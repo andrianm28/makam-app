@@ -1,0 +1,116 @@
+# Example only. Real secrets belong in protected environment/secret management.
+# Host reverse proxy routes 127.0.0.1:8081 to dev and 127.0.0.1:8082 to staging.
+
+name: makam-nonprod
+
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres_admin
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_admin_password
+    secrets:
+      - postgres_admin_password
+      - makam_dev_db_password
+      - makam_stg_db_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    mem_limit: 768m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres_admin"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [backend]
+
+  redis:
+    image: redis:8.2-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis_data:/data
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [backend]
+
+  dev-web:
+    image: ${APP_IMAGE:?APP_IMAGE is required}
+    restart: unless-stopped
+    env_file: .env.dev
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    ports:
+      - "127.0.0.1:8081:8080"
+    mem_limit: 512m
+    networks: [backend, egress]
+
+  stg-web:
+    image: ${APP_IMAGE:?APP_IMAGE is required}
+    restart: unless-stopped
+    env_file: .env.stg
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    ports:
+      - "127.0.0.1:8082:8080"
+    mem_limit: 704m
+    networks: [backend, egress]
+
+  stg-horizon:
+    image: ${APP_IMAGE:?APP_IMAGE is required}
+    restart: unless-stopped
+    command: ["php", "artisan", "horizon"]
+    env_file: .env.stg
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    stop_grace_period: 90s
+    mem_limit: 384m
+    networks: [backend, egress]
+
+  dev-worker:
+    image: ${APP_IMAGE:?APP_IMAGE is required}
+    profiles: ["dev-worker"]
+    command: ["php", "artisan", "queue:work", "--stop-when-empty", "--queue=critical,urgent,notifications,default"]
+    env_file: .env.dev
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    mem_limit: 256m
+    networks: [backend, egress]
+
+  stg-batch-worker:
+    image: ${APP_IMAGE:?APP_IMAGE is required}
+    profiles: ["batch"]
+    command: ["php", "artisan", "queue:work", "--stop-when-empty", "--queue=imports,media,reports", "--timeout=900"]
+    env_file: .env.stg
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    mem_limit: 384m
+    networks: [backend, egress]
+
+networks:
+  backend:
+    internal: true
+  egress:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+
+secrets:
+  postgres_admin_password:
+    file: ./secrets/postgres_admin_password.txt
+  makam_dev_db_password:
+    file: ./secrets/makam_dev_db_password.txt
+  makam_stg_db_password:
+    file: ./secrets/makam_stg_db_password.txt

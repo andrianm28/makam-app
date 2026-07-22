@@ -1,0 +1,25 @@
+# Environment
+.env
+.env.*
+!.env.*.example
+
+# Secrets
+*.pem
+*.key
+secrets/
+*_password*.txt
+*_token*.txt
+
+# Dependencies (future app code)
+vendor/
+node_modules/
+
+# Build artifacts
+public/build/
+storage/*.key
+bootstrap/cache/*.php
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/

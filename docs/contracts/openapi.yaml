@@ -1,0 +1,759 @@
+openapi: 3.1.0
+info:
+  title: Makam.co.id Application API
+  version: 0.3.0-draft
+  description: Draft application contract covering the RKS and the explicit Stakeholder
+    Workflow MVP. External payment, journal, reconciliation, file, notification, and
+    audit functions depend on shared K1-K8 contracts. Closed gates must expose documented
+    fallback modes.
+servers:
+- url: https://api.example.invalid/v1
+  description: Placeholder; replace per environment.
+tags:
+- name: Directory
+- name: At-Need
+- name: Booking
+- name: Plot Reservation
+- name: Pre-Need
+- name: Grave Registry
+- name: Renewal
+- name: Marketplace
+- name: Subscription
+- name: Visitation
+- name: Memorial
+- name: Public
+- name: FAQ
+- name: Admin
+- name: Vendor
+paths:
+  /cemeteries:
+    get:
+      tags:
+      - Directory
+      summary: List published cemeteries
+      parameters:
+      - in: query
+        name: city
+        schema:
+          type: string
+      - in: query
+        name: type
+        schema:
+          type: string
+          enum:
+          - TPU
+          - TPS
+      responses:
+        '200':
+          description: Published cemetery list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CemeterySummary'
+  /cemeteries/{cemeteryId}:
+    get:
+      tags:
+      - Directory
+      summary: Get cemetery detail and active public capability projection
+      parameters:
+      - $ref: '#/components/parameters/CemeteryId'
+      responses:
+        '200':
+          description: Cemetery detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CemeteryDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /at-need/intakes:
+    post:
+      tags:
+      - At-Need
+      summary: Submit minimum At-Need intake and create a FuneralCase
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AtNeedIntake'
+      responses:
+        '201':
+          description: FuneralCase created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FuneralCaseSummary'
+        '409':
+          description: Service area, operating-hours, or capacity gate is closed
+  /funeral-cases/{caseId}:
+    get:
+      tags:
+      - At-Need
+      summary: Get actor-appropriate FuneralCase projection
+      parameters:
+      - $ref: '#/components/parameters/CaseId'
+      responses:
+        '200':
+          description: FuneralCase projection
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /booking-drafts:
+    post:
+      tags:
+      - Booking
+      summary: Create a resumable booking draft
+      responses:
+        '201':
+          description: Draft created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingDraft'
+  /booking-drafts/{draftId}:
+    patch:
+      tags:
+      - Booking
+      summary: Save one or more booking steps idempotently
+      parameters:
+      - $ref: '#/components/parameters/DraftId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingDraftPatch'
+      responses:
+        '200':
+          description: Draft saved
+        '409':
+          description: Version conflict or invalid transition
+  /booking-drafts/{draftId}/submit:
+    post:
+      tags:
+      - Booking
+      summary: Submit a draft and route it to the explicit product workflow
+      parameters:
+      - $ref: '#/components/parameters/DraftId'
+      responses:
+        '201':
+          description: Workflow and order/case references created
+        '422':
+          description: Missing data or gated behavior
+  /plots/{plotId}/holds:
+    post:
+      tags:
+      - Plot Reservation
+      summary: Atomically acquire a time-bound plot hold
+      parameters:
+      - $ref: '#/components/parameters/PlotId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlotHoldRequest'
+      responses:
+        '201':
+          description: Hold acquired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlotReservation'
+        '409':
+          description: Plot unavailable
+          stale: null
+          conflicted: null
+          or capability disabled: null
+  /plot-reservations/{reservationId}/release:
+    post:
+      tags:
+      - Plot Reservation
+      summary: Release an active hold/reservation
+      parameters:
+      - $ref: '#/components/parameters/ReservationId'
+      responses:
+        '200':
+          description: Reservation released idempotently
+  /pre-need/interests:
+    post:
+      tags:
+      - Pre-Need
+      summary: Register non-binding Pre-Need interest or consultation request
+      responses:
+        '201':
+          description: Interest registered
+  /orders/{orderId}/accept-quote:
+    post:
+      tags:
+      - Booking
+      summary: Accept an exact current quote version
+      parameters:
+      - $ref: '#/components/parameters/OrderId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - quote_id
+              properties:
+                quote_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Quote accepted
+        '409':
+          description: Quote expired or superseded
+  /orders/{orderId}/payment-session:
+    post:
+      tags:
+      - Booking
+      summary: Create hosted checkout after confirmation/reservation and quote guards
+      parameters:
+      - $ref: '#/components/parameters/OrderId'
+      responses:
+        '201':
+          description: Hosted checkout created
+        '409':
+          description: Gate closed or a required guard is not valid
+  /grave-records/search:
+    get:
+      tags:
+      - Grave Registry
+      summary: Search grave records using the configured public/private projection
+      parameters:
+      - in: query
+        name: name
+        schema:
+          type: string
+      - in: query
+        name: block
+        schema:
+          type: string
+      - in: query
+        name: death_date
+        schema:
+          type: string
+          format: date
+      responses:
+        '200':
+          description: Policy-limited results
+        '503':
+          description: Data/privacy gate closed
+  /renewals:
+    post:
+      tags:
+      - Renewal
+      summary: Create a renewal request
+      responses:
+        '201':
+          description: Renewal created
+        '409':
+          description: Duplicate period or outside-system renewal already marked
+  /subscriptions:
+    post:
+      tags:
+      - Subscription
+      summary: Create a recurring grave-care subscription
+      responses:
+        '201':
+          description: Subscription created
+  /visit-bookings:
+    post:
+      tags:
+      - Visitation
+      summary: Request a visit slot where visitation is bookable
+      responses:
+        '201':
+          description: Visit booking created
+        '409':
+          description: Capacity
+          hours: null
+          or capability unavailable: null
+  /memorials/{memorialId}:
+    get:
+      tags:
+      - Memorial
+      summary: Get the allowlisted memorial projection
+      parameters:
+      - in: path
+        name: memorialId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Memorial projection
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /public/launch-areas:
+    get:
+      tags:
+      - Public
+      summary: List enabled launch cities/regencies
+      responses:
+        '200':
+          description: Launch areas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LaunchArea'
+  /service-catalog:
+    get:
+      tags:
+      - Booking
+      summary: List canonical basic and add-on services for a cemetery and service
+        type
+      parameters:
+      - in: query
+        name: cemetery_id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: service_type
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Available services
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServiceCatalogItem'
+  /marketplace/categories:
+    get:
+      tags:
+      - Marketplace
+      summary: List published marketplace categories
+      responses:
+        '200':
+          description: Categories
+  /marketplace/products:
+    get:
+      tags:
+      - Marketplace
+      summary: List published products by category, area, and vendor
+      parameters:
+      - in: query
+        name: category
+        schema:
+          type: string
+      - in: query
+        name: city
+        schema:
+          type: string
+      - in: query
+        name: vendor_id
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Products
+  /marketplace/orders:
+    post:
+      tags:
+      - Marketplace
+      summary: Create one-vendor MVP marketplace order from checkout
+      responses:
+        '201':
+          description: Marketplace order created
+        '409':
+          description: Mixed-vendor cart or stale price
+  /faq/categories:
+    get:
+      tags:
+      - FAQ
+      summary: List published FAQ categories
+      responses:
+        '200':
+          description: FAQ categories
+  /faq/articles:
+    get:
+      tags:
+      - FAQ
+      summary: Search/filter published FAQ articles
+      parameters:
+      - in: query
+        name: category
+        schema:
+          type: string
+      - in: query
+        name: q
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Published FAQ articles
+  /faq/articles/{slug}:
+    get:
+      tags:
+      - FAQ
+      summary: Get published FAQ article
+      parameters:
+      - in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: FAQ article
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /renewals/{renewalId}/payment-session:
+    post:
+      tags:
+      - Renewal
+      summary: Open online payment or return manual coordination instructions
+      parameters:
+      - in: path
+        name: renewalId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Payment mode and instructions/session
+        '409':
+          description: Tariff, duplicate period, or gate issue
+  /orders/{orderId}/confirmation:
+    get:
+      tags:
+      - Booking
+      summary: Get Step 9 confirmation projection
+      parameters:
+      - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Order reference, status, invoice, notification state, and next
+            action
+components:
+  parameters:
+    CemeteryId:
+      in: path
+      name: cemeteryId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DraftId:
+      in: path
+      name: draftId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    OrderId:
+      in: path
+      name: orderId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CaseId:
+      in: path
+      name: caseId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PlotId:
+      in: path
+      name: plotId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ReservationId:
+      in: path
+      name: reservationId
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    NotFound:
+      description: Resource not found or not visible to the actor
+  schemas:
+    CemeterySummary:
+      type: object
+      required:
+      - id
+      - type
+      - name
+      - address
+      - map_point
+      - capabilities
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+          - TPU
+          - TPS
+        name:
+          type: string
+        address:
+          type: string
+        facilities:
+          type: array
+          items:
+            type: string
+        price_range:
+          type: object
+          additionalProperties: true
+        map_point:
+          type: object
+          required:
+          - latitude
+          - longitude
+          properties:
+            latitude:
+              type: number
+            longitude:
+              type: number
+        capabilities:
+          $ref: '#/components/schemas/PublicCapabilityProfile'
+        primary_photo_url:
+          type: string
+          format: uri
+        google_maps_url:
+          type: string
+          format: uri
+    CemeteryDetail:
+      allOf:
+      - $ref: '#/components/schemas/CemeterySummary'
+      - type: object
+        properties:
+          packages:
+            type: array
+            items:
+              type: object
+              additionalProperties: true
+          public_map:
+            type: object
+            additionalProperties: true
+    PublicCapabilityProfile:
+      type: object
+      required:
+      - availability_mode
+      - booking_mode
+      - map_mode
+      properties:
+        availability_mode:
+          type: string
+          enum:
+          - INDICATIVE
+          - PACKAGE_CLASS
+          - SPECIFIC_PLOT
+        booking_mode:
+          type: string
+          enum:
+          - REQUEST_CONFIRMATION
+          - RESERVE_PLOT
+          - DIRECT_PURCHASE
+        map_mode:
+          type: string
+          enum:
+          - LOCATION_ONLY
+          - BLOCK_MAP
+          - PLOT_MAP
+        visitation_mode:
+          type: string
+          enum:
+          - NONE
+          - INFORMATION_ONLY
+          - BOOKABLE
+    AtNeedIntake:
+      type: object
+      required:
+      - contact_name
+      - contact_channel
+      - service_area
+      - urgency
+      properties:
+        contact_name:
+          type: string
+        contact_channel:
+          type: string
+        deceased_name:
+          type: string
+        current_location:
+          type: string
+        service_area:
+          type: string
+        requested_service_time:
+          type: string
+          format: date-time
+        urgency:
+          type: string
+          enum:
+          - URGENT
+          - STANDARD
+    FuneralCaseSummary:
+      type: object
+      required:
+      - id
+      - status
+      - urgency
+      - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        urgency:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        next_public_action:
+          type: string
+    BookingDraft:
+      type: object
+      required:
+      - id
+      - current_step
+      - version
+      properties:
+        id:
+          type: string
+          format: uuid
+        product_type:
+          type: string
+        current_step:
+          type: string
+        version:
+          type: integer
+    BookingDraftPatch:
+      type: object
+      required:
+      - version
+      - data
+      properties:
+        version:
+          type: integer
+        step:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
+    PlotHoldRequest:
+      type: object
+      required:
+      - process_id
+      - ttl_seconds
+      - idempotency_key
+      properties:
+        process_id:
+          type: string
+          format: uuid
+        ttl_seconds:
+          type: integer
+          minimum: 60
+        idempotency_key:
+          type: string
+    PlotReservation:
+      type: object
+      required:
+      - id
+      - plot_id
+      - status
+      - expires_at
+      - source_version
+      properties:
+        id:
+          type: string
+          format: uuid
+        plot_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - HELD
+          - CONFIRMED
+          - EXPIRED
+          - RELEASED
+          - CANCELLED
+        expires_at:
+          type: string
+          format: date-time
+        source_version:
+          type: string
+    Error:
+      type: object
+      required:
+      - code
+      - message
+      - trace_id
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        trace_id:
+          type: string
+    LaunchArea:
+      type: object
+      required:
+      - code
+      - name
+      properties:
+        code:
+          type: string
+          enum:
+          - JAKARTA
+          - BOGOR
+          - DEPOK
+          - TANGERANG
+          - BEKASI
+        name:
+          type: string
+    ServiceCatalogItem:
+      type: object
+      required:
+      - code
+      - name
+      - category
+      - availability
+      - price
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+          enum:
+          - BASIC
+          - ADD_ON
+        availability:
+          type: string
+        price:
+          type: object
+          additionalProperties: true
+        provider:
+          type: object
+          additionalProperties: true
