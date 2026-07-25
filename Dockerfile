@@ -145,6 +145,11 @@ RUN { \
 
 WORKDIR /var/www/html
 
+# The vendor stage's composer:2 image has the `composer` binary; only
+# vendor/ (its output) was being copied below, not the binary itself, so the
+# dump-autoload step right after this had nothing to run — caught by the
+# first real build reaching this far.
+COPY --from=vendor /usr/bin/composer /usr/local/bin/composer
 COPY --from=vendor /build/vendor/ ./vendor/
 COPY --from=frontend /build/public/build/ ./public/build/
 COPY . .
