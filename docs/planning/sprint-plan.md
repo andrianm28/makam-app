@@ -323,9 +323,9 @@ So "FAQ first" remains correct as the first *feature*, but it is no longer the f
 | S1-T7 | `.env.dev` / `.env.stg` with separated APP_KEY, DB user, Redis prefix, queue, cookie, storage | `platform-identity-and-access` | H-4, M-1 | 1 pd | ⚠️ **HUMAN** | ❌ open |
 | S1-T8 | CI pipeline skeleton (GitHub Actions) | all | H-4 | 2 pd | — | ✅ done — `.github/workflows/ci.yml` + `ci/verify-docs.sh` |
 | S1-T9 | `.gitignore` + `.claude/settings.json` hardening; commit design-system files | repo | **M-2, M-3** | 0.5 pd | — | ✅ done (M-2 by subagent; `.gitignore` fixed for scaffold) |
-| S1-T10 | ADR-0028 (design system) + ADR-0029 (platform foundation specs) | all | L-6 | 1 pd | — | ⚠️ 2 of 3 done; scaffold ADR still to write |
+| S1-T10 | ADR-0028 (design system) + ADR-0029 (platform foundation specs) + ADR-0030 (scaffold) | all | L-6 | 1 pd | — | ✅ done — 3 of 3 |
 
-**Total: ~12 pd · 8 of 10 done (25 Jul 2026)**
+**Total: ~12 pd · 9 of 10 done (25 Jul 2026)**
 
 Remaining: **S1-T7** (`.env.dev`/`.env.stg`, APP_KEY generation — behind human gate **G2**, deliberately untouched) and the scaffold half of **S1-T10**.
 
