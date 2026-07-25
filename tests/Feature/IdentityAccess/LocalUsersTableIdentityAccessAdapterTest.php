@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Tests\Feature\IdentityAccess;
 
 use App\Models\User;
-use App\Platform\IdentityAccess\Adapters\LocalUsersTableIdentityAccessAdapter;
 use App\Platform\IdentityAccess\ActorContext;
+use App\Platform\IdentityAccess\Adapters\LocalUsersTableIdentityAccessAdapter;
 use App\Platform\IdentityAccess\Models\ActorSession;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;

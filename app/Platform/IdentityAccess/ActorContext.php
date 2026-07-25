@@ -70,19 +70,19 @@ final class ActorContext
 
     /**
      * @param  int|string|null  $identityReference  Reference to the actor's
-     *         identity — the local `users.id` for this batch's MVP
-     *         adapter. `null` means an unauthenticated (guest) request.
-     *         Typed `int|string` rather than plain `int` because a future
-     *         K1/K2-backed `IdentityAccessAdapter` implementation may
-     *         reference identity by an external string id rather than the
-     *         local autoincrement primary key; widening the type now avoids
-     *         a breaking change to every consumer later.
+     *                                              identity — the local `users.id` for this batch's MVP
+     *                                              adapter. `null` means an unauthenticated (guest) request.
+     *                                              Typed `int|string` rather than plain `int` because a future
+     *                                              K1/K2-backed `IdentityAccessAdapter` implementation may
+     *                                              reference identity by an external string id rather than the
+     *                                              local autoincrement primary key; widening the type now avoids
+     *                                              a breaking change to every consumer later.
      * @param  list<string>  $roles  See the class-level note: always empty
-     *         today, not yet backed by any table this batch is authorized
-     *         to build.
+     *                               today, not yet backed by any table this batch is authorized
+     *                               to build.
      * @param  list<string>  $scopes  Always empty today — Batch 3.2 Agent C
-     *         builds real scope assignment (AC5). The field exists so the
-     *         shape does not change when that lands.
+     *                                builds real scope assignment (AC5). The field exists so the
+     *                                shape does not change when that lands.
      */
     public function __construct(
         public readonly int|string|null $identityReference,
