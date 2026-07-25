@@ -880,6 +880,8 @@ These were not in the original analysis and need tracking:
 
 Two gates remain **NOT negative-tested**: I5 (would require dropping a database) and I10 (would require reloading nginx without the auth bypass). Both are asserted from their positive result only.
 
+**Certificate renewal IS verified.** `certbot renew --cert-name dev.makam.co.id --dry-run` completed on 25 Jul 2026 with *"Congratulations, all simulated renewals succeeded"* and exit 0. It had twice exceeded a 2-minute foreground timeout and was reported as unverified in the preceding commit; that reservation is now withdrawn. The full ACME round trip works through basic auth, which was the risk gate I10 exists to guard.
+
 ---
 
 ## 13. OPEN QUESTIONS
