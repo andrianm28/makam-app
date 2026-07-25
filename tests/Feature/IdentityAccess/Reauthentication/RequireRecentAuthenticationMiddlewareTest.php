@@ -51,6 +51,29 @@ final class RequireRecentAuthenticationMiddlewareTest extends TestCase
                 return response('challenge-page', 200);
             })
             ->name('test.reauth.challenge');
+
+        // FIXED 26 Jul 2026 — first real CI run: "Route [test.reauth.
+        // challenge] not defined." Naming a route via ->name() chained
+        // AFTER ->get() does NOT retroactively index it in the router's
+        // name-lookup table — `Illuminate\Routing\RouteCollection::
+        // addLookups()` only reads `$route->getName()` once, at the
+        // moment the route is added to the collection (inside
+        // `Router::addRoute()`), which happens BEFORE the chained
+        // `->name(...)` call runs. In a normal app this is invisible
+        // because `Illuminate\Foundation\Support\Providers\
+        // RouteServiceProvider::register()` schedules one
+        // `$router->getRoutes()->refreshNameLookups()` call inside an
+        // `app->booted()` callback that fires once, after every route
+        // file has finished loading (i.e. after every `->name()` call in
+        // those files has already run). Routes registered here, in a
+        // test's own `setUp()`, run long AFTER that one-time boot
+        // callback already fired, so nothing ever re-indexes this name —
+        // confirmed by reproducing the exact mechanism directly against
+        // this repo's own pinned `laravel/framework` version outside this
+        // test. Calling `refreshNameLookups()` explicitly does exactly
+        // what that boot-time callback would have done, had these routes
+        // existed then.
+        app('router')->getRoutes()->refreshNameLookups();
     }
 
     private function actorSessionAuthenticatedAt(User $user, CarbonImmutable $lastAuthenticatedAt): ActorSession
