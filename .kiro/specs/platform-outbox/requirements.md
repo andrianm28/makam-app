@@ -6,19 +6,21 @@
 
 ## Acceptance criteria
 
-1. Critical domain events are inserted into the outbox **in the same database transaction** as the state mutation. A committed mutation with no outbox row is a defect.
-2. Events use the versioned envelope in `outbox-event-contract.md`: event id, type, version, occurred-at, aggregate reference, correlation id, and payload.
-3. Event types come from `event-catalog.md`. This spec implements the catalogue and does not restate it.
-4. Publication is at-least-once. Consumers are therefore **idempotent by contract**, keyed on event id.
-5. A publisher claim is atomic; two concurrent publishers never publish the same event twice.
-6. Publication failure is retried with bounded backoff and never loses the event; the row survives until published.
-7. Events carry no restricted data — references only, same rule as audit and notification payloads.
-8. Queue routing follows the names and priorities in `queue-and-outbox.md`. `imports`, `media`, and `reports` must never starve `critical` or `urgent`.
-9. Critical queue wait stays within 10 seconds and urgent within 15 seconds, per `performance-and-capacity.md` §3.
-10. Consumer failure does not roll back the producing transaction; the event remains available for retry.
-11. Replay is possible from the outbox for a bounded window, and replay is safe because consumers are idempotent.
-12. Outbox depth, age, and publication lag are observable and alertable.
-13. Correlation id is propagated from the request into the event and onward into queue jobs, provider calls, and notifications.
+EARS notation ([kiro.dev/docs/specs](https://kiro.dev/docs/specs/feature-specs/)), added 25 Jul 2026. Numbering is unchanged from the previous plain-list form, so every existing cross-reference to these criteria in other documents still points at the same requirement.
+
+1. WHEN a critical domain event occurs THE SYSTEM SHALL insert it into the outbox in the same database transaction as the state mutation. A committed mutation with no outbox row is a defect.
+2. THE SYSTEM SHALL use the versioned envelope defined in `outbox-event-contract.md` for every event: event id, type, version, occurred-at, aggregate reference, correlation id, and payload.
+3. THE SYSTEM SHALL use event types from `event-catalog.md` and SHALL NOT restate the catalogue.
+4. THE SYSTEM SHALL publish events at-least-once. Consumers SHALL be idempotent by contract, keyed on event id.
+5. THE SYSTEM SHALL make a publisher's claim on an event atomic. THE SYSTEM SHALL NOT let two concurrent publishers publish the same event twice.
+6. WHEN publication fails THE SYSTEM SHALL retry with bounded backoff. THE SYSTEM SHALL NOT lose the event; the row SHALL survive until published.
+7. THE SYSTEM SHALL NOT include restricted data in an event — references only, same rule as audit and notification payloads.
+8. THE SYSTEM SHALL route queues per the names and priorities in `queue-and-outbox.md`. THE SYSTEM SHALL NOT let `imports`, `media`, or `reports` starve `critical` or `urgent`.
+9. THE SYSTEM SHALL keep critical queue wait within 10 seconds and urgent queue wait within 15 seconds, per `performance-and-capacity.md` §3.
+10. WHEN a consumer fails THE SYSTEM SHALL NOT roll back the producing transaction; the event SHALL remain available for retry.
+11. THE SYSTEM SHALL support replay from the outbox for a bounded window; replay SHALL be safe because consumers are idempotent.
+12. THE SYSTEM SHALL make outbox depth, age, and publication lag observable and alertable.
+13. THE SYSTEM SHALL propagate correlation id from the request into the event and onward into queue jobs, provider calls, and notifications.
 
 ## Negative criteria
 

@@ -1,11 +1,13 @@
 # Tasks — At-Need Booking
 
-- [ ] Define minimum intake fields and validation.
-- [ ] Build area/hours/capacity gate.
-- [ ] Connect intake to FuneralCase and task templates.
-- [ ] Implement progressive document collection.
-- [ ] Add service time/transport milestones.
-- [ ] Add empathetic closure/degraded browser tests.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Define minimum intake fields and validation. _Requirements: 1_
+- [ ] Build area/hours/capacity gate. _Requirements: 2_
+- [ ] Connect intake to FuneralCase and task templates. _Requirements: 3_
+- [ ] Implement progressive document collection. _Requirements: 4_
+- [ ] Add service time/transport milestones. _Requirements: 8_
+- [ ] Add empathetic closure/degraded browser tests. _Requirements: 9_
 
 ## Design system
 

@@ -1,15 +1,17 @@
 # Tasks — Renewal and Grave Registry
 
-- [ ] Enable/configure PostgreSQL trigram support.
-- [ ] Implement grave record model and access modes.
-- [ ] Implement fuzzy search with benchmark at 100k records.
-- [ ] Implement async 10k-row import and row error report.
-- [ ] Implement renewal quote with tariff source/effective time.
-- [ ] Implement manual entry/empty state.
-- [ ] Implement external marking and duplicate-period guard.
-- [ ] Integrate payment/invoice after gate.
-- [ ] Implement reminder scheduler and idempotency key.
-- [ ] Add privacy, authorization, performance, and duplicate tests.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Enable/configure PostgreSQL trigram support. _Requirements: 3, 4_
+- [ ] Implement grave record model and access modes. _Requirements: 12, 14_
+- [ ] Implement fuzzy search with benchmark at 100k records. _Requirements: 3, 4_
+- [ ] Implement async 10k-row import and row error report. _Requirements: 13_
+- [ ] Implement renewal quote with tariff source/effective time. _Requirements: 6, 7_
+- [ ] Implement manual entry/empty state. _Requirements: 5_
+- [ ] Implement external marking and duplicate-period guard. _Requirements: 10, 11_
+- [ ] Integrate payment/invoice after gate. _Requirements: 8, 9_
+- [ ] Implement reminder scheduler and idempotency key. _Requirements: 15_
+- [ ] Add privacy, authorization, performance, and duplicate tests. _Requirements: 4, 11, 14, 16_
 
 ## Design system
 

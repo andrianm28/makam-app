@@ -1,11 +1,13 @@
 # Tasks — Booking and Order Orchestration
 
-- [ ] Add product-type router.
-- [ ] Link submissions to FuneralCase/PreNeedCase.
-- [ ] Generalize confirmation guard for manual or reservation evidence.
-- [ ] Preserve immutable quote/version acceptance.
-- [ ] Add payment and document security tests.
-- [ ] Add browser tests for resumable intake and duplicate submission.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Add product-type router. _Requirements: 4_
+- [ ] Link submissions to FuneralCase/PreNeedCase. _Requirements: 5_
+- [ ] Generalize confirmation guard for manual or reservation evidence. _Requirements: 6, 7_
+- [ ] Preserve immutable quote/version acceptance. _Requirements: 8_
+- [ ] Add payment and document security tests. _Requirements: 9, 10_
+- [ ] Add browser tests for resumable intake and duplicate submission. _Requirements: 2, 9_
 
 ## Design system
 

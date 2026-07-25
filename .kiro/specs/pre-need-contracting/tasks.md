@@ -1,11 +1,13 @@
 # Tasks — Pre-Need Contracting
 
-- [ ] Implement interest/consultation only flow.
-- [ ] Model proposal and non-binding quote.
-- [ ] Prepare gated agreement/payment schedule interfaces.
-- [ ] Add hard tests proving no payment while gate closed.
-- [ ] Record legal/accounting open decisions.
-- [ ] Do not implement paid states until stakeholder approval.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Implement interest/consultation only flow. _Requirements: 1_
+- [ ] Model proposal and non-binding quote. _Requirements: 3_
+- [ ] Prepare gated agreement/payment schedule interfaces. _Requirements: 2, 4, 6_
+- [ ] Add hard tests proving no payment while gate closed. _Requirements: 1_
+- [ ] Record legal/accounting open decisions. _Requirements: 2_
+- [ ] Do not implement paid states until stakeholder approval. _Requirements: 2_
 
 ## Design system
 

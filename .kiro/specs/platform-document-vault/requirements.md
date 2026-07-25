@@ -6,20 +6,22 @@
 
 ## Acceptance criteria
 
-1. Every untrusted file enters **private quarantine** on upload. There is no path that writes directly to accepted storage.
-2. A quarantined file cannot be used, downloaded, previewed, thumbnailed, or referenced in a list view before validation and malware-scan acceptance.
-3. Validation covers declared type, actual content type, size, and extension mismatch. MIME spoofing is rejected.
-4. Malware scanning is **fail-closed**: a scanner outage leaves the file `pending`, never `accepted`.
-5. Acceptance is an explicit state transition producing an auditable event.
-6. Signed URLs for deceased documents expire within **five minutes** and are single-purpose.
-7. A signed URL is never issued before the accepted state.
-8. Every restricted-file access is audited: actor, purpose, record, timestamp, and outcome.
-9. Access is purpose-scoped: holding a role is insufficient without a legitimate record relationship.
-10. Documents are stored on S3-compatible private storage with encryption; no public bucket or public object ACL exists.
-11. Deletion and retention follow approved policy while preserving audit and required evidence.
-12. Files are never attached to email or WhatsApp; external channels receive an authenticated link only.
-13. Upload progress, cancellation, and retry are supported without losing the parent draft or record.
-14. Import files (grave registry) use the same quarantine pipeline as customer documents.
+EARS notation ([kiro.dev/docs/specs](https://kiro.dev/docs/specs/feature-specs/)), added 25 Jul 2026. Numbering is unchanged from the previous plain-list form, so every existing cross-reference elsewhere in this spec and in other documents still points at the same requirement.
+
+1. WHEN a user uploads an untrusted file THE SYSTEM SHALL place it into **private quarantine**. THE SYSTEM SHALL NOT provide any path that writes directly to accepted storage.
+2. THE SYSTEM SHALL NOT allow a quarantined file to be used, downloaded, previewed, thumbnailed, or referenced in a list view before it passes validation and malware-scan acceptance.
+3. WHEN a file is uploaded THE SYSTEM SHALL validate its declared type, actual content type, size, and extension for mismatch, and SHALL reject MIME-spoofed files.
+4. WHILE the malware scanner is unavailable THE SYSTEM SHALL leave the file `pending` and SHALL NOT mark it `accepted` — malware scanning is **fail-closed**.
+5. WHEN a file is accepted THE SYSTEM SHALL perform an explicit state transition that produces an auditable event.
+6. THE SYSTEM SHALL expire every signed URL issued for a deceased document within **five minutes** and SHALL restrict it to a single purpose.
+7. THE SYSTEM SHALL NOT issue a signed URL before a file reaches the accepted state.
+8. WHEN a restricted file is accessed THE SYSTEM SHALL audit the actor, purpose, record, timestamp, and outcome.
+9. THE SYSTEM SHALL grant file access only when the requester holds both the role and a legitimate relationship to the record; holding a role alone SHALL NOT be sufficient.
+10. THE SYSTEM SHALL store documents on S3-compatible private storage with encryption; THE SYSTEM SHALL NOT create a public bucket or public object ACL.
+11. THE SYSTEM SHALL apply deletion and retention according to approved policy while preserving audit records and required evidence.
+12. THE SYSTEM SHALL NOT attach files to email or WhatsApp messages; external channels SHALL receive an authenticated link only.
+13. THE SYSTEM SHALL support upload progress, cancellation, and retry without losing the parent draft or record.
+14. WHEN a grave-registry import file is received THE SYSTEM SHALL route it through the same quarantine pipeline used for customer documents.
 
 ## Negative criteria
 

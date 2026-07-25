@@ -1,13 +1,15 @@
 # Tasks — Admin Operations
 
-- [ ] Build admin resources for directory/catalog/vendor/FAQ.
-- [ ] Implement PIC and communication log.
-- [ ] Implement guarded quote/payment actions.
-- [ ] Implement transaction reference views.
-- [ ] Implement manual payout and external renewal proof forms.
-- [ ] Implement period reports and export authorization.
-- [ ] Add audit events and security tests.
-- [ ] Disable unsafe bulk state changes.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Build admin resources for directory/catalog/vendor/FAQ. _Requirements: 1, 2, 3, 6_
+- [ ] Implement PIC and communication log. _Requirements: 4_
+- [ ] Implement guarded quote/payment actions. _Requirements: 9_
+- [ ] Implement transaction reference views. _Requirements: 5_
+- [ ] Implement manual payout and external renewal proof forms. _Requirements: 5_
+- [ ] Implement period reports and export authorization. _Requirements: 7, 10_
+- [ ] Add audit events and security tests. _Requirements: 8_
+- [ ] Disable unsafe bulk state changes. _Requirements: 9_
 
 ## Design system
 

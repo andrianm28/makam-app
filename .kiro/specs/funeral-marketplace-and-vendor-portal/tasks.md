@@ -1,16 +1,18 @@
 # Tasks — Funeral Marketplace and Vendor Portal
 
-- [ ] Implement product/category/variant data model.
-- [ ] Implement gravestone configurator schema and preview.
-- [ ] Implement cart and multi-vendor order decomposition.
-- [ ] Implement schedule and region delivery pricing.
-- [ ] Create vendor panel and query-level policies.
-- [ ] Implement vendor order status and evidence upload.
-- [ ] Implement vendor calendar/availability.
-- [ ] Implement transaction recap and payout records.
-- [ ] Implement manual payout proof workflow.
-- [ ] Add payout provider adapter behind feature flag.
-- [ ] Add cross-vendor isolation tests.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention. Only this top-level functional checklist is annotated; the "Canonical product codes" and "Design system" sections below have their own, separately-scoped task lists that are not tied to a single numbered acceptance criterion.
+
+- [ ] Implement product/category/variant data model. _Requirements: 1, 2_
+- [ ] Implement gravestone configurator schema and preview. _Requirements: 2_
+- [ ] Implement cart and multi-vendor order decomposition. _Requirements: 3, 4, 14_
+- [ ] Implement schedule and region delivery pricing. _Requirements: 2_
+- [ ] Create vendor panel and query-level policies. _Requirements: 5, 9_
+- [ ] Implement vendor order status and evidence upload. _Requirements: 7, 13_
+- [ ] Implement vendor calendar/availability. _Requirements: 6_
+- [ ] Implement transaction recap and payout records. _Requirements: 8_
+- [ ] Implement manual payout proof workflow. _Requirements: 11_
+- [ ] Add payout provider adapter behind feature flag. _Requirements: 11_
+- [ ] Add cross-vendor isolation tests. _Requirements: 9_
 
 ## Canonical product codes
 

@@ -1,12 +1,14 @@
 # Tasks — Cemetery Directory and Availability
 
-- [ ] Add capability profile schema and validation.
-- [ ] Add safe-default resolver and server-side checks.
-- [ ] Update public directory projection by capability.
-- [ ] Add optional plot source adapter interface.
-- [ ] Add stale-source monitoring and fallback.
-- [ ] Add cross-cemetery authorization and capability-combination tests.
-- [ ] Benchmark directory and map queries.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Add capability profile schema and validation. _Requirements: 4_
+- [ ] Add safe-default resolver and server-side checks. _Requirements: 4, 12_
+- [ ] Update public directory projection by capability. _Requirements: 2, 3, 5, 12_
+- [ ] Add optional plot source adapter interface. _Requirements: 6, 7_
+- [ ] Add stale-source monitoring and fallback. _Requirements: 8_
+- [ ] Add cross-cemetery authorization and capability-combination tests. _Requirements: 9_
+- [ ] Benchmark directory and map queries. _Requirements: 2, 3, 11_
 
 ## Design system
 

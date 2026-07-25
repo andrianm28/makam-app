@@ -1,12 +1,14 @@
 # Tasks — Funeral Case Management
 
-- [ ] Define case/task/communication schema and state machine.
-- [ ] Implement case creation from At-Need intake.
-- [ ] Implement assignment/handover and task templates.
-- [ ] Implement escalation scheduler and notifications.
-- [ ] Build Filament case workspace and customer timeline projection.
-- [ ] Add SLA, authorization, waiver, retry, and handover tests.
-- [ ] Add Urgent capacity dashboard and runbook links.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Define case/task/communication schema and state machine. _Requirements: 1, 4_
+- [ ] Implement case creation from At-Need intake. _Requirements: 1_
+- [ ] Implement assignment/handover and task templates. _Requirements: 2, 5_
+- [ ] Implement escalation scheduler and notifications. _Requirements: 3, 6_
+- [ ] Build Filament case workspace and customer timeline projection. _Requirements: 8_
+- [ ] Add SLA, authorization, waiver, retry, and handover tests. _Requirements: 3, 5, 7_
+- [ ] Add Urgent capacity dashboard and runbook links. _Requirements: 9_
 
 ## Design system
 

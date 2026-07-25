@@ -1,10 +1,12 @@
 # Tasks — Visitation Booking
 
-- [ ] Add visitation capability configuration.
-- [ ] Add schedule/capacity/blackout model.
-- [ ] Build customer request and operator calendar.
-- [ ] Add navigation projection and privacy tests.
-- [ ] Add cancellation/no-show and duplicate submission tests.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Add visitation capability configuration. _Requirements: 1_
+- [ ] Add schedule/capacity/blackout model. _Requirements: 2_
+- [ ] Build customer request and operator calendar. _Requirements: 3, 5, 6_
+- [ ] Add navigation projection and privacy tests. _Requirements: 4_
+- [ ] Add cancellation/no-show and duplicate submission tests. _Requirements: 7_
 
 ## Design system
 

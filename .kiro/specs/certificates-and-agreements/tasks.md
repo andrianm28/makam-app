@@ -1,10 +1,12 @@
 # Tasks — Certificates and Agreements
 
-- [ ] Define document types and issuer scopes.
-- [ ] Implement versioned agreement/acceptance.
-- [ ] Implement certificate eligibility and issue workflow behind gate.
-- [ ] Implement revoke/replace and delivery tracking.
-- [ ] Add numbering, authorization, duplicate, and immutable-history tests.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Define document types and issuer scopes. _Requirements: 1, 7_
+- [ ] Implement versioned agreement/acceptance. _Requirements: 1, 2_
+- [ ] Implement certificate eligibility and issue workflow behind gate. _Requirements: 3, 4_
+- [ ] Implement revoke/replace and delivery tracking. _Requirements: 4, 5, 6_
+- [ ] Add numbering, authorization, duplicate, and immutable-history tests. _Requirements: 4, 5, 7_
 
 ## Design system
 

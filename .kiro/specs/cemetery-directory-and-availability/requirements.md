@@ -4,18 +4,20 @@
 
 ## Acceptance criteria
 
-1. Initial launch city/regency list contains Jakarta, Bogor, Depok, Tangerang, and Bekasi.
-2. Platform filters published TPU/TPS by city/regency.
-3. Cemetery card/detail displays type, name, photo, address, Google Maps/navigation URL, facilities, attributed price range, and availability.
-4. Every cemetery has an explicit versioned capability profile; missing profile uses safe defaults.
-5. Default availability is indicative/package-class and visibly says `Perlu konfirmasi`.
-6. Makam Tumpang availability is explicit at location/package/class level.
-7. `SPECIFIC_PLOT` can be enabled only with authoritative registry, freshness evidence, and reservation contract.
-8. Missing/stale source disables plot reservation and falls back to request confirmation where allowed.
-9. Operator updates are scoped to assigned cemetery and audited.
-10. Admin can manage cities, cemetery content, facilities, prices, and capabilities without deployment.
-11. Google Maps behavior provides an external navigation link from coordinates/address; map-provider failure does not block viewing textual address.
-12. Public UI renders only active capabilities.
+EARS notation ([kiro.dev/docs/specs](https://kiro.dev/docs/specs/feature-specs/)), added 25 Jul 2026. Numbering is unchanged from the previous plain-list form, so every existing cross-reference elsewhere in this spec (`AC4`, `AC6`, `AC8` in `tasks.md`) and in other documents still points at the same requirement.
+
+1. THE SYSTEM SHALL include Jakarta, Bogor, Depok, Tangerang, and Bekasi in the initial launch city/regency list.
+2. WHEN a user applies a city/regency filter THE SYSTEM SHALL filter published TPU/TPS by that city/regency.
+3. WHEN a user views a cemetery card or detail THE SYSTEM SHALL display type, name, photo, address, Google Maps/navigation URL, facilities, attributed price range, and availability.
+4. THE SYSTEM SHALL maintain an explicit versioned capability profile for every cemetery. WHEN a capability profile is missing THE SYSTEM SHALL use safe defaults.
+5. THE SYSTEM SHALL present default availability as indicative/package-class and visibly labeled `Perlu konfirmasi`.
+6. THE SYSTEM SHALL present Makam Tumpang availability explicitly at the location/package/class level.
+7. THE SYSTEM SHALL NOT enable `SPECIFIC_PLOT` unless an authoritative registry, freshness evidence, and a reservation contract are present.
+8. WHILE the plot data source is missing or stale THE SYSTEM SHALL disable plot reservation and fall back to a request-confirmation path where allowed.
+9. THE SYSTEM SHALL scope operator updates to the operator's assigned cemetery and SHALL audit them.
+10. THE SYSTEM SHALL allow an admin to manage cities, cemetery content, facilities, prices, and capabilities without deployment.
+11. THE SYSTEM SHALL provide an external navigation link from coordinates/address via Google Maps. WHEN the map provider fails THE SYSTEM SHALL NOT block viewing of the textual address.
+12. THE SYSTEM SHALL render only active capabilities in the public UI.
 
 ## Negative criteria
 

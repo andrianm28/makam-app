@@ -1,13 +1,15 @@
 # Tasks — Recurring Care Subscriptions
 
-- [ ] Implement cycle frequency and date calculation.
-- [ ] Implement subscription and cycle unique constraints.
-- [ ] Implement scheduler with deterministic idempotency key.
-- [ ] Issue payment-link invoices through shared payment contract.
-- [ ] Implement webhook-driven payment state.
-- [ ] Implement work order and evidence tracking.
-- [ ] Implement tokenization adapter behind feature flag.
-- [ ] Add scheduler retry, duplicate, and timezone tests.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Implement cycle frequency and date calculation. _Requirements: 1_
+- [ ] Implement subscription and cycle unique constraints. _Requirements: 2, 5_
+- [ ] Implement scheduler with deterministic idempotency key. _Requirements: 2, 5_
+- [ ] Issue payment-link invoices through shared payment contract. _Requirements: 3_
+- [ ] Implement webhook-driven payment state. _Requirements: 4_
+- [ ] Implement work order and evidence tracking. _Requirements: 5, 6_
+- [ ] Implement tokenization adapter behind feature flag. _Requirements: 8_
+- [ ] Add scheduler retry, duplicate, and timezone tests. _Requirements: 2, 5_
 
 ## Design system
 

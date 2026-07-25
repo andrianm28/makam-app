@@ -1,16 +1,18 @@
 # Tasks — Platform Identity and Access
 
-- [ ] Define `ActorContext` and resolve it once per request.
-- [ ] Implement session auth guard for public and each panel.
-- [ ] Implement TOTP enrolment, challenge, recovery, and reset.
-- [ ] Enforce mandatory MFA for all privileged roles.
-- [ ] Implement re-authentication middleware for the six sensitive action classes.
-- [ ] Implement scope assignment model and mandatory query scopes.
-- [ ] Implement immediate session revocation across all actor sessions.
-- [ ] Implement opaque anonymous draft token and post-login attachment.
-- [ ] Add rate limiting for auth and authorization failures.
-- [ ] Add cross-panel and cross-record authorization negative tests.
-- [ ] Add MFA enrolment/challenge/recovery/revocation tests.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Define `ActorContext` and resolve it once per request. _Requirements: 8_
+- [ ] Implement session auth guard for public and each panel. _Requirements: 1, 4_
+- [ ] Implement TOTP enrolment, challenge, recovery, and reset. _Requirements: 2, 6_
+- [ ] Enforce mandatory MFA for all privileged roles. _Requirements: 2_
+- [ ] Implement re-authentication middleware for the six sensitive action classes. _Requirements: 3_
+- [ ] Implement scope assignment model and mandatory query scopes. _Requirements: 5_
+- [ ] Implement immediate session revocation across all actor sessions. _Requirements: 7_
+- [ ] Implement opaque anonymous draft token and post-login attachment. _Requirements: 10_
+- [ ] Add rate limiting for auth and authorization failures. _Requirements: 9_
+- [ ] Add cross-panel and cross-record authorization negative tests. _Requirements: 4, 5_
+- [ ] Add MFA enrolment/challenge/recovery/revocation tests. _Requirements: 2, 6_
 
 ## Design system
 

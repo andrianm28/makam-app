@@ -1,13 +1,15 @@
 # Tasks — Cemetery Operator Dashboard
 
-- [ ] Create cemetery assignment model/policy.
-- [ ] Build dedicated operator panel.
-- [ ] Implement request queue and decision action.
-- [ ] Implement availability update action.
-- [ ] Implement response target and admin escalation.
-- [ ] Add audit and adoption metrics.
-- [ ] Add cross-cemetery isolation tests.
-- [ ] Verify admin fallback works with operator disabled.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Create cemetery assignment model/policy. _Requirements: 2_
+- [ ] Build dedicated operator panel. _Requirements: 1_
+- [ ] Implement request queue and decision action. _Requirements: 3_
+- [ ] Implement availability update action. _Requirements: 4_
+- [ ] Implement response target and admin escalation. _Requirements: 5, 6_
+- [ ] Add audit and adoption metrics. _Requirements: 7, 8_
+- [ ] Add cross-cemetery isolation tests. _Requirements: 2_
+- [ ] Verify admin fallback works with operator disabled. _Requirements: 5, 6_
 
 ## Design system
 

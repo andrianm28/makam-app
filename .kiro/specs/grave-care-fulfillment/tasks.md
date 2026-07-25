@@ -1,10 +1,12 @@
 # Tasks — Grave Care Fulfillment
 
-- [ ] Separate billing cycles from work orders.
-- [ ] Implement schedule/assignment/checklist/evidence.
-- [ ] Add customer acceptance/complaint/make-good.
-- [ ] Implement vendor replacement/reschedule.
-- [ ] Add duplicate cycle, privacy, and paid-not-completed tests.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Separate billing cycles from work orders. _Requirements: 1, 2_
+- [ ] Implement schedule/assignment/checklist/evidence. _Requirements: 3_
+- [ ] Add customer acceptance/complaint/make-good. _Requirements: 5_
+- [ ] Implement vendor replacement/reschedule. _Requirements: 7_
+- [ ] Add duplicate cycle, privacy, and paid-not-completed tests. _Requirements: 4, 6, 8_
 
 ## Design system
 

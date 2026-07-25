@@ -1,21 +1,23 @@
 # Tasks — Platform Transactional Outbox
 
-- [ ] Define `outbox_events` with the versioned envelope from `outbox-event-contract.md`.
-- [ ] Implement a write helper that inserts the event inside the caller's transaction.
-- [ ] Implement atomic claim with `SKIP LOCKED` and stale-claim reclaim.
-- [ ] Implement per-event-type queue routing from `queue-and-outbox.md`.
-- [ ] Implement bounded backoff and permanent-failure escalation.
-- [ ] Implement a payload allowlist rejecting restricted classifications at write time.
-- [ ] Propagate correlation id from request into event, job, provider call, and notification.
-- [ ] Configure Horizon supervisors and queue priorities; cap the staging pool at two processes.
-- [ ] Isolate `imports`/`media`/`reports` onto on-demand workers.
-- [ ] Implement bounded replay from the outbox.
-- [ ] Add tests: commit succeeds but dispatcher dies — event still published on recovery.
-- [ ] Add tests: concurrent publishers never double-publish.
-- [ ] Add tests: duplicate delivery produces exactly one effect in each consumer.
-- [ ] Add tests: 10k-row import does not push critical queue wait past 10s.
-- [ ] Add tests: Horizon graceful termination does not lose or double-run a job.
-- [ ] Reconcile with `event-catalog.md` so every catalogued event has a producer and at least one consumer.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Define `outbox_events` with the versioned envelope from `outbox-event-contract.md`. _Requirements: 2_
+- [ ] Implement a write helper that inserts the event inside the caller's transaction. _Requirements: 1_
+- [ ] Implement atomic claim with `SKIP LOCKED` and stale-claim reclaim. _Requirements: 5_
+- [ ] Implement per-event-type queue routing from `queue-and-outbox.md`. _Requirements: 8_
+- [ ] Implement bounded backoff and permanent-failure escalation. _Requirements: 6_
+- [ ] Implement a payload allowlist rejecting restricted classifications at write time. _Requirements: 7_
+- [ ] Propagate correlation id from request into event, job, provider call, and notification. _Requirements: 13_
+- [ ] Configure Horizon supervisors and queue priorities; cap the staging pool at two processes. _Requirements: 8, 9_
+- [ ] Isolate `imports`/`media`/`reports` onto on-demand workers. _Requirements: 8_
+- [ ] Implement bounded replay from the outbox. _Requirements: 11_
+- [ ] Add tests: commit succeeds but dispatcher dies — event still published on recovery. _Requirements: 1, 6_
+- [ ] Add tests: concurrent publishers never double-publish. _Requirements: 5_
+- [ ] Add tests: duplicate delivery produces exactly one effect in each consumer. _Requirements: 4_
+- [ ] Add tests: 10k-row import does not push critical queue wait past 10s. _Requirements: 9_
+- [ ] Add tests: Horizon graceful termination does not lose or double-run a job. _Requirements: 6, 10_
+- [ ] Reconcile with `event-catalog.md` so every catalogued event has a producer and at least one consumer. _Requirements: 3_
 
 ## Design system
 

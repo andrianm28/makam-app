@@ -1,12 +1,14 @@
 # Tasks — Public Home and Navigation
 
-- [ ] Implement homepage route and layout.
-- [ ] Implement exact four service cards.
-- [ ] Implement desktop/mobile navigation.
-- [ ] Add urgent truthful-state banner.
-- [ ] Add customer-service CTA.
-- [ ] Add route and feature-gate explanatory pages.
-- [ ] Add responsive, keyboard, and analytics tests.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Implement homepage route and layout. _Requirements: 1, 2, 7_
+- [ ] Implement exact four service cards. _Requirements: 1, 3_
+- [ ] Implement desktop/mobile navigation. _Requirements: 4, 8_
+- [ ] Add urgent truthful-state banner. _Requirements: 5_
+- [ ] Add customer-service CTA. _Requirements: 5_
+- [ ] Add route and feature-gate explanatory pages. _Requirements: 6, 7_
+- [ ] Add responsive, keyboard, and analytics tests. _Requirements: 8, 9_
 
 ## Design system
 

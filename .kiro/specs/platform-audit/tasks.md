@@ -1,17 +1,19 @@
 # Tasks — Platform Audit
 
-- [ ] Define the `audit_events` schema with append-only database grants.
-- [ ] Implement the single `Audit::record()` write API.
-- [ ] Implement a mutation+audit wrapper so the pair cannot be separated.
-- [ ] Declare the sensitive-action list requiring a mandatory reason.
-- [ ] Implement a metadata allowlist that rejects restricted classifications at write time.
-- [ ] Implement correlation-id propagation across request, outbox, queue, provider, and notification.
-- [ ] Implement scoped audit query and audit-read logging.
-- [ ] Add tests: no state change commits without its audit record.
-- [ ] Add tests: update and delete on `audit_events` are rejected for the app role.
-- [ ] Add tests: restricted fields rejected from metadata.
-- [ ] Add tests: audit survives application rollback.
-- [ ] Reconcile with the 13 consuming specs so each names the audit actions it emits.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Define the `audit_events` schema with append-only database grants. _Requirements: 1, 2_
+- [ ] Implement the single `Audit::record()` write API. _Requirements: 2_
+- [ ] Implement a mutation+audit wrapper so the pair cannot be separated. _Requirements: 4_
+- [ ] Declare the sensitive-action list requiring a mandatory reason. _Requirements: 3_
+- [ ] Implement a metadata allowlist that rejects restricted classifications at write time. _Requirements: 5_
+- [ ] Implement correlation-id propagation across request, outbox, queue, provider, and notification. _Requirements: 10_
+- [ ] Implement scoped audit query and audit-read logging. _Requirements: 6, 7_
+- [ ] Add tests: no state change commits without its audit record. _Requirements: 4_
+- [ ] Add tests: update and delete on `audit_events` are rejected for the app role. _Requirements: 1_
+- [ ] Add tests: restricted fields rejected from metadata. _Requirements: 5_
+- [ ] Add tests: audit survives application rollback. _Requirements: 8_
+- [ ] Reconcile with the 13 consuming specs so each names the audit actions it emits. _Requirements: 9_
 
 ## Design system
 

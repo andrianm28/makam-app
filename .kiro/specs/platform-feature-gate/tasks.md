@@ -1,17 +1,19 @@
 # Tasks — Platform Feature Gate
 
-- [ ] Model the 17 gates and 18 flags from the registry documents; do not restate them in code comments.
-- [ ] Implement server-side evaluation with per-request caching and deny-by-default.
-- [ ] Expose `PaymentMode`, `WhatsAppMode`, `PreNeedMode`, `GraveSearchMode` as mode values.
-- [ ] Implement environment-scoped state so dev activation never implies staging or production.
-- [ ] Implement privileged activation requiring recent re-authentication, evidence reference, and audit.
-- [ ] Emit an outbox event on gate state change and invalidate caches.
-- [ ] Implement the declared closed-state fallback for each gate.
-- [ ] Add admin UI for gate state, owner, evidence, and history.
-- [ ] Add tests: misconfigured gate resolves closed.
-- [ ] Add tests: no MVP route or booking step disappears when a gate closes.
-- [ ] Add tests: client-side tampering cannot open a gate.
-- [ ] Add tests: activation without evidence is rejected.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Model the 17 gates and 18 flags from the registry documents; do not restate them in code comments. _Requirements: 1, 3_
+- [ ] Implement server-side evaluation with per-request caching and deny-by-default. _Requirements: 2, 8, 10_
+- [ ] Expose `PaymentMode`, `WhatsAppMode`, `PreNeedMode`, `GraveSearchMode` as mode values. _Requirements: 7_
+- [ ] Implement environment-scoped state so dev activation never implies staging or production. _Requirements: 11_
+- [ ] Implement privileged activation requiring recent re-authentication, evidence reference, and audit. _Requirements: 4, 12_
+- [ ] Emit an outbox event on gate state change and invalidate caches. _Requirements: 8, 9_
+- [ ] Implement the declared closed-state fallback for each gate. _Requirements: 5, 6_
+- [ ] Add admin UI for gate state, owner, evidence, and history. _Requirements: 3_
+- [ ] Add tests: misconfigured gate resolves closed. _Requirements: 10_
+- [ ] Add tests: no MVP route or booking step disappears when a gate closes. _Requirements: 6_
+- [ ] Add tests: client-side tampering cannot open a gate. _Requirements: 2_
+- [ ] Add tests: activation without evidence is rejected. _Requirements: 4_
 
 ## Design system
 

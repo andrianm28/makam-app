@@ -1,10 +1,12 @@
 # Tasks — Package and Service Bundles
 
-- [ ] Add package/version/item schema.
-- [ ] Build admin editor with publish workflow.
-- [ ] Implement quote expansion and price snapshots.
-- [ ] Implement substitution and evidence rules.
-- [ ] Add inclusion/exclusion and version regression tests.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Add package/version/item schema. _Requirements: 1, 7_
+- [ ] Build admin editor with publish workflow. _Requirements: 2_
+- [ ] Implement quote expansion and price snapshots. _Requirements: 3, 4_
+- [ ] Implement substitution and evidence rules. _Requirements: 5, 6_
+- [ ] Add inclusion/exclusion and version regression tests. _Requirements: 1, 2, 8_
 
 ## Design system
 

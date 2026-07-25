@@ -1,21 +1,23 @@
 # Tasks — Platform Financial Ledger and Settlement
 
-- [ ] Define `journal_batches` / `journal_entries` with integer minor-unit amounts.
-- [ ] Enforce debit=credit at the **database** level so no application path can bypass it.
-- [ ] Enforce append-only: no update or delete grant on journal tables for the app role.
-- [ ] Implement unique `business_key` idempotency and document the key format per source.
-- [ ] Write journal batches in the same transaction as the causing state change.
-- [ ] Bind every batch to an explicit `badan_usaha` / merchant entity.
-- [ ] Implement reversal-plus-correction flow; never edit a posted batch.
-- [ ] Implement vendor payable eligibility as a rule separate from paid state.
-- [ ] Implement manual payout with amount, proof, approver, and reference while `G-PAYOUT-01` is closed.
-- [ ] Implement reconciliation against provider statements producing exceptions, not adjustments.
-- [ ] Require authorized decision plus audit to resolve each exception.
-- [ ] Require recent re-authentication for bulk financial export.
-- [ ] Add tests: unbalanced batch rejected; duplicate business key posts once.
-- [ ] Add tests: partial refund allocation; chargeback; payable hold and release.
-- [ ] Add tests: reports reconcile to journal, not to order status.
-- [ ] Add tests: release rollback preserves journal and audit history.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Define `journal_batches` / `journal_entries` with integer minor-unit amounts. _Requirements: 1, 11_
+- [ ] Enforce debit=credit at the **database** level so no application path can bypass it. _Requirements: 1_
+- [ ] Enforce append-only: no update or delete grant on journal tables for the app role. _Requirements: 2_
+- [ ] Implement unique `business_key` idempotency and document the key format per source. _Requirements: 5_
+- [ ] Write journal batches in the same transaction as the causing state change. _Requirements: 3_
+- [ ] Bind every batch to an explicit `badan_usaha` / merchant entity. _Requirements: 4_
+- [ ] Implement reversal-plus-correction flow; never edit a posted batch. _Requirements: 2_
+- [ ] Implement vendor payable eligibility as a rule separate from paid state. _Requirements: 8_
+- [ ] Implement manual payout with amount, proof, approver, and reference while `G-PAYOUT-01` is closed. _Requirements: 9_
+- [ ] Implement reconciliation against provider statements producing exceptions, not adjustments. _Requirements: 10_
+- [ ] Require authorized decision plus audit to resolve each exception. _Requirements: 10_
+- [ ] Require recent re-authentication for bulk financial export. _Requirements: 13_
+- [ ] Add tests: unbalanced batch rejected; duplicate business key posts once. _Requirements: 1, 5_
+- [ ] Add tests: partial refund allocation; chargeback; payable hold and release. _Requirements: 7, 8_
+- [ ] Add tests: reports reconcile to journal, not to order status. _Requirements: 6, 12_
+- [ ] Add tests: release rollback preserves journal and audit history. _Requirements: 14_
 
 ## Design system
 

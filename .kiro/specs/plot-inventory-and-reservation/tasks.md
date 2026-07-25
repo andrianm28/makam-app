@@ -1,11 +1,13 @@
 # Tasks — Plot Inventory and Reservation
 
-- [ ] Define authoritative source adapter and reconciliation.
-- [ ] Add stable plot identity and status history.
-- [ ] Implement atomic hold/confirm/release/expire Actions.
-- [ ] Add stale-source circuit breaker and fallback.
-- [ ] Add public projection policy.
-- [ ] Run race, retry, expiry, and failover tests.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Define authoritative source adapter and reconciliation. _Requirements: 2, 6_
+- [ ] Add stable plot identity and status history. _Requirements: 2_
+- [ ] Implement atomic hold/confirm/release/expire Actions. _Requirements: 3, 4, 5, 7_
+- [ ] Add stale-source circuit breaker and fallback. _Requirements: 6_
+- [ ] Add public projection policy. _Requirements: 8_
+- [ ] Run race, retry, expiry, and failover tests. _Requirements: 3, 4, 7_
 
 ## Design system
 

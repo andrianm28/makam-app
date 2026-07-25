@@ -1,17 +1,19 @@
 # Tasks — Public Booking Wizard
 
-- [ ] Seed five launch regions.
-- [ ] Build nine-step shell and progress.
-- [ ] Implement cemetery selection with Google Maps URL.
-- [ ] Implement service-type conditional rules.
-- [ ] Implement canonical service catalog selection.
-- [ ] Implement quote summary/version check.
-- [ ] Implement customer and deceased forms.
-- [ ] Implement secure document upload.
-- [ ] Implement online/manual payment modes.
-- [ ] Implement confirmation and notification status.
-- [ ] Add autosave/resume and conflict handling.
-- [ ] Add browser tests for all branches and failures.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Seed five launch regions. _Requirements: 2_
+- [ ] Build nine-step shell and progress. _Requirements: 1, 14_
+- [ ] Implement cemetery selection with Google Maps URL. _Requirements: 3_
+- [ ] Implement service-type conditional rules. _Requirements: 4_
+- [ ] Implement canonical service catalog selection. _Requirements: 5_
+- [ ] Implement quote summary/version check. _Requirements: 6_
+- [ ] Implement customer and deceased forms. _Requirements: 7, 8_
+- [ ] Implement secure document upload. _Requirements: 8_
+- [ ] Implement online/manual payment modes. _Requirements: 9_
+- [ ] Implement confirmation and notification status. _Requirements: 10, 15_
+- [ ] Add autosave/resume and conflict handling. _Requirements: 11, 12, 13_
+- [ ] Add browser tests for all branches and failures. _Requirements: 14_
 
 ## Design system
 

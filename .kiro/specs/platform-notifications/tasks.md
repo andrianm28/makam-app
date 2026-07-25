@@ -1,18 +1,20 @@
 # Tasks — Platform Notifications
 
-- [ ] Implement recipient resolution from record scope per `notification-matrix.md`.
-- [ ] Implement server-resolved `WhatsAppMode`.
-- [ ] Implement per-channel delivery-state recording.
-- [ ] Implement idempotent dispatch keyed on event/recipient/channel/window.
-- [ ] Consume notifications from the transactional outbox, never inline.
-- [ ] Implement versioned templates with a variable allowlist that rejects restricted fields at render time.
-- [ ] Always create in-app records for admin/operator/vendor using record scope.
-- [ ] Implement bounded retry and a permanent-failure operational queue.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Implement recipient resolution from record scope per `notification-matrix.md`. _Requirements: 1, 6_
+- [ ] Implement server-resolved `WhatsAppMode`. _Requirements: 2_
+- [ ] Implement per-channel delivery-state recording. _Requirements: 3, 4_
+- [ ] Implement idempotent dispatch keyed on event/recipient/channel/window. _Requirements: 8_
+- [ ] Consume notifications from the transactional outbox, never inline. _Requirements: 9_
+- [ ] Implement versioned templates with a variable allowlist that rejects restricted fields at render time. _Requirements: 11, 13_
+- [ ] Always create in-app records for admin/operator/vendor using record scope. _Requirements: 7_
+- [ ] Implement bounded retry and a permanent-failure operational queue. _Requirements: 14_
 - [ ] Isolate the `notifications` queue from `critical` and `urgent`.
-- [ ] Add tests: channel failure does not change business state.
-- [ ] Add tests: recipient scope correctness and cross-scope leakage.
-- [ ] Add tests: no private attachment on any external channel.
-- [ ] Add tests: duplicate outbox delivery produces exactly one notification.
+- [ ] Add tests: channel failure does not change business state. _Requirements: 5_
+- [ ] Add tests: recipient scope correctness and cross-scope leakage. _Requirements: 6_
+- [ ] Add tests: no private attachment on any external channel. _Requirements: 10_
+- [ ] Add tests: duplicate outbox delivery produces exactly one notification. _Requirements: 8_
 
 ## Design system
 

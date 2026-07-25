@@ -1,18 +1,20 @@
 # Tasks — Platform Payment Adapter
 
-- [ ] Implement server-resolved `PaymentMode` and expose it to consumers.
-- [ ] Implement the six-condition payment guard as a single Action.
-- [ ] Implement hosted-checkout session creation with merchant/amount binding.
-- [ ] Implement durable webhook receiver: persist-then-ack within 2 seconds.
-- [ ] Implement signature, merchant, amount, currency, and replay validation.
-- [ ] Implement idempotent webhook application keyed on provider event identity.
-- [ ] Implement manual fallback: reference, proof upload, pending state, admin verification.
-- [ ] Require recent re-authentication on manual verification and payout actions.
-- [ ] Write the balanced journal entry in the same transaction as the paid effect.
-- [ ] Implement refund/chargeback/reversal as explicit non-destructive operations.
-- [ ] Add guard tests: closed gate, expired quote, expired reservation, amount mismatch, unauthorized opening.
-- [ ] Add webhook tests: bad signature, wrong merchant, wrong amount, duplicate, replay, out-of-order, dead dispatcher.
-- [ ] Add tests proving no paid state can be reached from a browser return.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Implement server-resolved `PaymentMode` and expose it to consumers. _Requirements: 1_
+- [ ] Implement the six-condition payment guard as a single Action. _Requirements: 2_
+- [ ] Implement hosted-checkout session creation with merchant/amount binding. _Requirements: 3, 13_
+- [ ] Implement durable webhook receiver: persist-then-ack within 2 seconds. _Requirements: 5_
+- [ ] Implement signature, merchant, amount, currency, and replay validation. _Requirements: 6_
+- [ ] Implement idempotent webhook application keyed on provider event identity. _Requirements: 7_
+- [ ] Implement manual fallback: reference, proof upload, pending state, admin verification. _Requirements: 8_
+- [ ] Require recent re-authentication on manual verification and payout actions. _Requirements: 9_
+- [ ] Write the balanced journal entry in the same transaction as the paid effect. _Requirements: 10_
+- [ ] Implement refund/chargeback/reversal as explicit non-destructive operations. _Requirements: 12_
+- [ ] Add guard tests: closed gate, expired quote, expired reservation, amount mismatch, unauthorized opening. _Requirements: 2_
+- [ ] Add webhook tests: bad signature, wrong merchant, wrong amount, duplicate, replay, out-of-order, dead dispatcher. _Requirements: 6, 7_
+- [ ] Add tests proving no paid state can be reached from a browser return. _Requirements: 4_
 
 ## Design system
 

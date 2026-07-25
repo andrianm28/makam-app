@@ -1,10 +1,12 @@
 # Tasks — Memorial and QR
 
-- [ ] Define consent/authority workflow and privacy modes.
-- [ ] Build private memorial draft and editor roles.
-- [ ] Build public projection and opaque QR token.
-- [ ] Add moderation/report/unpublish workflows.
-- [ ] Add privacy, token revocation, enumeration, and cross-family tests.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Define consent/authority workflow and privacy modes. _Requirements: 1, 2_
+- [ ] Build private memorial draft and editor roles. _Requirements: 1_
+- [ ] Build public projection and opaque QR token. _Requirements: 3, 4_
+- [ ] Add moderation/report/unpublish workflows. _Requirements: 5, 6_
+- [ ] Add privacy, token revocation, enumeration, and cross-family tests. _Requirements: 2, 4, 5_
 
 ## Design system
 
