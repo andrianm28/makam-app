@@ -1328,7 +1328,7 @@ These require a decision from design, product, or brand. **Each is a real fork, 
 | **OQ-08** | Is the **44 px** floor acceptable, or should public CTAs target 48 px given the Jabodetabek Android device mix? | 44 px (WCAG 2.5.5) | §7.3 |
 | **OQ-09** | How is the **Filament PHP colour array** generated from `tokens.css`? Filament resolves colours in PHP and cannot read CSS variables, so today the hex values are duplicated (§8.3). A build-time generator plus CI diff is proposed but unwritten. | Manual sync + CI diff check | §8.3, §9.5 |
 | **OQ-10** | Does a **Content-Security-Policy** exist or is one planned? No CSP is defined in [`security-baseline.md`](../security/security-baseline.md). Self-hosted fonts and an inline SVG sprite are CSP-friendly, but Livewire/Alpine may need `script-src` accommodation. This should be decided **before** the scaffold, not retrofitted. | None defined — flagged as a gap | §1.4, §4.6 |
-| **OQ-11** | Should `docs/design/` be added to `.kiro/steering/project.md` as a canonical document? It currently lists 17 documents and this is not among them, so agents following the steering file will not read it. | Not listed — **recommend adding** | Adoption |
+| **OQ-11** | Should `docs/design/` be added as a canonical Kiro steering document? | **Resolved, done 25 Jul 2026.** `design-system.md` and `tokens.css` are registered in `.kiro/steering/design.md` (a conditional steering file, loaded when work touches `resources/`, `app/Filament/`, `app/Livewire/`, or `docs/design/` — see `.kiro/steering/project.md`'s index) | Adoption |
 
 ---
 
@@ -1383,7 +1383,7 @@ Ordered, because some steps depend on earlier ones.
 1. [ ] Resolve **OQ-01** (brand primary) and **OQ-02** (existing identity) — everything downstream depends on the palette
 2. [ ] Resolve **OQ-04** (bottom nav) — it is a navigation contract, not a style choice
 3. [ ] Record **ADR-0028 — Adopt token-driven design system** (§9.4)
-4. [ ] Add `docs/design/design-system.md` to `.kiro/steering/project.md` (**OQ-11**) so agents actually read it
+4. [x] Add `docs/design/design-system.md` to Kiro steering (**OQ-11**) so agents actually read it — done 25 Jul 2026, `.kiro/steering/design.md`
 5. [ ] Scaffold Laravel 13 + the eight `technology-baseline.md` §5 artefacts (blocks all build verification)
 6. [ ] Self-host the fonts; decide **OQ-10** (CSP) *before* the scaffold hardens
 7. [x] Wire `app.css` per §8.2; confirm every utility in §8.2 actually generates — resolve any mismatch by fixing this document (**done 25 Jul 2026**, CI-enforced — see §12's NOT TESTED table)
