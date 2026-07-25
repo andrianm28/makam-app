@@ -145,7 +145,15 @@ final class GateActivationRecorderTest extends TestCase
         $this->assertSame(1, $outboxEvent->event_version);
         $this->assertSame('feature_gate', $outboxEvent->aggregate_type);
         $this->assertSame('G-PAY-01', $outboxEvent->aggregate_id);
-        $this->assertSame([
+        // assertEquals, not assertSame: outbox_events.payload is a
+        // Postgres `jsonb` column (the migration's own choice, unlike
+        // audit_events.metadata's plain `json`), and jsonb does not
+        // preserve object key order on round-trip — Postgres's own docs:
+        // "jsonb does not preserve the order of object keys." assertSame
+        // on an array is order-sensitive (PHP's `===` for arrays compares
+        // key order too), so it fails here for a reason that has nothing
+        // to do with correctness. First real Postgres CI run caught this.
+        $this->assertEquals([
             'gate_id' => 'G-PAY-01',
             'from_state' => 'closed',
             'to_state' => 'open',
@@ -161,11 +169,34 @@ final class GateActivationRecorderTest extends TestCase
         // Realistic Outbox-side failure trigger, matching Outbox::record()'s
         // own doc block: "must be unique across the table when non-null —
         // an INSERT with a colliding key throws a database-layer exception."
-        // This is the first activation ever recorded in this test, so the
-        // idempotency key GateActivationRecorder will compute is
-        // predictable ("...activation:1", GateActivation's first
-        // auto-increment id). Pre-claiming it forces the real
-        // Outbox::record() call inside GateActivationRecorder to collide.
+        //
+        // The colliding key must target the NEXT gate_activations id this
+        // test's own second `record()` call will actually get — not a
+        // hardcoded guess like `...activation:1`. Postgres SERIAL/BIGSERIAL
+        // sequences are NOT transactional: `RefreshDatabase` rolls back
+        // each test's own inserts, but does not reset the sequence's
+        // `nextval()` counter, so an earlier (rolled-back) test in the same
+        // CI run can leave `gate_activations_id_seq` already advanced past
+        // 1 by the time this test runs — a hardcoded "...activation:1"
+        // silently stops colliding and this test's own `$this->fail(...)`
+        // line fires instead (first real Postgres CI run caught exactly
+        // this). Deriving the target id from a REAL row created inside this
+        // test's own transaction sidesteps the sequence-drift problem
+        // entirely: whatever id Postgres assigns this call, the next one is
+        // one more, regardless of what any other test already consumed.
+        $recorder = new GateActivationRecorder;
+
+        $first = $recorder->record(
+            gateId: 'G-PAY-01',
+            actorReference: 7,
+            toState: 'open',
+            evidenceReference: 'MERCHANT-CONTRACT-2026-07-25',
+            reason: 'Merchant of record contract signed; reconciliation SOP approved.',
+        );
+
+        // GateActivationRecorder's SECOND call (below) will insert
+        // gate_activations row id `$first->id + 1` and derive its outbox
+        // idempotency key from that — pre-claim exactly that key.
         Outbox::record(
             eventName: 'fixture.collision.v1',
             eventVersion: 1,
@@ -173,18 +204,16 @@ final class GateActivationRecorderTest extends TestCase
             aggregateId: 1,
             data: [],
             classification: OutboxClassification::Internal,
-            idempotencyKey: 'feature_gate:G-PAY-01:activation:1',
+            idempotencyKey: 'feature_gate:G-PAY-01:activation:'.($first->id + 1),
         );
-
-        $recorder = new GateActivationRecorder;
 
         try {
             $recorder->record(
                 gateId: 'G-PAY-01',
                 actorReference: 7,
-                toState: 'open',
-                evidenceReference: 'MERCHANT-CONTRACT-2026-07-25',
-                reason: 'Merchant of record contract signed; reconciliation SOP approved.',
+                toState: 'closed',
+                evidenceReference: 'PROVIDER-INCIDENT-2026-07-26',
+                reason: 'Provider incident — rollback for safety.',
             );
 
             $this->fail('Expected the colliding idempotency key to throw a QueryException.');
@@ -192,16 +221,18 @@ final class GateActivationRecorderTest extends TestCase
             // Expected — the simulated Outbox-side failure.
         }
 
-        // Everything GateActivationRecorder itself would have written must
-        // be rolled back: the gate state change, the activation row, and
-        // the audit row (never reached, since Audit::record() runs after
-        // Outbox::record() — see GateActivationRecorder's own comment on
-        // write ordering). Only our one manually pre-inserted collision
-        // row remains.
-        $this->assertSame('closed', FeatureGate::query()->findOrFail('G-PAY-01')->state);
-        $this->assertSame(0, GateActivation::query()->count());
-        $this->assertSame(0, AuditEvent::query()->count());
-        $this->assertSame(1, OutboxEvent::query()->count());
+        // The first (successful) activation must stand — this test proves
+        // the SECOND call's own writes roll back, not that the whole test
+        // has no state. The gate must still read 'open' (from the first
+        // call), never 'closed' (the second call's target state, which
+        // must never have committed).
+        $this->assertSame('open', FeatureGate::query()->findOrFail('G-PAY-01')->state);
+        $this->assertSame(1, GateActivation::query()->count());
+        $this->assertSame(1, AuditEvent::query()->count());
+        // Two outbox rows: the first call's real event, plus our one
+        // manually pre-inserted collision row. The second call's own
+        // Outbox::record() never committed.
+        $this->assertSame(2, OutboxEvent::query()->count());
     }
 
     public function test_an_audit_write_failure_rolls_back_the_gate_change_the_activation_row_and_the_outbox_row(): void
