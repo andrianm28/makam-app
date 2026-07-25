@@ -96,8 +96,16 @@ final class FaqArticleLifecycleTest extends TestCase
         $this->assertNotNull($published->published_at);
         $this->assertNull($published->unpublished_at);
 
-        $this->assertDatabaseCount('faq_article_versions', 1);
-        $version = FaqArticleVersion::query()->sole();
+        // Scoped to this test's own article, not an absolute table count —
+        // the seed migration (2026_07_26_170400_seed_faq_categories_and_
+        // articles.php) already inserts 22 real faq_article_versions rows
+        // for the 22 published catalogue articles, and RefreshDatabase
+        // migrates once per suite, not per test, so those rows are already
+        // present before this test's own transaction starts. First real CI
+        // run caught this — see this file's other tests below, which were
+        // already correctly scoped this way.
+        $this->assertSame(1, FaqArticleVersion::query()->where('faq_article_id', $article->id)->count());
+        $version = FaqArticleVersion::query()->where('faq_article_id', $article->id)->sole();
         $this->assertSame($article->id, $version->faq_article_id);
         $this->assertSame(1, $version->version_number);
         $this->assertSame('Judul akan diterbitkan', $version->title);
@@ -164,7 +172,9 @@ final class FaqArticleLifecycleTest extends TestCase
         $republished = (new PublishFaqArticle)($edited, actorReference: 42);
 
         $this->assertSame(2, $republished->current_version);
-        $this->assertDatabaseCount('faq_article_versions', 2);
+        // Scoped, not an absolute table count — see the first test in this
+        // file for why (seed migration's 22 pre-existing rows).
+        $this->assertSame(2, FaqArticleVersion::query()->where('faq_article_id', $article->id)->count());
 
         $versionTwo = FaqArticleVersion::query()->where('faq_article_id', $article->id)->where('version_number', 2)->sole();
         $this->assertSame('Judul versi 2', $versionTwo->title);
@@ -192,8 +202,10 @@ final class FaqArticleLifecycleTest extends TestCase
         // cleared — see UnpublishFaqArticle's own doc block.
         $this->assertTrue($publishedAt->equalTo($unpublished->published_at));
         // Content and version history untouched by a pure visibility change.
+        // Scoped, not an absolute table count — see this file's first test
+        // for why (seed migration's 22 pre-existing rows).
         $this->assertSame(1, $unpublished->current_version);
-        $this->assertDatabaseCount('faq_article_versions', 1);
+        $this->assertSame(1, FaqArticleVersion::query()->where('faq_article_id', $article->id)->count());
     }
 
     public function test_unpublishing_a_draft_is_rejected(): void
@@ -231,7 +243,9 @@ final class FaqArticleLifecycleTest extends TestCase
         $this->assertTrue($republished->isPublished());
         $this->assertSame(2, $republished->current_version);
         $this->assertNull($republished->unpublished_at);
-        $this->assertDatabaseCount('faq_article_versions', 2);
+        // Scoped, not an absolute table count — see this file's first test
+        // for why (seed migration's 22 pre-existing rows).
+        $this->assertSame(2, FaqArticleVersion::query()->where('faq_article_id', $article->id)->count());
     }
 
     public function test_publish_state_saving_hook_rejects_an_unknown_state(): void
