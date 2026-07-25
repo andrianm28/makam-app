@@ -57,7 +57,7 @@ final class ScopeEntityType
 
     /**
      * @throws InvalidArgumentException when `$type` is not one of
-     *                                   `self::KNOWN_TYPES`.
+     *                                  `self::KNOWN_TYPES`.
      */
     public static function assertKnown(string $type): void
     {

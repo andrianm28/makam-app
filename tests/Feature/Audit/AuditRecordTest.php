@@ -11,6 +11,7 @@ use App\Platform\Audit\AuditSubject;
 use App\Platform\Audit\Exceptions\AuditMetadataKeyNotAllowedException;
 use App\Platform\Audit\Exceptions\AuditReasonRequiredException;
 use App\Platform\Audit\Models\AuditEvent;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -170,7 +171,7 @@ final class AuditRecordTest extends TestCase
             $this->markTestSkipped('audit_events_outcome_check is only added on the pgsql driver.');
         }
 
-        $this->expectException(\Illuminate\Database\QueryException::class);
+        $this->expectException(QueryException::class);
 
         AuditEvent::query()->create([
             'occurred_at' => now(),

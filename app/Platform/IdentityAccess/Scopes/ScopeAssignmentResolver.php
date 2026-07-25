@@ -70,7 +70,7 @@ final class ScopeAssignmentResolver
      * @return list<string>
      *
      * @throws \InvalidArgumentException when `$entityType` is not one of
-     *                                    `ScopeEntityType::KNOWN_TYPES`.
+     *                                   `ScopeEntityType::KNOWN_TYPES`.
      */
     public function grantedEntityIds(int|string $actorIdentifier, string $entityType): array
     {

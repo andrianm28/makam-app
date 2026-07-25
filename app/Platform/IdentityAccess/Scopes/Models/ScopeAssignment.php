@@ -81,7 +81,7 @@ final class ScopeAssignment extends Model
 
     protected static function booted(): void
     {
-        static::saving(function (self $assignment): void {
+        self::saving(function (self $assignment): void {
             ScopeEntityType::assertKnown($assignment->entity_type);
 
             if ($assignment->grant_level !== null) {

@@ -79,7 +79,7 @@ final class ScopeGrantLevel
 
     /**
      * @throws InvalidArgumentException when `$level` is not one of
-     *                                   `self::KNOWN_LEVELS`.
+     *                                  `self::KNOWN_LEVELS`.
      */
     public static function assertKnown(string $level): void
     {
