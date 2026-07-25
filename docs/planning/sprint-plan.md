@@ -540,20 +540,20 @@ Design system enforced by CI. `dev.` and `stg.` reachable, TLS-terminated, `noin
 
 ### Tasks
 
-| ID | Task | Spec | Effort | Gate |
-|---|---|---|---:|---|
-| S3-T1 | `ActorContext` resolved once per request; session guard for public and each panel | `platform-identity-and-access` AC1, AC8 | 2 pd | — |
-| S3-T2 | TOTP enrolment/challenge/recovery; **mandatory MFA for all privileged roles** | `platform-identity-and-access` AC2, AC6 | 3 pd | ⚠️ **HUMAN** |
-| S3-T3 | Re-authentication middleware for the six sensitive action classes | `platform-identity-and-access` AC3 | 1 pd | ⚠️ **HUMAN** |
-| S3-T4 | Scope assignment model + mandatory query scopes per `rbac-matrix.md` | `platform-identity-and-access` AC5 | 2 pd | — |
-| S3-T5 | Gate + flag registry from `assumptions-and-gates.md`; server evaluation, deny-by-default | `platform-feature-gate` AC1, AC2, AC10 | 2 pd | — |
-| S3-T6 | Expose `PaymentMode` / `WhatsAppMode` / `PreNeedMode` / `GraveSearchMode` as mode values | `platform-feature-gate` AC7 | 1 pd | — |
-| S3-T7 | Gate-closed explanatory-page pattern (design §6.4) + `intent=info` banner (design §6.9) | `platform-feature-gate` AC5 + design §6 | 1 pd | — |
-| S3-T8 | `audit_events` with **database-level** append-only grants; single `Audit::record()` API | `platform-audit` AC1, AC2 | 2 pd | — |
-| S3-T9 | Mutation+audit wrapper so the pair cannot be separated; metadata allowlist | `platform-audit` AC4, AC5 | 1.5 pd | — |
-| S3-T10 | Correlation-id propagation: request → outbox → queue → provider → notification | `platform-audit` AC10 + `platform-outbox` AC13 | 1 pd | — |
-| S3-T11 | Minimum outbox: `outbox_events` table, `SKIP LOCKED` publisher, queue routing | `platform-outbox` AC1, AC5, AC8 | 3 pd | — |
-| S3-T12 | Authorization + audit test suite: cross-panel, cross-record, cross-scope negatives | all four Tier-0 specs | 2 pd | — |
+| ID | Task | Spec | Effort | Gate | Status |
+|---|---|---|---:|---|---|
+| S3-T1 | `ActorContext` resolved once per request; session guard for public and each panel | `platform-identity-and-access` AC1, AC8 | 2 pd | — | ✅ done 26 Jul (Batch 3.1) — `ActorContext`/`ActorContextResolver`/`IdentityAccessAdapter` interface + MVP local-users adapter, `actor_sessions` table, `/admin` panel access policy. Roles/scopes deliberately empty (no owning table yet — flagged, not invented); MFA/re-auth/revoke-all explicitly deferred to later tasks |
+| S3-T2 | TOTP enrolment/challenge/recovery; **mandatory MFA for all privileged roles** | `platform-identity-and-access` AC2, AC6 | 3 pd | ⚠️ **HUMAN** | ❌ open |
+| S3-T3 | Re-authentication middleware for the six sensitive action classes | `platform-identity-and-access` AC3 | 1 pd | ⚠️ **HUMAN** | ❌ open |
+| S3-T4 | Scope assignment model + mandatory query scopes per `rbac-matrix.md` | `platform-identity-and-access` AC5 | 2 pd | — | ❌ open |
+| S3-T5 | Gate + flag registry from `assumptions-and-gates.md`; server evaluation, deny-by-default | `platform-feature-gate` AC1, AC2, AC10 | 2 pd | — | ❌ open |
+| S3-T6 | Expose `PaymentMode` / `WhatsAppMode` / `PreNeedMode` / `GraveSearchMode` as mode values | `platform-feature-gate` AC7 | 1 pd | — | ❌ open |
+| S3-T7 | Gate-closed explanatory-page pattern (design §6.4) + `intent=info` banner (design §6.9) | `platform-feature-gate` AC5 + design §6 | 1 pd | — | ❌ open |
+| S3-T8 | `audit_events` with **database-level** append-only grants; single `Audit::record()` API | `platform-audit` AC1, AC2 | 2 pd | — | ❌ open |
+| S3-T9 | Mutation+audit wrapper so the pair cannot be separated; metadata allowlist | `platform-audit` AC4, AC5 | 1.5 pd | — | ❌ open |
+| S3-T10 | Correlation-id propagation: request → outbox → queue → provider → notification | `platform-audit` AC10 + `platform-outbox` AC13 | 1 pd | — | ❌ open |
+| S3-T11 | Minimum outbox: `outbox_events` table, `SKIP LOCKED` publisher, queue routing | `platform-outbox` AC1, AC5, AC8 | 3 pd | — | ❌ open |
+| S3-T12 | Authorization + audit test suite: cross-panel, cross-record, cross-scope negatives | all four Tier-0 specs | 2 pd | — | ❌ open |
 
 **Total: ~21.5 pd**
 
