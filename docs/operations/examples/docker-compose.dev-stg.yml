@@ -15,7 +15,11 @@ services:
       - makam_dev_db_password
       - makam_stg_db_password
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # Mount the PARENT dir, not /data. postgres:18 sets
+      # PGDATA=/var/lib/postgresql/18/docker (verified on host), so mounting
+      # /var/lib/postgresql/data strands PGDATA outside the volume and the
+      # database is silently lost on recreate or `compose down -v`.
+      - postgres_data:/var/lib/postgresql
       - ./postgres-init:/docker-entrypoint-initdb.d:ro
     mem_limit: 768m
     healthcheck:
@@ -107,6 +111,12 @@ volumes:
   postgres_data:
   redis_data:
 
+# Host files must be owned by uid 999, mode 0400:
+#   sudo chown 999:999 ./secrets/*.txt && sudo chmod 0400 ./secrets/*.txt
+# The postgres entrypoint drops to uid 999 before running
+# /docker-entrypoint-initdb.d/, so root-owned 0400 files are unreadable there.
+# Compose long-syntax uid/gid/mode is NOT supported ("secrets uid, gid and mode
+# are not supported, they will be ignored" - verified on host 25 Jul 2026).
 secrets:
   postgres_admin_password:
     file: ./secrets/postgres_admin_password.txt

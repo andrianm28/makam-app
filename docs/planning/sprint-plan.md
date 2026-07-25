@@ -255,18 +255,32 @@ Everything else can be scheduled around this chain.
 
 This section is why the plan changed shape on 25 Jul 2026. The original four-sprint sequence had features starting in Sprint 3, because at the time the eight cross-cutting foundations were **unspecified and therefore invisible**. Now that they are specified, their consumers are explicit, and an order falls out of the specs rather than out of preference.
 
-Counting which foundations each of the 19 feature specs consumes:
+Which foundations each of the 19 feature specs genuinely needs in order to function:
 
-| Foundation | Consumed by | Verdict |
+| Foundation | Feature specs that need it | Verdict |
 |---|---:|---|
-| `platform-audit` | **17 of 19** | Prerequisite for anything |
-| `platform-identity-and-access` | **16 of 19** | Prerequisite for anything authenticated |
-| `platform-feature-gate` | **12 of 19** | Prerequisite for any gated fallback or explanatory page |
-| `platform-notifications` | 9 | Needed once anything notifies |
-| `platform-outbox` | 8 | Needed once anything is event-driven |
-| `platform-document-vault` | 7 | Needed once anything uploads |
+| `platform-identity-and-access` | **19 of 19** | Every spec has an authenticated or record-scoped surface |
+| `platform-audit` | **~18 of 19** | Nearly every spec has at least one action requiring an audit record |
+| `platform-feature-gate` | **16 of 19** | Every gated capability, mode value, and explanatory page |
+| `platform-notifications` | ~12 | Anything that tells a customer, operator, or vendor something |
+| `platform-outbox` | ~10 | Anything emitting a domain event |
+| `platform-document-vault` | ~10 | Anything with an upload or a private file |
 | `platform-payment-adapter` | 6 | Money paths only |
 | `platform-financial-ledger` | 5 | Money paths only |
+
+> **These figures are reasoned, not measured — read this before citing them.**
+>
+> An earlier revision of this section presented keyword-frequency counts as if they were dependency measurements. That was wrong in three compounding ways, and the numbers above replace them:
+>
+> 1. **File counts were reported as spec counts.** `kiro-specs-analysis.md` §2.2 reported "13 specs" for audit; the underlying `grep -ril` actually matched **13 files across 9 specs**.
+> 2. **The counts were then inflated without re-measuring.** This table previously read "17 of 19" for audit — a figure with no measurement behind it. Caught 25 Jul 2026 by a subagent writing ADR-0029, which found the contradiction between this table and three other documents and reported it rather than picking one.
+> 3. **Keyword counts are now self-contaminated.** The `## Design system` sections appended to all 19 `tasks.md` on 25 Jul 2026 contain the words *audit*, *authorization*, *pending*, and *feature-gate*. Re-running the old patterns partly measures those additions.
+>
+> More fundamentally: **keyword frequency was never a valid metric for sequencing.** A spec that needs an admin panel needs identity whether or not it ever writes the word "MFA". Keyword counts were a useful *discovery* heuristic — they are what surfaced the gap — but the ordering has to rest on reasoned dependency, which is what the table now states.
+>
+> The one keyword fact worth keeping, because it was the discovery signal and is reproducible against the pre-change tree: **`outbox` appeared 0 times in the entire `.kiro/` tree** before these specs existed, despite `AGENTS.md` making the transactional outbox mandatory.
+>
+> The tiering below is unaffected — the reasoned figures support it more strongly than the keyword counts did.
 
 Which gives four tiers:
 

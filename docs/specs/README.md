@@ -1,4 +1,15 @@
-# Feature Specifications — v0.3
+# Feature Specifications — v0.7
+
+**v0.7 (25 July 2026):** added the Platform foundation specs section and the dependency rule.
+
+## Document versioning convention
+
+Recorded 25 July 2026 for finding L-4 (document version inconsistency).
+
+- Each document carries its own version, reflecting when that document's **content** last changed.
+- The documentation **package** version is separate; `../../CHANGELOG.md` is authoritative for it (currently v0.6, also stated in `../../README.md` and `../../AGENTS.md`).
+- A document version is bumped only when its content changes; an unchanged document keeps its version even when the package version moves ahead.
+- A per-document version lower than the package version is therefore expected, not a defect. State the package baseline the document was last reviewed against instead of faking a bump.
 
 Canonical Kiro-compatible specifications are stored in `../../.kiro/specs/`. Each feature contains:
 

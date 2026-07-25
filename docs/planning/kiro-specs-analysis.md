@@ -171,14 +171,18 @@ Cross-referenced against the 24 modules in [`overview.md`](../architecture/overv
 |---|---|---|
 | `IdentityAccessAdapter` | ❌ **none** | every authenticated surface |
 | `DocumentVaultAdapter` | ❌ **none** | wizard Step 7, marketplace evidence, care evidence, memorial media, renewal import |
-| `PaymentAdapter` | ❌ **none** | 7 specs |
-| `NotificationAdapter` | ❌ **none** | 6 specs |
-| `AuditAdapter` | ❌ **none** | **13 specs** |
-| `FeatureGate` | ❌ **none** | 7 specs |
+| `PaymentAdapter` | ❌ **none** | 7 files / 4 specs |
+| `NotificationAdapter` | ❌ **none** | 6 files / 5 specs |
+| `AuditAdapter` | ❌ **none** | **13 files / 9 specs** |
+| `FeatureGate` | ❌ **none** | 7 files / 5 specs |
 | Transactional outbox (`queue-and-outbox.md`, ADR-0019) | ❌ **none** | mandatory for all critical events |
 | Financial ledger (`financial-ledger-and-settlement.md`, ADR-0020) | ❌ **none** | 5 specs |
 
-`AuditAdapter` is the sharpest illustration: **13 of 19 specs require audit behaviour, and no spec defines what audit is.** Each of those 13 will invent its own, and `AGENTS.md` requires append-only audit with specific referenced data.
+`AuditAdapter` is the sharpest illustration: **the word `audit` appears in 13 files across 9 specs, and no spec defines what audit is.** Each of those will invent its own, and `AGENTS.md` requires append-only audit with specific referenced data.
+
+> **Correction, 25 Jul 2026.** The counts in this table are `grep -ril` **file** counts, and an earlier revision mislabelled them as **spec** counts — the audit row read "13 specs" when the measurement was 13 files across 9 specs. Surfaced by a subagent writing ADR-0029, which found this table contradicting `sprint-plan.md` §3.4 and reported it rather than picking a number.
+>
+> These are **keyword-mention counts, not dependency counts**, and they under-report: a spec needing an admin panel needs identity whether or not it writes the word "MFA". They were a useful discovery heuristic — they are what surfaced the gap — but the reasoned per-spec dependency, which is what sequencing rests on, is in [`sprint-plan.md`](sprint-plan.md) §3.4. Note also that these counts are now **self-contaminated**: the `## Design system` sections appended to all 19 `tasks.md` contain the words *audit*, *authorization*, and *pending*, so re-running the old patterns partly measures those additions.
 
 **Impact:** every transactional vertical is spec-blocked, not just code-blocked. Building `public-booking-wizard` Step 7 requires document-vault behaviour that no spec defines; Step 8 requires payment-adapter behaviour that no spec defines; Step 9 requires notification behaviour that no spec defines.
 
@@ -403,7 +407,7 @@ $ grep -rnE '`(one of the 19 spec names)`' .kiro/specs/
 recurring-care-subscriptions/requirements.md:3: Fulfillment behavior is detailed in `grave-care-fulfillment`.
 ```
 
-Notably unreferenced despite being directly relevant: `marketplace-catalog.md` (0 — §2.4b), `mvp-scope.md` (0 — §2.4c), `notification-matrix.md` (0, though 6 specs need it), `order-lifecycle.md` (0, though several specs restate its states), `rbac-matrix.md` (0, though 13 specs need authorization), `assumptions-and-gates.md` (0, though 7 specs reference gates in prose).
+Notably unreferenced despite being directly relevant: `marketplace-catalog.md` (0 — §2.4b), `mvp-scope.md` (0 — §2.4c), `notification-matrix.md` (0, though 6 specs need it), `order-lifecycle.md` (0, though several specs restate its states), `rbac-matrix.md` (0, though nearly every spec needs authorization), `assumptions-and-gates.md` (0, though 7 specs reference gates in prose).
 
 The `.kiro/steering/project.md` file lists 17 canonical documents, so the linkage exists at steering level. But an agent working inside a single spec folder sees almost none of it.
 
@@ -523,7 +527,7 @@ These are required by `mvp-scope.md` / `AGENTS.md` / `release-gates.md` and owne
 | **Payment adapter / webhook** | `mvp-scope.md` §2 Step 8, §3, §4; `payment-webhook.md`; `release-gates.md` §C | 7 specs depend on it; Step 8 cannot be built |
 | **Identity / auth / MFA** | `AGENTS.md` (session auth + TOTP MFA); ADR-0024; `release-gates.md` §H | every panel depends on it |
 | **Document vault / upload pipeline** | `mvp-scope.md` §2 Step 7; ADR-0023; `file-upload-pipeline.md` | Step 7 + all evidence flows |
-| **Audit** | `AGENTS.md`; K8; ADR-0005 | **13 specs** reference audit behaviour |
+| **Audit** | `AGENTS.md`; K8; ADR-0005 | **13 files / 9 specs** mention audit; reasoned dependency is ~18 of 19 |
 | **Feature gate** | ADR-0006; `feature-flag-registry.md`; 17 gates in `assumptions-and-gates.md` | all gated fallbacks |
 | **Transactional outbox** | ADR-0019; `outbox-event-contract.md`; `queue-and-outbox.md` | **0 mentions anywhere** in `.kiro/` |
 | **Financial ledger / settlement** | ADR-0020; `financial-ledger-and-settlement.md`; `release-gates.md` §H | 5 specs reference journal/reconciliation |

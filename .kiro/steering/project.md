@@ -1,4 +1,6 @@
-# Makam.co.id Kiro Steering — v0.5
+# Makam.co.id Kiro Steering — v0.6
+
+**v0.6 (25 July 2026):** added canonical documents 18–20 plus the design-system and platform-foundation rules.
 
 Read these canonical documents before planning or implementation:
 
