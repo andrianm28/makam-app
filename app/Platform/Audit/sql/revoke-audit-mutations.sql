@@ -1,0 +1,66 @@
+-- NOT executed automatically by any migration, seeder, artisan
+-- command, or CI job. This file is documentation of the statements to
+-- run manually, once, after finding N-1 is resolved.
+--
+-- platform-audit design.md: "Append-only enforced at the database
+-- level: no UPDATE/DELETE grant on audit_events for the application
+-- role. Migration role only for schema."
+--
+-- Why this cannot be applied today
+-- ---------------------------------------------------------------------------
+-- Finding N-1 (docs/planning/sprint-plan.md): this project currently
+-- provisions only ONE Postgres role per environment
+-- (makam_dev_user / makam_stg_user — see
+-- docs/operations/examples/postgres-init/01-create-databases.sh),
+-- which OWNS the database (needed to run migrations, including the
+-- one that creates audit_events) and ALSO runs the application at
+-- request time. Revoking UPDATE/DELETE from that single role would
+-- also remove its own ability to run a future migration that alters
+-- this table (e.g. adding a column, or Laravel's own migration
+-- bookkeeping). There is no distinct, lower-privileged "application
+-- role" to revoke from yet — the role split needs two newly
+-- provisioned secrets per environment, which sprint-plan.md already
+-- classifies as a credential change requiring human approval.
+--
+-- docs/planning/sprint-plan.md already sketches the target shape for
+-- that split, in its own N-1 discussion (search that file for
+-- "makam_dev_app"):
+--
+--   CREATE ROLE makam_dev_app      LOGIN PASSWORD :'dev_app_password';
+--   CREATE ROLE makam_dev_migrator LOGIN PASSWORD :'dev_mig_password';
+--   CREATE DATABASE makam_dev OWNER makam_dev_migrator;
+--   -- ...mirrors for makam_stg / makam_stg_app / makam_stg_migrator
+--
+-- Run the statements below ONCE that split actually exists per
+-- environment, replacing <app_role> with the real non-migration
+-- application role (e.g. makam_dev_app in dev, makam_stg_app in
+-- staging). Until then, this file is reference only — see
+-- app/Platform/Audit/Models/AuditEvent.php for the application-level
+-- guard that stands in for this (explicitly NOT equivalent — see that
+-- class's doc block for exactly what it does and does not cover).
+
+-- 1. Remove the mutation privileges the application role would
+--    otherwise inherit from table ownership / a broad default grant.
+REVOKE UPDATE, DELETE ON audit_events FROM <app_role>;
+
+-- 2. The application role still needs to write new rows and read
+--    existing ones.
+GRANT SELECT, INSERT ON audit_events TO <app_role>;
+
+-- 3. Run per-table, deliberately, rather than as a schema-wide
+--    default privilege change. audit_events is meant to be the one
+--    exception to "the application role can UPDATE its own tables" —
+--    every other table in this schema is expected to allow UPDATE for
+--    the app role, so this must never be applied via
+--    `ALTER DEFAULT PRIVILEGES ... FOR ROLE <migrator> IN SCHEMA
+--    public REVOKE UPDATE, DELETE ON TABLES ...`, which would
+--    silently strip UPDATE from every future table too.
+
+-- 4. Confirm the revoke actually took effect (run as <app_role>, not
+--    as the migrator/owner role — the owner role bypasses ordinary
+--    grants):
+--
+--   SET ROLE <app_role>;
+--   UPDATE audit_events SET outcome = 'denied' WHERE id = 1;
+--   -- expected: ERROR: permission denied for table audit_events
+--   RESET ROLE;
