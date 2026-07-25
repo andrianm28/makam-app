@@ -26,6 +26,7 @@
  * Custom utilities for semantic tokens with no Tailwind theme namespace.
  * This is what makes `z-modal` and `duration-fast` legal instead of `z-[1400]`.
  * -------------------------------------------------------------------------- */
+@utility z-raised     { z-index: var(--mk-z-raised); }
 @utility z-sticky-cta { z-index: var(--mk-z-sticky-cta); }
 @utility z-dropdown   { z-index: var(--mk-z-dropdown); }
 @utility z-bottomnav  { z-index: var(--mk-z-bottomnav); }

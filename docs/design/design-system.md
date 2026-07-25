@@ -403,7 +403,7 @@ Interactive cards must contain **exactly one** focusable anchor covering the tit
 | Part | Classes |
 |---|---|
 | Backdrop | `fixed inset-0 bg-[var(--mk-surface-overlay)] z-backdrop` |
-| Sheet (`<md`) | `fixed inset-x-0 bottom-0 z-modal rounded-t-xl bg-white pb-[var(--mk-safe-bottom)] max-h-[85dvh] overflow-y-auto` |
+| Sheet (`<md`) | `fixed inset-x-0 bottom-0 z-modal rounded-t-xl bg-white pb-[var(--mk-safe-bottom)] max-h-[var(--mk-modal-sheet-max-height)] overflow-y-auto` |
 | Dialog (`md+`) | `md:relative md:inset-auto md:mx-auto md:my-16 md:max-w-lg md:rounded-xl md:shadow-xl` |
 | Header | `sticky top-0 bg-white border-b border-neutral-200 px-4 py-4 flex items-start gap-3` |
 | Footer | `sticky bottom-0 bg-white border-t border-neutral-200 px-4 py-4 flex flex-col-reverse gap-3 md:flex-row md:justify-end` |

@@ -376,6 +376,16 @@
   --mk-progress-fill: var(--color-primary-600);
   --mk-table-stripe: var(--color-neutral-50);
   --mk-table-hover: var(--color-primary-50);
+  --mk-modal-sheet-max-height: 85dvh; /* §3.4 bottom sheet on mobile; dvh
+    accounts for mobile browser chrome. No semantic-layer equivalent exists
+    for "85% of viewport", so this is a genuine component token, not a
+    hex/spacing/motion value with an existing home elsewhere. Found missing
+    25 Jul 2026: design-system.md §3.4 documented raw `max-h-[85dvh]`, which
+    the §9.2 MUST-NOT rules forbid (arbitrary Tailwind values are only
+    permitted as var() references to a real token) — the modal-building
+    agent correctly implemented the spec as written, so the defect was in
+    the spec, not the component. Fixed at the source instead of worked
+    around in the component. */
 }
 
 /* -----------------------------------------------------------------------------
