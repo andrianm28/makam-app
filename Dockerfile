@@ -77,30 +77,41 @@ FROM php:8.5-fpm-bookworm AS runtime
 # nginx is kept (not purged) — it is the HTTP server for this image, not a
 # build-time-only dependency like the -dev headers below.
 #
-# pcntl: laravel/horizon requires it (composer.lock) for worker signal
-# handling. It was missing here until the first real build caught composer's
-# platform check failing in the vendor stage over it — a real gap, not just a
-# vendor-stage artefact: this image is also what stg-horizon and the queue
-# workers run (docker-compose.dev-stg.yml), so pcntl has to work at runtime,
-# not merely satisfy a check. No -configure step needed, unlike intl.
+# pcntl: laravel/horizon requires it (composer.lock). NOT in the
+# docker-php-ext-install list below — two build attempts adding it there both
+# failed with "cp: cannot stat 'modules/*'" (Build complete, but nothing in
+# modules/ to install). ext/pcntl/config.m4 defaults PHP_PCNTL to enabled
+# unless --disable-pcntl is passed, and the official docker-library Dockerfile
+# for this exact base image (8.5/bookworm/fpm) never passes it — so pcntl is
+# almost certainly already compiled in, and docker-php-ext-install was being
+# asked to build a module that already exists (the exact, previously-reported
+# failure mode for e.g. `reflection`: docker-library/php#1137). Verified 25
+# Jul 2026 via php-src's config.m4 and the docker-library Dockerfile source,
+# NOT by running the image (this host cannot pull it — see -j note below).
+# The RUN step right after this one asserts it with `php -m`, so a wrong guess
+# here fails the build loudly instead of silently shipping without pcntl.
 #
-# No -j"$(nproc)": the second real build attempt failed here too — pcntl's
-# `make install-modules` ran with an empty modules/ dir ("cp: cannot stat
-# 'modules/*'") on the GitHub-hosted (multi-core) runner. Not independently
-# root-caused, but this is a known class of flakiness with parallel `make`
-# building PHP extensions on overlay filesystems; dropping -j removes the
-# parallelism instead of guessing at a per-extension workaround. Slower, not
-# proven necessary for every extension in this list — worth revisiting with
-# real evidence if build time becomes a problem later.
+# No -j"$(nproc)" on the extensions that ARE built here: an earlier attempt
+# (while pcntl was still in this list) failed the same way under -j on the
+# GitHub-hosted runner. Left removed since pcntl turned out to be the actual
+# cause either way, but not reverted back to -j either — not proven safe to
+# re-add without evidence, and the build is fast enough without it for now.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libpq-dev libzip-dev libicu-dev nginx \
     && docker-php-ext-configure intl \
-    && docker-php-ext-install pdo_pgsql pgsql zip intl opcache bcmath pcntl \
+    && docker-php-ext-install pdo_pgsql pgsql zip intl opcache bcmath \
     && pecl install redis \
     && docker-php-ext-enable redis \
     && apt-get purge -y --auto-remove libpq-dev libzip-dev libicu-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# Executable proof for the pcntl reasoning above, not just a comment: fail the
+# build immediately and clearly if this base image ever stops shipping pcntl
+# built in (a base image bump, for instance), rather than silently producing
+# an image where `php artisan horizon` fails at runtime instead of build time.
+RUN php -m | grep -qi '^pcntl$' \
+    || { echo 'pcntl is not built into this base image as expected — add it back to docker-php-ext-install above.' >&2; exit 1; }
 
 # php-fpm's own default pool listens on all interfaces; pin it to loopback —
 # nginx talks to it over 127.0.0.1 inside this same container, nothing else
