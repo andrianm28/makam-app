@@ -1250,9 +1250,9 @@ A conflict between ranks is a **defect**. Rank 1 wins for values; rank 2 wins fo
 
 Removing or weakening an assertion in `verify-contrast.py` to make a build pass is an accessibility regression and must be rejected in review.
 
-### 9.5 CI enforcement (**to be implemented** — see §12)
+### 9.5 CI enforcement — implemented 25 Jul 2026 (Batch 2.5, S2-T4)
 
-None of the following runs today; there is no CI pipeline and no `ci/version-matrix.yml` in this repository. Add these to the frontend job when the Laravel scaffold lands:
+All six gates below are live and blocking merges. Gates 1–3 and 4–5 run in `ci/verify-docs.sh` (GATE 1–3 and GATE 11–12 respectively — see that script's own numbering note for why 4/5 aren't literally "GATE 4"/"GATE 5" there, it already had unrelated gates at those numbers). Gate 6 runs as a step in `.github/workflows/ci.yml`'s `php` job, since it needs a bootstrapped Laravel app that `verify-docs.sh` (pure bash+python, no `vendor/`) cannot provide.
 
 ```bash
 # 1. Accessibility gate — hard fail
@@ -1275,7 +1275,7 @@ python3 docs/design/verify-contrast.py
 ! grep -rIn 'outline:\s*none' --include='*.css' resources/ | grep -v 'focus-visible'
 
 # 6. Filament PHP palette matches tokens.css (see §8.3 known gap)
-php artisan design:verify-filament-palette   # written 25 Jul 2026 — app/Console/Commands/VerifyFilamentPaletteCommand.php
+php artisan design:verify-filament-palette
 ```
 
 Also recommended: `axe-core` in the browser-test suite, and a Lighthouse budget matching §4.6. Both are **required by [`release-gates.md`](../testing/release-gates.md)** before production activation and are currently unimplemented.

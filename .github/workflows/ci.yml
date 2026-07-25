@@ -44,7 +44,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Run the ten documentation gates
+      - name: Run the documentation gates
         run: bash ci/verify-docs.sh
 
   # ---------------------------------------------------------------------------
@@ -148,6 +148,18 @@ jobs:
           DB_USERNAME: makam_test
           DB_PASSWORD: makam_test
           REDIS_HOST: 127.0.0.1
+
+      # design-system.md §9.5 gate 6: the Filament PHP colour palette
+      # (app/Support/Design/generated/) must match resources/css/tokens.css.
+      # ci/verify-docs.sh cannot run this gate itself — it is a pure bash+python
+      # script with no vendor/ or bootstrapped Laravel app (see its own header
+      # comment) — so it runs here instead, in the one job that already has
+      # composer install and a working artisan environment (APP_KEY prepared
+      # by "Prepare test environment" above). Command built and verified
+      # working in this same job's environment in Batch 2.4 (commit f33cabe);
+      # see app/Console/Commands/VerifyFilamentPaletteCommand.php.
+      - name: Verify Filament palette matches tokens.css
+        run: php artisan design:verify-filament-palette
 
   # ---------------------------------------------------------------------------
   # Frontend: lockfile install and production build. Also the point at which the

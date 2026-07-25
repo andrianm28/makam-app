@@ -151,6 +151,31 @@ else
   pass "no cat-based bypass of secret read denials"
 fi
 
+# ---------------------------------------------------------------------------
+head2 "GATE 11 — no raw z-index (design-system.md §9.5 gate 4)"
+# ---------------------------------------------------------------------------
+hits=$(grep -rInE 'z-index\s*:\s*[0-9]' --include='*.css' --include='*.blade.php' resources/ 2>/dev/null \
+        | grep -v 'resources/css/tokens.css' || true)
+if [ -z "$hits" ]; then pass "no raw z-index (all layering goes through --mk-z-* tokens)"
+else fail "raw z-index outside tokens.css:"; echo "$hits" | head -10; fi
+
+# ---------------------------------------------------------------------------
+head2 "GATE 12 — no focus suppression without replacement (design-system.md §9.5 gate 5)"
+# ---------------------------------------------------------------------------
+# design-system.md §9.5's own example (`grep -rIn 'outline:\s*none' --include='*.css'
+# resources/ | grep -v 'focus-visible'`) false-positives against this repo's current
+# state: both resources/css/app.css:89 and resources/css/tokens.css:276 contain the
+# literal string "outline: none" / "outline:none" inside a comment that WARNS against
+# ever doing it, not an actual declaration. Both are single-line `/* ... */` comments,
+# so filtering out lines containing the comment opener removes the false positive
+# without weakening the check against a real `outline: none;` declaration, which would
+# never have a `/*` earlier on the same line. Verified empirically against the current
+# repo (07/2026): zero real hits either way.
+hits=$(grep -rIn 'outline:\s*none' --include='*.css' resources/ 2>/dev/null \
+        | grep -v 'focus-visible' | grep -v '/\*' || true)
+if [ -z "$hits" ]; then pass "no unreplaced focus suppression"
+else fail "outline: none without a focus-visible replacement:"; echo "$hits" | head -10; fi
+
 printf '\n'
 if [ "$FAIL" -eq 0 ]; then
   printf '\033[32mRESULT: ALL DOC GATES PASS\033[0m\n'; exit 0
