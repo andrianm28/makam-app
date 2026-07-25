@@ -43,10 +43,16 @@ fi
 # ---------------------------------------------------------------------------
 head2 "GATE I1 — compose file is valid"
 # ---------------------------------------------------------------------------
-if docker compose -f "$COMPOSE" config -q 2>/dev/null; then
+# `sudo -n` here (and on every other `docker compose ... config` call below)
+# is still read-only — it does not violate the file-header rule. dev-web's
+# .env.dev is root:root mode 0400 (holds APP_KEY + DB_PASSWORD), so `docker
+# compose config` needs root just to PARSE the file and print the resolved
+# config; this gate first failed with "permission denied" the moment that
+# secret file existed, once dev-web actually replaced dev-placeholder.
+if sudo -n docker compose -f "$COMPOSE" config -q 2>/dev/null; then
   pass "docker compose config parses"
 else
-  fail "compose config invalid"; docker compose -f "$COMPOSE" config -q
+  fail "compose config invalid"; sudo -n docker compose -f "$COMPOSE" config -q
 fi
 
 # ---------------------------------------------------------------------------
@@ -54,7 +60,7 @@ head2 "GATE I2 — every service with ports: is on a routable network  [N-4]"
 # ---------------------------------------------------------------------------
 # Docker silently drops the ports: mapping for a container attached only to an
 # internal:true network. The declaration stays in the file and looks correct.
-out=$(docker compose -f "$COMPOSE" config 2>/dev/null | python3 -c '
+out=$(sudo -n docker compose -f "$COMPOSE" config 2>/dev/null | python3 -c '
 import sys, yaml
 cfg = yaml.safe_load(sys.stdin)
 nets = cfg.get("networks") or {}
@@ -78,7 +84,7 @@ head2 "GATE I3 — declared ports are actually listening  [N-4]"
 # ---------------------------------------------------------------------------
 # I2 checks the config; this checks reality. They can disagree if a container
 # was created before the network was fixed.
-declared=$(docker compose -f "$COMPOSE" config 2>/dev/null | python3 -c '
+declared=$(sudo -n docker compose -f "$COMPOSE" config 2>/dev/null | python3 -c '
 import sys, yaml
 cfg = yaml.safe_load(sys.stdin)
 for svc, s in (cfg.get("services") or {}).items():
@@ -129,8 +135,13 @@ check_mount() {
 }
 check_mount makam-nonprod-postgres-1        postgres /docker-entrypoint-initdb.d
 check_mount makam-nonprod-postgres-1        postgres /run/secrets
-check_mount makam-nonprod-dev-placeholder-1 nginx    /usr/share/nginx/html
 check_mount makam-nonprod-stg-placeholder-1 nginx    /usr/share/nginx/html
+# dev-placeholder's check_mount line was removed here, not redirected to
+# dev-web — the N-5 class of defect (bind-mounted asset unreadable by the
+# container's runtime uid) doesn't apply to dev-web at all: it has no
+# bind mounts. Its content (public/, resources/, etc.) is baked into the
+# image at build time, which is the entire point of an immutable artifact
+# (ci-cd-and-release.md §1) — there is nothing analogous to check here.
 
 # ---------------------------------------------------------------------------
 head2 "GATE I5 — application databases and extensions exist  [C-2]"
@@ -218,14 +229,23 @@ head2 "GATE I9 — dev.makam.co.id is public-by-decision and not indexable"
 # rather than silently accepting the drift.
 # stg.makam.co.id is unaffected by ADR-0031 and is not checked by this gate.
 # release-gates.md section I still requires noindex, unchanged by ADR-0031.
-code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 https://dev.makam.co.id/ 2>/dev/null)
+#
+# Checks /up, not /: this gate first failed with "returned unexpected 404"
+# the moment dev-web (a real, deployed Laravel app) replaced dev-placeholder
+# (a static page that always answered / with 200). / has no route yet —
+# routes/web.php deliberately has none until the homepage spec ships
+# (Sprint 4) — so a 404 there is correct app behaviour, not a policy
+# violation, and this gate should not conflate the two. /up is the stable
+# contract: Laravel's built-in health route, present regardless of which
+# feature specs have landed.
+code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 https://dev.makam.co.id/up 2>/dev/null)
 case "$code" in
-  200)     pass "dev.makam.co.id returns 200 without credentials (ADR-0031: intended)" ;;
+  200)     pass "dev.makam.co.id/up returns 200 without credentials (ADR-0031: intended)" ;;
   000)     skip "dev.makam.co.id not reachable from here" ;;
-  401|403) fail "dev.makam.co.id returned $code — access restriction is back but ADR-0031/this gate were not reverted to match" ;;
-  *)       fail "dev.makam.co.id returned unexpected $code" ;;
+  401|403) fail "dev.makam.co.id/up returned $code — access restriction is back but ADR-0031/this gate were not reverted to match" ;;
+  *)       fail "dev.makam.co.id/up returned unexpected $code" ;;
 esac
-hdr=$(curl -sI --max-time 8 https://dev.makam.co.id/ 2>/dev/null | grep -ic 'x-robots-tag')
+hdr=$(curl -sI --max-time 8 https://dev.makam.co.id/up 2>/dev/null | grep -ic 'x-robots-tag')
 if [ "${hdr:-0}" -ge 1 ]; then pass "X-Robots-Tag present on dev"
 elif [ "$code" = "000" ]; then skip "cannot check noindex header"
 else fail "X-Robots-Tag missing on dev — it may be indexed"; fi
