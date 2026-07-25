@@ -25,4 +25,10 @@ These are pointers with one-line summaries. The cited document governs; this lis
 
 ## Scope note
 
-This repository is documentation and planning only — it currently contains no application code. Doc gates live in [`ci/verify-docs.sh`](ci/verify-docs.sh); run it after editing repository documents.
+Updated 25 Jul 2026 — this note previously said the repository was documentation-only. That stopped being true when the Laravel 13 scaffold landed (`composer.json`, `app/`, `resources/`, `.github/workflows/ci.yml`), and CI has run and passed. Docs and application code coexist here now.
+
+Two gate scripts, run after the change they cover:
+- [`ci/verify-docs.sh`](ci/verify-docs.sh) — repository-wide, no build required. Also scans `resources/` and `app/` for hardcoded design values and arbitrary Tailwind values, so it applies to Blade components too, not just Markdown.
+- [`ci/verify-infra.sh`](ci/verify-infra.sh) — the live `makam-nonprod` stack; needs `docker` access, so it only runs on the deployment host.
+
+Composer and npm builds run in CI (`.github/workflows/ci.yml`), never on this host — see `docs/operations/ci-cd-and-release.md` §10. Do not run `npm run build` or a full `composer install` here; verify by pushing and checking the CI result instead.
