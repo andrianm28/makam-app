@@ -83,11 +83,20 @@ FROM php:8.5-fpm-bookworm AS runtime
 # vendor-stage artefact: this image is also what stg-horizon and the queue
 # workers run (docker-compose.dev-stg.yml), so pcntl has to work at runtime,
 # not merely satisfy a check. No -configure step needed, unlike intl.
+#
+# No -j"$(nproc)": the second real build attempt failed here too — pcntl's
+# `make install-modules` ran with an empty modules/ dir ("cp: cannot stat
+# 'modules/*'") on the GitHub-hosted (multi-core) runner. Not independently
+# root-caused, but this is a known class of flakiness with parallel `make`
+# building PHP extensions on overlay filesystems; dropping -j removes the
+# parallelism instead of guessing at a per-extension workaround. Slower, not
+# proven necessary for every extension in this list — worth revisiting with
+# real evidence if build time becomes a problem later.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libpq-dev libzip-dev libicu-dev nginx \
     && docker-php-ext-configure intl \
-    && docker-php-ext-install -j"$(nproc)" pdo_pgsql pgsql zip intl opcache bcmath pcntl \
+    && docker-php-ext-install pdo_pgsql pgsql zip intl opcache bcmath pcntl \
     && pecl install redis \
     && docker-php-ext-enable redis \
     && apt-get purge -y --auto-remove libpq-dev libzip-dev libicu-dev \
