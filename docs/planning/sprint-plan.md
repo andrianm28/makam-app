@@ -465,7 +465,7 @@ No features. No screens. No migrations beyond framework defaults. No nginx/DNS c
 | S2-T2 | Build `<x-mk.*>` primitives (button, field, card, modal, table, badge, alert, stepper, header) | design system | design §3 | 4 pd | — | ❌ open |
 | S2-T3 | Verify Filament 5 theming; implement `StatusIntent`; resolve OQ-09 palette duplication | design §3.7 + `booking-and-order-orchestration` | design §8.3, OQ-09 | 2 pd | — | ❌ open |
 | S2-T4 | Add all six design governance gates to CI, incl. `verify-contrast.py` as hard fail | design system | design §9.5 | 1 pd | — | ❌ open |
-| S2-T5 | nginx dev/stg vhosts + DNS + IP allowlist + TLS + `noindex` | infra | **M-1** | 2 pd | ⚠️ **HUMAN** | ❌ open |
+| S2-T5 | nginx dev/stg vhosts + DNS + IP allowlist + TLS + `noindex` | infra | **M-1** | 2 pd | ⚠️ **HUMAN** | ⚠️ **dev done 25 Jul; stg blocked on DNS** |
 | S2-T6 | Redis `requirepass` + separate prefixes/namespaces per environment | infra, `platform-outbox` prep | **M-5** | 1 pd | ⚠️ **HUMAN** | ❌ open |
 | S2-T7 | Encrypted daily staging backup to remote object storage + **restore test with evidence** | infra | **M-4** | 2 pd | ⚠️ **HUMAN** | ❌ **blocked on OQ-4** |
 | S2-T8 | Downgrade the 32 false `Covered` claims in the traceability matrix | traceability | **H-3** | 1 pd | — | ❌ open (verified: still 32 `Covered`, 0 tests) |
@@ -854,6 +854,9 @@ These were not in the original analysis and need tracking:
 | **N-1** | The init script creates **one** role per environment, but `database-backup-and-recovery.md` §8 requires **separate application and migration roles** with least privilege. Fixed in the S1-T3 DDL. | Medium | S1-T3 |
 | **N-2** | **No Content-Security-Policy** is defined anywhere in `security-baseline.md`. Cheap to add before the scaffold hardens; expensive to retrofit around Livewire/Alpine. | Medium | design OQ-10 → Sprint 1/2 |
 | **N-3** | ADR-0021 requires **managed** PostgreSQL with PITR for production; today's setup is a self-hosted Docker container with no backups. **No provider has been chosen.** Blocks all production planning. | **High** | R-5, Sprint 16 |
+| **N-4** | **A container attached only to an `internal: true` network silently ignores its `ports:` mapping.** The deployed compose declared `127.0.0.1:8081:80` for both placeholders while `docker port` returned nothing — so dev and staging were unreachable for reasons unrelated to nginx. The repo example always had a second `egress` bridge network; the deployed file had dropped it. Fixed 25 Jul 2026 by restoring `egress` and attaching both placeholders to `[backend, egress]`. **The real `dev-web`/`stg-web` containers need the same pair.** | **High** | S2-T5, drift H-5 |
+| **N-5** | Placeholder HTML was mode `0660` owned by uid 1000, but nginx inside the container runs as uid 101, so it could not read the file — a 403 waiting to happen even once the port worked. Fixed to `0644`. Generalises: **any bind-mounted asset must be readable by the container's runtime uid, not just by the host owner.** Same class of defect as C-2. | Medium | S2-T5 |
+| **N-6** | `sudo mkdir` on this host produces `drwxr-x---` (root umask 077), so an ACME webroot created that way is untraversable by `www-data` and returns 404. Certbot creates its own directories correctly during issuance, but a pre-existing restrictive directory would break **renewal** silently, 89 days later. Fixed to `0755` and verified the challenge path returns 200 without auth. | Medium | S2-T5 |
 
 ---
 
