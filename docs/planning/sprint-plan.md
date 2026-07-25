@@ -141,7 +141,7 @@ Note: `technology-baseline.md` pins `tailwindcss:^4.1`, which resolves to **4.3.
 | Laravel 13 skeleton, all 8 baseline artefacts | ✅ Complete, lockfiles committed |
 | CI pipeline | ✅ Core stages of `ci-cd-and-release.md` §2 running and blocking merges |
 | `makam_dev` + `makam_stg` databases, roles, extensions, isolation | ✅ Created, cross-access negative-tested |
-| Non-prod hardening: nginx dev/stg, IP allowlist, `noindex`, Redis auth, backups + restore test | ✅ Done |
+| Non-prod hardening: nginx dev/stg, `noindex`, Redis auth, backups + restore test. **`dev.` access restriction was later reversed by explicit decision — dev is now intentionally public; see ADR-0031.** `stg.` access restriction is unaffected. | ✅ Done |
 | Design system wired and CI-enforced | ✅ Tokens → Tailwind → Filament; contrast gate blocking |
 | `<x-mk.*>` primitives | ✅ Buttons, fields, cards, modals, tables, badges, alerts, stepper, header |
 | Homepage — 4 service cards, exact order, 5 launch regions | ✅ Complete |
@@ -465,7 +465,7 @@ No features. No screens. No migrations beyond framework defaults. No nginx/DNS c
 | S2-T2 | Build `<x-mk.*>` primitives (button, field, card, modal, table, badge, alert, stepper, header) | design system | design §3 | 4 pd | — | ❌ open |
 | S2-T3 | Verify Filament 5 theming; implement `StatusIntent`; resolve OQ-09 palette duplication | design §3.7 + `booking-and-order-orchestration` | design §8.3, OQ-09 | 2 pd | — | ❌ open |
 | S2-T4 | Add all six design governance gates to CI, incl. `verify-contrast.py` as hard fail | design system | design §9.5 | 1 pd | — | ❌ open |
-| S2-T5 | nginx dev/stg vhosts + DNS + IP allowlist + TLS + `noindex` | infra | **M-1** | 2 pd | ⚠️ **HUMAN** | ⚠️ **dev done 25 Jul; stg blocked on DNS** |
+| S2-T5 | nginx dev/stg vhosts + DNS + IP allowlist + TLS + `noindex` | infra | **M-1** | 2 pd | ⚠️ **HUMAN** | ⚠️ **dev done 25 Jul; dev's allowlist later removed by decision same day (ADR-0031); stg blocked on DNS** |
 | S2-T6 | Redis `requirepass` + separate prefixes/namespaces per environment | infra, `platform-outbox` prep | **M-5** | 1 pd | ⚠️ **HUMAN** | ❌ open |
 | S2-T7 | Encrypted daily staging backup to remote object storage + **restore test with evidence** | infra | **M-4** | 2 pd | ⚠️ **HUMAN** | ❌ **blocked on OQ-4** |
 | S2-T8 | Downgrade the 32 false `Covered` claims in the traceability matrix | traceability | **H-3** | 1 pd | — | ❌ open (verified: still 32 `Covered`, 0 tests) |
@@ -485,6 +485,8 @@ No features. No screens. No migrations beyond framework defaults. No nginx/DNS c
 Implement `StatusIntent` as the one place status → intent resolution happens (design §3.7), shared by public Livewire views and Filament tables. This must exist **before** any status is rendered anywhere.
 
 **S2-T5 — nginx / DNS / allowlist (⚠️ HUMAN GATE).** Touches DNS and firewall — both are required-pause conditions in `AGENTS.md` and the execution checklist. Deliver: `dev.makam.co.id` → `127.0.0.1:8081`, `stg.makam.co.id` → `127.0.0.1:8082`, restart the placeholder containers (or the real app image once it exists), IP allowlist or basic auth for dev, TLS via Certbot, `X-Robots-Tag: noindex` on both.
+>
+> **Updated 25 Jul 2026.** Basic auth was delivered for dev as scoped above, then explicitly reversed the same day by user decision — dev is now intentionally public, `noindex` only. See [ADR-0031](../adr/0031-make-dev-environment-public.md). `stg`'s allowlist/auth requirement is unaffected by this reversal.
 
 > **Take care:** `makam.co.id` currently serves a **live** static landing page plus `makam-notify.service` on `:3001`. Adding subdomain vhosts must not disturb it. Back up nginx config first; keep a rollback path; verify the apex still returns 200 afterwards.
 >
@@ -498,7 +500,7 @@ Implement `StatusIntent` as the one place status → intent resolution happens (
 
 ### Deliverable
 
-Design system enforced by CI. `dev.` and `stg.` reachable, TLS-terminated, access-restricted, `noindex`. Redis authenticated and namespaced. Staging backup running with a **recorded successful restore**. Traceability honest.
+Design system enforced by CI. `dev.` and `stg.` reachable, TLS-terminated, `noindex`. `stg.` access-restricted; `dev.` intentionally public by decision (ADR-0031). Redis authenticated and namespaced. Staging backup running with a **recorded successful restore**. Traceability honest.
 
 ### Definition of Done
 
@@ -507,7 +509,7 @@ Design system enforced by CI. `dev.` and `stg.` reachable, TLS-terminated, acces
 - [ ] All nine `<x-mk.*>` primitives exist with their documented states
 - [ ] Filament panel renders with brand palette; `StatusIntent` is the sole resolver
 - [ ] All six §9.5 CI gates active; `verify-contrast.py` blocks merge
-- [ ] `https://dev.makam.co.id` and `https://stg.makam.co.id` return 200, TLS valid, allowlist enforced, `noindex` header present
+- [ ] `https://dev.makam.co.id` and `https://stg.makam.co.id` return 200, TLS valid, `noindex` header present; `stg.` allowlist enforced, `dev.` intentionally unrestricted (ADR-0031)
 - [ ] `https://makam.co.id` **still returns 200** (regression check)
 - [ ] `redis-cli ping` without auth **fails**; app connects with auth; prefixes distinct per env
 - [ ] Backup exists in remote storage; **restore executed**; evidence recorded per §5
@@ -872,7 +874,7 @@ These were not in the original analysis and need tracking:
 | I6 | dev↔stg isolation broken | C-2 follow-up |
 | I7 | Postgres or Redis reachable from the host | security-baseline |
 | I8 | secret files not owned by uid 999 | C-2 root cause |
-| I9 | `dev.makam.co.id` public, or missing `noindex` | dev-staging §75, release-gates §I |
+| I9 | `dev.makam.co.id` missing `noindex`, or unexpectedly *not* public | dev-staging §5 (updated, ADR-0031), release-gates §I |
 | **I10** | ACME path behind auth — renewal would fail silently | **N-6** |
 | I11 | the live apex broken by an nginx change | S2-T5 regression |
 
@@ -880,7 +882,7 @@ These were not in the original analysis and need tracking:
 
 Two gates remain **NOT negative-tested**: I5 (would require dropping a database) and I10 (would require reloading nginx without the auth bypass). Both are asserted from their positive result only.
 
-**Certificate renewal IS verified.** `certbot renew --cert-name dev.makam.co.id --dry-run` completed on 25 Jul 2026 with *"Congratulations, all simulated renewals succeeded"* and exit 0. It had twice exceeded a 2-minute foreground timeout and was reported as unverified in the preceding commit; that reservation is now withdrawn. The full ACME round trip works through basic auth, which was the risk gate I10 exists to guard.
+**Certificate renewal IS verified.** `certbot renew --cert-name dev.makam.co.id --dry-run` completed on 25 Jul 2026 with *"Congratulations, all simulated renewals succeeded"* and exit 0. It had twice exceeded a 2-minute foreground timeout and was reported as unverified in the preceding commit; that reservation is now withdrawn. The full ACME round trip works through basic auth, which was the risk gate I10 exists to guard. **Basic auth was removed from `dev.makam.co.id` later the same day (ADR-0031)** — GATE I10 remains valid and unchanged: with no auth at all, the ACME path is trivially reachable, so the condition I10 guards against cannot occur on dev while ADR-0031 stands.
 
 ---
 
@@ -1005,7 +1007,7 @@ Because "every week has measurable progress" was an explicit goal. Sprint 3 is t
 | 1 | 1 | ✅ `makam_dev`/`makam_stg` exist with `pg_trgm`; secrets readable by uid 999; healthcheck asserts schema *(done 25 Jul 2026)* |
 | 2 | 1 | Laravel 13 boots; `migrate` succeeds; CI green on a PR; lockfiles committed |
 | 3 | 2 | Tailwind build emits token-driven CSS; contrast gate blocking merges; first `<x-mk.*>` primitives rendering |
-| 4 | 2 | `dev.`/`stg.` reachable over TLS with allowlist + `noindex`; Redis authenticated; restore evidence recorded |
+| 4 | 2 | `dev.`/`stg.` reachable over TLS with `noindex` (`stg.` allowlisted, `dev.` intentionally public per ADR-0031); Redis authenticated; restore evidence recorded |
 | 5 | **3** | A privileged user must enrol TOTP to reach a panel; cross-scope access denied by test |
 | 6 | **3** | A closed gate returns an explanatory page; a mutation without its audit record fails a test; commit-then-crash still publishes its outbox event |
 | 7 | 4 | Seeds loaded from canonical catalogues; **FAQ complete** — public + admin CMS, browser-tested |

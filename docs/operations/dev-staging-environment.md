@@ -72,8 +72,10 @@ Production credentials must never be copied to the host. Production data is proh
 
 ## 5. Access controls
 
-- `dev.makam.co.id`: VPN, IP allowlist, or reverse-proxy authentication; not public.
-- `stg.makam.co.id`: limited stakeholder/UAT access; authentication required where appropriate.
+- `dev.makam.co.id`: **public, by explicit decision — see note below.** No VPN, IP allowlist, or reverse-proxy authentication as of 25 Jul 2026.
+- `stg.makam.co.id`: limited stakeholder/UAT access; authentication required where appropriate. **Unaffected by the note below** — this line still applies to staging as originally written.
+
+> **Updated 25 Jul 2026 (ADR-0031).** This line originally required `dev.makam.co.id` to refuse unauthenticated access, implemented as HTTP basic auth the same day. Hours later the user explicitly requested making dev public, was shown this exact conflict, and reaffirmed the request — see [ADR-0031](../adr/0031-make-dev-environment-public.md) for the full reasoning and consequences. `auth_basic` was removed from the nginx vhost; `ci/verify-infra.sh` GATE I9 was updated in the same change to expect `200` rather than `401`/`403`. The `X-Robots-Tag: noindex` requirement in the line below is unchanged and still enforced — dev is public but still asked not to be indexed/crawled. Because dev is now reachable by anyone, including scanners (already observed probing this host for `.env`/`.git`/backup files on unrelated vhosts), §4's synthetic-data-only rule and normal secret hygiene matter more here than before, not less.
 - Both environments return `X-Robots-Tag: noindex, nofollow` and disallow crawler indexing.
 - SSH uses keys, no password login, least-privilege sudo, and restricted firewall rules.
 - PostgreSQL and Redis are not exposed publicly.

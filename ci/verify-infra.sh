@@ -207,15 +207,23 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-head2 "GATE I9 — dev.makam.co.id is not public and not indexable"
+head2 "GATE I9 — dev.makam.co.id is public-by-decision and not indexable"
 # ---------------------------------------------------------------------------
-# dev-staging-environment.md line 75 requires access restriction.
-# release-gates.md section I requires noindex.
+# ADR-0031 (25 Jul 2026): access restriction removed from dev.makam.co.id by
+# explicit user decision, reversing dev-staging-environment.md's original
+# §5/line 75 requirement (see that document's own dated note). This gate was
+# updated in the same change: a bare 200 is now the CORRECT state, not a
+# failure. A 401/403 here means access restriction came back (e.g. a config
+# rollback) without this gate and ADR-0031 being reverted together — flag it
+# rather than silently accepting the drift.
+# stg.makam.co.id is unaffected by ADR-0031 and is not checked by this gate.
+# release-gates.md section I still requires noindex, unchanged by ADR-0031.
 code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 https://dev.makam.co.id/ 2>/dev/null)
 case "$code" in
-  401|403) pass "dev.makam.co.id refuses unauthenticated access ($code)" ;;
+  200)     pass "dev.makam.co.id returns 200 without credentials (ADR-0031: intended)" ;;
   000)     skip "dev.makam.co.id not reachable from here" ;;
-  *)       fail "dev.makam.co.id returned $code without credentials — it is PUBLIC" ;;
+  401|403) fail "dev.makam.co.id returned $code — access restriction is back but ADR-0031/this gate were not reverted to match" ;;
+  *)       fail "dev.makam.co.id returned unexpected $code" ;;
 esac
 hdr=$(curl -sI --max-time 8 https://dev.makam.co.id/ 2>/dev/null | grep -ic 'x-robots-tag')
 if [ "${hdr:-0}" -ge 1 ]; then pass "X-Robots-Tag present on dev"
