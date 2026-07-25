@@ -1,0 +1,439 @@
+/* =============================================================================
+ * Makam.co.id — Design Tokens (SINGLE SOURCE OF TRUTH)
+ * =============================================================================
+ * Spec         : docs/design/design-system.md
+ * Version      : v0.1 (design baseline, unreleased)
+ * Stack        : Tailwind CSS 4.1+ (CSS-first `@theme`), Livewire 4, Filament 5
+ *
+ * RULES (enforced — see docs/design/design-system.md §9 Governance)
+ *  1. This file is the ONLY place a raw colour/size literal may be introduced.
+ *  2. Never hardcode a hex, px, ms, or shadow anywhere else. Reference a token.
+ *  3. Never use Tailwind arbitrary values for design decisions
+ *     (`text-[#12545E]`, `p-[13px]`, `z-[9999]`). Use the generated utility.
+ *  4. Adding or changing a token requires an ADR (see §9.4).
+ *  5. `@theme` emits every token below as a `:root` custom property, so plain
+ *     CSS, Filament panels, PDF/print stylesheets, and e-mail templates can all
+ *     consume `var(--color-primary-600)` without Tailwind utilities.
+ *
+ * LOAD ORDER — this file MUST be imported after `@import "tailwindcss";`
+ *
+ * Contrast: every pair marked "AA" in the spec was computed with
+ * docs/design/verify-contrast.py (WCAG 2.1 relative-luminance). Re-run it in CI
+ * after ANY colour change. Ratios are recorded in design-system.md §6.1.
+ * ========================================================================== */
+
+/* -----------------------------------------------------------------------------
+ * 1. PRIMITIVES — Tailwind theme namespaces (generate utilities + :root vars)
+ * -------------------------------------------------------------------------- */
+@theme {
+  /* ---------------------------------------------------------------------------
+   * 1.1 COLOUR — PRIMARY "Petrol"  (hue ~188, deep desaturated teal-blue)
+   * Brand, primary CTA, links, active nav, focus ring, informational surfaces.
+   * Deliberately NOT green: leaves the green hue free for `success` so a
+   * "Selesai" badge is never confusable with a brand button. See §2.2.
+   * ------------------------------------------------------------------------ */
+  --color-primary-50:  #EFF7F8;
+  --color-primary-100: #D6EBEE;
+  --color-primary-200: #ADD7DD;
+  --color-primary-300: #7BBAC5;
+  --color-primary-400: #4A97A6;
+  --color-primary-500: #2A7A8B;
+  --color-primary-600: #12545E; /* base — white label AA 8.55:1 */
+  --color-primary-700: #0F4550; /* hover / link on light */
+  --color-primary-800: #0D3842; /* pressed */
+  --color-primary-900: #0B2E36; /* footer, inverse header */
+  --color-primary-950: #061A1F;
+
+  /* ---------------------------------------------------------------------------
+   * 1.2 COLOUR — SECONDARY "Sandstone" (hue ~32, warm earth/stone)
+   * SURFACE & ACCENT ONLY. Evokes batu nisan / tanah — warmth without festivity.
+   * HARD CONSTRAINT: hue sits 6.5 deg from `warning`. Therefore secondary is
+   * NEVER a filled status chip, alert, or button. Allowed: 50–200 as surface
+   * tint, 700–900 as text on those tints, 300–400 as decorative rule/icon.
+   * ------------------------------------------------------------------------ */
+  --color-secondary-50:  #FBF8F4;
+  --color-secondary-100: #F4EDE3;
+  --color-secondary-200: #E7D9C6;
+  --color-secondary-300: #D5C0A1;
+  --color-secondary-400: #BFA179;
+  --color-secondary-500: #A9865C;
+  --color-secondary-600: #8A6A45;
+  --color-secondary-700: #6F5539;
+  --color-secondary-800: #5A4530;
+  --color-secondary-900: #4A3928;
+  --color-secondary-950: #281E14;
+
+  /* ---------------------------------------------------------------------------
+   * 1.3 COLOUR — NEUTRAL (slightly cool, harmonises with Petrol)
+   * ------------------------------------------------------------------------ */
+  --color-neutral-0:   #FFFFFF;
+  --color-neutral-50:  #F7F8F8;
+  --color-neutral-100: #EEF0F0;
+  --color-neutral-200: #DCE0E0; /* decorative divider only — see §6.3 */
+  --color-neutral-300: #C1C7C7; /* decorative border only — see §6.3 */
+  --color-neutral-400: #98A0A0;
+  --color-neutral-450: #7F8787; /* INTERACTIVE BORDER — AA-non-text 3.67:1 */
+  --color-neutral-500: #6F7878; /* placeholder — AA 4.53:1 on white */
+  --color-neutral-600: #576060; /* muted / helper text — AA 6.47:1 */
+  --color-neutral-700: #444B4B; /* body text — AA 8.92:1 */
+  --color-neutral-800: #2D3333; /* headings — AA 12.86:1 */
+  --color-neutral-900: #1A1F1F; /* display headings — AA 16.67:1 */
+  --color-neutral-950: #0D1111;
+
+  /* ---------------------------------------------------------------------------
+   * 1.4 COLOUR — SEMANTIC
+   * Hue separation (600 shade): primary 188 | success 146 | info 228
+   *                             warning 39  | danger  3
+   * ------------------------------------------------------------------------ */
+  /* SUCCESS — DIBAYAR, SELESAI, upload accepted, autosave confirmed */
+  --color-success-50:  #EEF8F1;
+  --color-success-100: #D5EEDD;
+  --color-success-200: #A8DCBB;
+  --color-success-300: #71C393;
+  --color-success-400: #3EA46B;
+  --color-success-500: #1F8A4F;
+  --color-success-600: #1C7A44; /* white label AA 5.36:1 */
+  --color-success-700: #166237;
+  --color-success-800: #134E2D;
+  --color-success-900: #104026;
+  --color-success-950: #062314;
+
+  /* WARNING — MENUNGGU_*, quote expiring, scan pending, URGENT time pressure */
+  --color-warning-50:  #FDF6EB;
+  --color-warning-100: #FAEACB;
+  --color-warning-200: #F3D294;
+  --color-warning-300: #E7B357;
+  --color-warning-400: #D4922A;
+  --color-warning-500: #B87A12;
+  --color-warning-600: #9A6300; /* darkened from #A66B00 to reach AA 5.05:1 */
+  --color-warning-700: #855400;
+  --color-warning-800: #6A4400;
+  --color-warning-900: #573800;
+  --color-warning-950: #2E1D00;
+
+  /* DANGER — DITOLAK, validation error, payment failed, file rejected.
+   * Muted brick, not neon red: the tone must stay respectful (§2.3). */
+  --color-danger-50:  #FDF2F1;
+  --color-danger-100: #FBDFDC;
+  --color-danger-200: #F5BEB9;
+  --color-danger-300: #EC948C;
+  --color-danger-400: #DE6459;
+  --color-danger-500: #C63F33;
+  --color-danger-600: #A32A24; /* white label AA 7.21:1 */
+  --color-danger-700: #87211D;
+  --color-danger-800: #6E1B18;
+  --color-danger-900: #5B1815;
+  --color-danger-950: #310A09;
+
+  /* INFO — gated-fallback mode banners, neutral system notices */
+  --color-info-50:  #F1F3FC;
+  --color-info-100: #E0E5F8;
+  --color-info-200: #C3CCF1;
+  --color-info-300: #9CAAE5;
+  --color-info-400: #7183D5;
+  --color-info-500: #4D60C0;
+  --color-info-600: #3A4E9B; /* white label AA 7.66:1 */
+  --color-info-700: #31417F;
+  --color-info-800: #293568;
+  --color-info-900: #242D55;
+  --color-info-950: #12162C;
+
+  /* ---------------------------------------------------------------------------
+   * 1.5 SPACING — 4 px base. Tailwind 4 derives the whole scale from this,
+   * so p-1=4px, p-2=8px, p-3=12px, p-4=16px, p-6=24px, p-11=44px ... p-24=96px.
+   * ------------------------------------------------------------------------ */
+  --spacing: 0.25rem;
+
+  /* ---------------------------------------------------------------------------
+   * 1.6 TYPOGRAPHY
+   * Self-hosted only. No CDN, no Google Fonts request: staging is noindex and
+   * access-restricted, and third-party font fetches leak visitor IPs on a page
+   * where the visitor is arranging a funeral. Subset: latin + latin-ext.
+   * ------------------------------------------------------------------------ */
+  --font-sans: "Inter var", "Inter", ui-sans-serif, system-ui, -apple-system,
+               "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Display serif: gravitas for hero + certificate/invoice documents only.
+   * Loaded per-route, never on the wizard (perf budget §5 of the spec). */
+  --font-display: "Source Serif 4", "Lora", ui-serif, Georgia, Cambria, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Mobile-first type scale. Line-heights are unitless-derived rem values. */
+  --text-2xs: 0.6875rem;              /* 11px — legal/footnote only */
+  --text-2xs--line-height: 1rem;      /* 16px */
+  --text-xs: 0.75rem;                 /* 12px — badge, table meta */
+  --text-xs--line-height: 1rem;       /* 16px */
+  --text-sm: 0.875rem;                /* 14px — helper, table body */
+  --text-sm--line-height: 1.25rem;    /* 20px */
+  --text-base: 1rem;                  /* 16px — body. NEVER smaller for forms. */
+  --text-base--line-height: 1.5rem;   /* 24px */
+  --text-lg: 1.125rem;                /* 18px — lead paragraph */
+  --text-lg--line-height: 1.75rem;    /* 28px */
+  --text-xl: 1.25rem;                 /* 20px — card title, h4 */
+  --text-xl--line-height: 1.75rem;    /* 28px */
+  --text-2xl: 1.5rem;                 /* 24px — section title, h3 */
+  --text-2xl--line-height: 2rem;      /* 32px */
+  --text-3xl: 1.875rem;               /* 30px — page title, h2 */
+  --text-3xl--line-height: 2.25rem;   /* 36px */
+  --text-4xl: 2.25rem;                /* 36px — hero mobile, h1 */
+  --text-4xl--line-height: 2.5rem;    /* 40px */
+  --text-5xl: 3rem;                   /* 48px — hero desktop */
+  --text-5xl--line-height: 1;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;   /* default for UI labels/buttons */
+  --font-weight-semibold: 600; /* headings */
+  --font-weight-bold: 700;     /* reserved: totals, order reference */
+
+  --tracking-tight: -0.015em;  /* headings 24px+ */
+  --tracking-normal: 0em;
+  --tracking-wide: 0.025em;    /* uppercase eyebrow/table head */
+
+  /* ---------------------------------------------------------------------------
+   * 1.7 RADIUS — restrained. No pill-shaped buttons: playful geometry reads
+   * wrong on a bereavement service (§2.3).
+   * ------------------------------------------------------------------------ */
+  --radius-none: 0px;
+  --radius-xs: 0.125rem;  /* 2px  — checkbox */
+  --radius-sm: 0.25rem;   /* 4px  — badge, tag, inline code */
+  --radius-md: 0.5rem;    /* 8px  — DEFAULT: button, input, select */
+  --radius-lg: 0.75rem;   /* 12px — card, alert, table wrapper */
+  --radius-xl: 1rem;      /* 16px — modal, bottom sheet */
+  --radius-2xl: 1.5rem;   /* 24px — hero media, illustration frame */
+  --radius-full: 9999px;  /* avatar, stepper dot, progress track ONLY */
+
+  /* ---------------------------------------------------------------------------
+   * 1.8 ELEVATION — low and soft. Heavy drop shadows read as "marketing".
+   * Tinted with the neutral hue rather than pure black.
+   * ------------------------------------------------------------------------ */
+  --shadow-none: none;
+  --shadow-xs: 0 1px 2px 0 rgb(13 17 17 / 0.05);
+  --shadow-sm: 0 1px 3px 0 rgb(13 17 17 / 0.07), 0 1px 2px -1px rgb(13 17 17 / 0.05);
+  --shadow-md: 0 4px 8px -2px rgb(13 17 17 / 0.08), 0 2px 4px -2px rgb(13 17 17 / 0.05);
+  --shadow-lg: 0 12px 20px -6px rgb(13 17 17 / 0.10), 0 4px 8px -4px rgb(13 17 17 / 0.06);
+  --shadow-xl: 0 24px 40px -12px rgb(13 17 17 / 0.14), 0 8px 16px -8px rgb(13 17 17 / 0.08);
+
+  /* ---------------------------------------------------------------------------
+   * 1.9 BREAKPOINTS — mobile-first. `xs` targets the 360 px Android viewport
+   * that dominates the Jabodetabek market; base styles assume 320 px.
+   * ------------------------------------------------------------------------ */
+  --breakpoint-xs: 22.5rem;  /* 360px */
+  --breakpoint-sm: 40rem;    /* 640px */
+  --breakpoint-md: 48rem;    /* 768px  — tablet, wizard goes 2-col */
+  --breakpoint-lg: 64rem;    /* 1024px — desktop nav replaces hamburger */
+  --breakpoint-xl: 80rem;    /* 1280px — max content width */
+  --breakpoint-2xl: 96rem;   /* 1536px */
+
+  /* 1.10 CONTAINERS */
+  --container-prose: 40rem;   /* 640px — FAQ article, legal copy */
+  --container-form: 48rem;    /* 768px — booking wizard, checkout */
+  --container-content: 80rem; /* 1280px — page shell */
+
+  /* 1.11 MOTION EASING */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);      /* default */
+  --ease-decelerate: cubic-bezier(0, 0, 0, 1);      /* entering */
+  --ease-accelerate: cubic-bezier(0.3, 0, 1, 1);    /* leaving */
+  --ease-emphasized: cubic-bezier(0.2, 0, 0.1, 1);  /* stepper advance */
+}
+
+/* -----------------------------------------------------------------------------
+ * 2. SEMANTIC LAYER + NON-TAILWIND TOKENS
+ * These have no Tailwind theme namespace, or express intent rather than value.
+ * Prefix `--mk-` avoids collision with Tailwind and Filament internals.
+ * Always reference the SEMANTIC token in component CSS, not the primitive.
+ * -------------------------------------------------------------------------- */
+:root {
+  /* 2.1 SURFACES */
+  --mk-surface-page: var(--color-neutral-50);
+  --mk-surface-raised: var(--color-neutral-0);
+  --mk-surface-sunken: var(--color-neutral-100);
+  --mk-surface-warm: var(--color-secondary-50);    /* trust/quiet sections */
+  --mk-surface-inverse: var(--color-primary-900);  /* footer */
+  --mk-surface-overlay: rgb(13 17 17 / 0.55);      /* modal backdrop */
+  --mk-surface-disabled: var(--color-neutral-100);
+
+  /* 2.2 TEXT */
+  --mk-text-strong: var(--color-neutral-900);
+  --mk-text-default: var(--color-neutral-700);
+  --mk-text-muted: var(--color-neutral-600);
+  --mk-text-placeholder: var(--color-neutral-500);
+  --mk-text-disabled: var(--color-neutral-500);   /* NOT 400: keeps 3.96:1 */
+  --mk-text-inverse: var(--color-neutral-0);
+  --mk-text-link: var(--color-primary-600);
+  --mk-text-link-hover: var(--color-primary-700);
+  --mk-text-on-brand: var(--color-neutral-0);
+
+  /* 2.3 BORDERS
+   * `subtle`/`default` are DECORATIVE (WCAG 1.4.11 does not apply).
+   * `interactive` is MANDATORY for any control boundary that conveys state:
+   * input, select, textarea, checkbox, radio, unfilled button. 3.67:1 verified. */
+  --mk-border-subtle: var(--color-neutral-200);
+  --mk-border-default: var(--color-neutral-300);
+  --mk-border-interactive: var(--color-neutral-450);
+  --mk-border-strong: var(--color-neutral-600);
+  --mk-border-brand: var(--color-primary-600);
+  --mk-border-error: var(--color-danger-600);
+
+  /* 2.4 FOCUS — single global treatment, never removed, never outline:none */
+  --mk-focus-color: var(--color-primary-600);
+  --mk-focus-color-inverse: var(--color-primary-300); /* on brand fills, 3.94:1 */
+  --mk-focus-width: 2px;
+  --mk-focus-offset: 2px;
+  --mk-focus-ring: 0 0 0 var(--mk-focus-offset) var(--mk-surface-raised),
+                   0 0 0 calc(var(--mk-focus-offset) + var(--mk-focus-width)) var(--mk-focus-color);
+
+  /* 2.5 SIZING — touch targets. 44px is the FLOOR for any public control. */
+  --mk-touch-min: 2.75rem;      /* 44px — WCAG 2.5.5 / AGENTS.md mobile-first */
+  --mk-control-h-sm: 2.25rem;   /* 36px — DESKTOP-ONLY dense admin tables */
+  --mk-control-h-md: 2.75rem;   /* 44px — DEFAULT */
+  --mk-control-h-lg: 3.25rem;   /* 52px — primary CTA, wizard Lanjutkan */
+  --mk-icon-sm: 1rem;
+  --mk-icon-md: 1.25rem;
+  --mk-icon-lg: 1.5rem;
+  --mk-header-h: 3.5rem;        /* 56px mobile */
+  --mk-header-h-lg: 4.5rem;     /* 72px desktop */
+  --mk-bottomnav-h: 3.5rem;     /* 56px + safe-area, see 2.9 */
+
+  /* 2.6 Z-INDEX — named layers. NEVER author a raw z-index. */
+  --mk-z-base: 0;
+  --mk-z-raised: 10;
+  --mk-z-sticky-cta: 900;     /* wizard sticky footer */
+  --mk-z-dropdown: 1000;
+  --mk-z-bottomnav: 1100;
+  --mk-z-header: 1200;
+  --mk-z-backdrop: 1300;
+  --mk-z-modal: 1400;         /* + bottom sheet */
+  --mk-z-popover: 1500;
+  --mk-z-toast: 1600;
+  --mk-z-tooltip: 1700;
+  --mk-z-skiplink: 1800;
+  --mk-z-debug: 1900;         /* non-production only */
+
+  /* 2.7 MOTION — short and calm. Nothing bouncy, nothing over 400ms. */
+  --mk-duration-instant: 80ms;
+  --mk-duration-fast: 120ms;   /* hover, focus, checkbox */
+  --mk-duration-base: 180ms;   /* dropdown, tooltip, accordion */
+  --mk-duration-slow: 260ms;   /* modal, bottom sheet, step transition */
+  --mk-duration-slower: 400ms; /* skeleton crossfade, page-level only */
+  --mk-transition-control: color var(--mk-duration-fast) var(--ease-standard),
+                           background-color var(--mk-duration-fast) var(--ease-standard),
+                           border-color var(--mk-duration-fast) var(--ease-standard),
+                           box-shadow var(--mk-duration-fast) var(--ease-standard);
+
+  /* 2.8 LAYOUT RHYTHM */
+  --mk-gutter: 1rem;            /* 16px mobile page gutter */
+  --mk-gutter-md: 1.5rem;       /* 24px */
+  --mk-gutter-lg: 2rem;         /* 32px */
+  --mk-section-gap: 2.5rem;     /* 40px mobile between page sections */
+  --mk-section-gap-lg: 4rem;    /* 64px desktop */
+  --mk-stack-gap: 1rem;         /* default vertical rhythm inside a card */
+  --mk-field-gap: 1.25rem;      /* 20px between form fields */
+
+  /* 2.9 SAFE AREA — iOS/Android notch + gesture bar */
+  --mk-safe-top: env(safe-area-inset-top, 0px);
+  --mk-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --mk-bottomnav-total: calc(var(--mk-bottomnav-h) + var(--mk-safe-bottom));
+
+  /* 2.10 STATUS INTENT ALIASES
+   * Map every canonical domain state to ONE intent. Components read these; they
+   * must not switch on the enum string themselves. Enums are canonical in
+   * docs/domain/order-lifecycle.md and docs/product/marketplace-catalog.md.
+   * Full mapping table: design-system.md §3.7. */
+  --mk-intent-neutral-fg: var(--color-neutral-700);
+  --mk-intent-neutral-bg: var(--color-neutral-100);
+  --mk-intent-neutral-border: var(--color-neutral-300);
+
+  --mk-intent-info-fg: var(--color-info-800);
+  --mk-intent-info-bg: var(--color-info-100);
+  --mk-intent-info-border: var(--color-info-300);
+
+  --mk-intent-pending-fg: var(--color-warning-800);
+  --mk-intent-pending-bg: var(--color-warning-100);
+  --mk-intent-pending-border: var(--color-warning-300);
+
+  --mk-intent-success-fg: var(--color-success-800);
+  --mk-intent-success-bg: var(--color-success-100);
+  --mk-intent-success-border: var(--color-success-300);
+
+  --mk-intent-danger-fg: var(--color-danger-800);
+  --mk-intent-danger-bg: var(--color-danger-100);
+  --mk-intent-danger-border: var(--color-danger-300);
+
+  /* URGENT ("Pemakaman Hari Ini") is an ALIAS of warning, not a new hue.
+   * IA §4 requires visual priority; AGENTS.md forbids implying a service claim
+   * while G-OPS-01 is closed. The alias gives emphasis without a new colour,
+   * and MUST always ship with an explicit availability label. */
+  --mk-intent-urgent-fg: var(--color-warning-800);
+  --mk-intent-urgent-bg: var(--color-warning-50);
+  --mk-intent-urgent-border: var(--color-warning-600);
+
+  /* 2.11 COMPONENT TOKENS — only where a component needs a value the semantic
+   * layer cannot express. Adding one requires review (§9.4). */
+  --mk-stepper-dot: 1.75rem;          /* 28px */
+  --mk-stepper-track: 2px;
+  --mk-skeleton-base: var(--color-neutral-200);
+  --mk-skeleton-sheen: var(--color-neutral-100);
+  --mk-progress-track: var(--color-neutral-200);
+  --mk-progress-fill: var(--color-primary-600);
+  --mk-table-stripe: var(--color-neutral-50);
+  --mk-table-hover: var(--color-primary-50);
+}
+
+/* -----------------------------------------------------------------------------
+ * 3. REDUCED MOTION — WCAG 2.3.3. Collapse duration; never remove the state
+ * change itself (a user who cannot see the transition still needs the result).
+ * -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --mk-duration-instant: 1ms;
+    --mk-duration-fast: 1ms;
+    --mk-duration-base: 1ms;
+    --mk-duration-slow: 1ms;
+    --mk-duration-slower: 1ms;
+  }
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* -----------------------------------------------------------------------------
+ * 4. FORCED COLORS (Windows High Contrast) — keep boundaries perceivable.
+ * -------------------------------------------------------------------------- */
+@media (forced-colors: active) {
+  :root {
+    --mk-focus-color: Highlight;
+    --mk-border-interactive: CanvasText;
+  }
+}
+
+/* -----------------------------------------------------------------------------
+ * 5. PRINT — invoice, kwitansi, agreement, certificate (AgreementCertificate
+ * module). Ink-economical, serif body, no elevation, no brand fills.
+ * -------------------------------------------------------------------------- */
+@media print {
+  :root {
+    --mk-surface-page: #FFFFFF;
+    --mk-surface-raised: #FFFFFF;
+    --mk-surface-sunken: #FFFFFF;
+    --mk-surface-warm: #FFFFFF;
+    --mk-text-default: #000000;
+    --mk-text-strong: #000000;
+    --mk-text-muted: #333333;
+    --mk-border-subtle: #999999;
+    --mk-border-default: #666666;
+    --mk-border-interactive: #000000;
+    --shadow-xs: none; --shadow-sm: none; --shadow-md: none;
+    --shadow-lg: none; --shadow-xl: none;
+  }
+}
+
+/* -----------------------------------------------------------------------------
+ * 6. DARK MODE — OUT OF MVP SCOPE.
+ * Not present in docs/product/screen-inventory.md, therefore it has no test
+ * coverage and no design review. Do NOT add `dark:` utilities until an ADR
+ * accepts it and screen-inventory lists the states. Tracked as OPEN QUESTION
+ * OQ-07 in design-system.md §11. Intentionally left unimplemented rather than
+ * half-implemented.
+ * -------------------------------------------------------------------------- */
