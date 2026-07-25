@@ -15,14 +15,20 @@
 # that (see docker/nginx.conf, docker/docker-entrypoint.sh) — Octane/FrankenPHP
 # is not used here (forbidden without an ADR; none exists for it).
 #
-# NOT TESTED: this image has never been built. It is written against the pinned
-# baseline and must be verified in CI before it is trusted. Pin the base images
-# by digest once a build has actually succeeded (technology-baseline.md §5.3).
+# Verified 25 Jul 2026: builds and pushes clean in CI (run 30149877896, commit
+# cc505e1) — ghcr.io/andrianm28/makam-app@sha256:b396ce586cf07d9852e41b2c208
+# 49d36a476871877b2a2e86eaea0d9474573e0. Took six iterations to get there; see
+# that commit and its five predecessors for the real bugs each one found (no
+# HTTP server on 8080, a composer platform-check mismatch, opcache already
+# being built into the base image, and the composer binary missing from the
+# runtime stage). Base images pinned by digest below now that a real build
+# has run against them (technology-baseline.md §5.3), captured from that
+# same run.
 
 # ---------------------------------------------------------------------------
 # Stage 1 — frontend assets
 # ---------------------------------------------------------------------------
-FROM node:24-bookworm-slim AS frontend
+FROM node:24-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d AS frontend
 
 WORKDIR /build
 
@@ -39,7 +45,7 @@ RUN npm run build
 # ---------------------------------------------------------------------------
 # Stage 2 — PHP dependencies
 # ---------------------------------------------------------------------------
-FROM composer:2 AS vendor
+FROM composer:2@sha256:5946476338742b200bb9ff88f8be56275ddae4b3949c72305cb0dbf10cfcb760 AS vendor
 
 WORKDIR /build
 
@@ -69,7 +75,7 @@ RUN composer install \
 # ---------------------------------------------------------------------------
 # Stage 3 — runtime
 # ---------------------------------------------------------------------------
-FROM php:8.5-fpm-bookworm AS runtime
+FROM php:8.5-fpm-bookworm@sha256:83c155135b9c4aa664fc6ce47020a10fe53576a0ed3468119cf2efec22fd16b9 AS runtime
 
 # PostgreSQL 18 client + the extensions the application actually needs.
 # pg_trgm and unaccent are server-side (created by migration), not PHP
