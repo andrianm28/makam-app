@@ -40,3 +40,10 @@ ekspektasi-user
 
 # Agent config (per AGENTS.md M-3)
 .claude/
+
+# Reversed 25 Jul 2026: this line un-ignores ekspektasi-user despite the
+# blanket ignore above. Reasoning recorded in the commit message and in
+# docs/planning/ekspektasi-vs-specs.md §4 D5 — it is the stakeholder-MVP
+# expectation document, authority rank 2 under AGENTS.md, and its being
+# untracked broke CI (GATE 4: a link to it 404s on a clean checkout).
+!ekspektasi-user
