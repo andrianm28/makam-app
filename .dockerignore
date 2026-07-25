@@ -1,0 +1,17 @@
+# Keeps the CI build context (and therefore the image) free of anything that
+# must never be baked into an immutable artifact — see Dockerfile's own note:
+# "No secret, no APP_KEY, and no .env is baked in."
+.git
+.env
+.env.*
+!.env.example
+
+vendor
+node_modules
+
+.github
+.kiro
+docs
+ci
+tests
+*.md

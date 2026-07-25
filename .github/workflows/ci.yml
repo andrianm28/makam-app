@@ -3,14 +3,18 @@ name: CI
 # Implements the required pipeline in docs/operations/ci-cd-and-release.md §2.
 # Builds happen HERE, never on the combined 2 vCPU / 4 GB dev+staging host (§10).
 #
-# Verified green 25 Jul 2026 (run 30147031136, commit e8e8c23): all six jobs
-# pass — docs gates, version assertion, PHP validate/lint/analyse/test,
+# Verified green 25 Jul 2026 (run 30147031136, commit e8e8c23): the first six
+# jobs pass — docs gates, version assertion, PHP validate/lint/analyse/test,
 # frontend build, OpenAPI/YAML validation, dependency audit. It took two
 # fix cycles to get there; the first real run failed five of six jobs and
 # caught six genuine bugs (missing tests/Unit and tests/Feature directories,
 # a Bunny Fonts CDN import contradicting the self-hosted-font policy, a
 # broken link only visible on a clean checkout, missing PyYAML, and a
 # missing phpstan.neon). None of that was found by local checks alone.
+#
+# A seventh job, build-image, was added the same day to close §2's remaining
+# "build immutable artifact/image" and "generate SBOM" steps — see that job's
+# own comment. NOT TESTED as of this comment: it has not run yet.
 
 on:
   push:
@@ -230,3 +234,94 @@ jobs:
           node-version-file: .nvmrc
       - name: npm audit
         run: npm audit --audit-level=high || true # TODO: fail once the baseline is clean
+
+  # ---------------------------------------------------------------------------
+  # Build the immutable artifact/image and push it to GHCR (ci-cd-and-release.md
+  # §2 "build immutable artifact/image", §10 combined dev/staging profile: "The
+  # Ubuntu 22.04 2/4 host receives a prebuilt immutable artifact/image" — the
+  # build happens here, never on that host). Only runs on `push` (not on the
+  # `pull_request` duplicate of the same commit) and only after every other job
+  # is green, so a broken build is never pushed and no commit is built twice.
+  #
+  # Uses this workflow's own short-lived GITHUB_TOKEN (packages: write below),
+  # not a personal access token — no local credential scope is needed for this.
+  #
+  # NOT TESTED: this is the first time this job has run. The Dockerfile itself
+  # had never been built before this job existed either (see its own header
+  # comment) — expect iteration.
+  # ---------------------------------------------------------------------------
+  build-image:
+    name: Build and push image
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    needs: [docs-gates, verify-versions, php, frontend, contracts, security-audit]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: meta
+        run: |
+          repo_lower=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          branch_slug=$(echo "${{ github.ref_name }}" | tr -c 'a-zA-Z0-9._-' '-')
+          {
+            echo "image=ghcr.io/${repo_lower}"
+            echo "sha_tag=sha-${GITHUB_SHA::12}"
+            echo "branch_tag=${branch_slug}"
+          } >> "$GITHUB_OUTPUT"
+
+      # "Build once, promote the same immutable artifact" (§1) — one build,
+      # tagged both by commit (the promotable, immutable reference the deploy
+      # step actually pins to) and by branch (a moving pointer for convenience,
+      # not what gets deployed).
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.branch_tag }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # §2 "generate SBOM and checksums where supported". The image digest
+      # (below) is the artifact's real checksum — content-addressed, verified
+      # by the registry itself, stronger than a separately-computed file hash.
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ steps.meta.outputs.sha_tag }}
+          path: sbom.spdx.json
+          retention-days: 90
+
+      - name: Record image reference
+        run: |
+          echo "### Image pushed" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
