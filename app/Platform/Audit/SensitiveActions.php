@@ -35,6 +35,25 @@ final class SensitiveActions
         'PAYMENT_MANUAL_VERIFICATION',
         'CERTIFICATE_REVOKE',
         'VENDOR_PAYOUT',
+
+        // Added by S3-T2 (platform-identity-and-access MFA batch). Only
+        // the explicit, human-initiated revoke
+        // (`Mfa\MfaEnrolmentService::revoke()`, `Mfa\MfaAuditActions::RESET`)
+        // is listed here — it changes a security control (an actor's MFA
+        // enrolment) in a way that could enable account takeover if abused
+        // without a recorded justification, the same category of risk
+        // `CERTIFICATE_REVOKE` already represents on this list.
+        //
+        // Deliberately NOT listed: `MFA_ENROLMENT_CONFIRMED`,
+        // `MFA_CHALLENGE_SUCCEEDED`, `MFA_CHALLENGE_FAILED`,
+        // `MFA_RECOVERY_USED` (`Mfa\MfaAuditActions`'s other four
+        // constants). These are routine, machine-driven outcomes of a
+        // login-time verification attempt — there is no human-authored
+        // "reason" for a user typing a 6-digit code correctly or
+        // incorrectly, so requiring one here would be a caller-facing
+        // dead end, not a real control. `MFA_RESET` alone is the
+        // deliberate, reasoned action in this group.
+        'MFA_RESET',
     ];
 
     public static function requiresReason(string $action): bool

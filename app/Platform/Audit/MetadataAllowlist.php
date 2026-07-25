@@ -35,6 +35,23 @@ final class MetadataAllowlist
         'previous_state',
         'new_state',
         'note',
+
+        // Added by S3-T2 (platform-identity-and-access MFA batch,
+        // `app/Platform/IdentityAccess/Mfa/**`). Both are non-secret,
+        // non-identifying labels/counts — never a code, secret, or
+        // recovery code value, per requirements.md's Negative criteria
+        // ("No credential, TOTP secret, or recovery code in logs, error
+        // trackers, or audit payloads"), which this addition was
+        // specifically re-checked against before being added.
+        //
+        // 'method': which verification mechanism a challenge/recovery
+        // attempt used — one of `Mfa\MfaVerificationMethod::KNOWN_METHODS`
+        // ('totp' | 'recovery_code'), never the submitted code itself.
+        'method',
+        // 'recovery_codes_remaining': an integer count only (e.g. how many
+        // unused recovery codes remain after a redemption), never a code
+        // value or hash.
+        'recovery_codes_remaining',
     ];
 
     /**
