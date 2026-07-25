@@ -465,12 +465,12 @@ No features. No screens. No migrations beyond framework defaults. No nginx/DNS c
 | S2-T2 | Build `<x-mk.*>` primitives (button, field, card, modal, table, badge, alert, stepper, header) | design system | design §3 | 4 pd | — | ✅ done 25 Jul (all 9 built, reviewed, merged) |
 | S2-T3 | Verify Filament 5 theming; implement `StatusIntent`; resolve OQ-09 palette duplication | design §3.7 + `booking-and-order-orchestration` | design §8.3, OQ-09 | 2 pd | — | ❌ open |
 | S2-T4 | Add all six design governance gates to CI, incl. `verify-contrast.py` as hard fail | design system | design §9.5 | 1 pd | — | ❌ open |
-| S2-T5 | nginx dev/stg vhosts + DNS + IP allowlist + TLS + `noindex` | infra | **M-1** | 2 pd | ⚠️ **HUMAN** | ⚠️ **dev done 25 Jul; dev's allowlist later removed by decision same day (ADR-0031); stg blocked on DNS** |
-| S2-T6 | Redis `requirepass` + separate prefixes/namespaces per environment | infra, `platform-outbox` prep | **M-5** | 1 pd | ⚠️ **HUMAN** | ❌ open |
-| S2-T7 | Encrypted daily staging backup to remote object storage + **restore test with evidence** | infra | **M-4** | 2 pd | ⚠️ **HUMAN** | ❌ **blocked on OQ-4** |
+| S2-T5 | nginx dev/stg vhosts + DNS + IP allowlist + TLS + `noindex` | infra | **M-1** | 2 pd | ⚠️ **HUMAN** | ⚠️ **dev done 25 Jul (allowlist later removed by decision, ADR-0031); stg vhost + runbook prepared 25 Jul (Batch 2.6A) — still blocked on DNS confirmation, not deployed** |
+| S2-T6 | Redis `requirepass` + separate prefixes/namespaces per environment | infra, `platform-outbox` prep | **M-5** | 1 pd | ⚠️ **HUMAN** | ⚠️ **prepared 25 Jul (Batch 2.6B) — runbook + compose snippet ready; not applied, needs a live restart human gate G4** |
+| S2-T7 | Encrypted daily staging backup to remote object storage + **restore test with evidence** | infra | **M-4** | 2 pd | ⚠️ **HUMAN** | ⚠️ **prepared 25 Jul (Batch 2.6C) — script + restore runbook ready; still blocked on OQ-4 (no object storage provider chosen)** |
 | S2-T8 | Downgrade the 32 false `Covered` claims in the traceability matrix | traceability | **H-3** | 1 pd | — | ❌ open (verified: still 32 `Covered`, 0 tests) |
 | S2-T9 | Align document versions to v0.6; register `docs/design/` + `platform-*` in Kiro steering | steering, `docs/specs/README.md` | **L-4**, design OQ-11 | 0.5 pd | — | ⚠️ partial — steering ✅, versions ❌ |
-| S2-T10 | Basic observability: structured logs, container/memory/swap/disk monitoring | infra | M-6 prep | 1.5 pd | — | ❌ open |
+| S2-T10 | Basic observability: structured logs, container/memory/swap/disk monitoring | infra | M-6 prep | 1.5 pd | — | ✅ done 25 Jul (Batch 2.7) — JSON log channel, `observability.md`, `monitoring-check.sh` verified against the live host |
 
 **Total: ~19 pd** — the heaviest sprint relative to its length. See §11; this is the most likely candidate for a 3-week Sprint 2.
 
