@@ -140,6 +140,18 @@
         @endisset
     </div>
 
+    {{--
+        FIXED 26 Jul 2026: this button unconditionally required
+        `icon.x-mark` via <x-dynamic-component> — a namespace that does not
+        exist anywhere in this repo (OQ-05, still open). Every `dismissible`
+        alert has been crashing since this file was first built; nothing
+        had exercised it with a real render until Batch 3.2's
+        GateClosedBladeComponentsRenderTest. Fixed the same way
+        modal.blade.php's own close button already does it: a hand-drawn
+        inline SVG X, not a dependency on the undecided icon set. Once
+        OQ-05 resolves, both this and modal.blade.php's close button can
+        switch to the real icon component together, in one pass.
+    --}}
     @if ($dismissible)
         <button
             type="button"
@@ -147,7 +159,9 @@
             aria-label="Tutup"
             class="touch-target inline-flex shrink-0 items-center justify-center rounded-md text-current focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
         >
-            <x-dynamic-component :component="'icon.x-mark'" class="size-5" aria-hidden="true" />
+            <svg class="size-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            </svg>
         </button>
     @endif
 </div>

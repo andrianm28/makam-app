@@ -52,13 +52,41 @@ use Illuminate\Database\Eloquent\Scope;
  * means a model adopting this trait is INVISIBLE (not merely unscoped)
  * until grants exist for it — the safe failure direction. This is exercised
  * by `tests/Feature/IdentityAccess/Scopes/ScopeAssignmentGlobalScopeTest`.
+ *
+ * ---------------------------------------------------------------------------
+ * FIXED 26 Jul 2026 — resolve the resolver fresh in apply(), never capture
+ * it in the constructor
+ * ---------------------------------------------------------------------------
+ * `HasScopeAssignments::bootHasScopeAssignments()` calls
+ * `static::addGlobalScope(app(ScopeAssignmentGlobalScope::class))` exactly
+ * ONCE per model class — Eloquent caches both "is this model class booted"
+ * and its registered global scope INSTANCES as PHP static properties on the
+ * model class itself, not per-request state. Laravel's testing framework
+ * rebuilds the DI container fresh for each test method, but that static
+ * cache is a plain PHP process-level static and survives across every test
+ * in the same PHPUnit run regardless. The first version of this class took
+ * `ScopeAssignmentResolver` as a constructor-promoted property, so the
+ * SPECIFIC resolver (and the SPECIFIC `ActorContext` it was holding —
+ * whichever actor happened to be current the moment the model was first
+ * booted, in practice whichever test ran first) got frozen into this
+ * object forever. Every later test's `actingAs()` call built a fresh
+ * request-scoped `ActorContext` that this already-cached scope instance
+ * never saw. First real Postgres CI run caught this as three failures, all
+ * "assertNotNull got null" for the tests that needed an actual grant to be
+ * visible after two earlier tests that only needed "sees nothing" (which
+ * passed regardless, since a stale guest/empty-grants actor still
+ * correctly resolves closed) — the bug was invisible until a test actually
+ * needed the CURRENT actor to matter.
+ *
+ * Fix: resolve `ScopeAssignmentResolver` from the container fresh on every
+ * `apply()` call instead of once at construction. `apply()` runs per
+ * query, not per model-boot, so this reads whichever `ActorContext` is
+ * bound *right now* — correct for both real per-request isolation (the
+ * property this was already designed for, via `ActorContext`'s own
+ * `scoped()` binding) and for this exact cross-test staleness.
  */
 final class ScopeAssignmentGlobalScope implements Scope
 {
-    public function __construct(
-        private readonly ScopeAssignmentResolver $resolver,
-    ) {}
-
     public function apply(Builder $builder, Model $model): void
     {
         // $model is required by the Scope contract's Model type, but every
@@ -69,11 +97,15 @@ final class ScopeAssignmentGlobalScope implements Scope
         $entityType = $model->scopeAssignmentEntityType();
         $keyName = $model->qualifyColumn($model->scopeAssignmentKeyName());
 
-        $actorIdentifier = $this->resolver->currentActorIdentifier();
+        // Resolved HERE, not via a constructor property — see the FIXED
+        // note above for exactly why that distinction is load-bearing.
+        $resolver = app(ScopeAssignmentResolver::class);
+
+        $actorIdentifier = $resolver->currentActorIdentifier();
 
         $grantedIds = $actorIdentifier === null
             ? []
-            : $this->resolver->grantedEntityIds($actorIdentifier, $entityType);
+            : $resolver->grantedEntityIds($actorIdentifier, $entityType);
 
         if ($model->scopeAssignmentKeyIsInteger()) {
             $grantedIds = array_map('intval', $grantedIds);

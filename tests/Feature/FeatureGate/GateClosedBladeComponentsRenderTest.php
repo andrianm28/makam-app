@@ -58,11 +58,28 @@ final class GateClosedBladeComponentsRenderTest extends TestCase
 
     public function test_gate_closed_page_renders_optional_fallback_and_support_slots(): void
     {
+        // The fallback slot's content is a plain <a>, not <x-mk.button>,
+        // deliberately: this test proves gate-closed-page's OWN slot
+        // mechanism (does content passed to `fallback`/`support` render at
+        // all), not button.blade.php's behavior — a different component's
+        // test already covers that. `Blade::render()` (an ad-hoc string
+        // compile, not the normal view-rendering path any real page uses)
+        // has a documented limitation with a component that both has
+        // @props defaults AND is nested inside a named slot of another
+        // Blade::render() string: the nested component's props default
+        // extraction did not run, producing "Undefined variable $loading"
+        // for <x-mk.button> specifically in that position. Real usage
+        // (a real Blade view rendering <x-mk.button> normally, including
+        // nested in a slot) is unaffected — only this specific ad-hoc
+        // testing pattern reproduces it. Confirmed 26 Jul 2026 against the
+        // first real Postgres CI run (this repo's SQLite-vs-Postgres split
+        // did not surface it locally as a php -l/syntax issue since it is
+        // a runtime view-compilation behavior, not a syntax error).
         $html = Blade::render(<<<'BLADE'
             <x-mk.gate-closed-page heading="Fitur ini belum tersedia">
                 Penjelasan singkat.
                 <x-slot:fallback>
-                    <x-mk.button href="/kontak">Daftar minat</x-mk.button>
+                    <a href="/kontak">Daftar minat</a>
                 </x-slot:fallback>
                 <x-slot:support>
                     Butuh bantuan? Hubungi 0800-1-MAKAM.

@@ -8,15 +8,26 @@ use App\Platform\FeatureGate\EloquentGateRegistrySource;
 use App\Platform\FeatureGate\Models\FeatureGate;
 use App\Platform\FeatureGate\Models\GateEnvironmentState;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
- * Exercises `EloquentGateRegistrySource` against the real (SQLite, test
- * driver — phpunit.xml) database: the seeded registry, an invalid `state`
- * value (misconfigured), an environment override, and a total load
- * failure. requirements.md AC10 end-to-end through the actual query path,
- * complementing `GateRegistrySnapshotTest`'s pure-value-object proof.
+ * Exercises `EloquentGateRegistrySource` against the real database: the
+ * seeded registry, an invalid `state` value (misconfigured), an
+ * environment override, and a total load failure. requirements.md AC10
+ * end-to-end through the actual query path, complementing
+ * `GateRegistrySnapshotTest`'s pure-value-object proof.
+ *
+ * FIXED 26 Jul 2026: this doc block originally claimed SQLite as the test
+ * driver — wrong. ci.yml's `php` job (the one that actually runs this
+ * suite) sets `DB_CONNECTION=pgsql` against a real Postgres service
+ * container; phpunit.xml's own default is irrelevant once that env var is
+ * set. This mattered concretely: the total-load-failure test below
+ * originally did a bare `Schema::drop('feature_gates')`, which is lenient
+ * on SQLite (foreign keys often unenforced by default) but failed loudly
+ * on the real Postgres CI run — `feature_flags`/`gate_activations`/
+ * `gate_environment_state` all hold live FK constraints against this
+ * table. Fixed with an explicit `CASCADE` drop.
  */
 final class EloquentGateRegistrySourceTest extends TestCase
 {
@@ -92,7 +103,13 @@ final class EloquentGateRegistrySourceTest extends TestCase
 
     public function test_a_total_registry_load_failure_denies_every_gate_instead_of_throwing(): void
     {
-        Schema::drop('feature_gates');
+        // CASCADE: `feature_flags`, `gate_activations`, and
+        // `gate_environment_state` all hold FK constraints against
+        // `feature_gates.gate_id`. CASCADE drops those constraints along
+        // with this table, not the other tables' rows — safe here since
+        // the test ends (and RefreshDatabase rolls the whole transaction
+        // back) immediately after this assertion.
+        DB::statement('DROP TABLE feature_gates CASCADE');
 
         $snapshot = (new EloquentGateRegistrySource('testing'))->load();
 

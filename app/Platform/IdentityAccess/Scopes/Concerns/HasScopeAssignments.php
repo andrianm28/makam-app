@@ -36,12 +36,16 @@ use App\Platform\IdentityAccess\Scopes\ScopeAssignmentGlobalScope;
  * ```
  *
  * `ScopeAssignmentGlobalScope` is resolved through the container
- * (`app(ScopeAssignmentGlobalScope::class)`) rather than `new`'d directly,
- * so its own dependency on `ScopeAssignmentResolver` (and, transitively,
- * `App\Platform\IdentityAccess\ActorContext`) is wired automatically. This
- * mirrors how other Laravel global-scope-with-dependencies packages boot
- * (e.g. multi-tenancy packages resolving a "current tenant" service the
- * same way) and needs no service-provider registration from this batch.
+ * (`app(ScopeAssignmentGlobalScope::class)`) here at BOOT time — but that
+ * call only constructs the scope object itself (it has no constructor
+ * dependencies; see its own class-level "FIXED" note for why). The scope's
+ * actual dependency, `ScopeAssignmentResolver`, is resolved again — freshly
+ * — inside `ScopeAssignmentGlobalScope::apply()` on every query, not
+ * captured once here. `bootHasScopeAssignments()` itself runs only once
+ * per model class per PHP process (Eloquent's own static boot cache), so
+ * anything resolved and stored at THIS point would be frozen for the
+ * process's lifetime — exactly the bug the "FIXED" note on the scope class
+ * describes and fixes.
  */
 trait HasScopeAssignments
 {
