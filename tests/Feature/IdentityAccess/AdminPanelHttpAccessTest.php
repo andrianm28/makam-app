@@ -88,6 +88,33 @@ final class AdminPanelHttpAccessTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * FIXED 26 Jul 2026 — first real CI run: an authenticated `GET /admin`
+     * renders the Dashboard page for real, and its layout (`filament/
+     * filament`'s `resources/views/components/layout/base.blade.php`) uses
+     * `@vite(...)`. This repo's `php` CI job runs PHPUnit without a prior
+     * frontend build (that's a SEPARATE job, `frontend`, in `ci.yml`, with
+     * no shared artifact), so no `public/build/manifest.json` exists when
+     * these tests run — real, working authorization logic failed on a
+     * missing, unrelated frontend asset manifest ("Vite manifest not
+     * found"), not a real access-control problem. `withoutVite()` is a
+     * built-in Laravel test helper (`Illuminate\Foundation\Testing\
+     * Concerns\InteractsWithContainer`, present on this repo's Laravel 13)
+     * that swaps in a no-op Vite instance for exactly this situation —
+     * confirmed against the same installed `laravel/framework` v13.22.0
+     * copy (a sibling project on this host) already used to verify this
+     * file's Filament source trail. The guest-redirect test never reaches
+     * view rendering (redirects short-circuit before the layout renders),
+     * so it was unaffected — this only needed to cover the two tests that
+     * actually render the dashboard.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->withoutVite();
+    }
+
     public function test_a_guest_is_redirected_away_from_the_admin_panel(): void
     {
         $response = $this->get('/admin');
