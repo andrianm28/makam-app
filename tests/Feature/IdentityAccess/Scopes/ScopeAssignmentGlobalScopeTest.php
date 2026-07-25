@@ -160,4 +160,38 @@ final class ScopeAssignmentGlobalScopeTest extends TestCase
 
         $this->assertNotNull($found);
     }
+
+    public function test_a_listing_query_returns_exactly_the_granted_rows_out_of_a_mixed_set(): void
+    {
+        // Batch 3.5b gap-fill: every test above only ever checks a SINGLE
+        // row at a time ("is row X visible: yes/no"), via ->find(). None of
+        // them prove the global scope's whereIn() constraint behaves
+        // correctly across a real multi-row RESULT SET returned from a
+        // plain listing query — the actual shape a table/index page issues.
+        // Three rows, only two granted: the result must be exactly those
+        // two, not zero, not three, and not the wrong two.
+        $granted1 = ScopedTestModel::query()->create(['name' => 'Alpha']);
+        $granted2 = ScopedTestModel::query()->create(['name' => 'Bravo']);
+        $ungranted = ScopedTestModel::query()->create(['name' => 'Charlie']);
+        $user = User::factory()->create();
+
+        foreach ([$granted1, $granted2] as $model) {
+            ScopeAssignment::query()->create([
+                'actor_identifier' => (string) $user->id,
+                'entity_type' => ScopeEntityType::CEMETERY,
+                'entity_id' => (string) $model->id,
+            ]);
+        }
+        $this->actingAs($user);
+
+        $visibleIds = ScopedTestModel::all()->pluck('id')->sort()->values()->all();
+
+        $this->assertSame(
+            [$granted1->id, $granted2->id],
+            $visibleIds,
+            'A listing query must return exactly the granted rows — not zero, not all three, not the ungranted row.'
+        );
+        $this->assertCount(2, $visibleIds);
+        $this->assertNotContains($ungranted->id, $visibleIds);
+    }
 }
