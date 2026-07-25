@@ -96,22 +96,32 @@ FROM php:8.5-fpm-bookworm AS runtime
 # GitHub-hosted runner. Left removed since pcntl turned out to be the actual
 # cause either way, but not reverted back to -j either — not proven safe to
 # re-add without evidence, and the build is fast enough without it for now.
+# opcache: same story as pcntl above, found by the next build attempt after
+# pcntl was removed — the failing extension's configure output was full of
+# opcache-specific checks (JIT, Capstone disassembly, shm_open/sysvipc shared
+# memory backends), and Zend OPcache has been a default-compiled extension
+# since PHP 5.5 (built unless --disable-opcache is passed; the official
+# Dockerfile doesn't pass it, same as pcntl). The opcache.ini step further
+# below still configures it — that part was always correct and unaffected by
+# this; only the redundant *build* step is removed here.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libpq-dev libzip-dev libicu-dev nginx \
     && docker-php-ext-configure intl \
-    && docker-php-ext-install pdo_pgsql pgsql zip intl opcache bcmath \
+    && docker-php-ext-install pdo_pgsql pgsql zip intl bcmath \
     && pecl install redis \
     && docker-php-ext-enable redis \
     && apt-get purge -y --auto-remove libpq-dev libzip-dev libicu-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Executable proof for the pcntl reasoning above, not just a comment: fail the
-# build immediately and clearly if this base image ever stops shipping pcntl
-# built in (a base image bump, for instance), rather than silently producing
-# an image where `php artisan horizon` fails at runtime instead of build time.
+# Executable proof for the pcntl/opcache reasoning above, not just a comment:
+# fail the build immediately and clearly if this base image ever stops
+# shipping either built in (a base image bump, for instance), rather than
+# silently producing an image that's missing them at runtime.
 RUN php -m | grep -qi '^pcntl$' \
     || { echo 'pcntl is not built into this base image as expected — add it back to docker-php-ext-install above.' >&2; exit 1; }
+RUN php -m | grep -qi opcache \
+    || { echo 'opcache is not built into this base image as expected — add it back to docker-php-ext-install above.' >&2; exit 1; }
 
 # php-fpm's own default pool listens on all interfaces; pin it to loopback —
 # nginx talks to it over 127.0.0.1 inside this same container, nothing else
