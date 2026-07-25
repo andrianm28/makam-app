@@ -1,0 +1,23 @@
+{
+    "private": true,
+    "name": "makam-app",
+    "type": "module",
+    "engines": {
+        "node": ">=24 <25"
+    },
+    "scripts": {
+        "build": "vite build",
+        "dev": "vite",
+        "verify:contrast": "python3 docs/design/verify-contrast.py",
+        "verify:docs": "bash ci/verify-docs.sh"
+    },
+    "devDependencies": {
+        "@tailwindcss/vite": "^4.1",
+        "laravel-vite-plugin": "^2.0",
+        "tailwindcss": "^4.1",
+        "vite": "^7.0"
+    },
+    "dependencies": {
+        "@fontsource-variable/inter": "^5.2"
+    }
+}

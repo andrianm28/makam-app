@@ -2,6 +2,17 @@
 .env
 .env.*
 !.env.*.example
+# `.env.*` above also matches `.env.example`, and `!.env.*.example` does not
+# rescue it (that pattern needs a segment between the dots, e.g. .env.dev.example).
+# The template MUST be tracked — it is the only non-secret record of which
+# variables exist. Found 25 Jul 2026 when the Laravel scaffold landed and the
+# skeleton's .env.example silently disappeared from git's view.
+!.env.example
+
+# Laravel
+.phpunit.result.cache
+/.phpunit.cache
+auth.json
 
 # Secrets
 *.pem
@@ -23,3 +34,9 @@ bootstrap/cache/*.php
 .DS_Store
 .idea/
 .vscode/
+
+# Project-specific expectations (stakeholder MVP, not code)
+ekspektasi-user
+
+# Agent config (per AGENTS.md M-3)
+.claude/

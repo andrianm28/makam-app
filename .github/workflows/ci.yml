@@ -1,0 +1,224 @@
+name: CI
+
+# Implements the required pipeline in docs/operations/ci-cd-and-release.md §2.
+# Builds happen HERE, never on the combined 2 vCPU / 4 GB dev+staging host (§10).
+#
+# NOT TESTED: this workflow has never run. Job order and gate content follow the
+# documented pipeline; the steps themselves are unverified until a first run.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Documentation and design gates. Runs first and needs no application code, so
+  # it gives a fast, always-available signal — and it is the guardrail that makes
+  # parallel agent fan-out safe (docs/planning/parallelization-analysis.md §6).
+  # ---------------------------------------------------------------------------
+  docs-gates:
+    name: Docs and design gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run the ten documentation gates
+        run: bash ci/verify-docs.sh
+
+  # ---------------------------------------------------------------------------
+  # Assert the running toolchain matches ci/version-matrix.yml, so the pipeline
+  # never silently drifts off the accepted baseline (technology-baseline.md §5).
+  # ---------------------------------------------------------------------------
+  verify-versions:
+    name: Verify pinned runtime versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          tools: composer:v2
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Assert versions against the matrix
+        run: |
+          php -r 'exit(version_compare(PHP_VERSION, "8.5.0", ">=") && version_compare(PHP_VERSION, "8.6.0", "<") ? 0 : 1);' \
+            || { echo "PHP $(php -r 'echo PHP_VERSION;') is outside ~8.5.0"; exit 1; }
+          node -e 'const M=+process.versions.node.split(".")[0]; if(M!==24){console.error(`Node ${process.versions.node} is not 24.x`);process.exit(1)}'
+          echo "PHP  $(php -r 'echo PHP_VERSION;')"
+          echo "Node $(node -v)"
+
+  # ---------------------------------------------------------------------------
+  # PHP: lockfile integrity, style, static analysis, tests.
+  # ---------------------------------------------------------------------------
+  php:
+    name: PHP (validate, lint, analyse, test)
+    runs-on: ubuntu-latest
+    needs: [verify-versions]
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: makam_test
+          POSTGRES_PASSWORD: makam_test
+          POSTGRES_DB: makam_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U makam_test"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:8.2-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s --health-timeout 3s --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          extensions: pdo_pgsql, pgsql, redis, zip, intl, bcmath
+          tools: composer:v2
+          coverage: none
+
+      - name: Validate composer.json against composer.lock
+        run: composer validate --strict
+
+      # Install from the lockfile, never resolve. ci-cd-and-release.md §1:
+      # "Production installs lockfiles without dependency resolution."
+      - name: Install dependencies from lockfile
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Create the extensions the application depends on
+        env:
+          PGPASSWORD: makam_test
+        run: |
+          psql -h 127.0.0.1 -U makam_test -d makam_test \
+            -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm;' \
+            -c 'CREATE EXTENSION IF NOT EXISTS unaccent;'
+
+      - name: Pint (code style)
+        run: vendor/bin/pint --test
+
+      - name: Larastan (static analysis)
+        run: vendor/bin/phpstan analyse --no-progress
+        continue-on-error: true # TODO: remove once a phpstan.neon baseline exists
+
+      - name: Prepare test environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+        env:
+          DB_CONNECTION: pgsql
+
+      - name: Tests
+        run: php artisan test
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: makam_test
+          DB_USERNAME: makam_test
+          DB_PASSWORD: makam_test
+          REDIS_HOST: 127.0.0.1
+
+  # ---------------------------------------------------------------------------
+  # Frontend: lockfile install and production build. Also the point at which the
+  # design-system token wiring is proven to compile (sprint task S2-T1).
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    needs: [verify-versions]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install from lockfile
+        run: npm ci --no-audit --no-fund
+      - name: Build
+        run: npm run build
+      - name: Assert the build emitted CSS
+        run: |
+          test -d public/build || { echo "no public/build produced"; exit 1; }
+          find public/build -name '*.css' | head -1 | grep -q . \
+            || { echo "no CSS emitted — token wiring may be broken"; exit 1; }
+
+  # ---------------------------------------------------------------------------
+  # Contract validation. OpenAPI 3.1 is contract-first per technology-baseline §2.
+  # ---------------------------------------------------------------------------
+  contracts:
+    name: OpenAPI and YAML validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate YAML documents parse
+        run: |
+          python3 - <<'PY'
+          import glob, sys, yaml
+          bad = 0
+          for f in glob.glob('docs/**/*.y*ml', recursive=True) + glob.glob('ci/*.y*ml'):
+              try:
+                  yaml.safe_load(open(f))
+                  print(f"OK   {f}")
+              except Exception as e:
+                  print(f"FAIL {f}: {e}"); bad = 1
+          sys.exit(bad)
+          PY
+      - name: Validate OpenAPI 3.1 structure
+        run: |
+          python3 - <<'PY'
+          import sys, yaml
+          d = yaml.safe_load(open('docs/contracts/openapi.yaml'))
+          v = str(d.get('openapi', ''))
+          if not v.startswith('3.1'):
+              print(f"openapi version is {v!r}, expected 3.1.x"); sys.exit(1)
+          if not d.get('paths'):
+              print("no paths defined"); sys.exit(1)
+          print(f"OpenAPI {v}, {len(d['paths'])} paths, "
+                f"{len(d.get('components', {}).get('schemas', {}))} schemas")
+          PY
+
+  # ---------------------------------------------------------------------------
+  # Dependency vulnerability audit (ci-cd-and-release.md §2).
+  # ---------------------------------------------------------------------------
+  security-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    needs: [verify-versions]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          tools: composer:v2
+          coverage: none
+      - name: Composer audit
+        run: composer audit --locked
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: npm audit
+        run: npm audit --audit-level=high || true # TODO: fail once the baseline is clean

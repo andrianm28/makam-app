@@ -92,8 +92,16 @@ head2 "GATE 7 — no unevidenced 'Covered' in traceability (AGENTS.md)"
 # Found 25 Jul 2026 by the subagent fixing H-3, which reported the false positive
 # instead of deleting the legend to make the gate green. Scoping the match to the
 # trailing status column is the fix; weakening the assertion would not have been.
+#
+# Second weakness, found 25 Jul 2026 when the Laravel scaffold landed: the count
+# accepted ANY test file, and the skeleton ships tests/Unit/ExampleTest.php and
+# tests/Feature/ExampleTest.php. Two placeholder assertions would have satisfied
+# "test evidence exists" for all 31 traceability rows. Framework stubs are now
+# excluded, so the gate measures real evidence rather than the presence of files.
 tm=docs/domain/traceability-matrix.md
-tests=$(find . -path ./.git -prune -o \( -name '*Test.php' -o -name '*.spec.ts' -o -name '*.cy.js' \) -print 2>/dev/null | wc -l)
+tests=$(find . -path ./.git -prune -o -path ./vendor -prune -o -path ./node_modules -prune -o \
+        \( -name '*Test.php' -o -name '*.spec.ts' -o -name '*.cy.js' \) -print 2>/dev/null \
+        | grep -vE '/(Unit|Feature)/ExampleTest\.php$' | wc -l)
 covered=$(grep -cE '\|[[:space:]]*Covered[^|]*\|?[[:space:]]*$' "$tm" 2>/dev/null || true)
 if [ "$covered" -eq 0 ] || [ "$tests" -gt 0 ]; then
   pass "traceability consistent (status cells marked Covered=$covered, test files=$tests)"

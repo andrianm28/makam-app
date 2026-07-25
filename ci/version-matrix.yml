@@ -1,0 +1,56 @@
+# Pinned runtime matrix for makam-app.
+#
+# Canonical source: docs/architecture/technology-baseline.md §2.
+# This file exists so CI can assert the running versions match the accepted
+# baseline instead of trusting whatever the build image happens to ship.
+# Required by technology-baseline.md §5 ("Locking rules").
+#
+# Exact patch versions live in the lockfiles and the runtime image digest.
+# This file pins the MINOR line each component must satisfy.
+
+baseline: v0.6
+updated: 2026-07-25
+
+runtime:
+  php:
+    constraint: "~8.5.0"
+    verified_on_host: "8.5.8"
+  node:
+    constraint: ">=24 <25"
+    verified_on_host: "24.16.0"
+
+framework:
+  laravel/framework: "^13.0"
+  livewire/livewire: "^4.0"
+  filament/filament: "^5.0"
+  laravel/horizon: "^5.0"
+
+frontend:
+  tailwindcss: "^4.1"
+  vite: "^7.0"
+
+data:
+  postgresql:
+    constraint: "18.x"
+    extensions: [pg_trgm, unaccent]
+    verified_on_host: "18.4"
+  redis:
+    constraint: "8.2.x"
+    topology: non-cluster
+    verified_on_host: "8.2.7"
+
+os:
+  production: "Ubuntu 24.04 LTS or managed equivalent"
+  combined_dev_staging: "Ubuntu 22.04 LTS, 2 vCPU / 4 GB"
+
+# Deferred by ADR — do not add without an approved ADR and measured need
+# (AGENTS.md §Pinned technology and dependencies, technology-baseline.md §9).
+forbidden_without_adr:
+  - laravel/octane
+  - kubernetes
+  - redis-cluster
+  - elasticsearch
+  - opensearch
+  - graphql
+  - kafka
+  - separate-spa-frontend
