@@ -1,5 +1,6 @@
 <?php
 
+use App\Platform\Correlation\Providers\CorrelationServiceProvider;
 use App\Platform\IdentityAccess\Providers\IdentityAccessServiceProvider;
 use App\Providers\AppServiceProvider;
 use App\Providers\Filament\AdminPanelProvider;
@@ -17,4 +18,9 @@ return [
     // here despite bootstrap/providers.php not being in that batch's
     // literal owned-files list (same precedent as AdminPanelProvider above).
     IdentityAccessServiceProvider::class,
+    // Batch 3.3 (S3-T10) — binds CorrelationContext (scoped()). Same
+    // precedent as IdentityAccessServiceProvider above: this file is not
+    // in that batch's literal owned-files list either, but the brief
+    // explicitly authorizes this one additive line.
+    CorrelationServiceProvider::class,
 ];

@@ -47,3 +47,6 @@ ekspektasi-user
 # expectation document, authority rank 2 under AGENTS.md, and its being
 # untracked broke CI (GATE 4: a link to it 404s on a clean checkout).
 !ekspektasi-user
+
+# MCP config (may contain DB URLs)
+.mcp.json

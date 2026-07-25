@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\AssignCorrelationId;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -22,6 +23,23 @@ return Application::configure(basePath: dirname(__DIR__))
         // (ci/verify-infra.sh GATE I7) — only the host's own reverse proxy can
         // ever reach it to set these headers in the first place.
         $middleware->trustProxies(at: '*');
+
+        // S3-T10 (platform-audit AC10 / platform-outbox AC13): the
+        // request-boundary origin point for correlation-id propagation.
+        // appendToGroup() puts this after the framework's own default
+        // `web` group middleware (cookies/session/CSRF/etc.) — that is
+        // still before every route handler, controller, and Livewire
+        // component, which is all "downstream" actually requires: a bound
+        // CorrelationContext by the time anything might call
+        // Audit::record(). See AssignCorrelationId's own doc block for the
+        // full behavior and security rationale. The Filament `/admin`
+        // panel does not go through this `web` group at all
+        // (AdminPanelProvider declares its own explicit
+        // ->middleware([...]) array) — it is wired there separately, and
+        // placed FIRST in that array specifically because
+        // AuthenticateSession's session-recording path sits later in that
+        // same array (see AdminPanelProvider's comment).
+        $middleware->appendToGroup('web', AssignCorrelationId::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

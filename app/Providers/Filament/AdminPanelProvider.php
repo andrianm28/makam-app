@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Providers\Filament;
 
+use App\Http\Middleware\AssignCorrelationId;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -108,6 +109,17 @@ class AdminPanelProvider extends PanelProvider
                 Widgets\FilamentInfoWidget::class,
             ])
             ->middleware([
+                // S3-T10 (platform-audit AC10 / platform-outbox AC13): this
+                // panel does not go through bootstrap/app.php's `web`
+                // middleware group at all (it declares this explicit array
+                // instead), so it needs its own copy of the correlation-id
+                // origin point. Placed first, before session/auth
+                // middleware, so a correlation id already exists for
+                // anything later in the stack that might want to reference
+                // it (e.g. AuthenticateSession's session-recording path) —
+                // /admin is the primary surface where privileged mutations,
+                // and therefore Audit::record() calls, will happen.
+                AssignCorrelationId::class,
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,
