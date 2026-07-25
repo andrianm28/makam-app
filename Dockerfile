@@ -46,12 +46,24 @@ WORKDIR /build
 COPY composer.json composer.lock ./
 # --no-dev: production artefact. --no-scripts: artisan is not runnable until the
 # application source is present, so package discovery runs in the final stage.
+#
+# --ignore-platform-req: the bare `composer:2` image has neither ext-intl
+# (filament/support) nor ext-pcntl (laravel/horizon) — composer's platform
+# check fails here even though both ARE installed in the runtime stage below
+# (see its docker-php-ext-install line), because this stage never loads any
+# extension, only resolves/downloads packages. Named explicitly, not a blanket
+# --ignore-platform-reqs, so a genuinely new required extension still fails
+# loudly here instead of silently reaching a runtime stage that lacks it too.
+# NOT TESTED (first real build, see file header): verify both extensions
+# really are present in stage 3 whenever composer.lock's requirements change.
 RUN composer install \
         --no-dev \
         --no-scripts \
         --no-interaction \
         --prefer-dist \
-        --optimize-autoloader
+        --optimize-autoloader \
+        --ignore-platform-req=ext-intl \
+        --ignore-platform-req=ext-pcntl
 
 
 # ---------------------------------------------------------------------------
@@ -64,11 +76,18 @@ FROM php:8.5-fpm-bookworm AS runtime
 # extensions — see docs/planning/sprint-plan.md S1-T3.
 # nginx is kept (not purged) — it is the HTTP server for this image, not a
 # build-time-only dependency like the -dev headers below.
+#
+# pcntl: laravel/horizon requires it (composer.lock) for worker signal
+# handling. It was missing here until the first real build caught composer's
+# platform check failing in the vendor stage over it — a real gap, not just a
+# vendor-stage artefact: this image is also what stg-horizon and the queue
+# workers run (docker-compose.dev-stg.yml), so pcntl has to work at runtime,
+# not merely satisfy a check. No -configure step needed, unlike intl.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libpq-dev libzip-dev libicu-dev nginx \
     && docker-php-ext-configure intl \
-    && docker-php-ext-install -j"$(nproc)" pdo_pgsql pgsql zip intl opcache bcmath \
+    && docker-php-ext-install -j"$(nproc)" pdo_pgsql pgsql zip intl opcache bcmath pcntl \
     && pecl install redis \
     && docker-php-ext-enable redis \
     && apt-get purge -y --auto-remove libpq-dev libzip-dev libicu-dev \
