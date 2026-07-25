@@ -858,6 +858,28 @@ These were not in the original analysis and need tracking:
 | **N-5** | Placeholder HTML was mode `0660` owned by uid 1000, but nginx inside the container runs as uid 101, so it could not read the file — a 403 waiting to happen even once the port worked. Fixed to `0644`. Generalises: **any bind-mounted asset must be readable by the container's runtime uid, not just by the host owner.** Same class of defect as C-2. | Medium | S2-T5 |
 | **N-6** | `sudo mkdir` on this host produces `drwxr-x---` (root umask 077), so an ACME webroot created that way is untraversable by `www-data` and returns 404. Certbot creates its own directories correctly during issuance, but a pre-existing restrictive directory would break **renewal** silently, 89 days later. Fixed to `0755` and verified the challenge path returns 200 without auth. | Medium | S2-T5 |
 
+### The three infra findings are now mechanical
+
+`AGENTS.md` requires evidence, not assertion. N-4, N-5 and N-6 were each silent, and recording them in prose does not stop them recurring — so on 25 Jul 2026 they became gates in [`ci/verify-infra.sh`](../../ci/verify-infra.sh), the operations companion to `ci/verify-docs.sh`. It is read-only by design: a fix belongs in `compose.yml`, never in the checker.
+
+| Gate | Catches | Origin |
+|---|---|---|
+| I1 | compose does not parse | — |
+| **I2** | a service publishing a port from an internal-only network | **N-4** |
+| **I3** | a declared port that is not actually listening | **N-4** |
+| **I4** | a bind mount unreadable by the container runtime uid | **N-5** |
+| I5 | `makam_dev`/`makam_stg` or their extensions missing | **C-2** |
+| I6 | dev↔stg isolation broken | C-2 follow-up |
+| I7 | Postgres or Redis reachable from the host | security-baseline |
+| I8 | secret files not owned by uid 999 | C-2 root cause |
+| I9 | `dev.makam.co.id` public, or missing `noindex` | dev-staging §75, release-gates §I |
+| **I10** | ACME path behind auth — renewal would fail silently | **N-6** |
+| I11 | the live apex broken by an nginx change | S2-T5 regression |
+
+**Each gate was negative-tested, not just observed passing.** A gate that has never failed has never been tested — that assumption misled this project twice already (doc gate 7 twice). Verified 25 Jul 2026: removing `egress` from a compose copy fails I2 for both placeholders; `chmod 0600` on the placeholder HTML fails I4; `chown 1000` on a secret fails I8. State was restored and the full suite returns green.
+
+Two gates remain **NOT negative-tested**: I5 (would require dropping a database) and I10 (would require reloading nginx without the auth bypass). Both are asserted from their positive result only.
+
 ---
 
 ## 13. OPEN QUESTIONS

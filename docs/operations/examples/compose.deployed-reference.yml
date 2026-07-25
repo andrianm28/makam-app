@@ -1,0 +1,123 @@
+name: makam-nonprod
+
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres_admin
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_admin_password
+    # SECRET OWNERSHIP — read this before touching ./secrets/
+    #
+    # Compose mounts file secrets into /run/secrets preserving the HOST file's
+    # uid/gid/mode. The Postgres entrypoint drops to uid 999 before running
+    # /docker-entrypoint-initdb.d/, so host files owned by uid 1000 are
+    # unreadable there. The init script then aborts on `set -euo pipefail`, and
+    # the failure is SILENT: PGDATA is already populated, so every later start
+    # logs "Skipping initialization" while the container reports healthy.
+    # That is what left makam_dev/makam_stg missing for a full day.
+    #
+    # The declarative fix (secrets long syntax with uid/gid/mode) does NOT work
+    # on this host. Verified 25 Jul 2026 — Docker Compose emits:
+    #   "secrets `uid`, `gid` and `mode` are not supported, they will be ignored"
+    # so ownership MUST be set on the host files instead:
+    #   sudo chown 999:999 ./secrets/*.txt && sudo chmod 0400 ./secrets/*.txt
+    # Current state: -r-------- 999:999 on all three (applied 25 Jul 2026).
+    # Re-apply after any operation that recreates or restores these files.
+    secrets:
+      - postgres_admin_password
+      - makam_dev_db_password
+      - makam_stg_db_password
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    mem_limit: 512m
+    # Asserts FUNCTION, not just liveness. `pg_isready` alone reported healthy
+    # for a full day while makam_dev/makam_stg did not exist — that is the
+    # failure this check exists to make loud. Verifies: server accepting
+    # connections, both application databases present, and pg_trgm installed in
+    # each (ADR-0007 trigram search depends on it).
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          pg_isready -U postgres_admin -q &&
+          psql -U postgres_admin -d makam_dev -tAc
+          "select 1 from pg_extension where extname='pg_trgm'" | grep -q 1 &&
+          psql -U postgres_admin -d makam_stg -tAc
+          "select 1 from pg_extension where extname='pg_trgm'" | grep -q 1
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks: [backend]
+
+  redis:
+    image: redis:8.2-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory-policy", "noeviction", "--maxmemory", "96mb"]
+    volumes:
+      - redis_data:/data
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [backend]
+
+  # Placeholder web backends: stand in for dev-web/stg-web until the Laravel
+  # application image exists. Bound to the same loopback ports the real app
+  # containers will use, so the host nginx vhosts don't need to change later.
+  #
+  # NETWORKS — both `backend` and `egress` are required, not optional.
+  # `backend` is internal:true, and Docker does not publish ports for a container
+  # attached only to an internal network: the `ports:` mapping below is silently
+  # ignored and 127.0.0.1:8081 never listens. Verified 25 Jul 2026 —
+  # `docker port` returned nothing while the container reported Up and healthy.
+  # The repo example (docs/operations/examples/docker-compose.dev-stg.yml) always
+  # had `[backend, egress]`; this deployed file had dropped `egress`. That is
+  # drift finding H-5. The real dev-web/stg-web containers need the same pair.
+  dev-placeholder:
+    image: nginx:alpine
+    restart: unless-stopped
+    volumes:
+      - ./placeholder-dev:/usr/share/nginx/html:ro
+    ports:
+      - "127.0.0.1:8081:80"
+    mem_limit: 32m
+    networks: [backend, egress]
+
+  stg-placeholder:
+    image: nginx:alpine
+    restart: unless-stopped
+    volumes:
+      - ./placeholder-stg:/usr/share/nginx/html:ro
+    ports:
+      - "127.0.0.1:8082:80"
+    mem_limit: 32m
+    networks: [backend, egress]
+
+networks:
+  # No route in or out except via published ports. Postgres and Redis live here
+  # only, which is why they are not reachable from the host.
+  backend:
+    internal: true
+  # Required by any container that publishes a port or needs outbound access
+  # (package installs, provider sandboxes, webhooks). Attaching a container to
+  # `backend` alone silently disables its `ports:` mapping — see the note on
+  # dev-placeholder. Postgres and Redis are deliberately NOT on this network.
+  egress:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+
+secrets:
+  postgres_admin_password:
+    file: ./secrets/postgres_admin_password.txt
+  makam_dev_db_password:
+    file: ./secrets/makam_dev_db_password.txt
+  makam_stg_db_password:
+    file: ./secrets/makam_stg_db_password.txt
