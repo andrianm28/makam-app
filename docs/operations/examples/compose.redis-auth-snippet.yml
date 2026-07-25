@@ -1,0 +1,141 @@
+# Redis requirepass — compose fragment (S2-T6, human gate G4)
+#
+# STATUS: prepared, NOT applied. This is a merge fragment, not a standalone
+# file — a human merges the pieces below into the live compose.yml
+# (/opt/makam/compose/compose.yml on the deployment host) alongside the
+# existing `redis:` service and top-level `secrets:` block. Do not `docker
+# compose up` this file on its own; it omits unrelated services on purpose.
+#
+# Mirrors the EXACT secret pattern already used for Postgres in
+# docker-compose.dev-stg.yml (file-based secret, not an inline environment
+# value) so the password never appears in `docker inspect` or
+# `docker compose config` output. See that file's own comments for the
+# uid/gid/mode lesson this fragment inherits.
+#
+# THE CRUX PROBLEM AND HOW THIS SOLVES IT
+# ----------------------------------------
+# Postgres accepts POSTGRES_PASSWORD_FILE — the official image reads the
+# file itself. Redis has no equivalent `_FILE` convention: `redis-server`
+# only takes `--requirepass <value>` as a literal CLI argument or a
+# directive inside a config file. Pointing --requirepass at a file path
+# (e.g. `--requirepass /run/secrets/redis_password`) would silently set the
+# password to the STRING "/run/secrets/redis_password", not the file's
+# contents — a real footgun. The fix is to replace `command:` with a small
+# shell wrapper that reads the secret file at container start and passes
+# its contents to redis-server.
+#
+# TWO VARIANTS ARE SHOWN. Pick one; do not run both.
+#
+# Variant A (recommended by the task brief, simplest, matches the existing
+# CLI-flags-only style already used for `--appendonly` etc.):
+#   the password is interpolated into the `--requirepass` argv of the
+#   redis-server process itself.
+#   KNOWN LIMITATION: for the lifetime of the process, that argv is
+#   visible to anything that can list processes in the container's PID
+#   namespace — `docker top redis`, `docker exec redis ps aux`, or a host
+#   root shell reading /proc/<pid>/cmdline. It never appears in `docker
+#   inspect` (no env var) and never appears in `docker compose config`
+#   (no interpolation of a compose variable), but it is not fully
+#   invisible to anyone who already has docker-exec-level access to the
+#   host. On this host that access tier is already privileged (deploy
+#   user / root), so the trade-off is likely acceptable — but confirm
+#   that assumption before merging.
+#
+# Variant B (harder, avoids the argv-visibility limitation entirely):
+#   the wrapper writes a throwaway `requirepass <value>` line into a
+#   generated config file inside the container's own ephemeral
+#   filesystem (never a mounted volume, so it does not touch host disk
+#   or a named volume), then launches `redis-server <that file> <other
+#   flags>`. The password is now file content, not a CLI argument, so it
+#   does not show up in `docker top` / `ps aux` either.
+#   NOT TESTED — see the caveat block below Variant B before using it.
+#
+# ---------------------------------------------------------------------------
+# VARIANT A — requirepass via CLI arg sourced from the secret file
+# ---------------------------------------------------------------------------
+#
+# Merge into the existing `redis:` service. Everything else on that service
+# (image, restart, volumes, mem_limit, healthcheck, networks) is UNCHANGED —
+# only `command:` gains the wrapper and `secrets:` is added.
+#
+# YAML NOTE: Compose performs its own `$VAR` / `${VAR}` interpolation on
+# string scalars in this file. A bare `$(cat ...)` is not a recognized
+# compose variable pattern, but `$$` is the documented way to guarantee a
+# literal `$` survives Compose's interpolation pass regardless of what
+# follows it — so `$$(cat ...)` is used below, not `$(cat ...)`. Untested
+# on this host's Compose version; verify with `docker compose config`
+# (read-only, does not start anything) before applying, per the constraint
+# that this task must not execute compose.
+
+services:
+  redis:
+    # image, restart, volumes, mem_limit, healthcheck, networks: unchanged,
+    # keep whatever is already in the live compose.yml for this service.
+    command:
+      - sh
+      - -c
+      - >-
+        exec redis-server
+        --appendonly yes
+        --appendfsync everysec
+        --maxmemory-policy noeviction
+        --requirepass "$$(cat /run/secrets/redis_password)"
+    secrets:
+      - redis_password
+
+# ---------------------------------------------------------------------------
+# VARIANT B — requirepass via generated runtime config file (no argv exposure)
+# ---------------------------------------------------------------------------
+# Use this instead of Variant A's `command:` block if the argv-visibility
+# limitation above is not acceptable. Replace Variant A's `command:` with:
+#
+#   command:
+#     - sh
+#     - -c
+#     - >-
+#       umask 077 &&
+#       printf 'requirepass %s\n' "$$(cat /run/secrets/redis_password)" > /tmp/redis-runtime.conf &&
+#       exec redis-server /tmp/redis-runtime.conf
+#       --appendonly yes --appendfsync everysec --maxmemory-policy noeviction
+#
+# CAVEAT — NOT TESTED, read before choosing Variant B:
+# The official redis:8.2-alpine image's docker-entrypoint.sh drops root to
+# the `redis` user via `gosu` ONLY when it detects the container's first
+# command argument is literally `redis-server` (so it can rewrite the
+# invocation before exec'ing). Both variants above start with `sh`, not
+# `redis-server`, as $1 — this fragment was written and reviewed without
+# access to a running container to confirm entrypoint behavior, so it is
+# UNVERIFIED whether redis-server ends up running as root or as the
+# `redis` user under either variant, and therefore UNVERIFIED what uid
+# should own ./secrets/redis_password.txt on the host (unlike the Postgres
+# secret, where uid 999 was empirically confirmed on this host on 25 Jul
+# 2026 — see docker-compose.dev-stg.yml). Before merging either variant, a
+# human must start it once on a disposable/non-prod redis container, run
+# `docker exec <container> id` and `docker exec <container> ps aux`, and
+# set host file ownership to match the uid `redis-server` actually runs
+# as, then chmod 0400 (the same discipline already documented for the
+# Postgres secrets). Do this on a scratch container, not the shared
+# `makam-nonprod` instance, until it is proven safe.
+#
+# ---------------------------------------------------------------------------
+# Top-level secrets block addition (merge with the existing block that
+# already declares postgres_admin_password / makam_dev_db_password /
+# makam_stg_db_password — do not replace that block, add to it):
+# ---------------------------------------------------------------------------
+secrets:
+  redis_password:
+    file: ./secrets/redis_password.txt
+
+# ---------------------------------------------------------------------------
+# App-side wiring (NOT part of the redis service — informational only)
+# ---------------------------------------------------------------------------
+# Do NOT add REDIS_PASSWORD to this compose file's `environment:` for the
+# web/worker/horizon services — that would leak the password into
+# `docker compose config` / `docker inspect` output for every reader with
+# host access, which is exactly what the secret-file pattern above avoids
+# for Redis itself. Instead set REDIS_PASSWORD in .env.dev and .env.stg
+# (the files already referenced via `env_file:` in docker-compose.dev-stg.yml
+# for dev-web/stg-web/stg-horizon/dev-worker/stg-batch-worker). See
+# docs/operations/redis-hardening.md for the exact human steps, including
+# how the same value gets from ./secrets/redis_password.txt into both
+# .env files without ever being echoed to a terminal or committed to git.

@@ -1,9 +1,46 @@
 <?php
 
+use Monolog\Formatter\JsonFormatter;
 use Monolog\Handler\NullHandler;
+use Monolog\Handler\RotatingFileHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
 use Monolog\Processor\PsrLogMessageProcessor;
+
+/*
+|--------------------------------------------------------------------------
+| Restricted data — what IS and IS NOT redacted here
+|--------------------------------------------------------------------------
+|
+| S2-T10 (docs/planning/agent-execution-plan.md §4). AGENTS.md §Observability:
+| "Never place restricted data in logs, Pulse, Horizon tags, or error
+| trackers." This file cannot enforce that rule; it only decides where log
+| lines go and what shape they are in. What actually keeps restricted data
+| out of a log line is the calling code choosing not to write it there.
+|
+| IS covered by a Laravel default, verified against docs/errors.md and
+| docs/validation.md (13.x) 25 Jul 2026 — see docs/operations/observability.md
+| §"Structured logging" for the verification note:
+|   - When a ValidationException redirects back with old input flashed to
+|     the session, Laravel's base exception handler excludes a small
+|     hard-coded field list — password, password_confirmation,
+|     current_password — from that flash. This is a session-flash
+|     protection for form repopulation, not a log-output protection, and it
+|     is NOT configurable from this file.
+|
+| NOT covered by any Laravel default (i.e. still the developer's
+| responsibility on every call site):
+|   - Log::info()/warning()/error()/etc. context arrays — anything passed
+|     here is written verbatim (JSON-encoded on the "json" channel below).
+|   - Exception::context() / the global Exceptions::context() closure in
+|     bootstrap/app.php.
+|   - Job/queue payloads, HTTP client request/response logging, webhook
+|     payload logging, Horizon tags, Pulse entries.
+|   - Full documents, signed URLs, payment credentials, identity numbers —
+|     see docs/operations/observability-stack.md §3's explicit "never log"
+|     list, which this project already treats as binding.
+|
+*/
 
 return [
 
@@ -102,6 +139,41 @@ return [
                 'stream' => 'php://stderr',
             ],
             'formatter' => env('LOG_STDERR_FORMATTER'),
+            'processors' => [PsrLogMessageProcessor::class],
+        ],
+
+        /*
+        |----------------------------------------------------------------
+        | Structured (JSON) channel — S2-T10
+        |----------------------------------------------------------------
+        |
+        | Not wired into the default 'stack' channel below, so existing
+        | deployments and their LOG_STACK=single default are unchanged by
+        | adding this. Opt in per-environment with either:
+        |   LOG_CHANNEL=json                (json only), or
+        |   LOG_STACK=single,json           (both, via the stack channel)
+        |
+        | Rotates on the same LOG_DAILY_DAYS retention as the 'daily'
+        | channel (default 14) so this doesn't grow the disk footprint
+        | envelope already assumed for the 4 GB host in
+        | dev-staging-environment.md §6.
+        |
+        | Field shape is documented, not enforced, by this config —
+        | Monolog's JsonFormatter emits whatever is in the record
+        | (message/context/extra/level/channel/datetime). Matching the
+        | field list in docs/operations/observability-stack.md §3
+        | (request_id, actor_type, domain_reference, etc.) is up to the
+        | code calling Log::withContext()/Log::info(), not this file.
+        */
+        'json' => [
+            'driver' => 'monolog',
+            'level' => env('LOG_LEVEL', 'debug'),
+            'handler' => RotatingFileHandler::class,
+            'handler_with' => [
+                'filename' => storage_path('logs/laravel-json.log'),
+                'maxFiles' => env('LOG_DAILY_DAYS', 14),
+            ],
+            'formatter' => JsonFormatter::class,
             'processors' => [PsrLogMessageProcessor::class],
         ],
 
