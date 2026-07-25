@@ -11,8 +11,10 @@ cemeteries
 cemetery_capability_profiles(version, modes, source, effective_at, evidence)
 cemetery_packages / cemetery_classes
 availability_snapshots
-blocks / plot_units / plot_status_events (optional)
+blocks / plot_units / plot_status_events (optional, READ-ONLY projection)
 ```
+
+**Table ownership (normative):** `blocks`, `plot_units`, and `plot_status_events` are **owned by `plot-inventory-and-reservation`**. This spec reads a projection of them and must not define or migrate them. Resolves `docs/planning/kiro-specs-analysis.md` §5.1b.
 
 ## Rendering
 

@@ -19,6 +19,21 @@ Canonical Kiro-compatible specifications are stored in `../../.kiro/specs/`. Eac
 
 Dashboard Vendor is covered by `funeral-marketplace-and-vendor-portal`.
 
+## Platform foundation specs
+
+Cross-cutting foundations every feature spec depends on. Added 25 July 2026 — they were previously consumed by many specs and owned by none, which left booking Steps 8–9 unbuildable. See `docs/planning/kiro-specs-analysis.md` §2.2.
+
+- `platform-identity-and-access` — session auth, mandatory TOTP MFA, re-authentication, panel access, query scope (K1/K2)
+- `platform-payment-adapter` — payment guard, hosted checkout, durable idempotent webhooks, manual fallback (K3–K5)
+- `platform-notifications` — notification matrix, recipient scope, per-channel delivery state (K7)
+- `platform-document-vault` — quarantine-first upload, fail-closed malware scan, 5-minute signed URLs, access audit (K6)
+- `platform-audit` — append-only audit; required by 13 feature specs (K8)
+- `platform-feature-gate` — the 17 gates and 18 flags, server-side, deny-by-default, documented fallbacks
+- `platform-outbox` — transactional outbox, versioned envelope, at-least-once delivery, queue priorities
+- `platform-financial-ledger` — balanced append-only journal, payable/payout separation, reconciliation
+
+**Dependency rule:** a feature spec may consume a foundation but must not redefine one. Where a foundation owns a table or a state contract, the consuming spec references it.
+
 ## Status interpretation
 
 - `Authority`: derived from RKS or explicit Stakeholder Workflow MVP.

@@ -24,9 +24,23 @@ What four sprints **does** deliver, and what this plan commits to:
 
 That is a genuine, demonstrable, weekly-measurable outcome. Section 8 sets out the honest runway from there to MVP acceptance. Scaling the plan down or compressing it is a product decision, not an engineering one — this document states the cost so that decision is informed.
 
-### 0.3 The single most urgent item
+### 0.3 The single most urgent item — ✅ RESOLVED 25 Jul 2026
 
-**C-2 is still broken right now.** Re-verified at the time of writing:
+> **Status update.** C-2 was **executed and verified on 25 Jul 2026**, under recorded human approval for Route A only (manual DDL, non-destructive; the `postgres_data` volume was preserved and Route B was never run). What follows is the original diagnosis, kept for the record. The verified outcome:
+>
+> - Secret ownership fixed via host `chown 999:999` — the declarative Compose fix proved **unsupported on this host** (see S1-T1).
+> - `makam_dev` and `makam_stg` created, owned by `makam_dev_user` / `makam_stg_user`.
+> - `pg_trgm 1.6` + `unaccent 1.1` installed in both; `similarity()` confirmed working, so ADR-0007 now has its foundation.
+> - Environment isolation verified by **5/5 negative tests** — `dev→stg`, `stg→dev`, and `dev→postgres` all `DENIED`; `PUBLIC` CONNECT revoked on the maintenance databases too.
+> - **Schema-aware healthcheck** installed and verified in **both** directions: exit 0 when correct, exit 1 when a database or an extension is missing. `pg_isready` alone can no longer report healthy over a missing schema.
+> - Data survived a container recreate, which independently confirms the deployed volume mount is correct (contrast H-1, the repo example).
+> - Init script realigned to bound parameters (H-2), so a future volume recreate reproduces this state instead of the original failure.
+>
+> Rollback path: `/opt/makam/compose/compose.yml.bak.20260725_042315Z` and `postgres-init/01-create-databases.sh.bak.20260725_042315Z`.
+>
+> **Still open:** finding N-1 — `database-backup-and-recovery.md` §8 wants separate application and migration roles. Only two secrets exist, so one role per environment was created. The split needs two newly provisioned secrets, which is a credential change requiring its own human approval.
+
+**Original diagnosis — C-2 was broken.** As verified at the time of writing:
 
 ```
 $ docker exec makam-nonprod-postgres-1 psql -U postgres_admin -d postgres -tAc \
@@ -216,26 +230,27 @@ Everything else can be scheduled around this chain.
 
 ### Task detail
 
-**S1-T1 — Docker secret ownership.** Preferred, declarative: service-level long syntax so the fix lives in `compose.yml`.
+**S1-T1 — Docker secret ownership. ✅ EXECUTED 25 Jul 2026.**
 
-```yaml
-services:
-  postgres:
-    secrets:
-      - source: postgres_admin_password
-        target: postgres_admin_password
-        uid: "999"
-        gid: "999"
-        mode: 0400
-      - source: makam_dev_db_password
-        target: makam_dev_db_password
-        uid: "999"
-        gid: "999"
-        mode: 0400
-      # …repeat for makam_stg_db_password
+The declarative fix (`secrets` long syntax with `uid`/`gid`/`mode`) was tried first and **does not work on this host.** Docker Compose parses the keys, then discards them:
+
+```
+$ docker compose up -d --force-recreate postgres
+warning  secrets `uid`, `gid` and `mode` are not supported, they will be ignored
 ```
 
-> **Verify first:** `uid`/`gid`/`mode` support in the long syntax is documented for Swarm and is honoured by Compose v2 in current versions, but **this has not been tested on this host**. Fallback if unsupported: `chown 999:999` the three host files, keeping mode `0400`. Do **not** `chmod 0444` — that makes a database credential world-readable on the host.
+Readability by uid 999 was still `NOT readable` afterwards. **The host-ownership fallback is therefore the actual fix, not the backup plan:**
+
+```bash
+sudo chown 999:999 /opt/makam/compose/secrets/*.txt
+sudo chmod 0400   /opt/makam/compose/secrets/*.txt
+```
+
+Verified immediately after: all three `READABLE ✅` by uid 999. The change is reflected **live in the running container** — Compose file-secrets are bind-mounted, so no recreate is needed for ownership alone.
+
+Do **not** `chmod 0444` — that makes a database credential world-readable on the host. Ownership must move to uid 999; the mode stays `0400`.
+
+`compose.yml` now carries a `SECRET OWNERSHIP` comment recording this, because the requirement is invisible from the file otherwise and will silently break again if the secret files are ever restored or regenerated.
 
 **S1-T3 — Create databases (⚠️ HUMAN GATE).** Two routes:
 

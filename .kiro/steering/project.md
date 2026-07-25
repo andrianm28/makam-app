@@ -19,8 +19,15 @@ Read these canonical documents before planning or implementation:
 15. `../../docs/operations/dev-staging-environment.md`
 16. `../../docs/operations/ci-cd-and-release.md`
 17. `../../AGENTS.md`
+18. `../../docs/design/design-system.md`
+19. `../../resources/css/tokens.css`
+20. `../../docs/planning/kiro-specs-analysis.md`
 
 Feature specs are canonical under `../specs/`.
+
+`design-system.md` is the single source of truth for component contracts and the ten required UI states; `tokens.css` is the single source of truth for every design value. Never hardcode a hex, px, ms, or shadow, and never use a Tailwind arbitrary value for a design decision.
+
+Platform foundation specs (`platform-*`) are canonical for the cross-cutting concerns — identity, payment, notifications, documents, audit, feature gates, outbox, financial ledger. A feature spec consumes them and must not redefine them.
 
 The Stakeholder Workflow MVP is a committed acceptance baseline. External gates may change the operating mode, but they must use the documented fallback rather than removing a required public flow.
 

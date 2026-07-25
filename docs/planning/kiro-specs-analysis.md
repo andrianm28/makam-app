@@ -148,7 +148,15 @@ Verified present and correctly stated:
 
 That is a strong compliance record on the **commercial and domain invariants** — the ones most expensive to get wrong.
 
-### 2.2 CRITICAL — foundations consumed but owned by nobody
+### 2.2 CRITICAL — foundations consumed but owned by nobody — ✅ RESOLVED 25 Jul 2026
+
+> **Status update.** All eight foundation specs were authored on 25 Jul 2026, taking the corpus from 19 to **27 specs (81 files)**: `platform-identity-and-access`, `platform-payment-adapter`, `platform-notifications`, `platform-document-vault`, `platform-audit`, `platform-feature-gate`, `platform-outbox`, `platform-financial-ledger`. Each has a complete requirements/design/tasks triad (10–14 acceptance criteria, 11–16 tasks). They are registered in `docs/specs/README.md` and `.kiro/steering/project.md`.
+>
+> The `AGENTS.md` mandates measured at **0 mentions** in §2.3 are now present: `outbox` 0 → 36 mentions across 14 files · MFA/TOTP 0 → 3 files · re-authentication 0 → 14 files · five-minute signed URL 0 → 3 files.
+>
+> Still thin: expand/contract migration appears in only 1 file. It is properly owned by `ci-cd-and-release.md` §4 rather than by a feature spec, so this is arguably correct — but no spec references that rule.
+>
+> The diagnosis below is kept for the record.
 
 Command:
 
