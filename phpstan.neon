@@ -1,0 +1,18 @@
+# Larastan configuration.
+# ci-cd-and-release.md §2 requires a static analysis stage; this is the
+# minimum config that gives Larastan a path to analyse. Level kept low
+# deliberately — this is a scaffold with almost no application code yet.
+# Raise the level as real code lands; do not raise it pre-emptively on an
+# empty app/ directory, that only produces noise.
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    paths:
+        - app
+
+    level: 2
+
+    excludePaths:
+        - app/Domain/*/README.md
+        - app/Platform/README.md
