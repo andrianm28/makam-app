@@ -1,11 +1,13 @@
 # Tasks — Public FAQ
 
-- [ ] Create FAQ schema and seed six categories.
-- [ ] Build admin FAQ resource with preview/publish.
-- [ ] Build public list, filter, search, and detail.
-- [ ] Add related articles and customer-service CTA.
-- [ ] Seed minimum initial questions.
-- [ ] Add authorization, publishing, search, and responsive tests.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+- [ ] Create FAQ schema and seed six categories. _Requirements: 2_
+- [ ] Build admin FAQ resource with preview/publish. _Requirements: 5_
+- [ ] Build public list, filter, search, and detail. _Requirements: 1, 3, 4_
+- [ ] Add related articles and customer-service CTA. _Requirements: 4, 8_
+- [ ] Seed minimum initial questions. _Requirements: 2_
+- [ ] Add authorization, publishing, search, and responsive tests. _Requirements: 6, 9_
 
 ## Design system
 
