@@ -3,8 +3,14 @@ name: CI
 # Implements the required pipeline in docs/operations/ci-cd-and-release.md §2.
 # Builds happen HERE, never on the combined 2 vCPU / 4 GB dev+staging host (§10).
 #
-# NOT TESTED: this workflow has never run. Job order and gate content follow the
-# documented pipeline; the steps themselves are unverified until a first run.
+# Verified green 25 Jul 2026 (run 30147031136, commit e8e8c23): all six jobs
+# pass — docs gates, version assertion, PHP validate/lint/analyse/test,
+# frontend build, OpenAPI/YAML validation, dependency audit. It took two
+# fix cycles to get there; the first real run failed five of six jobs and
+# caught six genuine bugs (missing tests/Unit and tests/Feature directories,
+# a Bunny Fonts CDN import contradicting the self-hosted-font policy, a
+# broken link only visible on a clean checkout, missing PyYAML, and a
+# missing phpstan.neon). None of that was found by local checks alone.
 
 on:
   push:
