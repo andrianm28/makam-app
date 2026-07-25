@@ -106,6 +106,19 @@ FROM php:8.5-fpm-bookworm@sha256:83c155135b9c4aa664fc6ce47020a10fe53576a0ed34681
 #
 # No -j"$(nproc)": removed while still chasing the wrong culprit and never
 # proven necessary to keep off — the build is fast enough without it.
+#
+# apt-mark manual libpq5 libzip4: the first real container run on the host
+# crashed on `migrate` with "could not find driver" — pdo_pgsql/pgsql/zip all
+# failed to load their .so at runtime with "libpq.so.5: cannot open shared
+# object file" / "libzip.so.4: cannot open...". `apt-get purge --auto-remove
+# libpq-dev libzip-dev` had swept the RUNTIME libraries away too (libpq5,
+# libzip4 were apt-installed as dependencies of the -dev packages, so
+# autoremove considered them orphaned once the -dev packages were purged —
+# even though the compiled extensions still link against them). libicu72 was
+# unaffected (not pulled in the same dependency chain), which is why intl
+# kept working and this wasn't caught by the pcntl/opcache assertions below.
+# Marking the runtime libs "manual" before the purge is the standard fix:
+# apt no longer considers them autoremove candidates.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libpq-dev libzip-dev libicu-dev nginx \
@@ -113,6 +126,7 @@ RUN apt-get update \
     && docker-php-ext-install pdo_pgsql pgsql zip intl bcmath pcntl \
     && pecl install redis \
     && docker-php-ext-enable redis \
+    && apt-mark manual libpq5 libzip4 \
     && apt-get purge -y --auto-remove libpq-dev libzip-dev libicu-dev \
     && rm -rf /var/lib/apt/lists/*
 
@@ -124,6 +138,14 @@ RUN php -m | grep -qi '^pcntl$' \
     || { echo 'pcntl did not install as expected — check docker-php-ext-install above.' >&2; exit 1; }
 RUN php -m | grep -qi opcache \
     || { echo 'opcache is not built into this base image as expected — add it back to docker-php-ext-install above.' >&2; exit 1; }
+
+# Same class of executable proof as the pcntl/opcache assertions above,
+# extended to cover the extensions this actual bug hit — pdo_pgsql/pgsql/zip
+# were never asserted at all until now, only the two that were being actively
+# debugged at the time. `extension_loaded()` (equivalent to grepping `php -m`)
+# is enough here: a missing runtime .so/.so-dependency makes PHP drop the
+# extension from this list entirely, it does not half-register it.
+RUN php -r 'foreach (["pdo_pgsql","pgsql","zip"] as $e) { if (!extension_loaded($e)) { fwrite(STDERR, "$e failed to load — check libpq5/libzip4 survived the apt purge above.\n"); exit(1); } }'
 
 # php-fpm's own default pool listens on all interfaces; pin it to loopback —
 # nginx talks to it over 127.0.0.1 inside this same container, nothing else
