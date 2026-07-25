@@ -137,7 +137,7 @@ RUN { \
 # /tmp because nginx runs as www-data (see USER below), not root, and /run
 # and /var/lib/nginx are not writable by that user.
 COPY docker/nginx.conf /etc/nginx/nginx.conf
-RUN mkdir -p /tmp/nginx-client-body /tmp/nginx-proxy /tmp/nginx-fastcgi
+RUN mkdir -p /tmp/nginx-client-body /tmp/nginx-proxy /tmp/nginx-fastcgi /tmp/nginx-uwsgi /tmp/nginx-scgi
 
 # Opcache settings suited to an immutable image: the code never changes at
 # runtime, so revalidation is wasted work.
@@ -172,6 +172,7 @@ RUN composer dump-autoload --optimize --no-dev --no-interaction \
 # since everything here runs as www-data, not root (see USER below).
 RUN chown -R www-data:www-data storage bootstrap/cache \
         /tmp/nginx-client-body /tmp/nginx-proxy /tmp/nginx-fastcgi \
+        /tmp/nginx-uwsgi /tmp/nginx-scgi \
     && chmod -R ug+rwX storage bootstrap/cache
 
 COPY docker/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
