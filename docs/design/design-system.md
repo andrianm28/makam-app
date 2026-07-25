@@ -1066,7 +1066,9 @@ export default {
 
 > **Caveat:** wrapping colours in `var()` disables Tailwind's automatic opacity modifiers in some v3-era code paths (`bg-primary-600/50`). Under Tailwind 4's `@theme`, opacity modifiers work via `color-mix()` and are unaffected. This is one more reason `@theme` is canonical and this shim is a last resort. **Not verified against a build** (§12).
 
-### 8.3 Filament 5 panels — ⚠️ least-verified section
+### 8.3 Filament 5 panels — ⚠️ partially verified 25 Jul 2026 (Batch 2.4, S2-T3)
+
+`AdminPanelProvider` (loading a `tokens.css`-generated palette, resolving OQ-09) is registered in `bootstrap/providers.php` and **booted successfully in CI against the real, pinned `filament/filament` v5.7.3** (run 30153271555 — no API mismatch, all tests green). That specific uncertainty — "does this even boot" — is resolved. Two things this section originally described are NOT what shipped, by deliberate, documented deviation rather than oversight: `->font('Inter var', provider: LocalFontProvider::class)` (no confirmed FQCN for `LocalFontProvider` in `filament/support` v5.7.3 — the panel self-hosts via `@font-face`/`@fontsource-variable/inter` instead, matching the public site) and the `discoverResources()`/`discoverPages()`/`discoverWidgets()` calls (the directories they'd scan don't exist yet under the current empty `app/Filament/Admin/` scaffold — add them back when the first Admin Resource is built). Neither of those two specific points has been verified either way.
 
 Goal: `/admin` and `/vendor` inherit the same tokens, so a `DIBAYAR` badge is identical in the customer view and the admin table.
 
@@ -1273,7 +1275,7 @@ python3 docs/design/verify-contrast.py
 ! grep -rIn 'outline:\s*none' --include='*.css' resources/ | grep -v 'focus-visible'
 
 # 6. Filament PHP palette matches tokens.css (see §8.3 known gap)
-php artisan design:verify-filament-palette   # helper to be written
+php artisan design:verify-filament-palette   # written 25 Jul 2026 — app/Console/Commands/VerifyFilamentPaletteCommand.php
 ```
 
 Also recommended: `axe-core` in the browser-test suite, and a Lighthouse budget matching §4.6. Both are **required by [`release-gates.md`](../testing/release-gates.md)** before production activation and are currently unimplemented.
@@ -1352,9 +1354,10 @@ This table was written when `makam-app` had no application code at all. The scaf
 | Tailwind 4 compilation of `tokens.css` / `@theme` / `@utility` / `@source` | **Verified** — CI's `frontend` job (`.github/workflows/ci.yml`) runs `npm run build` on every push and asserts CSS is emitted |
 | Every generated utility name in §8.2 (`max-w-form`, `max-w-prose`, `max-w-content`, `duration-fast`, `z-modal`, `z-header`, `touch-target`, `h-11`, `h-13`, `xs:`, `border-neutral-450`, `ease-standard`, `text-base`) | **Verified 25 Jul 2026 — S2-T1 closed.** CI greps the compiled CSS for each (`resources/views/design-system-smoke-test.blade.php` forces the ones with no real usage yet — `max-w-form`/`prose`/`content`, `xs:` — to actually generate, since Tailwind's JIT scanner only emits what's literally referenced somewhere) |
 | The `tailwind.config.js` shim, including the `var()`-in-colours opacity caveat | **NOT TESTED** |
-| **Filament 5 theming (§8.3)** — theme file path, `vendor/filament/.../theme.css` import target, `LocalFontProvider`, `Color::hex()`, `viteTheme()` | **NOT VERIFIED** — written from the documented baseline; **treat as the least reliable section** and confirm against shipped Filament 5 docs at scaffold time |
+| **Filament 5 theming (§8.3)** — panel boot itself | **Verified 25 Jul 2026** — `AdminPanelProvider` boots successfully in CI against the real, pinned `filament/filament` v5.7.3 (all tests green) |
+| **Filament 5 theming (§8.3)** — `LocalFontProvider`, `discoverResources()`/`discoverPages()`/`discoverWidgets()` | **NOT VERIFIED, deliberately not used** — see §8.3's own updated note for the specific, documented reason each was skipped rather than guessed at |
 | All Blade/Livewire snippets (§3.1, §3.2, §6.1, §8.4) | **NOT TESTED** — never rendered or compiled |
-| `StatusIntent` helper and `design:verify-filament-palette` command | **NOT WRITTEN** — referenced as required work |
+| `StatusIntent` helper and `design:verify-filament-palette` command | **Written and tested 25 Jul 2026** — `app/Support/Design/StatusIntent.php`, 26 tests green in CI (real PHPUnit run, not the earlier `php -l`-only claim); `design:verify-filament-palette` exists and works when run manually, not yet wired into CI (that's S2-T4/Batch 2.5) |
 | Rendered visual appearance of the palette | **NOT TESTED** — no screenshot, no browser, no device |
 | Screen-reader behaviour (NVDA/VoiceOver/TalkBack) | **NOT TESTED** |
 | Keyboard-only walkthroughs, focus-order verification, focus-trap behaviour | **NOT TESTED** |

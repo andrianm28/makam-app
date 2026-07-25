@@ -463,7 +463,7 @@ No features. No screens. No migrations beyond framework defaults. No nginx/DNS c
 |---|---|---|---|---:|---|---|
 | S2-T1 | Wire `tokens.css` → Tailwind 4.3; verify **every** utility in design-system §8.2 generates | design system | design §12 | 2 pd | — | ✅ done 25 Jul (CI-enforced) |
 | S2-T2 | Build `<x-mk.*>` primitives (button, field, card, modal, table, badge, alert, stepper, header) | design system | design §3 | 4 pd | — | ✅ done 25 Jul (all 9 built, reviewed, merged) |
-| S2-T3 | Verify Filament 5 theming; implement `StatusIntent`; resolve OQ-09 palette duplication | design §3.7 + `booking-and-order-orchestration` | design §8.3, OQ-09 | 2 pd | — | ❌ open |
+| S2-T3 | Verify Filament 5 theming; implement `StatusIntent`; resolve OQ-09 palette duplication | design §3.7 + `booking-and-order-orchestration` | design §8.3, OQ-09 | 2 pd | — | ✅ done 25 Jul (Batch 2.4) — panel boots in CI against real Filament 5.7.3, `StatusIntent` 26 tests green, OQ-09 resolved via generator |
 | S2-T4 | Add all six design governance gates to CI, incl. `verify-contrast.py` as hard fail | design system | design §9.5 | 1 pd | — | ❌ open |
 | S2-T5 | nginx dev/stg vhosts + DNS + IP allowlist + TLS + `noindex` | infra | **M-1** | 2 pd | ⚠️ **HUMAN** | ⚠️ **dev done 25 Jul (allowlist later removed by decision, ADR-0031); stg vhost + runbook prepared 25 Jul (Batch 2.6A) — still blocked on DNS confirmation, not deployed** |
 | S2-T6 | Redis `requirepass` + separate prefixes/namespaces per environment | infra, `platform-outbox` prep | **M-5** | 1 pd | ⚠️ **HUMAN** | ⚠️ **prepared 25 Jul (Batch 2.6B) — runbook + compose snippet ready; not applied, needs a live restart human gate G4** |
