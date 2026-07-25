@@ -77,49 +77,45 @@ FROM php:8.5-fpm-bookworm AS runtime
 # nginx is kept (not purged) — it is the HTTP server for this image, not a
 # build-time-only dependency like the -dev headers below.
 #
-# pcntl: laravel/horizon requires it (composer.lock). NOT in the
-# docker-php-ext-install list below — two build attempts adding it there both
-# failed with "cp: cannot stat 'modules/*'" (Build complete, but nothing in
-# modules/ to install). ext/pcntl/config.m4 defaults PHP_PCNTL to enabled
-# unless --disable-pcntl is passed, and the official docker-library Dockerfile
-# for this exact base image (8.5/bookworm/fpm) never passes it — so pcntl is
-# almost certainly already compiled in, and docker-php-ext-install was being
-# asked to build a module that already exists (the exact, previously-reported
-# failure mode for e.g. `reflection`: docker-library/php#1137). Verified 25
-# Jul 2026 via php-src's config.m4 and the docker-library Dockerfile source,
-# NOT by running the image (this host cannot pull it — see -j note below).
-# The RUN step right after this one asserts it with `php -m`, so a wrong guess
-# here fails the build loudly instead of silently shipping without pcntl.
+# pcntl: laravel/horizon requires it (composer.lock).
 #
-# No -j"$(nproc)" on the extensions that ARE built here: an earlier attempt
-# (while pcntl was still in this list) failed the same way under -j on the
-# GitHub-hosted runner. Left removed since pcntl turned out to be the actual
-# cause either way, but not reverted back to -j either — not proven safe to
-# re-add without evidence, and the build is fast enough without it for now.
-# opcache: same story as pcntl above, found by the next build attempt after
-# pcntl was removed — the failing extension's configure output was full of
-# opcache-specific checks (JIT, Capstone disassembly, shm_open/sysvipc shared
-# memory backends), and Zend OPcache has been a default-compiled extension
-# since PHP 5.5 (built unless --disable-opcache is passed; the official
-# Dockerfile doesn't pass it, same as pcntl). The opcache.ini step further
-# below still configures it — that part was always correct and unaffected by
-# this; only the redundant *build* step is removed here.
+# opcache: NOT in the docker-php-ext-install list below. `docker-php-ext-install`
+# runs its argument list as one script that stops at the FIRST failing
+# extension — every failed attempt that included opcache had it positioned
+# BEFORE pcntl/bcmath in the list, so opcache was silently the actual failure
+# point each time; pcntl and bcmath were never reached, and an earlier version
+# of this comment wrongly blamed pcntl for the same reason. Isolated by
+# removing extensions one at a time: pdo_pgsql+pgsql+zip+intl+bcmath together
+# build cleanly; adding pcntl back to that set also builds cleanly (this
+# comment describes the state that got the build green); opcache alone,
+# added back, is what actually reproduces "Build complete" followed by an
+# empty modules/ dir. Its configure output is full of opcache-specific checks
+# (JIT, Capstone disassembly, shm_open/sysvipc shared memory backends). Zend
+# OPcache has been a default-compiled PHP extension since 5.5 (built unless
+# --disable-opcache is passed; the official docker-library Dockerfile for
+# this base image doesn't pass it) — so it is almost certainly already
+# compiled in, and asking to build it again hits the same failure mode as
+# the previously-reported `reflection` case (docker-library/php#1137). The
+# opcache.ini step further below still configures it either way.
+#
+# No -j"$(nproc)": removed while still chasing the wrong culprit and never
+# proven necessary to keep off — the build is fast enough without it.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libpq-dev libzip-dev libicu-dev nginx \
     && docker-php-ext-configure intl \
-    && docker-php-ext-install pdo_pgsql pgsql zip intl bcmath \
+    && docker-php-ext-install pdo_pgsql pgsql zip intl bcmath pcntl \
     && pecl install redis \
     && docker-php-ext-enable redis \
     && apt-get purge -y --auto-remove libpq-dev libzip-dev libicu-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Executable proof for the pcntl/opcache reasoning above, not just a comment:
-# fail the build immediately and clearly if this base image ever stops
-# shipping either built in (a base image bump, for instance), rather than
-# silently producing an image that's missing them at runtime.
+# Executable proof for the reasoning above, not just a comment: fail the build
+# immediately and clearly if either ever stops being true (pcntl no longer
+# installable normally, or opcache no longer built in by default on a future
+# base image bump), rather than silently shipping a broken image.
 RUN php -m | grep -qi '^pcntl$' \
-    || { echo 'pcntl is not built into this base image as expected — add it back to docker-php-ext-install above.' >&2; exit 1; }
+    || { echo 'pcntl did not install as expected — check docker-php-ext-install above.' >&2; exit 1; }
 RUN php -m | grep -qi opcache \
     || { echo 'opcache is not built into this base image as expected — add it back to docker-php-ext-install above.' >&2; exit 1; }
 
