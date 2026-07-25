@@ -172,6 +172,28 @@ jobs:
           test -d public/build || { echo "no public/build produced"; exit 1; }
           find public/build -name '*.css' | head -1 | grep -q . \
             || { echo "no CSS emitted — token wiring may be broken"; exit 1; }
+      # Closes S2-T1 (sprint-plan.md): design-system.md §8.2 asserted every one
+      # of these compiles but this was never actually verified — see
+      # resources/views/design-system-smoke-test.blade.php for why a smoke
+      # file is needed (several of these have no real usage yet, so Tailwind's
+      # JIT scanner would never emit them without one). Where this fails,
+      # fix design-system.md/tokens.css, per S2-T1's own instruction — never
+      # work around it by weakening this check.
+      - name: Assert every §8.2 utility actually compiled
+        run: |
+          css=$(find public/build -name '*.css' | head -1)
+          missing=0
+          for cls in max-w-form max-w-prose max-w-content duration-fast \
+                     z-modal z-header touch-target h-11 h-13 border-neutral-450 \
+                     ease-standard text-base; do
+            grep -qF ".${cls}" "$css" || { echo "MISSING: .$cls"; missing=1; }
+          done
+          # xs: is a variant prefix, not a bare class — its presence shows up
+          # as an @media rule at the --breakpoint-xs value (22.5rem), not a
+          # literal ".xs" selector.
+          grep -qF '22.5rem' "$css" || { echo "MISSING: xs: breakpoint (22.5rem) not found in output"; missing=1; }
+          [ "$missing" -eq 0 ] || { echo "One or more design-system.md §8.2 utilities did not compile"; exit 1; }
+          echo "All asserted §8.2 utilities confirmed present in compiled CSS"
 
   # ---------------------------------------------------------------------------
   # Contract validation. OpenAPI 3.1 is contract-first per technology-baseline §2.

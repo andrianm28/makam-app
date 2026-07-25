@@ -5,10 +5,12 @@
  * Design VALUES belong in tokens.css and nowhere else. If you are about to type
  * a hex, px, ms, or shadow here, stop: add or reference a token instead.
  *
- * NOT TESTED: no Tailwind build has run against this file yet. Every utility
- * name design-system.md §8.2 promises is asserted from the documented Tailwind 4
- * API, not observed. Sprint task S2-T1 exists to verify it; where reality
- * differs, correct design-system.md rather than working around it here.
+ * S2-T1 closed 25 Jul 2026: every §8.2 utility is confirmed compiling, CI-
+ * enforced (ci.yml's frontend job, "Assert every §8.2 utility actually
+ * compiled" — see resources/views/design-system-smoke-test.blade.php for
+ * why a smoke file was needed). Where a future §8.2 addition disagrees with
+ * what actually compiles, correct design-system.md rather than working
+ * around it here — that instruction from S2-T1 still stands.
  * ========================================================================== */
 
 @import "tailwindcss";

@@ -1343,14 +1343,14 @@ Per `AGENTS.md`: *"Never report `PASS` for a check that was not executed; use `B
 | Two real AA failures found and fixed during authoring | **PASS** | `warning-600` 4.44 → 5.05; `neutral-300`/`400` borders 1.71/2.67 → `neutral-450` 3.67 |
 | `tokens.css` parses as CSS token declarations | **PASS** | Verifier extracted all 79 `--color-*-<shade>` tokens |
 
-### NOT TESTED — no build exists in this repository
+### NOT TESTED — updated as items get verified; not a static snapshot
 
-`makam-app` contains **no application code** — no `package.json`, `composer.json`, `Dockerfile`, `.nvmrc`, or lockfiles (all eight artefacts required by `technology-baseline.md` §5 are absent). Therefore:
+This table was written when `makam-app` had no application code at all. The scaffold has since landed (`technology-baseline.md` §5's eight artefacts all exist) and CI runs on every push — most rows below predate that and many are now stale. Rows are corrected as each is actually closed, not left asserting a state that stopped being true.
 
 | Item | Status |
 |---|---|
-| Tailwind 4.1 compilation of `tokens.css` / `@theme` / `@utility` / `@source` | **NOT TESTED** — no Tailwind installed |
-| Every generated utility name in §8.2 (`max-w-form`, `duration-fast`, `z-modal`, `h-13`, `xs:`) | **NOT TESTED** — asserted from the documented Tailwind 4 API, not from a build |
+| Tailwind 4 compilation of `tokens.css` / `@theme` / `@utility` / `@source` | **Verified** — CI's `frontend` job (`.github/workflows/ci.yml`) runs `npm run build` on every push and asserts CSS is emitted |
+| Every generated utility name in §8.2 (`max-w-form`, `max-w-prose`, `max-w-content`, `duration-fast`, `z-modal`, `z-header`, `touch-target`, `h-11`, `h-13`, `xs:`, `border-neutral-450`, `ease-standard`, `text-base`) | **Verified 25 Jul 2026 — S2-T1 closed.** CI greps the compiled CSS for each (`resources/views/design-system-smoke-test.blade.php` forces the ones with no real usage yet — `max-w-form`/`prose`/`content`, `xs:` — to actually generate, since Tailwind's JIT scanner only emits what's literally referenced somewhere) |
 | The `tailwind.config.js` shim, including the `var()`-in-colours opacity caveat | **NOT TESTED** |
 | **Filament 5 theming (§8.3)** — theme file path, `vendor/filament/.../theme.css` import target, `LocalFontProvider`, `Color::hex()`, `viteTheme()` | **NOT VERIFIED** — written from the documented baseline; **treat as the least reliable section** and confirm against shipped Filament 5 docs at scaffold time |
 | All Blade/Livewire snippets (§3.1, §3.2, §6.1, §8.4) | **NOT TESTED** — never rendered or compiled |
@@ -1383,7 +1383,7 @@ Ordered, because some steps depend on earlier ones.
 4. [ ] Add `docs/design/design-system.md` to `.kiro/steering/project.md` (**OQ-11**) so agents actually read it
 5. [ ] Scaffold Laravel 13 + the eight `technology-baseline.md` §5 artefacts (blocks all build verification)
 6. [ ] Self-host the fonts; decide **OQ-10** (CSP) *before* the scaffold hardens
-7. [ ] Wire `app.css` per §8.2; confirm every utility in §8.2 actually generates — resolve any mismatch by fixing this document
+7. [x] Wire `app.css` per §8.2; confirm every utility in §8.2 actually generates — resolve any mismatch by fixing this document (**done 25 Jul 2026**, CI-enforced — see §12's NOT TESTED table)
 8. [ ] Verify §8.3 against a real Filament 5 install; correct this document; then build the palette generator (**OQ-09**)
 9. [ ] Build the `<x-mk.*>` primitives (§3) with the ten states (§6)
 10. [ ] Implement `StatusIntent` as the single status → intent resolver (§3.7)
