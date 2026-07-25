@@ -41,11 +41,26 @@ final class MfaChallengeServiceTest extends TestCase
         return $enrolmentService->confirm($enrolment, $code, $user->id, 'admin', AuditSource::Panel)->enrolment;
     }
 
+    /**
+     * FIXED 26 Jul 2026 — first real CI run: `confirmedEnrolmentFor()`
+     * already consumes the CURRENT time-step as `last_verified_counter`
+     * (confirmation itself is a real TOTP verification). Generating this
+     * helper's code for `time()` too meant it very often (depending on
+     * exactly where in the 30-second window the test happened to run)
+     * asked for a code on the SAME step confirmation had just consumed —
+     * `Totp::verify()`'s replay guard then correctly rejected it as a
+     * replay, failing `$result->valid` for a reason that had nothing to
+     * do with a real defect (the replay protection was doing exactly what
+     * it is supposed to). Generating one period AHEAD guarantees a step
+     * strictly greater than whatever confirmation just consumed, while
+     * still landing inside `verify()`'s default ±1-step tolerance window
+     * when the challenge actually runs moments later at real "now".
+     */
     private function currentCodeFor(MfaEnrolment $enrolment): string
     {
         $totp = new Totp(t0: 0, period: $enrolment->period_seconds);
 
-        return $totp->generate(Base32::decode($enrolment->secret), time(), $enrolment->digits);
+        return $totp->generate(Base32::decode($enrolment->secret), time() + $enrolment->period_seconds, $enrolment->digits);
     }
 
     public function test_a_valid_code_succeeds_and_records_a_challenge_and_audit_row(): void

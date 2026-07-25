@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Platform\IdentityAccess\Mfa\Totp;
 
 use App\Platform\IdentityAccess\Mfa\Totp\Base32;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -33,17 +34,13 @@ final class Base32Test extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider rfc4648VectorsProvider
-     */
+    #[DataProvider('rfc4648VectorsProvider')]
     public function test_encode_matches_rfc4648_vectors(string $input, string $expected): void
     {
         $this->assertSame($expected, Base32::encode($input));
     }
 
-    /**
-     * @dataProvider rfc4648VectorsProvider
-     */
+    #[DataProvider('rfc4648VectorsProvider')]
     public function test_decode_matches_rfc4648_vectors(string $input, string $encoded): void
     {
         $this->assertSame($input, Base32::decode($encoded));

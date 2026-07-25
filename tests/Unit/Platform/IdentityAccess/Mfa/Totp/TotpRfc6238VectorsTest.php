@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Platform\IdentityAccess\Mfa\Totp;
 
 use App\Platform\IdentityAccess\Mfa\Totp\Totp;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -50,9 +51,7 @@ final class TotpRfc6238VectorsTest extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider rfc6238VectorsProvider
-     */
+    #[DataProvider('rfc6238VectorsProvider')]
     public function test_totp_matches_rfc6238_appendix_b_vectors(int $unixTime, string $expected): void
     {
         $totp = new Totp(t0: 0, period: 30);
@@ -69,9 +68,8 @@ final class TotpRfc6238VectorsTest extends TestCase
      * (10**6 divides 10**8), and `Hotp::generate()` computes the same
      * dynamic-truncation integer (`$binaryCode`) before applying either
      * modulus.
-     *
-     * @dataProvider rfc6238VectorsProvider
      */
+    #[DataProvider('rfc6238VectorsProvider')]
     public function test_six_digit_path_agrees_with_the_verified_eight_digit_vector(int $unixTime, string $expectedEightDigit): void
     {
         $totp = new Totp(t0: 0, period: 30);

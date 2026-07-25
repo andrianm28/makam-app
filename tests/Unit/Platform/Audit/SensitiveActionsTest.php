@@ -51,7 +51,16 @@ final class SensitiveActionsTest extends TestCase
         $this->assertFalse(SensitiveActions::requiresReason('ditolak'));
     }
 
-    public function test_the_list_contains_exactly_the_seven_requirements_named_actions(): void
+    /**
+     * FIXED 26 Jul 2026 — first real CI run: this test hardcoded "exactly
+     * the seven requirements.md-named actions," but Sprint 3 Batch 3.6
+     * (S3-T2, the MFA subsystem) deliberately added an eighth,
+     * `MFA_RESET` — a genuine, documented addition (see
+     * `SensitiveActions`'s own updated class doc comment for why only
+     * that one MFA action, not all four, requires a reason), not a
+     * regression. Renamed and updated rather than left red.
+     */
+    public function test_the_list_contains_exactly_the_seven_requirements_named_actions_plus_mfa_reset(): void
     {
         $this->assertSame(
             [
@@ -62,6 +71,7 @@ final class SensitiveActionsTest extends TestCase
                 'PAYMENT_MANUAL_VERIFICATION',
                 'CERTIFICATE_REVOKE',
                 'VENDOR_PAYOUT',
+                'MFA_RESET',
             ],
             SensitiveActions::ACTIONS
         );

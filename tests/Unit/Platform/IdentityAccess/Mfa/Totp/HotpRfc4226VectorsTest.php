@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Platform\IdentityAccess\Mfa\Totp;
 
 use App\Platform\IdentityAccess\Mfa\Totp\Hotp;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -44,9 +45,7 @@ final class HotpRfc4226VectorsTest extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider rfc4226VectorsProvider
-     */
+    #[DataProvider('rfc4226VectorsProvider')]
     public function test_hotp_matches_rfc4226_appendix_d_vectors(int $counter, string $expected): void
     {
         $this->assertSame($expected, Hotp::generate(self::RFC_SECRET, $counter, 6));
