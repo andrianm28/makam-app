@@ -15,7 +15,17 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * (`2026_07_26_180000_create_products_table.php`) for full schema reasoning,
  * including the resolution of the OPEN category-code question
  * (`App\Domain\Marketplace\MarketplaceProductCategory`) and the deliberate
- * absence of vendor/stock/schedule/etc. columns in this batch.
+ * absence of stock/schedule/service-area/etc. columns in this batch (still
+ * genuinely absent — those remain future vendor-listing-table concerns).
+ *
+ * `vendor_name` and `photo_path` were added later by
+ * `2026_07_26_200100_add_dummy_vendor_pricing_and_photo_to_products.php`,
+ * which also backfilled `base_price_idr`. Read that migration's own doc
+ * block before treating either column as real: both are explicitly
+ * user-authorized PLACEHOLDER data for public dev display, a single
+ * denormalized string each (no `vendors` table exists), not a real
+ * multi-vendor model — a future real-vendor batch is expected to replace
+ * both wholesale.
  *
  * One of exactly nine rows, seeded by
  * `2026_07_26_180200_seed_marketplace_products_and_variants.php` from
@@ -34,8 +44,10 @@ final class Product extends Model
     protected $fillable = [
         'code',
         'category',
+        'vendor_name',
         'name',
         'description',
+        'photo_path',
         'base_price_idr',
         'price_version',
         'is_active',

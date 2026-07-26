@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" role="img" aria-label="Ilustrasi perawatan makam bulanan (placeholder)">
+  <title>Perawatan Makam Bulanan — placeholder</title>
+  <rect width="400" height="300" rx="16" fill="#E8F0EE"/>
+  <!-- small mound / plot outline -->
+  <path d="M130 220 Q200 195 270 220" fill="none" stroke="#3F6659" stroke-width="4" stroke-linecap="round"/>
+  <!-- rake icon -->
+  <g stroke="#3F6659" stroke-width="4" fill="none" stroke-linecap="round">
+    <line x1="200" y1="200" x2="230" y2="110"/>
+    <line x1="212" y1="120" x2="188" y2="150"/>
+    <line x1="216" y1="128" x2="196" y2="152"/>
+    <line x1="220" y1="136" x2="204" y2="154"/>
+    <line x1="224" y1="144" x2="212" y2="156"/>
+  </g>
+  <!-- single leaf accent -->
+  <path d="M150 175 q10 -18 24 -6 q-10 18 -24 6 Z" fill="none" stroke="#6B8F71" stroke-width="2.5"/>
+</svg>

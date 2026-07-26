@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" role="img" aria-label="Ilustrasi batu nisan marmer (placeholder)">
+  <title>Batu Nisan Marmer — placeholder</title>
+  <rect width="400" height="300" rx="16" fill="#F3F0EA"/>
+  <!-- ground line -->
+  <line x1="90" y1="240" x2="310" y2="240" stroke="#C9C2B4" stroke-width="4" stroke-linecap="round"/>
+  <!-- base plinth -->
+  <rect x="150" y="222" width="100" height="18" rx="3" fill="none" stroke="#6E6455" stroke-width="4"/>
+  <!-- headstone silhouette, rounded top -->
+  <path d="M160 222 L160 130 Q200 90 240 130 L240 222 Z" fill="none" stroke="#6E6455" stroke-width="4" stroke-linejoin="round"/>
+  <!-- marble veining -->
+  <g fill="none" stroke="#C9C2B4" stroke-width="1.6">
+    <path d="M170 140 q15 15 5 35 q-8 18 10 30"/>
+    <path d="M205 120 q10 20 -3 40 q-10 15 8 28"/>
+  </g>
+</svg>

@@ -120,15 +120,86 @@ final class ProductCatalogueSeedTest extends TestCase
         }
     }
 
-    public function test_no_product_has_a_fabricated_base_price(): void
+    /**
+     * @return array<string, int>
+     */
+    private static function expectedDummyBasePricesByCode(): array
     {
-        // See 2026_07_26_180000_create_products_table.php's own doc block:
-        // no vendor exists yet to set a real commercial price, so every
-        // seeded row is deliberately left unpriced rather than seeded with
-        // an unverified figure.
+        // Mirrors the dummy price figures written by
+        // `2026_07_26_200100_add_dummy_vendor_pricing_and_photo_to_products.php`
+        // — kept here as a plain literal map (not a re-import of that
+        // migration's array) so this test independently proves the seeded
+        // value matches what that migration documents, rather than trivially
+        // agreeing with itself.
+        return [
+            ProductCode::FLOWER_BOARD => 350_000,
+            ProductCode::FLOWER_PETAL_PACKAGE => 175_000,
+            ProductCode::GRAVESTONE_GRANITE => 3_200_000,
+            ProductCode::GRAVESTONE_MARBLE => 3_800_000,
+            ProductCode::GRAVESTONE_CALLIGRAPHY => 3_950_000,
+            ProductCode::GRAVE_CARE_MONTHLY => 150_000,
+            ProductCode::GRAVE_CARE_QUARTERLY => 350_000,
+            ProductCode::GRAVE_CARE_SEMIANNUAL => 600_000,
+            ProductCode::GRAVE_CARE_ANNUAL => 950_000,
+        ];
+    }
+
+    /**
+     * Originally `test_no_product_has_a_fabricated_base_price`, asserting
+     * every `base_price_idr` was `NULL` — see
+     * `2026_07_26_180000_create_products_table.php`'s own doc block for why
+     * that was the honest state at the time: no vendor existed to set a real
+     * commercial price, so seeding a plausible-looking figure would have
+     * been an unverified fact masquerading as data.
+     *
+     * That premise has since changed, for this environment only: the user
+     * explicitly authorized clearly-fictional DUMMY vendor/pricing/photo
+     * data so `dev.makam.co.id` — a real, intentionally public, non-
+     * production host (ADR-0031) — has something realistic-looking to
+     * render instead of blank price fields. See
+     * `2026_07_26_200100_add_dummy_vendor_pricing_and_photo_to_products.php`'s
+     * own doc block for the full authorization trail and the "future
+     * real-vendor batch replaces this" caveat. This test is renamed and
+     * flipped accordingly: it now asserts the dummy price IS present and
+     * matches the documented figure, and that `price_version` was bumped to
+     * `2` (a new "cut" of the row's price definition, per that column's own
+     * documented intent) — not that prices are still absent.
+     */
+    public function test_every_product_has_the_documented_dummy_base_price_and_incremented_price_version(): void
+    {
+        $expected = self::expectedDummyBasePricesByCode();
+
         foreach (Product::query()->get() as $product) {
-            $this->assertNull($product->base_price_idr, "Product [{$product->code}] should not have a seeded base price yet.");
-            $this->assertSame(1, $product->price_version);
+            $this->assertArrayHasKey($product->code, $expected, "No expected dummy price documented for [{$product->code}].");
+            $this->assertNotNull($product->base_price_idr, "Product [{$product->code}] should have a seeded dummy base price.");
+            $this->assertSame(
+                $expected[$product->code],
+                $product->base_price_idr,
+                "Product [{$product->code}] does not match its documented dummy base price."
+            );
+            $this->assertSame(2, $product->price_version, "Product [{$product->code}] should be on price_version 2 after the dummy-price backfill.");
+        }
+    }
+
+    public function test_every_product_has_a_clearly_fictional_vendor_name_and_a_placeholder_photo(): void
+    {
+        // Not a byte-for-byte string match against the migration (that would
+        // just restate the migration's own array) — proves the shape/intent
+        // instead: every row has a non-blank vendor name, and every photo
+        // path points at this batch's hand-authored SVG illustration set
+        // rather than a fabricated "photograph" of a nonexistent product.
+        foreach (Product::query()->get() as $product) {
+            $this->assertNotNull($product->vendor_name, "Product [{$product->code}] should have a placeholder vendor name.");
+            $this->assertNotSame('', trim($product->vendor_name), "Product [{$product->code}] has a blank vendor name.");
+
+            $this->assertNotNull($product->photo_path, "Product [{$product->code}] should have a placeholder photo path.");
+            $this->assertStringStartsWith('images/marketplace/', $product->photo_path);
+            $this->assertStringEndsWith('.svg', $product->photo_path);
+
+            $this->assertFileExists(
+                public_path($product->photo_path),
+                "Product [{$product->code}]'s photo_path does not resolve to a real file under public/."
+            );
         }
     }
 
