@@ -3,7 +3,7 @@
 
     <x-mk.card> — design-system.md §3.3. Convention matches <x-mk.button>
     (read that file first): @props([...]) with defaults, classes composed
-    once in a single @php block, one $attributes->merge() on the root
+    once in a single PHP block, one $attributes->merge() on the root
     element, `neutral-0` (not Tailwind's built-in `white`) because
     tokens.css defines --color-neutral-0 explicitly.
 
@@ -30,13 +30,13 @@
     // component only ever receives an already-resolved intent. It does not
     // define `StatusIntent`; that resolution lives elsewhere and is not yet
     // built. An unrecognised value falls back to the plain default look,
-    // same defensive pattern <x-mk.button> uses for unknown $variant.
+    // same defensive pattern button.blade.php uses for unknown $variant.
     $validIntents = ['neutral', 'info', 'pending', 'success', 'danger', 'urgent'];
     $intent = in_array($intent, $validIntents, true) ? $intent : null;
 
     // A `<a>` with no real destination has no reliable affordance, so
     // `interactive` only promotes the tag to <a> when an href is actually
-    // present — same "no href, no <a>" logic <x-mk.button> uses. This also
+    // present — same "no href, no <a>" logic button.blade.php uses. This also
     // guarantees the interactive card contains exactly one focusable
     // anchor: the root element itself, wrapping everything (§3.3) — never
     // nest another <a> or <button> inside an interactive card's slot.

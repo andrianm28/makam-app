@@ -21,7 +21,7 @@
     Two structurally different layouts, same reasoning as stepper.blade.php:
       - Mobile (< lg): hamburger + logo + persistent Bantuan action.
       - Desktop (lg+): full horizontal nav, all items visible, no hamburger.
-    Class composition follows button.blade.php: one @php block, a lookup
+    Class composition follows button.blade.php: one PHP block, a lookup
     table for active/inactive nav classes, `neutral-0` instead of Tailwind's
     `white`. The Bantuan action reuses <x-mk.button> rather than
     re-implementing button styling here.

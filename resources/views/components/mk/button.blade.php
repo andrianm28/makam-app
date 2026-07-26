@@ -6,7 +6,7 @@
     (not just the spec) before building another one:
       - @props([...]) lists every prop with its default, in the same order the
         spec's props table does.
-      - Class composition is base + size + variant, built once in @php, merged
+      - Class composition is base + size + variant, built once in PHP, merged
         exactly once via $attributes->merge(['class' => $classes]) on the root
         element.
       - Every colour/spacing/motion value below is a Tailwind utility that

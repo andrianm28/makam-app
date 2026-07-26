@@ -18,7 +18,7 @@
     progress announcement for both breakpoints, so hiding the visual mobile
     bar on desktop never removes the accessible name from the tree.
 
-    Class composition follows button.blade.php: one @php block, state->class
+    Class composition follows button.blade.php: one PHP block, state->class
     lookup tables, single $attributes->merge on the root element. `neutral-0`
     is used instead of Tailwind's `white`, same convention.
 

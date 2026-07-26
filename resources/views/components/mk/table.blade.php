@@ -15,7 +15,7 @@
     approach given Blade/Tailwind with no JS.
 
     Convention: follows button.blade.php/spinner.blade.php's @props + single
-    @php composition style; `neutral-0` instead of Tailwind's `white`.
+    PHP-block composition style; `neutral-0` instead of Tailwind's `white`.
 
     -----------------------------------------------------------------------
     Props

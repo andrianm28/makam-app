@@ -7,7 +7,7 @@
 
     Convention matches <x-mk.button> (read that file first):
       - @props([...]) lists every prop with its default.
-      - Classes are composed once in a single @php block, then merged
+      - Classes are composed once in a single PHP block, then merged
         exactly once via $attributes->merge() on the root element.
       - `neutral-0` (not Tailwind's built-in `white`) — see button.blade.php
         for why: tokens.css defines --color-neutral-0 explicitly.
@@ -71,7 +71,7 @@
 
     // Shared by input/select/textarea. Disabled colours are the documented
     // pair (neutral-100/neutral-500/neutral-300) — never `opacity-50`, same
-    // rule as <x-mk.button>: a translucent field misreads as "temporarily
+    // rule as button.blade.php: a translucent field misreads as "temporarily
     // busy" rather than "not editable". `read-only:` targets the native
     // :read-only pseudo-class (input/textarea only — <select> has no
     // readonly attribute in HTML, so this rule is inert there).

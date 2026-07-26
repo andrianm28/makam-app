@@ -9,7 +9,7 @@
     two templates behind a breakpoint check.
 
     Convention: follows button.blade.php/spinner.blade.php — @props with every
-    prop defaulted, one @php block composing classes once, `neutral-0` instead
+    prop defaulted, one PHP block composing classes once, `neutral-0` instead
     of Tailwind's `white` (the spec's literal example says `bg-white`; §3.1's
     established convention is followed here instead, since neutral-0 traces to
     a real token and `white` does not).
