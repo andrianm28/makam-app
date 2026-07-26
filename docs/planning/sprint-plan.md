@@ -618,9 +618,9 @@ Starting with S4-T2 (public FAQ), implementation batches in this sprint are buil
 
 | ID | Task | Spec | Consumes | Effort | Gate | Status |
 |---|---|---|---|---:|---|---|
-| S4-T1 | Master data + seeds from the canonical catalogues; **enums derive from the catalogue, incl. the 9 marketplace product codes** | `cemetery-directory…`, `package-and-service-bundles`, `funeral-marketplace…` | audit | 3 pd | — | ✅ Done (26 Jul 2026) — master data/seeds only; full AC coverage for each spec is S4-T6/S4-T7/S4-T8's job |
-| S4-T2 | **FAQ complete slice** — public + admin CMS + 6 categories + no draft leakage | `public-faq` AC1–AC9, `admin-operations` AC6 | identity, audit, feature-gate | 4 pd | — | ✅ Done (26 Jul 2026), CI green |
-| S4-T3 | Homepage — 4 service cards exact order, 9 sections per IA §3, honest Urgent status | `public-home-and-navigation` AC1–AC9 | feature-gate, identity | 3 pd | — | ✅ Done (26 Jul 2026), CI green |
+| S4-T1 | Master data + seeds from the canonical catalogues; **enums derive from the catalogue, incl. the 9 marketplace product codes** | `cemetery-directory…`, `package-and-service-bundles`, `funeral-marketplace…` | audit | 3 pd | — | ✅ Done (26 Jul 2026) — master data/seeds only; full AC coverage for each spec is S4-T6/S4-T7/S4-T8's job. **Deployed to dev.makam.co.id 26 Jul 2026** — see Deployments log below |
+| S4-T2 | **FAQ complete slice** — public + admin CMS + 6 categories + no draft leakage | `public-faq` AC1–AC9, `admin-operations` AC6 | identity, audit, feature-gate | 4 pd | — | ✅ Done (26 Jul 2026), CI green. **Deployed to dev.makam.co.id 26 Jul 2026** |
+| S4-T3 | Homepage — 4 service cards exact order, 9 sections per IA §3, honest Urgent status | `public-home-and-navigation` AC1–AC9 | feature-gate, identity | 3 pd | — | ✅ Done (26 Jul 2026), CI green. **Deployed to dev.makam.co.id 26 Jul 2026** |
 | S4-T4 | Booking wizard shell Steps **1–5** + autosave/resume across sessions | `public-booking-wizard` AC1–AC6, AC11–AC13 | identity, feature-gate, audit | 5 pd | — | ⏸️ Paused (26 Jul 2026) — build/review in progress, paused before completion; nothing committed yet, no CI run |
 | S4-T5 | Draft persistence, versioning, idempotent save, server-side step validation | `booking-and-order-orchestration` AC2, AC3 | audit, outbox | 3 pd | — | ⏸️ Paused (26 Jul 2026) — built together with S4-T4, same feature; nothing committed yet |
 | S4-T6 | Cemetery directory + capability resolver + `"Perlu konfirmasi"` labelling | `cemetery-directory-and-availability` AC1–AC12 | feature-gate, audit, identity | 3 pd | — | Not started — master data ready (S4-T1) |
@@ -630,6 +630,18 @@ Starting with S4-T2 (public FAQ), implementation batches in this sprint are buil
 | S4-T10 | Resolve the 5 open decisions in `assumptions-and-gates.md` §5 that block specs | **L-6** | — | 1 pd | ⚠️ **HUMAN** | Not started — requires the user, not an agent |
 
 **Total: ~27 pd** — over a 2-week sprint for one developer. See §11.
+
+### Deployments log
+
+Per `docs/operations/ci-cd-and-release.md` §5/§10 ("promotion: commit -> CI artifact -> development -> smoke"). This is the first real deployment to the combined dev/staging host — `dev-web` had been running a placeholder until 25 Jul 2026, and even that first real image (25 Jul) was never migrated: `php artisan migrate:status` showed only Laravel's own 3 default migrations applied, none of Sprint 3 or Sprint 4's real schema.
+
+| Date | Commit | Image (GHCR) | What it includes | Migrations applied | Verified |
+|---|---|---|---|---|---|
+| 26 Jul 2026 | `8f7c7ee1b4fd7003eafc587da6dfbcb2bc899d34` (`docs/design-system-and-planning`) | `ghcr.io/andrianm28/makam-app@sha256:bfcf6077901f65eb59527ac6a9bfc8d0c39b63a01484752e4497fa26d9e8b259` (tag `sha-8f7c7ee1b4fd`) | Sprint 3 (Tier-0: identity/MFA, audit, feature-gate, outbox) + Sprint 4 S4-T1 (master data), S4-T2 (FAQ), S4-T3 (homepage) | 33 pending migrations run (`2026_07_26_100000` through `2026_07_26_200000`) — all pure `create_table`/seed, zero destructive operations, zero rows deleted | `https://dev.makam.co.id/` (200, real homepage content), `/faq` (200, real seeded articles), `/pemesanan-makam`\|`/marketplace`\|`/perpanjangan` (200, honest stubs, not 404), `/admin` (302 to login), `/up` (200), `X-Robots-Tag: noindex` still present |
+
+CI's own "Build and push image" job (`build-image`, `.github/workflows/ci.yml`) failed once on this commit with a transient `registry-1.docker.io` timeout (GitHub-runner-side network issue, not a code defect) — re-run (`gh run rerun`) succeeded cleanly on retry.
+
+Not deployed: anything from the paused S4-T4/S4-T5 booking-wizard work (never committed, so not in this or any image).
 
 > **Alignment note.** The old S3-T8 "gated-fallback mode banners" is **gone from this sprint** — it moved to S3-T7 in the Tier-0 sprint, where the gate registry that drives it lives. Features consume the banner; they do not each reimplement it.
 >
