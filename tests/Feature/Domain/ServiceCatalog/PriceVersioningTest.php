@@ -38,7 +38,7 @@ final class PriceVersioningTest extends TestCase
         $this->assertSame('1500000.00', $priceVersion->amount);
         $this->assertSame('IDR', $priceVersion->currency);
         $this->assertTrue($priceVersion->isCurrent());
-        $this->assertSame($service->id, $service->currentPriceVersion()?->id);
+        $this->assertSame($priceVersion->id, $service->currentPriceVersion()?->id);
     }
 
     public function test_recording_a_second_price_version_supersedes_the_first_and_becomes_current(): void

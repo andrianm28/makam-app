@@ -58,8 +58,18 @@ final class CemeterySeedTest extends TestCase
 
     public function test_nine_are_published_and_one_is_deliberately_draft(): void
     {
-        $this->assertDatabaseCount('cemeteries', 9, ['publication_status' => CemeteryPublicationStatus::PUBLISHED]);
-        $this->assertDatabaseCount('cemeteries', 1, ['publication_status' => CemeteryPublicationStatus::DRAFT]);
+        // assertDatabaseCount()'s third parameter is a connection name, not
+        // a where-conditions array (Illuminate\Foundation\Testing\Concerns\
+        // InteractsWithDatabase::assertDatabaseCount()) — a plain count
+        // query is the correct way to assert a filtered count.
+        $this->assertSame(
+            9,
+            Cemetery::query()->where('publication_status', CemeteryPublicationStatus::PUBLISHED)->count()
+        );
+        $this->assertSame(
+            1,
+            Cemetery::query()->where('publication_status', CemeteryPublicationStatus::DRAFT)->count()
+        );
 
         $draft = Cemetery::query()->where('publication_status', CemeteryPublicationStatus::DRAFT)->first();
         $this->assertSame('tps-bekasi-harapan-indah', $draft?->slug);
