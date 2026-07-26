@@ -13,6 +13,20 @@ parameters:
 
     level: 2
 
+    # Larastan's ModelCastHelper defaults this to false (extension.neon) and
+    # falls back to reading a model's `casts(): array` method by its
+    # declared return type only (e.g. `array<string, string>`), never the
+    # literal keys/values inside the method body — so every cast declared
+    # via this codebase's own `protected function casts(): array` convention
+    # (14 models, e.g. OutboxEvent's `occurred_at => immutable_datetime`)
+    # was invisible to it, producing false positives like "Cannot call
+    # method toRfc3339String() on string" for a genuinely CarbonImmutable
+    # attribute. This flag makes Larastan parse the method body's actual
+    # return expression instead. Verified against the real installed
+    # larastan/larastan v3.10.0 source (src/Properties/ModelCastHelper.php)
+    # on the sibling host, not guessed.
+    parseModelCastsMethod: true
+
     excludePaths:
         - app/Domain/*/README.md
         - app/Platform/README.md

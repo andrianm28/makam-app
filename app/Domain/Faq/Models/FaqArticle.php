@@ -149,6 +149,8 @@ final class FaqArticle extends Model
      * display is wanted. ADMIN-FACING — includes drafts/unpublished
      * targets; public rendering MUST use `publishedRelatedArticles()`
      * instead. See class-level AC6 doc block.
+     *
+     * @return BelongsToMany<self, $this>
      */
     public function relatedArticles(): BelongsToMany
     {
