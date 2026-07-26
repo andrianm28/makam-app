@@ -107,10 +107,23 @@
              explicit that `sm` (36px) is "forbidden on any public/mobile
              surface" and exists only for dense Filament table rows. Someone
              reaching for this button is often doing so under real stress —
-             it does not get the smallest touch target in the header. --}}
-        <x-mk.button variant="secondary" :href="$bantuanHref" class="shrink-0">
+             it does not get the smallest touch target in the header.
+
+             FIXED 26 Jul 2026 — first real CI run of Sprint 4's public-faq
+             batch: hand-written, not <x-mk.button>, for the same reason
+             resources/views/livewire/public/faq/index.blade.php's own doc
+             comment explains at length (every <x-mk.button> usage rendered
+             through a real Livewire full-page component fails with
+             "Undefined variable $loading" — this component is the shared
+             header, rendered on every page via layouts/app.blade.php, so it
+             hits the same bug the FAQ views' own buttons did). See
+             docs/planning/sprint-plan.md finding N-14. --}}
+        <a
+            href="{{ $bantuanHref }}"
+            class="shrink-0 inline-flex h-11 select-none items-center justify-center gap-2 rounded-md border border-primary-600 bg-neutral-0 px-4 text-base font-medium text-primary-700 transition-[color,background-color,border-color,box-shadow] duration-fast ease-standard hover:bg-primary-50 active:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
+        >
             Bantuan
-        </x-mk.button>
+        </a>
     </div>
 
     {{-- Mobile menu panel — the hamburger's target. Stays `hidden` until a
@@ -162,10 +175,14 @@
             </a>
             {{-- Same md (default) size as the mobile bar's Bantuan button —
                  see that comment. `sm` is reserved for dense Filament table
-                 rows, not a public header. --}}
-            <x-mk.button variant="secondary" :href="$bantuanHref">
+                 rows, not a public header. Hand-written, not <x-mk.button> —
+                 see the mobile bar's own Bantuan button comment above. --}}
+            <a
+                href="{{ $bantuanHref }}"
+                class="inline-flex h-11 select-none items-center justify-center gap-2 rounded-md border border-primary-600 bg-neutral-0 px-4 text-base font-medium text-primary-700 transition-[color,background-color,border-color,box-shadow] duration-fast ease-standard hover:bg-primary-50 active:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
+            >
                 Bantuan
-            </x-mk.button>
+            </a>
         </div>
     </div>
 </header>
