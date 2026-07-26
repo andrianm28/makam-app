@@ -1,6 +1,7 @@
 <?php
 
 use App\Platform\Correlation\Providers\CorrelationServiceProvider;
+use App\Platform\FeatureGate\Providers\FeatureGateServiceProvider;
 use App\Platform\IdentityAccess\Providers\IdentityAccessServiceProvider;
 use App\Providers\AppServiceProvider;
 use App\Providers\Filament\AdminPanelProvider;
@@ -12,6 +13,16 @@ return [
     // cannot run on this host — CI is the first real boot of this class
     // against the actual pinned filament/filament v5.7.3 package).
     AdminPanelProvider::class,
+    // FeatureGateServiceProvider's own class-level comment documented this
+    // exact missing line since the batch that wrote it (Sprint 3):
+    // GateRegistrySource/FeatureGateResolver/ModeResolver bindings existed
+    // but were unreachable dead code until now. Every FeatureGate test
+    // before S4-T3 used an in-memory GateRegistrySource stub, bypassing the
+    // container entirely — S4-T3's homepage was the first real HTTP
+    // request in this codebase to call app(ModeResolver::class), which is
+    // what actually surfaced this as a live 500
+    // (BindingResolutionException: GateRegistrySource is not instantiable).
+    FeatureGateServiceProvider::class,
     // Batch 3.1 (S3-T1) — binds IdentityAccessAdapter/ActorContextResolver
     // and registers the actor_sessions login/logout listeners. See that
     // provider's own class-level comment for why this registration line is
