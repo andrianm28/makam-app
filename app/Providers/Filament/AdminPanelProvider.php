@@ -78,19 +78,24 @@ use RuntimeException;
  * empty scaffold directory) and Resources are not this batch's file scope,
  * so that usage is documented here rather than implemented anywhere.
  *
- * A SECOND deliberate omission: the documented convention also wires
- * `->discoverResources(in: app_path('Filament/Admin/Resources'), ...)`
- * (and the equivalent for Pages/Widgets). This repo's scaffold only has a
- * flat `app/Filament/Admin/.gitkeep` — the `Resources/`, `Pages/`, and
- * `Widgets/` subdirectories a discover*() call would scan don't exist yet,
- * and creating them is outside this file's ownership (app/Filament/Admin/**
- * is a shared scaffold area for a future Resource-building batch, not this
- * one). Filament's discovery scanner is UNCONFIRMED to tolerate a missing
- * directory gracefully, so rather than risk a boot-time exception from a
- * path that doesn't exist, this panel registers only the package's own
- * built-in Dashboard/Account/Info widgets statically below and omits every
- * discover*() call. Whoever adds the first Admin Resource should add the
- * matching discoverResources() call back in at that point.
+ * A SECOND deliberate omission, RESOLVED by the batch that added the first
+ * Admin Resource (`App\Filament\Admin\Resources\FaqArticles\
+ * FaqArticleResource`, S4-T2): the documented convention also wires
+ * `->discoverResources(in: app_path('Filament/Admin/Resources'), for:
+ * ...)`. Until that batch, this repo's scaffold held only a flat
+ * `app/Filament/Admin/.gitkeep` — no `Resources/` directory existed for a
+ * discover*() call to scan, and Filament's discovery scanner's tolerance
+ * for a missing directory was unconfirmed, so the panel registered only
+ * the package's own built-in Dashboard/Account/Info widgets statically and
+ * omitted every discover*() call. The `->discoverResources()` call below
+ * was added back in once a real `Resources/` directory existed to point it
+ * at — verified against the real installed `filament/filament` v5.7.3
+ * (`Filament\Panel\Concerns\HasComponents::discoverResources(string $in,
+ * string $for): static`) rather than assumed. No matching
+ * `discoverPages()`/`discoverWidgets()` call was added: this batch did not
+ * populate `Filament/Admin/Pages/` or `Filament/Admin/Widgets/`, and adding
+ * a discovery call for a directory nothing populates would risk the same
+ * unconfirmed-missing-directory concern this paragraph originally raised.
  */
 class AdminPanelProvider extends PanelProvider
 {
@@ -101,6 +106,10 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->login()
             ->colors($this->filamentColors())
+            ->discoverResources(
+                in: app_path('Filament/Admin/Resources'),
+                for: 'App\\Filament\\Admin\\Resources',
+            )
             ->pages([
                 Pages\Dashboard::class,
             ])
