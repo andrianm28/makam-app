@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Placeholder illustration for Makam.co.id's CemeteryDirectory dummy/demo
+  data (dev environment only — see the seed-backfill migration's own doc
+  block for the authorization/reasoning). Deliberately abstract and
+  non-photorealistic: a low garden fence, a hedge row, and a single tree.
+  No specific religious iconography, no real place depicted. Calm
+  green/neutral palette only.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" role="img" aria-label="Ilustrasi taman dan pagar rendah pemakaman contoh">
+  <title>Ilustrasi contoh - pagar dan taman</title>
+  <rect x="0" y="0" width="400" height="300" fill="#eef2ea"/>
+  <rect x="0" y="0" width="400" height="185" fill="#e2ecdf"/>
+  <rect x="0" y="185" width="400" height="115" fill="#a9c9a5"/>
+  <path d="M0 185 Q 200 165 400 185 L400 205 Q200 188 0 205 Z" fill="#95bb90"/>
+  <!-- low fence -->
+  <g stroke="#9a9a8f" stroke-width="4">
+    <line x1="20" y1="205" x2="380" y2="205"/>
+    <line x1="20" y1="196" x2="380" y2="196"/>
+  </g>
+  <g fill="#9a9a8f">
+    <rect x="20" y="188" width="6" height="24"/>
+    <rect x="70" y="188" width="6" height="24"/>
+    <rect x="120" y="188" width="6" height="24"/>
+    <rect x="280" y="188" width="6" height="24"/>
+    <rect x="330" y="188" width="6" height="24"/>
+    <rect x="374" y="188" width="6" height="24"/>
+  </g>
+  <!-- hedge row -->
+  <rect x="140" y="196" width="130" height="18" rx="9" fill="#7bab74"/>
+  <!-- single tree, centered behind the hedge -->
+  <rect x="197" y="150" width="12" height="50" rx="3" fill="#7a6a52"/>
+  <circle cx="203" cy="140" r="32" fill="#6f9e6a"/>
+  <circle cx="180" cy="152" r="20" fill="#7bab74"/>
+  <circle cx="226" cy="152" r="20" fill="#7bab74"/>
+  <!-- small flower bed dots, generic -->
+  <circle cx="90" cy="240" r="5" fill="#c9a6a1"/>
+  <circle cx="104" cy="246" r="5" fill="#d8c08a"/>
+  <circle cx="118" cy="238" r="5" fill="#c9a6a1"/>
+  <circle cx="300" cy="244" r="5" fill="#d8c08a"/>
+  <circle cx="314" cy="238" r="5" fill="#c9a6a1"/>
+</svg>

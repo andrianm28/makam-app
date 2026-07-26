@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Placeholder illustration for Makam.co.id's CemeteryDirectory dummy/demo
+  data (dev environment only — see the seed-backfill migration's own doc
+  block for the authorization/reasoning). Deliberately abstract and
+  non-photorealistic: a small grove of trees over a quiet lawn. No specific
+  religious iconography, no real place depicted. Calm green/neutral palette
+  only.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" role="img" aria-label="Ilustrasi taman rindang pemakaman contoh">
+  <title>Ilustrasi contoh - taman rindang</title>
+  <rect x="0" y="0" width="400" height="300" fill="#eef2ea"/>
+  <rect x="0" y="0" width="400" height="180" fill="#e2ecdf"/>
+  <rect x="0" y="180" width="400" height="120" fill="#a9c9a5"/>
+  <path d="M0 180 Q 200 160 400 180 L400 200 Q200 184 0 200 Z" fill="#95bb90"/>
+  <!-- three trees of varying size -->
+  <g>
+    <rect x="64" y="150" width="10" height="60" rx="3" fill="#7a6a52"/>
+    <circle cx="69" cy="140" r="30" fill="#6f9e6a"/>
+    <circle cx="50" cy="152" r="20" fill="#7bab74"/>
+    <circle cx="88" cy="152" r="20" fill="#7bab74"/>
+  </g>
+  <g>
+    <rect x="192" y="130" width="14" height="80" rx="3" fill="#6d5c46"/>
+    <circle cx="199" cy="118" r="42" fill="#5f8f5b"/>
+    <circle cx="170" cy="136" r="26" fill="#6f9e6a"/>
+    <circle cx="228" cy="136" r="26" fill="#6f9e6a"/>
+  </g>
+  <g>
+    <rect x="316" y="156" width="10" height="54" rx="3" fill="#7a6a52"/>
+    <circle cx="321" cy="146" r="26" fill="#7bab74"/>
+  </g>
+  <!-- a short bench-like rectangle to imply a quiet resting spot -->
+  <rect x="150" y="236" width="40" height="8" rx="2" fill="#c9bfa8"/>
+  <rect x="154" y="244" width="4" height="10" fill="#b5ab94"/>
+  <rect x="182" y="244" width="4" height="10" fill="#b5ab94"/>
+</svg>

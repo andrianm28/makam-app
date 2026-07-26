@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Placeholder illustration for Makam.co.id's CemeteryDirectory dummy/demo
+  data (dev environment only — see the seed-backfill migration's own doc
+  block for the authorization/reasoning). Deliberately abstract and
+  non-photorealistic: a winding lawn path with low shrubs. No specific
+  religious iconography, no real place depicted. Calm green/neutral palette
+  only.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" role="img" aria-label="Ilustrasi jalan setapak taman pemakaman contoh">
+  <title>Ilustrasi contoh - jalan setapak</title>
+  <rect x="0" y="0" width="400" height="300" fill="#eef2ea"/>
+  <rect x="0" y="0" width="400" height="200" fill="#e2ecdf"/>
+  <rect x="0" y="200" width="400" height="100" fill="#a9c9a5"/>
+  <path d="M0 200 Q 200 178 400 200 L400 218 Q200 200 0 218 Z" fill="#95bb90"/>
+  <!-- winding path across the whole scene -->
+  <path d="M0 260 C 80 250, 100 220, 170 215 C 230 210, 250 180, 330 170 C 370 165, 385 150, 400 140"
+        fill="none" stroke="#d8cdb8" stroke-width="22" stroke-linecap="round"/>
+  <path d="M0 260 C 80 250, 100 220, 170 215 C 230 210, 250 180, 330 170 C 370 165, 385 150, 400 140"
+        fill="none" stroke="#e6ddc9" stroke-width="10" stroke-linecap="round"/>
+  <!-- low shrubs along the path -->
+  <circle cx="60" cy="245" r="14" fill="#7bab74"/>
+  <circle cx="120" cy="232" r="12" fill="#6f9e6a"/>
+  <circle cx="220" cy="196" r="14" fill="#7bab74"/>
+  <circle cx="300" cy="176" r="12" fill="#6f9e6a"/>
+  <circle cx="360" cy="152" r="13" fill="#7bab74"/>
+  <!-- a single distant tree for depth -->
+  <rect x="336" y="120" width="9" height="34" rx="3" fill="#7a6a52"/>
+  <circle cx="340" cy="112" r="20" fill="#6f9e6a"/>
+</svg>
