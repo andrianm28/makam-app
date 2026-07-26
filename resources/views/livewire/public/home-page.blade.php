@@ -8,22 +8,32 @@
       2. Hero + CTA "Pesan Makam"
       3. Four service cards, stakeholder order (AC1)
       4. Cara kerja singkat
-      5. TPU/TPS unggulan       -> DELIBERATELY ABSENT, see below
+      5. TPU/TPS unggulan       -> see below, REVERSED 26 Jul 2026
       6. Trust/safety
       7. FAQ highlights
       8. Customer-service CTA
       9. Footer                 -> rendered by layouts/app.blade.php, not here
 
-    --- Section 5 is unconditionally omitted — this is not a bug ---
+    --- Section 5 now renders — reversed from its original "deliberately
+    absent" state ---
     App\Livewire\Public\HomePage::render()'s own doc block has the full
-    reasoning. Short version: the only Cemetery rows that exist today are
-    S4-T1's ten EXAMPLE/FICTIONAL seed fixtures (placeholder addresses, no
-    coordinates/photos/prices, that migration's own doc block says so in
-    its own words). design-system.md §6.2's required-states table says so
-    explicitly for this exact case: "Featured cemeteries absent (homepage
-    §5) | Hide the section entirely — do not render an empty shell." No
-    `<section>` for item 5 exists anywhere below, and no `Cemetery` model is
-    imported into this file or into the Livewire class behind it.
+    reasoning trail. Short version: the ten Cemetery rows here were
+    fictional seed fixtures with NULL price/photo/coordinates when this
+    section was first built, so showing them as "featured" would have
+    misrepresented fabricated content as real — design-system.md §6.2's
+    required-states table's "hide the section entirely" row governed that
+    state. The user has since explicitly authorized clearly-fictional
+    DUMMY price/photo/coordinate data for full public display on
+    dev.makam.co.id (see `App\Support\ContactInfo`'s own doc block for the
+    identical authorization trail, and `2026_07_26_210000_backfill_dummy_
+    map_price_and_photo_for_seeded_cemeteries.php` for the data itself), so
+    that "hide entirely" state is no longer the true one — it remains coded
+    below for the case where every cemetery is later unpublished, but is
+    not reachable against today's seed data. Cards are intentionally NOT
+    links: `cemetery-directory-and-availability` (S4-T6) — the spec that
+    would build a real detail/directory page to link to — has not been
+    built yet, and inventing an unrouted `href` would trade one honesty gap
+    for another.
 
     --- Section 9 (footer) is NOT re-rendered here ---
     design-system.md §4.1's page-shell diagram places the footer as a
@@ -64,6 +74,9 @@
     copied verbatim (base + `$sizes['lg']` + `$variants['primary']`) — no
     new design value introduced.
 --}}
+@php
+    use App\Support\ContactInfo;
+@endphp
 <div>
     @php
         $urgentFallback = $urgentMode->fallback();
@@ -82,8 +95,11 @@
             >
                 Jam operasional dan cakupan layanan Urgent (termasuk Pemakaman Hari Ini) berbeda-beda di setiap TPU/TPS,
                 dan diperiksa langsung pada saat Anda mengajukan permintaan. Kami belum dapat menjamin penerimaan
-                otomatis di luar kapasitas yang tersedia saat ini.
-                <a href="/bantuan" class="font-medium underline underline-offset-2">Hubungi Bantuan untuk menanyakan ketersediaan.</a>
+                otomatis di luar kapasitas yang tersedia saat ini — hotline di bawah ini dapat dihubungi kapan pun
+                untuk menanyakan ketersediaan.
+                <a href="tel:{{ str_replace(['+', ' ', '-'], '', ContactInfo::PHONE) }}" class="font-medium underline underline-offset-2">{{ ContactInfo::PHONE }}</a>
+                atau
+                <a href="/bantuan" class="font-medium underline underline-offset-2">hubungi Bantuan</a>.
             </x-mk.alert>
         </div>
     @endif
@@ -156,6 +172,47 @@
             @endforeach
         </ol>
     </section>
+
+    {{-- Section 5: TPU/TPS unggulan — HomePage::render()'s own doc block
+         has the full "why this now renders" reasoning. §6.2 provider-
+         unavailable / truly-empty degrade the same way FAQ highlights does
+         below: hide the section entirely rather than an empty shell, per
+         design-system.md §6.2's own required-states row for this section.
+         Cards show name/city/address/price range/photo — deliberately not
+         wrapped in <a>, since no cemetery detail/directory route exists
+         yet (S4-T6, not built this batch). --}}
+    @unless ($featuredCemeteriesUnavailable || $featuredCemeteries->isEmpty())
+        <section aria-labelledby="featured-cemeteries-heading" class="mx-auto max-w-content px-4 py-5 md:px-6 lg:px-8 lg:py-8">
+            <h2 id="featured-cemeteries-heading" class="mb-6 text-center text-2xl font-semibold text-neutral-900">
+                TPU &amp; TPS Unggulan
+            </h2>
+            <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-3" aria-label="TPU dan TPS tersedia">
+                @foreach ($featuredCemeteries as $cemetery)
+                    <li wire:key="featured-cemetery-{{ $cemetery->id }}">
+                        <x-mk.card class="h-full">
+                            <x-slot:media>
+                                <img
+                                    src="{{ asset($cemetery->primary_photo_path) }}"
+                                    alt=""
+                                    class="h-40 w-full object-cover"
+                                    loading="lazy"
+                                >
+                            </x-slot:media>
+                            <h3 class="text-lg font-semibold text-neutral-900">{{ $cemetery->name }}</h3>
+                            <p class="text-sm text-neutral-600">{{ $cemetery->address }}</p>
+                            @if ($cemetery->price_min !== null && $cemetery->price_max !== null)
+                                <p class="mt-2 text-base font-medium text-neutral-800">
+                                    Rp {{ number_format((float) $cemetery->price_min, 0, ',', '.') }}
+                                    &ndash;
+                                    Rp {{ number_format((float) $cemetery->price_max, 0, ',', '.') }}
+                                </p>
+                            @endif
+                        </x-mk.card>
+                    </li>
+                @endforeach
+            </ul>
+        </section>
+    @endunless
 
     {{-- Section 6: Trust/safety — surface-warm (--mk-surface-warm ->
          --color-secondary-50 -> bg-secondary-50, already a generated
@@ -231,6 +288,10 @@
             </h2>
             <p class="text-base text-neutral-600">
                 Tim customer service kami siap membantu Anda menentukan langkah terbaik, kapan pun Anda membutuhkannya.
+            </p>
+            <p class="text-sm text-neutral-600">
+                {{ ContactInfo::PHONE }} (telepon/WhatsApp) · {{ ContactInfo::EMAIL }}<br>
+                {{ ContactInfo::BUSINESS_HOURS }}
             </p>
             <a
                 href="/bantuan"

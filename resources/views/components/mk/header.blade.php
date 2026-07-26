@@ -98,7 +98,8 @@
             <span class="sr-only">Buka menu navigasi</span>
         </button>
 
-        <a href="{{ $logoHref }}" class="flex min-w-0 flex-1 items-center justify-center text-lg font-semibold text-neutral-900">
+        <a href="{{ $logoHref }}" class="flex min-w-0 flex-1 items-center justify-center gap-2 text-lg font-semibold text-neutral-900">
+            <x-mk.logo :size="28" />
             Makam.co.id
         </a>
 
@@ -153,7 +154,8 @@
 
     {{-- Desktop bar (lg+) — 72px, full horizontal nav, no hamburger. --}}
     <div class="hidden lg:flex sticky top-0 z-header h-[var(--mk-header-h-lg)] items-center justify-between gap-6 border-b border-neutral-200 bg-neutral-0 px-8">
-        <a href="{{ $logoHref }}" class="shrink-0 text-xl font-semibold text-neutral-900">
+        <a href="{{ $logoHref }}" class="flex shrink-0 items-center gap-2 text-xl font-semibold text-neutral-900">
+            <x-mk.logo :size="32" />
             Makam.co.id
         </a>
 

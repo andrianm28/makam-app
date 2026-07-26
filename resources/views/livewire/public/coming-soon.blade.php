@@ -35,10 +35,19 @@
     `<x-mk.button>` — this file lives under `resources/views/livewire/**`,
     same N-14 convention as every other Livewire full-page view in this
     repo (see `home-page.blade.php`'s own doc block for the full citation).
+
+    Contact line below uses `App\Support\ContactInfo` — see that class's
+    own doc block for why this is clearly-plausible placeholder data,
+    explicitly authorized by the user for full public display on
+    dev.makam.co.id, not a real support line.
 --}}
+@php
+    use App\Support\ContactInfo;
+@endphp
 <div class="flex flex-col items-center gap-3 px-4 py-12 text-center">
     <h1 class="text-lg font-semibold text-neutral-800">{{ $heading }}</h1>
     <p class="max-w-prose text-base text-neutral-600">{{ $body }}</p>
+    <p class="text-sm text-neutral-600">{{ ContactInfo::PHONE }} · {{ ContactInfo::EMAIL }}</p>
     <div class="mt-2 flex flex-wrap justify-center gap-3">
         <a
             href="/"

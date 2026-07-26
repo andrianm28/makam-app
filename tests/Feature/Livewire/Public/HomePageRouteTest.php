@@ -144,32 +144,62 @@ final class HomePageRouteTest extends TestCase
         $response->assertDontSee('Ketersediaan Urgent Belum Dapat Dipastikan Otomatis');
     }
 
-    public function test_section_5_never_renders_any_of_the_s4_t1_seed_fixture_cemetery_names(): void
+    /**
+     * RENAMED from `test_section_5_never_renders_any_of_the_s4_t1_seed_
+     * fixture_cemetery_names`, which asserted none of these ten names could
+     * ever appear on the public homepage — correct at S4-T3 time, when
+     * these rows were fictional fixtures with NULL price/photo/coordinates
+     * and showing them as "featured" would have misrepresented fabricated
+     * content as real (see this file's own prior doc comment, kept in the
+     * original PR history).
+     *
+     * The premise changed by explicit user authorization — see
+     * `App\Livewire\Public\HomePage::render()`'s own doc block for the full
+     * reasoning trail. Section 5 now deliberately renders these same ten
+     * names (nine published, one draft) with clearly-fictional dummy
+     * price/photo/coordinate data, for full public display on
+     * `dev.makam.co.id`. This test is flipped accordingly: it now asserts
+     * the nine PUBLISHED fixture names DO appear, and the one DRAFT fixture
+     * (`tps-bekasi-harapan-indah`, per `CemeterySeedTest`) still does not —
+     * `Cemetery::published()` filtering the draft row out is itself real
+     * production behaviour worth protecting, not just a fixture detail.
+     */
+    public function test_section_5_shows_published_dummy_cemeteries_and_excludes_the_draft_one(): void
     {
-        // The single most important negative assertion in this batch — see
-        // App\Livewire\Public\HomePage::render()'s own doc block for the
-        // full reasoning. All ten are real rows in the database right now
-        // (2026_07_26_190300_seed_cemeteries_and_capability_profiles.php);
-        // none of them may ever appear on the public homepage.
         $response = $this->get('/');
         $response->assertOk();
 
-        $fixtureCemeteryNames = [
-            'TPU Jakarta Menteng',
-            'TPS Jakarta Kemang',
-            'TPU Bogor Bantarjati',
-            'TPS Bogor Cimanggu',
-            'TPU Depok Sawangan',
-            'TPS Depok Cinere',
-            'TPU Tangerang Cipondoh',
-            'TPS Tangerang Karawaci',
+        // HomePage::render() orders by (city, name) then ->take(6) — with
+        // nine published rows across five cities, the cap lands mid-way
+        // through Jakarta and excludes Tangerang entirely. This list is the
+        // actual first six under that ordering (verified by hand against
+        // CemeterySeedTest's known city/name data, not assumed), not just
+        // "some six names" — a change to the ordering or cap that shifts
+        // this list is exactly the kind of regression this test exists to
+        // catch.
+        $expectedVisibleNames = [
             'TPU Bekasi Jatiasih',
-            'TPS Bekasi Harapan Indah',
+            'TPS Bogor Cimanggu',
+            'TPU Bogor Bantarjati',
+            'TPS Depok Cinere',
+            'TPU Depok Sawangan',
+            'TPS Jakarta Kemang',
         ];
 
-        foreach ($fixtureCemeteryNames as $name) {
-            $response->assertDontSee($name);
+        foreach ($expectedVisibleNames as $name) {
+            $response->assertSee($name);
         }
+
+        // Excluded by the draft-publication-status scope (Cemetery::
+        // published()), not by the display cap:
+        $response->assertDontSee('TPS Bekasi Harapan Indah');
+
+        // Excluded purely by the ->take(6) display cap, even though these
+        // are genuinely published rows — asserted here so a future cap
+        // change is a deliberate, visible test update, not silent drift:
+        $response->assertDontSee('TPU Jakarta Menteng');
+        $response->assertDontSee('TPS Tangerang Karawaci');
+        $response->assertDontSee('TPU Tangerang Cipondoh');
     }
 
     public function test_faq_highlights_link_into_the_real_faq_routes(): void

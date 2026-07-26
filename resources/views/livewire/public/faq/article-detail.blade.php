@@ -14,6 +14,7 @@
 --}}
 @php
     use App\Livewire\Public\Faq\Support\FaqCategorySlug;
+    use App\Support\ContactInfo;
 @endphp
 
 <div class="py-8 md:py-12">
@@ -50,18 +51,17 @@
             <div class="whitespace-pre-line text-base text-neutral-700">{{ $article->body }}</div>
 
             {{-- Customer-service CTA — present on every article render,
-                 unconditionally (tasks.md §6.10 note). `/bantuan` is not
-                 yet built in this repository (routes/web.php has no such
-                 route) — the same honest forward-reference
-                 <x-mk.header>'s own `bantuanHref` default already makes;
-                 not fabricated here. A mailto/phone destination was
-                 considered and rejected: no real support email, phone, or
-                 WhatsApp number is committed anywhere in this repo's docs
-                 (the seed migration's own doc block notes
-                 release-gates.md still lists "support contacts, hours..."
-                 as an OPEN item) — linking to a documented-but-not-yet-built
-                 route is more honest than inventing a contact address this
-                 codebase does not actually have.
+                 unconditionally (tasks.md §6.10 note). `/bantuan` route
+                 itself still does not exist (routes/web.php has no such
+                 route yet — same honest forward-reference `<x-mk.header>`'s
+                 own `bantuanHref` default already makes), but a real
+                 contact line (`App\Support\ContactInfo`) is now shown
+                 alongside it: the user has explicitly authorized filling
+                 this repo's previously-documented "no real support email/
+                 phone" gap with clearly plausible placeholder data for
+                 full public display on dev.makam.co.id — see
+                 ContactInfo's own class doc block for the exact honesty
+                 framing.
 
                  FIXED 26 Jul 2026 — first real CI run: hand-written, not
                  <x-mk.button>, for the same reason
@@ -73,6 +73,9 @@
                  — including this one, which has no wire:loading attribute
                  at all). See sprint-plan.md finding N-14. --}}
             <div class="mt-8 border-t border-neutral-200 pt-6">
+                <p class="mb-3 text-sm text-neutral-600">
+                    {{ ContactInfo::PHONE }} (telepon/WhatsApp) · {{ ContactInfo::EMAIL }} · {{ ContactInfo::BUSINESS_HOURS }}
+                </p>
                 <a
                     href="/bantuan"
                     class="inline-flex h-11 select-none items-center justify-center gap-2 rounded-md border border-primary-600 bg-neutral-0 px-4 text-base font-medium text-primary-700 transition-[color,background-color,border-color,box-shadow] duration-fast ease-standard hover:bg-primary-50 active:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Public;
 
+use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\Faq\FaqPublicQuery;
 use App\Platform\Analytics\MenuInteractionRecorder;
 use App\Platform\FeatureGate\ModeResolver;
@@ -108,31 +109,48 @@ final class HomePage extends Component
             $faqHighlightsUnavailable = true;
         }
 
-        // IA §3 item 5 "TPU/TPS unggulan/tersedia" — deliberately NOT
-        // queried here. `App\Domain\CemeteryDirectory\Models\Cemetery` is
-        // not imported or referenced anywhere in this class. The only rows
-        // that exist today are `2026_07_26_190300_seed_cemeteries_and_
-        // capability_profiles.php`'s ten EXAMPLE/FICTIONAL fixture
-        // cemeteries — that migration's own doc block frames them
-        // explicitly as fixtures, not real business data (placeholder
-        // "Jl. Contoh ..." addresses, no coordinates, no photos, no
-        // prices). Presenting fictional cemetery names to a real visitor
-        // as "featured/unggulan" would be presenting fabricated content as
-        // real. design-system.md §6.2's own required-states table is
-        // explicit for this exact row: "Featured cemeteries absent
-        // (homepage §5) | Hide the section entirely — do not render an
-        // empty shell." So section 5 is unconditionally absent from the
-        // view below, regardless of what rows exist in the database today.
-        // Once a real cemetery partnership exists (real name, address,
-        // published status backed by real operator agreement — not a
-        // fixture), a future batch adds a genuine `Cemetery::published()`
-        // read here and the section 5 markup back into the view; nothing
-        // about this decision needs to change to make that possible later.
+        // IA §3 item 5 "TPU/TPS unggulan/tersedia bila data ada" — REVERSED
+        // 26 Jul 2026 from this class's original "deliberately NOT queried"
+        // stance. That original reasoning (see git history on this method)
+        // was sound at S4-T1/S4-T3 time: the only rows were ten fictional
+        // seed fixtures with NULL price/photo/coordinates, and presenting
+        // them as "featured" would have shown fabricated content as real.
+        // The premise changed by explicit user authorization, the same one
+        // `App\Support\ContactInfo`'s own doc block documents: `dev.makam.
+        // co.id` is a real, intentionally public, non-production host
+        // (docs/operations/dev-staging-environment.md, ADR-0031) where
+        // clearly-fictional DUMMY data is the correct content type to
+        // render end-to-end, not a fabrication risk. `2026_07_26_210000_
+        // backfill_dummy_map_price_and_photo_for_seeded_cemeteries.php`
+        // backfilled price/photo/coordinates for exactly this purpose.
+        //
+        // Same §6.3 provider-unavailable discipline as the FAQ highlights
+        // query above: a secondary panel failing must never take the whole
+        // homepage down. design-system.md §6.2's required-states row for
+        // this section ("Featured cemeteries absent (homepage §5) | Hide
+        // the section entirely") still governs the truly-empty case (e.g.
+        // every cemetery unpublished later) — that branch is kept in the
+        // view even though unreachable against today's seed data.
+        $featuredCemeteries = new Collection;
+        $featuredCemeteriesUnavailable = false;
+
+        try {
+            $featuredCemeteries = Cemetery::published()
+                ->orderBy('city')
+                ->orderBy('name')
+                ->take(6)
+                ->get();
+        } catch (Throwable $e) {
+            report($e);
+            $featuredCemeteriesUnavailable = true;
+        }
 
         return view('livewire.public.home-page', [
             'urgentMode' => $urgentMode,
             'faqHighlights' => $faqHighlights,
             'faqHighlightsUnavailable' => $faqHighlightsUnavailable,
+            'featuredCemeteries' => $featuredCemeteries,
+            'featuredCemeteriesUnavailable' => $featuredCemeteriesUnavailable,
             'primaryMenus' => self::PRIMARY_MENUS,
         ])->layout('layouts.app', [
             // No unsubstantiated superlative ("terpercaya"/"terbaik") in the
