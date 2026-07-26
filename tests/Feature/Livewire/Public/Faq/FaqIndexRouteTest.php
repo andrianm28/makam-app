@@ -28,6 +28,18 @@ final class FaqIndexRouteTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Real HTTP requests below render the full layout (`@vite(...)` in
+        // layouts/app.blade.php); this host's CI `php` job has no prior
+        // frontend build. Same requirement/reasoning as the admin Faq
+        // Filament tests (e.g. FaqArticleListPageTest) and
+        // AdminPanelHttpAccessTest.
+        $this->withoutVite();
+    }
+
     public function test_faq_index_returns_ok_and_lists_seeded_published_articles(): void
     {
         $response = $this->get('/faq');

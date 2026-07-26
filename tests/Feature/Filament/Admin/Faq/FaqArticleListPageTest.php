@@ -93,7 +93,14 @@ final class FaqArticleListPageTest extends TestCase
 
         $this->actingAs($user);
 
+        // The real seed migration already populates 23 articles across every
+        // category, so with the table's default page size these two
+        // freshly-created (highest-id) records are not guaranteed to land on
+        // the first page. Search down to just these two ("Artikel ..." does
+        // not collide with any real seeded title) before asserting
+        // visibility, rather than assuming a pristine, single-page table.
         Livewire::test(ListFaqArticles::class)
+            ->searchTable('Artikel')
             ->assertCanSeeTableRecords([$draft, $published])
             // Raw column state is the untouched `publish_state` value —
             // proves the two rows are backed by genuinely different data,

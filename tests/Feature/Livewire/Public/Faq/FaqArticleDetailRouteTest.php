@@ -22,6 +22,18 @@ final class FaqArticleDetailRouteTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Real HTTP requests below render the full layout (`@vite(...)` in
+        // layouts/app.blade.php); this host's CI `php` job has no prior
+        // frontend build. Same requirement/reasoning as the admin Faq
+        // Filament tests (e.g. FaqArticleListPageTest) and
+        // AdminPanelHttpAccessTest.
+        $this->withoutVite();
+    }
+
     public function test_a_real_seeded_published_article_renders_title_body_updated_date_and_cs_cta(): void
     {
         $response = $this->get('/faq/bagaimana-cara-memesan-makam');

@@ -63,15 +63,18 @@ final class ReorderFaqArticleActionsTest extends TestCase
         $this->actingAs($user);
 
         [$a, $b, $c] = $this->createThreeArticlesInPembayaran();
-        // Starting order (by sort_order, assigned sequentially at create
-        // time): A=1, B=2, C=3.
+        // PEMBAYARAN already holds real seeded articles (the data migration
+        // seeds 4), so these three are contiguous but NOT sort_order 1/2/3 —
+        // capture the actual starting values rather than assume a pristine
+        // category.
+        [$aOrder, $bOrder, $cOrder] = [$a->sort_order, $b->sort_order, $c->sort_order];
 
         Livewire::test(ListFaqArticles::class)
             ->callTableAction('moveDown', $a);
 
-        $this->assertSame(2, $a->refresh()->sort_order);
-        $this->assertSame(1, $b->refresh()->sort_order);
-        $this->assertSame(3, $c->refresh()->sort_order);
+        $this->assertSame($bOrder, $a->refresh()->sort_order);
+        $this->assertSame($aOrder, $b->refresh()->sort_order);
+        $this->assertSame($cOrder, $c->refresh()->sort_order);
 
         $this->assertDatabaseHas('audit_events', [
             'action' => FaqAuditActions::REORDERED,
@@ -85,13 +88,14 @@ final class ReorderFaqArticleActionsTest extends TestCase
         $this->actingAs($user);
 
         [$a, $b, $c] = $this->createThreeArticlesInPembayaran();
+        [$aOrder, $bOrder, $cOrder] = [$a->sort_order, $b->sort_order, $c->sort_order];
 
         Livewire::test(ListFaqArticles::class)
             ->callTableAction('moveUp', $c);
 
-        $this->assertSame(1, $a->refresh()->sort_order);
-        $this->assertSame(3, $b->refresh()->sort_order);
-        $this->assertSame(2, $c->refresh()->sort_order);
+        $this->assertSame($aOrder, $a->refresh()->sort_order);
+        $this->assertSame($cOrder, $b->refresh()->sort_order);
+        $this->assertSame($bOrder, $c->refresh()->sort_order);
     }
 
     public function test_move_up_is_hidden_for_the_first_article_and_move_down_is_hidden_for_the_last(): void
@@ -99,15 +103,21 @@ final class ReorderFaqArticleActionsTest extends TestCase
         $user = User::factory()->create();
         $this->actingAs($user);
 
-        [$a, , $c] = $this->createThreeArticlesInPembayaran();
+        $this->createThreeArticlesInPembayaran();
+        // PEMBAYARAN already holds real seeded articles, so the three just
+        // created are not necessarily the category's actual first/last —
+        // query the real boundary records rather than assume it.
+        $categoryId = FaqCategory::findByCode(FaqCategoryCode::PEMBAYARAN)->id;
+        $first = FaqArticle::forAdmin()->inCategory($categoryId)->orderBy('sort_order')->firstOrFail();
+        $last = FaqArticle::forAdmin()->inCategory($categoryId)->orderByDesc('sort_order')->firstOrFail();
 
         $component = Livewire::test(ListFaqArticles::class);
 
-        $component->assertTableActionHidden('moveUp', $a);
-        $component->assertTableActionVisible('moveDown', $a);
+        $component->assertTableActionHidden('moveUp', $first);
+        $component->assertTableActionVisible('moveDown', $first);
 
-        $component->assertTableActionHidden('moveDown', $c);
-        $component->assertTableActionVisible('moveUp', $c);
+        $component->assertTableActionHidden('moveDown', $last);
+        $component->assertTableActionVisible('moveUp', $last);
     }
 
     public function test_moving_never_leaves_a_duplicate_or_gapped_sort_order_within_the_category(): void
@@ -116,6 +126,13 @@ final class ReorderFaqArticleActionsTest extends TestCase
         $this->actingAs($user);
 
         [$a, $b, $c] = $this->createThreeArticlesInPembayaran();
+        // The three occupy a contiguous sort_order range (not necessarily
+        // starting at 1, since PEMBAYARAN already has real seeded articles)
+        // — after moving within that range, they must still occupy exactly
+        // that same set of values, just permuted, proving no gap/duplicate
+        // was introduced.
+        $originalOrders = [$a->sort_order, $b->sort_order, $c->sort_order];
+        sort($originalOrders);
 
         Livewire::test(ListFaqArticles::class)
             ->callTableAction('moveDown', $a)
@@ -127,7 +144,7 @@ final class ReorderFaqArticleActionsTest extends TestCase
             ->pluck('sort_order')
             ->all();
 
-        $this->assertSame([1, 2, 3], $sortOrders);
+        $this->assertSame($originalOrders, $sortOrders);
     }
 
     public function test_a_reorder_action_never_moves_an_article_from_a_different_category(): void
@@ -146,6 +163,7 @@ final class ReorderFaqArticleActionsTest extends TestCase
             body: 'I.',
             actorReference: 1,
         );
+        $otherCategoryOrder = $inOtherCategory->sort_order;
 
         Livewire::test(ListFaqArticles::class)
             ->callTableAction('moveDown', $a);
@@ -153,7 +171,7 @@ final class ReorderFaqArticleActionsTest extends TestCase
         // The other category's article is completely untouched -- proving
         // the row action built a category-scoped id list, not e.g. every
         // visible row on the page (which spans multiple categories).
-        $this->assertSame(1, $inOtherCategory->refresh()->sort_order);
+        $this->assertSame($otherCategoryOrder, $inOtherCategory->refresh()->sort_order);
         $this->assertSame($otherCategoryId, $inOtherCategory->category_id);
     }
 }
