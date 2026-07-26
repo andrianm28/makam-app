@@ -12,23 +12,25 @@ use App\Platform\FeatureGate\ModeResolver;
 use App\Platform\FeatureGate\Modes\GraveSearchMode;
 use App\Platform\FeatureGate\Modes\PaymentMode;
 use App\Platform\FeatureGate\Modes\PreNeedMode;
+use App\Platform\FeatureGate\Modes\UrgentMode;
 use App\Platform\FeatureGate\Modes\WhatsAppMode;
 use Tests\TestCase;
 
 /**
- * Locks in the ONE place `ModeResolver` pairs each of the four named modes
+ * Locks in the ONE place `ModeResolver` pairs each named mode
  * (requirements.md AC7) with its backing gate id — `G-PAY-01`, `G-WA-01`,
- * `G-LEGAL-01`, `G-DATA-01`. Uses an in-memory `GateRegistrySource` stub
- * instead of the database, so this stays a pure unit test: what is being
- * proven is the gate-id-to-mode WIRING, not the database read path (that is
- * `EloquentGateRegistrySourceTest`'s job).
+ * `G-LEGAL-01`, `G-DATA-01`, and (added for `public-home-and-navigation`
+ * S4-T3) `G-OPS-01` -> `UrgentMode`. Uses an in-memory `GateRegistrySource`
+ * stub instead of the database, so this stays a pure unit test: what is
+ * being proven is the gate-id-to-mode WIRING, not the database read path
+ * (that is `EloquentGateRegistrySourceTest`'s job).
  */
 final class ModeResolverTest extends TestCase
 {
     private function resolverWithOpenGates(string ...$openGateIds): ModeResolver
     {
         $states = [];
-        foreach (['G-PAY-01', 'G-WA-01', 'G-LEGAL-01', 'G-DATA-01'] as $gateId) {
+        foreach (['G-PAY-01', 'G-WA-01', 'G-LEGAL-01', 'G-DATA-01', 'G-OPS-01'] as $gateId) {
             $states[$gateId] = GateState::fromRecord($gateId, open: in_array($gateId, $openGateIds, true));
         }
 
@@ -53,6 +55,15 @@ final class ModeResolverTest extends TestCase
         $this->assertSame(WhatsAppMode::EmailInAppFallback, $modes->whatsAppMode());
         $this->assertSame(PreNeedMode::InterestOnly, $modes->preNeedMode());
         $this->assertSame(GraveSearchMode::ManualAssistance, $modes->graveSearchMode());
+        $this->assertSame(UrgentMode::CapacityUnknown, $modes->urgentMode());
+    }
+
+    public function test_urgent_mode_reads_g_ops_01_only(): void
+    {
+        $modes = $this->resolverWithOpenGates('G-OPS-01');
+
+        $this->assertSame(UrgentMode::AcceptingRequests, $modes->urgentMode());
+        $this->assertSame(PaymentMode::ManualCoordination, $modes->paymentMode());
     }
 
     public function test_payment_mode_reads_g_pay_01_only(): void
@@ -91,11 +102,12 @@ final class ModeResolverTest extends TestCase
 
     public function test_all_gates_open_resolves_every_mode_to_its_open_case(): void
     {
-        $modes = $this->resolverWithOpenGates('G-PAY-01', 'G-WA-01', 'G-LEGAL-01', 'G-DATA-01');
+        $modes = $this->resolverWithOpenGates('G-PAY-01', 'G-WA-01', 'G-LEGAL-01', 'G-DATA-01', 'G-OPS-01');
 
         $this->assertSame(PaymentMode::Online, $modes->paymentMode());
         $this->assertSame(WhatsAppMode::WhatsApp, $modes->whatsAppMode());
         $this->assertSame(PreNeedMode::PaymentEnabled, $modes->preNeedMode());
         $this->assertSame(GraveSearchMode::SearchEnabled, $modes->graveSearchMode());
+        $this->assertSame(UrgentMode::AcceptingRequests, $modes->urgentMode());
     }
 }

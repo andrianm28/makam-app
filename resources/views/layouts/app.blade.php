@@ -31,6 +31,39 @@
     as the second argument (`title`, `active`) into this view's own data —
     both are read defensively with `??` so this layout never hard-fails if
     a future caller omits either.
+
+    ---------------------------------------------------------------------------
+    UPDATED 26 Jul 2026 (Sprint 4 S4-T3 `public-home-and-navigation`) —
+    footer upgraded to the inverse-surface treatment IA §3 item 9 and
+    design-system.md's primitives table specify for the homepage
+    ---------------------------------------------------------------------------
+    design-system.md §4.1's page-shell diagram draws the footer as a
+    page-shell element (same level as the header), not per-page content, and
+    §4.5's homepage section 9 is "Footer — privacy, terms, contact,
+    inverse surface (--mk-surface-inverse / --color-primary-900), white
+    text verified 14.40:1". Rather than stack a SECOND, homepage-specific
+    footer under `livewire/public/home-page.blade.php`'s own content
+    (duplicating this markup, and leaving every other public page, e.g.
+    `/faq`, on the old lighter footer), this one shared footer was upgraded
+    in place — it now applies to every page that uses this layout, which is
+    a coherent site-wide improvement, not a homepage-only skin.
+    `bg-primary-900 text-neutral-0` are both direct Tailwind utilities for
+    already-`@theme`-registered primitives (`--color-primary-900`,
+    `--color-neutral-0`) — no `var(--mk-*)` bracket syntax needed, since
+    those primitives already have generated utility names.
+
+    Two NEW links below, `/privasi` and `/syarat-ketentuan`, are NOT in
+    information-architecture.md §1's route tree at all (unlike `/bantuan`,
+    which IS documented there even though unbuilt) — IA only says the
+    footer needs "privacy, terms, contact" without naming their paths. This
+    batch picked plausible Indonesian path names, consistent with this
+    site's existing convention (`/pemesanan-makam`, `/perpanjangan`,
+    `/bantuan`), as an honest forward-reference in the exact same spirit as
+    `/bantuan`'s own already-established pattern: a real `<a href>`, not a
+    fabricated claim that the page exists today. This is a genuine, named
+    spec gap — see this batch's final report — not a silent invention:
+    a future product/legal decision may pick different paths, at which
+    point this file is the one place to update.
 --}}
 <!DOCTYPE html>
 <html lang="id">
@@ -47,13 +80,14 @@
         {{ $slot }}
     </main>
 
-    <footer class="border-t border-neutral-200 bg-neutral-0 px-4 py-8 text-sm text-neutral-600">
-        <div class="mx-auto flex max-w-content flex-col items-center gap-2 text-center">
-            <p>
-                Butuh bantuan lebih lanjut?
-                <a href="/bantuan" class="text-primary-600 underline underline-offset-2 hover:text-primary-700">Hubungi Customer Service</a>
-            </p>
-            <p>&copy; {{ date('Y') }} Makam.co.id</p>
+    <footer class="bg-primary-900 px-4 py-8 text-neutral-0 md:px-6 lg:px-8">
+        <div class="mx-auto flex max-w-content flex-col items-center gap-4 text-center">
+            <nav aria-label="Tautan footer" class="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm">
+                <a href="/privasi" class="underline underline-offset-2 hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2">Kebijakan Privasi</a>
+                <a href="/syarat-ketentuan" class="underline underline-offset-2 hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2">Syarat &amp; Ketentuan</a>
+                <a href="/bantuan" class="underline underline-offset-2 hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2">Bantuan / Kontak</a>
+            </nav>
+            <p class="text-sm">&copy; {{ date('Y') }} Makam.co.id</p>
         </div>
     </footer>
 </body>

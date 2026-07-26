@@ -1,7 +1,11 @@
 <?php
 
+use App\Livewire\Public\ComingSoon\BookingWizardComingSoon;
+use App\Livewire\Public\ComingSoon\MarketplaceComingSoon;
+use App\Livewire\Public\ComingSoon\RenewalComingSoon;
 use App\Livewire\Public\Faq\FaqArticleDetail;
 use App\Livewire\Public\Faq\FaqIndex;
+use App\Livewire\Public\HomePage;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -13,17 +17,39 @@ use Illuminate\Support\Facades\Route;
 | docs/planning/sprint-plan.md §2.4 for which sprint owns which spec.
 |
 | The four MVP entry points (mvp-scope.md §1) — current status:
-|   /pemesanan-makam   Sprint 4  public-booking-wizard              NOT YET implemented
-|   /marketplace       Sprint 4  funeral-marketplace-and-vendor-portal NOT YET implemented
-|   /perpanjangan      Sprint 4  renewal-and-grave-registry          NOT YET implemented
-|   /faq               Sprint 4  public-faq                          implemented (S4-T2, this batch)
+|   /pemesanan-makam   Sprint 4  public-booking-wizard              STUB (S4-T3): honest
+|                                "coming soon" page, not gated — real wizard is S4-T4
+|   /marketplace       Sprint 4  funeral-marketplace-and-vendor-portal STUB (S4-T3): same,
+|                                real marketplace is later in Sprint 4 (S4-T8)
+|   /perpanjangan      Sprint 4  renewal-and-grave-registry          STUB (S4-T3): same,
+|                                real renewal flow is later in Sprint 4 (S4-T7)
+|   /faq               Sprint 4  public-faq                          implemented (S4-T2)
+|   /                  Sprint 4  public-home-and-navigation          implemented (S4-T3,
+|                                this batch) — homepage now serves real content; see
+|                                App\Livewire\Public\HomePage's own doc block.
 |
 | Laravel's default welcome page was deliberately removed: it hardcodes colours
 | and Tailwind arbitrary values, which the ci/verify-docs.sh token gates reject.
-| Nothing should be served from `/` until public-home-and-navigation is built —
-| AGENTS.md requires the homepage to present exactly four services in a fixed
-| order, so a placeholder here would be a false product claim.
+| `/` now serves the real HomePage component — AGENTS.md's four-fixed-order-
+| services requirement is what HomePage + <x-mk.header> together implement,
+| not a placeholder.
+|
+| The three STUB routes above return a real Livewire full-page component
+| rendering an honest "coming soon" state (200 OK, header + footer intact),
+| never Laravel's default 404 — requirements.md AC6 read expansively; see
+| resources/views/livewire/public/coming-soon.blade.php's own doc block for
+| why this is deliberately NOT <x-mk.gate-closed-page> (that component's
+| copy assumes a real closed FEATURE GATE, which does not apply here — these
+| three routes are simply not built yet this sprint). Each stub route is
+| expected to be REPLACED wholesale by its owning spec's real routes, not
+| extended in place.
 */
+
+Route::get('/', HomePage::class)->name('home');
+
+Route::get('/pemesanan-makam', BookingWizardComingSoon::class)->name('pemesanan-makam.index');
+Route::get('/marketplace', MarketplaceComingSoon::class)->name('marketplace.index');
+Route::get('/perpanjangan', RenewalComingSoon::class)->name('perpanjangan.index');
 
 /*
 |--------------------------------------------------------------------------
