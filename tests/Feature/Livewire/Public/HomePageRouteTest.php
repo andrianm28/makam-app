@@ -49,6 +49,19 @@ final class HomePageRouteTest extends TestCase
         $body = $response->getContent();
         $this->assertNotFalse($body);
 
+        // Scoped to <body> onward, not the whole raw response: HomePage's
+        // own <title> ("Makam.co.id - Pemesanan dan Layanan Pemakaman",
+        // set in HomePage::render()'s ->layout() call) contains the literal
+        // substring "Layanan Pemakaman" inside <head>, which a whole-page
+        // strpos search would find before the header nav ever renders —
+        // a real false failure this test hit once already, not a
+        // hypothetical. Anchoring on <body onward keeps the search scoped
+        // to what AC1's "in this exact order" is actually about: nav
+        // order, not page metadata.
+        $bodyStart = strpos($body, '<body');
+        $this->assertNotFalse($bodyStart, 'Expected a <body> tag in the homepage response.');
+        $bodyContent = substr($body, $bodyStart);
+
         // Plain substring search, not an exact `>FAQ<` tag match: Blade's
         // compiled output has whitespace/newlines around `{{ $item['label'] }}`
         // inside header.blade.php's `<a>` tags, so a strict adjacency match
@@ -58,10 +71,10 @@ final class HomePageRouteTest extends TestCase
         // first occurrence of each substring below still reflects real nav
         // order.
         $positions = [
-            'Pemesanan Makam' => strpos($body, 'Pemesanan Makam'),
-            'Layanan Pemakaman' => strpos($body, 'Layanan Pemakaman'),
-            'Perpanjangan Makam' => strpos($body, 'Perpanjangan Makam'),
-            'FAQ' => strpos($body, 'FAQ'),
+            'Pemesanan Makam' => strpos($bodyContent, 'Pemesanan Makam'),
+            'Layanan Pemakaman' => strpos($bodyContent, 'Layanan Pemakaman'),
+            'Perpanjangan Makam' => strpos($bodyContent, 'Perpanjangan Makam'),
+            'FAQ' => strpos($bodyContent, 'FAQ'),
         ];
 
         foreach ($positions as $label => $position) {
