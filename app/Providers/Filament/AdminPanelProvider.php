@@ -96,6 +96,22 @@ use RuntimeException;
  * populate `Filament/Admin/Pages/` or `Filament/Admin/Widgets/`, and adding
  * a discovery call for a directory nothing populates would risk the same
  * unconfirmed-missing-directory concern this paragraph originally raised.
+ *
+ * A THIRD change, made after the first Admin Resource's own test suite hit
+ * a real CI failure: `->default()` (`Filament\Panel::default(bool|Closure
+ * $condition = true): static`, confirmed against the same installed
+ * `filament/filament` v5.7.3 — `$isDefault` defaults to `false`). This
+ * app has exactly one panel, but `Filament\PanelRegistry::getDefaultPanel()`
+ * throws `NoDefaultPanelSetException` whenever something needs "the
+ * current panel" without a URL-based context to infer it from — which is
+ * exactly what `Livewire::test(SomeFilamentPage::class)` does (it invokes
+ * the component directly, bypassing the `/admin`-prefixed HTTP request
+ * that normally establishes panel context via route middleware). Real
+ * `$this->get('/admin/...')`-based tests were unaffected, since routing
+ * always supplies that context regardless of `isDefault()`. Marking the
+ * one real panel as the default is the standard fix for a single-panel
+ * app and has no effect on which panel serves a `/admin`-prefixed
+ * request, which was already unambiguous.
  */
 class AdminPanelProvider extends PanelProvider
 {
@@ -104,6 +120,7 @@ class AdminPanelProvider extends PanelProvider
         return $panel
             ->id('admin')
             ->path('admin')
+            ->default()
             ->login()
             ->colors($this->filamentColors())
             ->discoverResources(
