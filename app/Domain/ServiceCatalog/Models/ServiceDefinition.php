@@ -69,6 +69,8 @@ final class ServiceDefinition extends Model
     /**
      * Package items across every package version that reference this
      * service — includes items belonging to draft AND published versions.
+     *
+     * @return HasMany<ServicePackageItem, $this>
      */
     public function packageItems(): HasMany
     {
@@ -78,6 +80,8 @@ final class ServiceDefinition extends Model
     /**
      * This service's own price history — see `Models\PriceVersion`'s own
      * class-level doc block for the append-only/`morphTo` shape.
+     *
+     * @return MorphMany<PriceVersion, $this>
      */
     public function priceVersions(): MorphMany
     {

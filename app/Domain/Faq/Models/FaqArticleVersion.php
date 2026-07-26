@@ -57,6 +57,9 @@ final class FaqArticleVersion extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<FaqArticle, $this>
+     */
     public function article(): BelongsTo
     {
         return $this->belongsTo(FaqArticle::class, 'faq_article_id');

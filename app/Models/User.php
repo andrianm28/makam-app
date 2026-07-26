@@ -40,6 +40,8 @@ class User extends Authenticatable implements FilamentUser
      * Batch 3.1 (platform-identity-and-access, S3-T1) addition.
      * `actor_sessions` bookkeeping — see `ActorSession` for what writes to
      * it and `2026_07_26_100000_create_actor_sessions_table.php` for scope.
+     *
+     * @return HasMany<ActorSession, $this>
      */
     public function actorSessions(): HasMany
     {

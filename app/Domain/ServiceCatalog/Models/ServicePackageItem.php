@@ -87,11 +87,17 @@ final class ServicePackageItem extends Model
         }
     }
 
+    /**
+     * @return BelongsTo<ServicePackageVersion, $this>
+     */
     public function version(): BelongsTo
     {
         return $this->belongsTo(ServicePackageVersion::class, 'service_package_version_id');
     }
 
+    /**
+     * @return BelongsTo<ServiceDefinition, $this>
+     */
     public function serviceDefinition(): BelongsTo
     {
         return $this->belongsTo(ServiceDefinition::class, 'service_definition_id');
@@ -100,6 +106,8 @@ final class ServicePackageItem extends Model
     /**
      * Configured substitute(s) for this item — see
      * `Models\SubstitutionPolicy`'s own class-level doc block.
+     *
+     * @return HasMany<SubstitutionPolicy, $this>
      */
     public function substitutionPolicies(): HasMany
     {
@@ -109,6 +117,8 @@ final class ServicePackageItem extends Model
     /**
      * What evidence this item needs to be marked fulfilled — see
      * `Models\EvidenceRequirement`'s own class-level doc block.
+     *
+     * @return HasMany<EvidenceRequirement, $this>
      */
     public function evidenceRequirements(): HasMany
     {

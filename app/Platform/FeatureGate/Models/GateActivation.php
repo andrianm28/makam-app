@@ -50,6 +50,9 @@ final class GateActivation extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<FeatureGate, $this>
+     */
     public function gate(): BelongsTo
     {
         return $this->belongsTo(FeatureGate::class, 'gate_id', 'gate_id');

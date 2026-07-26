@@ -42,6 +42,9 @@ final class MfaRecoveryCode extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<MfaEnrolment, $this>
+     */
     public function enrolment(): BelongsTo
     {
         return $this->belongsTo(MfaEnrolment::class, 'mfa_enrolment_id');

@@ -51,11 +51,17 @@ final class FeatureGate extends Model
         ];
     }
 
+    /**
+     * @return HasMany<GateActivation, $this>
+     */
     public function activations(): HasMany
     {
         return $this->hasMany(GateActivation::class, 'gate_id', 'gate_id');
     }
 
+    /**
+     * @return HasMany<GateEnvironmentState, $this>
+     */
     public function environmentStates(): HasMany
     {
         return $this->hasMany(GateEnvironmentState::class, 'gate_id', 'gate_id');

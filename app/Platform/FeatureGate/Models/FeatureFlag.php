@@ -45,6 +45,9 @@ final class FeatureFlag extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<FeatureGate, $this>
+     */
     public function prerequisiteGate(): BelongsTo
     {
         return $this->belongsTo(FeatureGate::class, 'prerequisite_gate_id', 'gate_id');

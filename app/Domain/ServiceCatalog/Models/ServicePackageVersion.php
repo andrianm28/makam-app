@@ -91,6 +91,9 @@ final class ServicePackageVersion extends Model
         });
     }
 
+    /**
+     * @return BelongsTo<ServicePackage, $this>
+     */
     public function package(): BelongsTo
     {
         return $this->belongsTo(ServicePackage::class, 'service_package_id');
@@ -98,6 +101,8 @@ final class ServicePackageVersion extends Model
 
     /**
      * This version's included/optional/excluded lines, in insertion order.
+     *
+     * @return HasMany<ServicePackageItem, $this>
      */
     public function items(): HasMany
     {
@@ -109,6 +114,8 @@ final class ServicePackageVersion extends Model
      * opposed to a per-service price) is ever recorded against it — see
      * `Models\PriceVersion`'s own class-level doc block for why this is
      * `morphMany`, shared with `Models\ServiceDefinition`.
+     *
+     * @return MorphMany<PriceVersion, $this>
      */
     public function priceVersions(): MorphMany
     {

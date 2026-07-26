@@ -123,6 +123,9 @@ final class FaqArticle extends Model
         });
     }
 
+    /**
+     * @return BelongsTo<FaqCategory, $this>
+     */
     public function category(): BelongsTo
     {
         return $this->belongsTo(FaqCategory::class, 'category_id');
@@ -131,6 +134,8 @@ final class FaqArticle extends Model
     /**
      * Full publish history, oldest first — append-only, written only by
      * `Actions\PublishFaqArticle`. See `FaqArticleVersion`'s own doc block.
+     *
+     * @return HasMany<FaqArticleVersion, $this>
      */
     public function versions(): HasMany
     {
@@ -170,6 +175,8 @@ final class FaqArticle extends Model
      * through a public detail page. Any later batch rendering an article's
      * "related articles" block on a public page MUST call this, not
      * `relatedArticles()` — see class-level AC6 doc block.
+     *
+     * @return BelongsToMany<self, $this>
      */
     public function publishedRelatedArticles(): BelongsToMany
     {

@@ -48,7 +48,7 @@ final readonly class ResolveCemeteryCapabilityProfile
             return $current;
         }
 
-        return CemeteryCapabilityProfile::make(array_merge(
+        return new CemeteryCapabilityProfile(array_merge(
             CemeteryCapabilityProfile::safeDefaults(),
             [
                 'cemetery_id' => $cemetery->id,

@@ -35,6 +35,9 @@ final class EvidenceRequirement extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<ServicePackageItem, $this>
+     */
     public function item(): BelongsTo
     {
         return $this->belongsTo(ServicePackageItem::class, 'service_package_item_id');

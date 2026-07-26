@@ -73,16 +73,25 @@ final class MfaEnrolment extends Model
         });
     }
 
+    /**
+     * @return BelongsTo<User, $this>
+     */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
+    /**
+     * @return HasMany<MfaRecoveryCode, $this>
+     */
     public function recoveryCodes(): HasMany
     {
         return $this->hasMany(MfaRecoveryCode::class);
     }
 
+    /**
+     * @return HasMany<MfaChallenge, $this>
+     */
     public function challenges(): HasMany
     {
         return $this->hasMany(MfaChallenge::class);

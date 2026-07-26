@@ -32,6 +32,9 @@ final class GateEnvironmentState extends Model
         'state',
     ];
 
+    /**
+     * @return BelongsTo<FeatureGate, $this>
+     */
     public function gate(): BelongsTo
     {
         return $this->belongsTo(FeatureGate::class, 'gate_id', 'gate_id');

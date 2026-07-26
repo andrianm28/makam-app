@@ -70,6 +70,13 @@ final class PriceVersion extends Model
         ];
     }
 
+    /**
+     * Polymorphic — either a `ServiceDefinition` or a `ServicePackageVersion`
+     * (see this class's own doc block). No single concrete class to narrow
+     * to statically; `Model` is the correct, honest generic here.
+     *
+     * @return MorphTo<Model, $this>
+     */
     public function priceable(): MorphTo
     {
         return $this->morphTo();

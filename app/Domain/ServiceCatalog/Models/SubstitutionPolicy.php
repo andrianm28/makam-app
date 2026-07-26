@@ -36,11 +36,17 @@ final class SubstitutionPolicy extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<ServicePackageItem, $this>
+     */
     public function item(): BelongsTo
     {
         return $this->belongsTo(ServicePackageItem::class, 'service_package_item_id');
     }
 
+    /**
+     * @return BelongsTo<ServiceDefinition, $this>
+     */
     public function substituteServiceDefinition(): BelongsTo
     {
         return $this->belongsTo(ServiceDefinition::class, 'substitute_service_definition_id');

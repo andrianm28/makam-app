@@ -101,6 +101,8 @@ final class Cemetery extends Model
      * Full capability-profile history for this cemetery, newest first.
      * Owned by `CemeteryCapability` — see that module's `CemeteryCapability
      * Profile` model for the append-only versioning shape.
+     *
+     * @return HasMany<CemeteryCapabilityProfile, $this>
      */
     public function capabilityProfiles(): HasMany
     {
@@ -112,6 +114,8 @@ final class Cemetery extends Model
      * Package/class-level availability rows — requirements.md AC6 ("THE
      * SYSTEM SHALL present Makam Tumpang availability explicitly at the
      * location/package/class level"). Owned by `CemeteryCapability`.
+     *
+     * @return HasMany<CemeteryPackage, $this>
      */
     public function packages(): HasMany
     {

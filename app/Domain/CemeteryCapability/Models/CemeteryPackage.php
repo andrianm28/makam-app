@@ -88,6 +88,9 @@ final class CemeteryPackage extends Model
         });
     }
 
+    /**
+     * @return BelongsTo<Cemetery, $this>
+     */
     public function cemetery(): BelongsTo
     {
         return $this->belongsTo(Cemetery::class, 'cemetery_id');

@@ -50,6 +50,9 @@ final class FaqCategory extends Model
         });
     }
 
+    /**
+     * @return HasMany<FaqArticle, $this>
+     */
     public function articles(): HasMany
     {
         return $this->hasMany(FaqArticle::class, 'category_id');

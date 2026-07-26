@@ -46,6 +46,8 @@ final class ServicePackage extends Model
      * Every version, newest first — draft and published alike. ADMIN-FACING
      * (mirrors `App\Domain\Faq\Models\FaqArticle::relatedArticles()`'s own
      * "the un-prefixed relation sees everything" convention).
+     *
+     * @return HasMany<ServicePackageVersion, $this>
      */
     public function versions(): HasMany
     {
