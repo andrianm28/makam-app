@@ -2,13 +2,13 @@
 
 `_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
 
-- [ ] Add capability profile schema and validation. _Requirements: 4_
-- [ ] Add safe-default resolver and server-side checks. _Requirements: 4, 12_
-- [ ] Update public directory projection by capability. _Requirements: 2, 3, 5, 12_
-- [ ] Add optional plot source adapter interface. _Requirements: 6, 7_
-- [ ] Add stale-source monitoring and fallback. _Requirements: 8_
-- [ ] Add cross-cemetery authorization and capability-combination tests. _Requirements: 9_
-- [ ] Benchmark directory and map queries. _Requirements: 2, 3, 11_
+- [x] Add capability profile schema and validation. _Requirements: 4_ — done 26 Jul 2026 (Sprint 4 S4-T1, master-data batch): `cemetery_capability_profiles` schema + closed-list validation for all six modes, CI green
+- [ ] Add safe-default resolver and server-side checks. _Requirements: 4, 12_ — **partial**: `App\Domain\CemeteryCapability\Actions\ResolveCemeteryCapabilityProfile` (the safe-default resolver, AC4) is done and tested; the AC12 "server-side checks" half (only active capabilities ever reach a public projection) has no public read path to enforce yet — that is S4-T6
+- [ ] Update public directory projection by capability. _Requirements: 2, 3, 5, 12_ — not started; S4-T6
+- [ ] Add optional plot source adapter interface. _Requirements: 6, 7_ — not started; deliberately out of S4-T1's scope (owned by the separate, not-yet-built `plot-inventory-and-reservation` spec — see that spec and S4-T1's own commit history for the boundary reasoning)
+- [ ] Add stale-source monitoring and fallback. _Requirements: 8_ — not started
+- [ ] Add cross-cemetery authorization and capability-combination tests. _Requirements: 9_ — **partial**: closed-list/safe-default combination tests done (S4-T1); cross-cemetery authorization has no public query layer yet to test against — S4-T6
+- [ ] Benchmark directory and map queries. _Requirements: 2, 3, 11_ — not started; no query path exists yet to benchmark
 
 ## Design system
 

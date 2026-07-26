@@ -2,13 +2,13 @@
 
 `_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
 
-- [ ] Implement homepage route and layout. _Requirements: 1, 2, 7_
-- [ ] Implement exact four service cards. _Requirements: 1, 3_
-- [ ] Implement desktop/mobile navigation. _Requirements: 4, 8_
-- [ ] Add urgent truthful-state banner. _Requirements: 5_
-- [ ] Add customer-service CTA. _Requirements: 5_
-- [ ] Add route and feature-gate explanatory pages. _Requirements: 6, 7_
-- [ ] Add responsive, keyboard, and analytics tests. _Requirements: 8, 9_
+- [x] Implement homepage route and layout. _Requirements: 1, 2, 7_ — done 26 Jul 2026 (Sprint 4 S4-T3), CI green
+- [x] Implement exact four service cards. _Requirements: 1, 3_ — done 26 Jul 2026
+- [x] Implement desktop/mobile navigation. _Requirements: 4, 8_ — done in an earlier batch (`<x-mk.header>`), reused as-is
+- [x] Add urgent truthful-state banner. _Requirements: 5_ — done 26 Jul 2026 (`UrgentMode`/`G-OPS-01`)
+- [x] Add customer-service CTA. _Requirements: 5_ — done 26 Jul 2026
+- [x] Add route and feature-gate explanatory pages. _Requirements: 6, 7_ — done 26 Jul 2026 (honest "coming soon" stubs for the three not-yet-built destinations, read AC6 expansively — see sprint-plan.md's S4-T3 commit history for the reasoning)
+- [ ] Add responsive, keyboard, and analytics tests. _Requirements: 8, 9_ — analytics done (menu-impression events, test-covered); **keyboard and responsive verification are NOT done** (no browser available on this host)
 
 ## Design system
 
@@ -56,8 +56,8 @@ Per `AGENTS.md` (Mandatory MVP UX) and [`screen-inventory.md`](../../../docs/pro
 
 ### Tasks
 
-- [ ] Reference tokens for all colour/spacing/type; zero hardcoded values (CI-enforced, design-system.md §9.5).
-- [ ] Implement the four service cards with `<x-mk.card>`; preserve exact stakeholder order.
-- [ ] Implement all ten required states for PUB-001 per the table above.
-- [ ] Verify contrast/focus/touch-target compliance (design-system.md §7): 44 px minimum, visible focus ring, no colour-only status.
-- [ ] Confirm the nine-section homepage order matches design-system.md §4.5.
+- [x] Reference tokens for all colour/spacing/type; zero hardcoded values (CI-enforced, design-system.md §9.5). — CI green
+- [x] Implement the four service cards with `<x-mk.card>`; preserve exact stakeholder order.
+- [ ] Implement all ten required states for PUB-001 per the table above. — 9 of 10 implemented and test-covered; **responsive is NOT verified** (no browser on this host)
+- [ ] Verify contrast/focus/touch-target compliance (design-system.md §7): 44 px minimum, visible focus ring, no colour-only status. — token/class-level compliance only (real button/focus-ring recipes, icon added to the Urgent banner so status is never colour-only); **not verified with a real browser/axe**
+- [x] Confirm the nine-section homepage order matches design-system.md §4.5.

@@ -2,11 +2,11 @@
 
 `_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
 
-- [ ] Add package/version/item schema. _Requirements: 1, 7_
-- [ ] Build admin editor with publish workflow. _Requirements: 2_
-- [ ] Implement quote expansion and price snapshots. _Requirements: 3, 4_
-- [ ] Implement substitution and evidence rules. _Requirements: 5, 6_
-- [ ] Add inclusion/exclusion and version regression tests. _Requirements: 1, 2, 8_
+- [x] Add package/version/item schema. _Requirements: 1, 7_ — done 26 Jul 2026 (Sprint 4 S4-T1, master-data batch): `service_packages`/`service_package_versions`/`service_package_items` schema + lifecycle Actions (`DefineServicePackage`, `PublishServicePackageVersion`, `ReviseServicePackageVersion`), CI green
+- [ ] Build admin editor with publish workflow. _Requirements: 2_ — **partial**: the publish-workflow backend (Actions above, with AC2 immutability enforced at the model layer) is done and tested; the admin Filament editor UI is not built (out of S4-T1's master-data scope)
+- [ ] Implement quote expansion and price snapshots. _Requirements: 3, 4_ — **partial**: price-snapshot/versioning mechanism done (`price_versions` schema, `RecordServiceDefinitionPriceVersion`, tested); quote *expansion* (turning a package into real order/quote line items) is not built — that belongs to the booking wizard/orchestration work (S4-T4/S4-T5 onward)
+- [x] Implement substitution and evidence rules. _Requirements: 5, 6_ — done 26 Jul 2026: `SubstitutionPolicy`/`EvidenceRequirement` schema, wired into package-item authoring, tested
+- [x] Add inclusion/exclusion and version regression tests. _Requirements: 1, 2, 8_ — done 26 Jul 2026 (`ServicePackageLifecycleTest`, `ServicePackageVersionImmutabilityTest`)
 
 ## Design system
 

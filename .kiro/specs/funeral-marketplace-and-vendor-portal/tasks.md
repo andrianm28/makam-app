@@ -2,9 +2,9 @@
 
 `_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention. Only this top-level functional checklist is annotated; the "Canonical product codes" and "Design system" sections below have their own, separately-scoped task lists that are not tied to a single numbered acceptance criterion.
 
-- [ ] Implement product/category/variant data model. _Requirements: 1, 2_
-- [ ] Implement gravestone configurator schema and preview. _Requirements: 2_
-- [ ] Implement cart and multi-vendor order decomposition. _Requirements: 3, 4, 14_
+- [x] Implement product/category/variant data model. _Requirements: 1, 2_ — done 26 Jul 2026 (Sprint 4 S4-T1, master-data batch): `products`/`product_variants` schema, 9 real codes seeded, CI green
+- [ ] Implement gravestone configurator schema and preview. _Requirements: 2_ — **partial**: variant *schema* done (size/material/color/calligraphy style/inscription/preview-image-path columns, 6 example rows seeded); the interactive configurator UI and real preview rendering are not built
+- [ ] Implement cart and multi-vendor order decomposition. _Requirements: 3, 4, 14_ — not started; needs a payment decision not yet made (Tier 3, later sprint per sprint-plan.md)
 - [ ] Implement schedule and region delivery pricing. _Requirements: 2_
 - [ ] Create vendor panel and query-level policies. _Requirements: 5, 9_
 - [ ] Implement vendor order status and evidence upload. _Requirements: 7, 13_
@@ -85,11 +85,11 @@ Until then, category routing is **BLOCKED**, not merely undocumented. Product br
 ### Tasks
 
 - [ ] Replace AC1's English prose product list in `requirements.md` with a reference to `marketplace-catalog.md`, matching the pattern `public-booking-wizard` AC5 already uses for `service-catalog.md`. *(Requires an edit to `requirements.md` — out of scope for this file; raise as a spec-repair item.)*
-- [ ] Define the nine product codes as one enum derived from the catalogue; seeders and tests consume the enum, never a literal list.
-- [ ] Add a CI check that the enum and `marketplace-catalog.md` agree, so drift fails the build.
-- [ ] Resolve the category-code OPEN QUESTION with the product owner before building `/marketplace/kategori/{categorySlug}`.
-- [ ] Verify no product label or code is restated in a component, view, Filament Resource, validation rule, or fixture.
-- [ ] Confirm the single-vendor checkout constraint is enforced across categories, not just within one.
+- [x] Define the nine product codes as one enum derived from the catalogue; seeders and tests consume the enum, never a literal list. — done 26 Jul 2026 (`App\Domain\Marketplace\ProductCode`)
+- [x] Add a CI check that the enum and `marketplace-catalog.md` agree, so drift fails the build. — done 26 Jul 2026 (`ProductCatalogueSeedTest` re-parses the live catalogue document at test time and asserts agreement; runs in CI on every push)
+- [ ] Resolve the category-code OPEN QUESTION with the product owner before building `/marketplace/kategori/{categorySlug}`. — still open; `products.category` uses a plain code-safe string in the meantime, not a lookup table (see S4-T1 commit history) — this line item itself is NOT resolved, only worked around
+- [ ] Verify no product label or code is restated in a component, view, Filament Resource, validation rule, or fixture. — holds for everything that exists today (only the seed migration and its tests reference the 9 codes, both via the enum); nothing to re-verify until a consuming UI batch (S4-T8) adds more call sites
+- [ ] Confirm the single-vendor checkout constraint is enforced across categories, not just within one. — not applicable yet; no cart/checkout exists
 
 ### NOT TESTED
 

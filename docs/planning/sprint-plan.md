@@ -616,18 +616,18 @@ Starting with S4-T2 (public FAQ), implementation batches in this sprint are buil
 
 ### Tasks
 
-| ID | Task | Spec | Consumes | Effort | Gate |
-|---|---|---|---|---:|---|
-| S4-T1 | Master data + seeds from the canonical catalogues; **enums derive from the catalogue, incl. the 9 marketplace product codes** | `cemetery-directory…`, `package-and-service-bundles`, `funeral-marketplace…` | audit | 3 pd | — |
-| S4-T2 | **FAQ complete slice** — public + admin CMS + 6 categories + no draft leakage | `public-faq` AC1–AC9, `admin-operations` AC6 | identity, audit, feature-gate | 4 pd | — |
-| S4-T3 | Homepage — 4 service cards exact order, 9 sections per IA §3, honest Urgent status | `public-home-and-navigation` AC1–AC9 | feature-gate, identity | 3 pd | — |
-| S4-T4 | Booking wizard shell Steps **1–5** + autosave/resume across sessions | `public-booking-wizard` AC1–AC6, AC11–AC13 | identity, feature-gate, audit | 5 pd | — |
-| S4-T5 | Draft persistence, versioning, idempotent save, server-side step validation | `booking-and-order-orchestration` AC2, AC3 | audit, outbox | 3 pd | — |
-| S4-T6 | Cemetery directory + capability resolver + `"Perlu konfirmasi"` labelling | `cemetery-directory-and-availability` AC1–AC12 | feature-gate, audit, identity | 3 pd | — |
-| S4-T7 | Renewal skeleton — city/cemetery selection + fuzzy search UI + **three distinct empty states** | `renewal-and-grave-registry` AC1–AC5, AC14 | feature-gate, audit | 2 pd | — |
-| S4-T8 | Marketplace skeleton — category/product browse from seeded catalogue | `funeral-marketplace-and-vendor-portal` AC1–AC3 | identity, audit | 2 pd | — |
-| S4-T9 | Capacity review with all tenants counted; decide upgrade vs split | infra | — | 1 pd | ⚠️ **HUMAN** |
-| S4-T10 | Resolve the 5 open decisions in `assumptions-and-gates.md` §5 that block specs | **L-6** | — | 1 pd | ⚠️ **HUMAN** |
+| ID | Task | Spec | Consumes | Effort | Gate | Status |
+|---|---|---|---|---:|---|---|
+| S4-T1 | Master data + seeds from the canonical catalogues; **enums derive from the catalogue, incl. the 9 marketplace product codes** | `cemetery-directory…`, `package-and-service-bundles`, `funeral-marketplace…` | audit | 3 pd | — | ✅ Done (26 Jul 2026) — master data/seeds only; full AC coverage for each spec is S4-T6/S4-T7/S4-T8's job |
+| S4-T2 | **FAQ complete slice** — public + admin CMS + 6 categories + no draft leakage | `public-faq` AC1–AC9, `admin-operations` AC6 | identity, audit, feature-gate | 4 pd | — | ✅ Done (26 Jul 2026), CI green |
+| S4-T3 | Homepage — 4 service cards exact order, 9 sections per IA §3, honest Urgent status | `public-home-and-navigation` AC1–AC9 | feature-gate, identity | 3 pd | — | ✅ Done (26 Jul 2026), CI green |
+| S4-T4 | Booking wizard shell Steps **1–5** + autosave/resume across sessions | `public-booking-wizard` AC1–AC6, AC11–AC13 | identity, feature-gate, audit | 5 pd | — | 🔄 In progress (26 Jul 2026) |
+| S4-T5 | Draft persistence, versioning, idempotent save, server-side step validation | `booking-and-order-orchestration` AC2, AC3 | audit, outbox | 3 pd | — | 🔄 In progress (26 Jul 2026) — built together with S4-T4, same feature |
+| S4-T6 | Cemetery directory + capability resolver + `"Perlu konfirmasi"` labelling | `cemetery-directory-and-availability` AC1–AC12 | feature-gate, audit, identity | 3 pd | — | Not started — master data ready (S4-T1) |
+| S4-T7 | Renewal skeleton — city/cemetery selection + fuzzy search UI + **three distinct empty states** | `renewal-and-grave-registry` AC1–AC5, AC14 | feature-gate, audit | 2 pd | — | Not started |
+| S4-T8 | Marketplace skeleton — category/product browse from seeded catalogue | `funeral-marketplace-and-vendor-portal` AC1–AC3 | identity, audit | 2 pd | — | Not started — catalogue seeded (S4-T1) |
+| S4-T9 | Capacity review with all tenants counted; decide upgrade vs split | infra | — | 1 pd | ⚠️ **HUMAN** | Not started — requires the user, not an agent |
+| S4-T10 | Resolve the 5 open decisions in `assumptions-and-gates.md` §5 that block specs | **L-6** | — | 1 pd | ⚠️ **HUMAN** | Not started — requires the user, not an agent |
 
 **Total: ~27 pd** — over a 2-week sprint for one developer. See §11.
 
@@ -653,10 +653,10 @@ Four public entry points live on `dev.`/`stg.`, built from design-system primiti
 
 ### Definition of Done
 
-- [ ] Homepage shows exactly four services in stakeholder order (IA §3 nine-section order respected)
-- [ ] Five launch regions present and selectable
-- [ ] FAQ: six categories, filter, search, detail, CS CTA; **draft articles are not publicly reachable** (test-enforced)
-- [ ] Booking Steps 1–5 navigable; back preserves data; autosave verified across a session boundary
+- [x] Homepage shows exactly four services in stakeholder order (IA §3 nine-section order respected) — S4-T3, CI green
+- [ ] Five launch regions present and selectable — `LaunchCityCode` seeded/tested (S4-T1); real UI selection is S4-T4's Step 1
+- [x] FAQ: six categories, filter, search, detail, CS CTA; **draft articles are not publicly reachable** (test-enforced) — S4-T2, CI green
+- [ ] Booking Steps 1–5 navigable; back preserves data; autosave verified across a session boundary — S4-T4/S4-T5 in progress
 - [ ] Cemetery cards show type, name, photo, address, Maps URL, facilities, price **with source**, availability, `"Perlu konfirmasi"` when indicative
 - [ ] All ten required UI states implemented on every delivered transactional screen (design §6)
 - [ ] Zero hardcoded design values (CI-enforced)

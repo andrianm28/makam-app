@@ -2,12 +2,12 @@
 
 `_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
 
-- [ ] Create FAQ schema and seed six categories. _Requirements: 2_
-- [ ] Build admin FAQ resource with preview/publish. _Requirements: 5_
-- [ ] Build public list, filter, search, and detail. _Requirements: 1, 3, 4_
-- [ ] Add related articles and customer-service CTA. _Requirements: 4, 8_
-- [ ] Seed minimum initial questions. _Requirements: 2_
-- [ ] Add authorization, publishing, search, and responsive tests. _Requirements: 6, 9_
+- [x] Create FAQ schema and seed six categories. _Requirements: 2_ — done 26 Jul 2026 (Sprint 4 S4-T2, Batch 4.1), CI green
+- [x] Build admin FAQ resource with preview/publish. _Requirements: 5_ — done 26 Jul 2026 (Batch 4.3), CI green
+- [x] Build public list, filter, search, and detail. _Requirements: 1, 3, 4_ — done 26 Jul 2026 (Batch 4.2), CI green
+- [x] Add related articles and customer-service CTA. _Requirements: 4, 8_ — done 26 Jul 2026 (Batch 4.2)
+- [x] Seed minimum initial questions. _Requirements: 2_ — done 26 Jul 2026 (23 real questions across 6 categories, `docs/product/faq-catalog.md`'s minimum met)
+- [ ] Add authorization, publishing, search, and responsive tests. _Requirements: 6, 9_ — authorization/publishing/search tests done and passing in CI; **responsive verification is NOT done** (no browser available on this host — see sprint-plan.md §14 NOT TESTED)
 
 ## Design system
 
@@ -51,8 +51,8 @@ All ten states apply — design-system.md **§6**. This spec is the cheapest com
 
 ### Tasks
 
-- [ ] Reference tokens for all colour/spacing/type; zero hardcoded values.
-- [ ] Implement all ten required states per the table above; this spec is the reference slice.
-- [ ] Use `--container-prose` for article body; never full-bleed paragraphs.
-- [ ] Verify accessibility (design-system.md §7): 16 px input floor, focus ring, 44 px targets, `lang="id"`.
-- [ ] Confirm Filament FAQ resource inherits tokens (design-system.md §8.3), not its own palette.
+- [x] Reference tokens for all colour/spacing/type; zero hardcoded values. — CI-enforced (`ci/verify-docs.sh`), green on every batch
+- [ ] Implement all ten required states per the table above; this spec is the reference slice. — 9 of 10 implemented and test-covered (loading/empty×2/error/authorization/provider-unavailable/duplicate-retry-safe/pending/success/support); **responsive is NOT verified** (no browser on this host)
+- [x] Use `--container-prose` for article body; never full-bleed paragraphs.
+- [ ] Verify accessibility (design-system.md §7): 16 px input floor, focus ring, 44 px targets, `lang="id"`. — token/class-level compliance only (16px floor, focus-ring classes, `lang="id"` on the layout); **not verified with a real browser/axe/screen reader**
+- [x] Confirm Filament FAQ resource inherits tokens (design-system.md §8.3), not its own palette.
