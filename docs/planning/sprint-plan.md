@@ -610,6 +610,10 @@ No notifications, no document vault, no payment, no ledger, no features, no scre
 
 **Build FAQ first, not the booking wizard.** FAQ is the cheapest *complete* vertical slice — public list, filter, search, detail, admin CMS, publish/unpublish, six seeded categories — and it exercises every layer: Livewire, Filament, design system, migrations, seeds, authorization, browser tests, CI. Proving the stack on FAQ costs ~4 pd. Discovering a stack problem three-quarters through the 9-step wizard costs far more.
 
+### Execution methodology (S4-T2 onward)
+
+Starting with S4-T2 (public FAQ), implementation batches in this sprint are built using Claude Code's multi-agent orchestration: a background agent drafts a batch (a coherent slice — e.g. "backend/domain," "admin Filament resource," "public Livewire pages") against the relevant spec, then every batch is reviewed line-by-line against the spec and the real installed framework source before commit — not trusted on the agent's self-report. Real bugs found in review are fixed directly (schema mistakes, test assertions that assumed a pristine database instead of the real seeded state, misdiagnosed root causes) rather than only flagged. CI (`.github/workflows/ci.yml`) is the verification oracle for every batch — a batch is not considered done until its own CI run is green, not just until local checks pass, since this host cannot run `composer install`/`npm run build` itself (`CLAUDE.md`, `docs/operations/ci-cd-and-release.md` §10). Findings worth a future reader's attention (root causes, scope boundaries, deliberate omissions) are recorded in this document's finding list (Appendix A) the same way earlier sprints' findings were, whether or not the agent producing the batch is the one who wrote them up.
+
 ### Tasks
 
 | ID | Task | Spec | Consumes | Effort | Gate |
