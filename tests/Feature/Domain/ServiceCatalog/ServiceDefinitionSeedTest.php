@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Domain\ServiceCatalog;
 
+use App\Domain\ServiceCatalog\FulfillmentOwner;
 use App\Domain\ServiceCatalog\Models\ServiceDefinition;
 use App\Domain\ServiceCatalog\ServiceCatalogQuery;
 use App\Domain\ServiceCatalog\ServiceCategory;
@@ -18,21 +19,88 @@ use Tests\TestCase;
  * `ServiceCodeDriftTest` does not (that test's own focus is catalogue
  * fidelity; this one is seed defaults, active-scope behaviour, and
  * `ServiceCatalogQuery`'s read helpers).
+ *
+ * `is_active`/`description` are still asserted against the ORIGINAL seed
+ * migration's defaults below — those two columns are untouched by the
+ * later dummy-data migration. `fulfillment_owner` /`requires_schedule` /
+ * `requires_manual_confirmation`, by contrast, are no longer blanket
+ * null/false/false: `2026_07_26_220000_seed_service_definition_dummy_operational_data.php`
+ * fills them in with explicitly-authorized DUMMY/placeholder values for
+ * public display on the dev environment (see that migration's own doc
+ * block for the full per-code reasoning and the explicit "not real
+ * business data" disclaimer). The tests below were updated accordingly —
+ * this file previously asserted these three columns were still at their
+ * blanket null/false/false seed defaults, which stopped being true once
+ * that migration landed.
  */
 final class ServiceDefinitionSeedTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_every_seeded_row_is_active_with_no_description_and_no_schedule_or_confirmation_flags(): void
+    /**
+     * Mirrors `2026_07_26_210000_...`'s own `OPERATIONAL_DEFAULTS` map —
+     * deliberately duplicated here (not read from the migration class) so
+     * this test acts as a drift detector: if that migration's values ever
+     * change without a matching, deliberate test update, this test fails.
+     * Same "hardcode it independently, on purpose" convention
+     * `ServiceCodeDriftTest::CATALOGUE` already established for the
+     * catalogue's own code/label/category values.
+     *
+     * `code => [fulfillment_owner, requires_schedule, requires_manual_confirmation]`.
+     *
+     * @var array<string, array{0: string, 1: bool, 2: bool}>
+     */
+    private const array EXPECTED_DUMMY_OPERATIONAL_DEFAULTS = [
+        ServiceCode::DOCUMENT_PROCESSING => [FulfillmentOwner::PLATFORM, false, true],
+        ServiceCode::GRAVE_DIGGING => [FulfillmentOwner::CEMETERY_OPERATOR, false, true],
+
+        ServiceCode::AMBULANCE => [FulfillmentOwner::VENDOR, true, false],
+        ServiceCode::FUNERAL_HOME => [FulfillmentOwner::VENDOR, false, false],
+        ServiceCode::HEARSE => [FulfillmentOwner::VENDOR, true, false],
+        ServiceCode::TENT_AND_CHAIRS => [FulfillmentOwner::VENDOR, true, false],
+        ServiceCode::SOUND_SYSTEM => [FulfillmentOwner::VENDOR, true, false],
+        ServiceCode::FLOWERS => [FulfillmentOwner::VENDOR, false, false],
+        ServiceCode::GRAVESTONE => [FulfillmentOwner::VENDOR, false, true],
+        ServiceCode::DOCUMENTATION => [FulfillmentOwner::VENDOR, false, false],
+        ServiceCode::CATERING => [FulfillmentOwner::VENDOR, true, false],
+        ServiceCode::LIVE_STREAMING => [FulfillmentOwner::VENDOR, true, false],
+    ];
+
+    public function test_every_seeded_row_is_active_with_no_description(): void
     {
         foreach (ServiceDefinition::all() as $definition) {
             $this->assertTrue($definition->is_active, "[{$definition->code}] should seed active.");
             $this->assertNull($definition->description, "[{$definition->code}] should seed with no description.");
-            $this->assertFalse($definition->requires_schedule, "[{$definition->code}] should not seed requires_schedule.");
-            $this->assertFalse(
+        }
+    }
+
+    public function test_every_seeded_row_has_the_dummy_operational_defaults_from_the_dev_data_migration(): void
+    {
+        foreach (self::EXPECTED_DUMMY_OPERATIONAL_DEFAULTS as $code => [$owner, $requiresSchedule, $requiresManualConfirmation]) {
+            $definition = ServiceDefinition::findByCode($code);
+            $this->assertNotNull($definition, "Expected a seeded service for [{$code}].");
+
+            $this->assertSame($owner, $definition->fulfillment_owner, "[{$code}] fulfillment_owner mismatch.");
+            $this->assertTrue(FulfillmentOwner::isKnown($definition->fulfillment_owner), "[{$code}] fulfillment_owner should be a known value.");
+            $this->assertSame($requiresSchedule, $definition->requires_schedule, "[{$code}] requires_schedule mismatch.");
+            $this->assertSame(
+                $requiresManualConfirmation,
                 $definition->requires_manual_confirmation,
-                "[{$definition->code}] should not seed requires_manual_confirmation."
+                "[{$code}] requires_manual_confirmation mismatch."
             );
+        }
+    }
+
+    public function test_every_seeded_service_has_a_recorded_current_price_version_with_a_positive_amount(): void
+    {
+        foreach (ServiceCode::KNOWN_CODES as $code) {
+            $definition = ServiceDefinition::findByCode($code);
+            $this->assertNotNull($definition, "Expected a seeded service for [{$code}].");
+
+            $current = $definition->currentPriceVersion();
+            $this->assertNotNull($current, "[{$code}] should have a current price version recorded by the dev-data migration.");
+            $this->assertSame('IDR', $current->currency, "[{$code}] price currency mismatch.");
+            $this->assertGreaterThan(0.0, (float) $current->amount, "[{$code}] price amount should be positive.");
         }
     }
 

@@ -113,15 +113,34 @@ final class ServiceCodeDriftTest extends TestCase
     /**
      * Catalog rules ("Every service declares fulfillment owner: platform,
      * cemetery operator, or vendor") describe a CAPABILITY, not a per-code
-     * mapping the catalogue itself specifies — see the seed migration's own
-     * doc block. Seeded rows deliberately carry no fulfillment owner yet.
+     * mapping `docs/product/service-catalog.md` itself specifies — see
+     * `2026_07_26_180700_seed_service_definitions_from_catalog.php`'s own
+     * doc block. That is still true: the canonical catalogue document
+     * still names no per-code owner mapping.
+     *
+     * This test previously asserted every seeded row carried NO fulfillment
+     * owner, because the original seed migration deliberately left the
+     * column unset rather than guess. That stopped being the on-disk
+     * reality once
+     * `2026_07_26_220000_seed_service_definition_dummy_operational_data.php`
+     * landed as an explicitly-authorized follow-up: every one of the 12
+     * rows now carries a DUMMY/placeholder owner for public dev display
+     * (see that migration's own doc block for the full per-code reasoning
+     * and the explicit "not a catalogue decision, not real business data"
+     * disclaimer) — it is not a change to `service-catalog.md` or to this
+     * class's own reading of it. This test now documents THAT reality:
+     * every seeded row has a known, non-null owner assigned.
      */
-    public function test_no_seeded_service_has_a_fulfillment_owner_assigned_yet(): void
+    public function test_every_seeded_service_now_has_a_known_fulfillment_owner_from_the_dev_data_migration(): void
     {
         foreach (ServiceDefinition::all() as $definition) {
-            $this->assertNull(
+            $this->assertNotNull(
                 $definition->fulfillment_owner,
-                "[{$definition->code}] should not have a fulfillment owner assigned by the seed migration."
+                "[{$definition->code}] should have a (dummy, dev-only) fulfillment owner assigned by the dev-data migration."
+            );
+            $this->assertTrue(
+                FulfillmentOwner::isKnown($definition->fulfillment_owner),
+                "[{$definition->code}] fulfillment_owner should be one of FulfillmentOwner::KNOWN_OWNERS."
             );
         }
     }
