@@ -36,8 +36,12 @@ final class FooterLegalLinksRouteTest extends TestCase
 
     public function test_legal_routes_are_registered_with_the_expected_names_and_uris(): void
     {
-        $this->assertSame('/privasi', Route::getRoutes()->getByName('legal.privacy')?->uri());
-        $this->assertSame('/syarat-ketentuan', Route::getRoutes()->getByName('legal.terms')?->uri());
+        // Route::uri() returns the URI WITHOUT a leading slash (Laravel's
+        // own registration behaviour, not this batch's convention) — the
+        // original assertion here expected a leading '/' and failed the
+        // first real CI run over that alone.
+        $this->assertSame('privasi', Route::getRoutes()->getByName('legal.privacy')?->uri());
+        $this->assertSame('syarat-ketentuan', Route::getRoutes()->getByName('legal.terms')?->uri());
     }
 
     public function test_footer_privacy_and_terms_links_are_generated_via_named_routes_and_resolve_to_a_real_page(): void

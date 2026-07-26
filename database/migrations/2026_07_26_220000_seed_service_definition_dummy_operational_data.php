@@ -2,11 +2,9 @@
 
 declare(strict_types=1);
 
-use App\Domain\ServiceCatalog\Actions\RecordServiceDefinitionPriceVersion;
 use App\Domain\ServiceCatalog\FulfillmentOwner;
 use App\Domain\ServiceCatalog\Models\ServiceDefinition;
 use App\Domain\ServiceCatalog\ServiceCode;
-use App\Platform\Audit\AuditSource;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
@@ -137,8 +135,9 @@ use Illuminate\Support\Facades\DB;
  *   follows the same reasoning as the rest of the vendor-fulfilled group.
  *
  * ---------------------------------------------------------------------------
- * Pricing: `price_versions` via the real `RecordServiceDefinitionPriceVersion`
- * Action, not a new ad-hoc column and not a raw `DB::table()->insert()`
+ * Pricing: a direct `price_versions` insert, NOT the audited
+ * `RecordServiceDefinitionPriceVersion` Action — corrected after a real CI
+ * failure
  * ---------------------------------------------------------------------------
  * `service_definitions` has no price column by design —
  * `2026_07_26_180400_create_price_versions_table.php`'s own doc block is
@@ -148,27 +147,31 @@ use Illuminate\Support\Facades\DB;
  * quote/order"). Adding a parallel price column on `service_definitions`
  * here would duplicate that table's entire job.
  *
- * `Actions\RecordServiceDefinitionPriceVersion` is used directly (not a raw
- * insert) because its dependencies are simple enough to be safe inside a
- * migration: it only touches `DB::transaction()`, the `ServiceDefinition`/
- * `PriceVersion` Eloquent models, and `App\Platform\Audit\Audit::record()` —
- * none of which need an HTTP request, an authenticated session, or any
- * other request-scoped state that would be awkward or unavailable inside
- * `php artisan migrate`. Using the real Action (rather than hand-rolling
- * the insert) also means every seeded price gets the exact same
- * `version_number`/`superseded_at`/audit-trail behaviour a real admin
- * action would produce later, so this migration exercises the identical
- * code path `PriceVersioningTest.php` already covers, instead of a second,
- * parallel way of getting a row into `price_versions`.
+ * This migration originally called `Actions\RecordServiceDefinitionPriceVersion`
+ * directly, reasoning that doing so would exercise the exact same
+ * `version_number`/`superseded_at`/audit-trail code path a real admin action
+ * uses. That call also writes an `audit_events` row via `Audit::record()` —
+ * which turned out to be a real regression: `RefreshDatabase` re-runs every
+ * migration, including this one, before EVERY test in the suite, so those 12
+ * audit rows were present as a baseline for completely unrelated tests that
+ * assert an exact `AuditEvent::query()->count()` (`Tests\Feature\Audit\
+ * AuditRecordTest`, `AuditWrapTransactionTest`, `Tests\Feature\FeatureGate\
+ * GateActivationRecorderTest`) or `->sole()` a single audit row for one
+ * action (`ServiceCatalogAuditIntegrationTest::test_record_price_version_
+ * writes_an_audit_row`, which failed with `MultipleRecordsFoundException`
+ * once CATERING had two `PRICE_VERSION_RECORDED` rows: this migration's and
+ * the test's own). CI caught all seven failures on the first real push.
  *
- * `actorReference` is the literal string `'dev-seed-migration'` and
- * `actorRole` is `'system-seed'` — there is no authenticated human actor at
- * migration time, and inventing a fake numeric user id would misrepresent
- * the resulting `audit_events` row as if a real admin acted. `AuditSource::Job`
- * is used (not `Panel`) for the same reason: this is a system/console
- * process, not an admin-panel action. The recorded `reason` states plainly
- * that this is placeholder dev pricing, so anyone reading the audit trail
- * later sees exactly why these rows exist.
+ * The fix is a direct `DB::table('price_versions')->insert()` below: same
+ * columns, same shape (`version_number` hardcoded to `1` — safe because this
+ * table starts genuinely empty for every priceable, per the create-table
+ * migration's own doc block, so every code's very first version really is
+ * version 1), but zero interaction with `App\Platform\Audit\Audit::record()`.
+ * `PriceVersioningTest.php` still exercises the Action's own versioning
+ * mechanism directly (with its own synthetic amounts) — this migration no
+ * longer needs to re-exercise that same path to be correct, it only needs to
+ * get a plausible row into the table without a side effect on a shared,
+ * per-test-reset concern the rest of this codebase relies on staying clean.
  *
  * Amounts are plausible Rupiah placeholders within the ranges given for
  * this task, one flat amount per service (matching every other seeded
@@ -236,9 +239,9 @@ return new class extends Migration
     /**
      * `code => [amount as a decimal string, source note]` — plausible
      * Indonesian Rupiah placeholders within this task's given ranges. See
-     * this file's own doc block for why these are recorded through
-     * `RecordServiceDefinitionPriceVersion` rather than a raw insert, and
-     * why CATERING is a flat package amount rather than a per-porsi figure.
+     * this file's own doc block for why these are inserted directly rather
+     * than through `RecordServiceDefinitionPriceVersion`, and why CATERING
+     * is a flat package amount rather than a per-porsi figure.
      *
      * @var array<string, array{0: string, 1: string}>
      */
@@ -270,8 +273,6 @@ return new class extends Migration
             ]);
         }
 
-        $recordPrice = new RecordServiceDefinitionPriceVersion;
-
         foreach (self::DUMMY_PRICES as $code => [$amount, $source]) {
             $service = ServiceDefinition::findByCode($code);
 
@@ -283,16 +284,23 @@ return new class extends Migration
                 continue;
             }
 
-            $recordPrice(
-                serviceDefinition: $service,
-                amount: $amount,
-                actorReference: 'dev-seed-migration',
-                currency: 'IDR',
-                source: $source,
-                actorRole: 'system-seed',
-                auditSource: AuditSource::Job,
-                reason: 'Dev-only placeholder pricing seeded under explicit user authorization for public display on dev.makam.co.id; not a real vendor/operator pricing agreement.',
-            );
+            // Direct insert, not `RecordServiceDefinitionPriceVersion` — see
+            // this file's own doc block for why (that Action's audit-trail
+            // side effect broke unrelated tests under `RefreshDatabase`).
+            // `version_number` 1 is safe here: `price_versions` starts
+            // genuinely empty for every priceable, so this really is each
+            // service's first version.
+            DB::table('price_versions')->insert([
+                'priceable_type' => ServiceDefinition::class,
+                'priceable_id' => $service->id,
+                'version_number' => 1,
+                'amount' => $amount,
+                'currency' => 'IDR',
+                'source' => $source,
+                'effective_from' => $now,
+                'superseded_at' => null,
+                'recorded_by' => 'dev-seed-migration',
+            ]);
         }
     }
 
