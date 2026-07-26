@@ -6,6 +6,8 @@ use App\Livewire\Public\ComingSoon\RenewalComingSoon;
 use App\Livewire\Public\Faq\FaqArticleDetail;
 use App\Livewire\Public\Faq\FaqIndex;
 use App\Livewire\Public\HomePage;
+use App\Livewire\Public\Legal\PrivacyPolicy;
+use App\Livewire\Public\Legal\TermsOfService;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -66,3 +68,21 @@ Route::get('/perpanjangan', RenewalComingSoon::class)->name('perpanjangan.index'
 Route::get('/faq', FaqIndex::class)->name('faq.index');
 Route::get('/faq/kategori/{categorySlug}', FaqIndex::class)->name('faq.category');
 Route::get('/faq/{articleSlug}', FaqArticleDetail::class)->name('faq.show');
+
+/*
+|--------------------------------------------------------------------------
+| Legal — privacy policy and terms of service
+|--------------------------------------------------------------------------
+| Closes a real, previously-documented gap: layouts/app.blade.php's footer
+| has linked to /privasi and /syarat-ketentuan since the homepage footer
+| was upgraded (26 Jul 2026), but neither route existed, so both links
+| 404d — see that file's own (now-updated) doc comment. Read-only, no
+| App\Domain\** dependency, same shape as the FAQ routes above.
+|
+| The body copy these two routes serve is placeholder/draft legal content,
+| explicitly labelled as such on both pages — see App\Livewire\Public\
+| Legal\PrivacyPolicy's own doc block for why (sprint-plan.md §10: "legal/
+| privacy decisions (G7)" are "Not delegable to an agent at all").
+*/
+Route::get('/privasi', PrivacyPolicy::class)->name('legal.privacy');
+Route::get('/syarat-ketentuan', TermsOfService::class)->name('legal.terms');

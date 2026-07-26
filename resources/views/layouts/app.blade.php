@@ -52,18 +52,36 @@
     `--color-neutral-0`) — no `var(--mk-*)` bracket syntax needed, since
     those primitives already have generated utility names.
 
-    Two NEW links below, `/privasi` and `/syarat-ketentuan`, are NOT in
-    information-architecture.md §1's route tree at all (unlike `/bantuan`,
-    which IS documented there even though unbuilt) — IA only says the
-    footer needs "privacy, terms, contact" without naming their paths. This
-    batch picked plausible Indonesian path names, consistent with this
-    site's existing convention (`/pemesanan-makam`, `/perpanjangan`,
-    `/bantuan`), as an honest forward-reference in the exact same spirit as
-    `/bantuan`'s own already-established pattern: a real `<a href>`, not a
-    fabricated claim that the page exists today. This is a genuine, named
-    spec gap — see this batch's final report — not a silent invention:
-    a future product/legal decision may pick different paths, at which
-    point this file is the one place to update.
+    Two links below, `/privasi` and `/syarat-ketentuan`, are still NOT in
+    information-architecture.md §1's route tree (unlike `/bantuan`, which
+    IS documented there even though unbuilt) — IA only says the footer
+    needs "privacy, terms, contact" without naming their paths. This batch
+    picked plausible Indonesian path names, consistent with this site's
+    existing convention (`/pemesanan-makam`, `/perpanjangan`, `/bantuan`).
+    That naming-authority gap is still real (see this batch's final
+    report) — a future product/legal decision may pick different paths,
+    at which point `routes/web.php`'s `legal.privacy`/`legal.terms` route
+    names are the one place to repoint.
+
+    ---------------------------------------------------------------------------
+    UPDATED 26 Jul 2026 (legal pages batch) — gap CLOSED, links now real routes
+    ---------------------------------------------------------------------------
+    The note above previously described these two links as an unresolved
+    forward-reference — plain `<a href="/privasi">` pointing at nothing,
+    same honest-gap pattern as `/bantuan`'s. That is no longer true: `App\
+    Livewire\Public\Legal\PrivacyPolicy` and `TermsOfService` now back both
+    paths (routes/web.php's `legal.privacy` / `legal.terms`), so the two
+    links below were switched from raw hrefs to `route()` calls. `/bantuan`
+    is intentionally UNCHANGED — it remains a real, honest forward-reference
+    (no route exists for it yet), not touched by this batch.
+
+    The muted company-info line below the nav is placeholder legal-entity
+    data — a fictional PT name and a "Jl. Contoh ..." placeholder address,
+    the same honest-placeholder convention `2026_07_26_190300_seed_
+    cemeteries_and_capability_profiles.php` already established in this
+    codebase. Read from `App\Support\CompanyInfo::NAME`/`::ADDRESS` — the
+    one place this data is defined, also used by `PrivacyPolicy`'s and
+    `TermsOfService`'s own views — not hardcoded a second time here.
 --}}
 <!DOCTYPE html>
 <html lang="id">
@@ -83,11 +101,12 @@
     <footer class="bg-primary-900 px-4 py-8 text-neutral-0 md:px-6 lg:px-8">
         <div class="mx-auto flex max-w-content flex-col items-center gap-4 text-center">
             <nav aria-label="Tautan footer" class="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm">
-                <a href="/privasi" class="underline underline-offset-2 hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2">Kebijakan Privasi</a>
-                <a href="/syarat-ketentuan" class="underline underline-offset-2 hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2">Syarat &amp; Ketentuan</a>
+                <a href="{{ route('legal.privacy') }}" class="underline underline-offset-2 hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2">Kebijakan Privasi</a>
+                <a href="{{ route('legal.terms') }}" class="underline underline-offset-2 hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2">Syarat &amp; Ketentuan</a>
                 <a href="/bantuan" class="underline underline-offset-2 hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2">Bantuan / Kontak</a>
             </nav>
             <p class="text-sm">&copy; {{ date('Y') }} Makam.co.id</p>
+            <p class="text-xs text-primary-200">{{ \App\Support\CompanyInfo::NAME }} &middot; {{ \App\Support\CompanyInfo::ADDRESS }}</p>
         </div>
     </footer>
 </body>
