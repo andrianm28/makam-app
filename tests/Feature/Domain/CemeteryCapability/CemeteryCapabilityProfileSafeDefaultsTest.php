@@ -69,7 +69,7 @@ final class CemeteryCapabilityProfileSafeDefaultsTest extends TestCase
     {
         $cemetery = Cemetery::query()->firstOrFail();
 
-        $resolved = (new ResolveCemeteryCapabilityProfile())($cemetery);
+        $resolved = (new ResolveCemeteryCapabilityProfile)($cemetery);
 
         $this->assertTrue($resolved->exists);
         $this->assertSame(1, $resolved->version_number);
@@ -89,7 +89,7 @@ final class CemeteryCapabilityProfileSafeDefaultsTest extends TestCase
 
         $this->assertDatabaseCount('cemetery_capability_profiles', 10); // seeded rows only, none for this cemetery
 
-        $resolved = (new ResolveCemeteryCapabilityProfile())($cemetery);
+        $resolved = (new ResolveCemeteryCapabilityProfile)($cemetery);
 
         $this->assertFalse($resolved->exists, 'AC4 fallback must not silently persist a profile.');
         $this->assertTrue($resolved->matchesSafeDefaults());

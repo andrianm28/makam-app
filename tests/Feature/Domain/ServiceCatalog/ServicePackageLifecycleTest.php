@@ -12,6 +12,7 @@ use App\Domain\ServiceCatalog\Models\ServiceDefinition;
 use App\Domain\ServiceCatalog\ServiceCode;
 use App\Domain\ServiceCatalog\ServicePackageItemType;
 use App\Domain\ServiceCatalog\ServicePackageVersionStatus;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use InvalidArgumentException;
 use Tests\TestCase;
@@ -154,7 +155,7 @@ final class ServicePackageLifecycleTest extends TestCase
 
     public function test_defining_an_item_with_an_unknown_service_definition_id_is_rejected(): void
     {
-        $this->expectException(\Illuminate\Database\Eloquent\ModelNotFoundException::class);
+        $this->expectException(ModelNotFoundException::class);
 
         (new DefineServicePackage)(
             code: 'PAKET_SALAH',

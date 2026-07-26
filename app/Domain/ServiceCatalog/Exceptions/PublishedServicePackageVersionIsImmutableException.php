@@ -31,7 +31,7 @@ final class PublishedServicePackageVersionIsImmutableException extends RuntimeEx
     public static function forItemOfVersion(int|string $versionId): self
     {
         return new self(
-            "service_package_items cannot be added, changed, or removed on service_package_versions ".
+            'service_package_items cannot be added, changed, or removed on service_package_versions '.
             "row [{$versionId}] because that version is published and therefore immutable; ".
             'create a new version instead (Actions\ReviseServicePackageVersion).'
         );
