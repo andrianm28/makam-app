@@ -85,19 +85,53 @@
                     @enderror
                 </div>
 
+                {{-- FIXED 26 Jul 2026 — first real CI run: EVERY <x-mk.button>
+                     usage on this page (and on article-detail.blade.php's own
+                     CS CTA, which has no wire:loading attribute at all) failed
+                     with "Undefined variable $loading" — the SAME error
+                     message Batch 3.2's own GateClosedBladeComponentsRenderTest
+                     had previously attributed to a narrow Blade::render()-only
+                     limitation. This is broader: this repo's first-ever use of
+                     any <x-mk.*> primitive with a defaulted @props value,
+                     rendered through a REAL Livewire full-page component
+                     (resources/views/livewire/** did not exist before this
+                     batch), fails the same way — independent of wire:loading
+                     directives, since the CS CTA button that has none also
+                     failed. Root cause not fully pinned down (Blade's own
+                     compiled @props preamble looks safe on inspection — every
+                     assignment uses `??`, which does not throw on an undefined
+                     variable); rather than risk a wrong guess at a shared,
+                     heavily-used primitive this batch does not own, every
+                     button on this page is hand-written instead, reproducing
+                     button.blade.php's own already-approved literal recipe
+                     (base + size=md + variant classes) directly — the same
+                     defensive choice already made for the search <input> above
+                     for a different (but related) primitive limitation. See
+                     docs/planning/sprint-plan.md finding N-14 for the
+                     project-wide flag: no future Livewire full-page component
+                     should use <x-mk.button> until this is root-caused. --}}
                 <div class="flex gap-2">
-                    <x-mk.button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="search">
+                    <button
+                        type="submit"
+                        wire:loading.attr="disabled"
+                        wire:target="search"
+                        class="inline-flex h-11 select-none items-center justify-center gap-2 rounded-md border border-transparent bg-primary-600 px-4 text-base font-medium text-neutral-0 transition-[color,background-color,border-color,box-shadow] duration-fast ease-standard hover:bg-primary-700 active:bg-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:border-neutral-300 disabled:bg-neutral-100 disabled:text-neutral-500"
+                    >
                         Cari
-                    </x-mk.button>
+                    </button>
 
                     {{-- Only clears the search term — clearing the category
                          filter is already handled by the always-present
                          "Semua Kategori" chip below, so this button does not
                          also try to double as a category-reset control. --}}
                     @if ($term !== '')
-                        <x-mk.button type="button" variant="tertiary" wire:click="resetSearch">
+                        <button
+                            type="button"
+                            wire:click="resetSearch"
+                            class="inline-flex h-11 select-none items-center justify-center gap-2 rounded-md border border-neutral-450 bg-neutral-0 px-4 text-base font-medium text-neutral-700 transition-[color,background-color,border-color,box-shadow] duration-fast ease-standard hover:bg-neutral-50 active:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
+                        >
                             Reset pencarian
-                        </x-mk.button>
+                        </button>
                     @endif
                 </div>
             </div>
@@ -217,9 +251,15 @@
                                 </a>
                             @endforeach
                         </div>
-                        <x-mk.button variant="secondary" href="/bantuan" class="mt-2">
+                        {{-- See this file's own doc comment above the search
+                             buttons for why this is hand-written, not
+                             <x-mk.button>. --}}
+                        <a
+                            href="/bantuan"
+                            class="mt-2 inline-flex h-11 select-none items-center justify-center gap-2 rounded-md border border-primary-600 bg-neutral-0 px-4 text-base font-medium text-primary-700 transition-[color,background-color,border-color,box-shadow] duration-fast ease-standard hover:bg-primary-50 active:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
+                        >
                             Hubungi Customer Service
-                        </x-mk.button>
+                        </a>
                     </div>
                 @elseif ($activeCategory)
                     {{-- Empty category (§6.2) — exact tasks.md copy. Genuinely
@@ -231,9 +271,12 @@
                         <p class="max-w-prose text-base text-neutral-600">
                             Artikel untuk kategori ini sedang disiapkan.
                         </p>
-                        <x-mk.button variant="secondary" href="{{ route('faq.index') }}" class="mt-2">
+                        <a
+                            href="{{ route('faq.index') }}"
+                            class="mt-2 inline-flex h-11 select-none items-center justify-center gap-2 rounded-md border border-primary-600 bg-neutral-0 px-4 text-base font-medium text-primary-700 transition-[color,background-color,border-color,box-shadow] duration-fast ease-standard hover:bg-primary-50 active:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
+                        >
                             Lihat kategori lain
-                        </x-mk.button>
+                        </a>
                     </div>
                 @endif
             @else

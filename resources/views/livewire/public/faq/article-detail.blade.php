@@ -61,11 +61,24 @@
                  release-gates.md still lists "support contacts, hours..."
                  as an OPEN item) — linking to a documented-but-not-yet-built
                  route is more honest than inventing a contact address this
-                 codebase does not actually have. --}}
+                 codebase does not actually have.
+
+                 FIXED 26 Jul 2026 — first real CI run: hand-written, not
+                 <x-mk.button>, for the same reason
+                 resources/views/livewire/public/faq/index.blade.php's own
+                 doc comment explains at length (every <x-mk.button> usage on
+                 this page's sibling failed with "Undefined variable
+                 $loading" when rendered through a real Livewire full-page
+                 component — this repo's first-ever use of that combination
+                 — including this one, which has no wire:loading attribute
+                 at all). See sprint-plan.md finding N-14. --}}
             <div class="mt-8 border-t border-neutral-200 pt-6">
-                <x-mk.button variant="secondary" href="/bantuan">
+                <a
+                    href="/bantuan"
+                    class="inline-flex h-11 select-none items-center justify-center gap-2 rounded-md border border-primary-600 bg-neutral-0 px-4 text-base font-medium text-primary-700 transition-[color,background-color,border-color,box-shadow] duration-fast ease-standard hover:bg-primary-50 active:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
+                >
                     Hubungi Customer Service
-                </x-mk.button>
+                </a>
             </div>
         </article>
 
