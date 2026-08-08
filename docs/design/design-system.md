@@ -439,6 +439,18 @@ Every intent's `800`-on-`100` pairing is verified ≥ 7.25:1 (§7.1).
 
 **Mandatory:** a badge always carries **text**, and carries an **icon** whenever it communicates status. Colour alone never conveys state (WCAG 1.4.1). Never abbreviate a canonical status enum in the badge label.
 
+**`intent` is a closed vocabulary — an unsupported value now throws, not silently falls back to `neutral`.** Found 8 Aug 2026: `$intents[$intent] ?? $intents['neutral']` let a typo'd or invented intent render as a plausible-looking `neutral` badge with no error — on a status badge, a wrong status shown with nothing to catch it. Fixed to `throw new InvalidArgumentException(...)`, matching this codebase's `assertKnown()` convention for every other closed list.
+
+### 3.6a Filter chip — `<x-mk.filter-chip>`
+
+A **selection** control (which filter is active in a chip group), not a status marker — deliberately not a `<x-mk.badge>` intent. Added 8 Aug 2026 after two Sprint 4 batches (cemetery directory, marketplace) independently hand-wrote the same badge-shaped active/inactive chip recipe `public-faq`'s own `tasks.md` established first (`primary-100`/`primary-800` — already an asserted WCAG AA pair, §7.1, no new token or contrast work needed), because `<x-mk.badge>` has no `primary` intent and `$attributes->merge()` only appends onto its already-complete intent classes rather than replacing them. Three independent call sites reproducing one recipe is where §9.2 MUST #2 ("extend, don't fork") calls for a real primitive.
+
+**Props:** `href` · `active` (bool, default `false`).
+
+**Selection must not be colour-only (WCAG 1.4.1).** The active state adds a `icon.check` tick — not just a darker colour pair — plus `aria-current="page"` for assistive tech. This closes a real gap: `public-faq`'s existing hand-written chips signalled the active state by hue alone, with no non-colour cue on the "Semua Kategori" reset chip specifically (its page heading stays static regardless of which chip is active, so the redundant-heading argument that covers its per-category chips does not cover it).
+
+**Structure:** one wrapping `<a>` (touch-target, focus ring), one inner `<span>` carrying the intent-shaped classes — same two-layer shape the hand-written recipe already used, formalised into a primitive rather than copied a fourth time.
+
 ### 3.7 Status → visual intent mapping (**normative**)
 
 Components must **not** switch on enum strings. Resolve status → intent in one place (`app/Support/Design/StatusIntent.php`) and pass the intent down. Enums are canonical in [`order-lifecycle.md`](../domain/order-lifecycle.md) and [`marketplace-catalog.md`](../product/marketplace-catalog.md) — this table maps them, it does not define them.

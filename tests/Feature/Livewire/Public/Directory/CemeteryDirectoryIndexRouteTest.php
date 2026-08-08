@@ -1,0 +1,299 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Feature\Livewire\Public\Directory;
+
+use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
+use App\Domain\CemeteryDirectory\CemeteryType;
+use App\Domain\CemeteryDirectory\LaunchCityCode;
+use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Livewire\Public\Directory\CemeteryDirectoryIndex;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
+use Livewire\Livewire;
+use Tests\TestCase;
+
+/**
+ * `/cemeteries` (route name `cemeteries.index`) — Sprint 4 S4-T6, AC1,
+ * AC2, AC3, AC5, AC11, AC12.
+ *
+ * Every URL here is built with `route('cemeteries.index')` rather than a
+ * literal path, so this file keeps passing if the path registered in
+ * `routes/web.php` changes. It does depend on the route NAME existing —
+ * `routes/web.php` is outside this batch's scope and the required line is
+ * named in the batch report.
+ */
+final class CemeteryDirectoryIndexRouteTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // Required for any real HTTP request rendering a layout with
+        // @vite(...) — CI's `php` job has no frontend build.
+        $this->withoutVite();
+    }
+
+    public function test_the_directory_route_renders_successfully(): void
+    {
+        $this->get(route('cemeteries.index'))
+            ->assertOk()
+            ->assertSee('Direktori TPU dan TPS');
+    }
+
+    /**
+     * AC1 + the negative criterion "No hidden omission of a required MVP
+     * city". All five launch cities must appear as filter controls
+     * regardless of how many cemeteries each currently has.
+     */
+    public function test_all_five_launch_cities_are_offered_as_filters(): void
+    {
+        $response = $this->get(route('cemeteries.index'));
+        $body = $this->body($response->getContent());
+
+        foreach (LaunchCityCode::KNOWN_CODES as $code) {
+            $this->assertStringContainsString(ucfirst(strtolower($code)), $body);
+        }
+    }
+
+    /**
+     * AC2 — filtering by city returns only that city's published
+     * cemeteries. Asserted against real seeded data, additively (the seed
+     * count is not this test's subject).
+     */
+    public function test_city_filter_returns_only_that_citys_published_cemeteries(): void
+    {
+        $expected = Cemetery::query()
+            ->published()
+            ->inCity(LaunchCityCode::BOGOR)
+            ->pluck('name');
+
+        $this->assertGreaterThan(0, $expected->count());
+
+        $other = Cemetery::query()
+            ->published()
+            ->where('city', '!=', LaunchCityCode::BOGOR)
+            ->pluck('name');
+
+        $this->assertGreaterThan(0, $other->count());
+
+        $rendered = Livewire::test(CemeteryDirectoryIndex::class)
+            ->set('city', LaunchCityCode::BOGOR);
+
+        foreach ($expected as $name) {
+            $rendered->assertSee($name);
+        }
+
+        foreach ($other as $name) {
+            $rendered->assertDontSee($name);
+        }
+    }
+
+    public function test_type_filter_returns_only_that_type(): void
+    {
+        $tps = Cemetery::query()->published()->ofType(CemeteryType::TPS)->pluck('name');
+        $tpu = Cemetery::query()->published()->ofType(CemeteryType::TPU)->pluck('name');
+
+        $this->assertGreaterThan(0, $tps->count());
+        $this->assertGreaterThan(0, $tpu->count());
+
+        $rendered = Livewire::test(CemeteryDirectoryIndex::class)
+            ->set('type', CemeteryType::TPS);
+
+        foreach ($tps as $name) {
+            $rendered->assertSee($name);
+        }
+
+        foreach ($tpu as $name) {
+            $rendered->assertDontSee($name);
+        }
+    }
+
+    /**
+     * AC2's base guarantee. One seeded cemetery is deliberately `draft`
+     * precisely so this exclusion is provable rather than vacuous.
+     */
+    public function test_a_draft_cemetery_never_appears_in_the_public_directory(): void
+    {
+        $draft = Cemetery::query()
+            ->where('publication_status', CemeteryPublicationStatus::DRAFT)
+            ->firstOrFail();
+
+        $this->get(route('cemeteries.index'))->assertDontSee($draft->name);
+    }
+
+    /**
+     * AC5 — the default availability presentation. `Perlu konfirmasi` must
+     * be on the page, and the seeded profiles all carry the safe default,
+     * so every card carries it.
+     */
+    public function test_indicative_availability_is_labelled_perlu_konfirmasi(): void
+    {
+        $this->get(route('cemeteries.index'))->assertSee('Perlu konfirmasi');
+    }
+
+    /**
+     * The negative half of AC5, and the rule this whole slice exists for:
+     * with every seeded cemetery on safe defaults, no success-intent badge
+     * may render anywhere on the directory. Asserted against the actual
+     * token the badge primitive emits for `success`, not against a label.
+     */
+    public function test_no_success_intent_badge_renders_while_every_cemetery_is_indicative(): void
+    {
+        $body = $this->body($this->get(route('cemeteries.index'))->getContent());
+
+        $this->assertStringNotContainsString('--mk-intent-success', $body);
+    }
+
+    /**
+     * AC12 + the negative criterion "No public exposure of restricted plot
+     * data" — asserted against the rendered HTML, which is the surface that
+     * actually matters.
+     */
+    public function test_restricted_capability_modes_never_reach_the_rendered_directory(): void
+    {
+        $body = $this->body($this->get(route('cemeteries.index'))->getContent());
+
+        $this->assertStringNotContainsString('registry_mode', $body);
+        $this->assertStringNotContainsString('certificate_mode', $body);
+        $this->assertStringNotContainsString('AUTHORITATIVE', $body);
+        $this->assertStringNotContainsString('PLATFORM_MANAGED', $body);
+    }
+
+    /**
+     * AC3 — every card field. Checked on one known seeded cemetery so the
+     * assertion names real expected values rather than "something rendered".
+     */
+    public function test_a_card_shows_every_ac3_field(): void
+    {
+        $cemetery = Cemetery::query()->published()->where('slug', 'tpu-jakarta-menteng')->firstOrFail();
+
+        $response = $this->get(route('cemeteries.index'));
+
+        $response->assertSee($cemetery->type);
+        $response->assertSee($cemetery->name);
+        $response->assertSee($cemetery->address);
+
+        foreach ((array) $cemetery->facilities as $facility) {
+            $response->assertSee((string) $facility);
+        }
+
+        // Price range WITH source — AC3 requires the attribution, not just
+        // the figure.
+        $response->assertSee(number_format((float) $cemetery->price_min, 0, ',', '.'));
+        $response->assertSee((string) $cemetery->price_source);
+
+        // Photo.
+        $response->assertSee((string) $cemetery->primary_photo_path, escape: false);
+    }
+
+    /**
+     * §6.3 — an unknown `?city=` is a stated validation error, not a
+     * silently empty result. The distinction matters: on a directory whose
+     * negative criteria include "No hidden omission of a required MVP
+     * city", a filter that quietly yields nothing is the wrong failure.
+     */
+    public function test_an_unknown_city_filter_states_a_validation_error_and_still_lists_cemeteries(): void
+    {
+        $known = Cemetery::query()->published()->firstOrFail();
+
+        Livewire::test(CemeteryDirectoryIndex::class)
+            ->set('city', 'SURABAYA')
+            ->assertHasErrors('city')
+            ->assertSee($known->name);
+    }
+
+    public function test_an_unknown_type_filter_states_a_validation_error(): void
+    {
+        Livewire::test(CemeteryDirectoryIndex::class)
+            ->set('type', 'NOT_A_TYPE')
+            ->assertHasErrors('type');
+    }
+
+    public function test_reset_filters_clears_both_filters(): void
+    {
+        Livewire::test(CemeteryDirectoryIndex::class)
+            ->set('city', LaunchCityCode::BOGOR)
+            ->set('type', CemeteryType::TPS)
+            ->call('resetFilters')
+            ->assertSet('city', '')
+            ->assertSet('type', '');
+    }
+
+    /**
+     * §6.5 provider unavailable, proven by dropping the real table inside
+     * the test transaction — the way the FAQ tests do it, not by mocking
+     * the query class. The page must state the failure and keep its
+     * customer-service escape hatch, never blank or 500.
+     */
+    public function test_the_page_survives_the_cemeteries_table_being_unreadable(): void
+    {
+        Schema::drop('cemetery_capability_profiles');
+        Schema::drop('cemetery_packages');
+        Schema::drop('cemeteries');
+
+        Livewire::test(CemeteryDirectoryIndex::class)
+            ->assertSet('directoryUnavailable', true)
+            ->assertSee('Direktori lokasi sedang tidak dapat dimuat')
+            ->assertSee('Hubungi Customer Service');
+    }
+
+    /**
+     * design-system.md §9.2 MUST-NOT "never convey status by colour alone",
+     * and WCAG 1.4.1.
+     *
+     * The active and inactive filter chips share an identical structural
+     * recipe and differ only in colour family, so the `icon.check` tick is
+     * the ONLY non-chromatic selection cue a sighted user gets — this
+     * page's `<h1>` is static and its sr-only status line is only a result
+     * count, unlike the FAQ page whose heading names the active category.
+     * Asserted on the rendered SVG path data rather than a class name, so
+     * the test fails if the icon is removed even if the markup around it
+     * survives.
+     *
+     * Regression guard: without this, deleting the tick as "decoration"
+     * would break nothing any other test asserts.
+     */
+    public function test_the_active_filter_chip_carries_a_non_colour_selection_cue(): void
+    {
+        $checkPath = 'm4.5 12.75 6 6 9-13.5';
+
+        // The tick that marks whichever chip is active — present on the
+        // default view, where "Semua Kota"/"Semua Jenis" are selected.
+        $default = $this->body($this->get(route('cemeteries.index'))->getContent());
+        $this->assertStringContainsString($checkPath, $default);
+
+        // And still present when a real city filter is the active chip.
+        $filtered = Livewire::test(CemeteryDirectoryIndex::class)
+            ->set('city', LaunchCityCode::BOGOR)
+            ->html();
+
+        $this->assertStringContainsString($checkPath, $filtered);
+        $this->assertStringContainsString('aria-current', $filtered);
+    }
+
+    /**
+     * §6.10 — the customer-service escape hatch is present on the normal
+     * path too, not only on the failure paths.
+     */
+    public function test_the_customer_service_escape_hatch_is_present(): void
+    {
+        $this->get(route('cemeteries.index'))
+            ->assertSee('Hubungi Customer Service')
+            ->assertSee(route('bantuan.index'), escape: false);
+    }
+
+    /**
+     * Ordering assertions scope to the body so `<title>` cannot produce a
+     * false match.
+     */
+    private function body(string|false $content): string
+    {
+        $content = (string) $content;
+        $bodyStart = strpos($content, '<body');
+
+        return $bodyStart === false ? $content : substr($content, $bodyStart);
+    }
+}

@@ -118,7 +118,14 @@
              "Undefined variable $loading" — this component is the shared
              header, rendered on every page via layouts/app.blade.php, so it
              hits the same bug the FAQ views' own buttons did). See
-             docs/planning/sprint-plan.md finding N-14. --}}
+             docs/planning/sprint-plan.md finding N-14.
+
+             CORRECTED 08 Aug 2026 (Batch 0, P-3) — root-caused and fixed; see
+             faq/index.blade.php's own doc comment for the mechanism. New
+             Livewire views MAY use <x-mk.button> directly. This header's own
+             hand-written Bantuan buttons are correct, working code, rendered
+             on every page; migrating them is optional cleanup, not
+             required. --}}
         <a
             href="{{ $bantuanHref }}"
             class="shrink-0 inline-flex h-11 select-none items-center justify-center gap-2 rounded-md border border-primary-600 bg-neutral-0 px-4 text-base font-medium text-primary-700 transition-[color,background-color,border-color,box-shadow] duration-fast ease-standard hover:bg-primary-50 active:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"

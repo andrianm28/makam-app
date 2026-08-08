@@ -1,13 +1,16 @@
 <?php
 
 use App\Livewire\Public\ComingSoon\BookingWizardComingSoon;
-use App\Livewire\Public\ComingSoon\MarketplaceComingSoon;
 use App\Livewire\Public\ComingSoon\RenewalComingSoon;
+use App\Livewire\Public\Directory\CemeteryDetail;
+use App\Livewire\Public\Directory\CemeteryDirectoryIndex;
 use App\Livewire\Public\Faq\FaqArticleDetail;
 use App\Livewire\Public\Faq\FaqIndex;
 use App\Livewire\Public\HomePage;
 use App\Livewire\Public\Legal\PrivacyPolicy;
 use App\Livewire\Public\Legal\TermsOfService;
+use App\Livewire\Public\Marketplace\MarketplaceIndex;
+use App\Livewire\Public\Marketplace\ProductDetail;
 use App\Livewire\Public\Support\HelpCentre;
 use Illuminate\Support\Facades\Route;
 
@@ -22,10 +25,12 @@ use Illuminate\Support\Facades\Route;
 | The four MVP entry points (mvp-scope.md §1) — current status:
 |   /pemesanan-makam   Sprint 4  public-booking-wizard              STUB (S4-T3): honest
 |                                "coming soon" page, not gated — real wizard is S4-T4
-|   /marketplace       Sprint 4  funeral-marketplace-and-vendor-portal STUB (S4-T3): same,
-|                                real marketplace is later in Sprint 4 (S4-T8)
+|   /marketplace       Sprint 4  funeral-marketplace-and-vendor-portal implemented (S4-T8,
+|                                08 Aug 2026) — browse only; see MarketplaceIndex's own
+|                                doc block for what is deliberately still missing (cart,
+|                                checkout, vendor portal — Sprint 11-12)
 |   /perpanjangan      Sprint 4  renewal-and-grave-registry          STUB (S4-T3): same,
-|                                real renewal flow is later in Sprint 4 (S4-T7)
+|                                real renewal flow is in progress (S4-T7, agent team)
 |   /faq               Sprint 4  public-faq                          implemented (S4-T2)
 |   /                  Sprint 4  public-home-and-navigation          implemented (S4-T3,
 |                                this batch) — homepage now serves real content; see
@@ -37,22 +42,76 @@ use Illuminate\Support\Facades\Route;
 | services requirement is what HomePage + <x-mk.header> together implement,
 | not a placeholder.
 |
-| The three STUB routes above return a real Livewire full-page component
-| rendering an honest "coming soon" state (200 OK, header + footer intact),
-| never Laravel's default 404 — requirements.md AC6 read expansively; see
-| resources/views/livewire/public/coming-soon.blade.php's own doc block for
+| The two remaining STUB routes below return a real Livewire full-page
+| component rendering an honest "coming soon" state (200 OK, header + footer
+| intact), never Laravel's default 404 — requirements.md AC6 read expansively;
+| see resources/views/livewire/public/coming-soon.blade.php's own doc block for
 | why this is deliberately NOT <x-mk.gate-closed-page> (that component's
 | copy assumes a real closed FEATURE GATE, which does not apply here — these
-| three routes are simply not built yet this sprint). Each stub route is
-| expected to be REPLACED wholesale by its owning spec's real routes, not
-| extended in place.
+| routes are simply not built yet this sprint). Each stub route is expected to
+| be REPLACED wholesale by its owning spec's real routes, not extended in
+| place — `/marketplace` below is the first of the three to go through that
+| replacement; `MarketplaceComingSoon` (app/Livewire/Public/ComingSoon/) is
+| now dead code, deliberately left in place rather than deleted in this same
+| change (no test depends on it; removing it is separable cleanup).
 */
 
 Route::get('/', HomePage::class)->name('home');
 
 Route::get('/pemesanan-makam', BookingWizardComingSoon::class)->name('pemesanan-makam.index');
-Route::get('/marketplace', MarketplaceComingSoon::class)->name('marketplace.index');
 Route::get('/perpanjangan', RenewalComingSoon::class)->name('perpanjangan.index');
+
+/*
+|--------------------------------------------------------------------------
+| Marketplace — funeral-marketplace-and-vendor-portal AC1-AC3 (S4-T8)
+|--------------------------------------------------------------------------
+| Browse only, built by an agent-team teammate (marketplace-builder) and
+| independently reviewed (spec + design lenses) before wiring, per this
+| project's standing practice of never committing on a batch's self-report
+| alone. Both reviews: every specific claim MET; the only gap was these two
+| lines not existing yet.
+|
+| Read-only. Both components resolve catalogue data exclusively through
+| App\Domain\Marketplace\MarketplaceCatalogQuery — never Product::query()
+| directly. Category filtering uses `?kategori=<KEY>` with the three raw
+| MarketplaceProductCategory keys (FLOWERS/GRAVESTONES/GRAVE_CARE); a
+| `/marketplace/kategori/{categorySlug}` route is deliberately NOT
+| registered — marketplace-catalog.md defines nine product codes and ZERO
+| category slugs, and inventing an Indonesian slug would mint new canonical
+| catalogue data, which AGENTS.md forbids. Product detail routes by
+| ProductCode, not a slug — `products` has no slug column
+| (information-architecture.md's `/marketplace/produk/{productSlug}` is
+| stale against the schema; see MarketplaceCatalogQuery::findActiveByCode()'s
+| own doc block, which already anticipated this exact route shape).
+*/
+Route::get('/marketplace', MarketplaceIndex::class)->name('marketplace.index');
+Route::get('/marketplace/produk/{productCode}', ProductDetail::class)->name('marketplace.product');
+
+/*
+|--------------------------------------------------------------------------
+| Cemetery directory — cemetery-directory-and-availability AC1-AC12 (S4-T6)
+|--------------------------------------------------------------------------
+| Built by an agent-team teammate (directory-builder) and independently
+| reviewed (spec + design lenses) before wiring. Both reviews: every
+| specific claim MET; the only gap was these two lines not existing yet.
+|
+| Path chosen (not fixed by information-architecture.md §1, which has no
+| directory entry at all — a real, separate documentation gap, tracked
+| rather than silently patched): `/cemeteries`, matching the noun
+| docs/contracts/openapi.yaml already uses for `GET /cemeteries` and
+| `GET /cemeteries/{cemeteryId}`, so this introduces no new vocabulary.
+| Every internal link and every test resolves via `route('cemeteries.…')`,
+| never a literal path, so only the two NAMES below are load-bearing.
+|
+| Read-only. Resolves capability data exclusively through
+| App\Livewire\Public\Directory\Support\CemeteryDirectoryQuery, which
+| composes Cemetery::published() and ResolveCemeteryCapabilityProfile
+| rather than querying either directly. AC12's public capability
+| projection is structurally incapable of leaking `registry_mode` or
+| `certificate_mode` — see PublicCapabilityProjection's own doc block.
+*/
+Route::get('/cemeteries', CemeteryDirectoryIndex::class)->name('cemeteries.index');
+Route::get('/cemeteries/{cemeterySlug}', CemeteryDetail::class)->name('cemeteries.show');
 
 /*
 |--------------------------------------------------------------------------

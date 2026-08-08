@@ -36,6 +36,11 @@
     same N-14 convention as every other Livewire full-page view in this
     repo (see `home-page.blade.php`'s own doc block for the full citation).
 
+    CORRECTED 08 Aug 2026 (Batch 0, P-3) — N-14 is root-caused and fixed; see
+    faq/index.blade.php's own doc comment for the mechanism. New Livewire
+    views MAY use `<x-mk.button>` directly. The hand-written buttons here are
+    correct, working code; migrating them is optional cleanup, not required.
+
     Contact line below uses `App\Support\ContactInfo` — see that class's
     own doc block for why this is clearly-plausible placeholder data,
     explicitly authorized by the user for full public display on

@@ -71,7 +71,13 @@
                  $loading" when rendered through a real Livewire full-page
                  component — this repo's first-ever use of that combination
                  — including this one, which has no wire:loading attribute
-                 at all). See sprint-plan.md finding N-14. --}}
+                 at all). See sprint-plan.md finding N-14.
+
+                 CORRECTED 08 Aug 2026 (Batch 0, P-3) — root-caused and fixed;
+                 see faq/index.blade.php's own doc comment for the mechanism.
+                 New Livewire views MAY use <x-mk.button> directly. The
+                 hand-written button below is correct, working code;
+                 migrating it is optional cleanup, not required. --}}
             <div class="mt-8 border-t border-neutral-200 pt-6">
                 <p class="mb-3 text-sm text-neutral-600">
                     {{ ContactInfo::PHONE }} (telepon/WhatsApp) · {{ ContactInfo::EMAIL }} · {{ ContactInfo::BUSINESS_HOURS }}

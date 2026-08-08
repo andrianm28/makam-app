@@ -79,8 +79,25 @@
         'urgent'  => 'bg-[var(--mk-intent-urgent-bg)] text-[var(--mk-intent-urgent-fg)] border-[var(--mk-intent-urgent-border)]',
     ];
 
+    // FIXED 08 Aug 2026 — found independently by two Sprint 4 batches while
+    // reaching for an unsupported `intent="primary"`: this used to fall
+    // back to 'neutral' silently, no error, no warning, output
+    // byte-identical to a deliberate neutral badge. On a STATUS badge that
+    // is a wrong-status-shown defect no gate would catch. Every other
+    // closed list in this codebase fails loud (the `assertKnown()`
+    // convention in app/Domain/**, GateState's deny-by-default with an
+    // observable unknown/misconfigured flag) — this component silently
+    // doing the opposite was the outlier, not a deliberate design choice.
+    if (! array_key_exists($intent, $intents)) {
+        throw new InvalidArgumentException(
+            "Unsupported <x-mk.badge> intent [{$intent}]. Known intents: ".implode(', ', array_keys($intents)).'. '
+            .'A new value here is a design-system.md §3.7 status-vocabulary decision, not a component patch — '
+            .'see resources/views/components/mk/filter-chip.blade.php for why a selection control is a separate primitive, not a new intent.'
+        );
+    }
+
     $sizeClasses = $sizes[$size] ?? $sizes['md'];
-    $intentClasses = $intents[$intent] ?? $intents['neutral'];
+    $intentClasses = $intents[$intent];
 
     $classes = trim("$base $sizeClasses $intentClasses");
 @endphp

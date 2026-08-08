@@ -109,7 +109,22 @@
                      for a different (but related) primitive limitation. See
                      docs/planning/sprint-plan.md finding N-14 for the
                      project-wide flag: no future Livewire full-page component
-                     should use <x-mk.button> until this is root-caused. --}}
+                     should use <x-mk.button> until this is root-caused.
+
+                     CORRECTED 08 Aug 2026 (Batch 0, P-3) — root-caused and
+                     fixed. The real cause was `BladeCompiler::compileString()`
+                     calling `storeUncompiledBlocks()` before
+                     `compileComments()`, so a leading doc-comment whose prose
+                     contained the literal substring "@php" swallowed the
+                     component's real `@props()` block — nothing to do with
+                     Livewire, `wire:loading`, or this being a full-page
+                     component. Verified by rendering `<x-mk.button>` (all
+                     variants, including `loading`) through a real Livewire
+                     component on Laravel 13.22.0 + Livewire 4.3.3. New
+                     Livewire views MAY use `<x-mk.button>` directly — see the
+                     `makam-livewire-page` skill. The hand-written buttons
+                     below are correct, working code and migrating them back
+                     to the primitive is optional cleanup, not required. --}}
                 <div class="flex gap-2">
                     <button
                         type="submit"
@@ -140,65 +155,36 @@
         {{-- Category filter chips — all six, from FaqPublicQuery::categories().
              "Semua Kategori" (bare /faq) is itself one of the chips.
 
-             --- Active-chip colour override, and why it does NOT use
-             <x-mk.badge>'s $attributes->merge() for it ---
-             tasks.md: active filter uses --color-primary-100 (bg) +
-             --color-primary-800 (text). badge.blade.php's own $intents map
-             (§3.6) has no "primary" entry — its six intents are neutral/
-             info/pending/success/danger/urgent, none of which resolve to
-             those two tokens. $attributes->merge(['class' => $classes]) on
-             a <x-mk.badge> only APPENDS a caller's classes after its own
-             already-complete intent class string; it never REPLACES them.
-             Appending `bg-primary-100 text-primary-800` on top of the
-             badge's own already-rendered `bg-[var(--mk-intent-neutral-bg)]
-             text-[var(--mk-intent-neutral-fg)]` would leave two competing
-             utility declarations of equal specificity on one element, and
-             which one wins depends on Tailwind's generated CSS rule order —
-             not something this batch can verify without a real Tailwind
-             build on this host (the same class of risk
-             gate-closed-banner.blade.php's own doc block explicitly
-             declined to guess at for `rounded-lg` vs `rounded-none`).
-             Rather than guess, the ACTIVE chip below does not go through
-             <x-mk.badge>'s colour-resolution path at all: it reuses
-             badge.blade.php's own literal structural recipe (`inline-flex
-             items-center gap-1 rounded-sm border px-2 py-0.5 text-xs
-             font-medium`) written out directly with the tasks.md-specified
-             primary-100/primary-800 classes, so there is only ever ONE set
-             of colour classes on the element. Inactive chips use
-             <x-mk.badge intent="neutral"> exactly as the primitives table
-             specifies, with no override needed. --}}
+             CHANGED 08 Aug 2026 — this used to hand-write the active chip's
+             classes directly (badge.blade.php has no `primary` intent and
+             its $attributes->merge() only appends, never replaces). Two
+             later Sprint 4 batches (cemetery directory, marketplace)
+             independently hit the same wall and hand-wrote the identical
+             recipe, which is what made it a real design-system.md §9.2
+             MUST #2 violation ("extend, don't fork") rather than a one-off.
+             `<x-mk.filter-chip>` (§3.6a) now owns this: it is a selection
+             control, not a status marker, so it deliberately does not go
+             through <x-mk.badge> at all. It also closes a real WCAG
+             1.4.1-adjacent gap this page had and cemetery directory's own
+             chips did not: the old markup signalled the active state by
+             colour alone, and this page's <h1> stays static regardless of
+             which chip is active — including for "Semua Kategori" itself —
+             so there was no non-colour cue for that specific chip. The
+             primitive's check-icon tick fixes that for all six chips
+             uniformly. See docs/design/design-system.md §3.6a for the full
+             reasoning and the finding this traces to. --}}
         <nav aria-label="Filter kategori FAQ" class="mx-auto mb-8 flex max-w-content flex-wrap justify-center gap-2">
-            <a
-                href="{{ route('faq.index') }}"
-                @if (! $activeCategory) aria-current="page" @endif
-                class="touch-target inline-flex items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
-            >
-                @if (! $activeCategory)
-                    <span class="inline-flex items-center gap-1 rounded-sm border border-primary-300 bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-800">
-                        Semua Kategori
-                    </span>
-                @else
-                    <x-mk.badge intent="neutral">Semua Kategori</x-mk.badge>
-                @endif
-            </a>
+            <x-mk.filter-chip :href="route('faq.index')" :active="! $activeCategory">
+                Semua Kategori
+            </x-mk.filter-chip>
 
             @foreach ($categories as $category)
-                @php
-                    $isActiveCategory = $activeCategory?->id === $category->id;
-                @endphp
-                <a
-                    href="{{ route('faq.category', ['categorySlug' => FaqCategorySlug::forCategory($category)]) }}"
-                    @if ($isActiveCategory) aria-current="page" @endif
-                    class="touch-target inline-flex items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
+                <x-mk.filter-chip
+                    :href="route('faq.category', ['categorySlug' => FaqCategorySlug::forCategory($category)])"
+                    :active="$activeCategory?->id === $category->id"
                 >
-                    @if ($isActiveCategory)
-                        <span class="inline-flex items-center gap-1 rounded-sm border border-primary-300 bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-800">
-                            {{ $category->name }}
-                        </span>
-                    @else
-                        <x-mk.badge intent="neutral">{{ $category->name }}</x-mk.badge>
-                    @endif
-                </a>
+                    {{ $category->name }}
+                </x-mk.filter-chip>
             @endforeach
         </nav>
 
