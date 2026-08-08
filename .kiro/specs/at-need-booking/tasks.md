@@ -6,6 +6,9 @@
 - [ ] Build area/hours/capacity gate. _Requirements: 2_
 - [ ] Connect intake to FuneralCase and task templates. _Requirements: 3_
 - [ ] Implement progressive document collection. _Requirements: 4_
+- [ ] Implement availability/plot decision via manual confirmation or authoritative reservation. _Requirements: 5_
+- [ ] Build quote breakdown: land/package, funeral service, add-ons, delivery/transport, exclusions. _Requirements: 6_
+- [ ] Follow approved policy for payment timing; never imply a down-payment/partial-payment requirement outside that policy. _Requirements: 7_
 - [ ] Add service time/transport milestones. _Requirements: 8_
 - [ ] Add empathetic closure/degraded browser tests. _Requirements: 9_
 

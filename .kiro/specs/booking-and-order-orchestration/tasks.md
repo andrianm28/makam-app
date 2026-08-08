@@ -2,11 +2,17 @@
 
 `_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
 
+- [ ] Provide the single shared public entry point/route the nine-step workflow renders behind, for every product type. _Requirements: 1_ — the entry shell itself; distinct from product-type routing below (_Requirements: 4_), which is the selection logic once inside it.
+- [ ] Enforce `booking-wizard-fields.md`'s per-step field rules server-side on step completion. _Requirements: 3_
 - [ ] Add product-type router. _Requirements: 4_
 - [ ] Link submissions to FuneralCase/PreNeedCase. _Requirements: 5_
 - [ ] Generalize confirmation guard for manual or reservation evidence. _Requirements: 6, 7_
 - [ ] Preserve immutable quote/version acceptance. _Requirements: 8_
+- [ ] Enforce the commercial-transition state machine as forward-only, kept structurally separate from case/work/certificate states. _Requirements: 11_ — the render-separation half is already real: `App\Support\Design\StatusIntent`'s order-lifecycle family (tested, `tests/Unit/Support/Design/StatusIntentTest.php`) keeps e.g. `DIBAYAR`/`SELESAI` as distinct intents rather than one merged "done" badge (see "Order lifecycle → intent" table above). The forward-only transition-enforcement half — an Action rejecting a backward or skipped transition — does not exist yet; `app/Domain/Booking/Actions/` is still empty.
 - [ ] Add payment and document security tests. _Requirements: 9, 10_
+- [ ] Preserve the manual admin/case-manager fallback while an operator has not responded (the "Operator silence" state, above). _Requirements: 12_
+- [ ] Build the Step 9 order-state read model — reference, status (via `StatusIntent`), invoice state, channel-delivery state, next action, support reference. _Requirements: 13_
+- [ ] Dispatch admin/operator notifications per the notification matrix when triggered. _Requirements: 14_
 - [ ] Add browser tests for resumable intake and duplicate submission. _Requirements: 2, 9_
 
 ## Design system

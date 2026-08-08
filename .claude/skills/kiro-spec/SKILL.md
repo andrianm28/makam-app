@@ -5,9 +5,12 @@ description: Entry point for all Kiro spec-driven work in this repository (.kiro
 
 # Kiro specs — router and house rules
 
-This repository already holds **27 Kiro specs** under `.kiro/specs/<feature-name>/`, each a triad of
-`requirements.md` · `design.md` · `tasks.md`. `ci/verify-docs.sh` GATE 5 enforces that every spec
-has all three; GATE 6 enforces that each references `docs/design/design-system.md`.
+This repository already holds **28 Kiro specs** under `.kiro/specs/<feature-name>/`: 27 Feature
+Specs, each a triad of `requirements.md` · `design.md` · `tasks.md`, plus 1 Bugfix Spec
+(`help-centre-missing-route`), whose first-phase file is `bugfix.md` instead — see
+`kiro-bugfix-spec`. `ci/verify-docs.sh` GATE 5 enforces that every spec has its correct triad
+(accepting either first-phase file); GATE 6 enforces that each references
+`docs/design/design-system.md`.
 
 Source: [kiro.dev/docs/specs](https://kiro.dev/docs/specs/). Kiro is an IDE/CLI product; several of
 its features are buttons, not files. Where that is true, this skill set gives the **manual

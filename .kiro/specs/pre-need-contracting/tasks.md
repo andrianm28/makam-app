@@ -5,6 +5,9 @@
 - [ ] Implement interest/consultation only flow. _Requirements: 1_
 - [ ] Model proposal and non-binding quote. _Requirements: 3_
 - [ ] Prepare gated agreement/payment schedule interfaces. _Requirements: 2, 4, 6_
+- [ ] Bind agreement acceptance to the exact agreement and quote versions, behind gate. _Requirements: 5_
+- [ ] Issue a certificate only when eligibility rules are satisfied, behind gate. _Requirements: 7_
+- [ ] Link future activation/claim to a new At-Need FuneralCase without losing original contract history, behind gate. _Requirements: 8_
 - [ ] Add hard tests proving no payment while gate closed. _Requirements: 1_
 - [ ] Record legal/accounting open decisions. _Requirements: 2_
 - [ ] Do not implement paid states until stakeholder approval. _Requirements: 2_
