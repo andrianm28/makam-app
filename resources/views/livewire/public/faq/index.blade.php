@@ -115,10 +115,23 @@
                      fixed. The real cause was `BladeCompiler::compileString()`
                      calling `storeUncompiledBlocks()` before
                      `compileComments()`, so a leading doc-comment whose prose
-                     contained the literal substring "@php" swallowed the
-                     component's real `@props()` block — nothing to do with
-                     Livewire, `wire:loading`, or this being a full-page
-                     component. Verified by rendering `<x-mk.button>` (all
+                     named the raw-PHP directive as bare text (not inside a
+                     backtick-quoted code span) swallowed the component's
+                     real `@props()` block — nothing to do with Livewire,
+                     `wire:loading`, or this being a full-page component.
+
+                     THIS EXACT PARAGRAPH previously spelled that directive
+                     out literally while explaining the bug, which is the
+                     same trap by definition — caught 8 Aug 2026 (found by
+                     marketplace-builder auditing the whole repo for it, and
+                     independently reproduced by rendering: it was live,
+                     defused only by chance because the second raw-PHP block
+                     this file's old hand-written chip markup used to contain
+                     was removed by the same batch's <x-mk.filter-chip>
+                     migration). Never write that directive's literal name as
+                     bare prose in any comment in this codebase, including
+                     this one — describe it instead, as done here. Verified
+                     by rendering `<x-mk.button>` (all
                      variants, including `loading`) through a real Livewire
                      component on Laravel 13.22.0 + Livewire 4.3.3. New
                      Livewire views MAY use `<x-mk.button>` directly — see the
