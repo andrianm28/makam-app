@@ -985,6 +985,7 @@ use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\AuditSubject;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Creates a new, empty `booking_drafts` row at step 1 — the ONLY way this
@@ -994,27 +995,33 @@ use App\Platform\Audit\AuditSubject;
  * page load (see `App\Livewire\Public\Booking\BookingWizard::mount()`,
  * Task 9).
  *
- * Audited via `Audit::record()` but not `SensitiveActions`-listed — same
- * precedent as `App\Domain\ServiceCatalog\Actions\DefineServicePackage`.
+ * Audited via `Audit::record()`, wrapped in its own `DB::transaction()` so
+ * the draft row and its audit event commit or roll back together — this
+ * plan's Global Constraints ("every domain-layer write... calls
+ * `Audit::record()` inside its own transaction") and the same precedent as
+ * `App\Domain\ServiceCatalog\Actions\DefineServicePackage`. Not
+ * `SensitiveActions`-listed.
  */
 final readonly class StartBookingDraft
 {
     public function __invoke(?int $userId = null): BookingDraft
     {
-        $draft = BookingDraft::create([
-            'user_id' => $userId,
-        ]);
+        return DB::transaction(function () use ($userId): BookingDraft {
+            $draft = BookingDraft::create([
+                'user_id' => $userId,
+            ]);
 
-        Audit::record(
-            action: 'BOOKING_DRAFT_STARTED',
-            subject: new AuditSubject('booking_draft', $draft->id, $draft->version),
-            outcome: AuditOutcome::Allowed,
-            actorRef: $userId,
-            actorRole: $userId !== null ? 'customer' : 'guest',
-            source: AuditSource::Api,
-        );
+            Audit::record(
+                action: 'BOOKING_DRAFT_STARTED',
+                subject: new AuditSubject('booking_draft', $draft->id, $draft->version),
+                outcome: AuditOutcome::Allowed,
+                actorRef: $userId,
+                actorRole: $userId !== null ? 'customer' : 'guest',
+                source: AuditSource::Api,
+            );
 
-        return $draft;
+            return $draft;
+        });
     }
 }
 ```
@@ -1283,12 +1290,12 @@ declare(strict_types=1);
 
 namespace App\Domain\Booking\Actions;
 
+use App\Domain\Booking\BookingServiceType;
 use App\Domain\Booking\BookingWizardStep;
 use App\Domain\Booking\Exceptions\BookingStepValidationException;
 use App\Domain\Booking\Models\BookingDraft;
 use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
-use App\Domain\ServiceCatalog\ServiceCode;
 use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
@@ -1455,7 +1462,7 @@ final readonly class SaveBookingDraftStep
             return ['service_type' => ['Pilih jenis layanan terlebih dahulu.']];
         }
 
-        if (! \App\Domain\Booking\BookingServiceType::isKnown($serviceType)) {
+        if (! BookingServiceType::isKnown($serviceType)) {
             return ['service_type' => ['Jenis layanan yang dipilih tidak dikenali.']];
         }
 
