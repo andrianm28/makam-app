@@ -247,12 +247,29 @@ final class HomePageRouteTest extends TestCase
         $response->assertSee('Pemesanan Makam');
     }
 
-    public function test_marketplace_stub_route_returns_ok_not_404(): void
+    /**
+     * RENAMED from `test_marketplace_stub_route_returns_ok_not_404`, which
+     * asserted the "Segera Hadir" coming-soon stub's copy. That stopped
+     * being true 8 Aug 2026 (S4-T8, agent-team teammate marketplace-builder,
+     * reviewed and wired) — `/marketplace` now serves the real browse page,
+     * per that stub's own doc block: "expected to be REPLACED wholesale by
+     * its owning spec's real routes, not extended in place." This test
+     * belongs to neither S4-T6 nor S4-T8's file ownership (it predates both,
+     * from the S4-T3 homepage batch) — fixed here as part of wiring the two
+     * routes.php lines both batches were blocked on, the same integration
+     * step that broke this assertion. This is the CI failure that caught it:
+     * `HomePageRouteTest::test_marketplace_stub_route_returns_ok_not_404`
+     * failed on "To contain: Layanan Pemakaman Segera Hadir" once the route
+     * changed — expected, not a regression, and the reason this rename
+     * exists rather than a silent pass.
+     */
+    public function test_marketplace_route_now_serves_the_real_browse_page_not_the_stub(): void
     {
         $response = $this->get('/marketplace');
 
         $response->assertOk();
-        $response->assertSee('Layanan Pemakaman Segera Hadir');
+        $response->assertSee('Layanan Pemakaman');
+        $response->assertDontSee('Layanan Pemakaman Segera Hadir');
     }
 
     public function test_perpanjangan_stub_route_returns_ok_not_404(): void
