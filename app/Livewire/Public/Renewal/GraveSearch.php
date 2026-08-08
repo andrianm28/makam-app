@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Livewire\Public\Renewal;
 
+use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\GraveRegistry\GraveRegistryPublicQuery;
 use App\Domain\GraveRegistry\GraveSearchCriteria;
 use App\Domain\GraveRegistry\GraveSearchOutcome;
 use App\Domain\Renewal\RenewalJourneyStep;
-use App\Domain\Renewal\RenewalLocationQuery;
 use App\Platform\FeatureGate\ModeResolver;
 use App\Platform\FeatureGate\Modes\GraveSearchMode;
 use Illuminate\Contracts\View\View;
@@ -82,7 +82,7 @@ final class GraveSearch extends Component
     /**
      * The cemetery chosen in AC1's step 2, carried across from
      * `RenewalStart` as a query parameter. Validated against
-     * `RenewalLocationQuery::findPublishedCemetery()` on every render — an
+     * `CemeteryPublicQuery::findPublishedById()` on every render — an
      * id that names a draft or deleted cemetery must not become searchable
      * by being held in a URL.
      */
@@ -201,7 +201,7 @@ final class GraveSearch extends Component
         // generic notice, and a failed lookup here simply leaves it unnamed.
         $cemetery = $gateClosed
             ? null
-            : RenewalLocationQuery::findPublishedCemetery($this->cemeteryId);
+            : CemeteryPublicQuery::findPublishedById($this->cemeteryId);
 
         $outcome = GraveSearchOutcome::empty();
         $this->searchUnavailable = false;

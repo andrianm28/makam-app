@@ -1279,7 +1279,7 @@ Removing or weakening an assertion in `verify-contrast.py` to make a build pass 
 
 ### 9.5 CI enforcement — implemented 25 Jul 2026 (Batch 2.5, S2-T4)
 
-All six gates below are live and blocking merges. Gates 1–3 and 4–5 run in `ci/verify-docs.sh` (GATE 1–3 and GATE 11–12 respectively — see that script's own numbering note for why 4/5 aren't literally "GATE 4"/"GATE 5" there, it already had unrelated gates at those numbers). Gate 6 runs as a step in `.github/workflows/ci.yml`'s `php` job, since it needs a bootstrapped Laravel app that `verify-docs.sh` (pure bash+python, no `vendor/`) cannot provide.
+All seven gates below are live and blocking merges. Gates 1–3 and 4–5 run in `ci/verify-docs.sh` (GATE 1–3 and GATE 11–12 respectively — see that script's own numbering note for why 4/5 aren't literally "GATE 4"/"GATE 5" there, it already had unrelated gates at those numbers). Gates 6 and 13 run as steps in `.github/workflows/ci.yml`'s `php` job, since both need a bootstrapped Laravel app that `verify-docs.sh` (pure bash+python, no `vendor/`) cannot provide.
 
 ```bash
 # 1. Accessibility gate — hard fail
@@ -1303,6 +1303,17 @@ python3 docs/design/verify-contrast.py
 
 # 6. Filament PHP palette matches tokens.css (see §8.3 known gap)
 php artisan design:verify-filament-palette
+
+# 13. Every Blade view survives real compilation with no lost content —
+#     catches the N-14 doc-comment-corruption class (a {{-- --}} comment that
+#     merely mentions the literal "@php" token pairs with a later real
+#     @endphp and silently swallows everything between, including its own
+#     closing --}} — which then makes compileComments() race forward to the
+#     NEXT real --}} in the file, erasing the swallowed content entirely).
+#     php -l cannot see this: the compiled output is still syntactically
+#     valid PHP, just missing template content. Proven 8 Aug 2026 against
+#     this repo's own real, previously-live incident in faq/index.blade.php.
+php artisan blade:verify-content-survival
 ```
 
 Also recommended: `axe-core` in the browser-test suite, and a Lighthouse budget matching §4.6. Both are **required by [`release-gates.md`](../testing/release-gates.md)** before production activation and are currently unimplemented.

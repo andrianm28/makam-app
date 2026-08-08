@@ -161,6 +161,20 @@ jobs:
       - name: Verify Filament palette matches tokens.css
         run: php artisan design:verify-filament-palette
 
+      # design-system.md §9.5 gate 13: every Blade view must survive real
+      # compilation with no lost content — catches the N-14 doc-comment-
+      # corruption class, where a {{-- --}} comment merely mentioning the
+      # literal "@php" token pairs with a later real @endphp and silently
+      # swallows everything between. `php -l` on the compiled output cannot
+      # see this: the result is still syntactically valid PHP, just missing
+      # template content. Same reason as gate 6 above for running here rather
+      # than in ci/verify-docs.sh — needs a bootstrapped app with the real
+      # Blade compiler. Algorithm proven against this repo's own real,
+      # previously-live incident (faq/index.blade.php, 8 Aug 2026) before
+      # being wired in; see app/Console/Commands/VerifyBladeContentSurvivalCommand.php.
+      - name: Verify Blade views survive compilation (no lost content)
+        run: php artisan blade:verify-content-survival
+
   # ---------------------------------------------------------------------------
   # Frontend: lockfile install and production build. Also the point at which the
   # design-system token wiring is proven to compile (sprint task S2-T1).

@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Livewire\Public\Renewal;
 
+use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\Renewal\RenewalJourneyStep;
-use App\Domain\Renewal\RenewalLocationQuery;
 use App\Platform\FeatureGate\ModeResolver;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
@@ -74,8 +74,8 @@ final class RenewalStart extends Component
         // A tampered or stale `?kota=` value is silently discarded rather
         // than 404ing: nothing about this URL names a specific record whose
         // existence could leak, and dropping the visitor back to a working
-        // step 1 is more useful than an error page. `RenewalLocationQuery::
-        // cemeteriesInCity()` would return empty for an unknown code
+        // step 1 is more useful than an error page. `CemeteryPublicQuery::
+        // inCity()` would return empty for an unknown code
         // anyway; this makes the reset visible in the UI and the URL.
         if ($this->city !== '' && ! LaunchCityCode::isKnown($this->city)) {
             $this->city = '';
@@ -114,7 +114,7 @@ final class RenewalStart extends Component
 
         if ($this->city !== '') {
             try {
-                $cemeteries = RenewalLocationQuery::cemeteriesInCity($this->city);
+                $cemeteries = CemeteryPublicQuery::inCity($this->city);
             } catch (Throwable $e) {
                 report($e);
 
@@ -127,14 +127,14 @@ final class RenewalStart extends Component
 
         $selectedCityLabel = null;
 
-        foreach (RenewalLocationQuery::cities() as $city) {
+        foreach (CemeteryPublicQuery::launchCities() as $city) {
             if ($city['code'] === $this->city) {
                 $selectedCityLabel = $city['label'];
             }
         }
 
         return view('livewire.public.renewal.start', [
-            'cities' => RenewalLocationQuery::cities(),
+            'cities' => CemeteryPublicQuery::launchCities(),
             'cemeteries' => $cemeteries,
             'selectedCityLabel' => $selectedCityLabel,
             'currentStep' => $this->currentStep(),

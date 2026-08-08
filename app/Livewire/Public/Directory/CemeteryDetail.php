@@ -6,8 +6,8 @@ namespace App\Livewire\Public\Directory;
 
 use App\Domain\CemeteryCapability\Models\CemeteryCapabilityProfile;
 use App\Domain\CemeteryCapability\Models\CemeteryPackage;
+use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
-use App\Livewire\Public\Directory\Support\CemeteryDirectoryQuery;
 use App\Livewire\Public\Directory\Support\PublicCapabilityProjection;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
@@ -33,7 +33,7 @@ use Throwable;
  * `abort(404)` for both "no such cemetery" and "cemetery exists but is not
  * published". The two are indistinguishable from outside — a different
  * status or message would leak the existence of an unpublished record. Same
- * rule as `public-faq` AC6, and `CemeteryDirectoryQuery::
+ * rule as `public-faq` AC6, and `CemeteryPublicQuery::
  * findPublishedBySlug()` is what makes it structural (it cannot report the
  * difference, because it never learns it).
  *
@@ -72,14 +72,14 @@ final class CemeteryDetail extends Component
     {
         $this->cemeterySlug = $cemeterySlug;
 
-        if (CemeteryDirectoryQuery::findPublishedBySlug($cemeterySlug) === null) {
+        if (CemeteryPublicQuery::findPublishedBySlug($cemeterySlug) === null) {
             abort(404);
         }
     }
 
     public function render(): View
     {
-        $cemetery = CemeteryDirectoryQuery::findPublishedBySlug($this->cemeterySlug);
+        $cemetery = CemeteryPublicQuery::findPublishedBySlug($this->cemeterySlug);
 
         if ($cemetery === null) {
             // Re-checked on every render, not just in mount(): a cemetery
@@ -93,7 +93,7 @@ final class CemeteryDetail extends Component
         $this->packagesUnavailable = false;
 
         try {
-            $capabilities = CemeteryDirectoryQuery::publicCapabilities($cemetery);
+            $capabilities = PublicCapabilityProjection::forCemetery($cemetery);
         } catch (Throwable $e) {
             report($e);
 
@@ -114,7 +114,7 @@ final class CemeteryDetail extends Component
         $packages = new Collection;
 
         try {
-            $packages = CemeteryDirectoryQuery::activePackages($cemetery);
+            $packages = CemeteryPublicQuery::activePackages($cemetery);
         } catch (Throwable $e) {
             report($e);
 

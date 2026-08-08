@@ -91,7 +91,7 @@ final class RenewalStartTest extends TestCase
     /**
      * `TPS Bekasi Harapan Indah` is seeded `draft`. Excluding it is real
      * production behaviour from `Cemetery::scopePublished()`, which
-     * `RenewalLocationQuery` composes rather than works around.
+     * `CemeteryPublicQuery` composes rather than works around.
      */
     public function test_a_draft_cemetery_is_never_offered(): void
     {

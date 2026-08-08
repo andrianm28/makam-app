@@ -91,9 +91,9 @@ final class GraveRegistryPublicQuery
         // validation. `grave_records.cemetery_id` is a real `uuid` column on
         // PostgreSQL, so comparing it against a non-UUID string is a
         // database type error rather than a miss — it would throw instead of
-        // returning nothing. `App\Domain\Renewal\RenewalLocationQuery::
-        // findPublishedCemetery()` already stops that on the public screen's
-        // path; this stops it for any other caller too, since this is a
+        // returning nothing. `App\Domain\CemeteryDirectory\
+        // CemeteryPublicQuery::findPublishedById()` already stops that on the
+        // public screen's path; this stops it for any other caller too, since this is a
         // public read entry point and the failure mode is a 500 on a search
         // form rather than an empty result.
         if (! $criteria->hasAnyTerm() || ! Str::isUuid($criteria->cemeteryId)) {

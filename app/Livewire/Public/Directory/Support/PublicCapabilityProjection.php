@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Livewire\Public\Directory\Support;
 
+use App\Domain\CemeteryCapability\Actions\ResolveCemeteryCapabilityProfile;
 use App\Domain\CemeteryCapability\BookingMode;
 use App\Domain\CemeteryCapability\MapMode;
 use App\Domain\CemeteryCapability\Models\CemeteryCapabilityProfile;
+use App\Domain\CemeteryDirectory\Models\Cemetery;
 
 /**
  * The AC12 public projection of a cemetery capability profile — Sprint 4
@@ -80,6 +82,33 @@ final readonly class PublicCapabilityProjection
         public string $mapMode,
         public string $visitationMode,
     ) {}
+
+    /**
+     * Resolve a cemetery's current capability profile and project it, in one
+     * call — the ONLY way a public screen should obtain capability
+     * information.
+     *
+     * This deliberately lives here and NOT on `App\Domain\CemeteryDirectory\
+     * CemeteryPublicQuery` alongside every other public cemetery read. The
+     * projection is a UI-boundary concern defined by `docs/contracts/
+     * openapi.yaml`'s `PublicCapabilityProfile` schema rather than by the
+     * domain's own invariants, so a domain query class returning one would
+     * make `App\Domain\**` depend on `App\Livewire\**` — precisely the
+     * inversion `AGENTS.md` §Architecture forbids, and the one the
+     * S4-T6/S4-T7 query-class merge exists to eliminate. Keeping it here
+     * costs one extra import at each call site and keeps the dependency
+     * pointing the right way.
+     *
+     * AC4's safe-default fallback for a cemetery with no current profile is
+     * `ResolveCemeteryCapabilityProfile`'s job, not this method's — so
+     * "missing profile" is already handled before the projection happens,
+     * and there is only ever one definition of "safe default" in the
+     * codebase (`CemeteryCapabilityProfile::safeDefaults()`).
+     */
+    public static function forCemetery(Cemetery $cemetery): self
+    {
+        return self::from((new ResolveCemeteryCapabilityProfile)($cemetery));
+    }
 
     /**
      * Projects a resolved profile down to its four public modes.

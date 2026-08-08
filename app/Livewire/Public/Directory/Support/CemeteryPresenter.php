@@ -14,7 +14,8 @@ use App\Domain\CemeteryDirectory\Models\Cemetery;
  *
  * Exists so the two views cannot drift into two different renderings of the
  * same field. Formatting only — no querying, no capability logic (that is
- * `CemeteryDirectoryQuery` and `CemeteryAvailabilityIntent` respectively).
+ * `App\Domain\CemeteryDirectory\CemeteryPublicQuery` and
+ * `CemeteryAvailabilityIntent` respectively).
  */
 final class CemeteryPresenter
 {

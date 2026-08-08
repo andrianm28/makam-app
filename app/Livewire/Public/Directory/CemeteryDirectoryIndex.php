@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace App\Livewire\Public\Directory;
 
+use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
-use App\Livewire\Public\Directory\Support\CemeteryDirectoryQuery;
+use App\Livewire\Public\Directory\Support\PublicCapabilityProjection;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Url;
@@ -26,7 +27,7 @@ use Throwable;
  * changed in `routes/web.php` alone without touching this component, its
  * view, or its tests.
  *
- * Read-only. Every read goes through `CemeteryDirectoryQuery`, never a bare
+ * Read-only. Every read goes through `CemeteryPublicQuery`, never a bare
  * `Cemetery::query()` — see that class's doc block for the AC2 published-
  * only guarantee it composes.
  *
@@ -139,14 +140,14 @@ final class CemeteryDirectoryIndex extends Component
         $cards = new Collection;
 
         try {
-            $cemeteries = CemeteryDirectoryQuery::published(
+            $cemeteries = CemeteryPublicQuery::published(
                 city: $cityValid && $this->city !== '' ? $this->city : null,
                 type: $typeValid && $this->type !== '' ? $this->type : null,
             );
 
             $cards = $cemeteries->map(function (Cemetery $cemetery): array {
                 try {
-                    $capabilities = CemeteryDirectoryQuery::publicCapabilities($cemetery);
+                    $capabilities = PublicCapabilityProjection::forCemetery($cemetery);
                 } catch (Throwable $e) {
                     report($e);
 
@@ -175,8 +176,8 @@ final class CemeteryDirectoryIndex extends Component
 
         return view('livewire.public.directory.index', [
             'cards' => $cards,
-            'cities' => CemeteryDirectoryQuery::launchCities(),
-            'types' => CemeteryDirectoryQuery::types(),
+            'cities' => CemeteryPublicQuery::launchCities(),
+            'types' => CemeteryPublicQuery::types(),
             'filtersActive' => $this->city !== '' || $this->type !== '',
         ])->layout('layouts.app', [
             'title' => 'Direktori TPU dan TPS - Makam.co.id',

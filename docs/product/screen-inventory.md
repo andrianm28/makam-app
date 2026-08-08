@@ -1,12 +1,22 @@
 # Screen Inventory — MVP
 
+## Revision note — 08 August 2026, Sprint 4 S4-T6/S4-T7/S4-T8
+
+Three batches shipped on 08 Aug 2026 (CI run [`31248602859`](https://github.com/andrianm28/makam-app/actions/runs/31248602859), commit `a150a3b`) and this file understated all three. Rows below are reconciled against the routes and views that actually exist, not against what was planned. Per this repository's convention for superseded reasoning (`docs/planning/sprint-plan.md` findings N-10/N-11), corrections are annotated and dated rather than silently rewritten.
+
+**PUB-011 is restated, not duplicated.** S4-T6 shipped the cemetery directory as a **standalone public page** (`/cemeteries` + `/cemeteries/{cemeterySlug}`), not as a step inside the booking wizard, and this row previously described only the wizard step. A *new* PUB row was considered and rejected: `.kiro/specs/cemetery-directory-and-availability/tasks.md`, `.kiro/specs/public-booking-wizard/tasks.md`, and `docs/design/design-system.md` (§ cemetery card, § empty-state table) **already all call this screen PUB-011**, with the same state list, so minting a second ID would fork one screen across two identifiers — the drift this file exists to prevent. PUB-011 is therefore one screen with **two entry points**: standalone (shipped) and embedded as booking Step 2 (not built). No ID is taken away from the wizard.
+
+**PUB-080 was asserting something false.** It listed `/pemesanan-makam`, `/marketplace`, and `/perpanjangan` as coming-soon stubs. Verified against `routes/web.php` on 08 Aug 2026: `/marketplace` now resolves to `MarketplaceIndex` and `/perpanjangan` to `RenewalStart` — both real screens. Only `/pemesanan-makam` is still a stub (`BookingWizardComingSoon`), so the row is narrowed to it. The two removed routes are recorded here rather than dropped without trace.
+
+**Route-vocabulary gap, unresolved and not owned here.** The shipped paths are `/cemeteries…`, matching the noun `docs/contracts/openapi.yaml` already uses, **not** `information-architecture.md`'s Indonesian route tree. Reconciling IA §1 with the shipped URIs belongs to whoever owns `information-architecture.md`; it is recorded, not fixed.
+
 ## A. Public
 
 | Screen ID | Screen | Key states |
 |---|---|---|
 | PUB-001 | Homepage | normal, urgent unavailable, degraded notification |
-| PUB-010 | Booking Step 1 — Kota | loading, populated, no city |
-| PUB-011 | Booking Step 2 — TPU/TPS | list, filter, detail, no result |
+| PUB-010 | Booking Step 1 — Kota | loading, populated, no city — **not built** (S4-T4 paused). The five launch cities do ship as filters on PUB-011's standalone entry point, but that is not this screen |
+| PUB-011 | **Cemetery directory — list + detail.** Two entry points: standalone `/cemeteries` and `/cemeteries/{cemeterySlug}` (**shipped** 08 Aug 2026, S4-T6) · booking Step 2 embed (not built) | list, city/type filter, detail, no result — all shipped. Also shipped: validation error on an unknown filter (list still renders), authorization failure (draft slug 404s indistinguishably from an unknown one; "plot layout is not public for this cemetery" instead of a blank), provider unavailable, pending, support. **Absent:** duplicate/retry-safe, success, gated fallback banner — no mutation, no gate, no success outcome on a read-only browse surface |
 | PUB-012 | Booking Step 3 — Jenis layanan | available, conditional, gated |
 | PUB-013 | Booking Step 4 — Layanan | package, add-on, unavailable item |
 | PUB-014 | Booking Step 5 — Ringkasan | valid quote, changed price, expired quote |
@@ -14,23 +24,23 @@
 | PUB-016 | Booking Step 7 — Almarhum/dokumen | upload, scan pending, rejected file |
 | PUB-017 | Booking Step 8 — Pembayaran | online, manual fallback, pending, failed |
 | PUB-018 | Booking Step 9 — Konfirmasi | paid, manual verification pending, next action |
-| PUB-020 | Marketplace landing | categories, empty category |
-| PUB-021 | Product detail | variant, schedule, area unavailable |
+| PUB-020 | Marketplace landing — `/marketplace` (**shipped** 08 Aug 2026, S4-T8; browse only) | categories, empty category — both shipped, plus validation error (an unknown `?kategori=` explains itself and falls back to the full catalogue without leaking the domain exception message), provider unavailable, support. **Browse-only is test-enforced:** no cart or checkout affordance, and the component exposes no Livewire action to call. Category filtering is the query parameter `?kategori=<KEY>` (an internal key, not a public slug); `/marketplace/kategori/{categorySlug}` stays deliberately **unregistered** — `marketplace-catalog.md` defines 9 product codes and 0 category codes, and no slug was invented |
+| PUB-021 | Product detail — `/marketplace/produk/{productCode}` (**shipped** 08 Aug 2026, S4-T8; read-only) | variant — shipped as a **read-only** panel (a product family with no variant axes says so rather than showing an empty state; placeholder preview image paths are suppressed rather than rendered broken); a deactivated code 404s indistinguishably from one that never existed. **`schedule` and `area unavailable` remain genuinely unimplementable**, not merely unbuilt: verified 08 Aug 2026 that `products` and `product_variants` carry **no schedule, service-area, delivery-fee, or stock/availability column**, so three of the marketplace spec's AC2 fields have nowhere to live. A disclosed schema gap — needs a migration before this row can be completed |
 | PUB-022 | Cart | normal, vendor conflict, changed price |
 | PUB-023 | Marketplace checkout | online/manual payment |
 | PUB-024 | Marketplace order tracking | accepted, processing, completed, rejected |
-| PUB-030 | Renewal Step 1–2 | city/cemetery selection |
-| PUB-031 | Grave search | results, no result, privacy-limited |
-| PUB-032 | Renewal fee | source, last updated, mismatch warning |
-| PUB-033 | Renewal payment | online/manual |
-| PUB-034 | Renewal confirmation | invoice and due-date result |
+| PUB-030 | Renewal Step 1–2 — `/perpanjangan` (**shipped** 08 Aug 2026, S4-T7) | city/cemetery selection — shipped, with all five launch cities in canonical order, a city with no published cemetery still offered (never silently omitted) and answered by a three-part empty state, draft cemeteries never offered, an unknown city code discarded rather than 404ing, a failed cemetery read degrading instead of 500ing, and the closed data gate rendering an honest banner **without removing the step** |
+| PUB-031 | Grave search — `/perpanjangan/cari` (**shipped** 08 Aug 2026, S4-T7) | results, no result, privacy-limited — shipped as **three genuinely distinct states** (no-result · privacy-limited · gate-closed), held apart by assertions written as denials: the privacy-limited state never says "not found" and discloses no withheld name; the gate-closed state never implies the record does not exist; a search-backend failure is never reported as not-found. Also shipped: loading, validation error (a blank submission and an invalid death date are validation errors, *not* a no-result), authorization failure (a draft cemetery is unreachable through a held URL), support in every state. **Note:** AC4's < 500 ms at 100k records is **NOT TESTED** — nothing measures latency and no 100k-row fixture exists |
+| PUB-032 | Renewal fee | source, last updated, mismatch warning — **no screen exists** (journey step 4, Sprint 13). The six-step stepper displays it, which is the correct product framing, but nothing renders a tariff or a fine |
+| PUB-033 | Renewal payment | online/manual — **no screen exists** (journey step 5, Sprint 13) |
+| PUB-034 | Renewal confirmation | invoice and due-date result — **no screen exists** (journey step 6, Sprint 13) |
 | PUB-040 | FAQ list | category, search, no result |
 | PUB-041 | FAQ article | article, related content, customer-service CTA |
 | PUB-050 | Customer order status | timeline, next step, support |
 | PUB-060 | Help/contact — `/bantuan` | channels, hours, emergency disclaimer (`.kiro/specs/help-centre-missing-route` — bugfix spec; no owning feature spec yet, see traceability §E) |
 | PUB-070 | Kebijakan Privasi — `/privasi` | static policy sections, draft-pending-legal-review notice, customer-service CTA |
 | PUB-071 | Syarat & Ketentuan — `/syarat-ketentuan` | static terms sections, draft-pending-legal-review notice, customer-service CTA |
-| PUB-080 | Coming-soon stub — `/pemesanan-makam`, `/marketplace`, `/perpanjangan` (temporary; each route is replaced by its real screen — PUB-010, PUB-020, PUB-030) | not-yet-built explanation, contact channels, back-to-homepage and help CTAs |
+| PUB-080 | Coming-soon stub — **`/pemesanan-makam` only** (temporary; replaced by its real screen, PUB-010, when S4-T4 resumes) | not-yet-built explanation, contact channels, back-to-homepage and help CTAs |
 
 ## B. Admin
 

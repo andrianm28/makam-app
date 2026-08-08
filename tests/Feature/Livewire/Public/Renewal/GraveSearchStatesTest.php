@@ -417,7 +417,7 @@ final class GraveSearchStatesTest extends TestCase
      * A malformed `?tpu=` must render the "choose a TPU/TPS" state, not a
      * 500. On PostgreSQL `cemeteries.id` is a real `uuid` column, so
      * querying it with a non-UUID string is a database type error rather
-     * than a miss — see `RenewalLocationQuery::findPublishedCemetery()`.
+     * than a miss — see `CemeteryPublicQuery::findPublishedById()`.
      */
     public function test_a_malformed_cemetery_identifier_does_not_break_the_page(): void
     {

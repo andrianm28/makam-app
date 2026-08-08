@@ -107,8 +107,9 @@ Route::get('/marketplace/produk/{productCode}', ProductDetail::class)->name('mar
 | never a literal path, so only the two NAMES below are load-bearing.
 |
 | Read-only. Resolves capability data exclusively through
-| App\Livewire\Public\Directory\Support\CemeteryDirectoryQuery, which
-| composes Cemetery::published() and ResolveCemeteryCapabilityProfile
+| App\Domain\CemeteryDirectory\CemeteryPublicQuery and
+| App\Livewire\Public\Directory\Support\PublicCapabilityProjection, which
+| compose Cemetery::published() and ResolveCemeteryCapabilityProfile
 | rather than querying either directly. AC12's public capability
 | projection is structurally incapable of leaking `registry_mode` or
 | `certificate_mode` — see PublicCapabilityProjection's own doc block.
@@ -142,9 +143,9 @@ Route::get('/cemeteries/{cemeterySlug}', CemeteryDetail::class)->name('cemeterie
 |
 | Read-only. Both components resolve exclusively through
 | App\Domain\GraveRegistry\GraveRegistryPublicQuery and
-| App\Domain\Renewal\RenewalLocationQuery — never a GraveRecord or Cemetery
-| model directly. G-DATA-01 is read server-side via ModeResolver, matching
-| every other gated surface in this codebase.
+| App\Domain\CemeteryDirectory\CemeteryPublicQuery — never a GraveRecord or
+| Cemetery model directly. G-DATA-01 is read server-side via ModeResolver,
+| matching every other gated surface in this codebase.
 */
 Route::get('/perpanjangan', RenewalStart::class)->name('perpanjangan.index');
 Route::get('/perpanjangan/cari', GraveSearch::class)->name('perpanjangan.cari');

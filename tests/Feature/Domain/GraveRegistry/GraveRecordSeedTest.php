@@ -9,7 +9,7 @@ use App\Domain\GraveRegistry\GraveNameNormalizer;
 use App\Domain\GraveRegistry\GraveRecordAccessMode;
 use App\Domain\GraveRegistry\GraveRecordSource;
 use App\Domain\GraveRegistry\Models\GraveRecord;
-use App\Domain\Renewal\RenewalLocationQuery;
+use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use InvalidArgumentException;
 use Tests\TestCase;
@@ -151,7 +151,7 @@ final class GraveRecordSeedTest extends TestCase
         );
 
         // The guard that actually stops it being searched.
-        $this->assertNull(RenewalLocationQuery::findPublishedCemetery((string) $draft->id));
+        $this->assertNull(CemeteryPublicQuery::findPublishedById((string) $draft->id));
     }
 
     // =====================================================================

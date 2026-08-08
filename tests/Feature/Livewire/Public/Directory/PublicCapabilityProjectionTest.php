@@ -7,7 +7,6 @@ namespace Tests\Feature\Livewire\Public\Directory;
 use App\Domain\CemeteryCapability\Actions\ResolveCemeteryCapabilityProfile;
 use App\Domain\CemeteryCapability\Models\CemeteryCapabilityProfile;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
-use App\Livewire\Public\Directory\Support\CemeteryDirectoryQuery;
 use App\Livewire\Public\Directory\Support\PublicCapabilityProjection;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use ReflectionClass;
@@ -149,7 +148,7 @@ final class PublicCapabilityProjectionTest extends TestCase
         $this->assertGreaterThan(0, $cemeteries->count());
 
         foreach ($cemeteries as $cemetery) {
-            $projected = CemeteryDirectoryQuery::publicCapabilities($cemetery)->toArray();
+            $projected = PublicCapabilityProjection::forCemetery($cemetery)->toArray();
 
             $this->assertSame(PublicCapabilityProjection::PUBLIC_KEYS, array_keys($projected));
         }

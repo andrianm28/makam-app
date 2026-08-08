@@ -80,70 +80,47 @@
             </p>
         </div>
 
-        {{-- Category filter chips. Active-chip colours reuse
-             `faq/index.blade.php`'s already-approved literal recipe rather
-             than overriding <x-mk.badge>'s intent classes — see that file's
-             own doc comment for why appending classes onto a badge is not
-             safe here. Inactive chips use the primitive unchanged.
+        {{-- Category filter chips, via <x-mk.filter-chip> (design-system.md
+             §3.6a).
 
-             --- The tick is LOAD-BEARING, not decoration ---
-             Without it the active chip differs from an inactive one by
-             COLOUR ALONE: both render the identical `inline-flex items-center
-             gap-1 rounded-sm border px-2 py-0.5 text-xs font-medium` recipe
-             and differ only in hue. `aria-current="page"` on the wrapping
-             <a> serves assistive tech, but a sighted user who cannot
-             distinguish the two hues gets no cue at all inside the chip
-             group. That is the very failure design-system.md §3.6's own
-             "carries an icon whenever it communicates status" rule exists to
-             prevent — a rule the hand-written chip silently loses by not
-             going through <x-mk.badge>.
+             MIGRATED 8 Aug 2026, same day as shipping. This page originally
+             hand-wrote the active chip, copying `faq/index.blade.php`'s
+             literal recipe because `<x-mk.badge>`'s six intents are the
+             closed status vocabulary and have no `primary`, while
+             `$attributes->merge()` only appends — so passing the chip colours
+             through the badge left two competing colour declarations on one
+             element. S4-T6 hit the identical wall independently; the two
+             batches raised it jointly rather than shipping two workarounds,
+             and the primitive is the resolution. Three hand-written call
+             sites (FAQ, directory, here) collapse into it.
 
-             This page does also change its <h1> to the active category's
-             label, so the information is recoverable elsewhere; the tick
-             closes the gap inside the control group itself. Verified 8 Aug
-             2026 with directory-builder, whose own directory page had NO
-             such redundancy (static <h1>) and therefore no non-colour cue
-             whatsoever — the same four-line fix is applied there.
+             That makes the hand-written version a FORK of a primitive, which
+             §9.2 MUST #2 forbids — so it is gone. The primitive owns the
+             wrapper anchor, `aria-current="page"`, both colour recipes, and
+             the active state's check icon, which is the non-colour selection
+             cue (WCAG 1.4.1): without it, active and inactive differ by hue
+             alone, since every other property — layout, radius, border,
+             padding, text size — is identical.
 
-             `MarketplaceIndexRouteTest` asserts this icon's actual SVG path
-             data, so deleting it as decoration fails a test rather than
-             silently regressing. Do not remove it without replacing the
-             non-colour affordance.
-
-             `x-dynamic-component` (not a literal `<x-icon.check />`) is this
-             repo's universal icon convention — 28 call sites use it, zero
-             use the literal form. --}}
+             `MarketplaceIndexRouteTest` still asserts that icon's real SVG
+             path data and that exactly one chip in this nav carries
+             aria-current, so a regression inside the primitive fails a test
+             here, not just in the FAQ's. Both assertions are deliberately
+             behavioural rather than class-name-based, so they survived this
+             migration unchanged — which is the useful proof that it was a
+             refactor and not a rewrite. --}}
         <nav aria-label="Filter kategori produk" class="mb-8 flex flex-wrap justify-center gap-2">
-            <a
-                href="{{ route('marketplace.index') }}"
-                @if (! $activeCategory) aria-current="page" @endif
-                class="touch-target inline-flex items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
-            >
-                @if (! $activeCategory)
-                    <span class="inline-flex items-center gap-1 rounded-sm border border-primary-300 bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-800">
-                        <x-dynamic-component component="icon.check" class="size-3.5 shrink-0" aria-hidden="true" />
-                        Semua Kategori
-                    </span>
-                @else
-                    <x-mk.badge intent="neutral">Semua Kategori</x-mk.badge>
-                @endif
-            </a>
+            <x-mk.filter-chip :href="route('marketplace.index')" :active="! $activeCategory">
+                Semua Kategori
+            </x-mk.filter-chip>
 
             @foreach ($categoryKeys as $categoryKey)
-                <a
-                    href="{{ route('marketplace.index', ['kategori' => $categoryKey]) }}"
-                    @if ($activeCategory === $categoryKey) aria-current="page" @endif
-                    class="touch-target inline-flex items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
+                <x-mk.filter-chip
+                    :href="route('marketplace.index', ['kategori' => $categoryKey])"
+                    :active="$activeCategory === $categoryKey"
                 >
-                    @if ($activeCategory === $categoryKey)
-                        <span class="inline-flex items-center gap-1 rounded-sm border border-primary-300 bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-800">
-                            <x-dynamic-component component="icon.check" class="size-3.5 shrink-0" aria-hidden="true" />
-                            {{ MarketplaceProductCategory::label($categoryKey) }}
-                        </span>
-                    @else
-                        <x-mk.badge intent="neutral">{{ MarketplaceProductCategory::label($categoryKey) }}</x-mk.badge>
-                    @endif
-                </a>
+                    {{ MarketplaceProductCategory::label($categoryKey) }}
+                </x-mk.filter-chip>
             @endforeach
         </nav>
 

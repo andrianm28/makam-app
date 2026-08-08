@@ -83,9 +83,9 @@ use Illuminate\Support\Str;
  *   - `TPS Bekasi Harapan Indah` — one open row inside the DRAFT cemetery
  *     the cemetery seed deliberately left unpublished. A negative fixture:
  *     an unpublished cemetery must not become searchable just because a
- *     record points at it. `App\Domain\Renewal\RenewalLocationQuery::
- *     findPublishedCemetery()` is what stops it, and this row is what lets
- *     a test prove that rather than assume it.
+ *     record points at it. `App\Domain\CemeteryDirectory\
+ *     CemeteryPublicQuery::findPublishedById()` is what stops it, and this
+ *     row is what lets a test prove that rather than assume it.
  *
  * The no-result state needs no fixture — it is any name that matches
  * nothing.

@@ -62,7 +62,7 @@
         </div>
 
         {{-- AC1 + AC2 — the five launch cities, always all five, sourced from
-             CemeteryDirectoryQuery::launchCities() (which reads
+             CemeteryPublicQuery::launchCities() (which reads
              LaunchCityCode::KNOWN_CODES). A city with zero published
              cemeteries still gets a chip: the negative criterion is "No
              hidden omission of a required MVP city," so a city must never
@@ -145,20 +145,28 @@
                 @endif
             </button>
 
-            @foreach ($cities as $cityCode => $cityLabel)
+            {{-- `$cityOption['code']` / `['label']` are read inline rather than
+                 unpacked into local variables first. That is deliberate: the
+                 inline single-expression raw-PHP form would be swallowed by
+                 the compiler's block-pairing regex, which scans for an
+                 opening marker and pairs it with the NEXT closing one — and
+                 this file has a real block further down. See this file's
+                 header note; the probe caught exactly that here on
+                 8 Aug 2026 before it shipped. --}}
+            @foreach ($cities as $cityOption)
                 <button
                     type="button"
-                    wire:click="$set('city', @js($cityCode))"
-                    @if ($city === $cityCode) aria-current="true" @endif
+                    wire:click="$set('city', @js($cityOption['code']))"
+                    @if ($city === $cityOption['code']) aria-current="true" @endif
                     class="touch-target inline-flex items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
                 >
-                    @if ($city === $cityCode)
+                    @if ($city === $cityOption['code'])
                         <span class="inline-flex items-center gap-1 rounded-sm border border-primary-300 bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-800">
                             <x-dynamic-component component="icon.check" class="size-3.5 shrink-0" aria-hidden="true" />
-                            {{ $cityLabel }}
+                            {{ $cityOption['label'] }}
                         </span>
                     @else
-                        <x-mk.badge intent="neutral">{{ $cityLabel }}</x-mk.badge>
+                        <x-mk.badge intent="neutral">{{ $cityOption['label'] }}</x-mk.badge>
                     @endif
                 </button>
             @endforeach
@@ -181,20 +189,20 @@
                 @endif
             </button>
 
-            @foreach ($types as $typeCode => $typeLabel)
+            @foreach ($types as $typeOption)
                 <button
                     type="button"
-                    wire:click="$set('type', @js($typeCode))"
-                    @if ($type === $typeCode) aria-current="true" @endif
+                    wire:click="$set('type', @js($typeOption['code']))"
+                    @if ($type === $typeOption['code']) aria-current="true" @endif
                     class="touch-target inline-flex items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
                 >
-                    @if ($type === $typeCode)
+                    @if ($type === $typeOption['code'])
                         <span class="inline-flex items-center gap-1 rounded-sm border border-primary-300 bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-800">
                             <x-dynamic-component component="icon.check" class="size-3.5 shrink-0" aria-hidden="true" />
-                            {{ $typeLabel }}
+                            {{ $typeOption['label'] }}
                         </span>
                     @else
-                        <x-mk.badge intent="neutral">{{ $typeLabel }}</x-mk.badge>
+                        <x-mk.badge intent="neutral">{{ $typeOption['label'] }}</x-mk.badge>
                     @endif
                 </button>
             @endforeach
