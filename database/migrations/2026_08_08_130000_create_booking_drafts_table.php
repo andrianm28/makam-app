@@ -32,6 +32,17 @@ use Illuminate\Support\Facades\Schema;
  * never snapshotted into an immutable order line. A later batch building
  * real quote issuance is expected to read this column when it exists, not
  * extend it.
+ *
+ * `user_id` is nullable — an anonymous draft has none until it is
+ * attached to an account after login/verification
+ * (`booking-wizard-fields.md` §Global behavior).
+ *
+ * `version` and `last_idempotency_key` implement AC2's "resumable,
+ * idempotent, versioned" save contract: every step-save bumps `version`
+ * and records the idempotency key it was saved under, so a replayed
+ * request with the same key is a no-op rather than a double-apply. See
+ * `App\Domain\Booking\Actions\SaveBookingDraftStep` (a later task in
+ * this plan) for where that check actually lives.
  */
 return new class extends Migration
 {
@@ -45,6 +56,11 @@ return new class extends Migration
             $table->unsignedTinyInteger('current_step')->default(1);
             $table->json('completed_steps')->default(new \Illuminate\Database\Query\Expression("'[]'"));
 
+            // `city_code` stores a `LaunchCityCode::KNOWN_CODES` value. Named for
+            // brevity to match this table's `cemetery_id`/`service_type` pattern,
+            // not `docs/product/booking-wizard-fields.md`'s `city_or_regency_code`
+            // field name verbatim — the closed-list VALUES are reused from
+            // `LaunchCityCode` unchanged; only this column's own name differs.
             $table->string('city_code', 16)->nullable();
 
             $table->foreignUuid('cemetery_id')->nullable()->constrained('cemeteries')->nullOnDelete();
