@@ -10,6 +10,7 @@ use App\Domain\Booking\Exceptions\BookingStepValidationException;
 use App\Domain\Booking\Models\BookingDraft;
 use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
+use App\Domain\ServiceCatalog\ServiceCode;
 use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
@@ -57,6 +58,7 @@ final readonly class SaveBookingDraftStep
             BookingWizardStep::LOCATION => self::validateLocation($payload),
             BookingWizardStep::CEMETERY => self::validateCemetery($payload, $draft),
             BookingWizardStep::SERVICE_TYPE => self::validateServiceType($payload),
+            BookingWizardStep::SERVICES => self::validateServices($payload),
             default => [],
         };
 
@@ -72,6 +74,7 @@ final readonly class SaveBookingDraftStep
                     'cemetery_package_id' => $payload['cemetery_package_id'] ?? null,
                 ],
                 BookingWizardStep::SERVICE_TYPE => ['service_type' => $payload['service_type']],
+                BookingWizardStep::SERVICES => ['selected_services' => $payload['selected_services']],
                 default => [],
             };
 
@@ -177,6 +180,46 @@ final readonly class SaveBookingDraftStep
 
         if (! BookingServiceType::isKnown($serviceType)) {
             return ['service_type' => ['Jenis layanan yang dipilih tidak dikenali.']];
+        }
+
+        return [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, list<string>>
+     */
+    private static function validateServices(array $payload): array
+    {
+        $selections = $payload['selected_services'] ?? [];
+
+        if (! is_array($selections) || $selections === []) {
+            return ['selected_services' => ['Pilih minimal layanan dasar.']];
+        }
+
+        $selectedCodes = [];
+
+        foreach ($selections as $selection) {
+            $code = $selection['code'] ?? null;
+            $quantity = $selection['quantity'] ?? null;
+
+            if (! is_string($code) || ! ServiceCode::isKnown($code)) {
+                return ['selected_services' => ["Layanan [{$code}] tidak dikenali."]];
+            }
+
+            if (! is_int($quantity) || $quantity < 1) {
+                return ['selected_services' => ["Jumlah untuk layanan [{$code}] harus lebih dari nol."]];
+            }
+
+            $selectedCodes[] = $code;
+        }
+
+        $missingBasics = array_diff(ServiceCode::BASIC_CODES, $selectedCodes);
+
+        if ($missingBasics !== []) {
+            return ['selected_services' => [
+                'Layanan dasar wajib disertakan: '.implode(', ', $missingBasics).'.',
+            ]];
         }
 
         return [];
