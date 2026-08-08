@@ -1,6 +1,6 @@
 <?php
 
-use App\Livewire\Public\ComingSoon\BookingWizardComingSoon;
+use App\Livewire\Public\Booking\BookingWizard;
 use App\Livewire\Public\Directory\CemeteryDetail;
 use App\Livewire\Public\Directory\CemeteryDirectoryIndex;
 use App\Livewire\Public\Faq\FaqArticleDetail;
@@ -24,8 +24,10 @@ use Illuminate\Support\Facades\Route;
 | docs/planning/sprint-plan.md §2.4 for which sprint owns which spec.
 |
 | The four MVP entry points (mvp-scope.md §1) — current status:
-|   /pemesanan-makam   Sprint 4  public-booking-wizard              STUB (S4-T3): honest
-|                                "coming soon" page, not gated — real wizard is S4-T4
+|   /pemesanan-makam   Sprint 4  public-booking-wizard              implemented (S4-T4/S4-T5,
+|                                08 Aug 2026) — steps 1-5 only; steps 6-9 are real stepper
+|                                entries with no screen behind them yet, per
+|                                BookingWizard's own doc block
 |   /marketplace       Sprint 4  funeral-marketplace-and-vendor-portal implemented (S4-T8,
 |                                08 Aug 2026) — browse only; see MarketplaceIndex's own
 |                                doc block for what is deliberately still missing (cart,
@@ -45,24 +47,36 @@ use Illuminate\Support\Facades\Route;
 | services requirement is what HomePage + <x-mk.header> together implement,
 | not a placeholder.
 |
-| The one remaining STUB route below returns a real Livewire full-page
-| component rendering an honest "coming soon" state (200 OK, header + footer
-| intact), never Laravel's default 404 — requirements.md AC6 read expansively;
-| see resources/views/livewire/public/coming-soon.blade.php's own doc block for
-| why this is deliberately NOT <x-mk.gate-closed-page> (that component's
-| copy assumes a real closed FEATURE GATE, which does not apply here — this
-| route is simply not built yet this sprint). A stub route is expected to be
-| REPLACED wholesale by its owning spec's real routes, not extended in place
-| — `/marketplace` and `/perpanjangan` have now both gone through that
-| replacement; `MarketplaceComingSoon` and `RenewalComingSoon`
+| Every MVP entry point above now serves a real route. A stub route is
+| expected to be REPLACED wholesale by its owning spec's real routes, not
+| extended in place — `/pemesanan-makam`, `/marketplace`, and `/perpanjangan`
+| have now all gone through that replacement; `BookingWizardComingSoon`,
+| `MarketplaceComingSoon`, and `RenewalComingSoon`
 | (app/Livewire/Public/ComingSoon/) are now dead code, deliberately left in
 | place rather than deleted in this same change (no test depends on either;
-| removing them is separable cleanup).
+| removing them is separable cleanup). The stub pattern itself (a real
+| Livewire full-page component rendering an honest "coming soon" state —
+| 200 OK, header + footer intact, never Laravel's default 404 — per
+| requirements.md AC6 read expansively) is still documented in
+| resources/views/livewire/public/coming-soon.blade.php's own doc block,
+| including why it is deliberately NOT <x-mk.gate-closed-page>.
 */
 
 Route::get('/', HomePage::class)->name('home');
 
-Route::get('/pemesanan-makam', BookingWizardComingSoon::class)->name('pemesanan-makam.index');
+/*
+|--------------------------------------------------------------------------
+| Booking wizard — public-booking-wizard AC1-AC6, AC11-AC13 (S4-T4/S4-T5,
+| resumed 08 Aug 2026) + booking-and-order-orchestration AC2, AC3
+|--------------------------------------------------------------------------
+| Steps 1-5 only. REPLACES the BookingWizardComingSoon stub — see that
+| class's own doc block and this file's top-of-file note on stub
+| replacement. Steps 6-9 remain unbuilt; the stepper still shows all nine
+| (BookingWizardStep::LAST_IMPLEMENTED = 5).
+*/
+Route::get('/pemesanan-makam', BookingWizard::class)->name('pemesanan-makam.index');
+Route::redirect('/pemesanan-makam/baru', '/pemesanan-makam')->name('pemesanan-makam.new');
+Route::get('/pemesanan-makam/draft/{draftId}', BookingWizard::class)->name('pemesanan-makam.draft');
 
 /*
 |--------------------------------------------------------------------------

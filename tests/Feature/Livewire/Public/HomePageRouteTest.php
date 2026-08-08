@@ -238,13 +238,28 @@ final class HomePageRouteTest extends TestCase
         $response->assertSee('Pertanyaan populer sedang tidak tersedia');
     }
 
-    public function test_pemesanan_makam_stub_route_returns_ok_not_404(): void
+    /**
+     * RENAMED from `test_pemesanan_makam_stub_route_returns_ok_not_404`,
+     * which asserted the "Segera Hadir" coming-soon stub's copy. That stopped
+     * being true 9 Aug 2026 (S4-T4/S4-T5 resumed, public-booking-wizard
+     * Task 9) — `/pemesanan-makam` now serves the real wizard (Steps 1-5),
+     * per that stub's own doc block: "expected to be REPLACED wholesale by
+     * its owning spec's real routes, not extended in place." Same shape as
+     * the marketplace and renewal renames above, both of which hit the same
+     * CI failure once their routes were wired.
+     *
+     * The step-1 heading "Langkah 1 — Pilih Lokasi" would pass through the
+     * stepper even if the page body were blank (same reason marketplace-
+     * builder and renewal-builder flagged it), so this asserts the wizard's
+     * own step-1 subtitle instead — text that renders nowhere else.
+     */
+    public function test_pemesanan_makam_route_now_serves_the_real_wizard_not_the_stub(): void
     {
         $response = $this->get('/pemesanan-makam');
 
         $response->assertOk();
-        $response->assertSee('Pemesanan Makam Segera Hadir');
-        $response->assertSee('Pemesanan Makam');
+        $response->assertSee('Pilih lokasi, TPU/TPS, dan jenis layanan untuk memulai pemesanan makam.');
+        $response->assertDontSee('Pemesanan Makam Segera Hadir');
     }
 
     /**
