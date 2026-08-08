@@ -72,3 +72,7 @@ ekspektasi-user
 
 # MCP config (may contain DB URLs)
 .mcp.json
+
+# Superpowers subagent-driven-development isolated workspaces (scratch git
+# worktrees, one branch per in-flight plan) — never committed.
+.worktrees/
