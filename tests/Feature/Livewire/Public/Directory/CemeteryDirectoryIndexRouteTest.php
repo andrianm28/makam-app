@@ -275,9 +275,23 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
      * the test transaction — the way the FAQ tests do it, not by mocking
      * the query class. The page must state the failure and keep its
      * customer-service escape hatch, never blank or 500.
+     *
+     * FIXED 08 Aug 2026 — a real cross-batch integration failure, caught by
+     * CI, not by either batch that wrote the two sides of it. This test
+     * predates `grave_records` (S4-T7, migration `2026_08_08_100000`), which
+     * added `grave_records.cemetery_id` as `restrictOnDelete` against
+     * `cemeteries` — so a plain `Schema::drop('cemeteries')` now fails with
+     * "cannot drop table cemeteries because other objects depend on it"
+     * instead of the clean drop this test always relied on.
+     * `RenewalStartTest::test_a_failed_cemetery_read_degrades_honestly_
+     * instead_of_500ing` already handles this correctly (drops
+     * `grave_records` first) because it was written after that migration
+     * existed; this test needed the same fix once the dependency appeared
+     * out from under it.
      */
     public function test_the_page_survives_the_cemeteries_table_being_unreadable(): void
     {
+        Schema::dropIfExists('grave_records');
         Schema::drop('cemetery_capability_profiles');
         Schema::drop('cemetery_packages');
         Schema::drop('cemeteries');
