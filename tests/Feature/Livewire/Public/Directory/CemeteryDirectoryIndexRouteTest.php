@@ -59,6 +59,54 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
     }
 
     /**
+     * The negative criterion "No hidden omission of a required MVP city",
+     * proven properly.
+     *
+     * The test above is VACUOUS against the regression that actually
+     * threatens this rule. Every one of the five launch cities has at least
+     * one published cemetery in the seed, so an implementation that
+     * "optimised" `launchCities()` down to *cities that have published
+     * rows* would still render all five and would still pass it. That
+     * optimisation looks entirely reasonable to someone who has not read
+     * the negative criterion — and it is the exact failure the criterion
+     * names.
+     *
+     * So: empty one city out and assert its filter survives anyway. A
+     * launch city is a statement about where the platform operates, not a
+     * summary of today's inventory; a family in Bekasi must not be told
+     * the city is unserved because no operator has onboarded yet.
+     *
+     * Flagged by `renewal-builder` (S4-T7) as a rule that must not be
+     * softened into an implementation detail when the two directory query
+     * classes are merged into `app/Domain/CemeteryDirectory/`. This test is
+     * what makes that non-negotiable rather than advisory.
+     */
+    public function test_a_launch_city_keeps_its_filter_even_with_no_published_cemeteries(): void
+    {
+        Cemetery::query()
+            ->inCity(LaunchCityCode::BEKASI)
+            ->update(['publication_status' => CemeteryPublicationStatus::UNPUBLISHED]);
+
+        // Precondition: the city is genuinely empty now, so the only thing
+        // that can put "Bekasi" on the page is the filter control itself.
+        $this->assertSame(
+            0,
+            Cemetery::query()->published()->inCity(LaunchCityCode::BEKASI)->count(),
+        );
+
+        $body = $this->body($this->get(route('cemeteries.index'))->getContent());
+
+        $this->assertStringContainsString('Bekasi', $body);
+
+        // And selecting it reaches the explained §6.2 empty state — the
+        // honest destination — rather than a silently absent chip.
+        Livewire::test(CemeteryDirectoryIndex::class)
+            ->set('city', LaunchCityCode::BEKASI)
+            ->assertHasNoErrors()
+            ->assertSee('Belum ada lokasi yang cocok dengan filter ini.');
+    }
+
+    /**
      * AC2 — filtering by city returns only that city's published
      * cemeteries. Asserted against real seeded data, additively (the seed
      * count is not this test's subject).
@@ -186,7 +234,7 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
         $response->assertSee((string) $cemetery->price_source);
 
         // Photo.
-        $response->assertSee((string) $cemetery->primary_photo_path, escape: false);
+        $response->assertSee((string) $cemetery->primary_photo_path);
     }
 
     /**
@@ -282,7 +330,7 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
     {
         $this->get(route('cemeteries.index'))
             ->assertSee('Hubungi Customer Service')
-            ->assertSee(route('bantuan.index'), escape: false);
+            ->assertSee(route('bantuan.index'));
     }
 
     /**

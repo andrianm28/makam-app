@@ -21,6 +21,20 @@
        gates, wraps, or hides the textual address. Do not "tidy" the address
        and the map link into one @if block.
 
+    --- Editing these comments: one trap ---
+    Never write Blade's raw-PHP open/close directives as literal text inside
+    a Blade comment in this file. `BladeCompiler::compileString()` runs
+    `storeUncompiledBlocks()` BEFORE `compileComments()`, and its regex pairs
+    any such opening token with the next matching closing one — so a mention
+    inside a comment pairs with this file's REAL closing token below and
+    silently swallows everything between them. Backticks do not help; they
+    are just characters to that regex. It may not even raise a syntax error,
+    so `php -l` on the compiled output can pass while the view is wrong.
+    Describe the directive in prose, or double the leading marker to escape
+    it. This is finding N-14's actual root cause (root-caused 8 Aug 2026,
+    Batch 0/P-3, after an earlier wrong diagnosis blamed Livewire) and it
+    has bitten this repository twice.
+
     --- Buttons ---
     <x-mk.button> is used directly. Finding N-14 (the "Undefined variable
     $loading" failure that made resources/views/livewire/public/faq/*.blade.php

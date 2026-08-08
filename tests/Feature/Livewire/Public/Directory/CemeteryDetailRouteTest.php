@@ -83,6 +83,25 @@ final class CemeteryDetailRouteTest extends TestCase
 
     /**
      * AC3 — every field the detail page owes.
+     *
+     * Note on `assertSee()` and escaping — this failed in CI on 8 Aug 2026
+     * and the fix is not the obvious one. These assertions deliberately use
+     * the DEFAULT `escape: true`, not `escape: false`.
+     *
+     * `button.blade.php:81` renders `href="{{ $href }}"`, so Blade escapes
+     * the seeded Google Maps URL's `&` to `&amp;` in the real HTML — which
+     * is correct and safe, not a view bug. `assertSee($value, $escape =
+     * true)` applies `e()` to the EXPECTED value (`TestResponse.php:710`),
+     * so the default escapes the needle the same way Blade escaped the
+     * output and the two match. Passing `escape: false` searches for the
+     * raw `&query=` in a response containing `&amp;query=`, and never
+     * matches.
+     *
+     * The trap: `escape: false` looks harmless on a value with no
+     * HTML-special characters (a photo path, a bare route URL) and passes
+     * by coincidence. Every assertion in these files targets auto-escaped
+     * Blade output, so none of them wants it — do not reintroduce it here
+     * on the theory that an attribute value is "already raw".
      */
     public function test_the_detail_page_shows_every_ac3_field(): void
     {
@@ -93,8 +112,8 @@ final class CemeteryDetailRouteTest extends TestCase
         $response->assertSee($cemetery->type);
         $response->assertSee($cemetery->name);
         $response->assertSee($cemetery->address);
-        $response->assertSee((string) $cemetery->primary_photo_path, escape: false);
-        $response->assertSee((string) $cemetery->google_maps_url, escape: false);
+        $response->assertSee((string) $cemetery->primary_photo_path);
+        $response->assertSee((string) $cemetery->google_maps_url);
         $response->assertSee((string) $cemetery->price_source);
         $response->assertSee(number_format((float) $cemetery->price_min, 0, ',', '.'));
 
@@ -135,7 +154,7 @@ final class CemeteryDetailRouteTest extends TestCase
 
         $this->get(route('cemeteries.show', ['cemeterySlug' => $cemetery->slug]))
             ->assertSee('Buka di Google Maps')
-            ->assertSee((string) $cemetery->googleMapsUrl(), escape: false);
+            ->assertSee((string) $cemetery->googleMapsUrl());
     }
 
     /**
@@ -282,7 +301,7 @@ final class CemeteryDetailRouteTest extends TestCase
 
         $this->get(route('cemeteries.show', ['cemeterySlug' => $cemetery->slug]))
             ->assertSee('Hubungi Customer Service')
-            ->assertSee(route('bantuan.index'), escape: false);
+            ->assertSee(route('bantuan.index'));
     }
 
     public function test_the_detail_page_links_back_to_the_directory(): void
@@ -290,7 +309,7 @@ final class CemeteryDetailRouteTest extends TestCase
         $cemetery = $this->exampleCemetery();
 
         $this->get(route('cemeteries.show', ['cemeterySlug' => $cemetery->slug]))
-            ->assertSee(route('cemeteries.index'), escape: false)
+            ->assertSee(route('cemeteries.index'))
             ->assertSee('Kembali ke direktori');
     }
 

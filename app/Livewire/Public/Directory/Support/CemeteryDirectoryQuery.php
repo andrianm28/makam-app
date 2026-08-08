@@ -63,6 +63,24 @@ final class CemeteryDirectoryQuery
      * exactly the negative criterion "No hidden omission of a required MVP
      * city".
      *
+     * **Never filter this down to cities that have published cemeteries.**
+     * It is the one change to this method that looks like an obvious
+     * improvement and is actually the failure the negative criterion names:
+     * a launch city is a statement about where the platform operates, not a
+     * summary of today's inventory, and a family in a city with no
+     * onboarded operator must not be shown a UI implying the city is
+     * unserved. `CemeteryDirectoryIndexRouteTest::
+     * test_a_launch_city_keeps_its_filter_even_with_no_published_cemeteries`
+     * empties a city out and asserts the filter survives, specifically so
+     * this cannot regress silently — the simpler "all five appear" test
+     * cannot catch it, because every seeded city currently has published
+     * rows.
+     *
+     * `renewal-builder` (S4-T7) independently reached the same rule in
+     * `RenewalLocationQuery::cities()` and asked that it be carried into
+     * the merged `app/Domain/CemeteryDirectory/` query class as
+     * non-negotiable. Carry the test with it.
+     *
      * @return array<string, string>
      */
     public static function launchCities(): array
@@ -149,6 +167,31 @@ final class CemeteryDirectoryQuery
      * are never distinguished, so a caller cannot use the response to learn
      * that an unpublished cemetery exists. Same discipline as
      * `FaqPublicQuery::findBySlug()`.
+     *
+     * ---------------------------------------------------------------------
+     * Why there is no `Str::isUuid()` guard here — deliberate, not an
+     * oversight
+     * ---------------------------------------------------------------------
+     * `cemeteries.id` is a real Postgres `uuid` column
+     * (`2026_07_26_190000_create_cemeteries_table.php:103`), so querying it
+     * with a non-UUID string is a database TYPE ERROR ("invalid input
+     * syntax for type uuid"), not a miss — a tampered URL 500s instead of
+     * returning null, and SQLite hides it so only CI would catch it.
+     * Surfaced by `renewal-builder` (S4-T7), which guards its own
+     * id-keyed lookups for exactly this reason.
+     *
+     * This slice is not exposed: both public routes key on the SLUG, and
+     * `slug` is `$table->string('slug')->unique()` (line 109) — a varchar,
+     * where any garbage string is a clean miss. Checked directly, 8 Aug
+     * 2026: nothing in `app/Livewire/Public/Directory/**` queries a
+     * cemetery id taken from a URL or query string. The only `cemetery_id`
+     * comparison in this path is inside `ResolveCemeteryCapabilityProfile`,
+     * which receives an already-loaded model.
+     *
+     * So a guard here would validate a condition that cannot occur on these
+     * routes. **If a `findPublishedById()` is ever added to this class — or
+     * to the domain-level query class this should be merged into — it needs
+     * the guard.**
      */
     public static function findPublishedBySlug(string $slug): ?Cemetery
     {

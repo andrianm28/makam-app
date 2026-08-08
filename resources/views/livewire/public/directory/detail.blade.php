@@ -20,6 +20,14 @@
        Availability badges take an already-resolved (intent, icon, label)
        triple from CemeteryAvailabilityIntent.
 
+    Editing these comments: never write Blade's raw-PHP open/close directives
+    as literal text in a Blade comment here. `compileString()` runs
+    `storeUncompiledBlocks()` before `compileComments()`, so a mention inside
+    a comment pairs with this file's real closing token and silently swallows
+    everything between — often without a syntax error. See
+    directory/index.blade.php's header for the full note (finding N-14's
+    actual root cause).
+
     3. AC11: the textual address renders UNCONDITIONALLY. The Google Maps
        button is a separate element guarded by its own @if — its absence
        never hides the address. Cemetery::googleMapsUrl() returning null is
