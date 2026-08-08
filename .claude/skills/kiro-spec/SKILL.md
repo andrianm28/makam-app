@@ -24,13 +24,24 @@ equivalent** and says so — never pretend a Kiro UI action ran.
 | New feature, architecture/constraints fixed first | Feature Spec, **Design-First** | `kiro-feature-spec` |
 | Defect in a real code path | **Bugfix Spec** (`bugfix.md`) | `kiro-bugfix-spec` |
 | Well-understood feature, want one pass, no gates | **Quick Spec** | `kiro-quick-spec` |
-| Medium task (15–60 min), no formal docs wanted | **Plan mode** | `kiro-plan` |
-| Requirements written, want them stress-tested | **Analyze Requirements** | `kiro-analyze-requirements` |
-| Want tests that prove the requirements, not examples | **Correctness / PBT** | `kiro-correctness` |
+| Complex task, no formal docs wanted | **Plan mode** | `kiro-plan` |
+| Implementing an existing spec's task list — waves of independent tasks run concurrently, dependent ones wait | **Parallel task execution** | `kiro-execute-tasks` |
 | Writing/refining one artefact | — | `kiro-requirements` · `kiro-design` · `kiro-tasks` |
-| Implementing an existing spec's task list | — | `kiro-execute-tasks` |
 
 Typo fixes and one-line corrections do **not** need a spec. Say so and just fix them.
+
+**Not alternative entry points — composed with the above, not chosen instead of it.** Analyze
+Requirements (`kiro-analyze-requirements`) stress-tests a `requirements.md` that already exists,
+most useful right after Quick Spec since that path has no requirements-review gate of its own.
+Correctness (`kiro-correctness`) property-tests an implementation against its requirements once
+built. Both slot into a Feature/Bugfix/Quick Spec already in progress; neither creates a spec on
+its own.
+
+**Availability** (per kiro.dev's own capability matrix): Feature Specs, Bugfix Specs, and Quick
+Spec work in IDE, CLI, and Web. Parallel task execution works in IDE, CLI, and Web too. Analyze
+Requirements and Correctness are **IDE-only** — there is no button here in this headless
+environment, so their skills give the manual equivalent instead (see each skill's own honesty
+note). None of the six is available on Mobile.
 
 ## House rules that override the vendor docs
 

@@ -21,13 +21,18 @@ Source: [kiro.dev/docs/specs/feature-specs](https://kiro.dev/docs/specs/feature-
 
 ## EARS patterns
 
-kiro.dev shows the event-driven form explicitly:
+**kiro.dev itself shows only one pattern, the event-driven form** — this is the only one either of
+its feature-spec pages demonstrates:
 
 ```
 WHEN [condition/event] THE SYSTEM SHALL [expected behavior]
 ```
 
-The full EARS grammar (used across this repo's 27 specs) is:
+The other six rows below are **not from kiro.dev** — they are the broader EARS standard (a
+requirements-syntax methodology that predates and is external to Kiro) that this repo applies in
+full, consistently, across all 28 specs. Kiro's docs neither show nor forbid these forms; treat
+the table as this repo's own convention layered on top of Kiro's one demonstrated pattern, not as
+something kiro.dev itself specifies:
 
 | Pattern | Form | Use for |
 |---|---|---|

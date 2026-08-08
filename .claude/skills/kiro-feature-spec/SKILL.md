@@ -18,10 +18,15 @@ A Feature Spec produces three files in `.kiro/specs/<kebab-case-feature>/`:
 Use a Feature Spec for complex, multi-task, collaborative work. Not for bug fixes
 (`kiro-bugfix-spec`) and not for exploratory coding.
 
-## Choose the variant — this cannot be changed later
+## Choose the variant deliberately
 
-Kiro is explicit: **you cannot switch workflows after creating a spec.** If the approach must
-change, start a new spec and carry content across.
+Treat this as a decision worth making carefully: pick Requirements-First or Design-First up front,
+based on which of the two is actually fixed for this feature (behaviour vs. architecture). If the
+approach turns out wrong partway through, start a new spec and carry content across rather than
+improvising a hybrid — cleaner than a spec that mixes both workflows' assumptions. (An earlier
+version of this note stated as fact that "Kiro is explicit: you cannot switch workflows after
+creating a spec" — that specific claim was not found on kiro.dev's own pages and has been softened
+to this repo's own recommendation instead of an asserted Kiro rule.)
 
 **Requirements-First** — `Requirements → Design → Tasks`
 - The behaviour is known; the architecture may flex to meet it.

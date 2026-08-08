@@ -1,6 +1,6 @@
 ---
 name: kiro-plan
-description: Run Kiro's Plan mode — structured requirements questioning plus read-only codebase exploration, producing a step-by-step implementation plan without writing spec files. Use for medium-complexity work (roughly 15–60 minutes) or multi-file changes where "understand this first, then implement" applies and formal spec documents are not wanted.
+description: Run Kiro's Plan mode — structured requirements questioning plus read-only codebase exploration, producing a step-by-step implementation plan without writing spec files. Use for complex tasks or multi-file changes where "understand this first, then implement" applies and formal spec documents are not wanted; faster and more conversational than a Feature Spec.
 ---
 
 # Plan mode — think before acting, without formal artefacts
@@ -8,9 +8,13 @@ description: Run Kiro's Plan mode — structured requirements questioning plus r
 Source: [kiro.dev/docs/specs/plan](https://kiro.dev/docs/specs/plan/).
 
 Plan mode is conversational. It produces **no** `requirements.md` or `design.md` — just a plan.
-Use it for medium-complexity tasks needing 15–60 minutes of implementation, or for architectural
-decisions that need exploration first. For anything that deserves permanent documentation, use
-`kiro-feature-spec` instead.
+kiro.dev frames it as "complex tasks where you want to think through the approach before writing
+code" and "multi-file changes where understanding existing architecture matters" — faster and more
+conversational than a Feature Spec, with no formal documents required. (An earlier version of this
+skill stated a specific "15–60 minute" duration for Plan mode; that number does not appear on the
+real kiro.dev page and has been removed — it was this repo's own unsourced guess, not a Kiro
+claim.) For anything that deserves permanent documentation, use `kiro-feature-spec` instead.
+Available in IDE and CLI; not in Web or Mobile.
 
 ## The four phases
 

@@ -11,8 +11,8 @@ Quick Spec compresses requirements, design, and task planning into a single cont
 produces the **identical three artefacts** in `.kiro/specs/<feature>/` — the only difference from a
 standard Feature Spec is *where the review happens*.
 
-> "Instead of reviewing and approving each artifact, you front-load your input so Kiro has enough
-> context to produce high-quality specs autonomously."
+> "Instead of approving each phase before the next begins, you answer clarifying questions up
+> front and land directly on an actionable task list."
 
 ## The trade you are making
 
@@ -52,8 +52,11 @@ Fall back to the standard workflow (`kiro-feature-spec`) when the feature touche
 - a destructive migration.
 
 These are `AGENTS.md` human-gate territory. Skipping review gates on them is exactly the wrong
-trade — Kiro says the same thing in its own words: standard specs have "enhanced value in
-compliance-sensitive domains".
+trade — consistent with kiro.dev's own guidance that "for features where requirements quality is
+critical - compliance-sensitive domains, high-stakes systems, unfamiliar territory - a standard
+Feature Spec with explicit review gates is usually the better fit." (kiro.dev does not itemize
+auth/money/privacy by name the way the list above does; that specific list is this repo's own
+application of that general principle via `AGENTS.md`'s human-gate rules.)
 
 ## Procedure
 

@@ -5,8 +5,11 @@ description: Implement a Kiro spec's tasks.md — dependency waves for concurren
 
 # Executing a spec's tasks
 
-Source: [kiro.dev/docs/specs/best-practices](https://kiro.dev/docs/specs/best-practices/) and
-`feature-specs`.
+Source: [kiro.dev/docs/specs](https://kiro.dev/docs/specs/) (the dependency-graph/wave mechanic —
+described there in full, with the Wave 1/Wave 2/... breakdown; `best-practices` below only
+paraphrases a shorter version of the same) and
+[kiro.dev/docs/specs/best-practices](https://kiro.dev/docs/specs/best-practices/) (the "Sync Files" /
+already-implemented-work guidance).
 
 > **Honesty note.** "Run all Tasks" and "Sync Files" are Kiro IDE/CLI buttons. This skill is the
 > manual equivalent. Do not report that a Kiro action ran.
