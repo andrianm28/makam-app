@@ -22,6 +22,18 @@
 
 ---
 
+## Pre-Flight Corrections (human-confirmed 08 Aug 2026)
+
+These amend the task text below. They are binding; where a task's code or tests contradict them, the correction wins.
+
+- **R1 (Audit metadata — Task 6/7):** `SaveBookingDraftStep` must NOT pass `metadata: ['step' => $step]` to `Audit::record()`. `MetadataAllowlist::ALLOWED_KEYS` has no `step` key and `Audit::record()` throws `AuditMetadataKeyNotAllowedException` for disallowed keys. Drop the metadata argument entirely (action + subject + version still identify the step).
+- **R2 (Eager draft creation — Task 9/10):** In `BookingWizard::saveStep1()`, wrap `currentOrNewDraft()` + `SaveBookingDraftStep` in `DB::transaction` so a `BookingStepValidationException` rolls back the freshly created draft. The test `test_an_invalid_step_1_submission_shows_a_field_error_and_creates_no_draft` must see 0 drafts.
+- **R3 (Seeded prices — Task 4 and Task 10):** `2026_07_26_220000_seed_service_definition_dummy_operational_data.php` seeds a `price_versions` row (version 1, `superseded_at` null) for ALL 12 services; `price_versions` has `UNIQUE(priceable_type, priceable_id, version_number)`. Seeded amounts include DOCUMENT_PROCESSING 350000.0, GRAVE_DIGGING 750000.0. Test fixtures must supersede seeded rows before asserting missing-price state, and must create fixture prices with a NEW version_number (e.g. 2), never re-using the seeded version 1.
+  - Task 4 `test_summary_marks_a_missing_price_honestly...`: first supersede the seeded price for the service under test, then assert the missing-price state.
+  - Task 4 `test_summary_computes_line_totals...`: supersede the seeded DOCUMENT_PROCESSING price, then create the fixture price with `version_number => 2`, amount 150000.
+  - Task 10 step-5 test: seeded prices exist, so assert a real computed total (DOCUMENT_PROCESSING 350000 + GRAVE_DIGGING 750000 = 1100000) instead of `Harga belum tersedia`. The honest missing-price state remains covered only by Task 4's explicit fixture.
+- **R4 (Task 6 step-2 happy path):** `test_step_2_accepts_a_published_cemetery_matching_the_selected_city` must add `->whereDoesntHave('packages')` (the first published JAKARTA cemetery, TPU Jakarta Menteng, has active packages and would force a step-2 package error).
+
 ## Task 1: `booking_drafts` migration
 
 **Files:**
