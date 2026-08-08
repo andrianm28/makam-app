@@ -27,7 +27,7 @@
 | PUB-040 | FAQ list | category, search, no result |
 | PUB-041 | FAQ article | article, related content, customer-service CTA |
 | PUB-050 | Customer order status | timeline, next step, support |
-| PUB-060 | Help/contact | channels, hours, emergency disclaimer |
+| PUB-060 | Help/contact — `/bantuan` | channels, hours, emergency disclaimer (`.kiro/specs/help-centre-missing-route` — bugfix spec; no owning feature spec yet, see traceability §E) |
 | PUB-070 | Kebijakan Privasi — `/privasi` | static policy sections, draft-pending-legal-review notice, customer-service CTA |
 | PUB-071 | Syarat & Ketentuan — `/syarat-ketentuan` | static terms sections, draft-pending-legal-review notice, customer-service CTA |
 | PUB-080 | Coming-soon stub — `/pemesanan-makam`, `/marketplace`, `/perpanjangan` (temporary; each route is replaced by its real screen — PUB-010, PUB-020, PUB-030) | not-yet-built explanation, contact channels, back-to-homepage and help CTAs |

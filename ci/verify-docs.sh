@@ -69,14 +69,34 @@ else fail "$broken broken link(s):"; head -10 /tmp/broken.log | sed 's/^/    /';
 # ---------------------------------------------------------------------------
 head2 "GATE 5 — spec structural integrity"
 # ---------------------------------------------------------------------------
+# A Feature Spec's first phase is requirements.md. A Bugfix Spec's first
+# phase is bugfix.md instead (kiro.dev/docs/specs/bugfix-specs; this repo's
+# own .claude/skills/kiro-bugfix-spec) — a different filename for the same
+# EARS-notation phase, not a missing file. Added 8 Aug 2026 when
+# .kiro/specs/help-centre-missing-route/ became this repo's first bugfix
+# spec and correctly failed the requirements.md-only check below; the fix
+# is here, in the gate, not a fake requirements.md added to satisfy it.
 missing=0
+featureSpecs=0
+bugfixSpecs=0
 for d in .kiro/specs/*/; do
-  for f in requirements.md design.md tasks.md; do
+  if [ -f "$d"requirements.md ]; then
+    featureSpecs=$((featureSpecs+1))
+    firstPhase=requirements.md
+  elif [ -f "$d"bugfix.md ]; then
+    bugfixSpecs=$((bugfixSpecs+1))
+    firstPhase=bugfix.md
+  else
+    echo "missing: $d requirements.md or bugfix.md"
+    missing=$((missing+1))
+    continue
+  fi
+  for f in "$firstPhase" design.md tasks.md; do
     [ -f "$d$f" ] || { echo "missing: $d$f"; missing=$((missing+1)); }
   done
 done
 n=$(ls -1d .kiro/specs/*/ 2>/dev/null | wc -l)
-if [ "$missing" -eq 0 ]; then pass "$n specs, all with complete requirements/design/tasks triad"
+if [ "$missing" -eq 0 ]; then pass "$n specs ($featureSpecs feature, $bugfixSpecs bugfix), all with complete triads"
 else fail "$missing missing spec file(s)"; fi
 
 # ---------------------------------------------------------------------------

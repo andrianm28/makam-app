@@ -21,6 +21,8 @@ v0.4 — 25 July 2026, finding H-3: statuses in section B previously read `Cover
 
 H-3's blanket downgrade of all 31 rows was correct in July and became wrong in the opposite direction as real tests landed: rows whose tests genuinely exist and pass kept reporting `Specified`, understating coverage as badly as the pre-H-3 file overstated it. **10 rows are raised to `Covered` in v0.5** (HOME-01…HOME-04, FAQ-01…FAQ-06) — each one read against its test file first, not raised on the strength of a filename. The other 21 stay `Specified`; section D says why for the ones where a test file exists but does not cover the row's claim.
 
+**Addition — finding T-H, 08 August 2026.** Screen PUB-060 (`/bantuan`) shipped the same day as a fix for a real defect — see [`.kiro/specs/help-centre-missing-route/`](../../.kiro/specs/help-centre-missing-route/), this repository's first Bugfix Spec. It does not fit section B's table, which is scoped to RKS-derived Stakeholder Workflow expectations (section A); PUB-060 answers `product-brief.md` §5.10 and `information-architecture.md` §2 instead, a cross-cutting UX principle with no RKS item behind it. Rather than force an ill-fitting RKS mapping, it is recorded in new **section E** below.
+
 ## A. RKS authority
 
 | RKS | Capability | Spec | Gate/control |
@@ -80,6 +82,18 @@ The **Test evidence** column holds repo-relative paths to the tests backing a `C
 ## C. Gate interpretation
 
 `Specified (gated fallback)` means the user-facing step and outcome are required even when an external capability is inactive. A closed gate cannot be used to remove Step 8, hide the feature silently, or report a false success.
+
+## E. Cross-cutting screens — no RKS-derived expectation ID
+
+Screens required by a cross-cutting UX principle rather than a stakeholder-workflow item in section A. Same `Covered` bar as section B: a named test must exist, be read against the claim, and pass in CI.
+
+| ID | Expectation | Canonical doc | Screen | Test evidence | Status |
+|---|---|---|---|---|---|
+| SUPPORT-01 | Customer-service escape hatch reachable from every page | `product-brief.md` §5.10; `information-architecture.md` §2; `design-system.md` §6.10 | PUB-060 — `/bantuan` | `tests/Feature/Livewire/Public/Support/HelpCentreRouteTest.php`<br>`tests/Feature/Livewire/Public/Legal/FooterLegalLinksRouteTest.php` | Covered |
+
+**Evidence, read against the claim, not the filename.** `HelpCentreRouteTest` asserts: the route resolves at the expected name/URI; `GET /bantuan` returns 200; the page states the `ContactInfo` channels, the operating hours, and the emergency disclaimer *above* the channel list (a safety-ordering assertion); it does not claim 24/7 availability or an SLA; it admits the channels are placeholders, not a live line; it renders without any `wire:*` binding or `<form>`, satisfying §6.10's "must work with JS disabled"; and it links onward to `/faq` and `/`. `FooterLegalLinksRouteTest`'s companion method confirms `/privasi` still links `/bantuan` and that following the link now reaches this page rather than a 404. Both files ran and passed together in CI: GitHub Actions run `31237318086`, job **PHP (validate, lint, analyse, test)** (id `93052168835`), commit `97dfbbf`.
+
+**Ownership, not coverage, is what remains open.** No feature spec's `requirements.md` claims PUB-060 — see `.kiro/specs/help-centre-missing-route/design.md`'s closing note. That is a spec-authoring decision for a human, not a defect this row can resolve by itself.
 
 ## D. Evidence trail for the `Covered` rows
 
