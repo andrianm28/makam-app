@@ -6,6 +6,7 @@ namespace App\Domain\Booking\Actions;
 
 use App\Domain\Booking\BookingServiceType;
 use App\Domain\Booking\BookingWizardStep;
+use App\Domain\Booking\Exceptions\BookingDraftVersionConflictException;
 use App\Domain\Booking\Exceptions\BookingStepValidationException;
 use App\Domain\Booking\Models\BookingDraft;
 use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
@@ -36,7 +37,7 @@ use InvalidArgumentException;
  */
 final readonly class SaveBookingDraftStep
 {
-    public function __invoke(BookingDraft $draft, int $step, array $payload, string $idempotencyKey): BookingDraft
+    public function __invoke(BookingDraft $draft, int $step, array $payload, string $idempotencyKey, ?int $expectedVersion = null): BookingDraft
     {
         BookingWizardStep::assertKnown($step);
 
@@ -54,6 +55,10 @@ final readonly class SaveBookingDraftStep
             return $draft;
         }
 
+        if ($expectedVersion !== null && $draft->version !== $expectedVersion) {
+            throw new BookingDraftVersionConflictException($expectedVersion, $draft->version);
+        }
+
         $errors = match ($step) {
             BookingWizardStep::LOCATION => self::validateLocation($payload),
             BookingWizardStep::CEMETERY => self::validateCemetery($payload, $draft),
@@ -67,6 +72,12 @@ final readonly class SaveBookingDraftStep
         }
 
         return DB::transaction(function () use ($draft, $step, $payload, $idempotencyKey): BookingDraft {
+            // Persist onto an authoritative reload so the caller's instance
+            // is never mutated in place — every save returns an independent
+            // snapshot, which is what the optimistic-version contract
+            // (`$expectedVersion` against `version`) is built on.
+            $current = BookingDraft::query()->findOrFail($draft->id);
+
             $attributes = match ($step) {
                 BookingWizardStep::LOCATION => ['city_code' => $payload['city_code']],
                 BookingWizardStep::CEMETERY => [
@@ -78,31 +89,31 @@ final readonly class SaveBookingDraftStep
                 default => [],
             };
 
-            $completedSteps = $draft->completed_steps;
+            $completedSteps = $current->completed_steps;
             if (! in_array($step, $completedSteps, true)) {
                 $completedSteps[] = $step;
                 sort($completedSteps);
             }
 
-            $draft->fill([
+            $current->fill([
                 ...$attributes,
                 'completed_steps' => $completedSteps,
                 'current_step' => min($step + 1, BookingWizardStep::LAST_IMPLEMENTED + 1),
-                'version' => $draft->version + 1,
+                'version' => $current->version + 1,
                 'last_idempotency_key' => $idempotencyKey,
             ]);
-            $draft->save();
+            $current->save();
 
             Audit::record(
                 action: 'BOOKING_DRAFT_STEP_SAVED',
-                subject: new AuditSubject('booking_draft', $draft->id, $draft->version),
+                subject: new AuditSubject('booking_draft', $current->id, $current->version),
                 outcome: AuditOutcome::Allowed,
-                actorRef: $draft->user_id,
-                actorRole: $draft->user_id !== null ? 'customer' : 'guest',
+                actorRef: $current->user_id,
+                actorRole: $current->user_id !== null ? 'customer' : 'guest',
                 source: AuditSource::Api,
             );
 
-            return $draft->refresh();
+            return $current->refresh();
         });
     }
 
