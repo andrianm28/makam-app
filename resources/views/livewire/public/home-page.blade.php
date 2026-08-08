@@ -97,7 +97,13 @@
                 dan diperiksa langsung pada saat Anda mengajukan permintaan. Kami belum dapat menjamin penerimaan
                 otomatis di luar kapasitas yang tersedia saat ini — hotline di bawah ini dapat dihubungi kapan pun
                 untuk menanyakan ketersediaan.
-                <a href="tel:{{ str_replace(['+', ' ', '-'], '', ContactInfo::PHONE) }}" class="font-medium underline underline-offset-2">{{ ContactInfo::PHONE }}</a>
+                {{-- The leading `+` is KEPT. Stripping it (as this line did until 8 Aug
+                     2026) yields `tel:6281200001234`, which a handset reads as a
+                     DOMESTIC number and dials wrongly; `+62…` is an unambiguous
+                     international dial string. Found while building PUB-060, which
+                     had already made the opposite call — see App\Livewire\Public\
+                     Support\HelpCentre::telHref(). --}}
+                <a href="tel:+{{ preg_replace('/[^0-9]/', '', ContactInfo::PHONE) }}" class="font-medium underline underline-offset-2">{{ ContactInfo::PHONE }}</a>
                 atau
                 <a href="/bantuan" class="font-medium underline underline-offset-2">hubungi Bantuan</a>.
             </x-mk.alert>

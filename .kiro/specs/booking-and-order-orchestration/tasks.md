@@ -24,6 +24,28 @@ This spec is the **domain** layer; [`public-booking-wizard`](../public-booking-w
 
 This spec therefore contributes **status semantics**, not screens.
 
+#### The eight overlapping acceptance criteria (normative, added 8 Aug 2026)
+
+The split above is stated at the level of layers. This table states it at the level of **acceptance criteria**, which is where double implementation actually happens. The eight overlaps are the ones enumerated in [`docs/planning/kiro-specs-analysis.md`](../../../docs/planning/kiro-specs-analysis.md) §5.4; the allocation matches the **normative Boundary table** already carried by [`public-booking-wizard/design.md`](../public-booking-wizard/design.md) §Boundary, which is the authority here. Nothing below reallocates anything — this is that table restated per criterion so neither side has to infer its half.
+
+| # | Overlapping concern | Wizard AC (presentation — what the user sees) | This spec's AC (domain — what the server enforces) |
+|---|---|---|---|
+| 1 | Nine-step presentation | AC1 — step rendering, stepper, labels, progress | AC1 — product-type routing behind the same nine-step entry |
+| 2 | Autosave / resume | AC11, AC12 — autosave affordance, resume UX, "saved" indicator | AC2 — draft persistence, versioning, idempotent save |
+| 3 | Server prevents step skipping | AC13 — client-side hints and disabled affordances | AC3 — server-side step validation, **authoritative** |
+| 4 | Immutable quote | AC6 — rendering quote lines, totals, and the accepted version | AC8 — quote issue, versioning, immutability |
+| 5 | Payment gate / manual fallback | AC9 — rendering payment mode and its states | AC6, AC7 — payment guard, gate evaluation, webhook effects |
+| 6 | Private documents | AC8 — upload UI and progress | AC10 — document adapter, quarantine, signed URLs |
+| 7 | Step 9 confirmation content | AC10 — Step 9 layout and delivery indicators | AC13 — order state machine, notification dispatch |
+| 8 | Admin/operator notification | AC15 — how notification status is displayed | AC14 — dispatch, recipient scope, and delivery state |
+
+**How to use it.** Where a criterion appears on both sides, each spec implements **only its own column** and consumes the other's output; neither may satisfy its criterion by reimplementing the other half. Two consequences worth stating because they are the ones most likely to be got wrong:
+
+- **Autosave (row 2) has a task in both `tasks.md` files.** That is not a duplicate to be deleted — the wizard's task is the affordance and the resume flow, this spec's task is persistence, version, and idempotency key. Both must exist; neither is complete alone. §5.4 flags exactly this pair.
+- **A criterion satisfied on one side is not evidence for the other.** A green wizard test proving a "Tersimpan" indicator renders says nothing about whether the draft survived; a green orchestration test proving version increment says nothing about whether the user was ever told. Traceability entries must cite the column they actually cover.
+
+**Scope of this note.** This is the **orchestration half** of the boundary task below. The wizard half already exists and is unchanged: `public-booking-wizard/design.md` §Boundary is normative and was not edited by this batch.
+
 ### Order lifecycle → intent (normative — the single source consumers must use)
 
 design-system.md §3.7. Implement once in `StatusIntent`; the public site, the admin panel, and the vendor panel all consume it. Components must never `match` on an enum string.
@@ -84,5 +106,5 @@ design-system.md **§6**. These are the states the domain layer must expose so t
 - [ ] Expose gated-fallback mode values from the server for UI consumption (§6.9); no front-end flags.
 - [ ] Ensure blocked-payment and authorization denials return explanatory states (§6.4), never raw 403 or silent failure.
 - [ ] Ensure duplicate submission renders the same confirmation (§6.6).
-- [ ] Add a "Boundary" note to this spec and to `public-booking-wizard` so the eight overlapping acceptance criteria are not implemented twice.
+- [x] Add a "Boundary" note to this spec and to `public-booking-wizard` so the eight overlapping acceptance criteria are not implemented twice. *(Done 8 Aug 2026 — see "The eight overlapping acceptance criteria" above. Both halves now exist: the wizard half is `public-booking-wizard/design.md` §Boundary, which already carried the normative presentation-versus-domain table and was **not** edited; this half names the eight criteria per `kiro-specs-analysis.md` §5.4 and allocates each one against that table.)*
 - [ ] Verify no design value is hardcoded in any Action, Service, or notification template.

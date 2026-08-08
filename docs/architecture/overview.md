@@ -91,9 +91,11 @@ flowchart LR
 | CareSubscription | Billing cycle and care fulfillment schedule |
 | Visitation | Visit booking, access instructions, facilities, capacity |
 | Memorial | Optional memorial profile, QR token, privacy and moderation |
+| Faq | Public FAQ categories, articles, versioning, and publish lifecycle |
 | NotificationAdapter | Email/WhatsApp flags, template and fallback |
 | AuditAdapter | Append-only audit references |
 | FeatureGate | Legal, data, capability, provider, and operational gate enforcement |
+| Analytics | Anonymous public interaction counts (menu impression/click), recorded best-effort with no personal data |
 
 ## 6. Heterogeneous cemetery capability
 

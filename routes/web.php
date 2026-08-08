@@ -8,6 +8,7 @@ use App\Livewire\Public\Faq\FaqIndex;
 use App\Livewire\Public\HomePage;
 use App\Livewire\Public\Legal\PrivacyPolicy;
 use App\Livewire\Public\Legal\TermsOfService;
+use App\Livewire\Public\Support\HelpCentre;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -86,3 +87,28 @@ Route::get('/faq/{articleSlug}', FaqArticleDetail::class)->name('faq.show');
 */
 Route::get('/privasi', PrivacyPolicy::class)->name('legal.privacy');
 Route::get('/syarat-ketentuan', TermsOfService::class)->name('legal.terms');
+
+/*
+|--------------------------------------------------------------------------
+| Bantuan — PUB-060, the customer-service escape hatch
+|--------------------------------------------------------------------------
+| Closes a real defect found 8 Aug 2026, the same class as the /privasi and
+| /syarat-ketentuan gap closed on 26 Jul 2026 — a link shipped ahead of its
+| destination, except this one shipped on EVERY page.
+|
+| <x-mk.header> renders a persistent "Bantuan" action on both the mobile and
+| desktop bars (information-architecture.md §2 makes it mandatory and
+| forbids collapsing it into the hamburger), and seven further views link
+| /bantuan: layouts/app.blade.php's footer, both FAQ views, both legal
+| views, the coming-soon stub, and the homepage. No route backed it, so the
+| one affordance design-system.md §6.10 requires on every transactional
+| screen 404d from every screen — and product-brief.md §5 point 10 ("Semua
+| halaman memiliki customer-service escape hatch") was unmet site-wide.
+|
+| Deliberately static: no domain read, no form. This is where §6.5's
+| provider-unavailable copy and the FAQ's empty state send a stuck user, so
+| it must still render when the database is down. See App\Livewire\Public\
+| Support\HelpCentre's own doc block for the full reasoning, including why
+| no contact form exists and why no wa.me deep link is minted.
+*/
+Route::get('/bantuan', HelpCentre::class)->name('bantuan.index');

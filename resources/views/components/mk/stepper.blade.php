@@ -1,16 +1,36 @@
 {{--
     resources/views/components/mk/stepper.blade.php
 
-    <x-mk.stepper> — design-system.md §3.9. Booking Steps 1-9.
+    <x-mk.stepper> — design-system.md §3.9. Booking Steps 1-9 by default.
 
-    Labels are a PRODUCT CONTRACT (booking-wizard-fields.md, design-system.md
-    §3.9) — hardcoded below, not exposed as a prop, so nothing can reword them
-    by accident. Do not add a `labels` prop.
+    LABELS ARE A PRODUCT CONTRACT (booking-wizard-fields.md, design-system.md
+    §3.9). The nine booking labels are the DEFAULT VALUE of the `labels` prop,
+    so a caller that passes nothing renders exactly the nine canonical booking
+    steps and nothing can reword them by accident.
+
+    `labels` exists for a DIFFERENT JOURNEY, never for re-labelling booking.
+    The renewal journey (.kiro/specs/renewal-and-grave-registry, AC1) is six
+    visible steps — city, TPU/TPS, grave search, fee, payment, confirmation —
+    and its tasks.md requires this same primitive, which is the only reason
+    the prop exists. Passing `labels` from a booking screen to rename,
+    reorder, hide, or renumber a booking step is forbidden by AGENTS.md
+    ("Never rename, reorder, or hide a product label, route, menu item, or
+    booking step") and by design-system.md §9.2 MUST-NOT 9. Booking always
+    reads 1-9, including when the Urgent / Pre-Need branches diverge
+    internally — the stepper is a PRESENTATION contract (§3.9), never
+    renumbered per branch.
+
+    Every count is derived from the supplied array, never from a literal 9:
+    the total, the mobile "Langkah N dari M" line, `aria-valuemax`, the step
+    clamp, and the progress percentage. A supplied array may be a 0-indexed
+    list or an already-1-indexed map; it is re-keyed to a contiguous 1..N
+    sequence either way. An empty array renders an empty rail rather than
+    dividing by zero.
 
     Two genuinely different layouts (not a responsive class tweak on one
     markup tree), same reasoning the table/modal primitives use for their own
     mobile/desktop splits:
-      - Mobile (< md): compact "Langkah N dari 9" + title + thin progress bar.
+      - Mobile (< md): compact "Langkah N dari M" + title + thin progress bar.
       - Desktop (md+): full horizontal dot rail with four visual states.
     Both are always in the DOM; Tailwind responsive display utilities
     (`md:hidden` / `hidden md:flex`) pick one. A single `sr-only` progressbar
@@ -21,6 +41,12 @@
     Class composition follows button.blade.php: one PHP block, state->class
     lookup tables, single $attributes->merge on the root element. `neutral-0`
     is used instead of Tailwind's `white`, same convention.
+
+    `role="group"` and `aria-label="Progres pemesanan"` are merge DEFAULTS on
+    that same single merge, not literal attributes written after it. The
+    rendered default is unchanged, but a non-booking journey that supplies its
+    own `labels` can also supply its own accessible group name instead of
+    emitting a duplicate `aria-label` attribute on the root element.
 
     Interaction (design-system.md §3.9 table):
       complete -> clickable, back nav preserves data
@@ -53,13 +79,16 @@
     not decoration (WCAG 2.5.5).
 --}}
 @props([
-    'step' => 1,           // current step, 1-9
+    'step' => 1,           // current step, 1..count($labels)
     'errorSteps' => [],    // step numbers currently in the `error` state
     'stepMethod' => 'goToStep', // Livewire method invoked as stepMethod(n)
-])
 
-@php
-    $labels = [
+    // NORMATIVE DEFAULT — the nine canonical booking steps
+    // (booking-wizard-fields.md, design-system.md §3.9). Omitting `labels`
+    // MUST keep rendering exactly these nine, in exactly this order, with
+    // exactly this wording. Override only for a different journey (see the
+    // file-header note), never to re-label booking.
+    'labels' => [
         1 => 'Lokasi',
         2 => 'TPU/TPS',
         3 => 'Jenis Layanan',
@@ -69,12 +98,26 @@
         7 => 'Data Almarhum + Dokumen',
         8 => 'Pembayaran',
         9 => 'Konfirmasi',
-    ];
+    ],
+])
 
+@php
+    // Re-key to a contiguous 1..N sequence so a caller may pass either a
+    // 0-indexed list or an already-1-indexed map and get the same rendering.
+    // For the untouched nine-step default this is an identity transform.
+    $labels = array_values((array) $labels);
     $totalSteps = count($labels);
-    $step = max(1, min($totalSteps, (int) $step));
+    $labels = $totalSteps > 0
+        ? array_combine(range(1, $totalSteps), $labels)
+        : [];
+
+    // Only guards the arithmetic below: an empty `labels` array renders an
+    // empty rail instead of dividing by zero. With the default it is 9.
+    $divisor = max(1, $totalSteps);
+
+    $step = max(1, min($divisor, (int) $step));
     $currentLabel = $labels[$step] ?? '';
-    $percent = (int) round(($step / $totalSteps) * 100);
+    $percent = (int) round(($step / $divisor) * 100);
 
     $stateOf = function (int $n) use ($step, $errorSteps): string {
         if (in_array($n, $errorSteps, true)) {
@@ -117,7 +160,7 @@
         : 'border-neutral-300';
 @endphp
 
-<div {{ $attributes->merge(['class' => 'w-full']) }} role="group" aria-label="Progres pemesanan">
+<div {{ $attributes->merge(['class' => 'w-full', 'role' => 'group', 'aria-label' => 'Progres pemesanan']) }}>
     {{-- Single accessible progress announcement, shared by both layouts so it
          is never removed from the tree by a `md:hidden` / `hidden md:flex`
          split (display:none removes descendants from the accessibility tree

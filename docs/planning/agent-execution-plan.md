@@ -265,16 +265,29 @@ Every slice consumes this. The critical constraint: **enums derive from the cano
 
 **Blocked for marketplace categories:** the catalogue has 9 product codes but **0 category codes**, so `/marketplace/kategori/{categorySlug}` cannot be seeded. Product decision required.
 
+> **Correction, 8 Aug 2026 — the ownership line above is wrong against the code that shipped.** The row is kept as written for the record; this note supersedes its "Owns" clause only. S4-T1 was delivered 26 Jul 2026 and owns **neither** of the two paths named above. Verified directly against the repository today:
+>
+> | Claim in the row above | What is actually true |
+> |---|---|
+> | Owns `database/seeders/**` | `database/seeders/` contains exactly one file, Laravel's **untouched stock `DatabaseSeeder.php`**. Nothing in CI, the Dockerfile, or any deployment script runs `php artisan db:seed` — the seed migrations' own doc blocks say so explicitly (`2026_07_26_170400_seed_faq_categories_and_articles.php`: "no CI pipeline or deployment process ever runs `php artisan db:seed`"). Seeder classes were never the delivery mechanism here |
+> | Owns `app/Support/Catalog/**` | **`app/Support/Catalog/` does not exist.** `app/Support/` holds `CompanyInfo.php`, `ContactInfo.php`, and `Design/` — nothing catalogue-related |
+>
+> **The real ownership.** Master data ships as **timestamped data migrations** in `database/migrations/`, so it applies through the same `php artisan migrate` that creates the schema and needs no second deployment step: `…_120400_seed_feature_gate_registry.php`, `…_170400_seed_faq_categories_and_articles.php`, `…_180200_seed_marketplace_products_and_variants.php`, `…_180700_seed_service_definitions_from_catalog.php`, `…_190300_seed_cemeteries_and_capability_profiles.php`, plus three later dummy-data backfills (`…_200100`, `…_210000`, `…_220000`). The **closed-list constant classes** live one directory per module under `app/Domain/*/`, not under `app/Support/` — `ServiceCatalog/ServiceCode.php`, `ServiceCatalog/ServiceCategory.php`, `ServiceCatalog/FulfillmentOwner.php`, `Marketplace/ProductCode.php`, `Marketplace/MarketplaceProductCategory.php`, `Faq/FaqCategoryCode.php`, `CemeteryDirectory/LaunchCityCode.php`, `CemeteryCapability/*Mode.php`, and others.
+>
+> **The constraint the row states is unaffected and was met** — enums still derive from one canonical definition each, which is what `AGENTS.md` §Documentation actually requires; only the two directory paths were wrong. A future batch briefing an agent from this section must state the migration-plus-`app/Domain/` layout, because briefing `database/seeders/**` would send that agent to build a parallel, never-executed seeding path alongside the real one.
+
 ### Batch 4.2 — 6 agents, concurrent, **worktree isolation required**
 
-| Agent | Slice | Spec / AC | Consumes | Slot |
-|---|---|---|---|---|
-| A | **FAQ complete** — public + admin CMS | `public-faq` AC1–AC9, `admin-operations` AC6 | identity, audit, gates | `…_100000` |
-| B | Homepage — 4 cards exact order, 9 sections | `public-home-and-navigation` AC1–AC9 | gates, identity | `…_110000` |
-| C | Cemetery directory + capability resolver | `cemetery-directory-and-availability` AC1–AC12 | gates, audit, identity | `…_120000` |
-| D | Wizard Steps 1–5 + stepper + autosave | `public-booking-wizard` AC1–AC6, AC11–AC13 | identity, gates, audit | `…_130000` |
-| E | Draft persistence, versioning, server validation | `booking-and-order-orchestration` AC2, AC3 | audit, outbox | `…_140000` |
-| F | Renewal search skeleton + marketplace browse | `renewal-and-grave-registry` AC1–AC5, AC14; `funeral-marketplace…` AC1–AC3 | gates, audit | `…_150000` |
+The **Status** column was appended 8 Aug 2026 — the six rows are otherwise unchanged from the 25 Jul plan and are kept exactly as briefed, so the plan-versus-outcome comparison stays readable. Status values are sourced from [`sprint-plan.md`](sprint-plan.md) §7, which is authoritative for progress (`AGENTS.md`: *"`tasks.md` is planning only; issue tracker owns progress"* — no tracker is named yet, **OQ-8**).
+
+| Agent | Slice | Spec / AC | Consumes | Slot | Status (8 Aug 2026) |
+|---|---|---|---|---|---|
+| A | **FAQ complete** — public + admin CMS | `public-faq` AC1–AC9, `admin-operations` AC6 | identity, audit, gates | `…_100000` | ✅ **Done** — S4-T2, 26 Jul 2026, CI green, **deployed to dev.makam.co.id** 26 Jul |
+| B | Homepage — 4 cards exact order, 9 sections | `public-home-and-navigation` AC1–AC9 | gates, identity | `…_110000` | ✅ **Done** — S4-T3, 26 Jul 2026, CI green, **deployed to dev.makam.co.id** 26 Jul |
+| C | Cemetery directory + capability resolver | `cemetery-directory-and-availability` AC1–AC12 | gates, audit, identity | `…_120000` | Not started — S4-T6; master data ready (S4-T1) |
+| D | Wizard Steps 1–5 + stepper + autosave | `public-booking-wizard` AC1–AC6, AC11–AC13 | identity, gates, audit | `…_130000` | ⏸️ **Paused** — S4-T4, 26 Jul 2026; build/review paused before completion, nothing committed, no CI run |
+| E | Draft persistence, versioning, server validation | `booking-and-order-orchestration` AC2, AC3 | audit, outbox | `…_140000` | ⏸️ **Paused** — S4-T5, built together with S4-T4 as one feature; nothing committed |
+| F | Renewal search skeleton + marketplace browse | `renewal-and-grave-registry` AC1–AC5, AC14; `funeral-marketplace…` AC1–AC3 | gates, audit | `…_150000` | Not started — S4-T7 + S4-T8; catalogue seeded (S4-T1) |
 
 **Build FAQ first if you must serialize any of these.** It is the cheapest complete vertical slice and it proves every layer — Livewire, Filament, design system, migrations, seeds, authorization, tests, CI. Finding a stack problem in FAQ costs 4 pd; finding it three-quarters through the wizard costs far more.
 
@@ -282,9 +295,18 @@ Two briefs carry a specific non-obvious requirement:
 - **Agent C:** indicative availability renders `neutral` + `"Perlu konfirmasi"` — **never `success`**. An indicative price styled as success is a false promise.
 - **Agent F:** three **distinct** empty states for grave search — no-result, privacy-limited, gate-closed. Collapsing them means a family concludes their relative's grave does not exist.
 
+> **What the outcome says about this batch, 8 Aug 2026.** The batch above was planned as six concurrent worktree agents. It was not run that way. `sprint-plan.md` §7's "Execution methodology" describes what actually happened from S4-T2 onward — *"a background agent drafts a batch … then every batch is reviewed line-by-line against the spec and the real installed framework source before commit"* — i.e. one drafting agent at a time with a review gate between batches, not six in parallel. Two observations worth keeping:
+>
+> 1. **The two slices that completed are exactly the two this section told you to build first.** "Build FAQ first if you must serialize any of these" was followed, and A then B landed CI-green and deployed. That advice held up.
+> 2. **D and E were treated as one unit of work, not two agents** — `sprint-plan.md` §7 records S4-T5 as *"built together with S4-T4, same feature."* That is a correction to this table's shape, not just its status: `public-booking-wizard` AC11–AC13 (D) and `booking-and-order-orchestration` AC2–AC3 (E) are precisely the overlapping autosave/step-validation criteria that the wizard-versus-orchestration Boundary exists to split (`kiro-specs-analysis.md` §5.4). Briefing them as two concurrent agents with disjoint file sets assumed a separation the specs had not yet made concrete. Anyone re-planning this batch should brief D+E as one agent, or land the Boundary note first.
+>
+> Neither observation invalidates the six-agent shape for A/B/C/F; it has simply never been exercised, which is what §11 already says about every batch in this document.
+
 ### HUMAN — S4-T9 capacity review (G6), S4-T10 five open decisions (G7)
 
 **Sprint 4 shape:** 1 → 6 (worktree). Peak concurrency 6, but see §1.5 — six diffs land on one reviewer.
+
+> **Correction, 8 Aug 2026.** Planned shape retained above for the record; **actual shape so far is 1 → 1 → 1** (S4-T1, then S4-T2, then S4-T3, each a serial batch with a review gate between), with S4-T4/T5 paused and S4-T6/T7/T8 not started. Peak concurrency observed in Sprint 4 is **1**, not 6. The §1.5 prediction — that review, not agent count, is the real constraint — is so far the thing this sprint actually demonstrates.
 
 ---
 

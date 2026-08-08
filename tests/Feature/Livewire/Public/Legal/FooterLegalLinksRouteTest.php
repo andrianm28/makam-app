@@ -62,16 +62,35 @@ final class FooterLegalLinksRouteTest extends TestCase
         $this->get(route('legal.terms'))->assertOk();
     }
 
-    public function test_bantuan_link_remains_an_honest_unbuilt_forward_reference(): void
+    /**
+     * RENAMED from `test_bantuan_link_remains_an_honest_unbuilt_forward_
+     * reference`, which asserted `$this->get('/bantuan')->assertNotFound()`.
+     *
+     * That assertion was correct when written on 26 Jul 2026: `/bantuan` was
+     * explicitly out of that batch's scope, so the honest thing was to pin
+     * the gap rather than pretend it did not exist. But pinning a gap means
+     * the test starts guarding it — and this one would have failed the
+     * moment the gap was closed, which is exactly what happened.
+     *
+     * The premise changed on 8 Aug 2026. `/bantuan` was found to be linked
+     * from `<x-mk.header>` on EVERY page plus seven further views while no
+     * route backed it, making `design-system.md` §6.10's mandatory support
+     * escape hatch a site-wide 404. `App\Livewire\Public\Support\HelpCentre`
+     * (PUB-060) now serves it. This test asserts the new reality directly —
+     * the footer still links it, and following the link now reaches a real
+     * page — instead of asserting a now-false negative.
+     */
+    public function test_bantuan_link_from_the_footer_reaches_the_real_help_page(): void
     {
-        // /bantuan is explicitly out of this batch's scope — still a plain
-        // href, not a route() call, and still genuinely unbuilt: no route
-        // backs it, so it still 404s exactly as before this batch.
         $response = $this->get('/privasi');
 
         $response->assertOk();
         $response->assertSee('href="/bantuan"', false);
-        $this->get('/bantuan')->assertNotFound();
+
+        // The link is still a plain href rather than a route() call in the
+        // shared footer/header markup, so following it is the only thing
+        // that actually proves the destination exists.
+        $this->get('/bantuan')->assertOk();
     }
 
     public function test_footer_shows_the_fictional_company_legal_entity_line(): void

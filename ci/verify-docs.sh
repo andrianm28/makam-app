@@ -89,31 +89,110 @@ if [ -z "$nods" ]; then pass "all specs reference docs/design/design-system.md"
 else fail "spec(s) without a design-system reference:"; echo "$nods" | sed 's/^/    /'; fi
 
 # ---------------------------------------------------------------------------
-head2 "GATE 7 — no unevidenced 'Covered' in traceability (AGENTS.md)"
+head2 "GATE 7 — every 'Covered' traceability row names a test file that exists"
 # ---------------------------------------------------------------------------
 # AGENTS.md: "Every traceability item marked `Covered` needs test evidence."
 #
-# Count only STATUS CELLS, not every occurrence of the word. The file legitimately
-# defines `Covered` as a reserved vocabulary word in its own status legend, and an
-# earlier version of this gate counted that definition and failed a correct file.
-# Found 25 Jul 2026 by the subagent fixing H-3, which reported the false positive
-# instead of deleting the legend to make the gate green. Scoping the match to the
-# trailing status column is the fix; weakening the assertion would not have been.
+# LESSON 1 (kept from the original gate, still enforced) — match only STATUS
+# CELLS, not every occurrence of the word. The file legitimately defines
+# `Covered` as a reserved vocabulary word in its own status legend, and an
+# earlier version of this gate counted that definition and failed a correct
+# file. Found 25 Jul 2026 by the subagent fixing H-3, which reported the false
+# positive instead of deleting the legend to make the gate green. Scoping the
+# match to the trailing status column was the fix; weakening the assertion
+# would not have been. This version scopes harder: a line counts as a row only
+# if it starts with `|` AND its first cell is a traceability ID (HOME-01,
+# FAQ-03, ...), so legends, prose, and the section D evidence trail — all of
+# which say "Covered" repeatedly — cannot reach the gate at all. The
+# ID-shaped-row rule is then cross-checked against a plain status-cell count
+# (see g7_loose below) so a `Covered` row with a malformed ID cannot slip
+# through the narrower filter unnoticed.
 #
-# Second weakness, found 25 Jul 2026 when the Laravel scaffold landed: the count
-# accepted ANY test file, and the skeleton ships tests/Unit/ExampleTest.php and
-# tests/Feature/ExampleTest.php. Two placeholder assertions would have satisfied
-# "test evidence exists" for all 31 traceability rows. Framework stubs are now
-# excluded, so the gate measures real evidence rather than the presence of files.
+# LESSON 2 (kept, and still live) — framework stubs are not evidence. The
+# Laravel skeleton ships tests/Unit/ExampleTest.php and tests/Feature/
+# ExampleTest.php; two placeholder assertions must never satisfy "test evidence
+# exists" for 31 traceability rows. Both stub files have since been deleted
+# from this repo (verified 08 Aug 2026), but the exclusion below is retained
+# deliberately: `php artisan` scaffolding can recreate them at any time, and a
+# row naming one as its evidence must still be rejected.
+#
+# WHY THE OLD TEST-FILE COUNT IS GONE (finding T-B, 08 Aug 2026) — the previous
+# condition was `[ "$covered" -eq 0 ] || [ "$tests" -gt 0 ]`. That was a real
+# check only while the repo had zero tests. Once real tests landed (90 files by
+# August) the right-hand side became permanently true and the gate passed
+# unconditionally — it would have accepted all 31 rows marked `Covered` with
+# nothing whatsoever behind them. The existence of tests SOMEWHERE was never
+# evidence for a SPECIFIC row. The gate now verifies the mapping instead: every
+# `Covered` row must name at least one test path in its own "Test evidence"
+# cell, and every path it names must exist on disk. Whether that test actually
+# asserts what the row claims is not mechanically checkable and stays a human
+# review duty — the matrix's section D records that reading per row so a
+# reviewer can re-check it.
+#
+# Column positions are read from the END of the row (status = last cell,
+# evidence = the one before it) rather than by fixed index, so prepending a
+# column to the section B table does not silently break the gate.
 tm=docs/domain/traceability-matrix.md
-tests=$(find . -path ./.git -prune -o -path ./vendor -prune -o -path ./node_modules -prune -o \
-        \( -name '*Test.php' -o -name '*.spec.ts' -o -name '*.cy.js' \) -print 2>/dev/null \
-        | grep -vE '/(Unit|Feature)/ExampleTest\.php$' | wc -l)
-covered=$(grep -cE '\|[[:space:]]*Covered[^|]*\|?[[:space:]]*$' "$tm" 2>/dev/null || true)
-if [ "$covered" -eq 0 ] || [ "$tests" -gt 0 ]; then
-  pass "traceability consistent (status cells marked Covered=$covered, test files=$tests)"
+G7_STUBS=" tests/Unit/ExampleTest.php tests/Feature/ExampleTest.php "
+g7_log=/tmp/g7-traceability.log
+: > "$g7_log"
+g7_rows=0
+g7_paths=0
+
+if [ ! -f "$tm" ]; then
+  fail "$tm is missing — traceability cannot be verified"
 else
-  fail "$covered status cell(s) marked 'Covered' but $tests test files exist — AGENTS.md violation (finding H-3)"
+  while IFS=$'\t' read -r id evidence status; do
+    g7_rows=$((g7_rows + 1))
+    paths=$(printf '%s\n' "$evidence" \
+            | grep -oE '(tests|resources/tests)/[A-Za-z0-9_./-]+\.(php|ts|js)' | sort -u || true)
+    if [ -z "$paths" ]; then
+      echo "$id: status '$status' but its Test evidence cell names no test file" >> "$g7_log"
+      continue
+    fi
+    while IFS= read -r p; do
+      g7_paths=$((g7_paths + 1))
+      if [ "${G7_STUBS#* $p }" != "$G7_STUBS" ]; then
+        echo "$id: names '$p' — framework stub, not test evidence (lesson 2)" >> "$g7_log"
+      elif [ ! -f "$p" ]; then
+        echo "$id: names '$p' — no such file on disk" >> "$g7_log"
+      fi
+    done <<< "$paths"
+  done < <(awk -F'|' '
+    /^\|/ {
+      if (NF < 5) next
+      id = $2;        gsub(/^[[:space:]]+|[[:space:]]+$/, "", id)
+      if (id !~ /^[A-Z]+-[0-9]+$/) next
+      st = $(NF - 1); gsub(/^[[:space:]]+|[[:space:]]+$/, "", st)
+      if (st !~ /^Covered/) next
+      ev = $(NF - 2); gsub(/^[[:space:]]+|[[:space:]]+$/, "", ev)
+      # Never emit an empty field: IFS=tab in the reader collapses runs of
+      # whitespace delimiters, which would shift the columns for an
+      # evidence-less row.
+      if (ev == "") ev = "-"
+      printf "%s\t%s\t%s\n", id, ev, st
+    }' "$tm")
+
+  # Cross-check (lesson 1): every status cell reading `Covered` on any table row
+  # must have been one of the ID-shaped rows examined above.
+  g7_loose=$(awk -F'|' '
+    /^\|/ { if (NF < 3) next
+            st = $(NF - 1); gsub(/^[[:space:]]+|[[:space:]]+$/, "", st); if (st ~ /^Covered/) n++ }
+    END { print n + 0 }' "$tm")
+  if [ "$g7_loose" -ne "$g7_rows" ]; then
+    echo "$((g7_loose - g7_rows)) row(s) marked 'Covered' were not examined — first cell is not a traceability ID" >> "$g7_log"
+  fi
+
+  if [ ! -s "$g7_log" ]; then
+    if [ "$g7_rows" -eq 0 ]; then
+      pass "traceability has no 'Covered' rows — nothing to evidence"
+    else
+      pass "$g7_rows 'Covered' row(s), $g7_paths named test path(s), all exist on disk"
+    fi
+  else
+    fail "unevidenced 'Covered' row(s) — AGENTS.md violation (findings H-3, T-B):"
+    sed 's/^/    /' "$g7_log"
+  fi
 fi
 
 # ---------------------------------------------------------------------------

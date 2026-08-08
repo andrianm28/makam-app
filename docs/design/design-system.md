@@ -538,6 +538,21 @@ Wrap it in `aria-live="polite"` so it is announced without stealing focus. **Nev
 
 **Urgent / Pre-Need branching** — internal workflow may differ, but the stepper still reads 1–9 and the user always reaches an explicit outcome (`booking-wizard-fields.md` §Branching). The stepper is a **presentation** contract; do not renumber it per branch.
 
+**Props**
+
+| Prop | Default | Meaning |
+|---|---|---|
+| `step` | `1` | Current step, clamped to `1..count($labels)` |
+| `errorSteps` | `[]` | Step numbers currently in the `error` state |
+| `stepMethod` | `'goToStep'` | Livewire method invoked as `stepMethod(n)` by a clickable dot |
+| `labels` | **the nine booking labels above** | Ordered step labels for the journey being rendered |
+
+**The nine-step default is normative.** Omitting `labels` renders exactly the nine canonical booking steps, in that order, with that wording — that is the contract quoted at the top of this section, and it is the *default value* of the prop precisely so that nothing can reword booking by accident. This is a component-contract change, not a token change, so [§9.4](#94-changing-a-token) does not apply and **no ADR is required**; §9.4 governs `tokens.css` only.
+
+**`labels` is for a different journey, never for re-labelling booking.** It exists because the renewal journey (`.kiro/specs/renewal-and-grave-registry` AC1) is **six** visible steps — city · TPU/TPS · grave search · fee · payment · confirmation/invoice — and its `tasks.md` requires this same primitive rather than a second stepper. Passing `labels` from a booking surface to rename, reorder, hide, or renumber a booking step is forbidden by `AGENTS.md` (§Mandatory MVP UX, "Booking exposes Steps 1–9 exactly as documented") and by [§9.2](#92-rules-for-developers-and-ai-agents-enforceable) MUST NOT 9. Urgent / Pre-Need branches keep reading 1–9; they do not supply `labels`.
+
+Every count is derived from the supplied array, never from a literal 9 — the total, the mobile `Langkah N dari M` line, `aria-valuemin`/`aria-valuemax`, the `step` clamp, and the progress-bar percentage. A supplied array may be a 0-indexed list or an already-1-indexed map; it is re-keyed to a contiguous `1..N` sequence either way. `role="group"` and `aria-label="Progres pemesanan"` are merge defaults, so a non-booking journey supplies its own accessible group name alongside its own `labels`.
+
 ### 3.10 Header — `<x-mk.header>`
 
 Per [IA §2](../product/information-architecture.md), labels are identical on mobile and desktop: `Pemesanan Makam` · `Layanan Pemakaman` · `Perpanjangan Makam` · `FAQ` · `Masuk/Akun` · `Bantuan`.
