@@ -53,6 +53,16 @@ ekspektasi-user
 # spec tooling belongs in the repository beside the specs it governs.
 !.claude/skills/
 
+# Un-ignored 8 Aug 2026, same reasoning as the skills above. Subagent role
+# definitions double as agent-team teammate types
+# (code.claude.com/docs/en/agent-teams), and Claude Code's own guidance is to
+# "check them into version control so your team can use and improve them
+# collaboratively". They are project knowledge, not machine-local config.
+# .claude/settings.json deliberately stays ignored (AGENTS.md M-3) — the
+# CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS flag lives there and is a per-machine
+# opt-in into an experimental feature, not a project decision.
+!.claude/agents/
+
 # Reversed 25 Jul 2026: this line un-ignores ekspektasi-user despite the
 # blanket ignore above. Reasoning recorded in the commit message and in
 # docs/planning/ekspektasi-vs-specs.md §4 D5 — it is the stakeholder-MVP
