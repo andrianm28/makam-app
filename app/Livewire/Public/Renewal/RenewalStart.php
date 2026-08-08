@@ -1,0 +1,153 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Livewire\Public\Renewal;
+
+use App\Domain\CemeteryDirectory\LaunchCityCode;
+use App\Domain\Renewal\RenewalJourneyStep;
+use App\Domain\Renewal\RenewalLocationQuery;
+use App\Platform\FeatureGate\ModeResolver;
+use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Collection;
+use Livewire\Attributes\Url;
+use Livewire\Component;
+use Throwable;
+
+/**
+ * `/perpanjangan` — screen PUB-030 (`docs/product/screen-inventory.md`:
+ * "Renewal Step 1-2 | city/cemetery selection"). Sprint 4 S4-T7,
+ * `.kiro/specs/renewal-and-grave-registry` AC1 (steps 1 and 2 of the six)
+ * and AC2 (all five MVP launch cities).
+ *
+ * REPLACES the `App\Livewire\Public\ComingSoon\RenewalComingSoon` stub
+ * wholesale — that class's own doc block says it is "expected to be
+ * REPLACED, not extended", and `routes/web.php` says the same of its route
+ * registration. This batch does not own `routes/web.php`; the exact route
+ * lines needed are reported to the batch lead instead of edited in.
+ *
+ * Same structural shape as `App\Livewire\Public\Faq\FaqIndex`: a plain
+ * `Livewire\Component`, `->layout('layouts.app', [...])` attached
+ * per-render so `<title>` can follow the selected city, read-only, no
+ * `app/Domain/**` write path anywhere in this class.
+ *
+ * ---------------------------------------------------------------------------
+ * Why the gate produces a BANNER here and a PAGE on the next screen
+ * ---------------------------------------------------------------------------
+ * `G-DATA-01` closed means the grave-search capability is unavailable
+ * (AC16). This screen is not the search — it is city and cemetery
+ * selection, which works perfectly well either way and which
+ * design-system.md §6.9 forbids removing: "a closed gate never removes a
+ * required MVP step." So this screen renders `<x-mk.gate-closed-banner>`
+ * up front, telling the visitor before they invest in two selections that
+ * the search step will need the manual-assistance path, and step 3 itself
+ * (`GraveSearch`) renders §6.4's full explanatory page.
+ *
+ * The banner is dismissible, which is NOT this class's decision to make —
+ * it comes from `App\Platform\FeatureGate\Modes\GraveSearchMode::
+ * fallback()`, decided once per mode. §6.9 allows dismissal only for
+ * informational modes and forbids it for any mode that changes how a user
+ * must pay; this one changes a search path, not a payment.
+ */
+final class RenewalStart extends Component
+{
+    /**
+     * The launch city selected in AC1's step 1, as a
+     * `LaunchCityCode::KNOWN_CODES` value. Empty means step 1 is still
+     * open — which is what makes the stepper's current step derivable
+     * rather than tracked as a second, drift-prone piece of state.
+     */
+    #[Url(as: 'kota', history: true)]
+    public string $city = '';
+
+    /**
+     * §6.5 "Provider unavailable" — set only when the cemetery list query
+     * itself throws. The city chooser above it is built from
+     * `LaunchCityCode`, a PHP constant with no database behind it, so
+     * step 1 keeps working even when step 2's read is down. That is the
+     * whole point of catching here rather than letting the page 500.
+     */
+    public bool $cemeteryListUnavailable = false;
+
+    public function mount(): void
+    {
+        // A tampered or stale `?kota=` value is silently discarded rather
+        // than 404ing: nothing about this URL names a specific record whose
+        // existence could leak, and dropping the visitor back to a working
+        // step 1 is more useful than an error page. `RenewalLocationQuery::
+        // cemeteriesInCity()` would return empty for an unknown code
+        // anyway; this makes the reset visible in the UI and the URL.
+        if ($this->city !== '' && ! LaunchCityCode::isKnown($this->city)) {
+            $this->city = '';
+        }
+    }
+
+    public function selectCity(string $city): void
+    {
+        if (! LaunchCityCode::isKnown($city)) {
+            return;
+        }
+
+        $this->city = $city;
+    }
+
+    public function resetCity(): void
+    {
+        $this->city = '';
+    }
+
+    /**
+     * AC1 step 1 until a city is chosen, then step 2. Derived from the one
+     * piece of state this screen holds — see `$city`.
+     */
+    private function currentStep(): int
+    {
+        return $this->city === ''
+            ? RenewalJourneyStep::CITY
+            : RenewalJourneyStep::CEMETERY;
+    }
+
+    public function render(): View
+    {
+        $cemeteries = new Collection;
+        $this->cemeteryListUnavailable = false;
+
+        if ($this->city !== '') {
+            try {
+                $cemeteries = RenewalLocationQuery::cemeteriesInCity($this->city);
+            } catch (Throwable $e) {
+                report($e);
+
+                // §6.5 — the city chooser and the whole page must survive a
+                // failed secondary read (design-system.md §6.3/§6.5, and the
+                // pattern `FaqIndex`/`HomePage` both use).
+                $this->cemeteryListUnavailable = true;
+            }
+        }
+
+        $selectedCityLabel = null;
+
+        foreach (RenewalLocationQuery::cities() as $city) {
+            if ($city['code'] === $this->city) {
+                $selectedCityLabel = $city['label'];
+            }
+        }
+
+        return view('livewire.public.renewal.start', [
+            'cities' => RenewalLocationQuery::cities(),
+            'cemeteries' => $cemeteries,
+            'selectedCityLabel' => $selectedCityLabel,
+            'currentStep' => $this->currentStep(),
+            'stepLabels' => RenewalJourneyStep::labels(),
+            // Read from the server every render — never a client-supplied
+            // flag (design-system.md §6.9, and `ModeResolver` is the one
+            // place gate-id-to-mode pairing lives).
+            'graveSearchMode' => app(ModeResolver::class)->graveSearchMode(),
+        ])->layout('layouts.app', [
+            'title' => $selectedCityLabel !== null
+                ? 'Perpanjangan Makam '.$selectedCityLabel.' - Makam.co.id'
+                : 'Perpanjangan Makam - Makam.co.id',
+            'active' => 'perpanjangan',
+        ]);
+    }
+}

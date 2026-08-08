@@ -1,7 +1,6 @@
 <?php
 
 use App\Livewire\Public\ComingSoon\BookingWizardComingSoon;
-use App\Livewire\Public\ComingSoon\RenewalComingSoon;
 use App\Livewire\Public\Directory\CemeteryDetail;
 use App\Livewire\Public\Directory\CemeteryDirectoryIndex;
 use App\Livewire\Public\Faq\FaqArticleDetail;
@@ -11,6 +10,8 @@ use App\Livewire\Public\Legal\PrivacyPolicy;
 use App\Livewire\Public\Legal\TermsOfService;
 use App\Livewire\Public\Marketplace\MarketplaceIndex;
 use App\Livewire\Public\Marketplace\ProductDetail;
+use App\Livewire\Public\Renewal\GraveSearch;
+use App\Livewire\Public\Renewal\RenewalStart;
 use App\Livewire\Public\Support\HelpCentre;
 use Illuminate\Support\Facades\Route;
 
@@ -29,8 +30,10 @@ use Illuminate\Support\Facades\Route;
 |                                08 Aug 2026) — browse only; see MarketplaceIndex's own
 |                                doc block for what is deliberately still missing (cart,
 |                                checkout, vendor portal — Sprint 11-12)
-|   /perpanjangan      Sprint 4  renewal-and-grave-registry          STUB (S4-T3): same,
-|                                real renewal flow is in progress (S4-T7, agent team)
+|   /perpanjangan      Sprint 4  renewal-and-grave-registry          implemented (S4-T7,
+|                                08 Aug 2026) — AC1-AC5, AC14 only; steps 4-6 (fee,
+|                                payment, confirmation) are real stepper entries with no
+|                                screen behind them yet, per RenewalStart's own doc block
 |   /faq               Sprint 4  public-faq                          implemented (S4-T2)
 |   /                  Sprint 4  public-home-and-navigation          implemented (S4-T3,
 |                                this batch) — homepage now serves real content; see
@@ -42,24 +45,24 @@ use Illuminate\Support\Facades\Route;
 | services requirement is what HomePage + <x-mk.header> together implement,
 | not a placeholder.
 |
-| The two remaining STUB routes below return a real Livewire full-page
+| The one remaining STUB route below returns a real Livewire full-page
 | component rendering an honest "coming soon" state (200 OK, header + footer
 | intact), never Laravel's default 404 — requirements.md AC6 read expansively;
 | see resources/views/livewire/public/coming-soon.blade.php's own doc block for
 | why this is deliberately NOT <x-mk.gate-closed-page> (that component's
-| copy assumes a real closed FEATURE GATE, which does not apply here — these
-| routes are simply not built yet this sprint). Each stub route is expected to
-| be REPLACED wholesale by its owning spec's real routes, not extended in
-| place — `/marketplace` below is the first of the three to go through that
-| replacement; `MarketplaceComingSoon` (app/Livewire/Public/ComingSoon/) is
-| now dead code, deliberately left in place rather than deleted in this same
-| change (no test depends on it; removing it is separable cleanup).
+| copy assumes a real closed FEATURE GATE, which does not apply here — this
+| route is simply not built yet this sprint). A stub route is expected to be
+| REPLACED wholesale by its owning spec's real routes, not extended in place
+| — `/marketplace` and `/perpanjangan` have now both gone through that
+| replacement; `MarketplaceComingSoon` and `RenewalComingSoon`
+| (app/Livewire/Public/ComingSoon/) are now dead code, deliberately left in
+| place rather than deleted in this same change (no test depends on either;
+| removing them is separable cleanup).
 */
 
 Route::get('/', HomePage::class)->name('home');
 
 Route::get('/pemesanan-makam', BookingWizardComingSoon::class)->name('pemesanan-makam.index');
-Route::get('/perpanjangan', RenewalComingSoon::class)->name('perpanjangan.index');
 
 /*
 |--------------------------------------------------------------------------
@@ -112,6 +115,39 @@ Route::get('/marketplace/produk/{productCode}', ProductDetail::class)->name('mar
 */
 Route::get('/cemeteries', CemeteryDirectoryIndex::class)->name('cemeteries.index');
 Route::get('/cemeteries/{cemeterySlug}', CemeteryDetail::class)->name('cemeteries.show');
+
+/*
+|--------------------------------------------------------------------------
+| Renewal — renewal-and-grave-registry AC1-AC5, AC14 (S4-T7)
+|--------------------------------------------------------------------------
+| Built by an agent-team teammate (renewal-builder) and independently
+| reviewed (spec + design lenses, read directly against the code — the two
+| review subagents this batch would normally use both failed on a session
+| API limit, so this review was done manually against the same checklist)
+| before wiring. Every claim checked: the three empty states are enforced
+| structurally in GraveSearchOutcome (gate-closed is not even representable
+| by it — that state is the search never having run), a `closed`-mode
+| record is matched and counted, never dropped, the six stepper labels come
+| from RenewalJourneyStep and stepper.blade.php itself is untouched, the
+| migration is additive-only and does not swallow a real pg_trgm failure,
+| and heir_contact_reference is projected by no access mode at all.
+|
+| Replaces `RenewalComingSoon` wholesale, per that stub's own doc block.
+| Paths from information-architecture.md §1's route tree. `/perpanjangan`
+| is Step 1-2 (city, cemetery); `/perpanjangan/cari` is Step 3 (grave
+| search) — steps 4-6 (fee, payment, confirmation) are Sprint 13 per
+| sprint-plan.md §9 and render as real, visible, not-yet-reachable stepper
+| entries rather than being hidden (§6.9: a closed/future gate never
+| removes a required MVP step).
+|
+| Read-only. Both components resolve exclusively through
+| App\Domain\GraveRegistry\GraveRegistryPublicQuery and
+| App\Domain\Renewal\RenewalLocationQuery — never a GraveRecord or Cemetery
+| model directly. G-DATA-01 is read server-side via ModeResolver, matching
+| every other gated surface in this codebase.
+*/
+Route::get('/perpanjangan', RenewalStart::class)->name('perpanjangan.index');
+Route::get('/perpanjangan/cari', GraveSearch::class)->name('perpanjangan.cari');
 
 /*
 |--------------------------------------------------------------------------

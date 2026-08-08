@@ -272,12 +272,30 @@ final class HomePageRouteTest extends TestCase
         $response->assertDontSee('Layanan Pemakaman Segera Hadir');
     }
 
-    public function test_perpanjangan_stub_route_returns_ok_not_404(): void
+    /**
+     * RENAMED from `test_perpanjangan_stub_route_returns_ok_not_404`, which
+     * asserted the "Segera Hadir" coming-soon stub's copy. That stopped
+     * being true 8 Aug 2026 (S4-T7, agent-team teammate renewal-builder,
+     * reviewed and wired) — `/perpanjangan` now serves the real renewal
+     * journey start (Step 1-2). Same shape as the marketplace rename two
+     * tests above; both routes were wired in the same integration pass.
+     *
+     * `assertSee('Perpanjangan Makam')` alone would be weak here for the
+     * same reason marketplace-builder flagged on the marketplace rename:
+     * `<x-mk.header>` renders that exact string as a nav label on every
+     * page, so the assertion would pass even if the page body were blank.
+     * `Langkah 1 — Pilih Kota` is this screen's own step-1 heading and
+     * appears nowhere else, so it is what actually proves the real page
+     * rendered rather than merely a page with a header.
+     */
+    public function test_perpanjangan_route_now_serves_the_real_renewal_page_not_the_stub(): void
     {
         $response = $this->get('/perpanjangan');
 
         $response->assertOk();
-        $response->assertSee('Perpanjangan Makam Segera Hadir');
+        $response->assertSee('Langkah 1');
+        $response->assertSee('Pilih Kota');
+        $response->assertDontSee('Perpanjangan Makam Segera Hadir');
     }
 
     public function test_viewing_the_homepage_records_menu_impressions_without_sensitive_data(): void
