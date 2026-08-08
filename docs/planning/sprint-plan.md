@@ -627,7 +627,7 @@ Starting with S4-T2 (public FAQ), implementation batches in this sprint are buil
 | S4-T7 | Renewal skeleton — city/cemetery selection + fuzzy search UI + **three distinct empty states** | `renewal-and-grave-registry` AC1–AC5, AC14 | feature-gate, audit | 2 pd | — | ✅ Done (08 Aug 2026, agent team), CI green — run `31248602859`, commit `a150a3b`. AC1–AC3, AC5, AC14 shipped at `/perpanjangan` + `/perpanjangan/cari`, and the three empty states did **not** collapse — no-result, privacy-limited, and gate-closed are held apart by assertions written as denials (the §7 note below flagged this as the defect to avoid). **Partial:** only journey steps 1–3 have screens; steps 4–6 (fee, payment, confirmation) are Sprint 13. **AC4 (< 500 ms at 100k records) is NOT TESTED and not passing** — nothing measures latency, no 100k-row fixture exists |
 | S4-T8 | Marketplace skeleton — category/product browse from seeded catalogue | `funeral-marketplace-and-vendor-portal` AC1–AC3 | identity, audit | 2 pd | — | ✅ Done (08 Aug 2026, agent team), CI green — run `31248602859`, commit `a150a3b`. AC1 and browse shipped at `/marketplace` + `/marketplace/produk/{productCode}`; browse-only is test-enforced (no cart/checkout affordance, no callable Livewire action). **Partial:** AC2 cannot be completed as specified — `products`/`product_variants` have no schedule, service-area, delivery-fee, or stock/availability column. AC3's cart→checkout→payment→vendor sequence is Sprint 11–12 as planned. `/marketplace/kategori/{categorySlug}` stays deliberately **unregistered and BLOCKED** pending a product decision — `marketplace-catalog.md` defines 9 product codes and 0 category codes, and no slug was invented; filtering uses an internal `?kategori=` key instead |
 | S4-T9 | Capacity review with all tenants counted; decide upgrade vs split | infra | — | 1 pd | ⚠️ **HUMAN** | Not started — requires the user, not an agent |
-| S4-T10 | Resolve the 5 open decisions in `assumptions-and-gates.md` §5 that block specs | **L-6** | — | 1 pd | ⚠️ **HUMAN** | Not started — requires the user, not an agent |
+| S4-T10 | Resolve the open decisions in `assumptions-and-gates.md` §5 that block specs — **12 items now**, not 5; the list grew after this row was written (verified 08 Aug 2026 by counting §5 directly) | **L-6** | — | 1 pd | ⚠️ **HUMAN** | Not started — requires the user, not an agent |
 
 **Total: ~27 pd** — over a 2-week sprint for one developer. See §11.
 
@@ -794,11 +794,11 @@ An agent may **prepare and propose** every item below. **None may be executed wi
 | **G3** | S2-T5 | **DNS + firewall** | DNS records, IP allowlist, TLS; **risks the live `makam.co.id`** |
 | **G4** | S2-T6 | Security config | Redis auth; requires restart |
 | **G5** | S2-T7 | DB + storage | Backup credentials, remote storage, restore execution |
-| **G6** | S3-T9 | Infrastructure | Capacity decision: upgrade / split / accept |
-| **G7** | S3-T10 | Product/legal | Reservation TTL, certificate authority, public data minimums, consent |
-| **G8** | S4-T5 | Release | Gate report sign-off |
-| **G9** | S4-T6 | Migration + deploy | Rollback rehearsal, expand/contract |
-| **G10** | S4-T7 | Product/brand | Brand primary (OQ-01), navigation contract (OQ-04) |
+| **G6** | S4-T9 | Infrastructure | Capacity decision: upgrade / split / accept |
+| **G7** | S4-T10 | Product/legal | Reservation TTL, certificate authority, public data minimums, consent, and 8 more — see §5, now 12 items total |
+| **G8** | S5-T5 | Release | Gate report sign-off (release-gate dry run) |
+| **G9** | S5-T6 | Migration + deploy | Rollback rehearsal, expand/contract |
+| **G10** | S5-T7 | Product/brand | Brand primary (OQ-01), navigation contract (OQ-04), plus OQ-05/OQ-06 |
 
 ### Required pause conditions — agent must stop and ask
 
@@ -859,7 +859,7 @@ Not counted above because it is **already done**: authoring the eight foundation
 |---|---|---|---|---|---|
 | R-1 | **nginx work breaks live `makam.co.id`** | Med | **High** | Config backup, `nginx -t`, apex regression test, rollback, G3 | Human + agent |
 | R-2 | Silent-failure class recurs elsewhere | Med | **High** | S1-T4 pattern: assert *function*, not liveness, in every healthcheck | Dev |
-| R-3 | Host capacity insufficient once PHP-FPM + Horizon run | **High** | Med | S3-T9 measurement + decision; builds stay in CI | G6 |
+| R-3 | Host capacity insufficient once PHP-FPM + Horizon run | **High** | Med | S4-T9 measurement + decision; builds stay in CI | G6 |
 | R-4 | Payment gate `G-PAY-01` stays closed indefinitely | Med | **High** | Manual fallback is the designed path; no payment work in 1–4 | Product |
 | R-5 | Production managed Postgres provider undecided (N-3) | **High** | **High** | Decide by Sprint 5; blocks all production planning | Product |
 | R-6 | No object storage → blocks backups **and** uploads | Med | High | **OQ-4 — resolve before Sprint 2** | Product |
@@ -1005,7 +1005,7 @@ Per `AGENTS.md`: *"Never report `PASS` for a check that was not executed; use `B
 | **L-3** | Low | 2 | S2-T5 | `git-askpass` sudo path + hardcoded username |
 | **L-4** | Low | 2, 5 | S2-T9, S5-T8 | Version alignment to v0.6 |
 | **L-5** | Low | 5 | S5-T8 | `CLAUDE.md` ↔ `AGENTS.md` |
-| **L-6** | Low | 4 | S4-T10 | 5 open decisions ⚠️ G7 |
+| **L-6** | Low | 4 | S4-T10 | 12 open decisions (was 5; list grew) ⚠️ G7 |
 | **N-1** | Medium | 1 | S1-T3 | Separate app/migration roles — **new**; needs 2 provisioned secrets |
 | **N-2** | Medium | 1–2 | OQ-11 | No CSP defined — **new** |
 | **N-3** | High | 15 | OQ-6 | No managed Postgres provider — **new** |
