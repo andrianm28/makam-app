@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Domain\GraveRegistry;
 
+use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\GraveRegistry\GraveNameNormalizer;
 use App\Domain\GraveRegistry\GraveRecordAccessMode;
 use App\Domain\GraveRegistry\GraveRecordSource;
 use App\Domain\GraveRegistry\Models\GraveRecord;
-use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use InvalidArgumentException;
 use Tests\TestCase;
