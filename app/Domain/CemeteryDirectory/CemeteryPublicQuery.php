@@ -258,10 +258,25 @@ final class CemeteryPublicQuery
      * EXPRESSIBLE, not that every seeded cemetery have it populated." A
      * screen must present that as "not recorded yet", never as a failure.
      *
+     * Unlike every other method here this one receives an already-loaded
+     * model rather than starting its own query, so this class's headline rule
+     * ("every method here starts from `Cemetery::published()`") had nowhere
+     * to live except in caller discipline. All current callers do obtain the
+     * model from a published-scoped method first, but the guarantee belongs
+     * at this seam, not in the callers' memory — including the two Booking
+     * call sites this module does not own. An unpublished cemetery therefore
+     * returns an empty collection, matching `inCity()`'s posture for an
+     * unknown city code: an invalid input on a public read is an empty
+     * result, never an exception.
+     *
      * @return Collection<int, CemeteryPackage>
      */
     public static function activePackages(Cemetery $cemetery): Collection
     {
+        if (! $cemetery->isPublished()) {
+            return new Collection;
+        }
+
         /** @var Collection<int, CemeteryPackage> $packages */
         $packages = $cemetery->packages()
             ->active()

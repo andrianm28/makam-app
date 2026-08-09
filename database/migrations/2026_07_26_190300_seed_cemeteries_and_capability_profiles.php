@@ -264,9 +264,32 @@ return new class extends Migration
             'tpu-bekasi-jatiasih', 'tps-bekasi-harapan-indah',
         ];
 
-        // cemetery_capability_profiles and cemetery_packages both
-        // cascadeOnDelete() from cemeteries.id, so deleting the cemeteries
-        // is sufficient.
+        // `cemeteries.id` now has FOUR inbound foreign keys with THREE
+        // different delete behaviours, not the two cascades this comment
+        // used to claim:
+        //
+        //   cemetery_capability_profiles.cemetery_id  cascade   2026_07_26_190100:85
+        //   cemetery_packages.cemetery_id             cascade   2026_07_26_190200:57
+        //   grave_records.cemetery_id                 RESTRICT  2026_08_08_100000:130-132
+        //   booking_drafts.cemetery_id                set null  2026_08_08_130000:67
+        //
+        // The two cascades still make the row deletes below sufficient for
+        // this migration's own children. The `grave_records` RESTRICT does
+        // not, and it is a row-level `DELETE` constraint — it fires on the
+        // statement below, not only on a `DROP TABLE`.
+        //
+        // Why this still works in the normal case: a sequential
+        // `migrate:rollback` reverses in descending migration-name order, so
+        // `2026_08_08_100010_seed_example_grave_records.php`'s own `down()`
+        // has already removed its fixture rows (which reference eight of the
+        // ten slugs below) before this `down()` runs. Run this migration's
+        // `down()` OUT of that order — a single targeted rollback, a manual
+        // invocation — and the RESTRICT fires and this statement fails.
+        //
+        // Do not extend this to delete `grave_records` here: that table is
+        // owned by `GraveRegistry`, and per `AGENTS.md` §Database we do not
+        // rely on destructive production `down()` migrations for rollback in
+        // the first place.
         DB::table('cemeteries')->whereIn('slug', $slugs)->delete();
     }
 };

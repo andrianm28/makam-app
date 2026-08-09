@@ -115,7 +115,12 @@ final class CemeteryDetailRouteTest extends TestCase
         $response->assertSee((string) $cemetery->primary_photo_path);
         $response->assertSee((string) $cemetery->google_maps_url);
         $response->assertSee((string) $cemetery->price_source);
+        // BOTH ends of AC3's "attributed price range".
+        // `CemeteryPresenter::priceRange()` renders "{symbol} {min} - {symbol}
+        // {max}"; asserting only the minimum let a regression that dropped or
+        // corrupted the upper half pass on both routes.
         $response->assertSee(number_format((float) $cemetery->price_min, 0, ',', '.'));
+        $response->assertSee(number_format((float) $cemetery->price_max, 0, ',', '.'));
 
         foreach ((array) $cemetery->facilities as $facility) {
             $response->assertSee((string) $facility);

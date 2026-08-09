@@ -26,6 +26,18 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * migration never touches `cemetery_capability_profiles` or
  * `cemetery_packages`).
  *
+ * Known fact, stated because the two relations below no longer enumerate
+ * everything that depends on this table: `GraveRegistry` and `Booking` have
+ * both since attached foreign keys to `cemeteries` without an owning
+ * relation here — `grave_records.cemetery_id` (RESTRICT on delete,
+ * `2026_08_08_100000`) and `booking_drafts.cemetery_id` (SET NULL,
+ * `2026_08_08_130000`). Those are deliberately NOT modelled as relations on
+ * this model: the dependency points inward from modules this one does not
+ * own, and adding `hasMany` accessors here would invert that ownership.
+ * Recorded so nobody reads `capabilityProfiles()`/`packages()` as the
+ * complete inbound-dependency picture — it is not, and
+ * `2026_07_26_190300`'s `down()` carries the full four-FK table.
+ *
  * `id` is a UUID, not an auto-increment integer — the one deliberate
  * deviation from `App\Domain\Faq\Models\FaqArticle`'s otherwise-matched
  * conventions in this batch. `docs/contracts/openapi.yaml`'s `CemeteryId`

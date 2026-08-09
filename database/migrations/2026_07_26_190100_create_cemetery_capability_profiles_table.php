@@ -19,7 +19,10 @@ use Illuminate\Support\Facades\Schema;
  * maintain an explicit versioned capability profile for every cemetery.
  * WHEN a capability profile is missing THE SYSTEM SHALL use safe
  * defaults"), AC5, and AC7. `docs/architecture/overview.md` §6 is the
- * authority for the six mode names/cases/safe-defaults this table stores;
+ * authority for the six mode names and their value sets;
+ * `docs/domain/cemetery-capability-model.md`'s "Safe default" column is the
+ * authority for the six safe defaults this table's column defaults carry —
+ * `overview.md` states no default at all, so do not cite it for one;
  * see `App\Domain\CemeteryCapability\Models\CemeteryCapabilityProfile`'s
  * own class-level doc block for the full versioning-shape and
  * evidence-trail-scope reasoning (including the documented judgement call
