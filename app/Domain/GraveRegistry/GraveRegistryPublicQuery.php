@@ -127,9 +127,26 @@ final class GraveRegistryPublicQuery
      */
     private static function buildQuery(GraveSearchCriteria $criteria): Builder
     {
+        // Publication status is scoped HERE, not left to the caller. Before
+        // this clause existed, `search()` carried an unstated precondition —
+        // "whoever calls me has already proven this cemetery is published" —
+        // that appeared nowhere in `GraveSearchCriteria`'s signature, and a
+        // draft cemetery's records came back as fully-populated `open`
+        // projections to anyone holding its UUID. The sole caller
+        // (`GraveSearch`) does check, so nothing incorrect ever reached a
+        // visitor, but a precondition invisible at the seam is not a control.
+        //
+        // `Cemetery::scopePublished()` IS the canonical definition of
+        // published (AC2's base guarantee); composing it here is a reference
+        // to that canon, not the duplication `AGENTS.md` §Documentation
+        // forbids — which is exactly why this is fixed and the `G-DATA-01`
+        // gate check above is not.
         $query = GraveRecord::query()
             ->with('cemetery')
-            ->inCemetery($criteria->cemeteryId);
+            ->inCemetery($criteria->cemeteryId)
+            ->whereHas('cemetery', static function (Builder $cemetery): void {
+                $cemetery->published();
+            });
 
         if ($criteria->block !== '') {
             $query->inBlock($criteria->block);
