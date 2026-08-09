@@ -320,7 +320,14 @@
                                 // the most cautious availability state. The
                                 // page-level alert above already told the user
                                 // this happened.
-                                $availabilityMode = $capabilities?->availabilityMode ?? '';
+                                //
+                                // `$capabilities` is never null: the component
+                                // substitutes a real safe-default projection on
+                                // the degraded path, so `$availabilityMode` is
+                                // always a member of
+                                // AvailabilityMode::KNOWN_MODES rather than the
+                                // empty string this line used to coerce to.
+                                $availabilityMode = $capabilities->availabilityMode;
                                 $availability = CemeteryAvailabilityIntent::forCemetery($availabilityMode);
                                 $priceRange = CemeteryPresenter::priceRange($cemetery);
                                 $priceAttribution = CemeteryPresenter::priceAttribution($cemetery);

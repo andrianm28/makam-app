@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Public\Directory;
 
+use App\Domain\CemeteryCapability\Models\CemeteryCapabilityProfile;
 use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
@@ -136,7 +137,15 @@ final class CemeteryDirectoryIndex extends Component
         $this->directoryUnavailable = false;
         $this->capabilitiesDegraded = false;
 
-        /** @var Collection<int, array<string, mixed>> $cards */
+        // The shape is declared precisely rather than as
+        // `array<string, mixed>`: this array is the whole contract crossing
+        // the Livewire->Blade seam, `index.blade.php` destructures exactly
+        // these two keys, and `phpstan.neon` sets `paths: [app]` so no Blade
+        // file in this repository is under static analysis. A loose shape
+        // here leaves the far side of that seam checkable by nothing —
+        // which is precisely how `ba662d1`'s `$code => $label` destructuring
+        // bug reached production.
+        /** @var Collection<int, array{cemetery: Cemetery, capabilities: PublicCapabilityProjection}> $cards */
         $cards = new Collection;
 
         try {
@@ -145,6 +154,7 @@ final class CemeteryDirectoryIndex extends Component
                 type: $typeValid && $this->type !== '' ? $this->type : null,
             );
 
+            /** @var Collection<int, array{cemetery: Cemetery, capabilities: PublicCapabilityProjection}> $cards */
             $cards = $cemeteries->map(function (Cemetery $cemetery): array {
                 try {
                     $capabilities = PublicCapabilityProjection::forCemetery($cemetery);
@@ -159,8 +169,22 @@ final class CemeteryDirectoryIndex extends Component
                     // omit the cemetery or imply availability we could not
                     // read. tasks.md: "capability resolution failure falls
                     // back to safe defaults (AC4), not a blank page."
+                    //
+                    // The substitution is the same one `CemeteryDetail`
+                    // already makes on its own degraded path: build the
+                    // safe defaults from the one place that defines them and
+                    // project them through the same AC12 allowlist. The
+                    // earlier `null` here made this the only nullable
+                    // contract crossing the seam, and the view coerced it to
+                    // `''` — a value that is not a member of
+                    // `AvailabilityMode::KNOWN_MODES`. Passing a legal value
+                    // instead of relying on the intent resolver's
+                    // degrade-to-neutral behaviour keeps both consumers
+                    // answering this question the same way.
                     $this->capabilitiesDegraded = true;
-                    $capabilities = null;
+                    $capabilities = PublicCapabilityProjection::from(
+                        new CemeteryCapabilityProfile(CemeteryCapabilityProfile::safeDefaults())
+                    );
                 }
 
                 return [

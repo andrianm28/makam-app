@@ -9,6 +9,7 @@ use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Livewire\Public\Directory\CemeteryDirectoryIndex;
+use App\Livewire\Public\Directory\Support\CemeteryAvailabilityIntent;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
@@ -307,6 +308,51 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
             ->assertSet('directoryUnavailable', true)
             ->assertSee('Direktori lokasi sedang tidak dapat dimuat')
             ->assertSee('Hubungi Customer Service');
+    }
+
+    /**
+     * §6.5, the per-cemetery half — capability resolution failing for a
+     * cemetery must degrade that one card to AC4's safe defaults, not blank
+     * the directory and not omit the cemetery. Proven by dropping
+     * `cemetery_capability_profiles` alone, so `CemeteryPublicQuery::
+     * published()` still succeeds and only the per-card resolution throws.
+     * Nothing holds a foreign key into that table, so it drops cleanly on
+     * PostgreSQL as well as SQLite.
+     *
+     * What this asserts and what it deliberately does not: the badge output
+     * is IDENTICAL before and after the fix this test accompanies, because
+     * `CemeteryAvailabilityIntent::forCemetery()` degrades any unrecognised
+     * mode to `neutral` on purpose. So this test does not, and cannot,
+     * observe the difference between the old `null` -> `''` coercion and the
+     * new legal `INDICATIVE` value from the rendered HTML. What it does
+     * guard is the pair staying consistent: `index.blade.php` now reads
+     * `$capabilities->availabilityMode` with a plain `->`, so if the
+     * component is ever reverted to assigning `null` on this path, this test
+     * fatals instead of silently passing. That is the regression the typed
+     * `$cards` shape declares and that no gate in this repository can check
+     * for a Blade file (`phpstan.neon` sets `paths: [app]`).
+     */
+    public function test_a_cemetery_whose_capabilities_cannot_be_resolved_still_renders_with_safe_defaults(): void
+    {
+        $published = Cemetery::query()->published()->pluck('name');
+        $this->assertGreaterThan(0, $published->count());
+
+        Schema::drop('cemetery_capability_profiles');
+
+        $rendered = Livewire::test(CemeteryDirectoryIndex::class)
+            ->assertSet('directoryUnavailable', false)
+            ->assertSet('capabilitiesDegraded', true);
+
+        // Every published cemetery is still listed — a resolution failure
+        // must never omit a location from the directory.
+        foreach ($published as $name) {
+            $rendered->assertSee($name);
+        }
+
+        // And each one carries the safe default's neutral availability
+        // badge, not a blank or a success claim.
+        $rendered->assertSee(CemeteryAvailabilityIntent::NEEDS_CONFIRMATION_LABEL);
+        $this->assertStringNotContainsString('--mk-intent-success', $rendered->html());
     }
 
     /**
