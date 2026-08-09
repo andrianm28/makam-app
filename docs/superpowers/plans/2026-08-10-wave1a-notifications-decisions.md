@@ -33,7 +33,7 @@ not the raw human matrix labels. Land as a Task 1 fix round before Task 2,
 because Tasks 3-6 depend on event identity too.
 
 **Application question raised 10 Aug 2026.** The ruling could not be applied
-literally. Of the 17 matrix rows, only 7 have a clean catalogue counterpart;
+literally. Of the 17 matrix rows, only 6 have a clean catalogue counterpart;
 2 ("Order processing", "Order completed") both correspond to
 `order.status_changed.v1`, and `notification_templates.event_name` is
 `unique()`, so writing machine names collides at seed time; the remaining 8
@@ -45,7 +45,7 @@ producer emits.
 fabrication, not a new user decision.** Keep `event_name` as the matrix label
 (the matrix's own row identity, canonical per AC1). Add a **nullable,
 non-unique `outbox_event_name`** column carrying the machine key only for the
-7 rows with a real catalogue counterpart. Leave it NULL for the 2 colliding
+6 rows with a real catalogue counterpart. Leave it NULL for the 2 colliding
 order rows and the 8 rows with no counterpart. Dispatch keys on
 `outbox_event_name`; NULL means no template matches and nothing is sent — the
 same honest-absence pattern as Task 1's nullable `default_channel` ruling.

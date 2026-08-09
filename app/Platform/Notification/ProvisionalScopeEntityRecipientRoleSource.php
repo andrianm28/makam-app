@@ -34,18 +34,18 @@ use App\Platform\Notification\Contracts\RecipientRoleSource;
  *   the matrix's "Pengelola TPU/TPS" column.
  * - `vendor` -> vendor (`RecipientRole::VENDOR`) — the matrix's "Vendor"
  *   column.
- * - `case` -> case manager (`RecipientRole::CASE_MANAGER`). The matrix has
- *   no "case manager" column today (ruling 4 is blocked pending a
- *   decision on 34 new cell values), so this role can never actually match
- *   a matrix column right now — `RecipientResolver` simply finds no column
- *   to check and resolves nothing for it. That is a correct, honest
+ * - `case` -> case manager (`RecipientRole::CASE_MANAGER`). The matrix now
+ *   has a "Case manager" column, but every cell is `TBD` under ruling 4's
+ *   refinement. `TBD` resolves to no recipients until that policy is
+ *   decided, so this role emits nothing today. That is a correct, honest
  *   no-op, not a bug in this class.
  * - `business_entity` -> platform admin (`RecipientRole::PLATFORM_ADMIN`)
  *   — the matrix's "Admin platform" column. Finance is NOT derivable from
  *   this: `business_entity` cannot distinguish an admin grant from a
  *   finance grant, and guessing would fabricate an authorization
- *   distinction. Consistent anyway, because the matrix has no "finance"
- *   column either (also blocked by ruling 4).
+ *   distinction. The matrix now has a "Finance" column, but its cells are
+ *   `TBD`; this role source still does not derive Finance recipients or
+ *   invent Finance policy.
  * - `order`, `grave` -> `null`. Neither implies a recipient role by
  *   itself: an order-scoped grant's *actual* holder role (case manager?
  *   assigned vendor?) is exactly the ambiguity ruling 6 defers — no
