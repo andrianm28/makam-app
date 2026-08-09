@@ -9,6 +9,7 @@ use App\Domain\GraveRegistry\GraveRecordAccessMode;
 use App\Domain\GraveRegistry\GraveRecordProjection;
 use App\Domain\GraveRegistry\GraveRegistryPublicQuery;
 use App\Domain\GraveRegistry\GraveSearchCriteria;
+use App\Domain\GraveRegistry\Models\GraveRecord;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use ReflectionClass;
 use ReflectionProperty;
@@ -284,6 +285,51 @@ final class GraveRegistryPublicQueryTest extends TestCase
     }
 
     /**
+     * A DRAFT cemetery's records are not public data, and the query itself
+     * must say so — not the screen that happens to call it today.
+     *
+     * `TPS Bekasi Harapan Indah` is seeded `draft` and holds exactly one
+     * grave record (`Contoh Rahmat Hidayat`, block `H-01`), seeded `open`
+     * mode on purpose so this is provable rather than vacuous: without the
+     * publication-status filter this same search returns that row as a
+     * fully-populated `open` projection — deceased name, block, death date,
+     * due date — for a cemetery no public directory will list.
+     *
+     * The sibling test at `GraveSearchStatesTest::
+     * test_a_draft_cemetery_cannot_be_searched_through_a_held_url` proves
+     * the SCREEN refuses it. This proves the QUERY refuses it, which is the
+     * half that was missing: a second caller would not have inherited the
+     * screen's check.
+     *
+     * Block rather than name as the search term, per this class's own doc
+     * block — exact equality means the same thing on SQLite and PostgreSQL.
+     */
+    public function test_a_search_never_reaches_a_record_in_an_unpublished_cemetery(): void
+    {
+        $draftCemeteryId = $this->cemeteryId('tps-bekasi-harapan-indah');
+
+        // The fixture must really be there, or the assertions below pass for
+        // the wrong reason.
+        $this->assertSame(
+            1,
+            GraveRecord::query()->where('cemetery_id', $draftCemeteryId)->count(),
+            'The draft cemetery must still hold its one seeded grave record for this test to mean anything.'
+        );
+
+        $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
+            cemeteryId: $draftCemeteryId,
+            block: 'H-01',
+        ));
+
+        // Not merely "no readable rows": no rows at all. A restricted-shaped
+        // outcome would still disclose that a matching record exists in a
+        // cemetery that is not published.
+        $this->assertSame(0, $outcome->matchCount());
+        $this->assertSame([], $outcome->openResults);
+        $this->assertSame([], $outcome->restrictedResults);
+    }
+
+    /**
      * A blank search would match the whole cemetery's registry, which is a
      * bulk disclosure rather than a search. Refused before any query runs.
      */
@@ -365,6 +411,17 @@ final class GraveRegistryPublicQueryTest extends TestCase
      * escaping to a caller would carry every column including the withheld
      * ones, and "the Blade template just does not print it" is not a
      * privacy control.
+     *
+     * The count is anchored before the loop deliberately. A bare `foreach`
+     * over a result set asserts ZERO times if that set is ever empty — so
+     * if the fixture shrank, or the search silently stopped returning rows,
+     * this test would keep passing while testing nothing. A test that can
+     * assert zero times is not test evidence under `AGENTS.md` §Testing.
+     *
+     * Four is the same figure `test_a_mixed_search_reports_readable_rows_
+     * and_the_restricted_match_together` pins for this identical search —
+     * TPU Jakarta Menteng's three `open` rows plus its one `limited` row —
+     * so the two tests fail together rather than one of them going quiet.
      */
     public function test_the_query_never_returns_an_eloquent_model(): void
     {
@@ -373,7 +430,11 @@ final class GraveRegistryPublicQueryTest extends TestCase
             name: 'Contoh',
         ));
 
-        foreach ([...$outcome->openResults, ...$outcome->restrictedResults] as $row) {
+        $rows = [...$outcome->openResults, ...$outcome->restrictedResults];
+
+        $this->assertCount(4, $rows, 'Fixture anchor: without matched rows the loop below would assert nothing.');
+
+        foreach ($rows as $row) {
             $this->assertInstanceOf(GraveRecordProjection::class, $row);
         }
     }

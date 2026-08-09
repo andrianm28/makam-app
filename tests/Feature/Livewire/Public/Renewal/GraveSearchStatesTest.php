@@ -265,6 +265,60 @@ final class GraveSearchStatesTest extends TestCase
             ->assertSee('Hubungi bantuan');
     }
 
+    /**
+     * §6.2 applies to what is ANNOUNCED, not only to what is drawn. The
+     * screen's one `aria-live` region used to read "{count} data makam cocok
+     * dengan pencarian Anda" for every outcome, so a screen-reader user
+     * whose search matched nothing heard "0 data makam cocok dengan
+     * pencarian Anda" — a bare no-data announcement, forbidden in terms by
+     * design-system.md §6.2 ("Never a bare 'Tidak ada data'").
+     *
+     * Scope, stated rather than implied: this covers the announcement's
+     * COPY, which is server-rendered and therefore assertable here. Whether
+     * a live region present in the DOM from first paint is actually
+     * announced on a URL-arrival page load is a DOM-timing question no test
+     * in this repository can answer — there is no browser, Dusk, Playwright
+     * or Cypress harness. That half is ledgered under the program-level
+     * browser-harness gap, NOT TESTED.
+     */
+    public function test_the_no_result_announcement_carries_section_6_2s_three_parts_not_a_bare_count(): void
+    {
+        $this->openTheDataGate();
+
+        Livewire::withQueryParams([
+            'tpu' => $this->cemeteryId('tpu-jakarta-menteng'),
+            'blok' => 'ZZ-99',
+        ])
+            ->test(GraveSearch::class)
+            ->assertOk()
+            // The bare count, gone.
+            ->assertDontSee('0 data makam cocok dengan pencarian Anda')
+            // 1. What is empty, and where.
+            ->assertSee('Data makam tidak ditemukan di TPU Jakarta Menteng.')
+            // 2. Why — and explicitly not "the grave does not exist".
+            ->assertSee('Registri makam kami belum tentu lengkap, jadi hasil ini belum tentu berarti makam yang Anda cari tidak ada.')
+            // 3. What to do next.
+            ->assertSee('Lanjutkan lewat tombol Input manual atau Hubungi bantuan di bawah.');
+    }
+
+    /**
+     * The count announcement is still correct where a count is the honest
+     * thing to announce — the fix must not have flattened both branches
+     * into the no-result wording.
+     */
+    public function test_a_matching_search_still_announces_its_count(): void
+    {
+        $this->openTheDataGate();
+
+        Livewire::withQueryParams([
+            'tpu' => $this->cemeteryId('tpu-jakarta-menteng'),
+            'blok' => 'A-12',
+        ])
+            ->test(GraveSearch::class)
+            ->assertSee('1 data makam cocok dengan pencarian Anda.')
+            ->assertDontSee('Registri makam kami belum tentu lengkap');
+    }
+
     public function test_the_no_result_state_is_not_confused_with_the_other_two(): void
     {
         $this->openTheDataGate();
@@ -277,6 +331,53 @@ final class GraveSearchStatesTest extends TestCase
             ->assertSee(self::NO_RESULT_MARKER)
             ->assertDontSee(self::PRIVACY_LIMITED_MARKER)
             ->assertDontSee(self::GATE_CLOSED_MARKER);
+    }
+
+    // =====================================================================
+    // §6.1 loading
+    // =====================================================================
+
+    /**
+     * `tasks.md` lists the loading state FIRST among the states
+     * "Implemented and CI-green", and this file had no assertion about it
+     * anywhere — `AGENTS.md` §Testing: "Every traceability item marked
+     * `Covered` needs test evidence." The markup was genuinely present and
+     * genuinely server-rendered all along, so this closes a missing
+     * assertion, not a missing feature.
+     *
+     * What CAN be asserted here: the skeleton and its `sr-only`
+     * announcement are in the server-rendered HTML, keyed to the `search`
+     * action, and the container carries `aria-busy`. `wire:loading.delay` is
+     * asserted too, because that attribute is the whole mechanism — without
+     * it the skeleton would be permanently visible rather than shown during
+     * a request.
+     *
+     * What CANNOT be asserted here, stated rather than glossed: that the
+     * skeleton actually APPEARS during an in-flight request, and that its
+     * reserved heights hold CLS under 0.1. Both need a browser, and no
+     * browser/Dusk/Playwright/Cypress harness exists in this repository —
+     * NOT TESTED, ledgered under the program-level accessibility gap.
+     *
+     * `assertSeeHtml`, not `assertSee`: `assertSee` escapes its needle, so
+     * `aria-busy="true"` would be compared as `aria-busy=&quot;true&quot;`
+     * and never match.
+     */
+    public function test_the_loading_skeleton_and_its_screen_reader_announcement_are_rendered(): void
+    {
+        $this->openTheDataGate();
+
+        Livewire::withQueryParams(['tpu' => $this->cemeteryId('tpu-jakarta-menteng')])
+            ->test(GraveSearch::class)
+            ->assertOk()
+            // The announcement a screen-reader user gets — §6.1: "Every
+            // skeleton carries an sr-only announcement; a screen-reader user
+            // hears nothing from a pulsing box."
+            ->assertSee('Mencari data makam')
+            ->assertSeeHtml('aria-busy="true"')
+            // Shown only while the `search` action is in flight, and only
+            // after the delay — not a permanently-visible box.
+            ->assertSeeHtml('wire:loading.delay')
+            ->assertSeeHtml('wire:target="search"');
     }
 
     // =====================================================================
@@ -314,6 +415,38 @@ final class GraveSearchStatesTest extends TestCase
             'blok' => 'A-12',
         ])
             ->test(GraveSearch::class)
+            ->assertSee('data contoh');
+    }
+
+    /**
+     * The disclosure must not depend on there being a readable row to hang
+     * it off. `TPS Jakarta Kemang`'s only two seeded records are both
+     * restricted — `C-01` limited, `C-04` closed — so this search produces
+     * zero open results and renders the privacy-limited card alone. The
+     * matches are still fabricated, so the page must still say so.
+     *
+     * Before this was fixed the label was computed from `openResults` alone
+     * and rendered only inside the open-results branch, so this exact
+     * search showed fictional data with no disclosure whatsoever — on any
+     * seeded environment.
+     */
+    public function test_a_restricted_only_result_set_still_discloses_that_its_matches_are_example_data(): void
+    {
+        $this->openTheDataGate();
+
+        Livewire::withQueryParams([
+            'tpu' => $this->cemeteryId('tps-jakarta-kemang'),
+            'nama' => 'Contoh',
+        ])
+            ->test(GraveSearch::class)
+            ->assertOk()
+            // There are matches, and they are all restricted.
+            ->assertSee(self::PRIVACY_LIMITED_MARKER)
+            ->assertDontSee(self::NO_RESULT_MARKER)
+            // Neither withheld name appears, so no open row is being
+            // rendered that the label could be hanging off.
+            ->assertDontSee('Contoh Agus Priyono')
+            ->assertDontSee('Contoh Dewi Anggraini')
             ->assertSee('data contoh');
     }
 
@@ -359,6 +492,64 @@ final class GraveSearchStatesTest extends TestCase
             ->call('search')
             ->assertHasErrors(['deathDate' => 'date_format'])
             ->assertDontSee(self::NO_RESULT_MARKER);
+    }
+
+    /**
+     * The same test the `?tpu=` tamper case already had, for the parameter
+     * that never got one — which is exactly why the production gap survived.
+     *
+     * `?tanggal=` is `#[Url]`-bound, so it arrives on a plain GET and never
+     * passes through `search()`. Before `mount()` validated, a malformed
+     * value went straight into `whereDate('death_date', …)`: on PostgreSQL
+     * that throws and the page renders §6.5 "provider unavailable", on SQLite
+     * it renders the no-result state. Both are wrong, and the SQLite one is
+     * the documented defect — a family told nothing matched when the real
+     * problem is a date they can fix.
+     *
+     * §6.3 is the correct state: an inline per-field error on the form, with
+     * no search run. Asserted as three separate facts (error present,
+     * message rendered, neither empty state rendered) because a page that
+     * merely avoids 500ing is not the same as a page that says what is
+     * wrong.
+     */
+    public function test_a_malformed_death_date_in_the_url_renders_the_validation_state_not_an_empty_one(): void
+    {
+        $this->openTheDataGate();
+
+        // '2018-13-45' is the interesting one: it is not a real calendar
+        // date, but a lenient parser rolls it forward into one.
+        foreach (['garbage', '11-04-2018', '2018-13-45', "' OR 1=1 --"] as $tampered) {
+            Livewire::withQueryParams([
+                'tpu' => $this->cemeteryId('tpu-jakarta-menteng'),
+                'tanggal' => $tampered,
+            ])
+                ->test(GraveSearch::class)
+                ->assertOk()
+                ->assertHasErrors('deathDate')
+                ->assertSee('Tanggal wafat harus berupa tanggal yang valid.')
+                ->assertDontSee(self::NO_RESULT_MARKER)
+                ->assertDontSee(self::PRIVACY_LIMITED_MARKER)
+                ->assertDontSee('Pencarian sedang tidak dapat diproses');
+        }
+    }
+
+    /**
+     * A well-formed `?tanggal=` still works — the guard above must reject
+     * malformed dates without also breaking the shared/bookmarked result
+     * link that `mount()` exists to support.
+     */
+    public function test_a_valid_death_date_in_the_url_still_runs_the_search(): void
+    {
+        $this->openTheDataGate();
+
+        Livewire::withQueryParams([
+            'tpu' => $this->cemeteryId('tpu-jakarta-menteng'),
+            'tanggal' => '2018-04-11',
+        ])
+            ->test(GraveSearch::class)
+            ->assertOk()
+            ->assertHasNoErrors()
+            ->assertSee('Contoh Budi Santoso');
     }
 
     // =====================================================================

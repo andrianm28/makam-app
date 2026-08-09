@@ -268,8 +268,33 @@
                     </x-mk.alert>
 
                 @elseif ($resultsShown)
+                    {{-- The ONLY programmatic announcement of a search
+                         outcome. It used to be a bare count for every
+                         outcome, which meant a screen-reader user whose
+                         search matched nothing heard "0 data makam cocok
+                         dengan pencarian Anda" — a bare no-data
+                         announcement, which design-system.md §6.2 forbids in
+                         terms ("Three parts, always: what is empty · why ·
+                         what to do next. Never a bare 'Tidak ada data'").
+                         The visible no-result card below carries all three
+                         parts; the announcement carried none of them.
+
+                         Kept shorter than the visible copy on purpose — this
+                         is heard, not read — but it carries the same three
+                         parts, because the whole point of this screen is
+                         that "nothing matched" must never be heard as "the
+                         grave does not exist".
+
+                         Long sentences stay on ONE source line each, per
+                         this file's note further down: wrapping them inserts
+                         a newline into the rendered HTML and an assertSee()
+                         on the phrase silently fails. --}}
                     <p class="sr-only" role="status" aria-live="polite">
-                        {{ $outcome->matchCount() }} data makam cocok dengan pencarian Anda.
+                        @if ($outcome->isNoResult())
+                            Data makam tidak ditemukan di {{ $cemetery->name }}. Registri makam kami belum tentu lengkap, jadi hasil ini belum tentu berarti makam yang Anda cari tidak ada. Lanjutkan lewat tombol Input manual atau Hubungi bantuan di bawah.
+                        @else
+                            {{ $outcome->matchCount() }} data makam cocok dengan pencarian Anda.
+                        @endif
                     </p>
 
                     {{-- ------------------------------------------------------
@@ -315,7 +340,6 @@
                             ];
 
                             $resultRows = [];
-                            $hasExampleRow = false;
 
                             foreach ($outcome->openResults as $row) {
                                 $resultRows[] = [
@@ -329,8 +353,6 @@
                                     'death_date' => $row->deathDate ?? 'Tidak tercatat',
                                     'due_date' => $row->dueDate ?? 'Tidak tercatat',
                                 ];
-
-                                $hasExampleRow = $hasExampleRow || $row->isExampleData;
                             }
                         @endphp
 
@@ -339,18 +361,6 @@
                             :headers="$resultHeaders"
                             :rows="$resultRows"
                         />
-
-                        @if ($hasExampleRow)
-                            {{-- Fabricated seed rows must announce
-                                 themselves on any surface that shows them —
-                                 the same honesty discipline the seed
-                                 migration's "Contoh" name prefix
-                                 implements at the data layer. --}}
-                            <p class="mt-3 text-sm text-neutral-600">
-                                Sebagian hasil di atas adalah <span class="font-medium">data contoh</span> untuk
-                                keperluan uji coba, bukan data makam yang sebenarnya.
-                            </p>
-                        @endif
 
                         @if ($outcome->matchCount() >= $maxResults)
                             <p class="mt-3 text-sm text-neutral-600">
@@ -430,6 +440,33 @@
                                 </div>
                             </x-mk.card>
                         </div>
+                    @endif
+
+                    {{-- Fabricated seed rows must announce themselves on any
+                         surface that shows them — the same honesty
+                         discipline the seed migration's "Contoh" name prefix
+                         implements at the data layer.
+
+                         Rendered HERE, below both result cards, and read off
+                         GraveSearchOutcome::hasExampleData() rather than
+                         recomputed from $outcome->openResults. Both facts
+                         matter. It used to sit inside the open-results
+                         branch and be computed from the open rows alone, so
+                         a search whose every match was restricted (TPS
+                         Jakarta Kemang, both of whose seeded rows are
+                         withheld) showed fictional data with no disclosure
+                         at all.
+
+                         The copy says "hasil pencarian ini", not "hasil di
+                         atas": the label now covers the readable table AND
+                         the privacy-limited card, and "di atas" would be
+                         wrong the moment only one of the two carries the
+                         example rows. --}}
+                    @if ($outcome->hasExampleData())
+                        <p class="mt-3 text-sm text-neutral-600">
+                            Sebagian hasil pencarian ini adalah <span class="font-medium">data contoh</span> untuk
+                            keperluan uji coba, bukan data makam yang sebenarnya.
+                        </p>
                     @endif
 
                     {{-- ======================================================

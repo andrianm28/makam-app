@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\GraveRegistry;
 
 use App\Domain\GraveRegistry\Models\GraveRecord;
+use DateTimeImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -100,6 +101,23 @@ final class GraveRegistryPublicQuery
             return GraveSearchOutcome::empty();
         }
 
+        // The date-shape check is the UUID check's reasoning applied to the
+        // other criteria field backed by a typed column:
+        // `grave_records.death_date` is a real `date` on PostgreSQL, so
+        // `whereDate()` against a non-date string is a database type error
+        // rather than a miss — it throws instead of returning nothing.
+        //
+        // Defence in depth ONLY, and it deliberately cannot produce the right
+        // screen state on its own: an empty outcome renders as *no-result*,
+        // which is the very conflation this module exists to prevent. The
+        // correctness-carrying fix is `GraveSearch::mount()` populating the
+        // error bag so §6.3's validation state renders and no search runs.
+        // This clause exists so that a FUTURE caller which forgets to
+        // validate gets nothing back rather than a 500 on a public form.
+        if ($criteria->deathDate !== '' && ! self::isIsoDate($criteria->deathDate)) {
+            return GraveSearchOutcome::empty();
+        }
+
         $records = self::buildQuery($criteria)
             ->limit(self::MAX_RESULTS)
             ->get();
@@ -127,9 +145,26 @@ final class GraveRegistryPublicQuery
      */
     private static function buildQuery(GraveSearchCriteria $criteria): Builder
     {
+        // Publication status is scoped HERE, not left to the caller. Before
+        // this clause existed, `search()` carried an unstated precondition —
+        // "whoever calls me has already proven this cemetery is published" —
+        // that appeared nowhere in `GraveSearchCriteria`'s signature, and a
+        // draft cemetery's records came back as fully-populated `open`
+        // projections to anyone holding its UUID. The sole caller
+        // (`GraveSearch`) does check, so nothing incorrect ever reached a
+        // visitor, but a precondition invisible at the seam is not a control.
+        //
+        // `Cemetery::scopePublished()` IS the canonical definition of
+        // published (AC2's base guarantee); composing it here is a reference
+        // to that canon, not the duplication `AGENTS.md` §Documentation
+        // forbids — which is exactly why this is fixed and the `G-DATA-01`
+        // gate check above is not.
         $query = GraveRecord::query()
             ->with('cemetery')
-            ->inCemetery($criteria->cemeteryId);
+            ->inCemetery($criteria->cemeteryId)
+            ->whereHas('cemetery', static function (Builder $cemetery): void {
+                $cemetery->published();
+            });
 
         if ($criteria->block !== '') {
             $query->inBlock($criteria->block);
@@ -175,6 +210,25 @@ final class GraveRegistryPublicQuery
             })
             ->orderByRaw('similarity(deceased_name_normalized, ?) desc', [$normalizedName])
             ->orderBy('deceased_name_normalized');
+    }
+
+    /**
+     * A strict `Y-m-d` calendar date, matching `rules()`' `date_format:Y-m-d`
+     * on the screen and `docs/contracts/openapi.yaml`'s `death_date`
+     * (`format: date`).
+     *
+     * The round-trip comparison is what makes it strict:
+     * `createFromFormat()` alone accepts `2018-13-45` and rolls it forward
+     * into a real date, so re-formatting and comparing is the only way to
+     * reject a date that parses but was never the date the caller wrote. The
+     * leading `!` resets the time fields so today's clock cannot leak into
+     * the comparison.
+     */
+    private static function isIsoDate(string $value): bool
+    {
+        $parsed = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+
+        return $parsed !== false && $parsed->format('Y-m-d') === $value;
     }
 
     /**

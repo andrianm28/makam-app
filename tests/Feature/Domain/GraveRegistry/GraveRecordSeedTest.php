@@ -180,14 +180,30 @@ final class GraveRecordSeedTest extends TestCase
 
     /**
      * The model side of the same guarantee — a row written through
-     * Eloquent derives the column in `booted()` and ignores whatever the
+     * Eloquent derives the column in `booted()` and OVERRIDES whatever the
      * caller supplied for it.
+     *
+     * `forceFill()`, not `create()`, and the reason matters more than the
+     * mechanism. `deceased_name_normalized` is no longer in `$fillable`
+     * (it is derived, so advertising it as an input was an interface lie).
+     * Mass assignment silently DROPS an unlisted key — so had this test
+     * kept passing the wrong value to `create()`, it would still pass while
+     * proving only that `$fillable` ignores unknown keys, which is a fact
+     * about Eloquent rather than about this model's `saving` hook. That is
+     * exactly the vacuous-pass shape this retrofit fixed elsewhere in the
+     * suite.
+     *
+     * `forceFill()` bypasses `$fillable` and genuinely sets the attribute,
+     * which is asserted BEFORE the save so the premise is visible: the
+     * wrong value really was on the model, and `booted()` really did
+     * replace it.
      */
-    public function test_the_model_derives_the_normalized_name_and_ignores_a_supplied_one(): void
+    public function test_the_model_derives_the_normalized_name_and_overrides_a_supplied_one(): void
     {
         $cemeteryId = Cemetery::query()->where('slug', 'tpu-bogor-bantarjati')->sole()->id;
 
-        $record = GraveRecord::query()->create([
+        $record = new GraveRecord;
+        $record->forceFill([
             'cemetery_id' => $cemeteryId,
             'deceased_name' => 'Contoh Nama  Uji-Coba',
             'deceased_name_normalized' => 'nilai yang salah',
@@ -196,7 +212,30 @@ final class GraveRecordSeedTest extends TestCase
             'source' => GraveRecordSource::CONTOH,
         ]);
 
+        // The premise: the caller-supplied value really is on the model.
+        // Without this the assertion below could hold for the wrong reason.
+        $this->assertSame('nilai yang salah', $record->deceased_name_normalized);
+
+        $record->save();
+
         $this->assertSame('contoh nama uji coba', $record->deceased_name_normalized);
+    }
+
+    /**
+     * The other half of the `$fillable` change: the two derived/protected
+     * columns are no longer mass-assignable at all. Asserted directly
+     * rather than left implicit, because a future edit re-adding either
+     * would be silent — and for `heir_contact_reference` that means a
+     * protected-class field (`AGENTS.md` §Authorization and files puts heir
+     * contact with KTP/KK/death documents) becoming writable by any array
+     * splatted into `create()`.
+     */
+    public function test_derived_and_protected_columns_are_not_mass_assignable(): void
+    {
+        $fillable = (new GraveRecord)->getFillable();
+
+        $this->assertNotContains('deceased_name_normalized', $fillable);
+        $this->assertNotContains('heir_contact_reference', $fillable);
     }
 
     // =====================================================================
