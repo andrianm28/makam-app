@@ -9,6 +9,7 @@ use App\Domain\Marketplace\Models\Product;
 use App\Domain\Marketplace\ProductCode;
 use App\Livewire\Public\Marketplace\MarketplaceIndex;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
 use ReflectionClass;
 use ReflectionMethod;
@@ -189,6 +190,34 @@ final class MarketplaceIndexRouteTest extends TestCase
         $response->assertOk();
         $response->assertSee('Belum ada produk di kategori ini.');
         $response->assertSee('Lihat kategori lain');
+        $response->assertSee('Hubungi Customer Service');
+    }
+
+    public function test_the_provider_unavailable_branch_degrades_the_index_without_going_blank(): void
+    {
+        // W-5: the §6.5 branch at index.blade.php:150-158 had zero coverage
+        // across all 16 methods. Mirror ProductDetailRouteTest::test_a_
+        // variant_read_failure_degrades_the_panel_without_taking_the_page_
+        // down — force a REAL read failure by dropping the table inside the
+        // test transaction, rather than mocking MarketplaceCatalogQuery.
+        // product_variants is dropped first: on Postgres a bare DROP TABLE
+        // products while product_variants still references it fails with
+        // 2BP01, and DROP TABLE ... CASCADE is unsupported on SQLite.
+        Schema::dropIfExists('product_variants');
+        Schema::drop('products');
+
+        $response = $this->get('/marketplace');
+
+        $response->assertOk();
+        $response->assertSee('Katalog sedang tidak dapat dimuat');
+        // The @unless ($catalogueUnavailable) block is skipped — neither the
+        // empty state nor the product grid may render alongside the alert.
+        $response->assertDontSee('Belum ada produk');
+        $response->assertDontSee('/marketplace/produk/'.ProductCode::FLOWER_BOARD);
+        // §6.5 is never a dead end: the category chips and the support
+        // escape hatch both still work (neither reads the dropped table).
+        $response->assertSee('Filter kategori produk');
+        $response->assertSee('/bantuan');
         $response->assertSee('Hubungi Customer Service');
     }
 
