@@ -175,11 +175,40 @@ return new class extends Migration
         DB::statement('CREATE EXTENSION IF NOT EXISTS pg_trgm');
 
         // design.md's Search section: "PostgreSQL pg_trgm proposed for
-        // normalized deceased name." gin_trgm_ops accelerates BOTH halves
-        // of the query GraveRegistryPublicQuery builds — the unanchored
-        // LIKE '%...%' and the similarity() threshold — which is why the
-        // normalized column carries one index rather than a trigram index
-        // plus a separate text-pattern index.
+        // normalized deceased name."
+        //
+        // What this index can and cannot do for the query
+        // GraveRegistryPublicQuery actually builds — corrected 09 Aug 2026,
+        // because the earlier note here claimed it accelerated both halves
+        // and that is false:
+        //
+        //   - gin_trgm_ops indexes the operators %, <%, %>, LIKE, ILIKE, ~
+        //     and ~*. So the unanchored LIKE '%...%' half IS an indexable
+        //     predicate in principle.
+        //   - similarity(a, b) >= threshold is a bare FUNCTION CALL, not one
+        //     of those operators, so that half is NOT indexable under this
+        //     operator class. (The operator form `a % b` would be; the query
+        //     is written with an explicit threshold instead — see that
+        //     class's own note on why the threshold is pinned to pg_trgm's
+        //     default rather than tuned.)
+        //   - The query ORs the two halves together inside one WHERE group.
+        //     A disjunction is only index-usable if EVERY branch is, so the
+        //     non-indexable similarity() branch nullifies the LIKE branch's
+        //     indexability too: the planner evaluates the whole predicate as
+        //     a filter over the rows the other clauses (cemetery, block,
+        //     death date) narrow it to.
+        //   - ORDER BY similarity(...) DESC cannot use this index either.
+        //     KNN ordering by distance needs a GiST index (gist_trgm_ops);
+        //     GIN has no ordering support at all.
+        //
+        // This says NOTHING about whether AC4 (< 500 ms at 100,000 records)
+        // passes — that is separately and already ledgered as NOT TESTED,
+        // with no benchmark run at any scale and no load-testing harness in
+        // this repository. Whether the index shape or the query shape should
+        // change belongs to the batch that has a measurement. This comment
+        // is corrected only so nobody reads it as evidence AC4 needs no
+        // work, which is precisely what a reader would have concluded from
+        // the sentence it replaces.
         //
         // Raw statement, not $table->index(): Laravel's schema builder has
         // no expression for a GIN index with an operator class.
