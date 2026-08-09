@@ -34,14 +34,25 @@ use Illuminate\Support\Facades\Schema;
  * caller can reuse `Models\PriceVersion` directly the same way).
  *
  * ---------------------------------------------------------------------------
- * No seed data — same reasoning as `service_packages`
+ * No seed data IN THIS MIGRATION — same reasoning as `service_packages`
  * ---------------------------------------------------------------------------
  * `service-catalog.md` gives a code and an Indonesian label per service,
  * never a Rupiah amount. Seeding an invented price here would be exactly
- * the fabricated business data this batch's brief forbids. This table
- * ships empty; `tests/Feature/Domain/ServiceCatalog/PriceVersioningTest.php`
- * exercises the versioning behaviour with synthetic test-only amounts, not
- * real seed content.
+ * the fabricated business data this batch's brief forbids. This table ships
+ * empty AS OF THIS MIGRATION; `tests/Feature/Domain/ServiceCatalog/
+ * PriceVersioningTest.php` exercises the versioning behaviour with synthetic
+ * test-only amounts, not real seed content.
+ *
+ * It does NOT stay empty. The later, separately-authorized
+ * `2026_07_26_220000_seed_service_definition_dummy_operational_data.php`
+ * inserts one dev-only placeholder row per catalogue code — which is exactly
+ * why it is a separate, later, explicitly dev-labelled migration carrying its
+ * own "not real catalogue pricing" disclaimer, rather than seed content here.
+ * The reasoning above is why this file seeds nothing; it was never a claim
+ * about the table's state for all time. (This block previously read "This
+ * table ships empty" without qualification, and two other doc blocks cited it
+ * as authority for the same false claim; all three corrected 09 Aug 2026 by
+ * the ServiceCatalog Superpowers retrofit, F9.)
  *
  * ---------------------------------------------------------------------------
  * Append-only shape — mirrors `faq_article_versions` / `AuditEvent` /

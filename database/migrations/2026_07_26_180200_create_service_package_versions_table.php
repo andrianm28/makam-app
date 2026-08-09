@@ -17,11 +17,24 @@ use Illuminate\Support\Facades\Schema;
  * `status` — two states, not three
  * ---------------------------------------------------------------------------
  * `draft` | `published` — plain string, application-layer-validated against
- * `App\Domain\ServiceCatalog\ServicePackageVersionStatus::KNOWN_STATUSES`
- * (not a Postgres enum, same established convention as every other
- * closed-list string column in this codebase). See that class's own doc
- * block for why this is deliberately two states, not `FaqArticlePublishState`'s
- * three.
+ * `App\Domain\ServiceCatalog\ServicePackageVersionStatus::KNOWN_STATUSES`,
+ * with no Postgres enum and no CHECK constraint. This block previously
+ * justified that with "same established convention as every other
+ * closed-list string column in this codebase". That was false, and was
+ * already false when written: `audit_events.outcome`
+ * (`2026_07_26_110000_create_audit_events_table.php:190`) and
+ * `outbox_events.classification`
+ * (`2026_07_26_140000_create_outbox_events_table.php:204`) both ship real
+ * pgsql-guarded CHECK constraints, and
+ * `2026_07_26_200000_create_menu_interaction_events_table.php:111` names
+ * that as the convention. The honest statement is: this column deliberately
+ * relies on application-layer validation ALONE, which is a weaker choice
+ * than two sibling tables make, and adding a CHECK constraint now is a
+ * migration against a table deployed to `dev.makam.co.id` — ledgered as a
+ * human-ruling item, not silently deferred. (Corrected 09 Aug 2026 by the
+ * ServiceCatalog Superpowers retrofit, F10.) See
+ * `ServicePackageVersionStatus`'s own doc block for why this is deliberately
+ * two states, not `FaqArticlePublishState`'s three.
  *
  * ---------------------------------------------------------------------------
  * AC2 enforcement — where the freeze actually lives

@@ -46,11 +46,18 @@ use InvalidArgumentException;
  * appears anywhere on this write path (`AGENTS.md` §Domain and financial
  * invariants).
  *
- * No seeded price data exists for this module to version yet — see
- * `2026_07_26_180400_create_price_versions_table.php`'s own doc block for
- * why. This Action exists so the versioning MECHANISM is correct and
- * tested; a later batch's admin editor is where a real operator enters a
- * real Rupiah amount.
+ * Every catalogue code already carries a v1 price:
+ * `2026_07_26_220000_seed_service_definition_dummy_operational_data.php`
+ * seeds one DEV-ONLY placeholder `price_versions` row per code (that
+ * migration's own doc block carries the "not real catalogue pricing"
+ * disclaimer), so this Action records the NEXT version on top of that
+ * baseline rather than a service's first-ever price. This Action exists so
+ * the versioning MECHANISM is correct and tested; a later batch's admin
+ * editor is where a real operator enters a real Rupiah amount. (This doc
+ * block previously read "No seeded price data exists for this module to
+ * version yet", citing the `180400` migration's own since-corrected claim as
+ * its authority; both corrected 09 Aug 2026 by the ServiceCatalog
+ * Superpowers retrofit, F9.)
  *
  * Audited via `Audit::record()` but not `SensitiveActions`-listed — see
  * `App\Domain\ServiceCatalog\ServiceCatalogAuditActions`'s own doc block.
