@@ -9,6 +9,8 @@ use App\Domain\Booking\Actions\StartBookingDraft;
 use App\Domain\Booking\BookingWizardStep;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\ServiceCatalog\ServiceCatalogQuery;
+use App\Domain\ServiceCatalog\ServiceCode;
 use App\Livewire\Public\Booking\BookingWizard;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -41,9 +43,35 @@ final class BookingWizardStepsFourAndFiveTest extends TestCase
 
         $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
 
-        foreach (['DOCUMENT_PROCESSING', 'GRAVE_DIGGING', 'AMBULANCE', 'FUNERAL_HOME', 'HEARSE', 'TENT_AND_CHAIRS', 'SOUND_SYSTEM', 'FLOWERS', 'GRAVESTONE', 'DOCUMENTATION', 'CATERING', 'LIVE_STREAMING'] as $code) {
-            $component->assertSee($code);
+        // Asserted as the submitted VALUE, not as visible text: the code is
+        // what reaches `saveStep4()`, while the visible label is now the
+        // catalogue's own name (see the next test).
+        foreach (ServiceCode::KNOWN_CODES as $code) {
+            $component->assertSeeHtml('value="'.$code.'"');
         }
+    }
+
+    /**
+     * Step 4 used to render bare enum codes ("DOCUMENT_PROCESSING",
+     * "TENT_AND_CHAIRS") while Step 5's summary showed the real seeded
+     * Indonesian names for the same services, on the same journey, two
+     * clicks apart. Both now read from `ServiceDefinition::name`.
+     */
+    public function test_step_4_labels_each_service_with_its_real_catalogue_name(): void
+    {
+        $draftId = $this->draftAtStep4();
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
+
+        foreach (ServiceCatalogQuery::allActive() as $definition) {
+            $component->assertSee($definition->name);
+        }
+
+        // A spot-check against the seed migration itself, so a regression
+        // that made `name` fall back to `code` cannot pass the loop above.
+        $component->assertSee('Pengurusan Dokumen');
+        $component->assertSee('Penggalian Makam');
+        $component->assertSee('Tenda & Kursi');
     }
 
     public function test_saving_step_4_with_both_basics_advances_to_step_5(): void

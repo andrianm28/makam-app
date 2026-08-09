@@ -35,13 +35,49 @@ final class BookingWizardRouteTest extends TestCase
         $this->get('/pemesanan-makam')->assertOk()->assertSeeLivewire(BookingWizard::class);
     }
 
+    /**
+     * The labels asserted here are `<x-mk.stepper>`'s OWN normative default
+     * (design-system.md §3.9), NOT `BookingWizardStep::LABELS`. This test
+     * previously asserted the latter, which only passed because the wizard
+     * was passing `:labels="$stepLabels"` into the stepper — the exact thing
+     * stepper.blade.php's file header, AGENTS.md, and design-system.md §9.2
+     * MUST-NOT 9 forbid a booking screen from doing. The assertion, not the
+     * behaviour, was wrong: the stepper's dot labels are a presentation
+     * contract owned by the primitive.
+     *
+     * `BookingWizardStep::LABELS` is still correct and still used — it is
+     * `booking-wizard-fields.md`'s own step HEADINGS, which this screen
+     * renders as its per-step `<h2>`; the two are separate contracts.
+     */
     public function test_the_nine_step_stepper_is_always_shown(): void
     {
         $component = Livewire::test(BookingWizard::class);
 
-        foreach (BookingWizardStep::labels() as $label) {
+        foreach ([
+            'Lokasi',
+            'TPU/TPS',
+            'Jenis Layanan',
+            'Pilih Layanan',
+            'Ringkasan',
+            'Data Pemesan',
+            'Data Almarhum + Dokumen',
+            'Pembayaran',
+            'Konfirmasi',
+        ] as $label) {
             $component->assertSee($label);
         }
+    }
+
+    public function test_the_wizard_never_re_labels_the_stepper(): void
+    {
+        // The regression this file previously encoded as correct behaviour.
+        // Five of the nine BookingWizardStep::LABELS values differ from the
+        // stepper's canonical wording; two of those differences are visible
+        // only in the stepper's own rail, so asserting their ABSENCE is what
+        // proves `:labels` is no longer being passed.
+        Livewire::test(BookingWizard::class)
+            ->assertDontSee('Data Almarhum and Documents')
+            ->assertDontSee('Ringkasan Pesanan');
     }
 
     public function test_step_1_offers_all_five_launch_cities_in_order(): void

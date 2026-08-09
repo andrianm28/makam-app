@@ -48,4 +48,39 @@ final class BookingServiceTypeTest extends TestCase
 
         $this->addToAssertionCount(1);
     }
+
+    /**
+     * The four labels are `docs/product/mvp-scope.md` row 3's own wording
+     * ("Makam Baru, Makam Tumpang, Urgent, Pre-Need"), repeated verbatim in
+     * `docs/product/product-brief.md` §3. Changing any of them is a product
+     * decision recorded in those files first — `AGENTS.md` forbids renaming
+     * a product label in code.
+     */
+    public function test_labels_match_the_canonical_mvp_scope_wording(): void
+    {
+        $this->assertSame(
+            [
+                'NEW_GRAVE' => 'Makam Baru',
+                'OVERLAPPING_GRAVE' => 'Makam Tumpang',
+                'URGENT_TODAY' => 'Urgent',
+                'PRE_NEED' => 'Pre-Need',
+            ],
+            BookingServiceType::LABELS,
+        );
+    }
+
+    public function test_every_known_code_has_a_label(): void
+    {
+        foreach (BookingServiceType::KNOWN_CODES as $code) {
+            $this->assertArrayHasKey($code, BookingServiceType::LABELS);
+            $this->assertNotSame($code, BookingServiceType::label($code), 'A label must never fall back to the raw code.');
+        }
+    }
+
+    public function test_label_throws_for_an_unknown_code(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        BookingServiceType::label('CREMATION');
+    }
 }

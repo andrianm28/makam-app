@@ -1,7 +1,11 @@
 <div class="py-8 md:py-12">
     <div class="mx-auto max-w-content px-4">
 
-        <x-mk.stepper :step="$currentStep" :labels="$stepLabels" class="mb-8" />
+        {{-- NO `:labels` — see stepper.blade.php's own file header: passing
+             `labels` from a booking screen is forbidden by AGENTS.md and
+             design-system.md §9.2 MUST-NOT 9. The primitive's default IS the
+             nine canonical booking labels. --}}
+        <x-mk.stepper :step="$currentStep" class="mb-8" />
 
         <div class="mx-auto mb-8 max-w-prose space-y-2 text-center">
             <h1 class="text-3xl font-semibold tracking-tight text-neutral-900">
@@ -71,19 +75,58 @@
                         </x-mk.button>
                     </div>
                 @else
+                    {{-- Two-level choice. A cemetery with active package/class
+                         rows CANNOT be selected on its own — SaveBookingDraftStep
+                         ::validateCemetery() requires a package id for it
+                         (booking-wizard-fields.md §Step 2, "package/class when
+                         applicable"), so those cards expand into one button per
+                         package instead of a single whole-card button that could
+                         only ever be rejected. Cemeteries with no packages keep
+                         the plain whole-card button. --}}
                     <ul class="grid gap-4 md:grid-cols-2" aria-label="Daftar TPU/TPS">
                         @foreach ($cemeteries as $cemetery)
+                            @php($packages = $packagesByCemetery[$cemetery->id] ?? collect())
                             <li>
-                                <button
-                                    type="button"
-                                    wire:click="saveStep2('{{ $cemetery->id }}')"
-                                    class="block w-full rounded-lg border border-neutral-200 bg-neutral-0 p-4 text-left shadow-sm transition-[border-color,box-shadow] duration-fast ease-standard select-none hover:border-primary-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 md:p-6"
-                                >
-                                    <span class="flex flex-col gap-4">
-                                        <span class="text-lg font-semibold text-neutral-900">{{ $cemetery->name }}</span>
-                                        <x-mk.badge intent="neutral">{{ $cemetery->type }}</x-mk.badge>
-                                    </span>
-                                </button>
+                                @if ($packages->isEmpty())
+                                    <button
+                                        type="button"
+                                        wire:click="saveStep2('{{ $cemetery->id }}')"
+                                        wire:loading.attr="disabled"
+                                        wire:target="saveStep2"
+                                        class="block w-full rounded-lg border border-neutral-200 bg-neutral-0 p-4 text-left shadow-sm transition-[border-color,box-shadow] duration-fast ease-standard select-none hover:border-primary-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 md:p-6"
+                                    >
+                                        <span class="flex flex-col gap-4">
+                                            <span class="text-lg font-semibold text-neutral-900">{{ $cemetery->name }}</span>
+                                            <x-mk.badge intent="neutral">{{ $cemetery->type }}</x-mk.badge>
+                                        </span>
+                                    </button>
+                                @else
+                                    <div class="h-full rounded-lg border border-neutral-200 bg-neutral-0 p-4 shadow-sm md:p-6">
+                                        <div class="flex flex-col gap-4">
+                                            <span class="text-lg font-semibold text-neutral-900">{{ $cemetery->name }}</span>
+                                            <x-mk.badge intent="neutral">{{ $cemetery->type }}</x-mk.badge>
+                                        </div>
+
+                                        <p id="cemetery-{{ $cemetery->id }}-packages-label" class="mt-4 text-sm text-neutral-600">
+                                            Pilih paket/kelas untuk TPU/TPS ini:
+                                        </p>
+
+                                        <ul class="mt-2 flex flex-wrap gap-2" aria-labelledby="cemetery-{{ $cemetery->id }}-packages-label">
+                                            @foreach ($packages as $package)
+                                                <li>
+                                                    <x-mk.button
+                                                        variant="secondary"
+                                                        wire:click="saveStep2('{{ $cemetery->id }}', {{ $package->id }})"
+                                                        wire:loading.attr="disabled"
+                                                        wire:target="saveStep2"
+                                                    >
+                                                        {{ $package->name }}@if ($package->class_label) &mdash; {{ $package->class_label }}@endif
+                                                    </x-mk.button>
+                                                </li>
+                                            @endforeach
+                                        </ul>
+                                    </div>
+                                @endif
                             </li>
                         @endforeach
                     </ul>
@@ -115,7 +158,7 @@
                                 wire:loading.attr="disabled"
                                 wire:target="saveStep3"
                             >
-                                {{ $type }}
+                                {{ \App\Domain\Booking\BookingServiceType::label($type) }}
                             </x-mk.button>
                         </li>
                     @endforeach
@@ -142,20 +185,23 @@
                         <p class="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-600">
                             Layanan dasar
                         </p>
+                        {{-- The catalogue's own `name` is the visible label;
+                             `code` stays the submitted value, so the payload
+                             shape saveStep4() receives is unchanged. --}}
                         <ul class="flex flex-col gap-2">
-                            @foreach (\App\Domain\ServiceCatalog\ServiceCode::BASIC_CODES as $code)
+                            @foreach ($basicServices as $service)
                                 <li class="flex items-center gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
                                     <input
                                         type="checkbox"
-                                        id="service-{{ $code }}"
-                                        value="{{ $code }}"
+                                        id="service-{{ $service->code }}"
+                                        value="{{ $service->code }}"
                                         wire:model="stagedServiceCodes"
                                         checked
                                         disabled
                                         class="touch-target"
                                     />
-                                    <label for="service-{{ $code }}" class="flex-1 text-base text-neutral-800">
-                                        {{ $code }}
+                                    <label for="service-{{ $service->code }}" class="flex-1 text-base text-neutral-800">
+                                        {{ $service->name }}
                                     </label>
                                     <x-mk.badge intent="neutral">Wajib</x-mk.badge>
                                 </li>
@@ -168,17 +214,17 @@
                             Layanan tambahan
                         </p>
                         <ul class="flex flex-col gap-2">
-                            @foreach (\App\Domain\ServiceCatalog\ServiceCode::ADDITIONAL_CODES as $code)
+                            @foreach ($additionalServices as $service)
                                 <li class="flex items-center gap-3 rounded-lg border border-neutral-200 bg-neutral-0 p-3">
                                     <input
                                         type="checkbox"
-                                        id="service-{{ $code }}"
-                                        value="{{ $code }}"
+                                        id="service-{{ $service->code }}"
+                                        value="{{ $service->code }}"
                                         wire:model="stagedServiceCodes"
                                         class="touch-target"
                                     />
-                                    <label for="service-{{ $code }}" class="flex-1 text-base text-neutral-800">
-                                        {{ $code }}
+                                    <label for="service-{{ $service->code }}" class="flex-1 text-base text-neutral-800">
+                                        {{ $service->name }}
                                     </label>
                                 </li>
                             @endforeach
@@ -241,6 +287,17 @@
                 </x-mk.button>
             </section>
         @endif
+
+        {{-- Step-independent errors: an expired/unknown draft session, a
+             draft changed in another tab, and the server-side "finish the
+             previous step first" rejection. Rendered outside the per-step
+             sections because every one of them can be raised from any step. --}}
+        @error('draft')
+            <p class="mt-4 text-sm text-danger-700" role="alert">{{ $message }}</p>
+        @enderror
+        @error('step')
+            <p class="mt-4 text-sm text-danger-700" role="alert">{{ $message }}</p>
+        @enderror
 
         <div aria-live="polite" class="mt-4 text-sm text-neutral-600">
             @if ($autosaveState === 'saved')

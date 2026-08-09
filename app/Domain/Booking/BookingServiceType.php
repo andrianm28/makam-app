@@ -55,9 +55,52 @@ final class BookingServiceType
         self::PRE_NEED,
     ];
 
+    /**
+     * The human-visible Step 3 labels — COPIED, not invented.
+     *
+     * `docs/product/mvp-scope.md` row 3 ("Pilih jenis layanan | Makam Baru,
+     * Makam Tumpang, Urgent, Pre-Need") and `docs/product/product-brief.md`
+     * §3 ("Pilih jenis layanan: Makam Baru, Makam Tumpang, Urgent,
+     * Pre-Need.") name these four in exactly this order, in the Step 3
+     * context. `booking-wizard-fields.md` §Step 3 lists only the machine
+     * codes, so those two documents are the canonical label source.
+     *
+     * Deliberately NOT translated further: "Urgent" and "Pre-Need" read as
+     * English but are the stakeholder's own product copy, and `AGENTS.md`
+     * forbids renaming a product label ("Never rename, reorder, or hide a
+     * product label, route, menu item, or booking step"). Inventing
+     * "Pemakaman Hari Ini" / "Pra-Kebutuhan" here would be exactly that
+     * rename, and would fork the catalogue away from the two canonical
+     * documents. Changing this wording is a product decision made in
+     * `mvp-scope.md` first, not a code change.
+     *
+     * @var array<string, string>
+     */
+    public const array LABELS = [
+        self::NEW_GRAVE => 'Makam Baru',
+        self::OVERLAPPING_GRAVE => 'Makam Tumpang',
+        self::URGENT_TODAY => 'Urgent',
+        self::PRE_NEED => 'Pre-Need',
+    ];
+
     public static function isKnown(string $code): bool
     {
         return in_array($code, self::KNOWN_CODES, true);
+    }
+
+    /**
+     * The display label for one code. Same contract as
+     * `App\Domain\Booking\BookingWizardStep::label()`: an unknown code is a
+     * programming error, not a rendering fallback.
+     *
+     * @throws InvalidArgumentException when `$code` is not one of
+     *                                  `self::KNOWN_CODES`.
+     */
+    public static function label(string $code): string
+    {
+        self::assertKnown($code);
+
+        return self::LABELS[$code];
     }
 
     /**

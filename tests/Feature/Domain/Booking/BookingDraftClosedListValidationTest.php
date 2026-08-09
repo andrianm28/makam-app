@@ -60,4 +60,19 @@ final class BookingDraftClosedListValidationTest extends TestCase
 
         $this->assertSame('URGENT_TODAY', $draft->service_type);
     }
+
+    /**
+     * `id` doubles as this journey's anonymous resume token, so it must not
+     * be mass-assignable: `HasUuids` generates an unguessable one, and no
+     * caller in this codebase passes its own.
+     */
+    public function test_the_resume_token_id_is_not_mass_assignable(): void
+    {
+        $chosenId = '11111111-1111-4111-8111-111111111111';
+
+        $draft = BookingDraft::create(['id' => $chosenId]);
+
+        $this->assertNotSame($chosenId, $draft->id);
+        $this->assertTrue(Str::isUuid($draft->id));
+    }
 }

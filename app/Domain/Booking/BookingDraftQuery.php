@@ -59,11 +59,29 @@ final class BookingDraftQuery
         $allPricesAvailable = true;
 
         foreach ($draft->selected_services as $selection) {
+            // A read path never throws on malformed stored data. Every write
+            // goes through `SaveBookingDraftStep::validateServices()`, which
+            // guarantees the `list<array{code, quantity}>` shape — but this
+            // is a JSON column, so a row hand-edited in the database or
+            // written by a different schema version must degrade gracefully
+            // rather than raise a raw PHP error on a public summary screen.
+            //
+            // A row with no usable code is skipped (there is nothing to name
+            // or price). A row with a usable code but an unusable quantity is
+            // KEPT and rendered UNPRICED — quantity 1 is a guess, and pricing
+            // a guess would fabricate a total, which this method's own
+            // contract forbids.
+            if (! is_array($selection) || ! isset($selection['code']) || ! is_scalar($selection['code'])) {
+                continue;
+            }
+
             $code = (string) $selection['code'];
-            $quantity = (int) $selection['quantity'];
+            $rawQuantity = $selection['quantity'] ?? null;
+            $quantityIsUsable = is_int($rawQuantity) && $rawQuantity >= 1;
+            $quantity = $quantityIsUsable ? $rawQuantity : 1;
 
             $definition = ServiceDefinition::findByCode($code);
-            $priceVersion = $definition?->currentPriceVersion();
+            $priceVersion = $quantityIsUsable ? $definition?->currentPriceVersion() : null;
 
             $unitPrice = $priceVersion !== null ? (float) $priceVersion->amount : null;
             $lineTotal = $unitPrice !== null ? $unitPrice * $quantity : null;

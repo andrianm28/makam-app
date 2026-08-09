@@ -53,10 +53,15 @@ final class BookingDraft extends Model
     ];
 
     /**
+     * `id` is deliberately NOT fillable: `HasUuids` generates it on insert
+     * whenever it is absent, and no caller in this codebase passes one
+     * (verified across `app/` and `tests/`). Leaving it mass-assignable
+     * would let a caller choose a draft's own resume token — the one
+     * attribute on this model that must stay unguessable.
+     *
      * @var list<string>
      */
     protected $fillable = [
-        'id',
         'user_id',
         'current_step',
         'completed_steps',

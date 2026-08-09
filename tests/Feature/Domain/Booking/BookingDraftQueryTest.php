@@ -104,4 +104,44 @@ final class BookingDraftQueryTest extends TestCase
         $this->assertNull($summary['total']);
         $this->assertFalse($summary['all_prices_available']);
     }
+
+    /**
+     * `selected_services` is a JSON column. Every write goes through
+     * `SaveBookingDraftStep::validateServices()`, but a row hand-edited in
+     * the database (or written by a different schema version) must degrade
+     * on this READ path rather than raise a raw PHP error on a public
+     * summary screen.
+     */
+    public function test_summary_skips_a_row_with_no_usable_service_code(): void
+    {
+        $draft = BookingDraft::create([
+            'selected_services' => [
+                ['quantity' => 1],
+                'not-even-an-array',
+                ['code' => 'DOCUMENT_PROCESSING', 'quantity' => 1],
+            ],
+        ]);
+
+        $summary = BookingDraftQuery::summary($draft);
+
+        $this->assertCount(1, $summary['lines']);
+        $this->assertSame('DOCUMENT_PROCESSING', $summary['lines'][0]['code']);
+    }
+
+    public function test_summary_renders_a_row_with_an_unusable_quantity_as_unpriced_rather_than_guessing_a_total(): void
+    {
+        $draft = BookingDraft::create([
+            'selected_services' => [
+                ['code' => 'DOCUMENT_PROCESSING'],
+            ],
+        ]);
+
+        $summary = BookingDraftQuery::summary($draft);
+
+        $this->assertCount(1, $summary['lines']);
+        $this->assertNull($summary['lines'][0]['unit_price']);
+        $this->assertNull($summary['lines'][0]['line_total']);
+        $this->assertNull($summary['total'], 'A guessed quantity must never produce a priced total.');
+        $this->assertFalse($summary['all_prices_available']);
+    }
 }

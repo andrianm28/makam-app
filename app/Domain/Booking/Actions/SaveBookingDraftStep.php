@@ -47,6 +47,21 @@ final readonly class SaveBookingDraftStep
             );
         }
 
+        // Step 5 is READ-ONLY — a summary of steps 1-4, with no write action
+        // and no payload of its own. It is inside the implemented boundary
+        // (5 === LAST_IMPLEMENTED) so the guard above cannot catch it, and
+        // without this one it would fall through both `match`es' `default`
+        // arms: no validation, no attributes, but a version bump and
+        // `current_step = 6` — a step the Blade view has no branch for,
+        // permanently stranding the draft with no way forward or back.
+        // Rejected here in the same boundary-check style rather than given a
+        // silent no-op arm, because no valid caller exists.
+        if ($step === BookingWizardStep::SUMMARY) {
+            throw new InvalidArgumentException(
+                'Step ['.BookingWizardStep::SUMMARY.'] (Ringkasan Pesanan) is read-only and has no save action.'
+            );
+        }
+
         // Idempotency replay: the same key for the same draft means this
         // exact save already happened — return the current state without
         // re-validating or re-bumping the version. See Task 8 for the
@@ -57,6 +72,12 @@ final readonly class SaveBookingDraftStep
 
         if ($expectedVersion !== null && $draft->version !== $expectedVersion) {
             throw new BookingDraftVersionConflictException($expectedVersion, $draft->version);
+        }
+
+        $sequencingErrors = self::validateStepSequencing($step, $draft);
+
+        if ($sequencingErrors !== []) {
+            throw new BookingStepValidationException($sequencingErrors);
         }
 
         $errors = match ($step) {
@@ -115,6 +136,40 @@ final readonly class SaveBookingDraftStep
 
             return $current->refresh();
         });
+    }
+
+    /**
+     * `booking-wizard-fields.md` §Global behavior: "User cannot skip required
+     * upstream decisions", and `public-booking-wizard` AC13's "unskippable"
+     * half. Enforced SERVER-SIDE against the draft's own persisted
+     * `completed_steps`, never against client state — the Livewire
+     * component's `$currentStep`/`$completedSteps` are `#[Locked]`, but a
+     * hand-crafted request straight to this Action must be rejected on the
+     * draft's own record regardless of what any client claims.
+     *
+     * Only the IMMEDIATELY preceding step is required, not the whole prefix:
+     * every step's own save appends to `completed_steps`, so reaching step N
+     * legitimately already implies 1..N-1 were each saved in turn, and
+     * checking only N-1 keeps this rule a single, cheap, obviously-correct
+     * boundary condition (the same shape as the two `InvalidArgumentException`
+     * boundary guards above). Step 1 has no predecessor and is always
+     * allowed. Re-saving an already-completed step (back-navigation, AC11) is
+     * always allowed for the same reason — its predecessor is by then
+     * complete.
+     *
+     * @return array<string, list<string>>
+     */
+    private static function validateStepSequencing(int $step, BookingDraft $draft): array
+    {
+        if ($step === BookingWizardStep::LOCATION) {
+            return [];
+        }
+
+        if (in_array($step - 1, $draft->completed_steps, true)) {
+            return [];
+        }
+
+        return ['step' => ['Selesaikan langkah sebelumnya terlebih dahulu.']];
     }
 
     /**
@@ -223,6 +278,14 @@ final readonly class SaveBookingDraftStep
             }
 
             $selectedCodes[] = $code;
+        }
+
+        // One row per service — quantity is what expresses "more than one",
+        // never a repeated code. A duplicate would otherwise double-count in
+        // `BookingDraftQuery::summary()`'s total and render the same line
+        // twice on Step 5.
+        if (count($selectedCodes) !== count(array_unique($selectedCodes))) {
+            return ['selected_services' => ['Layanan tidak boleh dipilih lebih dari satu kali.']];
         }
 
         $missingBasics = array_diff(ServiceCode::BASIC_CODES, $selectedCodes);

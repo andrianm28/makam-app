@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Livewire\Public\Booking;
 
+use App\Domain\Booking\BookingServiceType;
 use App\Domain\Booking\BookingWizardStep;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
@@ -51,6 +52,39 @@ final class BookingWizardEndToEndTest extends TestCase
         ]);
     }
 
+    /**
+     * Step 3 used to render the raw `BookingServiceType` codes to the user.
+     * The labels come from `mvp-scope.md` row 3 / `product-brief.md` §3
+     * ("Makam Baru, Makam Tumpang, Urgent, Pre-Need") — copied, not invented.
+     */
+    public function test_step_3_shows_product_labels_not_raw_enum_codes(): void
+    {
+        $cemetery = Cemetery::query()
+            ->where('city', LaunchCityCode::JAKARTA)
+            ->where('publication_status', 'published')
+            ->whereDoesntHave('packages')
+            ->firstOrFail();
+
+        $draftId = Livewire::test(BookingWizard::class)
+            ->call('saveStep1', LaunchCityCode::JAKARTA)
+            ->get('draftId');
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->call('saveStep2', $cemetery->id)
+            ->assertSet('currentStep', BookingWizardStep::SERVICE_TYPE);
+
+        foreach (BookingServiceType::LABELS as $code => $label) {
+            // `<x-mk.button>` renders its slot inside a bare `<span>`, so
+            // this asserts the VISIBLE copy specifically, not merely that
+            // the string occurs somewhere in the markup.
+            $component->assertSeeHtml("<span>{$label}</span>");
+            $component->assertDontSeeHtml("<span>{$code}</span>");
+            // The code survives only inside the `wire:click` payload — it is
+            // still what `saveStep3()` receives and what is persisted.
+            $component->assertSeeHtml("saveStep3('{$code}')");
+        }
+    }
+
     public function test_resuming_a_partially_completed_draft_skips_straight_to_its_saved_step(): void
     {
         $component = Livewire::test(BookingWizard::class)->call('saveStep1', LaunchCityCode::BOGOR);
@@ -82,12 +116,20 @@ final class BookingWizardEndToEndTest extends TestCase
         $this->assertDatabaseCount('booking_drafts', 1);
     }
 
+    /**
+     * Asserts `<x-mk.stepper>`'s own canonical labels (design-system.md
+     * §3.9), not `BookingWizardStep::LABELS` — see
+     * `BookingWizardRouteTest::test_the_nine_step_stepper_is_always_shown`
+     * for why that swap is a corrected expectation rather than a weakened
+     * one. What this test is really about is unchanged: steps 6-9 are
+     * unbuilt and must still be visible.
+     */
     public function test_the_stepper_never_removes_steps_6_through_9_even_though_they_are_unbuilt(): void
     {
         $component = Livewire::test(BookingWizard::class);
 
-        foreach (BookingWizardStep::LABELS as $step => $label) {
-            $component->assertSee($label);
+        foreach (['Data Pemesan', 'Data Almarhum + Dokumen', 'Pembayaran', 'Konfirmasi'] as $unbuiltStepLabel) {
+            $component->assertSee($unbuiltStepLabel);
         }
     }
 }
