@@ -24,17 +24,41 @@ use Symfony\Component\HttpFoundation\Response;
  * They compose independently and never call each other.
  *
  * ---------------------------------------------------------------------------
- * Route name pending confirmation (Task 2, tracked for Task 4/5)
+ * Route name — CONFIRMED (Task 4, built `App\Filament\Admin\Pages\MfaChallenge`)
  * ---------------------------------------------------------------------------
- * `'filament.admin.pages.mfa-challenge'` is the best current guess, traced
+ * `'filament.admin.pages.mfa-challenge'` was Task 2's best guess, traced
  * against a real installed Filament 5.7.3 package but not fully verified
- * end-to-end (the panel-level route-name prefix was not confirmed). The task
- * that builds the actual `MfaChallenge` page is responsible for confirming
- * this string and correcting it here if it differs.
+ * end-to-end at the time. Task 4 traced the full name-generation chain for
+ * real against the same installed `filament/filament` v5.7.3 copy (a sibling
+ * project on this host, `/home/ubuntu/platform-galang-dana-app/vendor/
+ * filament/filament`) and confirmed this string is correct:
+ *   - `routes/web.php:15` wraps every panel's routes in `Route::name('filament.')`.
+ *   - `routes/web.php:27-30` nests `Route::name("{$panelId}.")` — `'admin.'`
+ *     here, since this app has one domain (no multi-domain tenancy).
+ *   - `src/Pages/Page.php:111-121` (`Page::registerRoutes()`, the base class
+ *     every panel page — including `Pages\Dashboard` and `MfaChallenge` —
+ *     extends): wraps non-clustered pages in `Route::name('pages.')`.
+ *   - `src/Pages/Concerns/HasRoutes.php:44,56-59` (`routes()` /
+ *     `getRelativeRouteName()`): names the route after the page's own slug
+ *     (`'mfa-challenge'` for this page, set via `MfaChallenge::$slug`).
+ *   - `src/Pages/Page.php:172-180` (`getRouteName()`) independently confirms
+ *     the same concatenation: `'pages.' . getRelativeRouteName($panel)`,
+ *     passed through `Panel::generateRouteName()`
+ *     (`src/Panel/Concerns/HasRoutes.php:109-118`,
+ *     `"filament.{$this->getId()}.{$domain}{$name}"`, `$domain` empty here).
+ * Concatenated: `filament.` + `admin.` + `pages.` + `mfa-challenge` =
+ * `filament.admin.pages.mfa-challenge` — exactly Task 2's guess. No
+ * correction needed here or in the two Task 3 tests that already use it.
  */
 final class EnforceMfaChallenge
 {
-    private const string SESSION_KEY = 'mfa_challenge_satisfied_at';
+    /**
+     * Widened from `private` to `public` (Task 4) so `MfaChallenge`, the
+     * page this middleware redirects to, can write this exact key via
+     * `EnforceMfaChallenge::SESSION_KEY` instead of restating the literal
+     * string a second time.
+     */
+    public const string SESSION_KEY = 'mfa_challenge_satisfied_at';
 
     public function handle(Request $request, Closure $next): Response
     {

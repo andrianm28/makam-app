@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Providers\Filament;
 
+use App\Filament\Admin\Pages\MfaChallenge;
 use App\Http\Middleware\AssignCorrelationId;
 use App\Http\Middleware\EnforceMfaChallenge;
 use Filament\Http\Middleware\Authenticate;
@@ -130,6 +131,7 @@ class AdminPanelProvider extends PanelProvider
             )
             ->pages([
                 Pages\Dashboard::class,
+                MfaChallenge::class,
             ])
             ->widgets([
                 Widgets\AccountWidget::class,
