@@ -109,33 +109,51 @@
 
                          NOT related to finding N-14 (see this file's header):
                          N-14 was a <x-mk.button> defect and it is fixed. This
-                         is a different, still-live limitation — badge.blade.php
-                         has no `primary` intent, and $attributes->merge()
-                         APPENDS to its intent classes rather than REPLACING
-                         them. Routing this chip back through <x-mk.badge> with
-                         appended colour classes would reintroduce the
-                         rule-order ambiguity, not clean anything up.
+                         is a different limitation — badge.blade.php has no
+                         `primary` intent, and $attributes->merge() APPENDS to
+                         its intent classes rather than REPLACING them. Routing
+                         this chip back through <x-mk.badge> with appended
+                         colour classes would reintroduce the rule-order
+                         ambiguity, not clean anything up.
 
-                         AND DO NOT JUST PASS intent="primary" — it FAILS
-                         SILENTLY. badge.blade.php:83 is
-                         `$intents[$intent] ?? $intents['neutral']`, so an
-                         unknown intent renders neutral with no error, no
-                         warning, and nothing in the logs; the active chip
-                         would simply stop looking active and no test that
-                         asserts on text would catch it. Verified by render,
-                         8 Aug 2026 (marketplace-builder, S4-T8) — the output
-                         is byte-identical to intent="neutral".
+                         CORRECTED 09 Aug 2026 (retrofit finding). This block
+                         used to make two claims that are no longer true, and a
+                         maintainer trusting either would re-fork instead of
+                         migrating:
 
-                         The real fix is adding a `primary` intent to the badge
-                         primitive. Cheaper than it looks: primary-800 on
-                         primary-100 is ALREADY an asserted WCAG pair
-                         (docs/design/verify-contrast.py:99, inside GATE 1's
-                         46), so it needs no tokens.css change and no §9.4 ADR.
-                         But design-system.md §3.6 defines `intent` as a CLOSED
-                         list (neutral|info|pending|success|danger|urgent), so
-                         it is a governing-document edit plus a shared
-                         single-writer file — not this view's call. Raised with
-                         the lead 8 Aug 2026 by S4-T6 and S4-T8 jointly. --}}
+                         1. It said passing intent="primary" FAILS SILENTLY,
+                            falling back to neutral with nothing in the logs.
+                            That was true on 8 Aug and is not true now.
+                            badge.blade.php THROWS InvalidArgumentException on
+                            an unknown intent, and the comment above that throw
+                            records these same two Sprint 4 batches as the
+                            reason it was changed. An unsupported intent is a
+                            loud failure today.
+
+                         2. It called adding a `primary` intent to the badge
+                            primitive "the real fix ... raised with the lead".
+                            It was raised, and it was REJECTED.
+                            filter-chip.blade.php's header carries the ruling
+                            verbatim — "Rejected: adding a `primary` value to
+                            badge.blade.php's $intents map" — because §3.7 is a
+                            closed STATUS vocabulary and a selection state is
+                            not a status. <x-mk.filter-chip>
+                            (design-system.md §3.6a) shipped as the answer
+                            instead.
+
+                         So the real fix for this page is migrating these chips
+                         to <x-mk.filter-chip>, not extending the badge. That
+                         migration is deliberately NOT done here: the
+                         primitive's interface is href + active and it renders
+                         an <a> carrying aria-current, while these chips are
+                         buttons driving wire:click. Closing that gap means
+                         either the primitive gains a button mode or this page
+                         converts to link chips — both are design decisions on a
+                         shared single-writer file, so they are ledgered rather
+                         than made inside a fix wave. Worth knowing for whoever
+                         takes it: ba662d1 migrated marketplace's twin of this
+                         chip and left this one behind, so this is the last
+                         remaining fork of the three. --}}
                     <span class="inline-flex items-center gap-1 rounded-sm border border-primary-300 bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-800">
                         <x-dynamic-component component="icon.check" class="size-3.5 shrink-0" aria-hidden="true" />
                         Semua Kota
