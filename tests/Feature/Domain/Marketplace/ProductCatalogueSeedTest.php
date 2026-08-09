@@ -8,6 +8,7 @@ use App\Domain\Marketplace\MarketplaceProductCategory;
 use App\Domain\Marketplace\Models\Product;
 use App\Domain\Marketplace\ProductCode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use InvalidArgumentException;
 use Tests\TestCase;
 
 /**
@@ -149,6 +150,37 @@ final class ProductCatalogueSeedTest extends TestCase
             $this->assertNotSame('', trim($product->description), "Product [{$row['code']}] has a blank description.");
             $this->assertTrue($product->is_active);
         }
+    }
+
+    public function test_a_product_with_an_unknown_code_cannot_be_saved(): void
+    {
+        // W-4: the closed-list guard in Product::booted() is the ONLY
+        // enforcement of products.code — no DB CHECK exists and the seed
+        // migration bypasses it via DB::table()->insert() — so a refactor
+        // that dropped the assertKnown() line would otherwise go uncaught.
+        // Mirrors the sibling negative test ProductVariantSeedTest
+        // (product_id scope), fired through the model's own saving path.
+        $product = Product::findByCode(ProductCode::FLOWER_BOARD);
+        $this->assertNotNull($product);
+
+        $product->code = 'PRODUK_YANG_TIDAK_ADA';
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $product->save();
+    }
+
+    public function test_a_product_with_an_unknown_category_cannot_be_saved(): void
+    {
+        // W-4, category half of the same guard.
+        $product = Product::findByCode(ProductCode::FLOWER_BOARD);
+        $this->assertNotNull($product);
+
+        $product->category = 'KATEGORI_YANG_TIDAK_ADA';
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $product->save();
     }
 
     /**
