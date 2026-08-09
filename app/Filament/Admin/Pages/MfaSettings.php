@@ -116,16 +116,39 @@ final class MfaSettings extends Page
         $this->refreshOtpauthUri();
     }
 
+    /**
+     * Re-queries for a CONFIRMED enrolment (`firstOrFail()`) rather than
+     * trusting `$this->enrolment` — same guard shape `MfaChallenge::submit()`
+     * uses, for the same reason: a Livewire component's public methods are
+     * invocable over the wire regardless of what the Blade view currently
+     * renders, so the view's `@if ($isConfirmed)` around the "regenerate"
+     * button is not itself an access boundary.
+     * `MfaRecoveryService::regenerate()` performs no such check itself
+     * (unlike its sibling `redeem()`), so without this guard a still-PENDING,
+     * never-proven-possession enrolment could be given a stored, usable
+     * batch of recovery codes.
+     */
     public function regenerateRecoveryCodes(): void
     {
+        $user = Auth::user();
+
+        $enrolment = MfaEnrolment::query()
+            ->where('user_id', $user->id)
+            ->where('status', MfaEnrolmentStatus::CONFIRMED)
+            ->latest('id')
+            ->firstOrFail();
+
         $actorContext = app(ActorContext::class);
 
         $this->displayedRecoveryCodes = app(MfaRecoveryService::class)->regenerate(
-            enrolment: $this->enrolment,
+            enrolment: $enrolment,
             actorRef: $actorContext->identityReference,
             actorRole: 'authenticated_actor',
             source: AuditSource::Panel,
         );
+
+        $this->enrolment = $enrolment;
+        $this->enrolmentStatus = $enrolment->status;
     }
 
     /**

@@ -8,10 +8,12 @@ use App\Filament\Admin\Pages\MfaSettings;
 use App\Models\User;
 use App\Platform\Audit\AuditSource;
 use App\Platform\IdentityAccess\Mfa\Models\MfaEnrolment;
+use App\Platform\IdentityAccess\Mfa\Models\MfaRecoveryCode;
 use App\Platform\IdentityAccess\Mfa\MfaEnrolmentService;
 use App\Platform\IdentityAccess\Mfa\MfaEnrolmentStatus;
 use App\Platform\IdentityAccess\Mfa\Totp\Base32;
 use App\Platform\IdentityAccess\Mfa\Totp\Totp;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -105,6 +107,32 @@ final class MfaSettingsPageTest extends TestCase
             ->test(MfaSettings::class)
             ->call('regenerateRecoveryCodes')
             ->assertHasNoErrors();
+    }
+
+    /**
+     * Regression for the review finding: `regenerateRecoveryCodes()` must
+     * not trust `$this->enrolment` — it re-queries for a CONFIRMED
+     * enrolment and fails (`firstOrFail()`) when the actor's only enrolment
+     * is still PENDING, the same guard shape `MfaChallenge::submit()`
+     * already uses. Calling this action directly (bypassing the Blade
+     * view's `@if ($isConfirmed)`, which is not itself an access boundary
+     * for a Livewire component's public methods) must not create any
+     * `MfaRecoveryCode` rows for a never-proven-possession enrolment.
+     */
+    public function test_regenerating_recovery_codes_is_rejected_for_a_pending_enrolment(): void
+    {
+        $user = User::factory()->create();
+
+        $component = Livewire::actingAs($user)->test(MfaSettings::class);
+        // mount() auto-started a PENDING enrolment for this not-yet-enrolled user.
+
+        $this->expectException(ModelNotFoundException::class);
+
+        try {
+            $component->call('regenerateRecoveryCodes');
+        } finally {
+            $this->assertSame(0, MfaRecoveryCode::query()->count());
+        }
     }
 
     public function test_the_disable_button_links_to_the_gated_route_not_a_local_action(): void
