@@ -34,6 +34,27 @@ final class MfaRecoveryService
     private const string RATE_LIMIT_CONTEXT = 'mfa-recovery';
 
     /**
+     * 10 codes — a conventional count (Google/GitHub/GitLab-style
+     * authenticator recovery flows commonly ship 8-10); 10 gives a little
+     * more headroom for a family/staff member who redeems codes
+     * infrequently, without generating an unwieldy list to save.
+     *
+     * Duplicated from MfaEnrolmentService due to it being a private constant
+     * there — see regenerate() below for the rationale.
+     */
+    private const int RECOVERY_CODE_COUNT = 10;
+
+    /**
+     * Charset avoiding visually ambiguous characters (no `0`/`O`, no
+     * `1`/`I`) for a code a person may need to type from a printed page.
+     *
+     * Duplicated from MfaEnrolmentService — see regenerate() below for the rationale.
+     */
+    private const string RECOVERY_CODE_CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+    private const int RECOVERY_CODE_LENGTH = 10;
+
+    /**
      * @throws MfaEnrolmentNotConfirmedException when `$enrolment` is not
      *                                           `MfaEnrolmentStatus::CONFIRMED`.
      */
@@ -108,6 +129,80 @@ final class MfaRecoveryService
 
             return MfaRecoveryResult::success();
         });
+    }
+
+    /**
+     * Invalidates every currently-unused recovery code for `$enrolment` and
+     * generates a fresh batch of RECOVERY_CODE_COUNT — the standard
+     * "regenerate" semantics: old codes stop working the moment new ones
+     * exist, mirroring MfaEnrolmentService::confirm()'s one-time plaintext
+     * display contract. Old codes are marked used (not deleted) — same
+     * soft-invalidate-don't-delete convention this module already uses for
+     * MfaEnrolment::REVOKED.
+     *
+     * @return list<string>
+     */
+    public function regenerate(
+        MfaEnrolment $enrolment,
+        int $actorRef,
+        string $actorRole,
+        AuditSource $source,
+    ): array {
+        return DB::transaction(function () use ($enrolment, $actorRef, $actorRole, $source): array {
+            $enrolment->recoveryCodes()->whereNull('used_at')->get()->each(
+                fn (MfaRecoveryCode $code) => $code->markUsed()
+            );
+
+            $plaintextCodes = [];
+
+            for ($i = 0; $i < self::RECOVERY_CODE_COUNT; $i++) {
+                $code = self::generateRecoveryCode();
+                $plaintextCodes[] = $code;
+
+                MfaRecoveryCode::create([
+                    'mfa_enrolment_id' => $enrolment->id,
+                    'code_hash' => Hash::make($code),
+                ]);
+            }
+
+            Audit::record(
+                action: MfaAuditActions::RECOVERY_CODES_REGENERATED,
+                subject: new AuditSubject(type: 'mfa_enrolment', id: $enrolment->id),
+                outcome: AuditOutcome::Allowed,
+                actorRef: $actorRef,
+                actorRole: $actorRole,
+                source: $source,
+            );
+
+            return $plaintextCodes;
+        });
+    }
+
+    /**
+     * `random_int()` (CSPRNG-backed) rather than `Str::random()` — keeps
+     * this module's own random-generation story self-contained rather than
+     * relying on a helper's internal implementation, matching
+     * `MfaEnrolmentService::generateRecoveryCode()`'s identical approach.
+     * ~50 bits of entropy per code (32^10), which combined with hashed-at-rest
+     * storage and `MfaRateLimiter`'s throttle on redemption attempts is more
+     * than adequate for a one-time recovery code.
+     *
+     * Duplicated from MfaEnrolmentService (not extracted to a shared helper)
+     * — both are small ~15-line private methods; extracting a dedicated class
+     * would add unnecessary indirection for two call sites in different
+     * services. Duplication is noted here and in the RECOVERY_CODE_*
+     * constants above.
+     */
+    private static function generateRecoveryCode(): string
+    {
+        $charsetLength = strlen(self::RECOVERY_CODE_CHARSET);
+        $code = '';
+
+        for ($i = 0; $i < self::RECOVERY_CODE_LENGTH; $i++) {
+            $code .= self::RECOVERY_CODE_CHARSET[random_int(0, $charsetLength - 1)];
+        }
+
+        return substr($code, 0, 5).'-'.substr($code, 5);
     }
 
     private function recordAttempt(MfaEnrolment $enrolment, string $outcome, string $ip): void
