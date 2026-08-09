@@ -152,10 +152,15 @@ final class NotificationTemplatePersistenceTest extends TestCase
         $versionCount = NotificationTemplateVersion::query()->count();
 
         // Simulate a prior seed that used the old external fallback and a
-        // partial rerun that lost the active pointer.
+        // partial rerun that lost the active pointer and corrupted the
+        // outbox event key.
         DB::table('notification_templates')
             ->whereKey($draftTemplate->id)
             ->update(['default_channel' => 'EMAIL', 'active_version_id' => null]);
+
+        DB::table('notification_templates')
+            ->where('event_name', 'Booking submitted')
+            ->update(['outbox_event_name' => 'stale.value.v0']);
 
         DB::table('migrations')
             ->where('migration', '2026_08_09_100020_seed_notification_templates_from_matrix')
@@ -169,6 +174,51 @@ final class NotificationTemplatePersistenceTest extends TestCase
         $this->assertNull($draftTemplate->fresh()->default_channel);
         $this->assertSame($draftVersionId, $draftTemplate->fresh()->active_version_id);
         $this->assertSame('EMAIL', NotificationTemplate::query()->where('event_name', 'Booking submitted')->value('default_channel'));
+        $this->assertSame(
+            'booking.draft_submitted.v2',
+            NotificationTemplate::query()->where('event_name', 'Booking submitted')->value('outbox_event_name')
+        );
+    }
+
+    public function test_only_the_six_ruled_rows_carry_an_outbox_event_name(): void
+    {
+        $mapped = [
+            'Booking submitted' => 'booking.draft_submitted.v2',
+            'Availability requested' => 'availability.requested.v1',
+            'Availability confirmed/rejected' => 'availability.confirmed.v2',
+            'Quote issued' => 'quote.issued.v1',
+            'Quote accepted' => 'quote.accepted.v1',
+            'Payment received' => 'payment.received.v1',
+        ];
+
+        foreach ($mapped as $eventName => $outboxEventName) {
+            $this->assertSame(
+                $outboxEventName,
+                NotificationTemplate::query()->where('event_name', $eventName)->value('outbox_event_name'),
+                "Expected {$eventName} to carry outbox_event_name {$outboxEventName}."
+            );
+        }
+
+        $unmapped = [
+            'Booking draft created',
+            'Payment opened',
+            'Payment failed/exception',
+            'Order processing',
+            'Order completed',
+            'Marketplace order submitted',
+            'Vendor accepted/rejected',
+            'Vendor evidence uploaded',
+            'Renewal submitted',
+            'Renewal paid/verified',
+            'Reminder due',
+        ];
+
+        foreach ($unmapped as $eventName) {
+            $this->assertNull(
+                NotificationTemplate::query()->where('event_name', $eventName)->value('outbox_event_name'),
+                "Expected {$eventName} to have a NULL outbox_event_name."
+            );
+        }
     }
 
     public function test_notification_schema_has_json_variable_snapshots_and_no_version_update_timestamp(): void
@@ -178,10 +228,17 @@ final class NotificationTemplatePersistenceTest extends TestCase
             static fn (array $column): bool => $column['name'] === 'default_channel',
         ))[0];
 
+        $outboxEventName = array_values(array_filter(
+            Schema::getColumns('notification_templates'),
+            static fn (array $column): bool => $column['name'] === 'outbox_event_name',
+        ))[0];
+
         $this->assertTrue(Schema::hasColumn('notification_templates', 'event_name'));
         $this->assertTrue(Schema::hasColumn('notification_templates', 'default_channel'));
         $this->assertTrue(Schema::hasColumn('notification_templates', 'active_version_id'));
+        $this->assertTrue(Schema::hasColumn('notification_templates', 'outbox_event_name'));
         $this->assertTrue($defaultChannel['nullable']);
+        $this->assertTrue($outboxEventName['nullable']);
         $this->assertTrue(Schema::hasColumn('notification_template_versions', 'variable_allowlist'));
         $this->assertTrue(Schema::hasColumn('notification_template_versions', 'restricted_fields'));
         $this->assertFalse(Schema::hasColumn('notification_template_versions', 'updated_at'));
@@ -206,6 +263,7 @@ final class NotificationTemplatePersistenceTest extends TestCase
 
             $this->assertSame($version->id, $template->active_version_id);
             $this->assertSame($this->matrixDefaultChannel($row['recipients']), $template->default_channel);
+            $this->assertSame($this->matrixOutboxEventName($row['event']), $template->outbox_event_name);
 
             foreach ($row['recipients'] as $recipient => $channelFact) {
                 $this->assertStringContainsString($recipient.': '.$channelFact, $version->body);
@@ -225,6 +283,26 @@ final class NotificationTemplatePersistenceTest extends TestCase
         }
 
         return str_contains($facts, 'WA') ? 'WA' : null;
+    }
+
+    /**
+     * Ruling 1's approved refinement (`docs/superpowers/plans/2026-08-10-
+     * wave1a-notifications-decisions.md`): only these 6 matrix rows have a
+     * clean, non-ambiguous catalogue counterpart. Mirrors — does not
+     * duplicate as canonical data — the mapping the seed migration applies,
+     * so this test can independently confirm every other row stays NULL.
+     */
+    private function matrixOutboxEventName(string $eventName): ?string
+    {
+        return match ($eventName) {
+            'Booking submitted' => 'booking.draft_submitted.v2',
+            'Availability requested' => 'availability.requested.v1',
+            'Availability confirmed/rejected' => 'availability.confirmed.v2',
+            'Quote issued' => 'quote.issued.v1',
+            'Quote accepted' => 'quote.accepted.v1',
+            'Payment received' => 'payment.received.v1',
+            default => null,
+        };
     }
 
     private function template(string $eventName, ?string $defaultChannel = 'EMAIL'): NotificationTemplate
