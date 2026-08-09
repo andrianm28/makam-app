@@ -261,7 +261,13 @@ final class RenewalStartTest extends TestCase
         FeatureGate::query()->where('gate_id', 'G-DATA-01')->update(['state' => 'open']);
 
         Livewire::test(RenewalStart::class)
-            ->assertDontSee('Pencarian Data Makam Belum Tersedia Online');
+            ->assertDontSee('Pencarian Data Makam Belum Tersedia Online')
+            // design-system.md §9.2 MUST NOT 9: the gate state changes the
+            // banner, never the journey — city and cemetery selection must
+            // survive BOTH gate states, and the closed-gate test asserts
+            // them while this one asserts them with the gate open.
+            ->assertSee('Pilih Kota')
+            ->assertSee('Jakarta');
     }
 
     // =====================================================================
