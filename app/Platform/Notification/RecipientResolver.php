@@ -23,27 +23,31 @@ use Illuminate\Support\Facades\Log;
  *    Unknown event -> log a warning and return `RecipientSet::empty()`.
  *    Never throws into business state (AC5) — a matrix miss is a no-op,
  *    not an error.
- * 2. Customer: the matrix's "Customer" column. If it is not `none` and
- *    `$subject->ownerRef` is non-null, emit one `RecipientRole::CUSTOMER`
- *    recipient carrying the owner reference and no scope entity (ruling 5).
- *    An anonymous record (`ownerRef === null`) yields no customer
- *    recipient even when the column is targeted — there is no one to
- *    notify.
- * 3. Admin / cemetery operator / vendor: derived from
+ * 2. Customer: the matrix's "Customer" column. If it is not `none`/`TBD`
+ *    and `$subject->ownerRef` is non-null, emit one
+ *    `RecipientRole::CUSTOMER` recipient carrying the owner reference and
+ *    no scope entity (ruling 5). An anonymous record (`ownerRef === null`)
+ *    yields no customer recipient even when the column is targeted —
+ *    there is no one to notify.
+ * 3. Admin / cemetery operator / vendor / case manager: derived from
  *    `$subject`'s single scope entity (type + id), via
  *    `RecipientRoleSource::roleForScopeEntityType()` (the provisional role
  *    seam, ruling 2) then `ScopeAssignmentResolver::actorsForEntity()`
  *    (ruling 3). The role is mapped back to its matrix column
- *    (`ROLE_COLUMNS` below); if that column is `none`, or the role has no
- *    column at all yet (case manager — ruling 4 is blocked), nothing is
- *    emitted for it. Cross-scope leakage is prevented by construction:
- *    `actorsForEntity()` filters on `$subject`'s own `entity_id`, so an
- *    actor scoped to a *different* entity of the same type can never
- *    appear.
- * 4. Case manager / finance: currently unreachable. Case manager has no
- *    matrix column (ruling 4 blocked); finance is never derivable from any
- *    scope grant (ruling 2 — `business_entity` cannot distinguish admin
- *    from finance). Both resolve to nothing, honestly, rather than being
+ *    (`ROLE_COLUMNS` below); if that column is `none` or `TBD`, or the
+ *    role has no column at all, nothing is emitted for it. Cross-scope
+ *    leakage is prevented by construction: `actorsForEntity()` filters on
+ *    `$subject`'s own `entity_id`, so an actor scoped to a *different*
+ *    entity of the same type can never appear.
+ * 4. Case manager / finance: currently unreachable in practice, for two
+ *    different reasons. Case manager now has a matrix column (ruling 4),
+ *    but every cell in it is `TBD` — no recipient policy has been decided
+ *    for it yet — and `TBD` resolves to nothing, exactly like `none`, so
+ *    it emits nothing until a real value replaces `TBD`. Finance has no
+ *    matrix column mapping at all: it is never derivable from any scope
+ *    grant (ruling 2 — `business_entity` cannot distinguish admin from
+ *    finance), and guessing one would fabricate an authorization
+ *    distinction. Both resolve to nothing, honestly, rather than being
  *    guessed.
  * 5. Order/case events (ruling 6): no special-cased event-name branch
  *    exists for these. `app/Domain/OrderWorkflow/` and
@@ -77,9 +81,9 @@ final class RecipientResolver
      * Maps a provisional recipient role back to the matrix column that
      * targets it. Derived from `docs/contracts/notification-matrix.md`'s
      * current header row (`Customer | Admin platform | Pengelola TPU/TPS |
-     * Vendor`) — this task's hard scope limits forbid editing that file,
-     * so this map must be updated by whoever applies ruling 4 (case
-     * manager / finance columns) once that decision lands.
+     * Vendor | Case manager | Finance`). Finance stays absent: it remains
+     * underivable per ruling 2 (`business_entity` cannot distinguish admin
+     * from finance), and its column is `TBD` anyway.
      *
      * @var array<string, string>
      */
@@ -87,12 +91,21 @@ final class RecipientResolver
         RecipientRole::PLATFORM_ADMIN => 'Admin platform',
         RecipientRole::CEMETERY_OPERATOR => 'Pengelola TPU/TPS',
         RecipientRole::VENDOR => 'Vendor',
-        // RecipientRole::CASE_MANAGER intentionally absent: no matrix
-        // column exists for it (ruling 4 blocked). A role with no entry
-        // here always resolves to nothing — see `resolveScopedRecipients()`.
+        RecipientRole::CASE_MANAGER => 'Case manager',
     ];
 
     private const string NONE = 'none';
+
+    /**
+     * Matrix cell values that mean "no recipient" — `none` (an explicit
+     * decision) and `TBD` (an undecided one). Both must resolve to nothing:
+     * treating `TBD` as anything else would silently emit recipients for a
+     * policy nobody has decided (ruling 4's refinement,
+     * `docs/superpowers/plans/2026-08-10-wave1a-notifications-decisions.md`).
+     *
+     * @var list<string>
+     */
+    private const array EMPTY_VALUES = [self::NONE, 'TBD'];
 
     public function __construct(
         private readonly NotificationMatrixSource $matrixSource,
@@ -193,7 +206,15 @@ final class RecipientResolver
 
     private function isNone(string $value): bool
     {
-        return strcasecmp(trim($value), self::NONE) === 0;
+        $trimmed = trim($value);
+
+        foreach (self::EMPTY_VALUES as $emptyValue) {
+            if (strcasecmp($trimmed, $emptyValue) === 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function dedupeKey(int|string $actorRef, string $role, ?string $scopeEntityType, int|string|null $scopeEntityId): string

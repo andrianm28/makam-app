@@ -24,11 +24,13 @@ use Tests\TestCase;
  * scope (`ScopeAssignmentResolver::actorsForEntity()` + the provisional
  * role seam) or from the record owner reference for customers.
  *
- * Uses the real, unmodified `docs/contracts/notification-matrix.md` (not a
- * fixture copy — this task's hard scope limits forbid touching that file),
- * so these tests assert against its actual current rows. If a future
- * change to that document alters a row this file depends on, the failure
- * is exactly the signal that this file needs updating too.
+ * Uses the real `docs/contracts/notification-matrix.md` (not a fixture
+ * copy), so these tests assert against its actual current rows. If a
+ * future change to that document alters a row this file depends on, the
+ * failure is exactly the signal that this file needs updating too. Ruling
+ * 4 (`docs/superpowers/plans/2026-08-10-wave1a-notifications-decisions.md`)
+ * added the "Case manager" and "Finance" columns additively — every
+ * existing row/column/cell this file already depended on is unchanged.
  *
  * Deviation from the brief's Step 5 example test list, approved by the
  * `lane-notifications` coordinator mid-task (see `task-2-report.md`
@@ -148,6 +150,23 @@ final class RecipientResolverTest extends TestCase
         $subject = new RecipientResolutionSubject(ownerRef: null, scopeEntityType: null, scopeEntityId: null);
 
         $set = $this->resolver()->resolve('Order processing', $subject);
+
+        $this->assertTrue($set->isEmpty());
+    }
+
+    public function test_a_tbd_case_manager_cell_never_resolves_a_recipient(): void
+    {
+        // Ruling 4's approved refinement (`docs/superpowers/plans/
+        // 2026-08-10-wave1a-notifications-decisions.md`): every "Case
+        // manager" cell in the matrix is the literal `TBD`, not `none`.
+        // A real grant exists here — the security property under test is
+        // that an undecided policy still resolves to nothing, even though
+        // a recipient could technically be derived.
+        ScopeAssignment::query()->create(['actor_identifier' => 'case-manager-1', 'entity_type' => ScopeEntityType::CASE_RECORD, 'entity_id' => '7']);
+
+        $subject = new RecipientResolutionSubject(ownerRef: null, scopeEntityType: ScopeEntityType::CASE_RECORD, scopeEntityId: '7');
+
+        $set = $this->resolver()->resolve('Booking submitted', $subject);
 
         $this->assertTrue($set->isEmpty());
     }

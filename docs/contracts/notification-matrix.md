@@ -9,25 +9,27 @@
 
 ## Matrix
 
-| Event | Customer | Admin platform | Pengelola TPU/TPS | Vendor |
-|---|---|---|---|---|
-| Booking draft created | none | none | none | none |
-| Booking submitted | EMAIL/WA | IN_APP | IN_APP/EMAIL for selected location | none |
-| Availability requested | optional status | IN_APP | IN_APP/EMAIL/WA | none |
-| Availability confirmed/rejected | EMAIL/WA | IN_APP | IN_APP | none |
-| Quote issued | EMAIL/WA | IN_APP | optional | none |
-| Quote accepted | confirmation | IN_APP | optional | none |
-| Payment opened | EMAIL/WA | IN_APP | none | none |
-| Payment received | EMAIL/WA + invoice | IN_APP | IN_APP for related order | Vendor when allocated |
-| Payment failed/exception | EMAIL/WA with recovery | IN_APP exception | none | none |
-| Order processing | EMAIL/WA based on material change | IN_APP | IN_APP | Assigned vendor |
-| Order completed | EMAIL/WA | IN_APP | IN_APP | IN_APP |
-| Marketplace order submitted | EMAIL/WA | IN_APP | none | IN_APP/EMAIL |
-| Vendor accepted/rejected | EMAIL/WA | IN_APP | none | IN_APP |
-| Vendor evidence uploaded | EMAIL/WA | optional | none | IN_APP |
-| Renewal submitted | EMAIL/WA | IN_APP | IN_APP/EMAIL | none |
-| Renewal paid/verified | EMAIL/WA + invoice | IN_APP | IN_APP | none |
-| Reminder due | EMAIL/WA | optional | optional | none |
+`TBD`: recipient policy not yet decided — resolves to no recipients.
+
+| Event | Customer | Admin platform | Pengelola TPU/TPS | Vendor | Case manager | Finance |
+|---|---|---|---|---|---|---|
+| Booking draft created | none | none | none | none | TBD | TBD |
+| Booking submitted | EMAIL/WA | IN_APP | IN_APP/EMAIL for selected location | none | TBD | TBD |
+| Availability requested | optional status | IN_APP | IN_APP/EMAIL/WA | none | TBD | TBD |
+| Availability confirmed/rejected | EMAIL/WA | IN_APP | IN_APP | none | TBD | TBD |
+| Quote issued | EMAIL/WA | IN_APP | optional | none | TBD | TBD |
+| Quote accepted | confirmation | IN_APP | optional | none | TBD | TBD |
+| Payment opened | EMAIL/WA | IN_APP | none | none | TBD | TBD |
+| Payment received | EMAIL/WA + invoice | IN_APP | IN_APP for related order | Vendor when allocated | TBD | TBD |
+| Payment failed/exception | EMAIL/WA with recovery | IN_APP exception | none | none | TBD | TBD |
+| Order processing | EMAIL/WA based on material change | IN_APP | IN_APP | Assigned vendor | TBD | TBD |
+| Order completed | EMAIL/WA | IN_APP | IN_APP | IN_APP | TBD | TBD |
+| Marketplace order submitted | EMAIL/WA | IN_APP | none | IN_APP/EMAIL | TBD | TBD |
+| Vendor accepted/rejected | EMAIL/WA | IN_APP | none | IN_APP | TBD | TBD |
+| Vendor evidence uploaded | EMAIL/WA | optional | none | IN_APP | TBD | TBD |
+| Renewal submitted | EMAIL/WA | IN_APP | IN_APP/EMAIL | none | TBD | TBD |
+| Renewal paid/verified | EMAIL/WA + invoice | IN_APP | IN_APP | none | TBD | TBD |
+| Reminder due | EMAIL/WA | optional | optional | none | TBD | TBD |
 
 ## Delivery rules
 
