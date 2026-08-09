@@ -226,7 +226,16 @@ jobs:
       # work around it by weakening this check.
       - name: Assert every §8.2 utility actually compiled
         run: |
-          css=$(find public/build -name '*.css' | head -1)
+          # Target app-*.css explicitly. The build emits a second stylesheet
+          # (theme-*.css, the Filament admin theme added as a Vite entry), so
+          # `find public/build -name '*.css' | head -1` is order-dependent and
+          # can return theme-*.css — which imports tokens.css but not app.css's
+          # @utility block (z-header, z-modal, duration-fast, touch-target), so
+          # the assertion would report 4 false MISSING classes even though the
+          # public site CSS compiled them all. The §8.2 utilities belong to the
+          # public entry (resources/css/app.css → app-*.css).
+          css=$(find public/build -name 'app-*.css' | head -1)
+          [ -n "$css" ] || { echo "no app-*.css emitted — token wiring may be broken"; exit 1; }
           missing=0
           for cls in max-w-form max-w-prose max-w-content duration-fast \
                      z-modal z-header touch-target h-11 h-13 border-neutral-450 \
