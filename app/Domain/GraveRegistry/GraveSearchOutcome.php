@@ -93,4 +93,35 @@ final readonly class GraveSearchOutcome
     {
         return $this->openResults !== [];
     }
+
+    /**
+     * `true` when at least one MATCHED row — readable or restricted — is
+     * fabricated seed data rather than a real registry record. Fabricated
+     * rows must announce themselves on any surface that shows them, the
+     * same honesty discipline the seed migration's "Contoh" name prefix
+     * implements at the data layer.
+     *
+     * Read as one fact off the outcome rather than recomputed per card in
+     * the view, for the reason this class exists at all: the label has to
+     * appear wherever example rows appear, and a view that derives it
+     * separately for each card is one edit away from disclosing it on one
+     * card and not the other. That is not hypothetical — it is what
+     * happened: the label was computed from `openResults` alone, so a
+     * search whose every match was restricted (`TPS Jakarta Kemang`)
+     * rendered fictional data with no disclosure at all.
+     *
+     * `GraveRecordProjection::$isExampleData` is populated under all three
+     * access modes, including `closed`, so this fact survives the field
+     * reduction that removes everything else about a restricted row.
+     */
+    public function hasExampleData(): bool
+    {
+        foreach ([...$this->openResults, ...$this->restrictedResults] as $row) {
+            if ($row->isExampleData) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

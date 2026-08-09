@@ -318,6 +318,38 @@ final class GraveSearchStatesTest extends TestCase
     }
 
     /**
+     * The disclosure must not depend on there being a readable row to hang
+     * it off. `TPS Jakarta Kemang`'s only two seeded records are both
+     * restricted — `C-01` limited, `C-04` closed — so this search produces
+     * zero open results and renders the privacy-limited card alone. The
+     * matches are still fabricated, so the page must still say so.
+     *
+     * Before this was fixed the label was computed from `openResults` alone
+     * and rendered only inside the open-results branch, so this exact
+     * search showed fictional data with no disclosure whatsoever — on any
+     * seeded environment.
+     */
+    public function test_a_restricted_only_result_set_still_discloses_that_its_matches_are_example_data(): void
+    {
+        $this->openTheDataGate();
+
+        Livewire::withQueryParams([
+            'tpu' => $this->cemeteryId('tps-jakarta-kemang'),
+            'nama' => 'Contoh',
+        ])
+            ->test(GraveSearch::class)
+            ->assertOk()
+            // There are matches, and they are all restricted.
+            ->assertSee(self::PRIVACY_LIMITED_MARKER)
+            ->assertDontSee(self::NO_RESULT_MARKER)
+            // Neither withheld name appears, so no open row is being
+            // rendered that the label could be hanging off.
+            ->assertDontSee('Contoh Agus Priyono')
+            ->assertDontSee('Contoh Dewi Anggraini')
+            ->assertSee('data contoh');
+    }
+
+    /**
      * The worst possible version of the defect: telling a family their
      * relative was not found before they had typed anything. Arriving on
      * the screen must render neither empty state.
