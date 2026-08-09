@@ -30,3 +30,14 @@ Payment UI lives in the consuming specs (booking Step 8, renewal Step 5, marketp
 ## NOT TESTED
 
 Nothing here is implemented. The provider is **not chosen** and gate `G-PAY-01` status is unknown, so `docs/planning/sprint-plan.md` OQ-5 blocks this spec. `payment-webhook.md` describes the contract shape but no sandbox has been exercised. The FIN-DEC approvals in `release-gates.md` §H are prerequisites and are not granted.
+
+**Correction, 10 Aug 2026 (Wave 1b ruling 1b-L3-01):** the paragraph above is no longer accurate and is superseded on two points; the rest of it still holds. Appended rather than rewritten, per this repository's correction convention.
+
+1. **"Nothing here is implemented" is false as of commit `afe45fc`.** What landed on lane `lane/l3-payment-adapter`:
+   - `GuardPaymentSession` — the six-condition payment guard as a single Action, **deny-only**. Condition 1 (server-resolved `PaymentMode` via `ModeResolver::paymentMode()`, backed by `G-PAY-01`) is genuinely evaluated. Conditions 2-6 (confirmation/reservation, accepted quote, authorized opening, amount vs quote total, merchant + `badan_usaha` binding) each deny as `UnavailableUpstream`, naming the missing upstream, because no such record exists in this repository yet.
+   - `payment_intents` and `payment_sessions` tables and models. Every guard evaluation writes a `payment_intents` decision record; denials also write audit `PAYMENT_GUARD_DENIED` with outcome `denied`.
+   - **There is no reachable PASS outcome**, and therefore no caller can create a `payment_sessions` row. `PaymentIntentDecision` deliberately has no `Allowed` case and the Postgres CHECK admits only `'denied'`. This is a fail-closed guard, not a working payment path.
+   - **Not** implemented, deliberately: `CreatePaymentSession`, the `PaymentProvider` contract, and all provider/HTTP code.
+2. **The provider IS now chosen** — ADR-0033 selects the SumoPod sandbox for dev/staging. The `G-PAY-01`-status and FIN-DEC points still stand: the gate stays **closed for production**, the FIN-DEC approvals in `release-gates.md` §H remain ungranted, and no sandbox has been exercised yet.
+
+Still genuinely NOT TESTED: the Postgres-only CHECK constraints (the local suite runs on SQLite, so they are unverified until CI), and every provider/webhook/manual-fallback/reversal surface, none of which exists yet.

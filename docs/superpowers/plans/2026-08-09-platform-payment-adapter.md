@@ -152,6 +152,18 @@ This plan's own "Current state" section flags the absent L4 ledger but does not 
 
 **Consequence, recorded so it is not re-litigated.** Tasks 3-8 (webhook receiver, async apply, manual fallback, reversals) all sit downstream of a *created* session, which conditions 2-6 gate. They hit this same wall. When they do, escalate rather than widening scope or stubbing the upstream.
 
+**Ruling 1b-L3-02 (approved 10 Aug 2026) — ownership split.** `booking-and-order-orchestration` owns the real domain records: `Confirmation`, `PlotReservation`, `Quote`, order/case opening-authorization, and the merchant registry. **This lane (L3) owns** `payment_intents`, `payment_sessions`, and the guard logic that reads those records once they exist. Nothing is built differently as a result — this makes explicit what ruling 1b-L3-01 already implied, so the boundary is not re-argued when the orchestration spec lands.
+
+**Ruling 1b-L3-03 (approved 10 Aug 2026) — six conditions, not five.** `requirements.md` AC2 lists five guard conditions; `design.md` names six, adding the merchant/`badan_usaha` binding. **Six is adopted.** AC13 independently requires that binding, and six is strictly stricter than five, so it cannot under-enforce. AC2's text is stale and carries a doc correction; this is not a spec conflict requiring escalation.
+
+### Forward constraints on later tasks (from the Task 2 review — binding, do not drop)
+
+These are not defects in Task 2. They are requirements on whichever later task first creates the named surface.
+
+- **Authentication/throttling before the first HTTP caller.** `GuardPaymentSession` writes one `payment_intents` row plus one audit row per invocation, with no auth check and no rate limit. That is correct today because nothing calls it (verified by grep), but it becomes an unauthenticated write-amplification vector the moment a real entry point exists. **The task that wires the first HTTP caller MUST require an authenticated actor and/or throttle before the guard is invoked.**
+- **Reject non-positive amounts on the pass path.** `Money(0)` and `Money(-1)` are both recorded today. Harmless in a deny-only guard, but **the task that makes a real session creatable MUST reject non-positive amounts.**
+- **Adding `PaymentIntentDecision::Allowed`** requires its own reviewed migration to widen the Postgres CHECK, and is a financial change needing human sign-off.
+
 - [x] **Step 1 (superseding):** `SessionState` closed-list enum + `GuardResult` with a `DENIED(condition, publicMessage)` shape and an explicit `UnavailableUpstream` denial reason distinct from a genuine domain denial.
 - [x] **Step 2 (superseding):** `GuardPaymentSession` evaluating all six conditions in fixed order; condition 1 real, conditions 2/3/4/5/6 returning `UnavailableUpstream` denials that cite the missing upstream by name.
 - [x] **Step 3 (superseding):** `payment_intents` + `payment_sessions` migrations and models (this lane owns them per §File Structure). Every guard evaluation — pass or deny — writes a `payment_intents` decision record; denials also write audit `PAYMENT_GUARD_DENIED` (outcome denied).
