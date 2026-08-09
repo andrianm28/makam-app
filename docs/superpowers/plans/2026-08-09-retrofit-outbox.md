@@ -297,7 +297,9 @@ git commit -m "feat(booking): emit booking.draft_started.v1 to the transactional
 
 - [ ] **Step 1: Write the failing tests**
 
-Append these three methods to `BookingDraftOutboxTest`, and add `use App\Domain\Booking\Actions\SaveBookingDraftStep;` plus `use App\Domain\Booking\Models\BookingDraft;` to its imports:
+Append these three methods to `BookingDraftOutboxTest`, and add `use App\Domain\Booking\Actions\SaveBookingDraftStep;` to its imports.
+
+**Corrected 09 Aug 2026 (controller finding, post-Task-2).** This step originally also said to add `use App\Domain\Booking\Models\BookingDraft;`. **Do not** — none of Task 2's three tests reference `BookingDraft` directly, so the import is unused, and CI runs `vendor/bin/pint --test` (`.github/workflows/ci.yml:128`) with no `pint.json`, i.e. the Laravel preset, whose `no_unused_imports` rule **fails the build** on it. This repo has already broken CI on a Pint violation once (commit `40c4eb2`). **Task 4 adds that import**, because Task 4's rollback tests are the first code that actually uses `BookingDraft`.
 
 ```php
     public function test_saving_a_step_writes_one_outbox_event_referencing_the_draft_not_its_content(): void
@@ -585,6 +587,10 @@ git commit -m "test(outbox): prove AC1 end-to-end against a real domain mutation
 This mirrors `tests/Feature/FeatureGate/GateActivationRecorderTest.php`'s established shape — success plus **both** rollback directions — which is the evidentiary bar the existing producer was held to. AC1's own words: "A committed mutation with no outbox row is a defect." The inverse (an outbox row with no committed mutation) is equally a defect, and both directions need pinning.
 
 **Implementer instruction — read `tests/Feature/FeatureGate/GateActivationRecorderTest.php` first** and follow its failure-injection idiom. The mechanism below is the required *behaviour*; if that file already establishes a cleaner injection idiom for this codebase, use it.
+
+**Import instruction (added 09 Aug 2026, controller finding).** These two tests are the FIRST code in `BookingDraftOutboxTest` to reference `BookingDraft` directly, so **this task must add `use App\Domain\Booking\Models\BookingDraft;`** to the file's imports. Task 2 deliberately does not add it — an import with no usage fails CI's `vendor/bin/pint --test` under the Laravel preset's `no_unused_imports` rule. Add it here, where it is genuinely used.
+
+Note the test bodies below reference `\Illuminate\Support\Facades\Event` and `OutboxEvent` fully-qualified/already-imported respectively; prefer adding a proper `use Illuminate\Support\Facades\Event;` import and dropping the inline leading backslashes, matching this file's existing import style — but only if you actually use it.
 
 - [ ] **Step 1: Write the failing tests**
 
