@@ -2847,10 +2847,13 @@ final class BookingWizardAccessibilityTest extends TestCase
 
     public function test_each_step_heading_has_a_unique_id_targeted_by_aria_labelledby(): void
     {
+        // Heading ids carry a `booking-` prefix in the real Steps 1-3
+        // markup Task 9/10 actually shipped (`booking-step-N-heading`),
+        // not the bare `step-N-heading` this test originally assumed.
         $component = Livewire::test(BookingWizard::class);
 
-        $component->assertSeeHtml('aria-labelledby="step-1-heading"');
-        $component->assertSeeHtml('id="step-1-heading"');
+        $component->assertSeeHtml('aria-labelledby="booking-step-1-heading"');
+        $component->assertSeeHtml('id="booking-step-1-heading"');
     }
 
     public function test_the_autosave_region_is_polite_and_never_a_toast_role(): void
