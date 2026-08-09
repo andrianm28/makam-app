@@ -6,7 +6,6 @@ namespace Tests\Feature\Domain\Booking\Actions;
 
 use App\Domain\Booking\Actions\SaveBookingDraftStep;
 use App\Domain\Booking\Actions\StartBookingDraft;
-use App\Domain\Booking\Models\BookingDraft;
 use App\Platform\Outbox\Models\OutboxEvent;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
