@@ -15,8 +15,10 @@ use App\Platform\DocumentVault\Models\Document;
 use App\Platform\DocumentVault\StoragePathPolicy;
 use App\Platform\Outbox\Models\OutboxEvent;
 use GuzzleHttp\Psr7\Utils;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
@@ -147,6 +149,147 @@ final class UploadDocumentTest extends TestCase
         $this->assertFileExists("{$this->root}/KTP/quarantine/{$second->storage_key}");
     }
 
+    public function test_scan_dispatch_waits_until_the_outer_transaction_commits(): void
+    {
+        Queue::fake();
+
+        $assertedNothingWasPushedInsideTransaction = false;
+
+        DB::transaction(function () use (&$assertedNothingWasPushedInsideTransaction): void {
+            $this->action->upload(
+                DocumentKind::Ktp,
+                $this->uploadedFile($this->minimalPdf(), 'ktp.pdf', 'application/pdf'),
+                'booking_draft',
+                'draft-commit-timing',
+                null,
+                [],
+            );
+
+            Queue::assertNothingPushed();
+            $assertedNothingWasPushedInsideTransaction = true;
+        });
+
+        $this->assertTrue($assertedNothingWasPushedInsideTransaction);
+        Queue::assertPushed(ScanDocumentJob::class, 1);
+    }
+
+    public function test_direct_create_cannot_insert_an_accepted_document_state(): void
+    {
+        $this->expectException(QueryException::class);
+
+        Document::create([
+            'document_kind' => DocumentKind::Ktp,
+            'state' => DocumentState::Accepted,
+            'owner_type' => 'booking_draft',
+            'owner_id' => 'draft-direct-accepted',
+            'original_filename' => 'ktp.pdf',
+            'storage_prefix' => 'quarantine',
+            'storage_key' => 'direct-accepted-key',
+            'size_bytes' => 100,
+            'mime_declared' => 'application/pdf',
+            'scanner_required' => true,
+        ]);
+    }
+
+    public function test_resume_does_not_replace_bytes_when_document_is_scanning(): void
+    {
+        Queue::fake();
+
+        $document = $this->action->upload(
+            DocumentKind::Ktp,
+            $this->uploadedFile($this->minimalPdf(), 'ktp.pdf', 'application/pdf'),
+            'booking_draft',
+            'draft-scanning',
+            'resume-scanning',
+            [],
+        );
+        $path = "{$this->root}/KTP/quarantine/{$document->storage_key}";
+        $originalBytes = file_get_contents($path);
+        $document->transitionTo(DocumentState::Scanning);
+
+        $this->expectException(InvalidArgumentException::class);
+
+        try {
+            $this->action->upload(
+                DocumentKind::Ktp,
+                $this->uploadedFile($this->minimalPdf().'retry', 'ktp-retry.pdf', 'application/pdf'),
+                'booking_draft',
+                'draft-scanning',
+                'resume-scanning',
+                [],
+            );
+        } finally {
+            $this->assertSame($originalBytes, file_get_contents($path));
+            $this->assertSame(DocumentState::Scanning, $document->fresh()->state);
+        }
+    }
+
+    public function test_resume_does_not_replace_bytes_when_document_is_accepted(): void
+    {
+        Queue::fake();
+
+        $document = $this->action->upload(
+            DocumentKind::Ktp,
+            $this->uploadedFile($this->minimalPdf(), 'ktp.pdf', 'application/pdf'),
+            'booking_draft',
+            'draft-accepted',
+            'resume-accepted',
+            [],
+        );
+        $path = "{$this->root}/KTP/quarantine/{$document->storage_key}";
+        $originalBytes = file_get_contents($path);
+        $document->transitionTo(DocumentState::Scanning);
+        $document->promote();
+
+        $this->expectException(InvalidArgumentException::class);
+
+        try {
+            $this->action->upload(
+                DocumentKind::Ktp,
+                $this->uploadedFile($this->minimalPdf().'retry', 'ktp-retry.pdf', 'application/pdf'),
+                'booking_draft',
+                'draft-accepted',
+                'resume-accepted',
+                [],
+            );
+        } finally {
+            $this->assertSame($originalBytes, file_get_contents($path));
+            $this->assertSame(DocumentState::Accepted, $document->fresh()->state);
+        }
+    }
+
+    public function test_resume_rejects_a_token_owned_by_another_record(): void
+    {
+        Queue::fake();
+
+        $document = $this->action->upload(
+            DocumentKind::Ktp,
+            $this->uploadedFile($this->minimalPdf(), 'ktp.pdf', 'application/pdf'),
+            'booking_draft',
+            'draft-owner-a',
+            'resume-owner-a',
+            [],
+        );
+        $path = "{$this->root}/KTP/quarantine/{$document->storage_key}";
+        $originalBytes = file_get_contents($path);
+
+        $this->expectException(InvalidArgumentException::class);
+
+        try {
+            $this->action->upload(
+                DocumentKind::Ktp,
+                $this->uploadedFile($this->minimalPdf(), 'ktp-owner-b.pdf', 'application/pdf'),
+                'booking_draft',
+                'draft-owner-b',
+                'resume-owner-a',
+                [],
+            );
+        } finally {
+            $this->assertSame($originalBytes, file_get_contents($path));
+            $this->assertSame($document->id, Document::query()->sole()->id);
+        }
+    }
+
     public function test_grave_import_kind_routes_through_the_identical_quarantine_path(): void
     {
         Queue::fake();
@@ -243,6 +386,9 @@ final class UploadDocumentTest extends TestCase
         $this->assertSame('import.csv', $document->original_filename);
         $this->assertSame('text/csv', $document->mime_declared);
         $this->assertFileExists("{$this->root}/GRAVE_IMPORT/quarantine/{$document->storage_key}");
+
+        $stream->rewind();
+        $this->assertSame($csv, $stream->getContents());
     }
 
     public function test_a_psr7_stream_input_without_required_meta_throws(): void

@@ -9,6 +9,7 @@ use App\Platform\DocumentVault\Contracts\ObjectStorage;
 use App\Platform\DocumentVault\Contracts\StoragePathResolver;
 use App\Platform\DocumentVault\StoragePathPolicy;
 use Illuminate\Support\ServiceProvider;
+use LogicException;
 
 /**
  * Wires this lane's `DocumentVault` bindings: `ObjectStorage` ->
@@ -50,8 +51,17 @@ final class DocumentVaultServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->app->bind(ObjectStorage::class, config('document-vault.object_storage'));
-        $this->app->bind(MalwareScanner::class, config('document-vault.malware_scanner'));
+        $objectStorage = config('document-vault.object_storage');
+        $malwareScanner = config('document-vault.malware_scanner');
+
+        if (! is_string($objectStorage) || ! is_string($malwareScanner)) {
+            throw new LogicException(
+                'Document Vault storage and malware scanner providers must be explicitly configured outside development.',
+            );
+        }
+
+        $this->app->bind(ObjectStorage::class, $objectStorage);
+        $this->app->bind(MalwareScanner::class, $malwareScanner);
         $this->app->bind(StoragePathResolver::class, StoragePathPolicy::class);
     }
 }

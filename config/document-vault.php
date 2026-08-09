@@ -5,6 +5,15 @@ declare(strict_types=1);
 use App\Platform\DocumentVault\Adapters\LocalFilesystemObjectStorage;
 use App\Platform\DocumentVault\Adapters\MockScanner;
 
+$isDevelopmentEnvironment = in_array(
+    env('APP_ENV', 'production'),
+    ['local', 'development', 'testing'],
+    true,
+);
+
+$configuredObjectStorage = env('DOCUMENT_VAULT_OBJECT_STORAGE');
+$configuredMalwareScanner = env('DOCUMENT_VAULT_MALWARE_SCANNER');
+
 /**
  * Platform Document Vault configuration.
  *
@@ -31,7 +40,10 @@ use App\Platform\DocumentVault\Adapters\MockScanner;
 return [
     'scanner_outage' => (bool) env('DOCUMENT_VAULT_SCANNER_OUTAGE', false),
 
-    'object_storage' => env('DOCUMENT_VAULT_OBJECT_STORAGE', LocalFilesystemObjectStorage::class),
+    // Local/mock defaults are intentionally limited to development-like
+    // environments. Staging and production must name their providers
+    // explicitly or the service provider fails closed during boot.
+    'object_storage' => $configuredObjectStorage ?? ($isDevelopmentEnvironment ? LocalFilesystemObjectStorage::class : null),
 
-    'malware_scanner' => env('DOCUMENT_VAULT_MALWARE_SCANNER', MockScanner::class),
+    'malware_scanner' => $configuredMalwareScanner ?? ($isDevelopmentEnvironment ? MockScanner::class : null),
 ];

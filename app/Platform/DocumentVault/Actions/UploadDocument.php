@@ -14,11 +14,13 @@ use App\Platform\DocumentVault\Models\Document;
 use App\Platform\Outbox\Outbox;
 use App\Platform\Outbox\OutboxClassification;
 use App\Platform\Outbox\OutboxQueueName;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Psr\Http\Message\StreamInterface;
+use Throwable;
 
 /**
  * Quarantine-first upload entry point for the platform document vault
@@ -111,9 +113,7 @@ final readonly class UploadDocument
         array $meta,
     ): Document {
         return DB::transaction(function () use ($kind, $file, $ownerType, $ownerId, $clientUploadId, $meta): Document {
-            $existing = $clientUploadId !== null
-                ? Document::query()->where('client_upload_id', $clientUploadId)->first()
-                : null;
+            $existing = $this->findExisting($clientUploadId, $ownerType, (string) $ownerId);
 
             $resource = $this->resourceFrom($file);
 
@@ -134,17 +134,44 @@ final readonly class UploadDocument
                     );
                 }
 
-                return $this->createNew(
-                    $kind,
-                    $resource,
-                    $ownerType,
-                    $ownerId,
-                    $clientUploadId,
-                    $originalFilename,
-                    $mimeDeclared,
-                    $sizeBytes,
-                    $checksum,
-                );
+                try {
+                    // The unique client-upload index is the last line of
+                    // defense when two transactions observe no token row at
+                    // the same time. The savepoint lets the losing writer
+                    // recover the committed winner without aborting the
+                    // outer transaction.
+                    return DB::transaction(fn (): Document => $this->createNew(
+                        $kind,
+                        $resource,
+                        $ownerType,
+                        $ownerId,
+                        $clientUploadId,
+                        $originalFilename,
+                        $mimeDeclared,
+                        $sizeBytes,
+                        $checksum,
+                    ));
+                } catch (QueryException $exception) {
+                    if ($clientUploadId === null || ! $this->isDuplicateClientUploadId($exception)) {
+                        throw $exception;
+                    }
+
+                    $existing = $this->findExisting($clientUploadId, $ownerType, (string) $ownerId);
+
+                    if (! $existing instanceof Document) {
+                        throw $exception;
+                    }
+
+                    return $this->resume(
+                        $existing,
+                        $kind,
+                        $resource,
+                        $originalFilename,
+                        $mimeDeclared,
+                        $sizeBytes,
+                        $checksum,
+                    );
+                }
             } finally {
                 fclose($resource);
             }
@@ -165,6 +192,12 @@ final readonly class UploadDocument
         int $sizeBytes,
         string $checksum,
     ): Document {
+        if (! in_array($document->state, [DocumentState::Uploading, DocumentState::Quarantined], true)) {
+            throw new InvalidArgumentException(
+                "Document {$document->id} cannot be resumed from state {$document->state->value}; a fresh scan is required.",
+            );
+        }
+
         if ($kind !== $document->document_kind) {
             throw new InvalidArgumentException(
                 "\$kind ({$kind->value}) does not match the resumed document's original kind ({$document->document_kind->value}).",
@@ -173,10 +206,7 @@ final readonly class UploadDocument
 
         $mimeVerified = $this->validator->validate($kind, $originalFilename, $sizeBytes, $resource);
 
-        $this->objectStorage->put(
-            $this->pathResolver->quarantinePath($kind, $document->storage_key),
-            $resource,
-        );
+        $this->objectStorage->put($this->pathResolver->quarantinePath($kind, $document->storage_key), $resource);
 
         $document->fill([
             'original_filename' => $originalFilename,
@@ -210,55 +240,100 @@ final readonly class UploadDocument
 
         $storageKey = Str::random(40);
 
-        $this->objectStorage->put(
-            $this->pathResolver->quarantinePath($kind, $storageKey),
-            $resource,
-        );
+        $storagePath = $this->pathResolver->quarantinePath($kind, $storageKey);
 
-        $document = Document::create([
-            'document_kind' => $kind,
-            'state' => DocumentState::Quarantined,
-            'owner_type' => $ownerType,
-            'owner_id' => (string) $ownerId,
-            'original_filename' => $originalFilename,
-            // Literal 'quarantine', not composed via StoragePathResolver:
-            // that interface's job is building object KEYS
-            // (`{kind}/{prefix}/{key}`) for `ObjectStorage`, not sourcing
-            // this column's value — see `StoragePathPolicy`'s own doc block
-            // for what it does and does not own.
-            'storage_prefix' => 'quarantine',
-            'storage_key' => $storageKey,
-            'size_bytes' => $sizeBytes,
-            'mime_declared' => $mimeDeclared,
-            'mime_verified' => $mimeVerified,
-            'checksum_sha256' => $checksum,
-            'client_upload_id' => $clientUploadId,
-            'scanner_required' => $kind->scannerRequired(),
-        ]);
+        $this->objectStorage->put($storagePath, $resource);
 
-        // AC12: a reference plus the kind only — never content, never the
-        // original filename. `state` is deliberately the literal lowercase
-        // string `task-4-brief.md` specifies verbatim
-        // (`['kind' => ..., 'state' => 'quarantined']`), not
-        // `DocumentState::Quarantined->value` (uppercase) — the outbox
-        // envelope's own casing convention for this field, kept as given
-        // rather than silently "corrected" to the DB enum's casing.
-        Outbox::record(
-            eventName: 'document.uploaded.v1',
-            eventVersion: 1,
-            aggregateType: 'document',
-            aggregateId: $document->id,
-            data: [
-                'kind' => $kind->value,
-                'state' => 'quarantined',
-            ],
-            classification: OutboxClassification::Confidential,
-            idempotencyKey: "upload:{$document->id}",
-        );
+        try {
+            $document = Document::createQuarantined([
+                'document_kind' => $kind,
+                'owner_type' => $ownerType,
+                'owner_id' => (string) $ownerId,
+                'original_filename' => $originalFilename,
+                // Literal 'quarantine', not composed via StoragePathResolver:
+                // that interface's job is building object KEYS
+                // (`{kind}/{prefix}/{key}`) for `ObjectStorage`, not sourcing
+                // this column's value — see `StoragePathPolicy`'s own doc block
+                // for what it does and does not own.
+                'storage_prefix' => 'quarantine',
+                'storage_key' => $storageKey,
+                'size_bytes' => $sizeBytes,
+                'mime_declared' => $mimeDeclared,
+                'mime_verified' => $mimeVerified,
+                'checksum_sha256' => $checksum,
+                'client_upload_id' => $clientUploadId,
+                'scanner_required' => $kind->scannerRequired(),
+            ]);
 
-        ScanDocumentJob::dispatch($document->id)->onQueue(OutboxQueueName::Media->value);
+            // AC12: a reference plus the kind only — never content, never the
+            // original filename. `state` is deliberately the literal lowercase
+            // string `task-4-brief.md` specifies verbatim.
+            Outbox::record(
+                eventName: 'document.uploaded.v1',
+                eventVersion: 1,
+                aggregateType: 'document',
+                aggregateId: $document->id,
+                data: [
+                    'kind' => $kind->value,
+                    'state' => 'quarantined',
+                ],
+                classification: OutboxClassification::Confidential,
+                idempotencyKey: "upload:{$document->id}",
+            );
 
-        return $document;
+            // Register with the database transaction manager rather than
+            // dispatching now. This is equivalent to a queued job's
+            // `afterCommit` flag and remains observable with Queue::fake(),
+            // whose fake push method bypasses the queue driver's own
+            // after-commit hook.
+            DB::afterCommit(function () use ($document): void {
+                ScanDocumentJob::dispatch($document->id)->onQueue(OutboxQueueName::Media->value);
+            });
+
+            return $document;
+        } catch (Throwable $exception) {
+            try {
+                $this->objectStorage->delete($storagePath);
+            } catch (Throwable) {
+                // Preserve the original transaction/storage exception.
+            }
+
+            throw $exception;
+        }
+    }
+
+    private function findExisting(?string $clientUploadId, string $ownerType, string $ownerId): ?Document
+    {
+        if ($clientUploadId === null) {
+            return null;
+        }
+
+        $existing = Document::query()
+            ->where('client_upload_id', $clientUploadId)
+            ->where('owner_type', $ownerType)
+            ->where('owner_id', $ownerId)
+            ->lockForUpdate()
+            ->first();
+
+        if ($existing instanceof Document) {
+            return $existing;
+        }
+
+        $otherOwner = Document::query()
+            ->where('client_upload_id', $clientUploadId)
+            ->lockForUpdate()
+            ->first();
+
+        if ($otherOwner instanceof Document) {
+            throw new InvalidArgumentException('The client upload token belongs to another owner.');
+        }
+
+        return null;
+    }
+
+    private function isDuplicateClientUploadId(QueryException $exception): bool
+    {
+        return str_contains(strtolower($exception->getMessage()), 'client_upload_id');
     }
 
     private function resolveOriginalFilename(UploadedFile|StreamInterface $file, array $meta): string
@@ -306,21 +381,32 @@ final readonly class UploadDocument
             return $resource;
         }
 
-        $resource = $file->detach();
+        // Copy the PSR-7 stream instead of detaching it. `detach()` transfers
+        // ownership and leaves common implementations unusable, which made
+        // the old fallback call to `getContents()` fail after detachment.
+        $temp = fopen('php://temp', 'r+b');
 
-        if (is_resource($resource)) {
-            rewind($resource);
-
-            return $resource;
+        if ($temp === false) {
+            throw new InvalidArgumentException('Unable to create a temporary upload stream.');
         }
 
-        // Defensive fallback for a StreamInterface implementation with no
-        // real underlying PHP resource to detach — uncommon (every
-        // Guzzle-backed stream this codebase actually constructs has one),
-        // but this class must not assume it. Buffers the stream's own
-        // content into a fresh temp resource instead.
-        $temp = fopen('php://temp', 'r+b');
-        fwrite($temp, $file->getContents());
+        if ($file->isSeekable()) {
+            $file->rewind();
+        }
+
+        while (! $file->eof()) {
+            $chunk = $file->read(8192);
+
+            if ($chunk === '') {
+                break;
+            }
+
+            if (fwrite($temp, $chunk) !== strlen($chunk)) {
+                fclose($temp);
+                throw new InvalidArgumentException('Unable to buffer the upload stream.');
+            }
+        }
+
         rewind($temp);
 
         return $temp;

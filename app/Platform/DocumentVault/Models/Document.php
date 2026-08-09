@@ -8,6 +8,7 @@ use App\Platform\DocumentVault\DocumentKind;
 use App\Platform\DocumentVault\DocumentState;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use LogicException;
 
 /**
  * Eloquent model for `documents`
@@ -52,7 +53,6 @@ final class Document extends Model
      */
     protected $fillable = [
         'document_kind',
-        'state',
         'owner_type',
         'owner_id',
         'original_filename',
@@ -66,6 +66,114 @@ final class Document extends Model
         'scanner_required',
         'retention_until',
     ];
+
+    /**
+     * Create the only state this module may assign during upload. `state` is
+     * intentionally excluded from `$fillable`; this explicit factory keeps
+     * the quarantine-first invariant while still allowing the upload Action
+     * to create a complete row in one save.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    public static function createQuarantined(array $attributes): static
+    {
+        $document = new self;
+        $document->fill($attributes);
+        $document->writeState(DocumentState::Quarantined);
+        $document->save();
+
+        return $document;
+    }
+
+    /**
+     * Update a non-accepted lifecycle state through the state machine. The
+     * accepted state has a separate promotion-only method so a scan Action
+     * cannot accidentally mark a document usable.
+     */
+    public function transitionTo(DocumentState $nextState): void
+    {
+        if ($nextState === DocumentState::Accepted) {
+            throw new LogicException('Accepted documents must use the promotion path.');
+        }
+
+        $currentState = $this->state;
+
+        if (! $currentState instanceof DocumentState) {
+            throw new LogicException('A document must have a persisted state before it can transition.');
+        }
+
+        if ($currentState === $nextState) {
+            return;
+        }
+
+        $allowedStates = match ($currentState) {
+            DocumentState::Uploading => [DocumentState::Quarantined],
+            DocumentState::Quarantined => [
+                DocumentState::Scanning,
+                DocumentState::Rejected,
+                DocumentState::Expired,
+                DocumentState::Deleted,
+            ],
+            DocumentState::Scanning => [
+                DocumentState::Rejected,
+                DocumentState::Expired,
+                DocumentState::Deleted,
+            ],
+            DocumentState::Accepted => [DocumentState::Expired, DocumentState::Deleted],
+            DocumentState::Rejected => [DocumentState::Expired, DocumentState::Deleted],
+            DocumentState::Expired => [DocumentState::Deleted],
+            DocumentState::Deleted => [],
+        };
+
+        if (! in_array($nextState, $allowedStates, true)) {
+            throw new LogicException("Document state cannot transition from {$currentState->value} to {$nextState->value}.");
+        }
+
+        $this->writeState($nextState);
+        $this->save();
+    }
+
+    /**
+     * The only model-level path that may write `ACCEPTED`. Task 5's
+     * promotion Action must establish its clean-scan and storage guarantees
+     * before calling this method.
+     */
+    public function promote(): void
+    {
+        if ($this->state !== DocumentState::Scanning) {
+            throw new LogicException('Only a scanning document may be promoted.');
+        }
+
+        $this->writeState(DocumentState::Accepted);
+        $this->save();
+    }
+
+    /**
+     * Eloquent's `forceFill()` still routes through `setAttribute()`. Keep
+     * state writes private to the explicit methods above, including callers
+     * that try to bypass `$fillable` with direct assignment.
+     */
+    public function setAttribute($key, $value)
+    {
+        if ($key === 'state' && ! ($this->stateMutationAuthorized ?? false)) {
+            throw new LogicException('Document state must be changed through its transition API.');
+        }
+
+        return parent::setAttribute($key, $value);
+    }
+
+    private function writeState(DocumentState $state): void
+    {
+        $this->stateMutationAuthorized = true;
+
+        try {
+            $this->forceFill(['state' => $state]);
+        } finally {
+            $this->stateMutationAuthorized = false;
+        }
+    }
+
+    private bool $stateMutationAuthorized = false;
 
     /**
      * @return array<string, string>
