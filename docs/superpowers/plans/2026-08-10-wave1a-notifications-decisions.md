@@ -32,23 +32,32 @@ human review before authorization and privacy changes.
 not the raw human matrix labels. Land as a Task 1 fix round before Task 2,
 because Tasks 3-6 depend on event identity too.
 
-**Application question raised 10 Aug 2026 — OPEN.** The ruling cannot be
-applied literally. Of the 17 matrix rows, only 7 have a clean catalogue
-counterpart; 2 ("Order processing", "Order completed") both correspond to
+**Application question raised 10 Aug 2026.** The ruling could not be applied
+literally. Of the 17 matrix rows, only 7 have a clean catalogue counterpart;
+2 ("Order processing", "Order completed") both correspond to
 `order.status_changed.v1`, and `notification_templates.event_name` is
 `unique()`, so writing machine names collides at seed time; the remaining 8
 have no catalogue counterpart at all. Applying the ruling literally would
 require inventing 8+ event names absent from the canonical catalogue that no
 producer emits.
 
-Recommendation pending decision: keep `event_name` as the matrix label (the
-matrix's own row identity, canonical per AC1) and add a nullable, non-unique
-`outbox_event_name` carrying the machine key only where a real catalogue
-counterpart exists. Dispatch keys on `outbox_event_name`; NULL means no
-template matches and nothing is sent — the same honest-absence pattern as
-Task 1's nullable `default_channel` ruling.
+**Refinement approved 10 Aug 2026 — implementation-level correction to avoid
+fabrication, not a new user decision.** Keep `event_name` as the matrix label
+(the matrix's own row identity, canonical per AC1). Add a **nullable,
+non-unique `outbox_event_name`** column carrying the machine key only for the
+7 rows with a real catalogue counterpart. Leave it NULL for the 2 colliding
+order rows and the 8 rows with no counterpart. Dispatch keys on
+`outbox_event_name`; NULL means no template matches and nothing is sent — the
+same honest-absence pattern as Task 1's nullable `default_channel` ruling.
 
-**Status:** blocked pending decision. No seed event keys changed.
+**Follow-up question, deliberately left open:** whether
+`order.status_changed.v1` should be discriminated by status value so that
+"Order processing" and "Order completed" can be addressed separately. That is
+a template-key shape change. It is NOT decided here — whoever builds order
+dispatch must resolve it rather than assume a shape.
+
+**Status:** approach approved. Applied as a Task 1 fix round by the lane
+agent — explicitly outside Task 2's scope.
 
 ## Ruling 2 — Provisional actor-role concept
 
@@ -87,14 +96,24 @@ and "finance" columns so it covers all six classes
 `.kiro/specs/platform-notifications/requirements.md:16` (AC6) requires.
 Additive only — existing rows, columns, and cells are not touched.
 
-**Application question raised 10 Aug 2026 — OPEN.** The structural change is
+**Application question raised 10 Aug 2026.** The structural change is
 unambiguous, but two columns across 17 rows is 34 new cells whose values are
 recipient policy. Filling them with `none` is not a neutral default — it
 asserts that case managers and finance are never notified of anything, which
-would become canonical. Awaiting either the intended values or authorization
-to use an explicit `TBD` placeholder that does not assert an undecided policy.
+would become canonical.
 
-**Status:** blocked pending decision. Matrix unchanged.
+**Refinement approved 10 Aug 2026 — implementation-level correction to avoid
+fabrication, not a new user decision.** Seed all 34 new cells with an explicit
+`TBD` marker rather than `none`. `TBD` is honest about being unfilled; `none`
+would be an affirmative, uninvestigated policy claim. Behaviourally this costs
+nothing, because rulings 2 and 6 already defer case-manager and finance
+resolution. A `TBD` cell resolves to no recipients, exactly as `none` would,
+but the document does not claim the question was decided.
+
+**Status:** approach approved. Applied by the lane agent after Task 2's
+implementer completes — sequenced deliberately, because adding columns changes
+the recipient classes `RecipientResolver` reads and would otherwise shift the
+matrix under a running implementation. Explicitly outside Task 2's scope.
 
 ## Ruling 5 — `RecipientSet` shape
 
@@ -115,8 +134,12 @@ only `.gitkeep`. There is no order model and no case model, so resolution via
 
 ## Consequences for the lane
 
-- Task 1 gains a fix round for ruling 1 once its open question is decided.
+- Task 1 gains a fix round applying ruling 1's approved refinement
+  (`outbox_event_name`).
 - Task 2 proceeds under rulings 2, 3, 5, and 6.
-- Tasks 3-6 depend on ruling 1's outcome for event identity.
+- Tasks 3-6 key dispatch on `outbox_event_name`, and must treat NULL as "no
+  template matches, nothing sent" rather than as an error.
+- Whoever builds order dispatch owns the open `order.status_changed.v1`
+  status-discrimination question recorded under ruling 1.
 - The provisional role seam (ruling 2) is a known replacement point when the
   K1/K2 contract lands; it is not a permanent design.
