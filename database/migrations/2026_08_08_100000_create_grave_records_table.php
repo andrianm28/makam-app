@@ -82,12 +82,29 @@ use Illuminate\Support\Facades\Schema;
  *   `App\Domain\GraveRegistry\GraveRecordProjection` has no property for
  *   it under ANY access mode.
  *
- * - `access_mode` defaults to `closed`, the most restrictive of AC14's
- *   three. A row whose mode was never explicitly decided must not become
- *   publicly readable by omission. Plain `string(16)` with validation in
- *   `GraveRecord::booted()`, no Postgres `CHECK` — see `makam-migration`
- *   for why the three existing CHECKs are `app/Platform` protocol values
- *   and this is not one of them.
+ * - `access_mode` carries a column default of `closed`, the most
+ *   restrictive of AC14's three. A row whose mode was never explicitly
+ *   decided must not become publicly readable by omission. Plain
+ *   `string(16)` with validation in `GraveRecord::booted()`, no Postgres
+ *   `CHECK` — see `makam-migration` for why the three existing CHECKs are
+ *   `app/Platform` protocol values and this is not one of them.
+ *
+ *   Corrected 09 Aug 2026 — this bullet used to read as though every write
+ *   missing `access_mode` quietly landed on `closed`. It does not, and the
+ *   difference is worth knowing before anyone relies on it:
+ *
+ *     - Through Eloquent, omitting `access_mode` THROWS. `booted()`'s
+ *       `saving` hook runs `GraveRecordAccessMode::assertKnown()` against
+ *       the unset (stringified-null) attribute before any statement is
+ *       sent, so the column default is never reached. That is fail-safe and
+ *       deliberate: a loud failure on a privacy field beats a silent
+ *       default that hides a caller which forgot to decide. The behaviour
+ *       stays as-is; only this description changes.
+ *     - The column default is still load-bearing, but only for a raw
+ *       `DB::table('grave_records')->insert()` that omits the column —
+ *       which fires no model events and would otherwise have no safe value
+ *       at all. Seed migrations write exactly that way, so this is a real
+ *       path, not a theoretical one.
  *
  * - `source` / `source_updated_at` are `design.md`'s own column names and
  *   carry the record's PROVENANCE. Not to be confused with the TARIFF
