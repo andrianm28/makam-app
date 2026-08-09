@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Platform\FinancialLedger\Models;
 
+use App\Platform\FinancialLedger\Exceptions\InvalidVendorPayableException;
 use App\Platform\FinancialLedger\VendorPayableState;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -99,6 +100,10 @@ final class VendorPayable extends Model
     {
         self::saving(function (self $payable): void {
             VendorPayableState::assertKnown((string) $payable->state);
+
+            if ((int) $payable->amount_minor <= 0) {
+                throw InvalidVendorPayableException::forNonPositiveAmount((int) $payable->amount_minor);
+            }
         });
     }
 }

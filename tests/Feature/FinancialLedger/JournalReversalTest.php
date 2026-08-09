@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature\FinancialLedger;
 
+use App\Platform\Audit\AuditOutcome;
+use App\Platform\Audit\Models\AuditEvent;
+use App\Platform\Audit\SensitiveActions;
 use App\Platform\FinancialLedger\Exceptions\InvalidJournalBatchException;
 use App\Platform\FinancialLedger\Exceptions\JournalBatchAlreadyReversedException;
 use App\Platform\FinancialLedger\Exceptions\UnknownJournalBatchException;
@@ -66,6 +69,49 @@ final class JournalReversalTest extends TestCase
             ->value('balance');
         $this->assertSame(0, (int) $net);
         $this->assertTrue($reversal->isBalanced());
+    }
+
+    public function test_every_reversal_writes_a_sensitive_audit_event_with_its_reason(): void
+    {
+        $this->postOriginal();
+
+        $reversal = $this->journal()->postReversal(
+            originalBusinessKey: 'payment:original-event',
+            reason: 'Provider settlement retracted by bank',
+        );
+
+        $event = AuditEvent::query()
+            ->where('action', 'JOURNAL_REVERSAL')
+            ->where('subject_id', $reversal->id)
+            ->sole();
+
+        $this->assertSame(AuditOutcome::Allowed->value, $event->outcome);
+        $this->assertSame('journal_batch', $event->subject_type);
+        $this->assertSame('Provider settlement retracted by bank', $event->reason);
+        $this->assertTrue(SensitiveActions::requiresReason('JOURNAL_REVERSAL'));
+    }
+
+    public function test_reversal_batch_and_audit_roll_back_together_with_the_callers_transaction(): void
+    {
+        $original = $this->postOriginal();
+
+        try {
+            DB::transaction(function (): void {
+                $this->journal()->postReversal(
+                    originalBusinessKey: 'payment:original-event',
+                    reason: 'Provider settlement retracted by bank',
+                );
+
+                throw new \RuntimeException('rollback reversal fixture');
+            });
+            $this->fail('Expected the caller transaction to roll back.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('rollback reversal fixture', $exception->getMessage());
+        }
+
+        $this->assertSame(1, JournalBatch::query()->count());
+        $this->assertFalse(JournalBatch::query()->findOrFail($original->id)->isReversed());
+        $this->assertSame(0, AuditEvent::query()->where('action', 'JOURNAL_REVERSAL')->count());
     }
 
     public function test_the_reason_is_written_to_the_reversing_entries_own_note_column(): void
@@ -174,12 +220,18 @@ final class JournalReversalTest extends TestCase
     {
         $this->postOriginal();
 
-        $this->expectException(InvalidJournalBatchException::class);
+        try {
+            $this->journal()->postReversal(
+                originalBusinessKey: 'payment:original-event',
+                reason: '   ',
+            );
+            $this->fail('Expected a blank reversal reason to be rejected.');
+        } catch (InvalidJournalBatchException $exception) {
+            $this->assertStringContainsString('reason', $exception->getMessage());
+        }
 
-        $this->journal()->postReversal(
-            originalBusinessKey: 'payment:original-event',
-            reason: '   ',
-        );
+        $this->assertSame(1, JournalBatch::query()->count());
+        $this->assertSame(0, AuditEvent::query()->where('action', 'JOURNAL_REVERSAL')->count());
     }
 
     public function test_a_batch_cannot_be_reversed_twice(): void

@@ -17,6 +17,7 @@ final class ChartOfAccountsSeedTest extends TestCase
         $expectedAccounts = [
             ['code' => '1000', 'name' => 'Aset — Piutang Pelanggan', 'normal_balance' => 'DR'],
             ['code' => '2000', 'name' => 'Liabilitas — Pendapatan Diterima', 'normal_balance' => 'CR'],
+            ['code' => '2100', 'name' => 'Liabilitas — Utang Vendor', 'normal_balance' => 'CR'],
             ['code' => '4000', 'name' => 'Pendapatan — Layanan', 'normal_balance' => 'CR'],
             ['code' => '5000', 'name' => 'HPP / Komisi Vendor', 'normal_balance' => 'DR'],
             ['code' => '6000', 'name' => 'Beban — Biaya Channel', 'normal_balance' => 'DR'],
@@ -32,7 +33,7 @@ final class ChartOfAccountsSeedTest extends TestCase
             ],
         )->all();
 
-        $this->assertCount(7, $actualAccounts);
+        $this->assertCount(8, $actualAccounts);
         foreach ($expectedAccounts as $expectedAccount) {
             $this->assertContains($expectedAccount, $actualAccounts);
         }

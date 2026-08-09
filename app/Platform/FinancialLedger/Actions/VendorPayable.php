@@ -9,7 +9,9 @@ use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\AuditSubject;
 use App\Platform\Correlation\CorrelationContext;
+use App\Platform\FinancialLedger\Contracts\Journal as JournalContract;
 use App\Platform\FinancialLedger\Exceptions\InvalidVendorPayableException;
+use App\Platform\FinancialLedger\Journal;
 use App\Platform\FinancialLedger\Models\VendorPayable as VendorPayableModel;
 use App\Platform\FinancialLedger\Money;
 use App\Platform\FinancialLedger\VendorPayableEligibility;
@@ -33,19 +35,13 @@ use Illuminate\Support\Str;
  * an `if` in here.
  *
  * ---------------------------------------------------------------------------
- * This class posts NO journal batch, on purpose
+ * Eligible obligations accrue atomically
  * ---------------------------------------------------------------------------
- * Recognising that we owe a vendor is a workflow fact; it is not money
- * moving. The money moves at payout, and that is where
- * `ManualPayout::pay()` posts the batch. Accruing the liability into the
- * ledger at assessment time would be defensible accounting, but it needs a
- * vendor-liability account that the approved chart of accounts does not
- * contain (`ChartOfAccounts::MINIMAL_INITIAL_ACCOUNTS`), and
- * `docs/domain/financial-model.md` §6 is explicit that "conceptual posting
- * names are defined by accounting approval, not hard-coded in domain code"
- * with FIN-DEC-03/FIN-DEC-05 both still TBD. Inventing the account here would
- * be exactly the guessed implementation `financial-model.md` §4 forbids. Left
- * for the finance owner; flagged rather than assumed.
+ * The approved Wave 1b decision adds `2100 Utang Vendor`. The first eligible
+ * assessment posts `DR 5000 / CR 2100` through the shared Journal API, inside
+ * this Action's transaction with the payable row and its audit event. The
+ * stable business key makes a repeated assessment idempotent; an already
+ * payable row never accrues a second time.
  *
  * ---------------------------------------------------------------------------
  * The state machine only ever moves forward
@@ -59,6 +55,12 @@ use Illuminate\Support\Str;
  */
 final class VendorPayable
 {
+    private const string JOURNAL_SOURCE_TYPE = 'vendor_payable';
+
+    private const string ACCOUNT_VENDOR_COST = '5000';
+
+    private const string ACCOUNT_VENDOR_LIABILITY = '2100';
+
     /**
      * Audit action for the moment a debt is recognised. Deliberately NOT added
      * to `SensitiveActions::ACTIONS`: that list is a closed, human-reviewed
@@ -70,6 +72,10 @@ final class VendorPayable
      * decision, is on that list already as `VENDOR_PAYOUT`.
      */
     public const string AUDIT_ACTION_ASSESSED = 'VENDOR_PAYABLE_ASSESSED';
+
+    public function __construct(
+        private readonly JournalContract $journal = new Journal,
+    ) {}
 
     /**
      * Record, or re-record, what we owe a vendor for one source record, and
@@ -93,7 +99,7 @@ final class VendorPayable
      *                         `Money`'s constructor is the one place that check lives, and this
      *                         seam reuses it rather than restating it.
      *
-     * @throws InvalidVendorPayableException on a blank identifier, a negative
+     * @throws InvalidVendorPayableException on a blank identifier, a non-positive
      *                                       amount, or an attempt to restate the amount of a payable that is
      *                                       already eligible.
      */
@@ -115,8 +121,8 @@ final class VendorPayable
         $this->assertPresent('source_type', $sourceType);
         $this->assertPresent('source_id', $sourceId);
 
-        if ($amountMinor < 0) {
-            throw InvalidVendorPayableException::forNegativeAmount($amountMinor);
+        if ($amountMinor <= 0) {
+            throw InvalidVendorPayableException::forNonPositiveAmount($amountMinor);
         }
 
         $now ??= CarbonImmutable::now();
@@ -187,6 +193,10 @@ final class VendorPayable
 
         $payable = VendorPayableModel::query()->findOrFail($id);
 
+        if ($eligible) {
+            $this->accrue($payable, $correlationId, $now);
+        }
+
         $this->audit($payable, previousState: null, correlationId: $correlationId);
 
         return $payable;
@@ -228,6 +238,7 @@ final class VendorPayable
         ])->save();
 
         if ($eligible) {
+            $this->accrue($payable, $payable->correlation_id, $now);
             $this->audit(
                 $payable,
                 previousState: VendorPayableState::HELD,
@@ -236,6 +247,44 @@ final class VendorPayable
         }
 
         return $payable;
+    }
+
+    private function accrue(
+        VendorPayableModel $payable,
+        ?string $correlationId,
+        CarbonImmutable $now,
+    ): void {
+        $this->journal->post(
+            businessKey: $this->accrualBusinessKey(
+                (string) $payable->vendor_id,
+                (string) $payable->source_type,
+                (string) $payable->source_id,
+            ),
+            entityRef: (string) $payable->entity_ref,
+            sourceType: self::JOURNAL_SOURCE_TYPE,
+            sourceId: (string) $payable->id,
+            entries: [
+                [
+                    'account' => self::ACCOUNT_VENDOR_COST,
+                    'direction' => 'DR',
+                    'amountMinor' => (int) $payable->amount_minor,
+                    'reference' => 'vendor_payable:'.(string) $payable->id,
+                ],
+                [
+                    'account' => self::ACCOUNT_VENDOR_LIABILITY,
+                    'direction' => 'CR',
+                    'amountMinor' => (int) $payable->amount_minor,
+                    'reference' => 'vendor_payable:'.(string) $payable->id,
+                ],
+            ],
+            correlationId: $correlationId,
+            occurredAt: $now->toIso8601String(),
+        );
+    }
+
+    public function accrualBusinessKey(string $vendorId, string $sourceType, string $sourceId): string
+    {
+        return "vendor_payable:{$vendorId}:{$sourceType}:{$sourceId}";
     }
 
     /**

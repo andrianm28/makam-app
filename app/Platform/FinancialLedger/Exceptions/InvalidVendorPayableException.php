@@ -26,6 +26,14 @@ final class InvalidVendorPayableException extends InvalidArgumentException
         );
     }
 
+    public static function forNonPositiveAmount(int $amountMinor): self
+    {
+        return new self(
+            "Vendor payable amount [{$amountMinor}] is not positive. A zero or negative amount "
+            .'does not describe an obligation to a vendor.'
+        );
+    }
+
     public static function forBlankIdentifier(string $field): self
     {
         return new self(

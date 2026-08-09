@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace App\Platform\FinancialLedger;
 
+use App\Platform\Audit\Audit;
+use App\Platform\Audit\AuditOutcome;
+use App\Platform\Audit\AuditSource;
+use App\Platform\Audit\AuditSubject;
 use App\Platform\Correlation\CorrelationContext;
 use App\Platform\FinancialLedger\Actions\PostJournalBatch;
 use App\Platform\FinancialLedger\Contracts\Journal as JournalContract;
@@ -12,6 +16,7 @@ use App\Platform\FinancialLedger\Exceptions\JournalBatchAlreadyReversedException
 use App\Platform\FinancialLedger\Exceptions\UnknownJournalBatchException;
 use App\Platform\FinancialLedger\Models\JournalBatch;
 use App\Platform\FinancialLedger\Models\JournalEntry;
+use App\Platform\IdentityAccess\ActorContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -112,6 +117,7 @@ final class Journal implements JournalContract
             ],
             $entryRows,
         );
+
     }
 
     /**
@@ -198,7 +204,7 @@ final class Journal implements JournalContract
             ])
             ->all();
 
-        return ($this->postJournalBatch)(
+        $reversal = ($this->postJournalBatch)(
             [
                 'id' => $batchId,
                 'business_key' => $kind->businessKeyFor($originalBusinessKey),
@@ -216,6 +222,25 @@ final class Journal implements JournalContract
             ],
             $entryRows,
         );
+
+        $actor = app(ActorContext::class);
+        $actorRole = $actor->roles[0] ?? ($actor->isAuthenticated() ? 'unresolved' : 'system');
+
+        Audit::record(
+            action: 'JOURNAL_REVERSAL',
+            subject: new AuditSubject('journal_batch', $reversal->id),
+            outcome: AuditOutcome::Allowed,
+            actorRef: $actor->identityReference,
+            actorRole: $actorRole,
+            source: AuditSource::Panel,
+            reason: $reason,
+            correlationId: $this->resolveCorrelationId($correlationId),
+            metadata: [
+                'reference_number' => $reversal->business_key,
+            ],
+        );
+
+        return $reversal;
     }
 
     /**

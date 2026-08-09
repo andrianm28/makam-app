@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Platform\FinancialLedger\Models;
 
+use App\Platform\FinancialLedger\Exceptions\InvalidPayoutException;
 use App\Platform\FinancialLedger\PayoutMethod;
 use App\Platform\FinancialLedger\PayoutState;
 use Illuminate\Database\Eloquent\Model;
@@ -70,6 +71,10 @@ final class Payout extends Model
         self::saving(function (self $payout): void {
             PayoutMethod::assertKnown((string) $payout->method);
             PayoutState::assertKnown((string) $payout->state);
+
+            if ((int) $payout->amount_minor <= 0) {
+                throw InvalidPayoutException::forNonPositiveAmount((int) $payout->amount_minor);
+            }
         });
     }
 }

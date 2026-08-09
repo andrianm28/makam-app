@@ -21,6 +21,14 @@ use RuntimeException;
  */
 final class PayoutNotAuthorisedException extends RuntimeException
 {
+    public static function forActorContext(string $vendorId): self
+    {
+        return new self(
+            'The authenticated actor has no explicit finance or restricted-admin payout authority for vendor '
+            ."[{$vendorId}]."
+        );
+    }
+
     public static function forApprover(string $approverRef, string $vendorId): self
     {
         return new self(

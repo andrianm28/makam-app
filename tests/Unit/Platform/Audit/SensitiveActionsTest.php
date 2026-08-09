@@ -27,6 +27,7 @@ final class SensitiveActionsTest extends TestCase
             'manual payment verification' => ['PAYMENT_MANUAL_VERIFICATION'],
             'certificate revoke' => ['CERTIFICATE_REVOKE'],
             'vendor payout' => ['VENDOR_PAYOUT'],
+            'journal reversal' => ['JOURNAL_REVERSAL'],
             'price version recorded' => ['PRICE_VERSION_RECORDED'],
             'service definition price version recorded' => ['SERVICE_DEFINITION_PRICE_VERSION_RECORDED'],
         ];
@@ -75,6 +76,7 @@ final class SensitiveActionsTest extends TestCase
                 'PAYMENT_MANUAL_VERIFICATION',
                 'CERTIFICATE_REVOKE',
                 'VENDOR_PAYOUT',
+                'JOURNAL_REVERSAL',
                 'PRICE_VERSION_RECORDED',
                 'SERVICE_DEFINITION_PRICE_VERSION_RECORDED',
                 'MFA_RESET',

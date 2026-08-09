@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace Tests\Feature\FinancialLedger;
 
 use App\Platform\FinancialLedger\Actions\VendorPayable;
+use App\Platform\FinancialLedger\Contracts\Journal as JournalContract;
 use App\Platform\FinancialLedger\Exceptions\InvalidVendorPayableException;
+use App\Platform\FinancialLedger\JournalReversalKind;
+use App\Platform\FinancialLedger\Models\JournalBatch;
 use App\Platform\FinancialLedger\Models\VendorPayable as VendorPayableModel;
 use App\Platform\FinancialLedger\Money;
 use App\Platform\FinancialLedger\VendorPayableEligibility;
@@ -97,6 +100,64 @@ final class VendorPayableAssessmentTest extends TestCase
         $this->assertSame(250_000, (int) $row->amount_minor);
         $this->assertSame('badan-usaha-1', $row->entity_ref);
         $this->assertSame('vendor-1', $row->vendor_id);
+    }
+
+    public function test_eligible_assessment_accrues_dr_cost_and_cr_vendor_liability_once(): void
+    {
+        $payable = $this->assess($this->eligible());
+
+        $batch = JournalBatch::query()
+            ->where('business_key', 'vendor_payable:vendor-1:marketplace_order:order-1')
+            ->sole();
+        $entries = $batch->entries()->orderBy('account_code')->get();
+
+        $this->assertSame(['2100', '5000'], $entries->pluck('account_code')->all());
+        $this->assertSame(['CR', 'DR'], $entries->pluck('direction')->all());
+        $this->assertSame([250_000, 250_000], $entries->pluck('amount_minor')->all());
+
+        $this->assess($this->eligible());
+
+        $this->assertSame(
+            1,
+            JournalBatch::query()
+                ->where('business_key', 'vendor_payable:vendor-1:marketplace_order:order-1')
+                ->count(),
+        );
+        $this->assertSame($payable->id, VendorPayableModel::query()->sole()->id);
+    }
+
+    public function test_accrual_failure_rolls_back_the_payable_and_audit_together(): void
+    {
+        $action = new VendorPayable(journal: new ThrowingJournal);
+
+        try {
+            $action->assess(
+                vendorId: 'vendor-1',
+                entityRef: 'badan-usaha-1',
+                sourceType: 'marketplace_order',
+                sourceId: 'order-rollback',
+                amount: new Money(250_000),
+                eligibility: $this->eligible(),
+            );
+            $this->fail('Expected the accrual journal failure.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('journal fixture failure', $exception->getMessage());
+        }
+
+        $this->assertSame(0, VendorPayableModel::query()->count());
+        $this->assertSame(0, JournalBatch::query()->count());
+        $this->assertSame(
+            0,
+            DB::table('audit_events')->where('action', VendorPayable::AUDIT_ACTION_ASSESSED)->count(),
+        );
+    }
+
+    public function test_vendor_liability_account_is_seeded_additively(): void
+    {
+        $account = DB::table('coa_accounts')->where('code', '2100')->sole();
+
+        $this->assertSame('Liabilitas — Utang Vendor', $account->name);
+        $this->assertSame('CR', $account->normal_balance);
     }
 
     public function test_a_payable_row_is_not_paid_out(): void
@@ -227,5 +288,30 @@ final class VendorPayableAssessmentTest extends TestCase
     private function action(): VendorPayable
     {
         return $this->app->make(VendorPayable::class);
+    }
+}
+
+final class ThrowingJournal implements JournalContract
+{
+    public function post(
+        string $businessKey,
+        int|string $entityRef,
+        string $sourceType,
+        int|string $sourceId,
+        array $entries,
+        ?string $correlationId = null,
+        ?string $occurredAt = null,
+    ): JournalBatch {
+        throw new \RuntimeException('journal fixture failure');
+    }
+
+    public function postReversal(
+        string $originalBusinessKey,
+        string $reason,
+        JournalReversalKind $kind = JournalReversalKind::Reversal,
+        ?string $correlationId = null,
+        ?string $occurredAt = null,
+    ): JournalBatch {
+        throw new \RuntimeException('journal fixture failure');
     }
 }

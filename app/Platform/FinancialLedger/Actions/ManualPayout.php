@@ -12,9 +12,13 @@ use App\Platform\Audit\Exceptions\AuditReasonRequiredException;
 use App\Platform\Audit\SensitiveActions;
 use App\Platform\Correlation\CorrelationContext;
 use App\Platform\FinancialLedger\Contracts\Journal as JournalContract;
+use App\Platform\FinancialLedger\Contracts\PayoutAuthorizer;
+use App\Platform\FinancialLedger\Contracts\PayoutProofVerifier;
 use App\Platform\FinancialLedger\Exceptions\InvalidPayoutException;
+use App\Platform\FinancialLedger\Exceptions\PayoutActorMismatchException;
 use App\Platform\FinancialLedger\Exceptions\PayoutNotAuthorisedException;
 use App\Platform\FinancialLedger\Exceptions\PayoutReauthenticationRequiredException;
+use App\Platform\FinancialLedger\FinanceOrRestrictedAdminPayoutAuthorizer;
 use App\Platform\FinancialLedger\Journal;
 use App\Platform\FinancialLedger\Models\Payout;
 use App\Platform\FinancialLedger\Models\VendorPayable as VendorPayableModel;
@@ -22,13 +26,12 @@ use App\Platform\FinancialLedger\Money;
 use App\Platform\FinancialLedger\PayoutMethod;
 use App\Platform\FinancialLedger\PayoutProof;
 use App\Platform\FinancialLedger\PayoutState;
+use App\Platform\FinancialLedger\RejectingPayoutProofVerifier;
 use App\Platform\FinancialLedger\VendorPayableState;
+use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\Reauthentication\Models\ReauthenticationEvent;
 use App\Platform\IdentityAccess\Reauthentication\ReauthenticationOutcome;
 use App\Platform\IdentityAccess\Reauthentication\ReauthenticationService;
-use App\Platform\IdentityAccess\Scopes\Models\ScopeAssignment;
-use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
-use App\Platform\IdentityAccess\Scopes\ScopeGrantLevel;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -70,28 +73,14 @@ use Illuminate\Support\Str;
  *  6. that approver having re-authenticated recently.
  *
  * ---------------------------------------------------------------------------
- * How authorisation is decided, and why not with `ActorContext::hasRole()`
+ * How authorisation is decided
  * ---------------------------------------------------------------------------
- * `ActorContext::$roles` and `::$scopes` are permanently `[]` today — that
- * class's own doc block says so, and warns: "any consumer that needs
- * role-based checks before that gap is closed must not silently treat an empty
- * roles list as 'no roles required.'" A `hasRole('finance')` check would
- * therefore be theatre: it would read as a control while being backed by
- * nothing.
+ * `FinanceOrRestrictedAdminPayoutAuthorizer` is an explicit policy seam. It
+ * requires both a real finance/restricted-admin role from the server-side
+ * `ActorContext` and an active vendor-scoped privileged assignment. Caller
+ * supplied identity and role values never participate in that decision. The
+ * current local adapter exposes no real roles, so it fails closed.
  *
- * `scope_assignments` IS real, populated, and queryable today. Authorisation
- * here is an active, non-revoked assignment for the approver on
- * `entity_type = 'vendor'`, `entity_id = {vendor}`, at grant level
- * `privileged` — `docs/security/rbac-matrix.md`'s "Payout/refund" row is `No`
- * for every role except a restricted admin and a dedicated finance role, so
- * `own`/`assigned`/`read` are deliberately not enough. This is exactly the
- * use `ScopeGrantLevel`'s own doc block anticipates: "carried on the row
- * anyway ... purely as forward-compatible metadata so a future Policy class
- * can read it without a schema change." This is that Policy layer.
- *
- * Fail-closed: no grant row means refused. A vendor nobody has been granted
- * payout authority over cannot be paid, which is the correct default for a
- * control that has not been configured.
  *
  * ---------------------------------------------------------------------------
  * How re-authentication freshness is decided
@@ -120,34 +109,17 @@ use Illuminate\Support\Str;
  * itself is being refused until a fresh re-proof happens."
  *
  * ---------------------------------------------------------------------------
- * The journal posting, and one divergence from the brief's wording
+ * The journal posting
  * ---------------------------------------------------------------------------
  * The batch is posted through `Contracts\Journal` — the ONE write API — from
  * inside this Action's own `DB::transaction()`, so the payout row, the payable
  * state change, the audit row and the ledger entries commit or roll back as
  * one (AC3). `Journal::post()` opens no transaction of its own by design.
  *
- * The plan and this task's brief describe the posting as "cash-out DR,
- * vendor-payable CR". That cannot be written as stated, for two reasons, so it
- * is implemented as the economically equivalent posting the approved chart of
- * accounts can actually express:
+ * The approved accounting decision is a vendor-liability settlement:
+ * `DR 2100 Utang Vendor / CR 7000 Rekening Kas/Bank`. Assessment separately
+ * accrues `DR 5000 / CR 2100`.
  *
- *  - There is no vendor-payable account. `ChartOfAccounts::MINIMAL_INITIAL_ACCOUNTS`
- *    holds seven codes and none of them is a vendor liability, and
- *    `journal_entries.account_code` is a real foreign key into `coa_accounts`,
- *    so a code that is not there cannot be posted at all.
- *  - Crediting a vendor-payable liability would INCREASE what we owe. Paying a
- *    debt down is a debit to it. There is also no liability balance to debit,
- *    because `VendorPayable::assess()` posts no accrual batch — see that
- *    class's doc block for why the accrual is left to the finance owner.
- *
- * What is posted is therefore `DR 5000 HPP / Komisi Vendor` against
- * `CR 7000 Rekening Kas/Bank`: the vendor cost is recognised and cash leaves
- * the business, which is the economic event AC9 is about. Both codes are
- * constants below so replacing them is a one-line change once FIN-DEC-03 and
- * FIN-DEC-05 are decided — `docs/domain/financial-model.md` §6 is explicit
- * that "conceptual posting names are defined by accounting approval, not
- * hard-coded in domain code", and both decisions are still TBD.
  *
  * Nothing here reads, edits or references the customer's original journal
  * rows. The payout is its own batch with its own business key.
@@ -175,15 +147,14 @@ final class ManualPayout
 
     /**
      * `journal_batches.source_type`'s closed list (Task 2's PostgreSQL CHECK)
-     * already contains `payout`; this is a reference to it, not a second list.
+     * contains `payout`.
      */
     private const string JOURNAL_SOURCE_TYPE = 'payout';
 
     /**
-     * `5000 HPP / Komisi Vendor` — the vendor cost, debited. See the class doc
-     * block for why this and not a vendor-payable account.
+     * `2100 Liabilitas — Utang Vendor` — the liability, debited at payout.
      */
-    private const string ACCOUNT_VENDOR_COST = '5000';
+    private const string ACCOUNT_VENDOR_LIABILITY = '2100';
 
     /**
      * `7000 Rekening Kas/Bank` — cash, credited, because money left.
@@ -191,17 +162,13 @@ final class ManualPayout
     private const string ACCOUNT_CASH = '7000';
 
     /**
-     * The grant levels that carry payout authority. A list rather than a
-     * single constant so widening it is a deliberate, reviewable edit in one
-     * place instead of a loosened comparison somewhere in a method.
-     *
-     * @var list<string>
+     * Dependencies are explicit seams so the action can fail closed until the
+     * sibling modules provide their authoritative bindings.
      */
-    private const array AUTHORISED_GRANT_LEVELS = [
-        ScopeGrantLevel::PRIVILEGED,
-    ];
-
     public function __construct(
+        private readonly ActorContext $actorContext,
+        private readonly PayoutAuthorizer $authorizer = new FinanceOrRestrictedAdminPayoutAuthorizer,
+        private readonly PayoutProofVerifier $proofVerifier = new RejectingPayoutProofVerifier,
         private readonly JournalContract $journal = new Journal,
         private readonly ReauthenticationService $reauthentication = new ReauthenticationService,
     ) {}
@@ -234,26 +201,17 @@ final class ManualPayout
         string $payableId,
         Money $amount,
         PayoutProof $proof,
-        int|string $approverRef,
-        string $approverRole,
-        string $reason,
+        ?string $approverRef = null,
+        ?string $approverRole = null,
+        string $reason = '',
         ?string $correlationId = null,
         ?CarbonImmutable $occurredAt = null,
         string $ip = '0.0.0.0',
     ): Payout {
-        $approverRef = (string) $approverRef;
         $amountMinor = $amount->toMinorInt();
 
         if (trim($reason) === '') {
             throw AuditReasonRequiredException::forAction(self::AUDIT_ACTION);
-        }
-
-        if (trim($approverRef) === '') {
-            throw InvalidPayoutException::forBlankApprover('reference');
-        }
-
-        if (trim($approverRole) === '') {
-            throw InvalidPayoutException::forBlankApprover('role');
         }
 
         if ($amountMinor <= 0) {
@@ -266,8 +224,30 @@ final class ManualPayout
             throw InvalidPayoutException::forUnknownPayable($payableId);
         }
 
-        $this->assertApproverMayPayOut($approverRef, (string) $payable->vendor_id);
-        $this->assertApproverReauthenticatedRecently($approverRef, $approverRole, $ip);
+        $actorRef = $this->actorReference();
+        $actorRole = $this->authorizer->authorize($this->actorContext, (string) $payable->vendor_id);
+
+        if ($approverRef !== null && trim($approverRef) !== $actorRef) {
+            throw PayoutActorMismatchException::forField('reference');
+        }
+
+        if ($approverRole !== null && trim($approverRole) !== $actorRole) {
+            throw PayoutActorMismatchException::forField('role');
+        }
+
+        // A later FinancialLedger provider may bind the sibling DocumentVault
+        // adapter to this seam. Until then, the constructor's rejecting
+        // verifier remains the safe default.
+        $proofVerifier = app()->bound(PayoutProofVerifier::class)
+            ? app(PayoutProofVerifier::class)
+            : $this->proofVerifier;
+
+        $proofVerifier->assertAccepted(
+            $proof,
+            recordType: 'vendor_payable',
+            recordId: $payableId,
+        );
+        $this->assertApproverReauthenticatedRecently($actorRef, $actorRole, $ip);
 
         $occurredAt ??= CarbonImmutable::now();
         $correlationId ??= app(CorrelationContext::class)->current()?->value;
@@ -276,8 +256,8 @@ final class ManualPayout
             $payableId,
             $amountMinor,
             $proof,
-            $approverRef,
-            $approverRole,
+            $actorRef,
+            $actorRole,
             $reason,
             $correlationId,
             $occurredAt,
@@ -319,8 +299,8 @@ final class ManualPayout
                 'state' => PayoutState::RECORDED,
                 'proof_document_kind' => $proof->documentKind,
                 'proof_document_ref' => $proof->documentReference,
-                'approver_ref' => $approverRef,
-                'approver_role' => $approverRole,
+                'approver_ref' => $actorRef,
+                'approver_role' => $actorRole,
                 'journal_business_key' => $businessKey,
                 'correlation_id' => $correlationId,
                 'occurred_at' => $occurredAt,
@@ -345,7 +325,7 @@ final class ManualPayout
                 sourceId: $payoutId,
                 entries: [
                     [
-                        'account' => self::ACCOUNT_VENDOR_COST,
+                        'account' => self::ACCOUNT_VENDOR_LIABILITY,
                         'direction' => 'DR',
                         'amountMinor' => $amountMinor,
                         'reference' => 'vendor_payable:'.$payableId,
@@ -365,8 +345,8 @@ final class ManualPayout
                 action: self::AUDIT_ACTION,
                 subject: new AuditSubject('payout', $payoutId),
                 outcome: AuditOutcome::Allowed,
-                actorRef: $approverRef,
-                actorRole: $approverRole,
+                actorRef: $actorRef,
+                actorRole: $actorRole,
                 source: AuditSource::Panel,
                 reason: $reason,
                 correlationId: $correlationId,
@@ -395,19 +375,13 @@ final class ManualPayout
         return "payout:{$vendorId}:{$payableId}";
     }
 
-    private function assertApproverMayPayOut(string $approverRef, string $vendorId): void
+    private function actorReference(): string
     {
-        $authorised = ScopeAssignment::query()
-            ->where('actor_identifier', $approverRef)
-            ->where('entity_type', ScopeEntityType::VENDOR)
-            ->where('entity_id', $vendorId)
-            ->whereIn('grant_level', self::AUTHORISED_GRANT_LEVELS)
-            ->whereNull('revoked_at')
-            ->exists();
-
-        if (! $authorised) {
-            throw PayoutNotAuthorisedException::forApprover($approverRef, $vendorId);
+        if ($this->actorContext->identityReference === null) {
+            throw PayoutNotAuthorisedException::forActorContext('unknown');
         }
+
+        return (string) $this->actorContext->identityReference;
     }
 
     private function assertApproverReauthenticatedRecently(

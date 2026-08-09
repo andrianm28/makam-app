@@ -13,11 +13,23 @@ namespace App\Platform\FinancialLedger;
 final class ChartOfAccounts
 {
     /**
+     * The liability used when an eligible vendor obligation is accrued.
+     *
+     * @var array{code: string, name: string, normal_balance: string}
+     */
+    public const array VENDOR_LIABILITY_ACCOUNT = [
+        'code' => '2100',
+        'name' => 'Liabilitas — Utang Vendor',
+        'normal_balance' => 'CR',
+    ];
+
+    /**
      * @var list<array{code: string, name: string, normal_balance: string}>
      */
     public const array MINIMAL_INITIAL_ACCOUNTS = [
         ['code' => '1000', 'name' => 'Aset — Piutang Pelanggan', 'normal_balance' => 'DR'],
         ['code' => '2000', 'name' => 'Liabilitas — Pendapatan Diterima', 'normal_balance' => 'CR'],
+        self::VENDOR_LIABILITY_ACCOUNT,
         ['code' => '4000', 'name' => 'Pendapatan — Layanan', 'normal_balance' => 'CR'],
         ['code' => '5000', 'name' => 'HPP / Komisi Vendor', 'normal_balance' => 'DR'],
         ['code' => '6000', 'name' => 'Beban — Biaya Channel', 'normal_balance' => 'DR'],
