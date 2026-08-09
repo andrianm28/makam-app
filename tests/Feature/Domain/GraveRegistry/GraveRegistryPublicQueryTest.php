@@ -411,6 +411,17 @@ final class GraveRegistryPublicQueryTest extends TestCase
      * escaping to a caller would carry every column including the withheld
      * ones, and "the Blade template just does not print it" is not a
      * privacy control.
+     *
+     * The count is anchored before the loop deliberately. A bare `foreach`
+     * over a result set asserts ZERO times if that set is ever empty — so
+     * if the fixture shrank, or the search silently stopped returning rows,
+     * this test would keep passing while testing nothing. A test that can
+     * assert zero times is not test evidence under `AGENTS.md` §Testing.
+     *
+     * Four is the same figure `test_a_mixed_search_reports_readable_rows_
+     * and_the_restricted_match_together` pins for this identical search —
+     * TPU Jakarta Menteng's three `open` rows plus its one `limited` row —
+     * so the two tests fail together rather than one of them going quiet.
      */
     public function test_the_query_never_returns_an_eloquent_model(): void
     {
@@ -419,7 +430,11 @@ final class GraveRegistryPublicQueryTest extends TestCase
             name: 'Contoh',
         ));
 
-        foreach ([...$outcome->openResults, ...$outcome->restrictedResults] as $row) {
+        $rows = [...$outcome->openResults, ...$outcome->restrictedResults];
+
+        $this->assertCount(4, $rows, 'Fixture anchor: without matched rows the loop below would assert nothing.');
+
+        foreach ($rows as $row) {
             $this->assertInstanceOf(GraveRecordProjection::class, $row);
         }
     }
