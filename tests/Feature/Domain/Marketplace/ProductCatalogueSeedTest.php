@@ -8,6 +8,7 @@ use App\Domain\Marketplace\MarketplaceProductCategory;
 use App\Domain\Marketplace\Models\Product;
 use App\Domain\Marketplace\ProductCode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use InvalidArgumentException;
 use Tests\TestCase;
 
 /**
@@ -26,9 +27,24 @@ final class ProductCatalogueSeedTest extends TestCase
     use RefreshDatabase;
 
     /**
-     * @return list<string>
+     * Re-parses the "Categories and minimum products" section of
+     * `docs/product/marketplace-catalog.md` directly, independently of
+     * `ProductCode`, in the catalogue's OWN document order.
+     *
+     * W-3: the previous parser matched any backtick-quoted ALL_CAPS token
+     * anywhere in the file (P-2) and extracted codes only, which made this
+     * test blind to a catalogue REORDER (both sides were `sort()`ed) and to
+     * a LABEL change (the nine labels were hand-typed literals in a data
+     * provider — `tasks.md` §"Seeds and enums must derive from the
+     * catalogue" forbids that in "a test fixture"). This parser anchors to
+     * the section and extracts the `` `CODE` — Label `` pair from each
+     * bullet line, so order and label drift both fail this test.
+     *
+     * @return list<array{code: string, label: string, category: string}>
+     *                                                                    the catalogue's own product rows in document order; `category`
+     *                                                                    is the `###` heading text the bullet sits under.
      */
-    private function codesFromLiveCatalogueDocument(): array
+    private function catalogueProductRows(): array
     {
         $path = base_path('docs/product/marketplace-catalog.md');
         $this->assertFileExists($path, 'Canonical catalogue document is missing.');
@@ -36,40 +52,58 @@ final class ProductCatalogueSeedTest extends TestCase
         $contents = file_get_contents($path);
         $this->assertIsString($contents);
 
-        // Product codes appear in the catalogue only as backtick-quoted
-        // ALL_CAPS_WITH_UNDERSCORES tokens (e.g. "`FLOWER_BOARD`"), exactly
-        // once each, under the "Categories and minimum products" section.
-        // The vendor-processing-statuses code block later in the same file
-        // is a plain fenced code block, not backtick-quoted, so it is not
-        // matched by this pattern.
-        preg_match_all('/`([A-Z][A-Z0-9_]+)`/', $contents, $matches);
+        // Anchor to the section so backtick-quoted ALL_CAPS tokens elsewhere
+        // in the document cannot be misattributed to the catalogue (P-2).
+        // "\n## " (not "## ") ends the section at the next top-level heading
+        // while skipping the "### " category headings inside it.
+        $sectionStart = strpos($contents, '## Categories and minimum products');
+        $this->assertNotFalse($sectionStart, 'Catalogue section "Categories and minimum products" not found.');
+        $sectionEnd = strpos($contents, "\n## ", $sectionStart + 2);
+        $this->assertNotFalse($sectionEnd, 'Catalogue section is unterminated.');
 
-        return array_values(array_unique($matches[1]));
+        $rows = [];
+        $currentCategory = null;
+        foreach (preg_split('/\R/', substr($contents, $sectionStart, $sectionEnd - $sectionStart)) ?: [] as $line) {
+            if (preg_match('/^### (.+)$/', $line, $heading) === 1) {
+                $currentCategory = $heading[1];
+
+                continue;
+            }
+
+            if (preg_match('/^- `([A-Z][A-Z0-9_]*)` — (.+)$/u', $line, $bullet) === 1) {
+                $this->assertNotNull($currentCategory, "Product bullet [{$line}] appears before any category heading.");
+                $rows[] = [
+                    'code' => $bullet[1],
+                    'label' => trim($bullet[2]),
+                    'category' => $currentCategory,
+                ];
+            }
+        }
+
+        return $rows;
     }
 
     public function test_the_live_catalogue_document_still_names_exactly_nine_product_codes(): void
     {
-        $codes = $this->codesFromLiveCatalogueDocument();
+        $rows = $this->catalogueProductRows();
 
         $this->assertCount(
             9,
-            $codes,
-            'docs/product/marketplace-catalog.md no longer names exactly nine backtick-quoted product codes — '.
+            $rows,
+            'docs/product/marketplace-catalog.md no longer lists exactly nine products under "Categories and minimum products" — '.
             'either the catalogue changed (requires a product-approval note per tasks.md) or this test\'s parser broke.'
         );
     }
 
-    public function test_product_code_enum_matches_the_live_catalogue_document_exactly(): void
+    public function test_product_code_enum_matches_the_live_catalogue_document_in_document_order(): void
     {
-        $fromDocument = $this->codesFromLiveCatalogueDocument();
-        sort($fromDocument);
-
-        $fromEnum = ProductCode::KNOWN_CODES;
-        sort($fromEnum);
+        // W-3: no sort() — the catalogue's own bullet order is asserted, so
+        // a REORDER of the lines now fails here instead of being masked.
+        $fromDocument = array_column($this->catalogueProductRows(), 'code');
 
         $this->assertSame(
             $fromDocument,
-            $fromEnum,
+            ProductCode::KNOWN_CODES,
             'App\Domain\Marketplace\ProductCode::KNOWN_CODES has drifted from docs/product/marketplace-catalog.md.'
         );
     }
@@ -80,44 +114,74 @@ final class ProductCatalogueSeedTest extends TestCase
         $this->assertSame(9, count(ProductCode::KNOWN_CODES));
     }
 
-    public function test_seeded_product_codes_match_the_live_catalogue_document_exactly(): void
+    public function test_seeded_product_codes_match_the_live_catalogue_document_in_document_order(): void
     {
-        $fromDocument = $this->codesFromLiveCatalogueDocument();
-        sort($fromDocument);
+        // W-3: no sort() — document order is asserted against the seed's own
+        // sort_order, so a reordered catalogue (or seed) fails here too.
+        $fromDocument = array_column($this->catalogueProductRows(), 'code');
 
-        $seeded = Product::query()->pluck('code')->all();
-        sort($seeded);
+        $seeded = Product::query()->orderBy('sort_order')->pluck('code')->all();
 
         $this->assertSame($fromDocument, $seeded);
     }
 
-    /**
-     * @return iterable<string, array{string, string, string}>
-     */
-    public static function catalogueProductsByCategory(): iterable
-    {
-        yield 'FLOWER_BOARD' => [ProductCode::FLOWER_BOARD, MarketplaceProductCategory::FLOWERS, 'Karangan Bunga Papan'];
-        yield 'FLOWER_PETAL_PACKAGE' => [ProductCode::FLOWER_PETAL_PACKAGE, MarketplaceProductCategory::FLOWERS, 'Paket Bunga Tabur'];
-        yield 'GRAVESTONE_GRANITE' => [ProductCode::GRAVESTONE_GRANITE, MarketplaceProductCategory::GRAVESTONES, 'Granit'];
-        yield 'GRAVESTONE_MARBLE' => [ProductCode::GRAVESTONE_MARBLE, MarketplaceProductCategory::GRAVESTONES, 'Marmer'];
-        yield 'GRAVESTONE_CALLIGRAPHY' => [ProductCode::GRAVESTONE_CALLIGRAPHY, MarketplaceProductCategory::GRAVESTONES, 'Kaligrafi'];
-        yield 'GRAVE_CARE_MONTHLY' => [ProductCode::GRAVE_CARE_MONTHLY, MarketplaceProductCategory::GRAVE_CARE, 'Bulanan'];
-        yield 'GRAVE_CARE_QUARTERLY' => [ProductCode::GRAVE_CARE_QUARTERLY, MarketplaceProductCategory::GRAVE_CARE, '3 Bulan'];
-        yield 'GRAVE_CARE_SEMIANNUAL' => [ProductCode::GRAVE_CARE_SEMIANNUAL, MarketplaceProductCategory::GRAVE_CARE, '6 Bulan'];
-        yield 'GRAVE_CARE_ANNUAL' => [ProductCode::GRAVE_CARE_ANNUAL, MarketplaceProductCategory::GRAVE_CARE, 'Tahunan'];
-    }
-
     public function test_each_seeded_product_has_the_catalogues_exact_code_category_and_label(): void
     {
-        foreach (self::catalogueProductsByCategory() as [$code, $category, $label]) {
-            $product = Product::findByCode($code);
+        // W-3: labels come from the document, never retyped — the nine
+        // hand-typed label literals are gone, so a label change in the
+        // catalogue fails this test instead of silently passing. The category
+        // key is derived by matching the parsed heading against the domain's
+        // OWN label() mapping, so heading ↔ key drift fails in both
+        // directions too.
+        foreach ($this->catalogueProductRows() as $row) {
+            $product = Product::findByCode($row['code']);
+            $this->assertNotNull($product, "Expected a seeded product for [{$row['code']}].");
 
-            $this->assertNotNull($product, "Expected a seeded product for [{$code}].");
-            $this->assertSame($category, $product->category, "Product [{$code}] has an unexpected category.");
-            $this->assertSame($label, $product->name, "Product [{$code}] has an unexpected name/label.");
-            $this->assertNotSame('', trim($product->description), "Product [{$code}] has a blank description.");
+            $categoryKey = null;
+            foreach (MarketplaceProductCategory::KNOWN_KEYS as $key) {
+                if (MarketplaceProductCategory::label($key) === $row['category']) {
+                    $categoryKey = $key;
+                    break;
+                }
+            }
+            $this->assertNotNull($categoryKey, "Catalogue heading [{$row['category']}] matches no known category label.");
+
+            $this->assertSame($categoryKey, $product->category, "Product [{$row['code']}] has an unexpected category.");
+            $this->assertSame($row['label'], $product->name, "Product [{$row['code']}] has an unexpected name/label.");
+            $this->assertNotSame('', trim($product->description), "Product [{$row['code']}] has a blank description.");
             $this->assertTrue($product->is_active);
         }
+    }
+
+    public function test_a_product_with_an_unknown_code_cannot_be_saved(): void
+    {
+        // W-4: the closed-list guard in Product::booted() is the ONLY
+        // enforcement of products.code — no DB CHECK exists and the seed
+        // migration bypasses it via DB::table()->insert() — so a refactor
+        // that dropped the assertKnown() line would otherwise go uncaught.
+        // Mirrors the sibling negative test ProductVariantSeedTest
+        // (product_id scope), fired through the model's own saving path.
+        $product = Product::findByCode(ProductCode::FLOWER_BOARD);
+        $this->assertNotNull($product);
+
+        $product->code = 'PRODUK_YANG_TIDAK_ADA';
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $product->save();
+    }
+
+    public function test_a_product_with_an_unknown_category_cannot_be_saved(): void
+    {
+        // W-4, category half of the same guard.
+        $product = Product::findByCode(ProductCode::FLOWER_BOARD);
+        $this->assertNotNull($product);
+
+        $product->category = 'KATEGORI_YANG_TIDAK_ADA';
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $product->save();
     }
 
     /**
@@ -181,7 +245,19 @@ final class ProductCatalogueSeedTest extends TestCase
         }
     }
 
-    public function test_every_product_has_a_clearly_fictional_vendor_name_and_a_placeholder_photo(): void
+    /**
+     * Renamed from `test_every_product_has_a_clearly_fictional_vendor_name_...`
+     * during the 09 Aug 2026 Marketplace retrofit (W-1): the old name claimed
+     * the SEEDED vendor names are "clearly fictional", but this body only
+     * proves they are non-blank and the photo is a hand-authored SVG. The
+     * fictionality marker is applied at the PRESENTATION seam
+     * (`App\Livewire\Public\Marketplace\Support\MarketplacePresenter`, asserted
+     * by the two route tests); marking the seeded COLUMN values themselves is
+     * the ledgered data-layer half (needs a human-gated migration), so a
+     * data-layer "clearly fictional" assertion would fail against the current
+     * seed and is deliberately not written here.
+     */
+    public function test_every_product_has_a_non_blank_vendor_name_and_a_placeholder_photo(): void
     {
         // Not a byte-for-byte string match against the migration (that would
         // just restate the migration's own array) — proves the shape/intent

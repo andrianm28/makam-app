@@ -44,6 +44,7 @@
 --}}
 @php
     use App\Domain\Marketplace\MarketplaceProductCategory;
+    use App\Livewire\Public\Marketplace\Support\MarketplacePresenter;
 @endphp
 
 <div class="py-8 md:py-12">
@@ -78,17 +79,24 @@
 
                 @if ($product->vendor_name)
                     <p class="text-base text-neutral-600">
-                        Vendor: <span class="text-neutral-800">{{ $product->vendor_name }}</span>
+                        Vendor: <span class="text-neutral-800">{{ MarketplacePresenter::vendorLabel($product) }}</span>
                     </p>
                 @endif
 
+                @php
+                    $price = MarketplacePresenter::priceAttribution($product);
+                @endphp
                 <p class="text-2xl font-semibold text-neutral-900">
-                    @if ($product->base_price_idr !== null)
-                        Mulai Rp {{ number_format((float) $product->base_price_idr, 0, ',', '.') }}
+                    @if ($price !== null)
+                        Mulai {{ $price['amount'] }}
                     @else
                         Harga belum tersedia
                     @endif
                 </p>
+
+                @if ($price !== null)
+                    <p class="text-sm text-neutral-500">{{ $price['source'] }}</p>
+                @endif
 
                 <p class="max-w-prose text-base text-neutral-700">{{ $product->description }}</p>
             </div>

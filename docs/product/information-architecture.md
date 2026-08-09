@@ -10,7 +10,7 @@
 │   └── /konfirmasi/{orderReference}
 ├── /marketplace
 │   ├── /kategori/{categorySlug}
-│   ├── /produk/{productSlug}
+│   ├── /produk/{productCode}
 │   ├── /keranjang
 │   ├── /checkout
 │   └── /pesanan/{orderReference}

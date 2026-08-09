@@ -56,13 +56,19 @@
     existing IDR presentation. Every seeded `base_price_idr` is CLEARLY-
     FICTIONAL placeholder data — see
     `2026_07_26_200100_add_dummy_vendor_pricing_and_photo_to_products.php`'s
-    own doc block. This view neither hides that nor annotates each card with
-    it; the honest handling of a NULL price (a real possibility, since that
-    column is nullable and the original seed left all nine NULL) is the
-    "Harga belum tersedia" line below rather than a fabricated figure.
+    own doc block. Since the W-1 fix (09 Aug 2026) this view annotates every
+    rendered price with the "Estimasi internal (data contoh)" source line and
+    every rendered vendor name with the "(vendor contoh)" marker, via
+    `App\Livewire\Public\Marketplace\Support\MarketplacePresenter` — the two
+    figures a visitor could otherwise mistake for real ones now carry the
+    repository's fabricated-data marker. The honest handling of a NULL price
+    (a real possibility, since that column is nullable and the original seed
+    left all nine NULL) is the "Harga belum tersedia" line below rather than a
+    fabricated figure.
 --}}
 @php
     use App\Domain\Marketplace\MarketplaceProductCategory;
+    use App\Livewire\Public\Marketplace\Support\MarketplacePresenter;
 @endphp
 
 <div class="py-8 md:py-12">
@@ -198,6 +204,9 @@
             @else
                 <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-3 xl:grid-cols-4" aria-label="Daftar produk">
                     @foreach ($products as $product)
+                        @php
+                            $price = MarketplacePresenter::priceAttribution($product);
+                        @endphp
                         <li wire:key="product-{{ $product->code }}">
                             {{-- One focusable anchor per card: the card
                                  root itself (card.blade.php §3.3 — never
@@ -231,16 +240,20 @@
                                 <h2 class="text-lg font-semibold text-neutral-900">{{ $product->name }}</h2>
 
                                 @if ($product->vendor_name)
-                                    <p class="text-sm text-neutral-600">{{ $product->vendor_name }}</p>
+                                    <p class="text-sm text-neutral-600">{{ MarketplacePresenter::vendorLabel($product) }}</p>
                                 @endif
 
                                 <p class="text-base font-medium text-neutral-800">
-                                    @if ($product->base_price_idr !== null)
-                                        Mulai Rp {{ number_format((float) $product->base_price_idr, 0, ',', '.') }}
+                                    @if ($price !== null)
+                                        Mulai {{ $price['amount'] }}
                                     @else
                                         Harga belum tersedia
                                     @endif
                                 </p>
+
+                                @if ($price !== null)
+                                    <p class="text-xs text-neutral-500">{{ $price['source'] }}</p>
+                                @endif
                             </x-mk.card>
                         </li>
                     @endforeach

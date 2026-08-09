@@ -104,12 +104,19 @@ use Illuminate\Support\Facades\Schema;
  * `2026_07_26_180000` through `2026_07_26_182999` — the next free range
  * after Sprint 4's FAQ batch (`2026_07_26_170000`-`2026_07_26_170400`,
  * itself the range after Sprint 3's re-authentication batch). Reserved for
- * this batch's marketplace-PRODUCT-CATALOGUE-only migrations; the sibling
- * S4-T1 agents building `cemetery-directory-and-availability` and
- * `package-and-service-bundles` master data own their own separate ranges
- * and neither this table name nor this slot is shared with them —
- * `docs/architecture/overview.md` §5 gives `ServiceCatalog` its own table
- * names (`service_packages`, `services`, ...) distinct from this module's.
+ * this batch's marketplace-PRODUCT-CATALOGUE-only migrations.
+ *
+ * CORRECTION, 09 Aug 2026 (marketplace retrofit, finding D-3): the original
+ * claim that "neither this table name nor this slot is shared with"
+ * `package-and-service-bundles` is FALSE — the ServiceCatalog lane occupies
+ * `2026_07_26_180000` through `2026_07_26_180700` (`create_service_*`
+ * tables). Ordering is unaffected and deterministic: Laravel orders by full
+ * filename, so `create_products_table` sorts before
+ * `create_service_definitions_table` despite the shared `180000` prefix, and
+ * no Marketplace migration depends on a ServiceCatalog table (nor vice
+ * versa). Only the claim was wrong. The mirror-image claim in
+ * `2026_07_26_180000_create_service_definitions_table.php:63-70` is owned by
+ * the parallel ServiceCatalog lane and was NOT touched here.
  */
 return new class extends Migration
 {

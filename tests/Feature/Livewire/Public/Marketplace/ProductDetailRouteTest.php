@@ -7,8 +7,11 @@ namespace Tests\Feature\Livewire\Public\Marketplace;
 use App\Domain\Marketplace\Models\Product;
 use App\Domain\Marketplace\Models\ProductVariant;
 use App\Domain\Marketplace\ProductCode;
+use App\Livewire\Public\Marketplace\ProductDetail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
+use ReflectionClass;
+use ReflectionMethod;
 use Tests\TestCase;
 
 /**
@@ -152,14 +155,40 @@ final class ProductDetailRouteTest extends TestCase
     {
         // Browse only — cart/checkout are Sprint 11-12 and need a Tier-3
         // payment decision. AC3's later steps must not be implied.
+        // Strengthened in W-2 (same rationale as the index page's twin):
+        // structural assertions catch a real affordance whatever its label,
+        // with the string checks kept as belt-and-braces.
         $response = $this->get('/marketplace/produk/'.ProductCode::GRAVESTONE_GRANITE);
 
         $response->assertOk();
+        $response->assertDontSee('<form', escape: false);
+        $response->assertDontSee('wire:click', escape: false);
+        $response->assertDontSee('type="submit"', escape: false);
         $response->assertDontSee('Tambah ke Keranjang');
         $response->assertDontSee('/marketplace/keranjang');
         $response->assertDontSee('/marketplace/checkout');
         // §6.7 — the absence is stated as a pending state, not left silent.
         $response->assertSee('Pemesanan online belum tersedia');
+    }
+
+    public function test_the_component_exposes_no_livewire_actions_to_call(): void
+    {
+        // W-2 mirror of MarketplaceIndexRouteTest::test_the_component_exposes_
+        // no_livewire_actions_to_call. ProductDetail is the exact page a
+        // per-product "Tambah ke Keranjang" button would live on, so its
+        // action surface must be pinned structurally too. mount() is public
+        // by Livewire contract but is not callable from the browser; if a
+        // future batch adds a real action, this SHOULD fail — that is the
+        // prompt to restore a loading state with it.
+        $declaredHere = array_map(
+            static fn (ReflectionMethod $method): string => $method->getName(),
+            array_filter(
+                (new ReflectionClass(ProductDetail::class))->getMethods(ReflectionMethod::IS_PUBLIC),
+                static fn (ReflectionMethod $method): bool => $method->getDeclaringClass()->getName() === ProductDetail::class,
+            )
+        );
+
+        $this->assertSame(['mount', 'render'], array_values($declaredHere));
     }
 
     public function test_the_detail_page_states_the_single_vendor_per_checkout_constraint_as_a_note(): void
@@ -193,6 +222,28 @@ final class ProductDetailRouteTest extends TestCase
         $response->assertOk();
         $response->assertSee('/bantuan');
         $response->assertSee('Hubungi Customer Service');
+    }
+
+    public function test_a_rendered_dummy_price_is_always_accompanied_by_its_estimated_source_line(): void
+    {
+        // W-1 regression (Critical), detail page half: this screen renders
+        // `base_price_idr` at text-2xl directly above copy that tells the
+        // visitor to phone customer service to order "now" — so the source
+        // line MUST render with it. design-system.md §2.3 DO.
+        $response = $this->get('/marketplace/produk/'.ProductCode::GRAVESTONE_GRANITE);
+
+        $response->assertOk();
+        $response->assertSee('Estimasi internal (data contoh)');
+    }
+
+    public function test_a_rendered_vendor_name_always_carries_the_fabricated_data_marker(): void
+    {
+        // W-1 regression (Critical), detail page half — "Vendor:" must never
+        // render a bare invented trading name.
+        $response = $this->get('/marketplace/produk/'.ProductCode::GRAVESTONE_GRANITE);
+
+        $response->assertOk();
+        $response->assertSee('(vendor contoh)');
     }
 
     public function test_viewing_a_product_never_mutates_the_catalogue(): void
