@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Admin\DisableMfaController;
+use App\Http\Middleware\RequireRecentAuthentication;
 use App\Livewire\Public\Booking\BookingWizard;
 use App\Livewire\Public\Directory\CemeteryDetail;
 use App\Livewire\Public\Directory\CemeteryDirectoryIndex;
@@ -222,3 +224,24 @@ Route::get('/syarat-ketentuan', TermsOfService::class)->name('legal.terms');
 | no contact form exists and why no wa.me deep link is minted.
 */
 Route::get('/bantuan', HelpCentre::class)->name('bantuan.index');
+
+/*
+|--------------------------------------------------------------------------
+| Admin — MFA disable (Task 6, mfa-reauthentication-integration)
+|--------------------------------------------------------------------------
+| Not a Filament panel page (those auto-register their own routes via
+| `->pages()` in `AdminPanelProvider`) — a plain controller route, matching
+| `RequireRecentAuthentication`'s own doc block's literal `Route::post(...)`
+| example. Lives here, in the standard `web` group, rather than inside the
+| `/admin` panel's own middleware group, so it needs its own explicit `auth`
+| guard.
+|
+| `RequireRecentAuthentication::class.':mfa_disable,filament.admin.pages.
+| mfa-challenge'` is this middleware's first real attachment anywhere in
+| this repo (S3-T3 built it fully audited and tested, but never wired) — a
+| stale or absent `ActorContext::$lastAuthenticatedAt` redirects here to
+| `MfaChallenge` instead of letting the disable through.
+*/
+Route::post('/admin/mfa/disable', DisableMfaController::class)
+    ->middleware(['web', 'auth', RequireRecentAuthentication::class.':mfa_disable,filament.admin.pages.mfa-challenge'])
+    ->name('admin.mfa.disable');

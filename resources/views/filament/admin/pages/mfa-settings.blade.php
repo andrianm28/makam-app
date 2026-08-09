@@ -143,22 +143,28 @@
                     </p>
 
                     {{--
-                        Plain `<a>`, not `<x-filament::button tag="a">` — Filament's
-                        packaged button component's exact link-rendering attribute
-                        surface is not confirmed against the real installed package
-                        the way its plain form submit usage already is (mfa-challenge
-                        .blade.php). Styled with the same `bg-danger-600` /
+                        Plain HTML `<form method="POST">`, not
+                        `<x-filament::button tag="a">` or a Livewire
+                        `wire:click` — `admin.mfa.disable` (Task 6) is
+                        registered as `Route::post(...)`, and disabling is
+                        deliberately a real HTTP round trip through
+                        `RequireRecentAuthentication`, not a Livewire action
+                        this page performs itself (see this page's own class
+                        doc block). Styled with the same `bg-danger-600` /
                         `hover:bg-danger-700` / `active:bg-danger-800` classes
                         resources/views/components/mk/button.blade.php's own
                         'danger' variant uses — tokens.css-derived, not invented here.
                     --}}
                     <div>
-                        <a
-                            href="{{ route('admin.mfa.disable') }}"
-                            class="inline-flex h-11 select-none items-center justify-center gap-2 rounded-md border border-transparent bg-danger-600 px-4 text-base font-medium text-neutral-0 transition-[color,background-color,border-color,box-shadow] duration-fast ease-standard hover:bg-danger-700 active:bg-danger-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-600 focus-visible:ring-offset-2"
-                        >
-                            Nonaktifkan MFA
-                        </a>
+                        <form method="POST" action="{{ route('admin.mfa.disable') }}">
+                            @csrf
+                            <button
+                                type="submit"
+                                class="inline-flex h-11 select-none items-center justify-center gap-2 rounded-md border border-transparent bg-danger-600 px-4 text-base font-medium text-neutral-0 transition-[color,background-color,border-color,box-shadow] duration-fast ease-standard hover:bg-danger-700 active:bg-danger-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-600 focus-visible:ring-offset-2"
+                            >
+                                Nonaktifkan MFA
+                            </button>
+                        </form>
                     </div>
                 </div>
             </div>
