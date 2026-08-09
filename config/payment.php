@@ -143,17 +143,16 @@ return [
         |----------------------------------------------------------------------
         |
         | ADR-0033 accepts either Svix signatures or a shared `X-Webhook-Token`.
-        | They are not equally safe here, and the difference is not about the
-        | secret: a Svix delivery carries `svix-timestamp`, which is covered by
-        | the signature and is what AC6's replay window is enforced against. A
-        | shared-token delivery carries no provider timestamp at all — ADR-0033's
-        | envelope has no event-time field beyond `data.completed_at`, which is
-        | absent on failed/expired events — so a captured request stays replayable
-        | for as long as the token lives, and only the `provider_events`
-        | idempotency key limits the damage.
+         | They are not equally safe here, and the difference is not about the
+         | secret: a Svix delivery carries `svix-timestamp`, which is covered by
+         | the signature and is what AC6's replay window is enforced against. A
+         | shared-token delivery is accepted only when it also carries a
+         | freshness timestamp; token-only delivery is rejected. An environment
+         | must not enable this path unless its provider sends that signal.
         |
-        | Defaulting this to false is stricter than the ADR requires, never
-        | looser. Enabling it is a deliberate, environment-scoped decision.
+         | Defaulting this to false is stricter than the ADR requires, never
+         | looser. Enabling it is a deliberate, environment-scoped decision and
+         | never disables replay-window enforcement.
         |
         */
 

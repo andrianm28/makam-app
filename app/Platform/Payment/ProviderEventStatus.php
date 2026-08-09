@@ -43,6 +43,7 @@ enum ProviderEventStatus: string
 {
     case Received = 'RECEIVED';
     case Validated = 'VALIDATED';
+    case Processing = 'PROCESSING';
     case Processed = 'PROCESSED';
     case Duplicate = 'DUPLICATE';
     case RejectedPayload = 'REJECTED_PAYLOAD';

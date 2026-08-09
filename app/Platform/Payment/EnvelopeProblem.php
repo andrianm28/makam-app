@@ -21,6 +21,8 @@ enum EnvelopeProblem: string
     case MissingInvoiceReference = 'missing_data_order_id';
     case MissingAmount = 'missing_data_amount';
 
+    case FieldTooLong = 'field_too_long';
+
     /**
      * The amount arrived as a JSON number with fractional content. Wave 0
      * ruling 0c admits no float on the money path, and a fractional JSON

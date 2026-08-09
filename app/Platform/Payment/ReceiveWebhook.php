@@ -12,6 +12,7 @@ use App\Platform\Payment\Http\InboundWebhook;
 use App\Platform\Payment\Jobs\ProcessProviderEventJob;
 use App\Platform\Payment\Models\ProviderEvent;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 
 /**
  * AC5: "WHEN a webhook is received THE SYSTEM SHALL persist it, acknowledge it
@@ -71,55 +72,124 @@ final readonly class ReceiveWebhook
         $maxBytes = (int) config('payment.webhook.max_body_bytes', 65536);
 
         if (strlen($inbound->rawBody) > $maxBytes) {
-            // Nothing is stored: an oversized body is exactly the shape of
-            // storage abuse this endpoint has to refuse, and storing a
-            // truncated body would put something in the replay source of truth
-            // that the provider never sent. The refusal is still recorded —
-            // an audit row is bounded by the same throttle that bounds
-            // everything else here.
-            $this->auditRejection(
-                subjectId: 'unstored',
-                status: ProviderEventStatus::RejectedPayload,
-                detail: 'body exceeds the configured maximum size',
-                inbound: $inbound,
-            );
-
-            return ReceiveWebhookResult::payloadTooLarge();
+            return $this->persistOversized($inbound, $maxBytes);
         }
 
         $envelope = WebhookEnvelope::parse($inbound->rawBody);
 
         try {
-            $event = $this->persist($inbound, $envelope);
+            return DB::transaction(function () use ($inbound, $envelope): ReceiveWebhookResult {
+                $event = $this->persist($inbound, $envelope);
+
+                if (! $envelope->isWellFormed()) {
+                    return $this->reject(
+                        event: $event,
+                        status: ProviderEventStatus::RejectedPayload,
+                        detail: $this->envelopeProblemDetail($envelope),
+                        inbound: $inbound,
+                    );
+                }
+
+                return $this->finishValidation($event, $inbound, $envelope);
+            });
         } catch (QueryException $exception) {
             return $this->resolveDuplicate($inbound, $envelope, $exception);
         }
+    }
 
+    private function persistOversized(InboundWebhook $inbound, int $maxBytes): ReceiveWebhookResult
+    {
+        $envelope = WebhookEnvelope::parse('');
+
+        try {
+            return DB::transaction(function () use ($inbound, $maxBytes): ReceiveWebhookResult {
+                [$eventId, $eventIdSource] = $this->resolveEventIdentity($inbound);
+                $event = ProviderEvent::create([
+                    'provider' => $this->bounded($inbound->provider, 32),
+                    'provider_event_id' => $eventId,
+                    'event_id_source' => $eventIdSource,
+                    'merchant_ref' => $this->bounded($inbound->merchantRef, 128),
+                    'raw_payload' => substr('[oversized provider payload omitted]', 0, max(0, $maxBytes)),
+                    'payload_digest' => hash('sha256', $inbound->rawBody),
+                    'signature_timestamp' => $this->boundedOrNull($inbound->svixTimestamp, 32),
+                    'signature_header' => $this->boundedOrNull($inbound->credentials->svixSignature, 4096),
+                    'status' => ProviderEventStatus::RejectedPayload->value,
+                    'rejection_detail' => 'body exceeds the configured maximum size',
+                    'received_at' => $inbound->receivedAt(),
+                    'correlation_id' => $this->boundedOrNull($inbound->correlationId, 128),
+                ]);
+
+                $this->auditRejection(
+                    subjectId: $event->getKey(),
+                    status: ProviderEventStatus::RejectedPayload,
+                    detail: 'body exceeds the configured maximum size',
+                    inbound: $inbound,
+                );
+
+                return ReceiveWebhookResult::acknowledged(ProviderEventStatus::RejectedPayload, $event->getKey());
+            });
+        } catch (QueryException $exception) {
+            return $this->resolveDuplicate($inbound, $envelope, $exception);
+        }
+    }
+
+    private function finishValidation(
+        ProviderEvent $event,
+        InboundWebhook $inbound,
+        WebhookEnvelope $envelope,
+    ): ReceiveWebhookResult {
         $validation = $this->validator->validate($inbound, $envelope);
 
         if ($validation->isValid()) {
             $event->signature_mechanism = $validation->mechanism?->value;
             $event->markStatus(ProviderEventStatus::Validated);
 
-            // AC5's "and then process it asynchronously". A queue push, not
-            // the work itself — see `ProcessProviderEventJob`, whose apply
-            // logic belongs to Task 4.
-            ProcessProviderEventJob::dispatch($event->getKey());
+            // Dispatch only after the transaction commits, so a worker cannot
+            // observe a queued id whose lifecycle update later rolls back.
+            ProcessProviderEventJob::dispatch($event->getKey())->afterCommit();
 
             return ReceiveWebhookResult::acknowledged(ProviderEventStatus::Validated, $event->getKey());
         }
 
-        $event->signature_mechanism = $validation->mechanism?->value;
-        $event->markStatus($validation->status, $validation->detail);
-
-        $this->auditRejection(
-            subjectId: $event->getKey(),
+        return $this->reject(
+            event: $event,
             status: $validation->status,
             detail: $validation->detail ?? 'unspecified',
             inbound: $inbound,
+            mechanism: $validation->mechanism?->value,
+        );
+    }
+
+    private function reject(
+        ProviderEvent $event,
+        ProviderEventStatus $status,
+        string $detail,
+        InboundWebhook $inbound,
+        ?string $mechanism = null,
+    ): ReceiveWebhookResult {
+        if ($mechanism !== null) {
+            $event->signature_mechanism = $mechanism;
+        }
+
+        $event->markStatus($status, $detail);
+
+        $this->auditRejection(
+            subjectId: $event->getKey(),
+            status: $status,
+            detail: $detail,
+            inbound: $inbound,
         );
 
-        return ReceiveWebhookResult::acknowledged($validation->status, $event->getKey());
+        return ReceiveWebhookResult::acknowledged($status, $event->getKey());
+    }
+
+    private function envelopeProblemDetail(WebhookEnvelope $envelope): string
+    {
+        $detail = 'envelope: '.$envelope->problem?->value;
+
+        return $envelope->problemField === null
+            ? $detail
+            : $detail.' ('.$envelope->problemField.')';
     }
 
     private function persist(InboundWebhook $inbound, WebhookEnvelope $envelope): ProviderEvent
@@ -127,21 +197,33 @@ final readonly class ReceiveWebhook
         [$eventId, $eventIdSource] = $this->resolveEventIdentity($inbound);
 
         return ProviderEvent::create([
-            'provider' => $inbound->provider,
+            'provider' => $this->bounded($inbound->provider, 32),
             'provider_event_id' => $eventId,
             'event_id_source' => $eventIdSource,
-            'provider_transaction_id' => $envelope->providerTransactionId,
-            'invoice_reference' => $envelope->invoiceReference,
-            'event_type' => $envelope->eventType,
-            'merchant_ref' => $inbound->merchantRef,
+            'provider_transaction_id' => $this->persistedEnvelopeValue(
+                $envelope,
+                $envelope->providerTransactionId,
+                'data.payment_id',
+                128,
+            ),
+            'invoice_reference' => $this->persistedEnvelopeValue(
+                $envelope,
+                $envelope->invoiceReference,
+                'data.order_id',
+                128,
+            ),
+            'event_type' => $this->persistedEnvelopeValue($envelope, $envelope->eventType, 'event_type', 64),
+            'merchant_ref' => $this->bounded($inbound->merchantRef, 128),
             'amount_minor' => $envelope->amountMinor,
-            'declared_currency' => $envelope->declaredCurrency,
+            'declared_currency' => $this->persistedEnvelopeValue($envelope, $envelope->declaredCurrency, 'currency', 3),
             'event_occurred_at' => $envelope->occurredAt,
             'raw_payload' => $inbound->rawBody,
             'payload_digest' => hash('sha256', $inbound->rawBody),
+            'signature_timestamp' => $this->boundedOrNull($inbound->svixTimestamp, 32),
+            'signature_header' => $this->boundedOrNull($inbound->credentials->svixSignature, 4096),
             'status' => ProviderEventStatus::Received->value,
             'received_at' => $inbound->receivedAt(),
-            'correlation_id' => $inbound->correlationId,
+            'correlation_id' => $this->boundedOrNull($inbound->correlationId, 128),
         ]);
     }
 
@@ -216,6 +298,34 @@ final readonly class ReceiveWebhook
             throw $exception;
         }
 
+        $status = ProviderEventStatus::tryFrom((string) $original->status);
+
+        if ($status === null) {
+            throw $exception;
+        }
+
+        if ($status === ProviderEventStatus::Received) {
+            return DB::transaction(function () use ($original, $inbound, $envelope): ReceiveWebhookResult {
+                if (! $envelope->isWellFormed()) {
+                    return $this->reject(
+                        event: $original,
+                        status: ProviderEventStatus::RejectedPayload,
+                        detail: $this->envelopeProblemDetail($envelope),
+                        inbound: $inbound,
+                    );
+                }
+
+                return $this->finishValidation($original, $inbound, $envelope);
+            });
+        }
+
+        // A row still being claimed or retried is not a completed duplicate.
+        // Return its current state without creating a second effect or audit
+        // record; the owning asynchronous worker remains responsible for it.
+        if (in_array($status, [ProviderEventStatus::Processing, ProviderEventStatus::RetryableFailure], true)) {
+            return ReceiveWebhookResult::acknowledged($status, $original->getKey());
+        }
+
         // The original row is NOT re-statused: it is append-only evidence of
         // the first delivery, and a redelivery is not a change to what
         // happened then. The duplicate itself is recorded as an audit event,
@@ -237,6 +347,29 @@ final readonly class ReceiveWebhook
         );
 
         return ReceiveWebhookResult::acknowledged(ProviderEventStatus::Duplicate, $original->getKey());
+    }
+
+    private function bounded(string $value, int $maxLength): string
+    {
+        return mb_substr($value, 0, $maxLength);
+    }
+
+    private function boundedOrNull(?string $value, int $maxLength): ?string
+    {
+        return $value === null ? null : $this->bounded($value, $maxLength);
+    }
+
+    private function persistedEnvelopeValue(
+        WebhookEnvelope $envelope,
+        ?string $value,
+        string $field,
+        int $maxLength,
+    ): ?string {
+        if ($envelope->problemField === $field) {
+            return null;
+        }
+
+        return $this->boundedOrNull($value, $maxLength);
     }
 
     /**

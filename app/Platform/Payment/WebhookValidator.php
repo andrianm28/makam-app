@@ -5,10 +5,14 @@ declare(strict_types=1);
 namespace App\Platform\Payment;
 
 use App\Platform\Payment\Http\InboundWebhook;
+use App\Platform\Payment\Http\WebhookCredentials;
 use App\Platform\Payment\Models\PaymentSession;
+use App\Platform\Payment\Models\ProviderEvent;
 use App\Platform\Payment\Providers\SignatureMechanism;
 use App\Platform\Payment\Providers\SignatureOutcome;
+use App\Platform\Payment\Providers\SignatureVerification;
 use App\Platform\Payment\Providers\SumoPodWebhookSignature;
+use Carbon\CarbonImmutable;
 
 /**
  * AC6: "THE SYSTEM SHALL validate every webhook's signature, merchant scope,
@@ -78,9 +82,15 @@ final readonly class WebhookValidator
     public function validate(InboundWebhook $inbound, WebhookEnvelope $envelope): WebhookValidation
     {
         if (! $envelope->isWellFormed()) {
+            $detail = 'envelope: '.$envelope->problem?->value;
+
+            if ($envelope->problemField !== null) {
+                $detail .= ' ('.$envelope->problemField.')';
+            }
+
             return WebhookValidation::rejected(
                 ProviderEventStatus::RejectedPayload,
-                'envelope: '.$envelope->problem->value,
+                $detail,
             );
         }
 
@@ -187,6 +197,23 @@ final readonly class WebhookValidator
         }
 
         return WebhookValidation::passed($mechanism);
+    }
+
+    public function verifyStoredEvidence(ProviderEvent $event, CarbonImmutable $now): SignatureVerification
+    {
+        if ($event->event_id_source !== 'svix-id'
+            || $event->signature_timestamp === null
+            || $event->signature_header === null) {
+            return SignatureVerification::failed(SignatureOutcome::MalformedSignatureHeader);
+        }
+
+        return $this->signature->verify(
+            credentials: new WebhookCredentials(svixSignature: $event->signature_header),
+            svixId: $event->provider_event_id,
+            svixTimestamp: $event->signature_timestamp,
+            rawBody: $event->raw_payload,
+            now: $now,
+        );
     }
 
     private function findSession(string $provider, string $providerTransactionId): ?PaymentSession

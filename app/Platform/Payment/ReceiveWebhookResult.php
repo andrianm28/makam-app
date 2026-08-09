@@ -25,12 +25,11 @@ namespace App\Platform\Payment;
  *     unauthenticated caller could probe which merchant references exist, which
  *     transactions have sessions, and which amounts match, one request at a
  *     time. The response is therefore identical in shape and content for every
- *     outcome except the transport-level one below.
+ *     stored outcome.
  *
- * The single exception is `PayloadTooLarge`, which is not a webhook validation
- * outcome at all — the body was never read as a webhook. A 413 tells the
- * provider the request itself was unacceptable and is honest about the fact
- * that nothing was stored.
+ * Oversized bodies are not an exception to this contract: they are stored as a
+ * bounded `REJECTED_PAYLOAD` record with the full-body digest and acknowledged
+ * with the same HTTP 200 response.
  */
 final readonly class ReceiveWebhookResult
 {
@@ -50,10 +49,5 @@ final readonly class ReceiveWebhookResult
     public static function acknowledged(ProviderEventStatus $status, ?string $reference): self
     {
         return new self($status, $reference, 200, true);
-    }
-
-    public static function payloadTooLarge(): self
-    {
-        return new self(ProviderEventStatus::RejectedPayload, null, 413, false);
     }
 }

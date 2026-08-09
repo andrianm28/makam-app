@@ -84,4 +84,26 @@ final readonly class WebhookCredentials implements JsonSerializable, Stringable
     {
         return 'WebhookCredentials[REDACTED]';
     }
+
+    /**
+     * Laravel queue/error paths may call PHP serialization directly. Never let
+     * that path expose the public readonly credential properties.
+     *
+     * @return array<string, string>
+     */
+    public function __serialize(): array
+    {
+        return $this->toArray();
+    }
+
+    /**
+     * Credentials are request-scoped and must never be restored from a queue
+     * or cache payload.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function __unserialize(array $data): void
+    {
+        throw new \LogicException('WebhookCredentials must not be unserialized.');
+    }
 }

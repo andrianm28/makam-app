@@ -104,7 +104,6 @@ final readonly class SumoPodWebhookSignature
         CarbonImmutable $now,
     ): SignatureVerification {
         $svixAttempted = $svixId !== null
-            || $svixTimestamp !== null
             || $credentials->svixSignature !== null;
 
         if ($svixAttempted) {
@@ -112,7 +111,7 @@ final readonly class SumoPodWebhookSignature
         }
 
         if ($this->allowSharedToken && $this->sharedTokens !== [] && $credentials->sharedToken !== null) {
-            return $this->verifySharedToken($credentials->sharedToken);
+            return $this->verifySharedToken($credentials->sharedToken, $svixTimestamp, $now);
         }
 
         // Either no credential arrived at all, or the only one that did belongs
@@ -182,8 +181,11 @@ final readonly class SumoPodWebhookSignature
         return SignatureVerification::verified(SignatureMechanism::Svix);
     }
 
-    private function verifySharedToken(string $presented): SignatureVerification
-    {
+    private function verifySharedToken(
+        string $presented,
+        ?string $freshnessTimestamp,
+        CarbonImmutable $now,
+    ): SignatureVerification {
         $matched = false;
 
         foreach ($this->sharedTokens as $token) {
@@ -196,11 +198,19 @@ final readonly class SumoPodWebhookSignature
             return SignatureVerification::failed(SignatureOutcome::SignatureMismatch);
         }
 
-        // No replay-window check is possible on this path and none is faked —
-        // ADR-0033's shared-token delivery carries no provider timestamp. That
-        // is precisely why `payment.webhook.allow_shared_token` defaults to
-        // false; `provider_events.signature_mechanism` records which path a
-        // given event took so the difference stays visible after the fact.
+        // A token without a freshness signal is replayable indefinitely. The
+        // mechanism remains opt-in, but opting in cannot bypass the same
+        // timestamp window enforced for signed deliveries.
+        if ($freshnessTimestamp === null) {
+            return SignatureVerification::failed(SignatureOutcome::TimestampMalformed);
+        }
+
+        $freshness = $this->checkReplayWindow($freshnessTimestamp, $now);
+
+        if (! $freshness->isVerified()) {
+            return $freshness;
+        }
+
         return SignatureVerification::verified(SignatureMechanism::SharedToken);
     }
 

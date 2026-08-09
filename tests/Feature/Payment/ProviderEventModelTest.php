@@ -43,6 +43,8 @@ final class ProviderEventModelTest extends TestCase
             'declared_currency' => 'IDR',
             'raw_payload' => '{"event_type":"payment.completed"}',
             'payload_digest' => hash('sha256', '{"event_type":"payment.completed"}'),
+            'signature_timestamp' => (string) CarbonImmutable::now()->getTimestamp(),
+            'signature_header' => 'v1,test-signature',
             'status' => ProviderEventStatus::Received->value,
             'received_at' => CarbonImmutable::now(),
         ], $overrides));
@@ -57,7 +59,8 @@ final class ProviderEventModelTest extends TestCase
             'provider_transaction_id', 'invoice_reference', 'event_type',
             'merchant_ref', 'amount_minor', 'declared_currency',
             'event_occurred_at', 'raw_payload', 'payload_digest',
-            'signature_mechanism', 'status', 'rejection_detail',
+            'signature_mechanism', 'signature_timestamp', 'signature_header',
+            'status', 'rejection_detail',
             'received_at', 'validated_at', 'correlation_id',
         ] as $column) {
             $this->assertTrue(
@@ -149,5 +152,12 @@ final class ProviderEventModelTest extends TestCase
         $this->expectException(ProviderEventIsAppendOnlyException::class);
 
         $this->event(['status' => 'NOT_A_STATUS']);
+    }
+
+    public function test_processing_status_is_in_the_provider_event_closed_list(): void
+    {
+        $event = $this->event(['status' => ProviderEventStatus::Processing->value]);
+
+        $this->assertSame(ProviderEventStatus::Processing, $event->status());
     }
 }

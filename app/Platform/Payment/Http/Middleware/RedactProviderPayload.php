@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Platform\Payment\Http\Middleware;
 
+use App\Platform\Payment\Http\RawWebhookBody;
 use App\Platform\Payment\Http\WebhookCredentials;
 use Closure;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Throwable;
 
 /**
  * AC14: "THE SYSTEM SHALL source provider credentials from secret management,
@@ -35,12 +37,11 @@ use Symfony\Component\HttpFoundation\Response;
  * Symfony rebuilds header values from the server bag, so removing only the
  * header would leave the value reachable through `$request->server->all()`.
  *
- * The verbatim body is deliberately NOT altered: the signature is computed over
- * the exact bytes received, and `provider_events.raw_payload` must stay
- * re-verifiable (it is encrypted at rest instead — see that migration). What
- * `redact()` below exists for is any place a payload STRUCTURE is about to be
- * logged; the receiver uses it for nothing else today, and no payload is logged
- * on the happy path at all.
+ * The Request body is replaced with a redacted representation before the next
+ * handler runs. The exact bytes remain available only through the dump-safe
+ * `RawWebhookBody` holder, because the signature and durable evidence require
+ * them. `provider_events.raw_payload` is encrypted at rest; all ordinary
+ * request, log, and error handling sees the redacted representation.
  *
  * ---------------------------------------------------------------------------
  * What this does not do
@@ -87,6 +88,8 @@ final readonly class RedactProviderPayload
 
     public function handle(Request $request, Closure $next): Response
     {
+        $rawBody = $request->getContent();
+
         $credentials = new WebhookCredentials(
             svixSignature: $this->headerOrNull($request, 'svix-signature'),
             sharedToken: $this->headerOrNull($request, 'x-webhook-token'),
@@ -101,6 +104,21 @@ final readonly class RedactProviderPayload
         // are stored separately and would survive the removal above.
         $request->server->remove('PHP_AUTH_USER');
         $request->server->remove('PHP_AUTH_PW');
+
+        // The controller must receive the exact signed bytes, while the
+        // Request object is the object Laravel and error trackers commonly
+        // inspect. Keep the exact bytes in a dump-safe holder and replace the
+        // request content before invoking application code.
+        $request->initialize(
+            query: $request->query->all(),
+            request: $request->request->all(),
+            attributes: $request->attributes->all(),
+            cookies: $request->cookies->all(),
+            files: $request->files->all(),
+            server: $request->server->all(),
+            content: self::redactBody($rawBody),
+        );
+        $request->attributes->set('payment.webhook.raw_body', new RawWebhookBody($rawBody));
 
         // Scoped to this request: `instance()` on the request-lifetime
         // container, never a singleton that could outlive the delivery and be
@@ -133,6 +151,26 @@ final readonly class RedactProviderPayload
         }
 
         return $redacted;
+    }
+
+    public static function redactBody(string $rawBody): string
+    {
+        try {
+            /** @var mixed $decoded */
+            $decoded = json_decode($rawBody, true, 32, JSON_THROW_ON_ERROR);
+        } catch (Throwable) {
+            return self::MASK;
+        }
+
+        if (! is_array($decoded) || array_is_list($decoded)) {
+            return self::MASK;
+        }
+
+        try {
+            return json_encode(self::redact($decoded), JSON_THROW_ON_ERROR);
+        } catch (Throwable) {
+            return self::MASK;
+        }
     }
 
     private static function isSensitiveKey(string $key): bool

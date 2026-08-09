@@ -6,6 +6,7 @@ namespace App\Platform\Payment\Http\Controllers;
 
 use App\Platform\Correlation\CorrelationContext;
 use App\Platform\Payment\Http\InboundWebhook;
+use App\Platform\Payment\Http\RawWebhookBody;
 use App\Platform\Payment\Http\WebhookCredentials;
 use App\Platform\Payment\PaymentProviders;
 use App\Platform\Payment\ReceiveWebhook;
@@ -49,9 +50,9 @@ use Illuminate\Http\Request;
  *    that stores nothing.
  *  - A body-size cap and the durable-row design inside `ReceiveWebhook`.
  *
- * The raw body is read with `getContent()`, never `$request->json()`/`all()`:
- * the signature is computed over the exact bytes received, and a body Laravel
- * has normalised is not those bytes.
+ * The exact body is read from `RawWebhookBody`, never `$request->json()`/`all()`:
+ * the signature is computed over the exact bytes received, while the Request
+ * body itself is already a redacted error-safe representation.
  */
 final readonly class WebhookController
 {
@@ -63,11 +64,16 @@ final readonly class WebhookController
     public function __invoke(Request $request, string $merchant, WebhookCredentials $credentials): JsonResponse
     {
         $correlationId = $this->correlation->current();
+        $rawBody = $request->attributes->get('payment.webhook.raw_body');
+
+        if (! $rawBody instanceof RawWebhookBody) {
+            throw new \LogicException('RedactProviderPayload must run before WebhookController.');
+        }
 
         $result = ($this->receive)(new InboundWebhook(
             provider: (string) config('payment.default', PaymentProviders::SUMOPOD_SANDBOX),
             merchantRef: $merchant,
-            rawBody: $request->getContent(),
+            rawBody: $rawBody->value(),
             credentials: $credentials,
             // `svix-id` and `svix-timestamp` are NOT credentials — they are
             // the public, signature-covered parts of the Svix envelope — so

@@ -69,6 +69,7 @@ final readonly class WebhookEnvelope
         public ?string $declaredCurrency = null,
         public ?CarbonImmutable $occurredAt = null,
         public ?EnvelopeProblem $problem = null,
+        public ?string $problemField = null,
     ) {}
 
     public static function parse(string $rawBody): self
@@ -95,7 +96,11 @@ final readonly class WebhookEnvelope
 
         // Every extracted field is carried even when a later one fails, so the
         // durable `provider_events` row is as informative as the body allowed.
-        $partial = static fn (EnvelopeProblem $problem, ?int $amountMinor = null): self => new self(
+        $partial = static fn (
+            EnvelopeProblem $problem,
+            ?int $amountMinor = null,
+            ?string $problemField = null,
+        ): self => new self(
             eventType: $eventType,
             providerTransactionId: $transactionId,
             invoiceReference: $invoiceReference,
@@ -103,6 +108,7 @@ final readonly class WebhookEnvelope
             declaredCurrency: $currency,
             occurredAt: $occurredAt,
             problem: $problem,
+            problemField: $problemField,
         );
 
         if ($eventType === null) {
@@ -115,6 +121,17 @@ final readonly class WebhookEnvelope
 
         if ($invoiceReference === null) {
             return $partial(EnvelopeProblem::MissingInvoiceReference);
+        }
+
+        foreach ([
+            'event_type' => [$eventType, 64],
+            'data.payment_id' => [$transactionId, 128],
+            'data.order_id' => [$invoiceReference, 128],
+            'currency' => [$currency, 3],
+        ] as $field => [$value, $maxLength]) {
+            if ($value !== null && strlen($value) > $maxLength) {
+                return $partial(EnvelopeProblem::FieldTooLong, problemField: $field);
+            }
         }
 
         if (! array_key_exists('amount', $data)) {

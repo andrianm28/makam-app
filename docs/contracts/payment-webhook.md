@@ -51,6 +51,7 @@ Duplicate valid webhook returns a success acknowledgment and the original proces
 ```text
 RECEIVED
 VALIDATED
+PROCESSING
 PROCESSED
 DUPLICATE
 REJECTED_PAYLOAD

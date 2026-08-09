@@ -137,8 +137,15 @@ return new class extends Migration
 
             // Which verification mechanism accepted (or was attempted for)
             // this delivery: ADR-0033 allows Svix signatures or a shared
-            // `X-Webhook-Token`. Never the secret, never the signature value.
+            // `X-Webhook-Token`. The signed timestamp and encrypted signature
+            // evidence below are never exposed through ordinary serialization.
             $table->string('signature_mechanism', 16)->nullable();
+
+            // The signed timestamp and signature header are retained so a
+            // stored raw body can be reverified later. The header is encrypted
+            // by the model cast and hidden from ordinary serialization paths.
+            $table->string('signature_timestamp', 32)->nullable();
+            $table->text('signature_header')->nullable();
 
             // `App\Platform\Payment\ProviderEventStatus`. CHECK-constrained
             // below on Postgres, and enforced in the model for SQLite.

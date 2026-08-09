@@ -10,8 +10,11 @@ use App\Platform\Payment\Models\ProviderEvent;
 use App\Platform\Payment\PaymentAuditActions;
 use App\Platform\Payment\PaymentProviders;
 use App\Platform\Payment\ProviderEventStatus;
+use App\Platform\Payment\WebhookValidator;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
@@ -169,6 +172,19 @@ final class WebhookReceiverTest extends TestCase
         $this->assertSame('msg_01', $event->provider_event_id);
         $this->assertSame('svix-id', $event->event_id_source);
         $this->assertNotNull($event->received_at);
+    }
+
+    public function test_signed_metadata_reverifies_the_stored_raw_evidence(): void
+    {
+        $this->deliver(id: 'msg_reverify');
+
+        $event = ProviderEvent::query()->sole();
+        $this->assertSame('svix-id', $event->event_id_source);
+        $this->assertNotNull($event->signature_timestamp);
+        $this->assertNotNull($event->signature_header);
+        $verification = app(WebhookValidator::class)->verifyStoredEvidence($event, CarbonImmutable::now());
+
+        $this->assertTrue($verification->isVerified(), $verification->outcome->name);
     }
 
     public function test_the_receiver_does_no_async_work_and_makes_no_provider_call_in_the_request_path(): void
@@ -391,6 +407,70 @@ final class WebhookReceiverTest extends TestCase
         $this->assertEquals($before->updated_at, $after->updated_at);
     }
 
+    public function test_a_duplicate_delivery_recovers_a_row_stuck_before_validation(): void
+    {
+        $body = $this->body();
+        $timestamp = (string) CarbonImmutable::now()->getTimestamp();
+
+        ProviderEvent::create([
+            'provider' => PaymentProviders::SUMOPOD_SANDBOX,
+            'provider_event_id' => 'msg_stuck',
+            'event_id_source' => 'svix-id',
+            'provider_transaction_id' => 'pay_stuck',
+            'invoice_reference' => 'INV-2026-0001',
+            'event_type' => 'payment.completed',
+            'merchant_ref' => self::MERCHANT,
+            'amount_minor' => 150_000_000,
+            'declared_currency' => null,
+            'raw_payload' => $body,
+            'payload_digest' => hash('sha256', $body),
+            'signature_timestamp' => $timestamp,
+            'signature_header' => $this->signature('msg_stuck', $timestamp, $body),
+            'status' => ProviderEventStatus::Received->value,
+            'received_at' => CarbonImmutable::now(),
+        ]);
+
+        $response = $this->deliver(body: $body, id: 'msg_stuck', timestamp: $timestamp);
+
+        $this->assertAcknowledged($response);
+        $event = ProviderEvent::query()->sole();
+        $this->assertSame(ProviderEventStatus::RejectedSession->value, $event->status);
+        $this->assertSame(0, AuditEvent::query()->where('action', PaymentAuditActions::WEBHOOK_DUPLICATE)->count());
+        $this->assertSame(1, AuditEvent::query()->where('action', PaymentAuditActions::WEBHOOK_REJECTED)->count());
+    }
+
+    public function test_envelope_field_lengths_are_rejected_before_persistence(): void
+    {
+        $body = $this->body(dataOverrides: ['payment_id' => str_repeat('x', 129)]);
+
+        $this->assertAcknowledged($this->deliver(body: $body));
+
+        $event = $this->assertRejectionRecorded(ProviderEventStatus::RejectedPayload);
+        $this->assertStringContainsString('payment_id', (string) $event->rejection_detail);
+        $this->assertNull($event->provider_transaction_id);
+    }
+
+    public function test_rejection_status_and_audit_roll_back_together_if_audit_fails(): void
+    {
+        DB::statement(
+            'CREATE TRIGGER fail_audit_insert BEFORE INSERT ON audit_events '
+            ."BEGIN SELECT RAISE(ABORT, 'audit insert failed'); END"
+        );
+        $this->withoutExceptionHandling();
+
+        $thrown = false;
+
+        try {
+            $this->deliver(signature: 'v1,'.base64_encode('forged'));
+        } catch (QueryException) {
+            $thrown = true;
+        }
+
+        $this->assertSame(0, ProviderEvent::query()->count());
+        $this->assertSame(0, AuditEvent::query()->count());
+        $this->assertTrue($thrown);
+    }
+
     // -----------------------------------------------------------------
     // The endpoint itself — throttle, bounds, and the absence of an oracle
     // -----------------------------------------------------------------
@@ -438,21 +518,20 @@ final class WebhookReceiverTest extends TestCase
         $this->assertSame(0, ProviderEvent::query()->count());
     }
 
-    public function test_an_oversized_body_is_refused_without_storing_a_row(): void
+    public function test_an_oversized_body_is_recorded_as_a_bounded_rejected_payload_and_acked(): void
     {
         config(['payment.webhook.max_body_bytes' => 512]);
 
         $body = $this->body(dataOverrides: ['payment_method' => str_repeat('A', 2_000)]);
 
-        $this->deliver(body: $body)->assertStatus(413);
+        $this->deliver(body: $body)->assertOk();
 
-        $this->assertSame(0, ProviderEvent::query()->count(), 'an oversized body must not be stored');
+        $event = $this->assertRejectionRecorded(ProviderEventStatus::RejectedPayload);
+        $this->assertLessThanOrEqual(512, strlen((string) $event->raw_payload));
+        $this->assertSame(hash('sha256', $body), $event->payload_digest);
 
-        // Refused, but never silently — AC6.
-        $this->assertSame(
-            1,
-            AuditEvent::query()->where('action', PaymentAuditActions::WEBHOOK_REJECTED)->count()
-        );
+        // The stored evidence is a bounded marker, not a silently dropped body.
+        $this->assertStringContainsString('oversized', (string) $event->raw_payload);
     }
 
     public function test_the_response_body_is_identical_for_every_rejection_reason(): void

@@ -88,6 +88,8 @@ final class ProviderEvent extends Model
         'raw_payload',
         'payload_digest',
         'signature_mechanism',
+        'signature_timestamp',
+        'signature_header',
         'status',
         'rejection_detail',
         'received_at',
@@ -100,6 +102,7 @@ final class ProviderEvent extends Model
      */
     protected $hidden = [
         'raw_payload',
+        'signature_header',
     ];
 
     /**
@@ -113,6 +116,7 @@ final class ProviderEvent extends Model
             // type here would be an inexact security check.
             'amount_minor' => 'integer',
             'raw_payload' => 'encrypted',
+            'signature_header' => 'encrypted',
             'event_occurred_at' => 'immutable_datetime',
             'received_at' => 'immutable_datetime',
             'validated_at' => 'immutable_datetime',

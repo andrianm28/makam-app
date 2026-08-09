@@ -7,6 +7,8 @@ namespace Tests\Feature\Payment;
 use App\Platform\Payment\Http\Middleware\RedactProviderPayload;
 use App\Platform\Payment\Http\WebhookCredentials;
 use App\Platform\Payment\PaymentProviders;
+use App\Platform\Payment\Providers\SignatureOutcome;
+use App\Platform\Payment\Providers\SumoPodWebhookSignature;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
@@ -110,6 +112,7 @@ final class WebhookCredentialRedactionTest extends TestCase
 
         $exposures = [
             json_encode($credentials, JSON_THROW_ON_ERROR),
+            serialize($credentials),
             (string) $credentials,
             var_export($credentials->__debugInfo(), true),
             var_export($credentials->toArray(), true),
@@ -125,6 +128,70 @@ final class WebhookCredentialRedactionTest extends TestCase
         // Only an explicit property read returns the value — the one thing the
         // signature verifier does.
         $this->assertSame(self::TOKEN, $credentials->sharedToken);
+    }
+
+    public function test_token_only_verification_requires_a_freshness_signal(): void
+    {
+        $verifier = new SumoPodWebhookSignature(
+            signingSecrets: [],
+            sharedTokens: [self::TOKEN],
+            allowSharedToken: true,
+            replayWindowSeconds: 300,
+        );
+
+        $withoutTimestamp = $verifier->verify(
+            credentials: new WebhookCredentials(sharedToken: self::TOKEN),
+            svixId: null,
+            svixTimestamp: null,
+            rawBody: '{}',
+            now: CarbonImmutable::now(),
+        );
+
+        $this->assertSame(SignatureOutcome::TimestampMalformed, $withoutTimestamp->outcome);
+
+        $stale = $verifier->verify(
+            credentials: new WebhookCredentials(sharedToken: self::TOKEN),
+            svixId: null,
+            svixTimestamp: (string) CarbonImmutable::now()->subHour()->getTimestamp(),
+            rawBody: '{}',
+            now: CarbonImmutable::now(),
+        );
+
+        $this->assertSame(SignatureOutcome::TimestampOutsideWindow, $stale->outcome);
+
+        $withTimestamp = $verifier->verify(
+            credentials: new WebhookCredentials(sharedToken: self::TOKEN),
+            svixId: null,
+            svixTimestamp: (string) CarbonImmutable::now()->getTimestamp(),
+            rawBody: '{}',
+            now: CarbonImmutable::now(),
+        );
+
+        $this->assertTrue($withTimestamp->isVerified());
+    }
+
+    public function test_the_middleware_replaces_request_body_with_a_redacted_error_safe_representation(): void
+    {
+        $rawBody = json_encode([
+            'event_type' => 'payment.completed',
+            'data' => ['order_id' => 'INV-1', 'webhook_token' => self::TOKEN],
+        ], JSON_THROW_ON_ERROR);
+        $request = Request::create('/api/payments/webhook/'.self::MERCHANT, 'POST', server: [
+            'CONTENT_TYPE' => 'application/json',
+        ], content: $rawBody);
+
+        $middleware = $this->app->make(RedactProviderPayload::class);
+        $seen = null;
+
+        $middleware->handle($request, function (Request $passed) use (&$seen): Response {
+            $seen = $passed;
+
+            return new Response;
+        });
+
+        $this->assertSame($rawBody, $seen->attributes->get('payment.webhook.raw_body')->value());
+        $this->assertStringNotContainsString(self::TOKEN, $seen->getContent());
+        $this->assertStringContainsString(RedactProviderPayload::MASK, $seen->getContent());
     }
 
     public function test_redact_masks_credential_shaped_keys_at_any_depth(): void

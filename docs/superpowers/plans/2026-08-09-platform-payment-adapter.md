@@ -17,7 +17,7 @@
 - `app/Platform/Payment/` contains only `.gitkeep` — the module does not exist.
 - `PaymentMode` enum exists (`app/Platform/FeatureGate/Modes/PaymentMode.php`): `Online` / `ManualCoordination`, resolved server-side via `ModeResolver::paymentMode()` from `G-PAY-01` (AC1's "server-resolved, never a front-end flag" is already the established, tested pattern).
 - ADR-0033 (Wave 0) fixes the provider choice and the sandbox contract surface for dev/staging: `POST https://api-pay-sandbox.sumopod.com/api/v1/payments` with `X-Api-Key`, QRIS supported, ≤ 24 h `expires_in_hours`, hosted `payment_link_url`, Svix signatures or `X-Webhook-Token` verification, 10 s ack deadline, events `payment.completed|failed|expired|test`.
-- `docs/contracts/payment-webhook.md` v0.4 defines the application-side pipeline (`RECEIVED → VALIDATED → PROCESSED → DUPLICATE → REJECTED_* → RETRYABLE_FAILURE → MANUAL_REVIEW`) and the idempotency rule ("Primary key should use provider + event ID. A secondary guard should prevent the same provider transaction from settling multiple invoices.").
+- `docs/contracts/payment-webhook.md` v0.4 defines the application-side pipeline (`RECEIVED → VALIDATED → PROCESSING → PROCESSED → DUPLICATE → REJECTED_* → RETRYABLE_FAILURE → MANUAL_REVIEW`) and the idempotency rule ("Primary key should use provider + event ID. A secondary guard should prevent the same provider transaction from settling multiple invoices.").
 - `SensitiveActions::ACTIONS` already includes `PAYMENT_MANUAL_VERIFICATION` and `VENDOR_PAYOUT` (mandatory-reason actions) — the manual-verification and payout audit guards are pre-wired.
 - `ReauthenticationService` (`app/Platform/IdentityAccess/Reauthentication/ReauthenticationService.php`) and the `RequireRecentAuthentication` middleware pattern exist (prepared, no real controller yet) — AC9's "recent re-authentication on manual verification" consumes this prepared mechanism.
 - `Audit::record()/wrap()`, `Outbox::record()`, `OutboxClassification`, `OutboxQueueRouter` (with `critical` queue), `OutboxQueueName::Critical` all exist and are tested. `payment.received.v1` is in `event-catalog.md` (`:19`, "Valid webhook only").
@@ -215,9 +215,10 @@ Three decisions taken inside Task 3 that a reviewer should look at deliberately,
 their site: the secondary unique guard is a **partial** index scoped to settling event types (a total
 index would make Task 4's required out-of-order `expired`-after-`completed` delivery impossible to
 persist at all); the shared-token verification mechanism ADR-0033 permits **defaults to disabled**,
-because it carries no provider timestamp and so admits no replay window; and an **oversized body is
-refused with 413 and an audit row but no `provider_events` row**, since storing a truncated body
-would put something in the replay source of truth the provider never sent.
+ because it carries no provider timestamp and so admits no replay window; and an **oversized body is
+ bounded to a `REJECTED_PAYLOAD` `provider_events` row and acknowledged with HTTP 200**, with the
+ full-body digest retained and a bounded marker stored instead of unbounded raw bytes. This keeps
+ the rejection durable without pretending that a truncated body is the provider's signed evidence.
 
 Four failure states were added to `docs/contracts/payment-webhook.md` (`REJECTED_PAYLOAD`,
 `REJECTED_REPLAY`, `REJECTED_CURRENCY`, `REJECTED_SESSION`) because AC6 names five things to validate
