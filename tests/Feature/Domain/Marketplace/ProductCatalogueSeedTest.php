@@ -41,8 +41,8 @@ final class ProductCatalogueSeedTest extends TestCase
      * bullet line, so order and label drift both fail this test.
      *
      * @return list<array{code: string, label: string, category: string}>
-     *         the catalogue's own product rows in document order; `category`
-     *         is the `###` heading text the bullet sits under.
+     *                                                                    the catalogue's own product rows in document order; `category`
+     *                                                                    is the `###` heading text the bullet sits under.
      */
     private function catalogueProductRows(): array
     {
@@ -66,6 +66,7 @@ final class ProductCatalogueSeedTest extends TestCase
         foreach (preg_split('/\R/', substr($contents, $sectionStart, $sectionEnd - $sectionStart)) ?: [] as $line) {
             if (preg_match('/^### (.+)$/', $line, $heading) === 1) {
                 $currentCategory = $heading[1];
+
                 continue;
             }
 
