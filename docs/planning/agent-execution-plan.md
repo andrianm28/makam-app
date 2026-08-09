@@ -285,8 +285,8 @@ The **Status** column was appended 8 Aug 2026 — the six rows are otherwise unc
 | A | **FAQ complete** — public + admin CMS | `public-faq` AC1–AC9, `admin-operations` AC6 | identity, audit, gates | `…_100000` | ✅ **Done** — S4-T2, 26 Jul 2026, CI green, **deployed to dev.makam.co.id** 26 Jul |
 | B | Homepage — 4 cards exact order, 9 sections | `public-home-and-navigation` AC1–AC9 | gates, identity | `…_110000` | ✅ **Done** — S4-T3, 26 Jul 2026, CI green, **deployed to dev.makam.co.id** 26 Jul |
 | C | Cemetery directory + capability resolver | `cemetery-directory-and-availability` AC1–AC12 | gates, audit, identity | `…_120000` | Not started — S4-T6; master data ready (S4-T1) |
-| D | Wizard Steps 1–5 + stepper + autosave | `public-booking-wizard` AC1–AC6, AC11–AC13 | identity, gates, audit | `…_130000` | ⏸️ **Paused** — S4-T4, 26 Jul 2026; build/review paused before completion, nothing committed, no CI run |
-| E | Draft persistence, versioning, server validation | `booking-and-order-orchestration` AC2, AC3 | audit, outbox | `…_140000` | ⏸️ **Paused** — S4-T5, built together with S4-T4 as one feature; nothing committed |
+| D | Wizard Steps 1–5 + stepper + autosave | `public-booking-wizard` AC1–AC6, AC11–AC13 | identity, gates, audit | `…_130000` | 🔵 **Implemented, pending merge/CI** — S4-T4, resumed 08 Aug 2026 and reviewed 09 Aug; built on an unmerged branch, booking test surface green locally, **no CI run and not deployed** |
+| E | Draft persistence, versioning, server validation | `booking-and-order-orchestration` AC2, AC3 | audit, outbox | `…_140000` | 🔵 **Implemented, pending merge/CI** — S4-T5, built together with S4-T4 as one feature, same branch; **no CI run and not deployed** |
 | F | Renewal search skeleton + marketplace browse | `renewal-and-grave-registry` AC1–AC5, AC14; `funeral-marketplace…` AC1–AC3 | gates, audit | `…_150000` | Not started — S4-T7 + S4-T8; catalogue seeded (S4-T1) |
 
 **Build FAQ first if you must serialize any of these.** It is the cheapest complete vertical slice and it proves every layer — Livewire, Filament, design system, migrations, seeds, authorization, tests, CI. Finding a stack problem in FAQ costs 4 pd; finding it three-quarters through the wizard costs far more.
@@ -306,7 +306,7 @@ Two briefs carry a specific non-obvious requirement:
 
 **Sprint 4 shape:** 1 → 6 (worktree). Peak concurrency 6, but see §1.5 — six diffs land on one reviewer.
 
-> **Correction, 8 Aug 2026.** Planned shape retained above for the record; **actual shape so far is 1 → 1 → 1** (S4-T1, then S4-T2, then S4-T3, each a serial batch with a review gate between), with S4-T4/T5 paused and S4-T6/T7/T8 not started. Peak concurrency observed in Sprint 4 is **1**, not 6. The §1.5 prediction — that review, not agent count, is the real constraint — is so far the thing this sprint actually demonstrates.
+> **Correction, 8 Aug 2026 (updated 9 Aug).** Planned shape retained above for the record; **actual shape so far is 1 → 1 → 1** (S4-T1, then S4-T2, then S4-T3, each a serial batch with a review gate between), with S4-T4/T5 paused and S4-T6/T7/T8 not started. S4-T4/T5 were subsequently resumed as **one** serial batch (08–09 Aug), which does not change the observed peak. Peak concurrency observed in Sprint 4 is **1**, not 6. The §1.5 prediction — that review, not agent count, is the real constraint — is so far the thing this sprint actually demonstrates.
 
 ---
 

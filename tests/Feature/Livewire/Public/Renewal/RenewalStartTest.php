@@ -215,12 +215,20 @@ final class RenewalStartTest extends TestCase
      * CASCADE clause, and `phpunit.xml` defaults to SQLite locally while CI
      * runs PostgreSQL. If a later batch adds another table with a foreign
      * key to `cemeteries`, this test fails with an FK error rather than
-     * passing silently — which is the correct signal, not a flaw.
+     * passing silently — which is the correct signal, not a flaw. (That
+     * tripwire is exactly what caught the `booking_drafts` FK added on
+     * 08 Aug 2026; `booking_drafts` now joins the drop list below, so the
+     * tripwire still guards every table added in the future.)
      *
      * Safe: RefreshDatabase rolls the whole test transaction back.
      */
     public function test_a_failed_cemetery_read_degrades_honestly_instead_of_500ing(): void
     {
+        // Empty in this test — no draft is ever created. Dropped first so
+        // PostgreSQL's `DROP TABLE` of the parents is not blocked by the
+        // incoming `booking_drafts` FK (2BP01); its `nullOnDelete` only
+        // applies to row DELETEs, never to DROP TABLE.
+        Schema::dropIfExists('booking_drafts');
         Schema::dropIfExists('grave_records');
         Schema::dropIfExists('cemetery_packages');
         Schema::dropIfExists('cemetery_capability_profiles');

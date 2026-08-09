@@ -10,16 +10,22 @@ Three batches shipped on 08 Aug 2026 (CI run [`31248602859`](https://github.com/
 
 **Route-vocabulary gap, unresolved and not owned here.** The shipped paths are `/cemeteries…`, matching the noun `docs/contracts/openapi.yaml` already uses, **not** `information-architecture.md`'s Indonesian route tree. Reconciling IA §1 with the shipped URIs belongs to whoever owns `information-architecture.md`; it is recorded, not fixed.
 
+## Revision note — 09 August 2026, Sprint 4 S4-T4/S4-T5 (booking wizard Steps 1–5)
+
+S4-T4/S4-T5 resumed 08 Aug 2026 and Steps 1–5 are now **built and reviewed on an unmerged branch** — not merged, not CI-verified, not deployed. The five booking rows below (PUB-010, PUB-011's wizard-embed entry point, PUB-012, PUB-013, PUB-014) and PUB-080 are corrected accordingly; each says "implemented, pending merge/CI" rather than "shipped", which in this file has so far meant deployed. The 08 Aug note above is left verbatim.
+
+**PUB-011's two entry points are still two.** The wizard's Step 2 is its own list-plus-package-picker inside `/pemesanan-makam`, sharing `CemeteryPublicQuery` with the standalone `/cemeteries` page but not its Blade views. AC3's full field list (photo, address, Maps URL, facilities, attributed price range) is rendered on the **standalone** entry point only; the wizard embed currently shows name, type, and — where the cemetery has them — its package/class choices. That remains a real gap in the embed, recorded here rather than implied away by the row now reading as built.
+
 ## A. Public
 
 | Screen ID | Screen | Key states |
 |---|---|---|
 | PUB-001 | Homepage | normal, urgent unavailable, degraded notification |
-| PUB-010 | Booking Step 1 — Kota | loading, populated, no city — **not built** (S4-T4 paused). The five launch cities do ship as filters on PUB-011's standalone entry point, but that is not this screen |
-| PUB-011 | **Cemetery directory — list + detail.** Two entry points: standalone `/cemeteries` and `/cemeteries/{cemeterySlug}` (**shipped** 08 Aug 2026, S4-T6) · booking Step 2 embed (not built) | list, city/type filter, detail, no result — all shipped. Also shipped: validation error on an unknown filter (list still renders), authorization failure (draft slug 404s indistinguishably from an unknown one; "plot layout is not public for this cemetery" instead of a blank), provider unavailable, pending, support. **Absent:** duplicate/retry-safe, success, gated fallback banner — no mutation, no gate, no success outcome on a read-only browse surface |
-| PUB-012 | Booking Step 3 — Jenis layanan | available, conditional, gated |
-| PUB-013 | Booking Step 4 — Layanan | package, add-on, unavailable item |
-| PUB-014 | Booking Step 5 — Ringkasan | valid quote, changed price, expired quote |
+| PUB-010 | Booking Step 1 — Kota — `/pemesanan-makam` | loading, populated, no city — **implemented, pending merge/CI** (09 Aug 2026, S4-T4). All five launch cities are offered here in canonical order, so this screen no longer borrows PUB-011's filters as evidence |
+| PUB-011 | **Cemetery directory — list + detail.** Two entry points: standalone `/cemeteries` and `/cemeteries/{cemeterySlug}` (**shipped** 08 Aug 2026, S4-T6) · booking Step 2 embed (**implemented, pending merge/CI** 09 Aug 2026, S4-T4 — name/type plus a package/class picker where the cemetery has active packages; AC3's fuller field list is on the standalone entry point only) | list, city/type filter, detail, no result — all shipped. Also shipped: validation error on an unknown filter (list still renders), authorization failure (draft slug 404s indistinguishably from an unknown one; "plot layout is not public for this cemetery" instead of a blank), provider unavailable, pending, support. **Absent:** duplicate/retry-safe, success, gated fallback banner — no mutation, no gate, no success outcome on a read-only browse surface |
+| PUB-012 | Booking Step 3 — Jenis layanan | available — **implemented, pending merge/CI** (09 Aug 2026, S4-T4); all four service types are offered under their `mvp-scope.md` labels. **conditional and gated are absent**: no per-cemetery Makam Tumpang precondition and no Urgent/Pre-Need gate wiring exists yet — recorded, not implied |
+| PUB-013 | Booking Step 4 — Layanan | package, add-on — **implemented, pending merge/CI** (09 Aug 2026, S4-T4); the 12 catalogue services render under their real names, basics mandatory. **unavailable item is absent** — no per-service availability signal exists in the catalogue yet |
+| PUB-014 | Booking Step 5 — Ringkasan | valid quote — **implemented, pending merge/CI** (09 Aug 2026, S4-T4), as a computed presentation over current price versions with an honest "harga belum tersedia" when any price is missing. **changed price and expired quote are absent** — there is no persisted Quote row (AC8, out of scope for this batch), so there is nothing to expire or re-confirm against |
 | PUB-015 | Booking Step 6 — Data pemesan | validation, authenticated prefill |
 | PUB-016 | Booking Step 7 — Almarhum/dokumen | upload, scan pending, rejected file |
 | PUB-017 | Booking Step 8 — Pembayaran | online, manual fallback, pending, failed |
@@ -40,7 +46,7 @@ Three batches shipped on 08 Aug 2026 (CI run [`31248602859`](https://github.com/
 | PUB-060 | Help/contact — `/bantuan` | channels, hours, emergency disclaimer (`.kiro/specs/help-centre-missing-route` — bugfix spec; no owning feature spec yet, see traceability §E) |
 | PUB-070 | Kebijakan Privasi — `/privasi` | static policy sections, draft-pending-legal-review notice, customer-service CTA |
 | PUB-071 | Syarat & Ketentuan — `/syarat-ketentuan` | static terms sections, draft-pending-legal-review notice, customer-service CTA |
-| PUB-080 | Coming-soon stub — **`/pemesanan-makam` only** (temporary; replaced by its real screen, PUB-010, when S4-T4 resumes) | not-yet-built explanation, contact channels, back-to-homepage and help CTAs |
+| PUB-080 | Coming-soon stub — **no route left** as of 09 Aug 2026 (verified against `routes/web.php`: `/pemesanan-makam` now resolves to `BookingWizard`; `BookingWizardComingSoon` survives as deliberately-retained dead code, as `MarketplaceComingSoon` and `RenewalComingSoon` already do). S4-T4's branch replaces `/pemesanan-makam`'s `BookingWizardComingSoon` stub with the real wizard (PUB-010), the same way `RenewalStart` replaced `RenewalComingSoon`; the row is retained, not deleted, because the stub pattern is still the documented answer for a route whose screen is not built. **Pending merge/CI** — the stub is still what is deployed | not-yet-built explanation, contact channels, back-to-homepage and help CTAs |
 
 ## B. Admin
 
