@@ -144,6 +144,33 @@ final class NotificationTemplatePersistenceTest extends TestCase
         $this->assertSame('EMAIL', NotificationTemplate::query()->where('event_name', 'Quote issued')->value('default_channel'));
     }
 
+    public function test_matrix_seed_up_is_idempotent_and_reconciles_existing_rows(): void
+    {
+        $draftTemplate = NotificationTemplate::query()->where('event_name', 'Booking draft created')->sole();
+        $draftVersionId = $draftTemplate->active_version_id;
+        $templateCount = NotificationTemplate::query()->count();
+        $versionCount = NotificationTemplateVersion::query()->count();
+
+        // Simulate a prior seed that used the old external fallback and a
+        // partial rerun that lost the active pointer.
+        DB::table('notification_templates')
+            ->whereKey($draftTemplate->id)
+            ->update(['default_channel' => 'EMAIL', 'active_version_id' => null]);
+
+        DB::table('migrations')
+            ->where('migration', '2026_08_09_100020_seed_notification_templates_from_matrix')
+            ->delete();
+
+        $seed = require base_path('database/migrations/2026_08_09_100020_seed_notification_templates_from_matrix.php');
+        $seed->up();
+
+        $this->assertSame($templateCount, NotificationTemplate::query()->count());
+        $this->assertSame($versionCount, NotificationTemplateVersion::query()->count());
+        $this->assertNull($draftTemplate->fresh()->default_channel);
+        $this->assertSame($draftVersionId, $draftTemplate->fresh()->active_version_id);
+        $this->assertSame('EMAIL', NotificationTemplate::query()->where('event_name', 'Booking submitted')->value('default_channel'));
+    }
+
     public function test_notification_schema_has_json_variable_snapshots_and_no_version_update_timestamp(): void
     {
         $defaultChannel = array_values(array_filter(
