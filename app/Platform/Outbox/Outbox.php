@@ -46,10 +46,20 @@ use Carbon\CarbonImmutable;
  * at the point of insert. Finding N-10 (`docs/planning/sprint-plan.md`)
  * flagged the correlation mechanism as "prepared, not proven end-to-end"
  * because no real consumer existed yet — this is that consumer. It is
- * still not a full end-to-end proof (see this batch's report for exactly
- * what tests do and do not exercise: request boundary -> outbox insert is
- * covered; outbox -> queue job -> provider/notification propagation is
- * not, because no provider/notification classes exist in this repo yet).
+ * still not a full end-to-end proof. What is now exercised, after the
+ * 09 Aug 2026 retrofit wired real `app/Domain/Booking/Actions/**`
+ * producers:
+ *   - request boundary -> outbox insert is covered
+ *     (`OutboxCorrelationTest`, with the correlation context bound
+ *     directly rather than exercised through `AssignCorrelationId`
+ *     middleware);
+ *   - outbox -> queue-job dispatch is covered end to end
+ *     (`OutboxBookingDraftPublicationTest` proves a real producer's row
+ *     is claimed and `PublishOutboxEventJob` pushed;
+ *     `OutboxRecoveryTest` runs that job to completion on the sync
+ *     queue);
+ *   - provider/notification propagation is NOT covered, because no
+ *     provider/notification classes exist in this repo yet.
  */
 final class Outbox
 {

@@ -34,7 +34,7 @@ final class ServiceCatalogQuery
     }
 
     /**
-     * The 11 catalogue-defined "Additional services", active only, in
+     * The 10 catalogue-defined "Additional services", active only, in
      * `service-catalog.md`'s own table order.
      *
      * @return Collection<int, ServiceDefinition>

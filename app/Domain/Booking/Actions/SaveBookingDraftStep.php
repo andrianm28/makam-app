@@ -16,6 +16,8 @@ use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\AuditSubject;
+use App\Platform\Outbox\Outbox;
+use App\Platform\Outbox\OutboxClassification;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -124,6 +126,38 @@ final readonly class SaveBookingDraftStep
                 'last_idempotency_key' => $idempotencyKey,
             ]);
             $current->save();
+
+            // `platform-outbox` AC1 — same transaction as the save above.
+            // Provisional event name; see `StartBookingDraft`'s own note and
+            // finding N-17 for why `event-catalog.md` has no entry to use.
+            Outbox::record(
+                eventName: 'booking.draft_step_saved.v1',
+                eventVersion: 1,
+                aggregateType: 'booking_draft',
+                aggregateId: $current->id,
+                data: [
+                    'draft_id' => $current->id,
+                    'step' => $step,
+                    'version' => $current->version,
+                    'completed_steps' => $current->completed_steps,
+                    // AC2 is references-only: the step's own `$payload`
+                    // (city, cemetery, service selections) is CONTENT and is
+                    // deliberately not forwarded. A consumer reads the draft
+                    // by `draft_id`. This also keeps the event immune to a
+                    // future step adding a restricted field, rather than
+                    // relying on `PayloadClassification`'s key-name denylist
+                    // — which its own doc block says is "not a substitute for
+                    // producers themselves following references-only."
+                ],
+                classification: OutboxClassification::Internal,
+                // `version` bumps exactly once per accepted save, so this is
+                // unique per real save yet deterministic. Step alone is not
+                // unique: back-navigation legitimately re-saves a step (AC11)
+                // and each re-save is a distinct event, not a replay. A true
+                // replay never reaches here — it returns early above, before
+                // this transaction opens.
+                idempotencyKey: "booking_draft:{$current->id}:step:{$step}:v{$current->version}",
+            );
 
             Audit::record(
                 action: 'BOOKING_DRAFT_STEP_SAVED',

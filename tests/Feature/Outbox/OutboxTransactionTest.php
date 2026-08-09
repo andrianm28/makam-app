@@ -25,9 +25,13 @@ use Tests\TestCase;
  * caller's own, exactly as `Outbox::record()`'s doc block instructs.
  *
  * Uses `Tests\Fixtures\OutboxFixtureAggregate`, not a real domain model —
- * `app/Domain/**` is empty scaffolding; no real business mutation exists in
- * this repo yet to prove AC1 against. Stated plainly, matching this
- * project's established honesty discipline (see this batch's report).
+ * this is the standalone-transaction proof (record a row inside a
+ * caller-owned transaction that rolls back), complementary to the
+ * real-producer proof in
+ * `tests/Feature/Domain/Booking/Actions/BookingDraftOutboxTest.php` and
+ * `tests/Feature/Outbox/OutboxBookingDraftPublicationTest.php`, which
+ * exercise `app/Domain/Booking/Actions/**`'s own transactions. Stated
+ * plainly, matching this project's established honesty discipline.
  */
 final class OutboxTransactionTest extends TestCase
 {
