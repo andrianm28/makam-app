@@ -129,8 +129,125 @@
                     Kembali
                 </x-mk.button>
             </section>
+        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::SERVICES)
+            <section aria-labelledby="booking-step-4-heading">
+                <h2 id="booking-step-4-heading" class="mb-3 text-lg font-semibold text-neutral-900">
+                    Langkah 4 &mdash; Pilih Layanan
+                </h2>
+
+                <fieldset class="flex flex-col gap-6">
+                    <legend class="sr-only">Pilih layanan</legend>
+
+                    <div>
+                        <p class="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-600">
+                            Layanan dasar
+                        </p>
+                        <ul class="flex flex-col gap-2">
+                            @foreach (\App\Domain\ServiceCatalog\ServiceCode::BASIC_CODES as $code)
+                                <li class="flex items-center gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                                    <input
+                                        type="checkbox"
+                                        id="service-{{ $code }}"
+                                        value="{{ $code }}"
+                                        wire:model="stagedServiceCodes"
+                                        checked
+                                        disabled
+                                        class="touch-target"
+                                    />
+                                    <label for="service-{{ $code }}" class="flex-1 text-base text-neutral-800">
+                                        {{ $code }}
+                                    </label>
+                                    <x-mk.badge intent="neutral">Wajib</x-mk.badge>
+                                </li>
+                            @endforeach
+                        </ul>
+                    </div>
+
+                    <div>
+                        <p class="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-600">
+                            Layanan tambahan
+                        </p>
+                        <ul class="flex flex-col gap-2">
+                            @foreach (\App\Domain\ServiceCatalog\ServiceCode::ADDITIONAL_CODES as $code)
+                                <li class="flex items-center gap-3 rounded-lg border border-neutral-200 bg-neutral-0 p-3">
+                                    <input
+                                        type="checkbox"
+                                        id="service-{{ $code }}"
+                                        value="{{ $code }}"
+                                        wire:model="stagedServiceCodes"
+                                        class="touch-target"
+                                    />
+                                    <label for="service-{{ $code }}" class="flex-1 text-base text-neutral-800">
+                                        {{ $code }}
+                                    </label>
+                                </li>
+                            @endforeach
+                        </ul>
+                    </div>
+                </fieldset>
+
+                @error('selected_services')
+                    <p class="mt-3 text-sm text-danger-700" role="alert">{{ $message }}</p>
+                @enderror
+
+                <div class="mt-4 flex gap-3">
+                    <x-mk.button variant="tertiary" wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::SERVICE_TYPE }})">
+                        Kembali
+                    </x-mk.button>
+                    <x-mk.button
+                        variant="primary"
+                        wire:click="continueFromStep4"
+                        wire:loading.attr="disabled"
+                        wire:target="continueFromStep4"
+                    >
+                        Lanjutkan
+                    </x-mk.button>
+                </div>
+            </section>
+        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::SUMMARY)
+            <section aria-labelledby="booking-step-5-heading">
+                <h2 id="booking-step-5-heading" class="mb-3 text-lg font-semibold text-neutral-900">
+                    Langkah 5 &mdash; Ringkasan Pesanan
+                </h2>
+
+                @if ($summary !== null)
+                    <x-mk.table
+                        caption="Ringkasan layanan yang dipilih"
+                        :headers="[
+                            ['key' => 'label', 'label' => 'Layanan'],
+                            ['key' => 'quantity', 'label' => 'Jumlah', 'numeric' => true],
+                            ['key' => 'price', 'label' => 'Harga', 'numeric' => true],
+                        ]"
+                        :rows="collect($summary['lines'])->map(fn ($line) => [
+                            'label' => $line['label'],
+                            'quantity' => $line['quantity'],
+                            'price' => $line['line_total'] !== null
+                                ? 'Rp ' . number_format($line['line_total'], 0, ',', '.')
+                                : 'Harga belum tersedia',
+                        ])->all()"
+                    />
+
+                    <p class="mt-4 text-base font-semibold text-neutral-900">
+                        @if ($summary['total'] !== null)
+                            Total: Rp {{ number_format($summary['total'], 0, ',', '.') }}
+                        @else
+                            Total belum dapat dihitung &mdash; sebagian harga layanan belum tersedia.
+                        @endif
+                    </p>
+                @endif
+
+                <x-mk.button variant="tertiary" wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::SERVICES }})" class="mt-4">
+                    Kembali
+                </x-mk.button>
+            </section>
         @endif
 
-        {{-- Steps 4-5 are added by Task 10 --}}
+        <div aria-live="polite" class="mt-4 text-sm text-neutral-600">
+            @if ($autosaveState === 'saved')
+                <span>Tersimpan</span>
+            @elseif ($autosaveState === 'failed')
+                <span class="text-danger-700">Gagal menyimpan &mdash; coba lagi</span>
+            @endif
+        </div>
     </div>
 </div>

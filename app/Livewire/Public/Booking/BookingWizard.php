@@ -11,6 +11,7 @@ use App\Domain\Booking\BookingWizardStep;
 use App\Domain\Booking\Exceptions\BookingStepValidationException;
 use App\Domain\Booking\Models\BookingDraft;
 use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
+use App\Domain\ServiceCatalog\ServiceCode;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -65,9 +66,33 @@ final class BookingWizard extends Component
 
     public bool $cemeteryListUnavailable = false;
 
+    /**
+     * `idle` before any save, `saving` never actually observed server-side
+     * (Livewire round-trips are synchronous from this class's perspective;
+     * the Blade view's `wire:loading` targets the transient in-flight
+     * state), `saved` or `failed` after the most recent step-save attempt.
+     * Inline, never a toast — `booking-wizard-fields.md` §Global behavior
+     * and `public-booking-wizard/design.md`'s own autosave affordance
+     * section.
+     */
+    public string $autosaveState = 'idle';
+
+    /**
+     * Step 4's checkbox staging area — every `ServiceCode` currently
+     * checked in the UI, `wire:model`-bound one entry per checkbox.
+     * `ServiceCode::BASIC_CODES` are always present here (mandatory,
+     * non-removable per `service-catalog.md`) whether or not the draft has
+     * reached step 4 yet — see `mount()`/`hydrateFrom()`.
+     *
+     * @var list<string>
+     */
+    public array $stagedServiceCodes = [];
+
     public function mount(?string $draftId = null): void
     {
         if ($draftId === null) {
+            $this->stagedServiceCodes = ServiceCode::BASIC_CODES;
+
             return;
         }
 
@@ -78,6 +103,7 @@ final class BookingWizard extends Component
             // working state" discipline as RenewalStart::mount() for an
             // unknown ?kota=.
             $this->draftId = null;
+            $this->stagedServiceCodes = ServiceCode::BASIC_CODES;
 
             return;
         }
@@ -95,6 +121,10 @@ final class BookingWizard extends Component
         $this->selectedServices = $draft->selected_services;
         $this->completedSteps = $draft->completed_steps;
         $this->currentStep = $draft->current_step;
+
+        $this->stagedServiceCodes = $this->selectedServices !== []
+            ? array_column($this->selectedServices, 'code')
+            : ServiceCode::BASIC_CODES;
     }
 
     public function saveStep1(string $cityCode): void
@@ -107,9 +137,11 @@ final class BookingWizard extends Component
             });
 
             $this->hydrateFrom($saved);
+            $this->autosaveState = 'saved';
 
             $this->redirect(route('pemesanan-makam.draft', ['draftId' => $saved->id]), navigate: false);
         } catch (BookingStepValidationException $e) {
+            $this->autosaveState = 'failed';
             $this->addError('city_code', $e->getErrors()['city_code'][0] ?? 'Kota tidak valid.');
         }
     }
@@ -125,6 +157,31 @@ final class BookingWizard extends Component
     public function saveStep3(string $serviceType): void
     {
         $this->saveStepOrShowErrors(BookingWizardStep::SERVICE_TYPE, ['service_type' => $serviceType]);
+    }
+
+    /**
+     * @param  list<array{code: string, quantity: int}>  $selectedServices
+     */
+    public function saveStep4(array $selectedServices): void
+    {
+        $this->saveStepOrShowErrors(BookingWizardStep::SERVICES, ['selected_services' => $selectedServices]);
+    }
+
+    /**
+     * The Blade "Lanjutkan" trigger for step 4 — `wire:click` cannot build
+     * the `list<array{code, quantity}>` shape `saveStep4()` needs directly
+     * from `$stagedServiceCodes` (a Livewire action-call expression is
+     * evaluated client-side, not PHP), so this zero-arg wrapper reads the
+     * checkbox-bound property server-side and calls `saveStep4()` with the
+     * shape it expects. Quantity is always 1 — this batch has no
+     * quantity/variant picker UI; see the task report for that scope note.
+     */
+    public function continueFromStep4(): void
+    {
+        $this->saveStep4(array_map(
+            static fn (string $code): array => ['code' => $code, 'quantity' => 1],
+            $this->stagedServiceCodes,
+        ));
     }
 
     private function saveStepOrShowErrors(int $step, array $payload): void
@@ -143,7 +200,9 @@ final class BookingWizard extends Component
             $saved = (new SaveBookingDraftStep)($draft, $step, $payload, (string) Str::uuid());
 
             $this->hydrateFrom($saved);
+            $this->autosaveState = 'saved';
         } catch (BookingStepValidationException $e) {
+            $this->autosaveState = 'failed';
             foreach ($e->getErrors() as $field => $messages) {
                 $this->addError($field, $messages[0]);
             }
@@ -183,11 +242,21 @@ final class BookingWizard extends Component
             }
         }
 
+        $summary = null;
+        if ($this->currentStep === BookingWizardStep::SUMMARY && $this->draftId !== null) {
+            $draft = BookingDraftQuery::find($this->draftId);
+            if ($draft !== null) {
+                $summary = BookingDraftQuery::summary($draft);
+            }
+        }
+
         return view('livewire.public.booking.wizard', [
             'cities' => CemeteryPublicQuery::launchCities(),
             'cemeteries' => $cemeteries,
             'stepLabels' => BookingWizardStep::labels(),
             'lastImplementedStep' => BookingWizardStep::LAST_IMPLEMENTED,
+            'allServiceCodes' => ServiceCode::KNOWN_CODES,
+            'summary' => $summary,
         ])->layout('layouts.app', [
             'title' => 'Pemesanan Makam - Makam.co.id',
             'active' => null,
