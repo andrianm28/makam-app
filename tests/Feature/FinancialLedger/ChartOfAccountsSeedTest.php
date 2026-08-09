@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\Feature\FinancialLedger;
 
-use App\Platform\FinancialLedger\ChartOfAccounts;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -15,13 +14,28 @@ final class ChartOfAccountsSeedTest extends TestCase
 
     public function test_the_minimal_chart_of_accounts_is_seeded_exactly(): void
     {
-        $this->assertSame(ChartOfAccounts::initialAccounts(), DB::table('coa_accounts')->orderBy('code')->get()->map(
+        $expectedAccounts = [
+            ['code' => '1000', 'name' => 'Aset — Piutang Pelanggan', 'normal_balance' => 'DR'],
+            ['code' => '2000', 'name' => 'Liabilitas — Pendapatan Diterima', 'normal_balance' => 'CR'],
+            ['code' => '4000', 'name' => 'Pendapatan — Layanan', 'normal_balance' => 'CR'],
+            ['code' => '5000', 'name' => 'HPP / Komisi Vendor', 'normal_balance' => 'DR'],
+            ['code' => '6000', 'name' => 'Beban — Biaya Channel', 'normal_balance' => 'DR'],
+            ['code' => '6100', 'name' => 'Beban — Refund', 'normal_balance' => 'DR'],
+            ['code' => '7000', 'name' => 'Rekening Kas/Bank', 'normal_balance' => 'DR'],
+        ];
+
+        $actualAccounts = DB::table('coa_accounts')->orderBy('code')->get()->map(
             static fn (object $account): array => [
                 'code' => $account->code,
                 'name' => $account->name,
                 'normal_balance' => $account->normal_balance,
             ],
-        )->all());
+        )->all();
+
+        $this->assertCount(7, $actualAccounts);
+        foreach ($expectedAccounts as $expectedAccount) {
+            $this->assertContains($expectedAccount, $actualAccounts);
+        }
     }
 
     public function test_the_chart_of_accounts_accepts_additive_finance_owner_accounts(): void

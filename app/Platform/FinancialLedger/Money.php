@@ -15,7 +15,20 @@ use OverflowException;
  */
 final readonly class Money
 {
-    public function __construct(public int $minorUnits) {}
+    public readonly int $minorUnits;
+
+    /**
+     * @param  mixed  $minorUnits  The runtime boundary is checked explicitly so
+     *                             weak callers cannot truncate a float to int.
+     */
+    public function __construct(mixed $minorUnits)
+    {
+        if (! is_int($minorUnits)) {
+            throw new \TypeError('Money minor units must be an integer.');
+        }
+
+        $this->minorUnits = $minorUnits;
+    }
 
     /**
      * Convert a decimal string to the configured integer minor-unit value.
@@ -95,6 +108,10 @@ final readonly class Money
 
     public function format(): string
     {
+        if ($this->minorUnits === PHP_INT_MIN) {
+            throw new OverflowException('Money value cannot be formatted within the integer range.');
+        }
+
         $factor = self::factor(self::minorUnits());
         $isNegative = $this->minorUnits < 0;
         $absolute = $isNegative ? -$this->minorUnits : $this->minorUnits;

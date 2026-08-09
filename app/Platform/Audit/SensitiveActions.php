@@ -36,6 +36,7 @@ final class SensitiveActions
         'CERTIFICATE_REVOKE',
         'VENDOR_PAYOUT',
         'PRICE_VERSION_RECORDED',
+        'SERVICE_DEFINITION_PRICE_VERSION_RECORDED',
 
         // Added by S3-T2 (platform-identity-and-access MFA batch). Only
         // the explicit, human-initiated revoke

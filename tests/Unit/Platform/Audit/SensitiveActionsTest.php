@@ -28,6 +28,7 @@ final class SensitiveActionsTest extends TestCase
             'certificate revoke' => ['CERTIFICATE_REVOKE'],
             'vendor payout' => ['VENDOR_PAYOUT'],
             'price version recorded' => ['PRICE_VERSION_RECORDED'],
+            'service definition price version recorded' => ['SERVICE_DEFINITION_PRICE_VERSION_RECORDED'],
         ];
     }
 
@@ -61,6 +62,7 @@ final class SensitiveActionsTest extends TestCase
      * that one MFA action, not all four, requires a reason), not a
      * regression. Renamed and updated rather than left red. Wave 0c later
      * added `PRICE_VERSION_RECORDED` as the financial price-version action.
+     * The ServiceCatalog action uses its domain-qualified emitted name too.
      */
     public function test_the_list_contains_the_requirements_named_actions_plus_mfa_reset_and_price_version_recorded(): void
     {
@@ -74,6 +76,7 @@ final class SensitiveActionsTest extends TestCase
                 'CERTIFICATE_REVOKE',
                 'VENDOR_PAYOUT',
                 'PRICE_VERSION_RECORDED',
+                'SERVICE_DEFINITION_PRICE_VERSION_RECORDED',
                 'MFA_RESET',
             ],
             SensitiveActions::ACTIONS

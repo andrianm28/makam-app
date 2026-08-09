@@ -13,6 +13,7 @@ use App\Domain\ServiceCatalog\Models\ServiceDefinition;
 use App\Domain\ServiceCatalog\ServiceCatalogAuditActions;
 use App\Domain\ServiceCatalog\ServiceCode;
 use App\Domain\ServiceCatalog\ServicePackageItemType;
+use App\Platform\Audit\Exceptions\AuditReasonRequiredException;
 use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\Audit\SensitiveActions;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -21,11 +22,8 @@ use Tests\TestCase;
 
 /**
  * Proves this batch's Audit-integration decision: every write Action calls
- * `App\Platform\Audit\Audit::record()`, but none of the four action names
- * are on `SensitiveActions::ACTIONS` — the judgement call
- * `App\Domain\ServiceCatalog\ServiceCatalogAuditActions`'s own doc block
- * documents. Mirrors `tests/Feature/Domain/Faq/FaqAuditIntegrationTest.php`'s
- * own shape.
+ * `App\Platform\Audit\Audit::record()`, and the emitted price-version action
+ * is covered by the platform's mandatory-reason list.
  */
 final class ServiceCatalogAuditIntegrationTest extends TestCase
 {
@@ -42,17 +40,19 @@ final class ServiceCatalogAuditIntegrationTest extends TestCase
         ]];
     }
 
-    public function test_none_of_the_service_catalog_audit_actions_are_sensitive_listed(): void
+    public function test_only_the_emitted_price_version_action_is_sensitive_listed(): void
     {
         foreach ([
             ServiceCatalogAuditActions::PACKAGE_DEFINED,
             ServiceCatalogAuditActions::PACKAGE_VERSION_PUBLISHED,
             ServiceCatalogAuditActions::PACKAGE_VERSION_REVISED,
-            ServiceCatalogAuditActions::PRICE_VERSION_RECORDED,
         ] as $action) {
             $this->assertNotContains($action, SensitiveActions::ACTIONS, "{$action} should not be sensitive-listed.");
             $this->assertFalse(SensitiveActions::requiresReason($action), "{$action} should not require a mandatory reason.");
         }
+
+        $this->assertContains(ServiceCatalogAuditActions::PRICE_VERSION_RECORDED, SensitiveActions::ACTIONS);
+        $this->assertTrue(SensitiveActions::requiresReason(ServiceCatalogAuditActions::PRICE_VERSION_RECORDED));
     }
 
     public function test_define_service_package_writes_an_audit_row(): void
@@ -134,12 +134,32 @@ final class ServiceCatalogAuditIntegrationTest extends TestCase
             serviceDefinition: $service,
             amount: '500000.00',
             actorReference: 11,
+            reason: 'Scheduled catalogue price update.',
         );
 
         $event = AuditEvent::query()->where('action', ServiceCatalogAuditActions::PRICE_VERSION_RECORDED)->sole();
         $this->assertSame('service_definition', $event->subject_type);
         $this->assertSame((string) $service->id, $event->subject_id);
         $this->assertSame((string) $priceVersion->version_number, $event->subject_version);
+    }
+
+    public function test_record_price_version_without_reason_is_rejected_and_rolled_back(): void
+    {
+        $service = ServiceDefinition::findByCode(ServiceCode::CATERING);
+        $priceVersionCount = $service->priceVersions()->count();
+
+        $this->expectException(AuditReasonRequiredException::class);
+
+        try {
+            (new RecordServiceDefinitionPriceVersion)(
+                serviceDefinition: $service,
+                amount: '500000.00',
+                actorReference: 11,
+            );
+        } finally {
+            $this->assertSame($priceVersionCount, $service->priceVersions()->count());
+            $this->assertDatabaseCount('audit_events', 0);
+        }
     }
 
     /**

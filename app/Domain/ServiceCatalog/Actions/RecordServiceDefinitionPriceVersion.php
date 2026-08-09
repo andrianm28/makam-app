@@ -59,12 +59,11 @@ use InvalidArgumentException;
  * its authority; both corrected 09 Aug 2026 by the ServiceCatalog
  * Superpowers retrofit, F9.)
  *
- * Audited via `Audit::record()` but not `SensitiveActions`-listed — see
- * `App\Domain\ServiceCatalog\ServiceCatalogAuditActions`'s own doc block.
- * (`App\Platform\Audit\SensitiveActions::ACTIONS` already lists
- * `TARIFF_SOURCE_CHANGE` for the unrelated grave-renewal tariff-source
- * concept — this catalogue price-versioning action is a distinct concept
- * from that one and is not added to it.)
+ * Audited via `Audit::record()` and listed in `SensitiveActions` under the
+ * emitted domain-qualified action name. (`App\Platform\Audit\SensitiveActions::ACTIONS`
+ * already lists `TARIFF_SOURCE_CHANGE` for the unrelated grave-renewal
+ * tariff-source concept; this catalogue price-versioning action is distinct
+ * and has its own explicit sensitive action.)
  */
 final readonly class RecordServiceDefinitionPriceVersion
 {

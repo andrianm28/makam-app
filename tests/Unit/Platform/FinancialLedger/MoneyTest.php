@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Tests\Unit\Platform\FinancialLedger;
 
 use App\Platform\FinancialLedger\Money;
+use InvalidArgumentException;
+use OverflowException;
+use Tests\Support\WeakMoneyCaller;
 use Tests\TestCase;
 use TypeError;
 
@@ -21,6 +24,13 @@ final class MoneyTest extends TestCase
         $this->assertSame(15000025, Money::fromDecimal('150000.25'));
         $this->assertSame(1, Money::fromDecimal('0.01'));
         $this->assertSame(10, Money::fromDecimal('0.1'));
+    }
+
+    public function test_from_decimal_rejects_non_zero_excess_precision(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        Money::fromDecimal('1.001');
     }
 
     public function test_money_round_trips_an_integer_minor_value(): void
@@ -47,10 +57,17 @@ final class MoneyTest extends TestCase
         $this->assertSame('Rp 150.000,25', (new Money(15000025))->format());
     }
 
-    public function test_float_constructor_input_is_rejected(): void
+    public function test_float_constructor_input_is_rejected_from_a_weak_caller(): void
     {
         $this->expectException(TypeError::class);
 
-        new Money(150000.0);
+        WeakMoneyCaller::construct(1.5);
+    }
+
+    public function test_format_rejects_php_int_min_without_negating_out_of_range(): void
+    {
+        $this->expectException(OverflowException::class);
+
+        (new Money(PHP_INT_MIN))->format();
     }
 }
