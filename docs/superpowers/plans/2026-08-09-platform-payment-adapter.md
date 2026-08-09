@@ -152,12 +152,12 @@ This plan's own "Current state" section flags the absent L4 ledger but does not 
 
 **Consequence, recorded so it is not re-litigated.** Tasks 3-8 (webhook receiver, async apply, manual fallback, reversals) all sit downstream of a *created* session, which conditions 2-6 gate. They hit this same wall. When they do, escalate rather than widening scope or stubbing the upstream.
 
-- [ ] **Step 1 (superseding):** `SessionState` closed-list enum + `GuardResult` with a `DENIED(condition, publicMessage)` shape and an explicit `UnavailableUpstream` denial reason distinct from a genuine domain denial.
-- [ ] **Step 2 (superseding):** `GuardPaymentSession` evaluating all six conditions in fixed order; condition 1 real, conditions 2/3/4/5/6 returning `UnavailableUpstream` denials that cite the missing upstream by name.
-- [ ] **Step 3 (superseding):** `payment_intents` + `payment_sessions` migrations and models (this lane owns them per §File Structure). Every guard evaluation — pass or deny — writes a `payment_intents` decision record; denials also write audit `PAYMENT_GUARD_DENIED` (outcome denied).
-- [ ] **Step 4 (superseding):** Tests: each of the six conditions denies, with conditions 2/3/4/5/6 asserting the `UnavailableUpstream` reason; a closed gate denies via condition 1; mode is never read from request input; no input combination reaches a PASS; no provider call is reachable from the guard.
-- [ ] **Step 5 (superseding):** Assert the fail-closed invariant directly — a test proving `GuardPaymentSession` has no reachable PASS outcome under the current upstream, so no `payment_sessions` row can be created by any caller.
-- [ ] **Step 6 (superseding):** Commit citing Wave 1b ruling 1b-L3-01. `CreatePaymentSession` and the provider seam are NOT implemented in this task.
+- [x] **Step 1 (superseding):** `SessionState` closed-list enum + `GuardResult` with a `DENIED(condition, publicMessage)` shape and an explicit `UnavailableUpstream` denial reason distinct from a genuine domain denial.
+- [x] **Step 2 (superseding):** `GuardPaymentSession` evaluating all six conditions in fixed order; condition 1 real, conditions 2/3/4/5/6 returning `UnavailableUpstream` denials that cite the missing upstream by name.
+- [x] **Step 3 (superseding):** `payment_intents` + `payment_sessions` migrations and models (this lane owns them per §File Structure). Every guard evaluation — pass or deny — writes a `payment_intents` decision record; denials also write audit `PAYMENT_GUARD_DENIED` (outcome denied).
+- [x] **Step 4 (superseding):** Tests: each of the six conditions denies, with conditions 2/3/4/5/6 asserting the `UnavailableUpstream` reason; a closed gate denies via condition 1; mode is never read from request input; no input combination reaches a PASS; no provider call is reachable from the guard.
+- [x] **Step 5 (superseding):** Assert the fail-closed invariant directly — a test proving `GuardPaymentSession` has no reachable PASS outcome under the current upstream, so no `payment_sessions` row can be created by any caller.
+- [x] **Step 6 (superseding):** Commit citing Wave 1b ruling 1b-L3-01. `CreatePaymentSession` and the provider seam are NOT implemented in this task.
 
 ---
 
