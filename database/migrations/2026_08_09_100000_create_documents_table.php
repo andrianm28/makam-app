@@ -87,6 +87,9 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('documents');
+        // Intentionally non-destructive: production rollback uses the
+        // previous application artifact against this forward-compatible
+        // schema. Document references and their retention state are durable
+        // records and must not be deleted by migration rollback.
     }
 };

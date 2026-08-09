@@ -56,6 +56,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('document_scans');
+        // Intentionally non-destructive: scan evidence is durable history and
+        // must remain available when the application artifact is rolled back.
+        // Schema compatibility is handled by a later forward migration.
     }
 };

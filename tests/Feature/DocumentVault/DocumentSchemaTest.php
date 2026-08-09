@@ -108,6 +108,18 @@ final class DocumentSchemaTest extends TestCase
         ]));
     }
 
+    public function test_the_partial_unique_index_allows_multiple_null_client_upload_ids(): void
+    {
+        DB::table('documents')->insert($this->documentAttributes([
+            'client_upload_id' => null,
+        ]));
+        DB::table('documents')->insert($this->documentAttributes([
+            'client_upload_id' => null,
+        ]));
+
+        $this->assertSame(2, DB::table('documents')->count());
+    }
+
     public function test_a_document_cannot_be_deleted_while_a_scan_attempt_references_it(): void
     {
         $documentId = (string) Str::uuid();
