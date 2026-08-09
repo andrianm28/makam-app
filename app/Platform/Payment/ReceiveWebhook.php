@@ -67,6 +67,8 @@ final readonly class ReceiveWebhook
 
     private const int MAX_TIMESTAMP_LENGTH = 32;
 
+    private const string SVIX_SIGNATURE_VERSION = 'v1';
+
     private const string EVENT_ID_SOURCE_SVIX = 'svix-id';
 
     private const string EVENT_ID_SOURCE_DIGEST = 'body-digest';
@@ -300,6 +302,7 @@ final readonly class ReceiveWebhook
     ): ReceiveWebhookResult {
         return DB::transaction(function () use ($inbound, $envelope, $exception): ReceiveWebhookResult {
             [$eventId] = $this->resolveEventIdentity($inbound);
+            $headerProblem = $this->signedHeaderProblem($inbound);
 
             // The lock is the recovery claim. It serializes duplicate retries
             // so only one caller can move RECEIVED through validation and
@@ -311,8 +314,16 @@ final readonly class ReceiveWebhook
                 ->first();
 
             if ($original !== null) {
-                if (! hash_equals((string) $original->payload_digest, hash('sha256', $inbound->rawBody))) {
-                    return $this->rejectMismatchedDuplicate($original, $inbound);
+                if (! $this->payloadDigestMatches($original, $inbound->rawBody)) {
+                    return $this->rejectDuplicatePayload(
+                        original: $original,
+                        inbound: $inbound,
+                        detail: 'payload digest mismatch for duplicate event id',
+                    );
+                }
+
+                if ($headerProblem !== null) {
+                    return $this->rejectDuplicatePayload($original, $inbound, $headerProblem);
                 }
 
                 return $this->resolveLockedDuplicate($original, $inbound, $envelope, $exception);
@@ -331,6 +342,18 @@ final readonly class ReceiveWebhook
 
             if ($original === null) {
                 throw $exception;
+            }
+
+            if (! $this->payloadDigestMatches($original, $inbound->rawBody)) {
+                return $this->rejectDuplicatePayload(
+                    original: $original,
+                    inbound: $inbound,
+                    detail: 'payload digest mismatch for secondary transaction and invoice guard',
+                );
+            }
+
+            if ($headerProblem !== null) {
+                return $this->rejectDuplicatePayload($original, $inbound, $headerProblem);
             }
 
             return $this->resolveLockedDuplicate($original, $inbound, $envelope, $exception);
@@ -392,9 +415,10 @@ final readonly class ReceiveWebhook
         return ReceiveWebhookResult::acknowledged(ProviderEventStatus::Duplicate, $original->getKey());
     }
 
-    private function rejectMismatchedDuplicate(
+    private function rejectDuplicatePayload(
         ProviderEvent $original,
         InboundWebhook $inbound,
+        string $detail,
     ): ReceiveWebhookResult {
         // The original row is immutable evidence. A different body under the
         // same provider event id is rejected and audited without rewriting the
@@ -402,11 +426,16 @@ final readonly class ReceiveWebhook
         $this->auditRejection(
             subjectId: $original->getKey(),
             status: ProviderEventStatus::RejectedPayload,
-            detail: 'payload digest mismatch for duplicate event id',
+            detail: $detail,
             inbound: $inbound,
         );
 
         return ReceiveWebhookResult::acknowledged(ProviderEventStatus::RejectedPayload, $original->getKey());
+    }
+
+    private function payloadDigestMatches(ProviderEvent $original, string $rawBody): bool
+    {
+        return hash_equals((string) $original->payload_digest, hash('sha256', $rawBody));
     }
 
     private function bounded(string $value, int $maxLength): string
@@ -435,6 +464,16 @@ final readonly class ReceiveWebhook
 
         if ($signature !== null && strlen($signature) > self::MAX_SIGNATURE_HEADER_LENGTH) {
             return 'svix-signature header is too long';
+        }
+
+        if ($signature !== null) {
+            foreach (preg_split('/\s+/', trim($signature), -1, PREG_SPLIT_NO_EMPTY) ?: [] as $entry) {
+                $parts = explode(',', $entry, 2);
+
+                if (count($parts) !== 2 || $parts[0] !== self::SVIX_SIGNATURE_VERSION || $parts[1] === '') {
+                    return 'svix-signature header is malformed';
+                }
+            }
         }
 
         return null;

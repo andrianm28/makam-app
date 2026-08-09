@@ -101,3 +101,9 @@ Shared-token webhook verification is disabled in the current adapter. A
 caller-supplied timestamp is not an authenticated freshness signal and cannot
 provide replay protection; only Svix-signed deliveries are accepted until a
 trusted provider freshness contract exists.
+
+### Amendment — fix round 3 ruling (`platform-payment-adapter` Task 3)
+
+The shared-token mechanism remains disabled until the provider supplies a
+trustworthy freshness mechanism that is itself signed/authenticated. A
+caller-supplied `svix-timestamp` cannot re-enable token-only verification.

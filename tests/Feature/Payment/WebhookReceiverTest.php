@@ -532,6 +532,120 @@ final class WebhookReceiverTest extends TestCase
         $this->assertStringContainsString('payload digest mismatch', (string) ($audit->metadata['note'] ?? ''));
     }
 
+    public function test_a_secondary_collision_with_a_different_body_cannot_recover_the_original_row(): void
+    {
+        $originalBody = $this->body(dataOverrides: [
+            'payment_id' => 'pay_secondary',
+            'order_id' => 'INV-secondary',
+        ]);
+        $retryBody = $this->body(dataOverrides: [
+            'payment_id' => 'pay_secondary',
+            'order_id' => 'INV-secondary',
+            'amount' => 1_500_001,
+        ]);
+        $originalTimestamp = (string) CarbonImmutable::now()->getTimestamp();
+
+        ProviderEvent::create([
+            'provider' => PaymentProviders::SUMOPOD_SANDBOX,
+            'provider_event_id' => 'msg_secondary_original',
+            'event_id_source' => 'svix-id',
+            'provider_transaction_id' => 'pay_secondary',
+            'invoice_reference' => 'INV-secondary',
+            'event_type' => 'payment.completed',
+            'merchant_ref' => self::MERCHANT,
+            'amount_minor' => 150_000_000,
+            'raw_payload' => $originalBody,
+            'payload_digest' => hash('sha256', $originalBody),
+            'signature_timestamp' => $originalTimestamp,
+            'signature_header' => $this->signature('msg_secondary_original', $originalTimestamp, $originalBody),
+            'status' => ProviderEventStatus::Received->value,
+            'received_at' => CarbonImmutable::now(),
+        ]);
+
+        $this->assertAcknowledged($this->deliver(
+            body: $retryBody,
+            id: 'msg_secondary_retry',
+        ));
+
+        $event = ProviderEvent::query()->sole();
+        $this->assertSame(ProviderEventStatus::Received->value, $event->status);
+        $this->assertSame(0, AuditEvent::query()->where('action', PaymentAuditActions::WEBHOOK_DUPLICATE)->count());
+        $audit = AuditEvent::query()->where('action', PaymentAuditActions::WEBHOOK_REJECTED)->sole();
+        $this->assertStringContainsString('payload digest mismatch', (string) ($audit->metadata['note'] ?? ''));
+    }
+
+    public function test_duplicate_recovery_rejects_an_overlong_signed_header_before_validation(): void
+    {
+        $body = $this->body(dataOverrides: ['payment_id' => 'pay_overlong_retry']);
+        $timestamp = (string) CarbonImmutable::now()->getTimestamp();
+        $validSignature = $this->signature('msg_overlong_retry', $timestamp, $body);
+
+        ProviderEvent::create([
+            'provider' => PaymentProviders::SUMOPOD_SANDBOX,
+            'provider_event_id' => 'msg_overlong_retry',
+            'event_id_source' => 'svix-id',
+            'provider_transaction_id' => 'pay_overlong_retry',
+            'invoice_reference' => 'INV-2026-0001',
+            'event_type' => 'payment.completed',
+            'merchant_ref' => self::MERCHANT,
+            'amount_minor' => 150_000_000,
+            'raw_payload' => $body,
+            'payload_digest' => hash('sha256', $body),
+            'signature_timestamp' => $timestamp,
+            'signature_header' => $validSignature,
+            'status' => ProviderEventStatus::Received->value,
+            'received_at' => CarbonImmutable::now(),
+        ]);
+
+        $this->assertAcknowledged($this->deliver(
+            body: $body,
+            id: 'msg_overlong_retry',
+            timestamp: $timestamp,
+            signature: $validSignature.' '.str_repeat('x', 4_097),
+        ));
+
+        $event = ProviderEvent::query()->sole();
+        $this->assertSame(ProviderEventStatus::Received->value, $event->status);
+        $audit = AuditEvent::query()->where('action', PaymentAuditActions::WEBHOOK_REJECTED)->sole();
+        $this->assertStringContainsString('svix-signature header is too long', (string) ($audit->metadata['note'] ?? ''));
+    }
+
+    public function test_duplicate_recovery_rejects_a_malformed_signed_header_before_validation(): void
+    {
+        $body = $this->body(dataOverrides: ['payment_id' => 'pay_malformed_retry']);
+        $timestamp = (string) CarbonImmutable::now()->getTimestamp();
+        $validSignature = $this->signature('msg_malformed_retry', $timestamp, $body);
+
+        ProviderEvent::create([
+            'provider' => PaymentProviders::SUMOPOD_SANDBOX,
+            'provider_event_id' => 'msg_malformed_retry',
+            'event_id_source' => 'svix-id',
+            'provider_transaction_id' => 'pay_malformed_retry',
+            'invoice_reference' => 'INV-2026-0001',
+            'event_type' => 'payment.completed',
+            'merchant_ref' => self::MERCHANT,
+            'amount_minor' => 150_000_000,
+            'raw_payload' => $body,
+            'payload_digest' => hash('sha256', $body),
+            'signature_timestamp' => $timestamp,
+            'signature_header' => $validSignature,
+            'status' => ProviderEventStatus::Received->value,
+            'received_at' => CarbonImmutable::now(),
+        ]);
+
+        $this->assertAcknowledged($this->deliver(
+            body: $body,
+            id: 'msg_malformed_retry',
+            timestamp: $timestamp,
+            signature: $validSignature.' malformed-entry',
+        ));
+
+        $event = ProviderEvent::query()->sole();
+        $this->assertSame(ProviderEventStatus::Received->value, $event->status);
+        $audit = AuditEvent::query()->where('action', PaymentAuditActions::WEBHOOK_REJECTED)->sole();
+        $this->assertStringContainsString('svix-signature header is malformed', (string) ($audit->metadata['note'] ?? ''));
+    }
+
     public function test_envelope_field_lengths_are_rejected_before_persistence(): void
     {
         $body = $this->body(dataOverrides: ['payment_id' => str_repeat('x', 129)]);
