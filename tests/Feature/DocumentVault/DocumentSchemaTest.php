@@ -7,6 +7,7 @@ namespace Tests\Feature\DocumentVault;
 use App\Platform\DocumentVault\DocumentKind;
 use App\Platform\DocumentVault\DocumentState;
 use App\Platform\DocumentVault\ScanVerdict;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -134,6 +135,95 @@ final class DocumentSchemaTest extends TestCase
             'evidence' => json_encode(['reason' => 'fixture'], JSON_THROW_ON_ERROR),
             'attempt' => 1,
             'scanned_at' => now(),
+        ]);
+
+        $this->expectException(QueryException::class);
+
+        DB::table('documents')->where('id', $documentId)->delete();
+    }
+
+    public function test_the_database_rejects_a_signed_url_grant_beyond_five_minutes(): void
+    {
+        $this->skipUnlessPostgres('signed_url_grants_expires_at_check');
+
+        $documentId = (string) Str::uuid();
+        DB::table('documents')->insert($this->documentAttributes([
+            'id' => $documentId,
+        ]));
+
+        $createdAt = CarbonImmutable::parse('2026-08-09 12:00:00');
+
+        $this->expectException(QueryException::class);
+
+        DB::table('signed_url_grants')->insert([
+            'document_id' => $documentId,
+            'purpose' => 'DOWNLOAD',
+            'token' => 'opaque-token-123',
+            'expires_at' => $createdAt->addSeconds(301),
+            'consumed_at' => null,
+            'created_at' => $createdAt,
+        ]);
+    }
+
+    public function test_the_database_rejects_an_unknown_access_event_purpose(): void
+    {
+        $this->skipUnlessPostgres('document_access_events_purpose_check');
+
+        $documentId = (string) Str::uuid();
+        DB::table('documents')->insert($this->documentAttributes([
+            'id' => $documentId,
+        ]));
+
+        $this->expectException(QueryException::class);
+
+        DB::table('document_access_events')->insert([
+            'document_id' => $documentId,
+            'actor_ref' => 'actor-123',
+            'actor_role' => 'admin',
+            'purpose' => 'PREVIEW',
+            'outcome' => 'allowed',
+            'ip_address' => '192.0.2.1',
+            'occurred_at' => now(),
+        ]);
+    }
+
+    public function test_the_database_rejects_an_unknown_access_event_outcome(): void
+    {
+        $this->skipUnlessPostgres('document_access_events_outcome_check');
+
+        $documentId = (string) Str::uuid();
+        DB::table('documents')->insert($this->documentAttributes([
+            'id' => $documentId,
+        ]));
+
+        $this->expectException(QueryException::class);
+
+        DB::table('document_access_events')->insert([
+            'document_id' => $documentId,
+            'actor_ref' => 'actor-123',
+            'actor_role' => 'admin',
+            'purpose' => 'VIEW',
+            'outcome' => 'unknown',
+            'ip_address' => '192.0.2.1',
+            'occurred_at' => now(),
+        ]);
+    }
+
+    public function test_a_document_cannot_be_deleted_while_a_signed_url_grant_references_it(): void
+    {
+        $documentId = (string) Str::uuid();
+        DB::table('documents')->insert($this->documentAttributes([
+            'id' => $documentId,
+        ]));
+
+        $createdAt = CarbonImmutable::parse('2026-08-09 12:00:00');
+        DB::table('signed_url_grants')->insert([
+            'document_id' => $documentId,
+            'purpose' => 'DOWNLOAD',
+            'token' => 'opaque-token-restrict',
+            'expires_at' => $createdAt->addMinutes(5),
+            'consumed_at' => null,
+            'created_at' => $createdAt,
         ]);
 
         $this->expectException(QueryException::class);
