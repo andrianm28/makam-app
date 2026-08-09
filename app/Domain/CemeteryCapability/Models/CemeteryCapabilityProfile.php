@@ -14,6 +14,7 @@ use App\Domain\CemeteryDirectory\Models\Cemetery;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use InvalidArgumentException;
 
 /**
  * Eloquent model for `cemetery_capability_profiles` — see the migration
@@ -116,7 +117,54 @@ final class CemeteryCapabilityProfile extends Model
             RegistryMode::assertKnown($profile->registry_mode);
             CertificateMode::assertKnown($profile->certificate_mode);
             VisitationMode::assertKnown($profile->visitation_mode);
+
+            self::assertValidModeCombination($profile);
         });
+    }
+
+    /**
+     * The six checks above validate each mode against its own closed list
+     * independently; nothing there stops a row whose six values are each
+     * individually legal but whose COMBINATION is not.
+     * `docs/domain/cemetery-capability-model.md` "Valid combinations" states
+     * three such rules. Only the first is expressible against a column on
+     * this table, and only that one is enforced here:
+     *
+     * - `SPECIFIC_PLOT` requires `registry_mode=AUTHORITATIVE` — enforced
+     *   below; it is also requirements.md AC7's "authoritative registry" limb
+     *   and `AGENTS.md` §Domain and financial invariants' "specific plot
+     *   requires authoritative inventory."
+     * - `RESERVE_PLOT` requires an atomic reservation contract and a
+     *   freshness SLO — NOT enforced: neither is a column on
+     *   `cemetery_capability_profiles`, so there is nothing here to compare.
+     * - `DIRECT_PURCHASE` additionally requires approved price, legal,
+     *   payment, cancellation, and certificate model — NOT enforced, same
+     *   reason. These two are activation-evidence preconditions carried by
+     *   the `source`/`owner`/`evidence` trail a human reviews, not by any
+     *   mode value; recorded here so the omission is deliberate and visible
+     *   rather than looking like an oversight.
+     *
+     * Correct-and-partial by construction: this is an Eloquent event, so a
+     * `DB::table()->insert()` bypasses it exactly as the six closed-list
+     * checks are bypassed. A database-level guard is the piece that would
+     * complete it and is deliberately not added here (`AGENTS.md`
+     * §Infrastructure-agent execution — a migration against an already
+     * deployed table needs human review).
+     *
+     * @throws InvalidArgumentException when the combination is not permitted.
+     */
+    private static function assertValidModeCombination(self $profile): void
+    {
+        if ($profile->availability_mode === AvailabilityMode::SPECIFIC_PLOT
+            && $profile->registry_mode !== RegistryMode::AUTHORITATIVE) {
+            throw new InvalidArgumentException(sprintf(
+                'Invalid capability combination: availability_mode [%s] requires registry_mode [%s], got [%s]. '
+                .'See docs/domain/cemetery-capability-model.md "Valid combinations" and requirements.md AC7.',
+                AvailabilityMode::SPECIFIC_PLOT,
+                RegistryMode::AUTHORITATIVE,
+                (string) $profile->registry_mode,
+            ));
+        }
     }
 
     /**
