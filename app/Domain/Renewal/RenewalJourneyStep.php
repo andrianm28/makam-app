@@ -20,9 +20,9 @@ use InvalidArgumentException;
  * own doc block names this journey as the single reason that prop exists:
  * "`labels` exists for a DIFFERENT JOURNEY, never for re-labelling
  * booking." Every renewal screen passes the same six, so they are defined
-     * once here rather than retyped per view — retyped labels are how a
-     * product contract quietly drifts, and design-system.md §9.2 MUST NOT
-     * 9 forbids renaming, reordering, or hiding a documented step.
+ * once here rather than retyped per view — retyped labels are how a
+ * product contract quietly drifts, and design-system.md §9.2 MUST NOT
+ * 9 forbids renaming, reordering, or hiding a documented step.
  *
  * This is NOT a database-backed closed list, so it has no `access_mode`-
  * style column behind it and no `booted()` hook validates it; it is the
