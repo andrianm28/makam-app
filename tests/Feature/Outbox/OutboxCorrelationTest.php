@@ -16,9 +16,11 @@ use Tests\TestCase;
  * correlation mechanism (finding N-10, `docs/planning/sprint-plan.md`) —
  * this proves `trace_id` is actually sourced from
  * `app(CorrelationContext::class)->current()?->value`, closing one of the
- * three consumer gaps N-10 listed (outbox; queue job and provider/
- * notification propagation remain unproven, since no real job/provider/
- * notification classes exist in this repo yet — see this batch's report).
+ * three consumer gaps N-10 listed. The queue-job half is now exercised by
+ * `OutboxBookingDraftPublicationTest` (outbox -> `PublishOutboxEventJob`
+ * dispatch) and `OutboxRecoveryTest` (the job running to completion on
+ * the sync queue); provider/notification propagation remains unproven,
+ * since no provider/notification classes exist in this repo yet.
  */
 final class OutboxCorrelationTest extends TestCase
 {

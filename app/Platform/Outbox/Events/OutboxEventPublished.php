@@ -15,9 +15,9 @@ namespace App\Platform\Outbox\Events;
  * ---------------------------------------------------------------------------
  * "Publish" here means "fire an in-process Laravel event carrying the
  * envelope." There is no real external message bus/broker adapter, and no
- * real consumer (listener) anywhere in this repo yet — every domain module
- * that would eventually listen for `payment.received.v1` etc. is still
- * empty scaffolding (`app/Domain/**`). That consumer wiring, along with
+ * real consumer (listener) for any of these envelopes exists anywhere in
+ * this repo yet — no domain module currently registers an
+ * `OutboxEventPublished` listener. That consumer wiring, along with
  * Horizon supervisors and bounded replay, is explicitly Sprint 6 scope per
  * `docs/planning/agent-execution-plan.md`. This class exists so
  * `OutboxPublisher`'s claim/dispatch loop has a real, observable, testable
