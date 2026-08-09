@@ -42,6 +42,14 @@ final class FaqPublicQuery
      * Published articles in one category, in display order. Never includes
      * a draft or unpublished article — see `FaqArticle::scopePublished()`.
      *
+     * `orderBy('id')` is a deterministic tiebreaker, not decoration: nothing
+     * guarantees `sort_order` is unique within a category (see
+     * `Actions\CreateFaqArticleDraft`'s own note), and without a tiebreaker
+     * two colliding rows order arbitrarily — differently between PostgreSQL
+     * and SQLite, and potentially differently between two requests on the
+     * same engine. Added 09 Aug 2026 (retrofit-faq fix wave) to every
+     * `sort_order` ordering in this class.
+     *
      * @return Collection<int, FaqArticle>
      */
     public static function articlesInCategory(int $categoryId): Collection
@@ -49,6 +57,7 @@ final class FaqPublicQuery
         return FaqArticle::published()
             ->inCategory($categoryId)
             ->orderBy('sort_order')
+            ->orderBy('id')
             ->get();
     }
 
@@ -64,6 +73,7 @@ final class FaqPublicQuery
             ->join('faq_categories', 'faq_categories.id', '=', 'faq_articles.category_id')
             ->orderBy('faq_categories.sort_order')
             ->orderBy('faq_articles.sort_order')
+            ->orderBy('faq_articles.id')
             ->select('faq_articles.*')
             ->get();
     }
@@ -85,6 +95,7 @@ final class FaqPublicQuery
         return FaqArticle::published()
             ->matching($term)
             ->orderBy('sort_order')
+            ->orderBy('id')
             ->get();
     }
 
