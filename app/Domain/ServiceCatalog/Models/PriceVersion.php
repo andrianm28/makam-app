@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\ServiceCatalog\Models;
 
+use App\Domain\ServiceCatalog\Exceptions\PriceVersionIsAppendOnlyException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
@@ -35,6 +36,40 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * introducing more polymorphic relations across modules is the right place
  * to add a project-wide morph map, at which point existing `priceable_type`
  * rows would need a one-time backfill.
+ *
+ * ---------------------------------------------------------------------------
+ * ENFORCEMENT ADDED 09 Aug 2026 (ServiceCatalog Superpowers retrofit, F26)
+ * ---------------------------------------------------------------------------
+ * Until then the "append-only" paragraph above — and
+ * `2026_07_26_180400_create_price_versions_table.php:55-56`'s "never delete or
+ * renumber a version after the fact" — were claims with nothing behind them:
+ * this class defined no `booted()` of any kind, so
+ * `$old->forceFill(['amount' => '1'])->save()` and `$old->delete()` both
+ * simply worked. `booted()` below closes exactly the gap that paragraph
+ * describes and no more:
+ *
+ * - INSERT is always allowed (that is what "append" means).
+ * - UPDATE is allowed only for the single legal mutation the paragraph names:
+ *   `superseded_at` alone, and only from `null` to a value. `Actions\
+ *   RecordServiceDefinitionPriceVersion` does exactly that
+ *   (`forceFill(['superseded_at' => $now])->save()`) and is unaffected.
+ *   Anything else — an `amount` rewrite, a `version_number` renumber, a
+ *   `superseded_at` un-stamp, even a no-op save — throws.
+ * - DELETE always throws.
+ *
+ * This is the property AC3's price snapshot depends on: a quote references a
+ * price version, and `design.md` §Consumption boundary says the quote holds
+ * the OLD snapshot, so a historical amount that can be rewritten in place is
+ * not a snapshot at all (`AGENTS.md` §Domain and financial invariants).
+ *
+ * Eloquent-level only, the same limit `App\Domain\Faq\Models\
+ * FaqArticleVersion`'s equivalent guard discloses: a raw
+ * `DB::table('price_versions')->update(...)` and a builder-level mass
+ * `PriceVersion::query()->...->update(...)`/`->delete()` both still bypass
+ * it. That is deliberate and load-bearing here — the dev-data seed migration
+ * (`2026_07_26_220000_...`) inserts through `DB::table()`, and existing tests
+ * clear/supersede seeded rows through the builder. The database-level close
+ * is ledgered with F11/F12, not attempted here.
  */
 final class PriceVersion extends Model
 {
@@ -68,6 +103,28 @@ final class PriceVersion extends Model
             'effective_from' => 'immutable_datetime',
             'superseded_at' => 'immutable_datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        self::saving(function (self $priceVersion): void {
+            if (! $priceVersion->exists) {
+                return;
+            }
+
+            $dirty = array_keys($priceVersion->getDirty());
+
+            $isTheOneLegalUpdate = $dirty === ['superseded_at']
+                && $priceVersion->getOriginal('superseded_at') === null;
+
+            if (! $isTheOneLegalUpdate) {
+                throw PriceVersionIsAppendOnlyException::forUpdate($priceVersion->getKey(), $dirty);
+            }
+        });
+
+        self::deleting(function (self $priceVersion): void {
+            throw PriceVersionIsAppendOnlyException::forDelete($priceVersion->getKey());
+        });
     }
 
     /**

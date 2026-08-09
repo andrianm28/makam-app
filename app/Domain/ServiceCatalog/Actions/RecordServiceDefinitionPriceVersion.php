@@ -32,6 +32,20 @@ use InvalidArgumentException;
  * fractional subunit in practice, but the column/parameter still avoid
  * float to stay correct if that ever changes).
  *
+ * The amount guard is a SHAPE assertion (`/^\d{1,10}(\.\d{1,2})?$/`), not
+ * `is_numeric()`. Corrected 09 Aug 2026 by the ServiceCatalog Superpowers
+ * retrofit (F7): `is_numeric()` admitted four classes of value the
+ * `decimal(12,2)` column cannot hold as written, and every one of them
+ * changed a MONEY value with no error and no trace — the audit `metadata`
+ * below carries only a sentence, never the amount. `'100.999'` was accepted
+ * and silently rounded by the database to `101.00`; `' 5000'` (leading
+ * whitespace) and `'1e9'` (exponent notation) were accepted; and
+ * `'99999999999.99'` (11 integer digits) reached the column and raised a raw
+ * `QueryException` rather than a domain error. The shape check closes all
+ * four in one guard and keeps the value a `string` end to end — no `float`
+ * appears anywhere on this write path (`AGENTS.md` §Domain and financial
+ * invariants).
+ *
  * No seeded price data exists for this module to version yet — see
  * `2026_07_26_180400_create_price_versions_table.php`'s own doc block for
  * why. This Action exists so the versioning MECHANISM is correct and
@@ -57,8 +71,23 @@ final readonly class RecordServiceDefinitionPriceVersion
         AuditSource $auditSource = AuditSource::Panel,
         ?string $reason = null,
     ): PriceVersion {
-        if (! is_numeric($amount) || (float) $amount <= 0) {
-            throw new InvalidArgumentException('Price version amount must be a positive numeric value.');
+        // Shape assertion, not `is_numeric()` — see this class's own doc
+        // block. At most 10 integer digits and at most 2 fractional digits
+        // is exactly `decimal(12,2)`'s domain, so a value that passes here
+        // reaches the column without the database silently changing it.
+        if (preg_match('/^\d{1,10}(\.\d{1,2})?$/', $amount) !== 1) {
+            throw new InvalidArgumentException(
+                'Price version amount must be a plain decimal string with at most 10 integer digits '.
+                "and at most 2 fractional digits — the decimal(12,2) column's exact domain. ".
+                "Got [{$amount}]."
+            );
+        }
+
+        // Zero rejected WITHOUT casting to float: given the shape above, a
+        // string of nothing but zeros and an optional decimal point is the
+        // only zero it admits.
+        if (ltrim(str_replace('.', '', $amount), '0') === '') {
+            throw new InvalidArgumentException('Price version amount must be greater than zero.');
         }
 
         if (trim($currency) === '') {
