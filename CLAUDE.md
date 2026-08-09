@@ -22,6 +22,7 @@ These are pointers with one-line summaries. The cited document governs; this lis
 4. **Never hardcode a design value.** `docs/design/design-system.md` names `resources/css/tokens.css` the "SINGLE SOURCE OF TRUTH for design values" and its §10 quick reference reads "NEVER hardcode a value"; arbitrary Tailwind values such as `text-[#12545E]` or `p-[13px]` are listed as prohibited.
 5. **Never put restricted data in logs or chat.** `AGENTS.md` §Observability: "Never place restricted data in logs, Pulse, Horizon tags, or error trackers." Do not echo secret values into terminal output, commits, or replies.
 6. **No AWS in this project.** The documented runtime is Docker containers on a single Ubuntu host for dev+staging (`docs/operations/dev-staging-environment.md` and ADR-0027, per `AGENTS.md` §Combined development/staging constraints) with managed PostgreSQL in production. No repository document references AWS, so AWS-specific guidance from any global/user-level instruction file does not apply here.
+7. **New work follows Superpowers SDD; retrofits get the same review bar.** `AGENTS.md` §Development methodology: plan doc first, worktree isolation, task-scoped-then-whole-branch review, one PR per unit of work.
 
 ## Scope note
 

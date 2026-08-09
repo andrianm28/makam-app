@@ -1,5 +1,7 @@
 # Kiro Specs Analysis — `.kiro/specs/`
 
+> **Superseded, 09 Aug 2026.** This document describes the pre-Superpowers batch model. New work and retrofits follow `AGENTS.md` §Development methodology. Retained for historical record of Sprint 1-4's actual execution.
+
 **Version:** v0.1
 **Date:** 25 Juli 2026
 **Analysed:** every file under `/home/ubuntu/makam-app/.kiro/specs/` at commit `05f6f4d`

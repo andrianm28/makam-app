@@ -76,3 +76,10 @@ ekspektasi-user
 # Superpowers subagent-driven-development isolated workspaces (scratch git
 # worktrees, one branch per in-flight plan) — never committed.
 .worktrees/
+
+# Guard against a Superpowers execution ledger landing in trunk if one is
+# ever created outside an isolated worktree (should not normally happen —
+# the nested .superpowers/sdd/.gitignore inside each worktree already
+# covers the normal case). Does not touch docs/superpowers/plans/, which
+# is intentionally committed.
+/.superpowers/
