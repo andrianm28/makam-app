@@ -26,24 +26,18 @@
 # same run.
 
 # ---------------------------------------------------------------------------
-# Stage 1 — frontend assets
-# ---------------------------------------------------------------------------
-FROM node:24-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d AS frontend
-
-WORKDIR /build
-
-# Install from the lockfile only. `npm ci` fails if package.json and
-# package-lock.json disagree, which is the behaviour we want in CI.
-COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
-
-COPY vite.config.js ./
-COPY resources/ ./resources/
-RUN npm run build
-
-
-# ---------------------------------------------------------------------------
-# Stage 2 — PHP dependencies
+# Stage 1 — PHP dependencies
+#
+# Runs BEFORE the frontend stage (reordered — was Stage 2) because the
+# frontend build now depends on its output: resources/css/filament/admin/
+# theme.css imports Filament's own base theme from
+# vendor/filament/filament/resources/css/theme.css (the standard, non-
+# optional Filament v3+ custom-theme convention), and Vite needs that file
+# present on disk to resolve it. Before this reorder, the two stages built
+# in parallel with no shared filesystem, so `npm run build` always failed
+# here — the exact same gap CI's separate "Frontend build" job had (fixed
+# there by installing composer deps first; fixed here by feeding this
+# stage's vendor/filament output into the frontend stage below).
 # ---------------------------------------------------------------------------
 FROM composer:2@sha256:5946476338742b200bb9ff88f8be56275ddae4b3949c72305cb0dbf10cfcb760 AS vendor
 
@@ -70,6 +64,27 @@ RUN composer install \
         --optimize-autoloader \
         --ignore-platform-req=ext-intl \
         --ignore-platform-req=ext-pcntl
+
+
+# ---------------------------------------------------------------------------
+# Stage 2 — frontend assets
+# ---------------------------------------------------------------------------
+FROM node:24-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d AS frontend
+
+WORKDIR /build
+
+# Install from the lockfile only. `npm ci` fails if package.json and
+# package-lock.json disagree, which is the behaviour we want in CI.
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+
+# Only the one package Vite's build actually needs to resolve — see the
+# stage-1 comment above for why this dependency exists at all.
+COPY --from=vendor /build/vendor/filament ./vendor/filament
+
+COPY vite.config.js ./
+COPY resources/ ./resources/
+RUN npm run build
 
 
 # ---------------------------------------------------------------------------

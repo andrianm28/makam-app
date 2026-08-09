@@ -191,6 +191,25 @@ jobs:
           cache: npm
       - name: Install from lockfile
         run: npm ci --no-audit --no-fund
+
+      # resources/css/filament/admin/theme.css imports Filament's own base
+      # theme from vendor/filament/filament/resources/css/theme.css — the
+      # standard, non-optional Filament v3+ custom-theme convention (it's
+      # what styles Filament's own components; without it @import fails, and
+      # Vite's Tailwind plugin needs the file present on disk to resolve it
+      # at build time). This job builds no PHP, so `vendor/` never existed
+      # here — the build failed on every push until this step was added.
+      # --no-dev because only the package's shipped files matter here, not
+      # dev tooling; no PHP extensions beyond the interpreter are needed
+      # since composer.json requires none for this install to succeed.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          tools: composer:v2
+          coverage: none
+      - name: Install PHP dependencies (vendor/filament/filament's theme.css is a real build-time asset)
+        run: composer install --no-interaction --prefer-dist --no-progress --no-dev
+
       - name: Build
         run: npm run build
       - name: Assert the build emitted CSS
