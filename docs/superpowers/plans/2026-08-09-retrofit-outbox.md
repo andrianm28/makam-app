@@ -145,6 +145,8 @@ Copied verbatim from the governing documents; every task's requirements implicit
 ]
 ```
 
+**Note for the implementer:** `BookingDraft` uses `HasUuids`, so `$draft->id` is a **UUID string**, not an integer. Do not cast it to `int` anywhere. `Outbox::record()`'s `$aggregateId` accepts `int|string` and stringifies internally.
+
 `actor_role` is a role string, never an identifier — `user_id` is deliberately excluded. `outbox_events` has no `actor_type`/`actor_id` columns by design (finding N-11), and a bare role carries no personal data, satisfying AC2's references-only rule without needing `PayloadClassification` to save us.
 
 - [ ] **Step 1: Write the failing test**
@@ -194,7 +196,9 @@ final class BookingDraftOutboxTest extends TestCase
         $event = OutboxEvent::query()->where('event_name', 'booking.draft_started.v1')->sole();
 
         $this->assertSame('customer', $event->payload['actor_role']);
-        $this->assertStringNotContainsString('4242', json_encode($event->payload, JSON_THROW_ON_ERROR));
+        // The identifier itself must never reach the payload — only the role.
+        $this->assertArrayNotHasKey('user_id', $event->payload);
+        $this->assertNotContains(4242, $event->payload, 'The user identifier must not appear under any key.');
     }
 }
 ```
