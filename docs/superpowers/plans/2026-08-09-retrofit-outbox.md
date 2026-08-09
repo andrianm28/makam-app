@@ -73,7 +73,9 @@ The brief left this open ("decide between them — or wire both if that's cleanl
 
 **Gap 1 — the event names are uncatalogued.** `docs/contracts/event-catalog.md` has no entry for a booking-draft-started or booking-draft-step-saved event. Its one booking row is `booking.draft_submitted.v2` (producer: Booking), which is a *submission* event belonging to Step 9 — and Step 9 does not exist: `BookingWizardStep::LAST_IMPLEMENTED` is 5, and `SaveBookingDraftStep` throws `InvalidArgumentException` for any step above it. So the catalogued booking event is genuinely unproducible today.
 
-This is the **same disclosed-gap pattern already established for finding N-12** (`docs/planning/sprint-plan.md`), when `GateActivationRecorder` needed `feature_gate.state_changed.v1` and the catalogue had no gate-state-change entry. That precedent's reasoning applies verbatim and is followed here: AC3 ("use event types from `event-catalog.md` and SHALL NOT restate the catalogue") constrains the outbox module's own general behaviour and forbids this module from unilaterally inventing catalogue entries; it does not forbid a producer from emitting an event. So: the rows are written, using clearly-provisional names that follow the catalogue's own `noun.verb_past_tense.vN` convention, and the gap is recorded as a new numbered finding rather than silently absorbed. **Task 5 records it as finding N-14** (next free number — N-13 is the last one on `sprint-plan.md`).
+This is the **same disclosed-gap pattern already established for finding N-12** (`docs/planning/sprint-plan.md`), when `GateActivationRecorder` needed `feature_gate.state_changed.v1` and the catalogue had no gate-state-change entry. That precedent's reasoning applies verbatim and is followed here: AC3 ("use event types from `event-catalog.md` and SHALL NOT restate the catalogue") constrains the outbox module's own general behaviour and forbids this module from unilaterally inventing catalogue entries; it does not forbid a producer from emitting an event. So: the rows are written, using clearly-provisional names that follow the catalogue's own `noun.verb_past_tense.vN` convention, and the gap is recorded as a new numbered finding rather than silently absorbed. **Task 5 records it as finding N-17.**
+
+**Corrected 09 Aug 2026 (Task 1 review finding).** This plan originally said "finding N-14 (next free number — N-13 is the last one on `sprint-plan.md`)". That was wrong on both counts. `sprint-plan.md`'s Appendix A already runs to **N-16**: N-14 is the 26 Jul FAQ/Blade-compiler `@php`-in-doc-comment post-mortem (still referenced by name in `app/Console/Commands/VerifyBladeContentSurvivalCommand.php`), N-15 is the OQ-05 icon-set gap, and N-16 is the unimplemented `openapi.yaml`. The next genuinely free number is **N-17**, and every reference in this plan and in production code must cite N-17, not N-14. Do not touch `VerifyBladeContentSurvivalCommand.php`'s N-14 mentions — those correctly refer to the real N-14.
 
 Chosen names, derived from the audit action names those same two Actions already write (`BOOKING_DRAFT_STARTED`, `BOOKING_DRAFT_STEP_SAVED`) so they are translations of existing vocabulary, not inventions:
 
@@ -118,7 +120,7 @@ Copied verbatim from the governing documents; every task's requirements implicit
 | `tests/Feature/Outbox/OutboxBookingDraftPublicationTest.php` | Create | The AC1 end-to-end proof: real domain mutation → real `outbox_events` row → `OutboxPublisher` claim → `PublishOutboxEventJob` dispatch. Lives under `tests/Feature/Outbox/` because it is the outbox module's proof, not booking's. |
 | `.kiro/specs/platform-outbox/tasks.md` | Modify (Task 5) | Correct the false "NOT TESTED / nothing is implemented" section and the checkbox states. |
 | `.kiro/specs/platform-outbox/design.md` | Modify (Task 5) | Record dispositions surfaced by review. |
-| `docs/planning/sprint-plan.md` | Append-correct (Task 5) | S3-T11 row + new finding N-14. Never rewrite prior text. |
+| `docs/planning/sprint-plan.md` | Append-correct (Task 5) | S3-T11 row + new finding N-17. Never rewrite prior text. |
 | `docs/planning/retrofit-backlog.md` | Append-correct (Task 5) | §1 item 6 status + new §2 entry. |
 
 **Test placement rule for implementers:** producer-side behaviour (does the Action write the right row, does it roll back) goes in the Booking test. Publisher-side behaviour (does the claim loop pick the row up and dispatch it) goes in the Outbox test. Do not merge them — they fail for different reasons and belong to different modules' review slices.
@@ -224,7 +226,7 @@ In `StartBookingDraft.php`, add the imports `App\Platform\Outbox\Outbox` and `Ap
             // Per AC3 this Action does not invent a catalogue entry; it emits
             // a clearly-provisional name following the catalogue's own
             // `noun.verb_past_tense.vN` convention, and the gap is recorded
-            // as finding N-14 in `docs/planning/sprint-plan.md` — the same
+            // as finding N-17 in `docs/planning/sprint-plan.md` — the same
             // disclosed-gap treatment finding N-12 already applied to
             // `feature_gate.state_changed.v1`.
             Outbox::record(
@@ -360,7 +362,7 @@ In `SaveBookingDraftStep.php`, add the imports `App\Platform\Outbox\Outbox` and 
 ```php
             // `platform-outbox` AC1 — same transaction as the save above.
             // Provisional event name; see `StartBookingDraft`'s own note and
-            // finding N-14 for why `event-catalog.md` has no entry to use.
+            // finding N-17 for why `event-catalog.md` has no entry to use.
             Outbox::record(
                 eventName: 'booking.draft_step_saved.v1',
                 eventVersion: 1,
@@ -681,7 +683,7 @@ Four read-only reviewers, one per slice, each given only its own boundary. Each 
 - [ ] **`.kiro/specs/platform-outbox/tasks.md`:** delete the false "## NOT TESTED / Nothing here is implemented" section and replace it with an honest per-AC status. Check the boxes Batch 3.4 genuinely completed (envelope/table, write helper, `SKIP LOCKED` claim, queue routing, bounded backoff, payload denylist, the recovery test) and leave genuinely-unbuilt ones unchecked (Horizon supervisors, on-demand worker isolation, bounded replay, the 10k-import test, the graceful-termination test). State plainly that `event-catalog.md` reconciliation is now **partially** done and what remains.
 - [ ] **`.kiro/specs/platform-outbox/design.md`:** record the dispositions the review surfaces. Do not restate acceptance criteria — `requirements.md` owns those.
 - [ ] **`docs/planning/sprint-plan.md` S3-T11 row (line 555):** **append-correct, never rewrite.** Follow the exact convention on the S4-T6 (line 628) and S4-T2 (line 624) rows: leave every word of the original in place and append a **`Correction, 09 Aug 2026 (retrofit):`** block. It must state what shipped, that gap 1 (AC1 against a real domain mutation) is now closed and *how*, that gaps 2–4 remain open with named reasons, the two disclosed gaps from this plan's scope decision, the PR number, and the CI run ID.
-- [ ] **`docs/planning/sprint-plan.md` Appendix A findings table:** add **finding N-14** — no catalogued event name exists for a booking-draft lifecycle event; `booking.draft_submitted.v2` is a Step 9 submission event and Step 9 is unbuilt; two provisional names are now in production code; whoever owns `docs/contracts/event-catalog.md` next should either add the two rows or rule that draft-lifecycle events do not belong in the catalogue. Follow N-12's and N-13's own shape (the finding, the resolution taken, what still needs to happen, severity, affected paths).
+- [ ] **`docs/planning/sprint-plan.md` Appendix A findings table:** add **finding N-17** — no catalogued event name exists for a booking-draft lifecycle event; `booking.draft_submitted.v2` is a Step 9 submission event and Step 9 is unbuilt; two provisional names are now in production code; whoever owns `docs/contracts/event-catalog.md` next should either add the two rows or rule that draft-lifecycle events do not belong in the catalogue. Follow N-12's and N-13's own shape (the finding, the resolution taken, what still needs to happen, severity, affected paths).
 - [ ] **`docs/planning/retrofit-backlog.md` §1 item 6:** change status from "Not started" to "✅ **Done** — 09 Aug 2026", note which producers were wired, link the PR and CI run. Match items 1–3's row formatting exactly.
 - [ ] **`docs/planning/retrofit-backlog.md` §2:** add a new `### Outbox, retrofitted 09 Aug 2026` entry. **Read the existing `Faq` §2 entry first and copy its structure** — an intro paragraph naming what made this module different, then a `| Gap / finding | Disposition | Owner / reason |` table, then a "Full evidence trail:" line. Every gap gets closed-with-evidence or ledgered-with-a-named-reason; no silent carry-forward.
 - [ ] Run `bash ci/verify-docs.sh` after the documentation edits and confirm ALL DOC GATES PASS.
