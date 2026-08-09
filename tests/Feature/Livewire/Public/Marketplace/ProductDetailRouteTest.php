@@ -195,6 +195,28 @@ final class ProductDetailRouteTest extends TestCase
         $response->assertSee('Hubungi Customer Service');
     }
 
+    public function test_a_rendered_dummy_price_is_always_accompanied_by_its_estimated_source_line(): void
+    {
+        // W-1 regression (Critical), detail page half: this screen renders
+        // `base_price_idr` at text-2xl directly above copy that tells the
+        // visitor to phone customer service to order "now" — so the source
+        // line MUST render with it. design-system.md §2.3 DO.
+        $response = $this->get('/marketplace/produk/'.ProductCode::GRAVESTONE_GRANITE);
+
+        $response->assertOk();
+        $response->assertSee('Estimasi internal (data contoh)');
+    }
+
+    public function test_a_rendered_vendor_name_always_carries_the_fabricated_data_marker(): void
+    {
+        // W-1 regression (Critical), detail page half — "Vendor:" must never
+        // render a bare invented trading name.
+        $response = $this->get('/marketplace/produk/'.ProductCode::GRAVESTONE_GRANITE);
+
+        $response->assertOk();
+        $response->assertSee('(vendor contoh)');
+    }
+
     public function test_viewing_a_product_never_mutates_the_catalogue(): void
     {
         // §6.6 — a detail page is a pure read; repeated views are safe.

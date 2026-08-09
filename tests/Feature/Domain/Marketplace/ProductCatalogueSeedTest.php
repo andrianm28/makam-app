@@ -181,7 +181,19 @@ final class ProductCatalogueSeedTest extends TestCase
         }
     }
 
-    public function test_every_product_has_a_clearly_fictional_vendor_name_and_a_placeholder_photo(): void
+    /**
+     * Renamed from `test_every_product_has_a_clearly_fictional_vendor_name_...`
+     * during the 09 Aug 2026 Marketplace retrofit (W-1): the old name claimed
+     * the SEEDED vendor names are "clearly fictional", but this body only
+     * proves they are non-blank and the photo is a hand-authored SVG. The
+     * fictionality marker is applied at the PRESENTATION seam
+     * (`App\Livewire\Public\Marketplace\Support\MarketplacePresenter`, asserted
+     * by the two route tests); marking the seeded COLUMN values themselves is
+     * the ledgered data-layer half (needs a human-gated migration), so a
+     * data-layer "clearly fictional" assertion would fail against the current
+     * seed and is deliberately not written here.
+     */
+    public function test_every_product_has_a_non_blank_vendor_name_and_a_placeholder_photo(): void
     {
         // Not a byte-for-byte string match against the migration (that would
         // just restate the migration's own array) — proves the shape/intent

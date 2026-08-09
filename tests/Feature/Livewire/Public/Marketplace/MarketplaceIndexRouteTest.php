@@ -260,6 +260,32 @@ final class MarketplaceIndexRouteTest extends TestCase
         $response->assertSee('Hubungi Customer Service');
     }
 
+    public function test_a_rendered_dummy_price_is_always_accompanied_by_its_estimated_source_line(): void
+    {
+        // W-1 regression (Critical): every seeded product carries a non-null
+        // `base_price_idr` (locked by ProductCatalogueSeedTest's documented
+        // dummy-price map), so a fully-seeded index page MUST show the source
+        // line beside its prices. design-system.md §2.3 DO: "Show the source
+        // and last-updated time on any fee or availability figure."
+        $response = $this->get('/marketplace');
+
+        $response->assertOk();
+        $response->assertSee('Estimasi internal (data contoh)');
+    }
+
+    public function test_a_rendered_vendor_name_always_carries_the_fabricated_data_marker(): void
+    {
+        // W-1 regression (Critical): every seeded product has a non-blank
+        // `vendor_name` (locked by ProductCatalogueSeedTest), and the
+        // fabricated-data marker is this repository's established convention
+        // for values that could otherwise be mistaken for real ones — so the
+        // public page must never render a bare vendor name.
+        $response = $this->get('/marketplace');
+
+        $response->assertOk();
+        $response->assertSee('(vendor contoh)');
+    }
+
     public function test_the_landing_page_offers_no_cart_or_checkout_affordance(): void
     {
         // Browse only. Cart/checkout are Sprint 11-12 and need a Tier-3
