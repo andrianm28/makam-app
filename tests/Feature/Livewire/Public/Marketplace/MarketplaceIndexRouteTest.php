@@ -9,6 +9,7 @@ use App\Domain\Marketplace\Models\Product;
 use App\Domain\Marketplace\ProductCode;
 use App\Livewire\Public\Marketplace\MarketplaceIndex;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
 use ReflectionClass;
 use ReflectionMethod;
@@ -73,16 +74,29 @@ final class MarketplaceIndexRouteTest extends TestCase
         }
     }
 
-    public function test_marketplace_index_shows_the_menu_label_the_header_uses_for_this_route(): void
+    public function test_the_unfiltered_landing_page_shows_the_menu_label_in_its_own_heading(): void
     {
         // AGENTS.md: "Never rename, reorder, or hide a product label, route,
         // menu item, or booking step." /marketplace is "Layanan Pemakaman"
         // in the four-menu contract, so the landing page must not introduce
         // a second name for it.
+        // 604dd1f defect class: the pre-retrofit assertion was `assertSee`,
+        // which the header's own nav label satisfies on ANY page — even one
+        // that spells the menu differently. Strengthened in W-2 to read the
+        // page's own <h1> (the layout emits none, so the first <h1> in the
+        // body is this page's heading), and to request the UNFILTERED URL:
+        // a ?kategori= filter swaps the heading for the category label.
         $response = $this->get('/marketplace');
 
         $response->assertOk();
-        $response->assertSee('Layanan Pemakaman');
+
+        $body = $response->getContent();
+        $start = strpos($body, '<h1');
+        $this->assertNotFalse($start, 'Page heading not found.');
+        $end = strpos($body, '</h1>', $start);
+        $this->assertNotFalse($end, 'Page heading is unterminated.');
+
+        $this->assertStringContainsString('Layanan Pemakaman', substr($body, $start, $end - $start));
     }
 
     public function test_category_filter_narrows_the_list_to_that_category_only(): void
@@ -179,6 +193,34 @@ final class MarketplaceIndexRouteTest extends TestCase
         $response->assertSee('Hubungi Customer Service');
     }
 
+    public function test_the_provider_unavailable_branch_degrades_the_index_without_going_blank(): void
+    {
+        // W-5: the §6.5 branch at index.blade.php:150-158 had zero coverage
+        // across all 16 methods. Mirror ProductDetailRouteTest::test_a_
+        // variant_read_failure_degrades_the_panel_without_taking_the_page_
+        // down — force a REAL read failure by dropping the table inside the
+        // test transaction, rather than mocking MarketplaceCatalogQuery.
+        // product_variants is dropped first: on Postgres a bare DROP TABLE
+        // products while product_variants still references it fails with
+        // 2BP01, and DROP TABLE ... CASCADE is unsupported on SQLite.
+        Schema::dropIfExists('product_variants');
+        Schema::drop('products');
+
+        $response = $this->get('/marketplace');
+
+        $response->assertOk();
+        $response->assertSee('Katalog sedang tidak dapat dimuat');
+        // The @unless ($catalogueUnavailable) block is skipped — neither the
+        // empty state nor the product grid may render alongside the alert.
+        $response->assertDontSee('Belum ada produk');
+        $response->assertDontSee('/marketplace/produk/'.ProductCode::FLOWER_BOARD);
+        // §6.5 is never a dead end: the category chips and the support
+        // escape hatch both still work (neither reads the dropped table).
+        $response->assertSee('Filter kategori produk');
+        $response->assertSee('/bantuan');
+        $response->assertSee('Hubungi Customer Service');
+    }
+
     public function test_a_deactivated_product_disappears_from_the_unfiltered_index(): void
     {
         // The `active()` scope composed inside MarketplaceCatalogQuery is
@@ -260,16 +302,61 @@ final class MarketplaceIndexRouteTest extends TestCase
         $response->assertSee('Hubungi Customer Service');
     }
 
+    public function test_a_rendered_dummy_price_is_always_accompanied_by_its_estimated_source_line(): void
+    {
+        // W-1 regression (Critical): every seeded product carries a non-null
+        // `base_price_idr` (locked by ProductCatalogueSeedTest's documented
+        // dummy-price map), so a fully-seeded index page MUST show the source
+        // line beside its prices. design-system.md §2.3 DO: "Show the source
+        // and last-updated time on any fee or availability figure."
+        $response = $this->get('/marketplace');
+
+        $response->assertOk();
+        $response->assertSee('Estimasi internal (data contoh)');
+    }
+
+    public function test_a_rendered_vendor_name_always_carries_the_fabricated_data_marker(): void
+    {
+        // W-1 regression (Critical): every seeded product has a non-blank
+        // `vendor_name` (locked by ProductCatalogueSeedTest), and the
+        // fabricated-data marker is this repository's established convention
+        // for values that could otherwise be mistaken for real ones — so the
+        // public page must never render a bare vendor name.
+        $response = $this->get('/marketplace');
+
+        $response->assertOk();
+        $response->assertSee('(vendor contoh)');
+    }
+
     public function test_the_landing_page_offers_no_cart_or_checkout_affordance(): void
     {
         // Browse only. Cart/checkout are Sprint 11-12 and need a Tier-3
         // payment decision (tasks.md); nothing here may imply they exist.
+        // Strengthened in W-2: the old guard matched three guessed literal
+        // strings, so a real affordance could slip past with any other
+        // label or path. These structural assertions fail on an actual
+        // <form> or Livewire action regardless of wording; the strings
+        // stay as belt-and-braces.
         $response = $this->get('/marketplace');
 
         $response->assertOk();
+        $response->assertDontSee('<form', escape: false);
+        $response->assertDontSee('wire:click', escape: false);
+        $response->assertDontSee('type="submit"', escape: false);
         $response->assertDontSee('/marketplace/keranjang');
         $response->assertDontSee('/marketplace/checkout');
         $response->assertDontSee('Tambah ke Keranjang');
+    }
+
+    public function test_no_cart_or_checkout_route_is_registered(): void
+    {
+        // Same genre as test_the_category_slug_route_is_still_blocked_and_
+        // deliberately_unregistered: asserts a deliberate design decision
+        // (browse-only marketplace) rather than an accident. When Sprint
+        // 11-12 lands the real routes, these SHOULD fail — that failure is
+        // the signal to delete THIS test, not a regression.
+        $this->get('/marketplace/keranjang')->assertNotFound();
+        $this->get('/marketplace/checkout')->assertNotFound();
     }
 
     public function test_browsing_is_read_only_and_repeated_renders_never_mutate_the_catalogue(): void
