@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace Tests\Feature\IdentityAccess;
 
 use App\Models\User;
+use App\Platform\Audit\AuditSource;
+use App\Platform\IdentityAccess\Mfa\MfaEnrolmentService;
+use App\Platform\IdentityAccess\Mfa\Totp\Base32;
+use App\Platform\IdentityAccess\Mfa\Totp\Totp;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -153,5 +157,39 @@ final class AdminPanelHttpAccessTest extends TestCase
 
         $this->actingAs($first)->get('/admin')->assertOk();
         $this->actingAs($second)->get('/admin')->assertOk();
+    }
+
+    public function test_an_enrolled_admin_hitting_the_dashboard_is_redirected_to_the_mfa_challenge(): void
+    {
+        $user = User::factory()->create();
+        $enrolment = app(MfaEnrolmentService::class)->startEnrolment($user->id);
+        $this->confirmEnrolment($enrolment, $user);
+
+        $this->actingAs($user)
+            ->get('/admin')
+            ->assertRedirect(route('filament.admin.pages.mfa-challenge'));
+    }
+
+    public function test_a_non_enrolled_admin_still_reaches_the_dashboard(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->get('/admin')
+            ->assertOk();
+    }
+
+    private function confirmEnrolment($enrolment, User $user): void
+    {
+        $totp = new Totp(t0: 0, period: $enrolment->period_seconds);
+        $code = $totp->generate(Base32::decode($enrolment->secret), time(), $enrolment->digits);
+
+        app(MfaEnrolmentService::class)->confirm(
+            $enrolment,
+            $code,
+            actorRef: $user->id,
+            actorRole: 'admin',
+            source: AuditSource::Panel,
+        );
     }
 }

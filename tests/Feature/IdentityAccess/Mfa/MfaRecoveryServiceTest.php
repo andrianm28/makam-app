@@ -17,6 +17,7 @@ use App\Platform\IdentityAccess\Mfa\Models\MfaRecoveryCode;
 use App\Platform\IdentityAccess\Mfa\Totp\Base32;
 use App\Platform\IdentityAccess\Mfa\Totp\Totp;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 /**
@@ -140,5 +141,54 @@ final class MfaRecoveryServiceTest extends TestCase
 
         $this->assertFalse($sixth->valid);
         $this->assertTrue($sixth->rateLimited);
+    }
+
+    public function test_regenerate_invalidates_old_unused_codes_and_returns_ten_new_ones(): void
+    {
+        $user = User::factory()->create();
+        [$enrolment] = $this->confirmedEnrolmentWithRecoveryCodesFor($user);
+        $oldCodes = MfaRecoveryCode::query()->where('mfa_enrolment_id', $enrolment->id)->get();
+        $this->assertCount(10, $oldCodes);
+
+        $newCodes = app(MfaRecoveryService::class)->regenerate(
+            enrolment: $enrolment,
+            actorRef: $enrolment->user_id,
+            actorRole: 'authenticated_actor',
+            source: AuditSource::Panel,
+        );
+
+        $this->assertCount(10, $newCodes);
+
+        // Every old code is now unusable, even though it was never redeemed.
+        foreach ($oldCodes as $old) {
+            $this->assertNotNull($old->fresh()->used_at);
+        }
+
+        // The new codes are real, unused, and distinct from the old plaintext values.
+        $freshCodes = $enrolment->recoveryCodes()->whereNull('used_at')->get();
+        $this->assertCount(10, $freshCodes);
+        foreach ($newCodes as $plaintext) {
+            $this->assertTrue(
+                $freshCodes->contains(fn (MfaRecoveryCode $c): bool => Hash::check($plaintext, $c->code_hash))
+            );
+        }
+    }
+
+    public function test_regenerate_writes_one_audit_event(): void
+    {
+        $user = User::factory()->create();
+        [$enrolment] = $this->confirmedEnrolmentWithRecoveryCodesFor($user);
+
+        app(MfaRecoveryService::class)->regenerate(
+            enrolment: $enrolment,
+            actorRef: $enrolment->user_id,
+            actorRole: 'authenticated_actor',
+            source: AuditSource::Panel,
+        );
+
+        $this->assertDatabaseHas('audit_events', [
+            'action' => MfaAuditActions::RECOVERY_CODES_REGENERATED,
+            'outcome' => AuditOutcome::Allowed->value,
+        ]);
     }
 }

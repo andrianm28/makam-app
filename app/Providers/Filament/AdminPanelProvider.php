@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Providers\Filament;
 
+use App\Filament\Admin\Pages\MfaChallenge;
+use App\Filament\Admin\Pages\MfaSettings;
 use App\Http\Middleware\AssignCorrelationId;
+use App\Http\Middleware\EnforceMfaChallenge;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -129,6 +132,8 @@ class AdminPanelProvider extends PanelProvider
             )
             ->pages([
                 Pages\Dashboard::class,
+                MfaChallenge::class,
+                MfaSettings::class,
             ])
             ->widgets([
                 Widgets\AccountWidget::class,
@@ -150,6 +155,7 @@ class AdminPanelProvider extends PanelProvider
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,
                 AuthenticateSession::class,
+                EnforceMfaChallenge::class,
                 ShareErrorsFromSession::class,
                 VerifyCsrfToken::class,
                 SubstituteBindings::class,

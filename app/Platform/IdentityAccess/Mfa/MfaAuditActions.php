@@ -26,5 +26,7 @@ final class MfaAuditActions
 
     public const string RECOVERY_USED = 'MFA_RECOVERY_USED';
 
+    public const string RECOVERY_CODES_REGENERATED = 'MFA_RECOVERY_CODES_REGENERATED';
+
     public const string RESET = 'MFA_RESET';
 }
