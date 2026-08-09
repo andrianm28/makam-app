@@ -79,13 +79,26 @@ final class ServicePackageVersion extends Model
         self::saving(function (self $version): void {
             ServicePackageVersionStatus::assertKnown($version->status);
 
+            // INSERT: a row may only ever be born `draft`. Without this,
+            // `status` being fillable means
+            // `ServicePackageVersion::create([... 'status' => 'published'])`
+            // mints a frozen, zero-item version in one line and never meets
+            // `Actions\PublishServicePackageVersion`'s zero-item refusal.
+            if (! $version->exists && $version->status === ServicePackageVersionStatus::PUBLISHED) {
+                throw PublishedServicePackageVersionIsImmutableException::forDirectPublishedInsert();
+            }
+
             if ($version->exists && $version->getOriginal('status') === ServicePackageVersionStatus::PUBLISHED) {
                 throw PublishedServicePackageVersionIsImmutableException::forVersion($version->getKey());
             }
         });
 
         self::deleting(function (self $version): void {
-            if ($version->status === ServicePackageVersionStatus::PUBLISHED) {
+            // `getOriginal(...)`, never the live attribute — matching
+            // `saving()` above. Reading `$version->status` here let an
+            // in-memory downgrade (`$v->status = 'draft'; $v->delete();`)
+            // destroy a row that is still `published` in the database.
+            if ($version->getOriginal('status') === ServicePackageVersionStatus::PUBLISHED) {
                 throw PublishedServicePackageVersionIsImmutableException::forVersion($version->getKey());
             }
         });
