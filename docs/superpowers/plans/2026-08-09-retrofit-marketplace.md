@@ -84,9 +84,9 @@ Task 5 carries this same paragraph into `docs/planning/retrofit-backlog.md` §2 
 
 > `| ... `BookingWizardComingSoon`, `MarketplaceComingSoon`, and `RenewalComingSoon` (app/Livewire/Public/ComingSoon/) are now dead code, deliberately left in place rather than deleted in this same change (no test depends on either; removing them is separable cleanup).`
 
-**This retrofit is that separable cleanup, for the Marketplace one only.** Two constraints on how Task 3 does it:
-1. `BookingWizardComingSoon` and `RenewalComingSoon` are **out of scope** — they belong to the booking-wizard work and to the parallel `Renewal` lane respectively. Delete only `MarketplaceComingSoon.php`.
-2. Deleting it makes the `routes/web.php:52-64` comment partially stale. That comment block is **shared surface with the parallel `Renewal` lane** (which may delete `RenewalComingSoon`). Amend it with the smallest possible edit — do not restructure the block — to minimise the conflict window.
+**CORRECTION, 09 Aug 2026, before the fix wave started — this retrofit LEDGERS the stub, it does not delete it.** The plan as first committed (`369076a`) had Task 3 delete `MarketplaceComingSoon.php` and amend the `routes/web.php` comment. The team lead superseded that after the parallel `Renewal` lane independently found the identical pattern on `RenewalComingSoon`: removing either stub properly touches shared files (`routes/web.php`, `app/Livewire/Public/Booking/BookingWizard.php`) that both lanes would contend for if each cleaned up inline. The original text above is left as written, per this repository's append-correction convention.
+
+**Binding instruction for Task 3:** do **not** delete `MarketplaceComingSoon.php`, and do **not** touch `routes/web.php` or `BookingWizard.php` at all. The stub is disposed as a **ledgered gap** in Task 5, recorded as a combined future cleanup item worded *"paired with `RenewalComingSoon`, same dead-code pattern, one future PR should remove both together."* Neither lane deletes either stub this wave. The Task 1 schema/dead-code slice still gathers the full reference-grep evidence — it now feeds the ledger entry instead of authorising a deletion.
 
 ### Tests (4 files, 42 test methods)
 
@@ -234,7 +234,7 @@ git commit -m "Task 1: task-scoped review, 3 slices (domain, ui, schema+deadcode
 
 - [ ] **Step 3: Rule explicitly on these four dispositions**, each with a named reason:
   1. **AC2's missing columns** — add in this retrofit, or ledger as out-of-scope schema work needing human review? (Default expectation: ledger. A review retrofit adding four speculative columns to a public table, for features that do not exist, is scope creep — and `AGENTS.md` requires human review before a migration lands regardless.)
-  2. **`MarketplaceComingSoon` deletion** — confirm it is safe on the Task 1 grep evidence, and confirm the `routes/web.php:52-64` comment amendment is the minimal edit.
+  2. **`MarketplaceComingSoon`** — **superseded: the deletion is off the table** (see the correction under "Confirmed dead code"). Rule instead on how completely the Task 1 grep evidence establishes the stub is unreferenced, so Task 5's ledger entry states a verified fact rather than an assumption. Do not propose deleting it or editing `routes/web.php`.
   3. **The `{productSlug}` IA drift** — `ProductDetail.php` explicitly reported it "for this batch's owner to resolve," and this retrofit is that owner. Fix `information-architecture.md` to say `{productCode}`, or ledger with a named reason.
   4. **`VendorProcessingStatus`'s existence ahead of its table** — justified forward definition, or dead code? (These look alike and are not: one has a documented future consumer and a canonical-catalogue traceability role; the other is a superseded stub.)
 
@@ -280,13 +280,7 @@ public function test_no_marketplace_page_exposes_any_cart_or_checkout_route_or_f
 
 - [ ] **Step 5: Commit each fix separately**, message naming the finding it closes.
 
-- [ ] **Step 6: Delete the dead stub** (if Task 2 Step 3.2 confirmed it):
-
-```bash
-git rm app/Livewire/Public/ComingSoon/MarketplaceComingSoon.php
-```
-
-Then amend `routes/web.php:52-64` with the **smallest** edit that keeps the comment true — remove `MarketplaceComingSoon` from the list of stubs "deliberately left in place" and note it was removed by this retrofit. Do not restructure the block; the parallel `Renewal` lane may touch the same lines. Run `php -l routes/web.php` and `bash ci/verify-docs.sh` after.
+- [ ] **Step 6: Do NOT delete the dead stub.** Superseded by the correction under "Confirmed dead code" — `MarketplaceComingSoon.php` stays on disk this wave, and `routes/web.php` and `BookingWizard.php` are not touched at all. Its disposition is a Task 5 ledger entry pairing it with `RenewalComingSoon` for one future combined-removal PR.
 
 - [ ] **Step 7: Ledger every Minor finding verbatim**, not fixed, in `.superpowers/sdd/retrofit-marketplace/task-3-minor-findings.md`.
 
@@ -308,7 +302,7 @@ Then amend `routes/web.php:52-64` with the **smallest** edit that keeps the comm
 - Modify: `docs/planning/sprint-plan.md` — S4-T8's row (line 630) gets an **append-correction**. Do not edit or delete a single character of the existing row text.
 - Modify: `docs/planning/retrofit-backlog.md` — §1 item 7's **Marketplace half only**, plus a new §2 entry.
 
-- [ ] **Step 1: Give every self-flagged gap an explicit disposition** in a new `retrofit-backlog.md` §2 subsection headed `### funeral-marketplace-and-vendor-portal (Marketplace browse skeleton), retrofitted 09 Aug 2026`, matching items 1-4's existing two-column `| Gap | Disposition | Reason |` table format exactly. One row each for: AC2's missing columns; the category-code OPEN QUESTION; the `{productSlug}` IA drift; §6.1/§6.6/§6.8 unimplemented states; accessibility geometry; `tasks.md` §NOT TESTED bullets 2-5; `VendorProcessingStatus`'s forward definition; **and the `mvp-scope`/`sprint-plan` cart-checkout contradiction, carrying this plan's OPEN DEPENDENCY text including the "second retrofit must not start" sentence.**
+- [ ] **Step 1: Give every self-flagged gap an explicit disposition** in a new `retrofit-backlog.md` §2 subsection headed `### funeral-marketplace-and-vendor-portal (Marketplace browse skeleton), retrofitted 09 Aug 2026`, matching items 1-4's existing two-column `| Gap | Disposition | Reason |` table format exactly. One row each for: AC2's missing columns; the category-code OPEN QUESTION; the `{productSlug}` IA drift; §6.1/§6.6/§6.8 unimplemented states; accessibility geometry; `tasks.md` §NOT TESTED bullets 2-5; `VendorProcessingStatus`'s forward definition; **the `MarketplaceComingSoon` dead stub — worded "paired with `RenewalComingSoon`, same dead-code pattern, one future PR should remove both together," carrying the Task 1 grep evidence that it is unreferenced;** **and the `mvp-scope`/`sprint-plan` cart-checkout contradiction, carrying this plan's OPEN DEPENDENCY text including the "second retrofit must not start" sentence.**
 
 - [ ] **Step 2: Append-correct `sprint-plan.md`'s S4-T8 row.** Append to the existing cell; never rewrite it. Add: this retrofit's PR number, its CI run ID, the Critical/Important/Minor counts and how many were closed in-wave, and the `MarketplaceComingSoon` removal.
 
@@ -347,7 +341,7 @@ git commit -m "Task 5: disposition of all findings; tasks.md/sprint-plan.md/retr
 - [ ] Ledger `.superpowers/sdd/retrofit-marketplace/` populated with 3 briefs, 3 reports, the whole-module review, the Minor-findings park, and the re-review.
 - [ ] The whole-module review reproduces the `mvp-scope`/`sprint-plan` contradiction **verbatim**, picks no side, and states the second-retrofit precondition.
 - [ ] A bounded fix-wave commit exists per Critical/Important finding, each with a regression test; every Minor finding visibly parked.
-- [ ] `MarketplaceComingSoon.php` is deleted and `routes/web.php`'s comment is true again, with the other two stubs untouched.
+- [ ] `MarketplaceComingSoon.php` is **still on disk, untouched**, and ledgered in `retrofit-backlog.md` §2 as a combined future cleanup paired with `RenewalComingSoon`. `routes/web.php` and `BookingWizard.php` have zero changes in this branch's diff.
 - [ ] Every self-flagged gap has an explicit disposition in `retrofit-backlog.md` §2 — none silently dropped.
 - [ ] `sprint-plan.md`'s S4-T8 row is **append-corrected**, original text byte-for-byte intact.
 - [ ] `retrofit-backlog.md` §1 item 7's Marketplace half updated without disturbing the ServiceCatalog half.
