@@ -48,7 +48,7 @@ final readonly class StartBookingDraft
             // Per AC3 this Action does not invent a catalogue entry; it emits
             // a clearly-provisional name following the catalogue's own
             // `noun.verb_past_tense.vN` convention, and the gap is recorded
-            // as finding N-14 in `docs/planning/sprint-plan.md` — the same
+            // as finding N-17 in `docs/planning/sprint-plan.md` — the same
             // disclosed-gap treatment finding N-12 already applied to
             // `feature_gate.state_changed.v1`.
             Outbox::record(
