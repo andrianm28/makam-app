@@ -38,8 +38,6 @@ final class SumoPodWebhookSignatureTest extends TestCase
     ): SumoPodWebhookSignature {
         return new SumoPodWebhookSignature(
             signingSecrets: $secrets,
-            sharedTokens: $tokens,
-            allowSharedToken: $allowSharedToken,
             replayWindowSeconds: 300,
         );
     }
@@ -246,7 +244,7 @@ final class SumoPodWebhookSignatureTest extends TestCase
         $this->assertSame(SignatureOutcome::MechanismUnavailable, $result->outcome);
     }
 
-    public function test_a_shared_token_verifies_when_the_mechanism_is_enabled(): void
+    public function test_a_shared_token_stays_disabled_even_when_a_caller_requests_the_mechanism(): void
     {
         $result = $this->verifier(secrets: [], tokens: [self::TOKEN], allowSharedToken: true)->verify(
             credentials: $this->credentials(token: self::TOKEN),
@@ -256,8 +254,8 @@ final class SumoPodWebhookSignatureTest extends TestCase
             now: CarbonImmutable::now(),
         );
 
-        $this->assertSame(SignatureOutcome::Verified, $result->outcome);
-        $this->assertSame(SignatureMechanism::SharedToken, $result->mechanism);
+        $this->assertSame(SignatureOutcome::MechanismUnavailable, $result->outcome);
+        $this->assertNull($result->mechanism);
     }
 
     public function test_a_wrong_shared_token_is_rejected(): void
@@ -270,7 +268,7 @@ final class SumoPodWebhookSignatureTest extends TestCase
             now: CarbonImmutable::now(),
         );
 
-        $this->assertSame(SignatureOutcome::SignatureMismatch, $result->outcome);
+        $this->assertSame(SignatureOutcome::MechanismUnavailable, $result->outcome);
     }
 
     public function test_svix_headers_take_precedence_over_a_shared_token(): void

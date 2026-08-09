@@ -5,11 +5,9 @@ declare(strict_types=1);
 namespace App\Platform\Payment\Providers;
 
 /**
- * Which of ADR-0033's two verification mechanisms handled a delivery. Recorded
- * on `provider_events.signature_mechanism` so an operator can tell, per event,
- * whether the replay window was actually enforceable — only the Svix path
- * carries a provider timestamp. See `config/payment.php`
- * §`webhook.allow_shared_token`.
+ * Which verification mechanism handled a delivery. The shared-token value is
+ * retained as a schema value for a future trusted contract, but this lane
+ * accepts only the Svix mechanism.
  */
 enum SignatureMechanism: string
 {

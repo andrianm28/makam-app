@@ -214,8 +214,8 @@ test-only bypass was added. The consequences, stated rather than implied:
 Three decisions taken inside Task 3 that a reviewer should look at deliberately, all documented at
 their site: the secondary unique guard is a **partial** index scoped to settling event types (a total
 index would make Task 4's required out-of-order `expired`-after-`completed` delivery impossible to
-persist at all); the shared-token verification mechanism ADR-0033 permits **defaults to disabled**,
- because it carries no provider timestamp and so admits no replay window; and an **oversized body is
+persist at all); the shared-token verification mechanism ADR-0033 permits is **hard-disabled**,
+ because a caller-supplied timestamp is not an authenticated freshness signal; and an **oversized body is
  bounded to a `REJECTED_PAYLOAD` `provider_events` row and acknowledged with HTTP 200**, with the
  full-body digest retained and a bounded marker stored instead of unbounded raw bytes. This keeps
  the rejection durable without pretending that a truncated body is the provider's signed evidence.

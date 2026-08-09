@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Platform\Payment\Http;
 
+use Closure;
 use JsonSerializable;
 use Stringable;
 
@@ -38,16 +39,32 @@ use Stringable;
  */
 final readonly class WebhookCredentials implements JsonSerializable, Stringable
 {
-    public function __construct(
-        /** ADR-0033: the `svix-signature` header — `v1,<base64>` entries, space-separated. */
-        public ?string $svixSignature = null,
-        /** ADR-0033: the shared `X-Webhook-Token` header (`whtok_…`). */
-        public ?string $sharedToken = null,
-    ) {}
+    private Closure $readSvixSignature;
+
+    private Closure $readSharedToken;
+
+    public function __construct(?string $svixSignature = null, ?string $sharedToken = null)
+    {
+        // Closures keep the credential values in runtime-only storage. PHP's
+        // var_export() includes private properties, so private strings alone
+        // would still disclose them through __set_state output.
+        $this->readSvixSignature = static fn (): ?string => $svixSignature;
+        $this->readSharedToken = static fn (): ?string => $sharedToken;
+    }
+
+    public function svixSignature(): ?string
+    {
+        return ($this->readSvixSignature)();
+    }
+
+    public function sharedToken(): ?string
+    {
+        return ($this->readSharedToken)();
+    }
 
     public function hasAnyCredential(): bool
     {
-        return $this->svixSignature !== null || $this->sharedToken !== null;
+        return $this->svixSignature() !== null || $this->sharedToken() !== null;
     }
 
     /**
@@ -59,8 +76,8 @@ final readonly class WebhookCredentials implements JsonSerializable, Stringable
     public function toArray(): array
     {
         return [
-            'svix_signature' => $this->svixSignature === null ? 'absent' : '[REDACTED]',
-            'shared_token' => $this->sharedToken === null ? 'absent' : '[REDACTED]',
+            'svix_signature' => $this->svixSignature() === null ? 'absent' : '[REDACTED]',
+            'shared_token' => $this->sharedToken() === null ? 'absent' : '[REDACTED]',
         ];
     }
 

@@ -23,7 +23,7 @@ enum SignatureOutcome
     /** Authentic — see `SignatureVerification::$mechanism` for which path. */
     case Verified;
 
-    /** No signing secret and no usable shared token configured. Fail closed. */
+    /** No signing secret is configured. Fail closed. */
     case NotConfigured;
 
     /** No Svix headers, and the shared-token mechanism is absent or disabled. */

@@ -61,6 +61,12 @@ use Illuminate\Support\Facades\DB;
  */
 final readonly class ReceiveWebhook
 {
+    private const int MAX_SVIX_ID_LENGTH = 180;
+
+    private const int MAX_SIGNATURE_HEADER_LENGTH = 4096;
+
+    private const int MAX_TIMESTAMP_LENGTH = 32;
+
     private const string EVENT_ID_SOURCE_SVIX = 'svix-id';
 
     private const string EVENT_ID_SOURCE_DIGEST = 'body-digest';
@@ -76,10 +82,20 @@ final readonly class ReceiveWebhook
         }
 
         $envelope = WebhookEnvelope::parse($inbound->rawBody);
+        $headerProblem = $this->signedHeaderProblem($inbound);
 
         try {
-            return DB::transaction(function () use ($inbound, $envelope): ReceiveWebhookResult {
-                $event = $this->persist($inbound, $envelope);
+            return DB::transaction(function () use ($inbound, $envelope, $headerProblem): ReceiveWebhookResult {
+                $event = $this->persist($inbound, $envelope, $headerProblem !== null);
+
+                if ($headerProblem !== null) {
+                    return $this->reject(
+                        event: $event,
+                        status: ProviderEventStatus::RejectedPayload,
+                        detail: $headerProblem,
+                        inbound: $inbound,
+                    );
+                }
 
                 if (! $envelope->isWellFormed()) {
                     return $this->reject(
@@ -104,6 +120,7 @@ final readonly class ReceiveWebhook
         try {
             return DB::transaction(function () use ($inbound, $maxBytes): ReceiveWebhookResult {
                 [$eventId, $eventIdSource] = $this->resolveEventIdentity($inbound);
+                $headerProblem = $this->signedHeaderProblem($inbound);
                 $event = ProviderEvent::create([
                     'provider' => $this->bounded($inbound->provider, 32),
                     'provider_event_id' => $eventId,
@@ -111,8 +128,8 @@ final readonly class ReceiveWebhook
                     'merchant_ref' => $this->bounded($inbound->merchantRef, 128),
                     'raw_payload' => substr('[oversized provider payload omitted]', 0, max(0, $maxBytes)),
                     'payload_digest' => hash('sha256', $inbound->rawBody),
-                    'signature_timestamp' => $this->boundedOrNull($inbound->svixTimestamp, 32),
-                    'signature_header' => $this->boundedOrNull($inbound->credentials->svixSignature, 4096),
+                    'signature_timestamp' => $headerProblem === null ? $inbound->svixTimestamp : null,
+                    'signature_header' => $headerProblem === null ? $inbound->credentials->svixSignature() : null,
                     'status' => ProviderEventStatus::RejectedPayload->value,
                     'rejection_detail' => 'body exceeds the configured maximum size',
                     'received_at' => $inbound->receivedAt(),
@@ -192,8 +209,11 @@ final readonly class ReceiveWebhook
             : $detail.' ('.$envelope->problemField.')';
     }
 
-    private function persist(InboundWebhook $inbound, WebhookEnvelope $envelope): ProviderEvent
-    {
+    private function persist(
+        InboundWebhook $inbound,
+        WebhookEnvelope $envelope,
+        bool $discardSignedMetadata = false,
+    ): ProviderEvent {
         [$eventId, $eventIdSource] = $this->resolveEventIdentity($inbound);
 
         return ProviderEvent::create([
@@ -219,8 +239,8 @@ final readonly class ReceiveWebhook
             'event_occurred_at' => $envelope->occurredAt,
             'raw_payload' => $inbound->rawBody,
             'payload_digest' => hash('sha256', $inbound->rawBody),
-            'signature_timestamp' => $this->boundedOrNull($inbound->svixTimestamp, 32),
-            'signature_header' => $this->boundedOrNull($inbound->credentials->svixSignature, 4096),
+            'signature_timestamp' => $discardSignedMetadata ? null : $inbound->svixTimestamp,
+            'signature_header' => $discardSignedMetadata ? null : $inbound->credentials->svixSignature(),
             'status' => ProviderEventStatus::Received->value,
             'received_at' => $inbound->receivedAt(),
             'correlation_id' => $this->boundedOrNull($inbound->correlationId, 128),
@@ -252,7 +272,9 @@ final readonly class ReceiveWebhook
     {
         $svixId = $inbound->svixId;
 
-        if ($svixId !== null && $svixId !== '' && preg_match('/\A[\x20-\x7E]{1,180}\z/D', $svixId) === 1) {
+        if ($svixId !== null
+            && $svixId !== ''
+            && preg_match('/\A[\x20-\x7E]{1,'.self::MAX_SVIX_ID_LENGTH.'}\z/D', $svixId) === 1) {
             return [$svixId, self::EVENT_ID_SOURCE_SVIX];
         }
 
@@ -276,28 +298,51 @@ final readonly class ReceiveWebhook
         WebhookEnvelope $envelope,
         QueryException $exception,
     ): ReceiveWebhookResult {
-        [$eventId] = $this->resolveEventIdentity($inbound);
+        return DB::transaction(function () use ($inbound, $envelope, $exception): ReceiveWebhookResult {
+            [$eventId] = $this->resolveEventIdentity($inbound);
 
-        $original = ProviderEvent::query()
-            ->where('provider', $inbound->provider)
-            ->where('provider_event_id', $eventId)
-            ->first();
-
-        if ($original === null
-            && $envelope->providerTransactionId !== null
-            && $envelope->invoiceReference !== null) {
+            // The lock is the recovery claim. It serializes duplicate retries
+            // so only one caller can move RECEIVED through validation and
+            // register a post-commit job.
             $original = ProviderEvent::query()
                 ->where('provider', $inbound->provider)
-                ->where('provider_transaction_id', $envelope->providerTransactionId)
-                ->where('invoice_reference', $envelope->invoiceReference)
-                ->whereIn('event_type', ProviderEventType::settlingValues())
+                ->where('provider_event_id', $eventId)
+                ->lockForUpdate()
                 ->first();
-        }
 
-        if ($original === null) {
-            throw $exception;
-        }
+            if ($original !== null) {
+                if (! hash_equals((string) $original->payload_digest, hash('sha256', $inbound->rawBody))) {
+                    return $this->rejectMismatchedDuplicate($original, $inbound);
+                }
 
+                return $this->resolveLockedDuplicate($original, $inbound, $envelope, $exception);
+            }
+
+            if ($envelope->providerTransactionId !== null
+                && $envelope->invoiceReference !== null) {
+                $original = ProviderEvent::query()
+                    ->where('provider', $inbound->provider)
+                    ->where('provider_transaction_id', $envelope->providerTransactionId)
+                    ->where('invoice_reference', $envelope->invoiceReference)
+                    ->whereIn('event_type', ProviderEventType::settlingValues())
+                    ->lockForUpdate()
+                    ->first();
+            }
+
+            if ($original === null) {
+                throw $exception;
+            }
+
+            return $this->resolveLockedDuplicate($original, $inbound, $envelope, $exception);
+        });
+    }
+
+    private function resolveLockedDuplicate(
+        ProviderEvent $original,
+        InboundWebhook $inbound,
+        WebhookEnvelope $envelope,
+        QueryException $exception,
+    ): ReceiveWebhookResult {
         $status = ProviderEventStatus::tryFrom((string) $original->status);
 
         if ($status === null) {
@@ -305,18 +350,16 @@ final readonly class ReceiveWebhook
         }
 
         if ($status === ProviderEventStatus::Received) {
-            return DB::transaction(function () use ($original, $inbound, $envelope): ReceiveWebhookResult {
-                if (! $envelope->isWellFormed()) {
-                    return $this->reject(
-                        event: $original,
-                        status: ProviderEventStatus::RejectedPayload,
-                        detail: $this->envelopeProblemDetail($envelope),
-                        inbound: $inbound,
-                    );
-                }
+            if (! $envelope->isWellFormed()) {
+                return $this->reject(
+                    event: $original,
+                    status: ProviderEventStatus::RejectedPayload,
+                    detail: $this->envelopeProblemDetail($envelope),
+                    inbound: $inbound,
+                );
+            }
 
-                return $this->finishValidation($original, $inbound, $envelope);
-            });
+            return $this->finishValidation($original, $inbound, $envelope);
         }
 
         // A row still being claimed or retried is not a completed duplicate.
@@ -349,6 +392,23 @@ final readonly class ReceiveWebhook
         return ReceiveWebhookResult::acknowledged(ProviderEventStatus::Duplicate, $original->getKey());
     }
 
+    private function rejectMismatchedDuplicate(
+        ProviderEvent $original,
+        InboundWebhook $inbound,
+    ): ReceiveWebhookResult {
+        // The original row is immutable evidence. A different body under the
+        // same provider event id is rejected and audited without rewriting the
+        // original lifecycle or raw payload.
+        $this->auditRejection(
+            subjectId: $original->getKey(),
+            status: ProviderEventStatus::RejectedPayload,
+            detail: 'payload digest mismatch for duplicate event id',
+            inbound: $inbound,
+        );
+
+        return ReceiveWebhookResult::acknowledged(ProviderEventStatus::RejectedPayload, $original->getKey());
+    }
+
     private function bounded(string $value, int $maxLength): string
     {
         return mb_substr($value, 0, $maxLength);
@@ -357,6 +417,27 @@ final readonly class ReceiveWebhook
     private function boundedOrNull(?string $value, int $maxLength): ?string
     {
         return $value === null ? null : $this->bounded($value, $maxLength);
+    }
+
+    private function signedHeaderProblem(InboundWebhook $inbound): ?string
+    {
+        if ($inbound->svixId !== null
+            && preg_match('/\A[\x20-\x7E]{1,'.self::MAX_SVIX_ID_LENGTH.'}\z/D', $inbound->svixId) !== 1) {
+            return 'svix-id header is malformed or too long';
+        }
+
+        if ($inbound->svixTimestamp !== null
+            && strlen($inbound->svixTimestamp) > self::MAX_TIMESTAMP_LENGTH) {
+            return 'svix-timestamp header is too long';
+        }
+
+        $signature = $inbound->credentials->svixSignature();
+
+        if ($signature !== null && strlen($signature) > self::MAX_SIGNATURE_HEADER_LENGTH) {
+            return 'svix-signature header is too long';
+        }
+
+        return null;
     }
 
     private function persistedEnvelopeValue(

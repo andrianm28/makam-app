@@ -13,6 +13,8 @@ use Carbon\CarbonImmutable;
  * "Two verification mechanisms, either acceptable: Svix signatures (`svix-id`,
  * `svix-timestamp`, `svix-signature`; HMAC-SHA256 over `{id}.{timestamp}.{rawBody}`
  * with `whsec_…` secret) or a shared-token header `X-Webhook-Token` (`whtok_…`)."
+ * This adapter deliberately accepts only the Svix path: the shared-token
+ * alternative has no authenticated freshness signal and remains disabled.
  *
  * ---------------------------------------------------------------------------
  * Four decisions that are security-relevant and therefore not silent
@@ -64,12 +66,9 @@ final readonly class SumoPodWebhookSignature
 
     /**
      * @param  list<string>  $signingSecrets  current first, then rotating older ones
-     * @param  list<string>  $sharedTokens
      */
     public function __construct(
         private array $signingSecrets,
-        private array $sharedTokens,
-        private bool $allowSharedToken,
         private int $replayWindowSeconds,
     ) {}
 
@@ -85,13 +84,9 @@ final readonly class SumoPodWebhookSignature
 
         /** @var list<string> $secrets */
         $secrets = (array) config("payment.providers.{$provider}.webhook_signing_secrets", []);
-        /** @var list<string> $tokens */
-        $tokens = (array) config("payment.providers.{$provider}.webhook_tokens", []);
 
         return new self(
             signingSecrets: array_values($secrets),
-            sharedTokens: array_values($tokens),
-            allowSharedToken: (bool) config('payment.webhook.allow_shared_token', false),
             replayWindowSeconds: (int) config('payment.webhook.replay_window_seconds', 300),
         );
     }
@@ -104,14 +99,10 @@ final readonly class SumoPodWebhookSignature
         CarbonImmutable $now,
     ): SignatureVerification {
         $svixAttempted = $svixId !== null
-            || $credentials->svixSignature !== null;
+            || $credentials->svixSignature() !== null;
 
         if ($svixAttempted) {
-            return $this->verifySvix($credentials->svixSignature, $svixId, $svixTimestamp, $rawBody, $now);
-        }
-
-        if ($this->allowSharedToken && $this->sharedTokens !== [] && $credentials->sharedToken !== null) {
-            return $this->verifySharedToken($credentials->sharedToken, $svixTimestamp, $now);
+            return $this->verifySvix($credentials->svixSignature(), $svixId, $svixTimestamp, $rawBody, $now);
         }
 
         // Either no credential arrived at all, or the only one that did belongs
@@ -179,39 +170,6 @@ final readonly class SumoPodWebhookSignature
         }
 
         return SignatureVerification::verified(SignatureMechanism::Svix);
-    }
-
-    private function verifySharedToken(
-        string $presented,
-        ?string $freshnessTimestamp,
-        CarbonImmutable $now,
-    ): SignatureVerification {
-        $matched = false;
-
-        foreach ($this->sharedTokens as $token) {
-            if (hash_equals($token, $presented)) {
-                $matched = true;
-            }
-        }
-
-        if (! $matched) {
-            return SignatureVerification::failed(SignatureOutcome::SignatureMismatch);
-        }
-
-        // A token without a freshness signal is replayable indefinitely. The
-        // mechanism remains opt-in, but opting in cannot bypass the same
-        // timestamp window enforced for signed deliveries.
-        if ($freshnessTimestamp === null) {
-            return SignatureVerification::failed(SignatureOutcome::TimestampMalformed);
-        }
-
-        $freshness = $this->checkReplayWindow($freshnessTimestamp, $now);
-
-        if (! $freshness->isVerified()) {
-            return $freshness;
-        }
-
-        return SignatureVerification::verified(SignatureMechanism::SharedToken);
     }
 
     /**

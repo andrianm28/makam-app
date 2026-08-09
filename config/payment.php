@@ -23,11 +23,9 @@ use App\Platform\Payment\PaymentProviders;
  * injection)." The value is already injected under that exact spelling;
  * "correcting" it to SUMOPOD_* here would silently read an unset variable and
  * fail closed at the worst possible moment. `SUMODOP_SANDBOX_WEBHOOK_SECRET` is
- * the spelling the implementation plan's AC14 row uses for the signing secret,
- * and `SUMODOP_SANDBOX_WEBHOOK_TOKEN` follows the same prefix for ADR-0033's
- * second, shared-token mechanism (the ADR names the mechanism and its
- * `whtok_…` value shape but not a variable name — this one is chosen here for
- * consistency and is recorded in the Task 3 report).
+ * the spelling the implementation plan's AC14 row uses for the signing secret.
+ * The ADR-0033 shared-token alternative is disabled in this lane because it has
+ * no authenticated freshness signal.
  *
  * Every credential default is empty. A missing credential must fail closed
  * (every webhook rejected as `REJECTED_SIGNATURE`), never fall back to a
@@ -77,16 +75,10 @@ return [
                 static fn (string $secret): bool => $secret !== '',
             )),
 
-            /*
-             | ADR-0033's second acceptable mechanism: a shared `X-Webhook-Token`
-             | header (`whtok_…`). Also a rotatable list. See
-             | `webhook.allow_shared_token` below — configuring a token is not
-             | on its own enough to enable the mechanism.
-             */
-            'webhook_tokens' => array_values(array_filter(
-                array_map('trim', explode(',', (string) env('SUMODOP_SANDBOX_WEBHOOK_TOKEN', ''))),
-                static fn (string $token): bool => $token !== '',
-            )),
+            // Shared-token verification is disabled until an authenticated
+            // freshness contract exists. Do not load token material into the
+            // effective payment configuration in the meantime.
+            'webhook_tokens' => [],
         ],
     ],
 
@@ -139,24 +131,18 @@ return [
 
         /*
         |----------------------------------------------------------------------
-        | Shared-token verification is OFF unless explicitly enabled
+        | Shared-token verification is disabled
         |----------------------------------------------------------------------
         |
-        | ADR-0033 accepts either Svix signatures or a shared `X-Webhook-Token`.
-         | They are not equally safe here, and the difference is not about the
-         | secret: a Svix delivery carries `svix-timestamp`, which is covered by
-         | the signature and is what AC6's replay window is enforced against. A
-         | shared-token delivery is accepted only when it also carries a
-         | freshness timestamp; token-only delivery is rejected. An environment
-         | must not enable this path unless its provider sends that signal.
+         | ADR-0033 names a shared `X-Webhook-Token` alternative, but this lane
+         | does not enable it: a caller-supplied timestamp is not a trusted
+         | freshness signal and cannot prevent replay.
         |
-         | Defaulting this to false is stricter than the ADR requires, never
-         | looser. Enabling it is a deliberate, environment-scoped decision and
-         | never disables replay-window enforcement.
+         | The effective value is a code-level false, not an environment switch.
         |
         */
 
-        'allow_shared_token' => (bool) env('PAYMENT_WEBHOOK_ALLOW_SHARED_TOKEN', false),
+        'allow_shared_token' => false,
 
         /*
          | `queue-and-outbox.md` §2 / the plan: webhook application runs on

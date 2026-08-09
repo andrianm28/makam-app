@@ -113,6 +113,7 @@ final class WebhookCredentialRedactionTest extends TestCase
         $exposures = [
             json_encode($credentials, JSON_THROW_ON_ERROR),
             serialize($credentials),
+            var_export($credentials, true),
             (string) $credentials,
             var_export($credentials->__debugInfo(), true),
             var_export($credentials->toArray(), true),
@@ -122,20 +123,22 @@ final class WebhookCredentialRedactionTest extends TestCase
         foreach ($exposures as $index => $exposure) {
             $this->assertStringNotContainsString(self::TOKEN, $exposure, "exposure #{$index}");
             $this->assertStringNotContainsString('signature-bytes', $exposure, "exposure #{$index}");
-            $this->assertStringContainsString('[REDACTED]', $exposure, "exposure #{$index}");
+        }
+
+        foreach ([$exposures[0], $exposures[1], $exposures[3], $exposures[4], $exposures[5], $exposures[6]] as $index => $exposure) {
+            $this->assertStringContainsString('[REDACTED]', $exposure, "redacted exposure #{$index}");
         }
 
         // Only an explicit property read returns the value — the one thing the
         // signature verifier does.
-        $this->assertSame(self::TOKEN, $credentials->sharedToken);
+        $this->assertSame([], get_object_vars($credentials));
+        $this->assertSame(self::TOKEN, $credentials->sharedToken());
     }
 
     public function test_token_only_verification_requires_a_freshness_signal(): void
     {
         $verifier = new SumoPodWebhookSignature(
             signingSecrets: [],
-            sharedTokens: [self::TOKEN],
-            allowSharedToken: true,
             replayWindowSeconds: 300,
         );
 
@@ -147,7 +150,7 @@ final class WebhookCredentialRedactionTest extends TestCase
             now: CarbonImmutable::now(),
         );
 
-        $this->assertSame(SignatureOutcome::TimestampMalformed, $withoutTimestamp->outcome);
+        $this->assertSame(SignatureOutcome::MechanismUnavailable, $withoutTimestamp->outcome);
 
         $stale = $verifier->verify(
             credentials: new WebhookCredentials(sharedToken: self::TOKEN),
@@ -157,7 +160,7 @@ final class WebhookCredentialRedactionTest extends TestCase
             now: CarbonImmutable::now(),
         );
 
-        $this->assertSame(SignatureOutcome::TimestampOutsideWindow, $stale->outcome);
+        $this->assertSame(SignatureOutcome::MechanismUnavailable, $stale->outcome);
 
         $withTimestamp = $verifier->verify(
             credentials: new WebhookCredentials(sharedToken: self::TOKEN),
@@ -167,7 +170,7 @@ final class WebhookCredentialRedactionTest extends TestCase
             now: CarbonImmutable::now(),
         );
 
-        $this->assertTrue($withTimestamp->isVerified());
+        $this->assertSame(SignatureOutcome::MechanismUnavailable, $withTimestamp->outcome);
     }
 
     public function test_the_middleware_replaces_request_body_with_a_redacted_error_safe_representation(): void

@@ -94,3 +94,10 @@ filed under a status naming the wrong cause is not a usable record:
 
 The application-side enum is `App\Platform\Payment\ProviderEventStatus`. This
 document remains the canonical list; the enum follows it.
+
+### Amendment — fix round 2 (`platform-payment-adapter` Task 3)
+
+Shared-token webhook verification is disabled in the current adapter. A
+caller-supplied timestamp is not an authenticated freshness signal and cannot
+provide replay protection; only Svix-signed deliveries are accepted until a
+trusted provider freshness contract exists.

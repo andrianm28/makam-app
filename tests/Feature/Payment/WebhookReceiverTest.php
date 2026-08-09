@@ -187,6 +187,63 @@ final class WebhookReceiverTest extends TestCase
         $this->assertTrue($verification->isVerified(), $verification->outcome->name);
     }
 
+    public function test_complete_signed_header_metadata_is_stored_without_truncation(): void
+    {
+        $body = $this->body();
+        $timestamp = (string) CarbonImmutable::now()->getTimestamp();
+        $signature = $this->signature('msg_full_header', $timestamp, $body);
+        $header = $signature.' '.$signature;
+
+        $this->assertAcknowledged($this->deliver(
+            body: $body,
+            id: 'msg_full_header',
+            timestamp: $timestamp,
+            signature: $header,
+        ));
+
+        $event = ProviderEvent::query()->sole();
+        $this->assertSame($header, $event->signature_header);
+        $this->assertTrue(
+            app(WebhookValidator::class)->verifyStoredEvidence($event, CarbonImmutable::now())->isVerified()
+        );
+    }
+
+    public function test_an_overlong_svix_id_is_rejected_before_persistence_as_an_event_identity(): void
+    {
+        $id = str_repeat('i', 181);
+        $body = $this->body();
+        $timestamp = (string) CarbonImmutable::now()->getTimestamp();
+
+        $this->assertAcknowledged($this->deliver(
+            body: $body,
+            id: $id,
+            timestamp: $timestamp,
+            signature: $this->signature($id, $timestamp, $body),
+        ));
+
+        $event = $this->assertRejectionRecorded(ProviderEventStatus::RejectedPayload);
+        $this->assertSame('body-digest', $event->event_id_source);
+        $this->assertNull($event->signature_header);
+    }
+
+    public function test_an_overlong_svix_signature_is_rejected_before_persisting_signed_metadata(): void
+    {
+        $body = $this->body();
+        $timestamp = (string) CarbonImmutable::now()->getTimestamp();
+        $signature = $this->signature('msg_overlong_signature', $timestamp, $body)
+            .' '.str_repeat('x', 4_097);
+
+        $this->assertAcknowledged($this->deliver(
+            body: $body,
+            id: 'msg_overlong_signature',
+            timestamp: $timestamp,
+            signature: $signature,
+        ));
+
+        $event = $this->assertRejectionRecorded(ProviderEventStatus::RejectedPayload);
+        $this->assertNull($event->signature_header);
+    }
+
     public function test_the_receiver_does_no_async_work_and_makes_no_provider_call_in_the_request_path(): void
     {
         Queue::fake();
@@ -437,6 +494,42 @@ final class WebhookReceiverTest extends TestCase
         $this->assertSame(ProviderEventStatus::RejectedSession->value, $event->status);
         $this->assertSame(0, AuditEvent::query()->where('action', PaymentAuditActions::WEBHOOK_DUPLICATE)->count());
         $this->assertSame(1, AuditEvent::query()->where('action', PaymentAuditActions::WEBHOOK_REJECTED)->count());
+    }
+
+    public function test_a_same_id_with_a_different_body_cannot_recover_the_original_row(): void
+    {
+        $originalBody = $this->body(dataOverrides: ['payment_id' => 'pay_original']);
+        $retryBody = $this->body(dataOverrides: ['payment_id' => 'pay_tampered']);
+        $timestamp = (string) CarbonImmutable::now()->getTimestamp();
+
+        ProviderEvent::create([
+            'provider' => PaymentProviders::SUMOPOD_SANDBOX,
+            'provider_event_id' => 'msg_digest_guard',
+            'event_id_source' => 'svix-id',
+            'provider_transaction_id' => 'pay_original',
+            'invoice_reference' => 'INV-2026-0001',
+            'event_type' => 'payment.completed',
+            'merchant_ref' => self::MERCHANT,
+            'amount_minor' => 150_000_000,
+            'raw_payload' => $originalBody,
+            'payload_digest' => hash('sha256', $originalBody),
+            'signature_timestamp' => $timestamp,
+            'signature_header' => $this->signature('msg_digest_guard', $timestamp, $originalBody),
+            'status' => ProviderEventStatus::Received->value,
+            'received_at' => CarbonImmutable::now(),
+        ]);
+
+        $this->assertAcknowledged($this->deliver(
+            body: $retryBody,
+            id: 'msg_digest_guard',
+            timestamp: $timestamp,
+        ));
+
+        $event = ProviderEvent::query()->sole();
+        $this->assertSame(ProviderEventStatus::Received->value, $event->status);
+        $this->assertSame(0, AuditEvent::query()->where('action', PaymentAuditActions::WEBHOOK_DUPLICATE)->count());
+        $audit = AuditEvent::query()->where('action', PaymentAuditActions::WEBHOOK_REJECTED)->sole();
+        $this->assertStringContainsString('payload digest mismatch', (string) ($audit->metadata['note'] ?? ''));
     }
 
     public function test_envelope_field_lengths_are_rejected_before_persistence(): void

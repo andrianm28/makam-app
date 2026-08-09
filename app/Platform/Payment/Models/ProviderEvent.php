@@ -20,7 +20,8 @@ use Illuminate\Database\Eloquent\Model;
  * ---------------------------------------------------------------------------
  * design.md §Data says `provider_events` is append-only. `payment-webhook.md`
  * §Failure states, in the same breath, defines a lifecycle the row moves
- * through (`RECEIVED → VALIDATED → PROCESSED`, or a terminal `REJECTED_*`).
+ * through (`RECEIVED → VALIDATED → PROCESSING → PROCESSED`, or a terminal
+ * `REJECTED_*`).
  * Both are honoured by making the distinction explicit: the EVIDENCE is
  * immutable, the LIFECYCLE is not.
  *
