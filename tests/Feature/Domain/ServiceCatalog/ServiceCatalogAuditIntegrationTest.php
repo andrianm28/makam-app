@@ -13,11 +13,12 @@ use App\Domain\ServiceCatalog\Models\ServiceDefinition;
 use App\Domain\ServiceCatalog\ServiceCatalogAuditActions;
 use App\Domain\ServiceCatalog\ServiceCode;
 use App\Domain\ServiceCatalog\ServicePackageItemType;
-use App\Platform\Audit\Exceptions\AuditReasonRequiredException;
 use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\Audit\SensitiveActions;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -143,18 +144,50 @@ final class ServiceCatalogAuditIntegrationTest extends TestCase
         $this->assertSame((string) $priceVersion->version_number, $event->subject_version);
     }
 
-    public function test_record_price_version_without_reason_is_rejected_and_rolled_back(): void
+    /**
+     * F2R (10 Aug 2026, Task 2R baseline repair). `$reason` became a
+     * REQUIRED, non-blank `string` parameter of
+     * `RecordServiceDefinitionPriceVersion` — not the `?string = null` it
+     * carried before — so "reason omitted entirely" is no longer an
+     * expressible call (PHP itself refuses a call missing a required
+     * argument; that is not a domain behaviour worth a test). This replaces
+     * this file's previous
+     * `test_record_price_version_without_reason_is_rejected_and_rolled_back`,
+     * which exercised that now-impossible shape via
+     * `AuditReasonRequiredException`, with the two shapes that remain
+     * reachable through the Action's own signature: a blank string and a
+     * whitespace-only string. Both are now rejected by the Action's own
+     * guard, BEFORE `DB::transaction()` opens — a plain
+     * `InvalidArgumentException`, not `Audit::record()`'s
+     * `AuditReasonRequiredException` thrown from inside an already-open
+     * transaction, which is what this lane's own Task 1 left behind when it
+     * added this action to `SensitiveActions::ACTIONS` without updating this
+     * signature to match.
+     *
+     * @return list<array{string}>
+     */
+    public static function blankReasonProvider(): array
+    {
+        return [
+            'blank' => [''],
+            'whitespace only' => ["   \t  "],
+        ];
+    }
+
+    #[DataProvider('blankReasonProvider')]
+    public function test_record_price_version_with_a_blank_reason_is_rejected_and_writes_no_rows(string $reason): void
     {
         $service = ServiceDefinition::findByCode(ServiceCode::CATERING);
         $priceVersionCount = $service->priceVersions()->count();
 
-        $this->expectException(AuditReasonRequiredException::class);
+        $this->expectException(InvalidArgumentException::class);
 
         try {
             (new RecordServiceDefinitionPriceVersion)(
                 serviceDefinition: $service,
                 amount: '500000.00',
                 actorReference: 11,
+                reason: $reason,
             );
         } finally {
             $this->assertSame($priceVersionCount, $service->priceVersions()->count());
