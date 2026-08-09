@@ -2,7 +2,7 @@
 
 **Found:** 8 Aug 2026, during a full-repository analysis (not a bug report — no user ever reached this, since the site is pre-launch on `dev.makam.co.id`).
 **Fixed in:** commit `97dfbbf` (Batch 0, Sprint 4).
-**Kind:** standalone bugfix spec, per [`kiro-bugfix-spec`](../../../.claude/skills/kiro-bugfix-spec/SKILL.md) — not nested under a feature spec, because no feature spec owns the destination screen (PUB-060). That ownership question is separate and still open; see `docs/planning/sprint-plan.md`'s finding ledger and `docs/domain/traceability-matrix.md` §E.
+**Kind:** standalone bugfix spec, per Kiro's Bugfix Spec methodology (kiro.dev/docs/specs/bugfix-specs — the project's own `.claude/skills/kiro-bugfix-spec` that documented this locally has since been removed) — not nested under a feature spec, because no feature spec owns the destination screen (PUB-060). That ownership question is separate and still open; see `docs/planning/sprint-plan.md`'s finding ledger and `docs/domain/traceability-matrix.md` §E.
 
 ## Reproduction
 
