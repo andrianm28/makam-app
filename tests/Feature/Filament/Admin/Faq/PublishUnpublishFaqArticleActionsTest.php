@@ -143,6 +143,49 @@ final class PublishUnpublishFaqArticleActionsTest extends TestCase
         $this->assertSame(['previous_state' => 'published', 'new_state' => 'unpublished'], $event->metadata);
     }
 
+    public function test_the_publish_row_action_sends_a_success_notification(): void
+    {
+        // A plain custom `Filament\Actions\Action`'s user-supplied
+        // `->action()` closure never calls `$this->success()`, so before the
+        // retrofit fix wave these two verbs completed with no confirmation
+        // at all -- tasks.md §6.8's success state, claimed as implemented.
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $article = (new CreateFaqArticleDraft)(
+            categoryId: $this->categoryId(),
+            title: 'Artikel notifikasi terbit',
+            slug: 'row-action-notifikasi-terbit',
+            summary: 'Ringkasan.',
+            body: 'Isi.',
+            actorReference: $user->id,
+        );
+
+        Livewire::test(ListFaqArticles::class)
+            ->callTableAction('publish', $article)
+            ->assertNotified('Artikel diterbitkan.');
+    }
+
+    public function test_the_unpublish_row_action_sends_a_success_notification(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $draft = (new CreateFaqArticleDraft)(
+            categoryId: $this->categoryId(),
+            title: 'Artikel notifikasi cabut',
+            slug: 'row-action-notifikasi-cabut',
+            summary: 'Ringkasan.',
+            body: 'Isi.',
+            actorReference: $user->id,
+        );
+        $published = (new PublishFaqArticle)($draft, actorReference: $user->id);
+
+        Livewire::test(ListFaqArticles::class)
+            ->callTableAction('unpublish', $published)
+            ->assertNotified('Publikasi artikel dibatalkan.');
+    }
+
     public function test_the_publish_action_is_hidden_for_an_already_published_article_and_unpublish_is_hidden_for_a_draft(): void
     {
         $user = User::factory()->create();

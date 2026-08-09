@@ -101,6 +101,54 @@ final class FaqArticleDetailRouteTest extends TestCase
         $response->assertNotFound();
     }
 
+    public function test_the_breadcrumb_nav_and_related_section_carry_their_accessible_names(): void
+    {
+        // Markup-layer accessibility, no browser — the pattern
+        // MarketplaceIndexRouteTest and BookingWizardAccessibilityTest
+        // already established in this suite. The Faq views emitted real aria
+        // attributes with zero assertions over them until the retrofit fix
+        // wave. The browser/axe/screen-reader layer stays a program-level
+        // gap: no Dusk/Playwright/Cypress harness exists anywhere in this
+        // repository.
+        $response = $this->get('/faq/bagaimana-cara-memesan-makam');
+
+        $response->assertOk();
+        // Two <nav>/<section> landmarks on this page, so each needs its own
+        // accessible name to be distinguishable in a landmark list.
+        $response->assertSeeHtml('aria-label="Navigasi FAQ"');
+    }
+
+    public function test_the_related_articles_landmark_is_named_only_when_it_actually_renders(): void
+    {
+        // The related section is wrapped in `@if ($relatedArticles->isNotEmpty())`,
+        // so its accessible name must appear exactly when there is something
+        // to announce — asserting it unconditionally would pass against an
+        // always-rendered empty shell, which is the bug worth catching.
+        $withoutRelated = $this->get('/faq/bagaimana-cara-memesan-makam');
+        $withoutRelated->assertOk();
+        $withoutRelated->assertDontSeeHtml('aria-label="Artikel terkait"');
+
+        $category = FaqCategory::findByCode(FaqCategoryCode::CARA_MEMESAN);
+        $this->assertNotNull($category);
+
+        $create = new CreateFaqArticleDraft;
+        $publish = new PublishFaqArticle;
+
+        $main = $publish(
+            $create($category->id, 'Artikel utama zzaria', 'artikel-utama-zzaria', 'Ringkasan.', 'Isi.', actorReference: 1),
+            actorReference: 1,
+        );
+        $related = $publish(
+            $create($category->id, 'Artikel terkait zzaria', 'artikel-terkait-zzaria', 'Ringkasan.', 'Isi.', actorReference: 1),
+            actorReference: 1,
+        );
+        $main->relatedArticles()->sync([$related->id]);
+
+        $withRelated = $this->get('/faq/artikel-utama-zzaria');
+        $withRelated->assertOk();
+        $withRelated->assertSeeHtml('aria-label="Artikel terkait"');
+    }
+
     public function test_related_articles_render_the_published_link_but_never_a_draft_or_unpublished_one(): void
     {
         $category = FaqCategory::findByCode(FaqCategoryCode::CARA_MEMESAN);

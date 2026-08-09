@@ -14,6 +14,7 @@ use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Textarea;
+use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -175,6 +176,17 @@ final class FaqArticlesTable
                             actorReference: Auth::id() ?? 0,
                             reason: filled($data['reason'] ?? null) ? $data['reason'] : null,
                         );
+
+                        // Explicit, not `->successNotificationTitle()`: a plain
+                        // custom `Action`'s user-supplied `->action()` closure
+                        // never calls `$this->success()`, so these three verbs
+                        // -- the only AC5 verbs with no page of their own --
+                        // silently did nothing visible. Quiet confirmation, no
+                        // celebration (tasks.md §6.8).
+                        Notification::make()
+                            ->title('Artikel diterbitkan.')
+                            ->success()
+                            ->send();
                     }),
 
                 Action::make('unpublish')
@@ -194,6 +206,11 @@ final class FaqArticlesTable
                             actorReference: Auth::id() ?? 0,
                             reason: filled($data['reason'] ?? null) ? $data['reason'] : null,
                         );
+
+                        Notification::make()
+                            ->title('Publikasi artikel dibatalkan.')
+                            ->success()
+                            ->send();
                     }),
 
                 Action::make('moveUp')
@@ -270,5 +287,13 @@ final class FaqArticlesTable
             $orderedIds,
             actorReference: Auth::id() ?? 0,
         );
+
+        // Sent here rather than in the two row-action closures so the two
+        // early returns above (id not in list, boundary click) stay silent
+        // no-ops -- nothing moved, so nothing is confirmed.
+        Notification::make()
+            ->title('Urutan artikel diperbarui.')
+            ->success()
+            ->send();
     }
 }

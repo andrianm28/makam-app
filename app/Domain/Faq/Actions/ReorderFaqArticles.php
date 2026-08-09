@@ -26,9 +26,8 @@ use InvalidArgumentException;
  * resulting order after a reorder gesture — that is what "drag article X to
  * position 3" already computes client-side. Accepting that whole list here
  * and reassigning `1..N` by array position:
- *   - makes duplicate/gapped ordering structurally impossible (every id in
- *     the list gets exactly one sequential integer; nothing else touches
- *     `sort_order` for this category between calls);
+ *   - leaves this call's own output gapless and duplicate-free (every id in
+ *     the list gets exactly one sequential integer);
  *   - needs no separate "insert/shift everything after this point" logic
  *     that a partial-move primitive would require and could get wrong under
  *     concurrent edits;
@@ -43,9 +42,28 @@ use InvalidArgumentException;
  * id list would let a caller corrupt two categories' orderings at once
  * without any visible error. Rejected outright instead.
  *
- * Row-locks every affected article for the duration of the transaction, so
- * two concurrent reorder calls touching an overlapping id set cannot
- * interleave their writes.
+ * ---------------------------------------------------------------------------
+ * What is actually guaranteed about `sort_order` uniqueness — CORRECTED
+ * 09 Aug 2026 (retrofit-faq fix wave)
+ * ---------------------------------------------------------------------------
+ * The bullet above used to end "…nothing else touches `sort_order` for this
+ * category between calls", which is false: `CreateFaqArticleDraft` and
+ * `UpdateFaqArticleContent` both write `sort_order` too. What this Action
+ * really guarantees is reorder-vs-reorder serialization — it row-locks every
+ * article in its own id list for the duration of the transaction, so two
+ * concurrent reorders over an overlapping id set cannot interleave their
+ * writes.
+ *
+ * What it does NOT guarantee: serialization against a concurrent create or
+ * content edit. `CreateFaqArticleDraft` now takes a lock on the category row
+ * before its `max('sort_order')` read, which narrows that race to the window
+ * this Action's own article-level locks do not cover — it does not eliminate
+ * it, because the two Actions lock different rows. The durable fix is a
+ * `(category_id, sort_order)` unique index; that is a migration against a
+ * table already deployed to dev.makam.co.id, so it is ledgered pending human
+ * review per AGENTS.md §Infrastructure-agent execution rather than applied
+ * here. Public read order is meanwhile made deterministic regardless, by the
+ * `orderBy('id')` tiebreaker in `FaqPublicQuery`.
  *
  * Audited via `Audit::record()` but not `SensitiveActions`-listed — see
  * `App\Domain\Faq\FaqAuditActions`'s own doc block.

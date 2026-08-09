@@ -29,6 +29,21 @@ use Illuminate\Support\Facades\Schema;
  * migration's own doc block); this table exists purely to answer "what has
  * ever gone live."
  *
+ * KNOWN LIMITATION, recorded 09 Aug 2026 (retrofit-faq fix wave) — the
+ * paragraph above overclaims, and the overclaim is load-bearing enough to
+ * name here rather than leave for a reader to discover. The reasoning is
+ * sound for edits to a DRAFT, but it does not address edits to an article
+ * that is ALREADY PUBLISHED: `Actions\UpdateFaqArticleContent` rewrites live
+ * public content and appends no row here (`PublishFaqArticle` is the sole
+ * `FaqArticleVersion::create()` call site). So between two publishes of the
+ * same article, the live content can drift arbitrarily from version N's
+ * snapshot, and this table cannot fully answer "what was public, since
+ * when" — only "what each publish event captured at the moment it ran".
+ * Whether to snapshot on edit-of-published is a versioning DESIGN decision,
+ * not a bug fix — it changes `current_version` semantics and invalidates
+ * existing per-article version-count assertions — so it is ledgered pending
+ * a design/human ruling rather than changed here.
+ *
  * ---------------------------------------------------------------------------
  * Column shape
  * ---------------------------------------------------------------------------

@@ -98,6 +98,30 @@ final class ReorderFaqArticleActionsTest extends TestCase
         $this->assertSame($bOrder, $c->refresh()->sort_order);
     }
 
+    public function test_move_down_sends_a_success_notification(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        [$a] = $this->createThreeArticlesInPembayaran();
+
+        Livewire::test(ListFaqArticles::class)
+            ->callTableAction('moveDown', $a)
+            ->assertNotified('Urutan artikel diperbarui.');
+    }
+
+    public function test_move_up_sends_a_success_notification(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        [, , $c] = $this->createThreeArticlesInPembayaran();
+
+        Livewire::test(ListFaqArticles::class)
+            ->callTableAction('moveUp', $c)
+            ->assertNotified('Urutan artikel diperbarui.');
+    }
+
     public function test_move_up_is_hidden_for_the_first_article_and_move_down_is_hidden_for_the_last(): void
     {
         $user = User::factory()->create();

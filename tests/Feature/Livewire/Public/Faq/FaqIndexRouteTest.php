@@ -132,6 +132,70 @@ final class FaqIndexRouteTest extends TestCase
         $response->assertSee('Lihat kategori lain');
     }
 
+    public function test_bare_faq_index_renders_a_full_empty_state_when_the_whole_catalogue_is_unpublished(): void
+    {
+        // Same mechanism as the empty-category test above, widened to every
+        // published article — the "admin unpublished everything" scenario.
+        // Before the @else branch existed this rendered nothing but the
+        // sr-only count, which design-system.md §6.2 forbids twice over.
+        $unpublish = new UnpublishFaqArticle;
+        FaqArticle::published()->get()->each(
+            fn (FaqArticle $article) => $unpublish($article, actorReference: 1)
+        );
+
+        $this->assertSame(0, FaqArticle::published()->count());
+
+        $response = $this->get('/faq');
+
+        $response->assertOk();
+        // §6.2 part 1 — what is empty.
+        $response->assertSee('Belum ada artikel FAQ yang tersedia.');
+        // §6.2 part 2 — why, in copy unique to this branch.
+        $response->assertSee('Seluruh artikel FAQ sedang disiapkan atau diperbarui');
+        // §6.2 part 3 — what to do next.
+        $response->assertSee('Hubungi Customer Service');
+        $response->assertSee('/bantuan');
+        // The other two branches must not have been reached.
+        $response->assertDontSee('Tidak ada hasil');
+        $response->assertDontSee('Belum ada artikel di kategori ini.');
+    }
+
+    public function test_the_index_landmarks_and_result_count_region_carry_their_accessibility_attributes(): void
+    {
+        // Markup-layer accessibility, no browser — the pattern
+        // MarketplaceIndexRouteTest and BookingWizardAccessibilityTest
+        // already established in this suite. The Faq views emitted real aria
+        // attributes with zero assertions over them until the retrofit fix
+        // wave. The browser/axe/screen-reader layer stays a program-level
+        // gap: no Dusk/Playwright/Cypress harness exists anywhere in this
+        // repository.
+        $response = $this->get('/faq');
+
+        $response->assertOk();
+        // Three landmarks share this page; each needs its own accessible name.
+        $response->assertSeeHtml('aria-label="Cari FAQ"');
+        $response->assertSeeHtml('aria-label="Filter kategori FAQ"');
+        $response->assertSeeHtml('aria-label="Daftar artikel FAQ"');
+        // The result count is announced, not merely rendered — a sighted user
+        // sees the list change; a screen-reader user hears nothing without it.
+        $response->assertSeeHtml('role="status"');
+        $response->assertSeeHtml('aria-live="polite"');
+    }
+
+    public function test_the_result_count_region_announces_the_real_number_of_articles_found(): void
+    {
+        // `role="status"` on a region whose text never changes would be
+        // decoration. This pins that the announced count tracks the actual
+        // result set across two different searches.
+        $all = $this->get('/faq');
+        $all->assertOk();
+        $all->assertSee(FaqArticle::published()->count().' artikel ditemukan.');
+
+        $none = $this->get('/faq?q=xyzxyznotarealfaqtermxyz');
+        $none->assertOk();
+        $none->assertSee('0 artikel ditemukan.');
+    }
+
     public function test_livewire_component_validation_error_on_overlong_search_term(): void
     {
         Livewire::test(FaqIndex::class)

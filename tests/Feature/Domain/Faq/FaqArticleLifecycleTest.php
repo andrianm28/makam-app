@@ -8,6 +8,7 @@ use App\Domain\Faq\Actions\CreateFaqArticleDraft;
 use App\Domain\Faq\Actions\PublishFaqArticle;
 use App\Domain\Faq\Actions\UnpublishFaqArticle;
 use App\Domain\Faq\Actions\UpdateFaqArticleContent;
+use App\Domain\Faq\Exceptions\FaqArticleVersionIsImmutableException;
 use App\Domain\Faq\FaqCategoryCode;
 use App\Domain\Faq\Models\FaqArticle;
 use App\Domain\Faq\Models\FaqArticleVersion;
@@ -269,6 +270,59 @@ final class FaqArticleLifecycleTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
 
         FaqCategory::create(['code' => 'NOT_A_REAL_CODE', 'name' => 'Invalid', 'sort_order' => 99]);
+    }
+
+    public function test_a_persisted_version_row_cannot_be_updated(): void
+    {
+        $version = $this->publishOnceAndReturnItsVersionRow('uji-versi-tidak-dapat-diubah');
+
+        $this->expectException(FaqArticleVersionIsImmutableException::class);
+
+        $version->update(['title' => 'Judul yang diselundupkan']);
+    }
+
+    public function test_a_persisted_version_row_cannot_be_deleted(): void
+    {
+        $version = $this->publishOnceAndReturnItsVersionRow('uji-versi-tidak-dapat-dihapus');
+
+        $this->expectException(FaqArticleVersionIsImmutableException::class);
+
+        $version->delete();
+    }
+
+    public function test_the_real_publish_path_still_writes_a_version_row_normally(): void
+    {
+        // Regression guard for the two tests above: the append-only
+        // overrides must block edits without blocking the one legitimate
+        // write path (`FaqArticleVersion::create()` inside PublishFaqArticle,
+        // which routes through performInsert, not performUpdate).
+        $version = $this->publishOnceAndReturnItsVersionRow('uji-versi-jalur-tulis-nyata');
+
+        $this->assertSame(1, $version->version_number);
+        $this->assertSame('Judul terbit', $version->title);
+        $this->assertNotNull($version->published_at);
+    }
+
+    private function publishOnceAndReturnItsVersionRow(string $slug): FaqArticleVersion
+    {
+        $article = (new CreateFaqArticleDraft)(
+            categoryId: $this->categoryId(),
+            title: 'Judul terbit',
+            slug: $slug,
+            summary: 'Ringkasan terbit.',
+            body: 'Isi terbit.',
+            actorReference: 42,
+        );
+
+        $published = (new PublishFaqArticle)($article, actorReference: 42);
+
+        $version = FaqArticleVersion::query()
+            ->where('faq_article_id', $published->id)
+            ->sole();
+
+        $this->assertTrue($version->exists);
+
+        return $version;
     }
 
     public function test_faq_article_versions_table_has_no_updated_at_or_created_at_column(): void

@@ -51,12 +51,18 @@
             <div class="whitespace-pre-line text-base text-neutral-700">{{ $article->body }}</div>
 
             {{-- Customer-service CTA — present on every article render,
-                 unconditionally (tasks.md §6.10 note). `/bantuan` route
-                 itself still does not exist (routes/web.php has no such
-                 route yet — same honest forward-reference `<x-mk.header>`'s
-                 own `bantuanHref` default already makes), but a real
-                 contact line (`App\Support\ContactInfo`) is now shown
-                 alongside it: the user has explicitly authorized filling
+                 unconditionally (tasks.md §6.10 note).
+
+                 CORRECTED 09 Aug 2026 (retrofit-faq fix wave) — this comment
+                 used to say the `/bantuan` route "still does not exist". It
+                 does: `routes/web.php:226` registers
+                 `Route::get('/bantuan', HelpCentre::class)->name('bantuan.index')`,
+                 added 8 Aug 2026 by the batch whose own header comment names
+                 both FAQ views among the dangling links it closed. The link
+                 below now goes through `route('bantuan.index')` like every
+                 other link on this page. A real contact line
+                 (`App\Support\ContactInfo`) is shown alongside it: the user
+                 has explicitly authorized filling
                  this repo's previously-documented "no real support email/
                  phone" gap with clearly plausible placeholder data for
                  full public display on dev.makam.co.id — see
@@ -83,7 +89,7 @@
                     {{ ContactInfo::PHONE }} (telepon/WhatsApp) · {{ ContactInfo::EMAIL }} · {{ ContactInfo::BUSINESS_HOURS }}
                 </p>
                 <a
-                    href="/bantuan"
+                    href="{{ route('bantuan.index') }}"
                     class="inline-flex h-11 select-none items-center justify-center gap-2 rounded-md border border-primary-600 bg-neutral-0 px-4 text-base font-medium text-primary-700 transition-[color,background-color,border-color,box-shadow] duration-fast ease-standard hover:bg-primary-50 active:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
                 >
                     Hubungi Customer Service
