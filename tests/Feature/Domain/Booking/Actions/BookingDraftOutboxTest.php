@@ -6,6 +6,7 @@ namespace Tests\Feature\Domain\Booking\Actions;
 
 use App\Domain\Booking\Actions\SaveBookingDraftStep;
 use App\Domain\Booking\Actions\StartBookingDraft;
+use App\Domain\Booking\Exceptions\BookingStepValidationException;
 use App\Domain\Booking\Models\BookingDraft;
 use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\Outbox\Models\OutboxEvent;
@@ -107,7 +108,7 @@ final class BookingDraftOutboxTest extends TestCase
         try {
             (new SaveBookingDraftStep)($draft, 1, ['city_code' => 'NOT_A_CITY'], 'key-1');
             $this->fail('Expected the invalid city to be rejected.');
-        } catch (\App\Domain\Booking\Exceptions\BookingStepValidationException) {
+        } catch (BookingStepValidationException) {
             // expected
         }
 
