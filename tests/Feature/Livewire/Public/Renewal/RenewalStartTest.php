@@ -213,6 +213,24 @@ final class RenewalStartTest extends TestCase
             ->assertSet('city', LaunchCityCode::JAKARTA);
     }
 
+    /**
+     * The "Ganti kota" control is a <x-mk.button variant="link"> (design-
+     * system.md 9.2 MUST #2 — the page header claims every button uses the
+     * primitive, and this was the one hand-forked holdout). It renders only
+     * once a city is selected. This test pins the behaviour across the swap;
+     * primitive conformance itself is verified by reading, not by a test —
+     * no CI gate enforces 9.2 MUST #2.
+     */
+    public function test_the_change_city_control_returns_to_step_one(): void
+    {
+        Livewire::test(RenewalStart::class)
+            ->call('selectCity', LaunchCityCode::JAKARTA)
+            ->assertSee('Ganti kota')
+            ->assertSet('city', LaunchCityCode::JAKARTA)
+            ->call('resetCity')
+            ->assertSet('city', '');
+    }
+
     // =====================================================================
     // AC16 / §6.9 — the gate banner
     // =====================================================================

@@ -123,13 +123,9 @@
             @if ($city !== '')
                 <p class="mt-3 text-sm text-neutral-600">
                     Kota terpilih: <span class="font-medium text-neutral-900">{{ $selectedCityLabel }}</span>.
-                    <button
-                        type="button"
-                        wire:click="resetCity"
-                        class="underline underline-offset-2 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
-                    >
+                    <x-mk.button variant="link" wire:click="resetCity">
                         Ganti kota
-                    </button>
+                    </x-mk.button>
                 </p>
             @endif
         </section>
