@@ -140,6 +140,25 @@ Migrations (all additive, `2026_08_09_*`): `create_payment_intents_table`, `crea
 - [ ] **Step 3:** Implement `payment_intents`/`payment_sessions` models.
 - [ ] **Step 4:** Tests: all six guard failures each produce a denial (closed gate, expired quote, expired reservation, amount mismatch, unauthorized opening, missing merchant binding); a passed guard creates a session with `AWAITING_PAYMENT`; mode never read from request input; provider-unavailable returns truthful pending not a dead end.
 
+**Ruling (approved 10 Aug 2026, Wave 1b ruling 1b-L3-01) — Task 2 is re-scoped to a DENY-ONLY guard.** The four steps above are superseded by the six below; the text above is preserved byte-for-byte per this repo's append-correction convention.
+
+**Finding.** Task 2 as written above assumes upstream domain records that do not exist anywhere in this repository. Verified 10 Aug 2026: there is no `Confirmation` and no `PlotReservation` model/table/state (condition 2); no persisted `Quote` — `BookingDraftQuery::summary()` computes a draft-local total from *current* catalog price versions and `create_booking_drafts_table` explicitly defers quote issuance (conditions 3 and 5); no order/case opening-authorization API, and `ActorContext` exposes no roles or scopes accessors (condition 4); no merchant or `badan_usaha` model or binding record (condition 6). Only condition 1 is implementable today — `ModeResolver::paymentMode()` and `FeatureGateResolver` exist and are tested.
+
+This plan's own "Current state" section flags the absent L4 ledger but does not flag conditions 2/3/4/6, so Task 2 was written against records that were assumed present. Separately, `.kiro/specs/booking-and-order-orchestration/tasks.md` names *itself* the owner of the "payment guard", plus "Generalize confirmation guard for manual or reservation evidence" and "Preserve immutable quote/version acceptance" — all unchecked, and `sprint-plan.md` schedules that spec's build for Sprint 7 against the project's current Sprint 4. The upstream records are therefore not arriving soon.
+
+**Ruling.** Build the guard structure, `GuardResult`, `SessionState`, the `payment_intents`/`payment_sessions` tables, and condition 1 for real. Every other condition resolves to an explicit `UnavailableUpstream` outcome that **DENIES**. Do not implement the pass path, and do not implement `CreatePaymentSession`'s provider call, for conditions that cannot be truthfully evaluated.
+
+**Why deny-only rather than the Task 7 stub pattern.** Task 7 stubs the `Journal` — an output the guard *writes to*. Conditions 2/3/4/6 are the *truth sources the guard reads*. A stub answering "confirmation valid / quote accepted / opening authorized" would construct precisely what `AGENTS.md` §Domain and financial invariants forbids ("Never create payment before valid confirmation/reservation, accepted quote, and authorized opening") and would ship a guard whose passing path was never once exercised against a real record. Fail-closed is the only safe shape while the upstream is absent: a deny-only guard cannot create a payment, so it is safe to merge ahead of the orchestration spec.
+
+**Consequence, recorded so it is not re-litigated.** Tasks 3-8 (webhook receiver, async apply, manual fallback, reversals) all sit downstream of a *created* session, which conditions 2-6 gate. They hit this same wall. When they do, escalate rather than widening scope or stubbing the upstream.
+
+- [ ] **Step 1 (superseding):** `SessionState` closed-list enum + `GuardResult` with a `DENIED(condition, publicMessage)` shape and an explicit `UnavailableUpstream` denial reason distinct from a genuine domain denial.
+- [ ] **Step 2 (superseding):** `GuardPaymentSession` evaluating all six conditions in fixed order; condition 1 real, conditions 2/3/4/5/6 returning `UnavailableUpstream` denials that cite the missing upstream by name.
+- [ ] **Step 3 (superseding):** `payment_intents` + `payment_sessions` migrations and models (this lane owns them per §File Structure). Every guard evaluation — pass or deny — writes a `payment_intents` decision record; denials also write audit `PAYMENT_GUARD_DENIED` (outcome denied).
+- [ ] **Step 4 (superseding):** Tests: each of the six conditions denies, with conditions 2/3/4/5/6 asserting the `UnavailableUpstream` reason; a closed gate denies via condition 1; mode is never read from request input; no input combination reaches a PASS; no provider call is reachable from the guard.
+- [ ] **Step 5 (superseding):** Assert the fail-closed invariant directly — a test proving `GuardPaymentSession` has no reachable PASS outcome under the current upstream, so no `payment_sessions` row can be created by any caller.
+- [ ] **Step 6 (superseding):** Commit citing Wave 1b ruling 1b-L3-01. `CreatePaymentSession` and the provider seam are NOT implemented in this task.
+
 ---
 
 ## Task 3: Webhook receiver — persist, validate, ack ≤ 2 s (AC5, AC6, AC13)
