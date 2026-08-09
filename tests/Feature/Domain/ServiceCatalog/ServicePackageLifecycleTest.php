@@ -293,8 +293,11 @@ final class ServicePackageLifecycleTest extends TestCase
         // Absolute count, then every attribute AC1 names, per item.
         $this->assertSame(4, $v2->items()->count());
 
-        $sourceItems = $v1->items()->orderBy('id')->get()->keyBy('service_definition_id');
-        $copiedItems = $v2->items()->orderBy('id')->get()->keyBy('service_definition_id');
+        // Ordered by `service_definition_id`, not `id`: the copy's new rows get
+        // auto-increment ids in the copy loop's arbitrary fetch order (line 77
+        // has no ORDER BY), so `id` order is not a contract between the two.
+        $sourceItems = $v1->items()->orderBy('service_definition_id')->get()->keyBy('service_definition_id');
+        $copiedItems = $v2->items()->orderBy('service_definition_id')->get()->keyBy('service_definition_id');
 
         $this->assertSame($sourceItems->keys()->all(), $copiedItems->keys()->all());
 
