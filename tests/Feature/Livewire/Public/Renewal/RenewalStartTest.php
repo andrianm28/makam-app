@@ -204,13 +204,14 @@ final class RenewalStartTest extends TestCase
 
         $component->assertSee('wire:click="goToStep(1)"', false);
 
+        $component->call('goToStep', RenewalJourneyStep::FEE)
+            ->assertOk()
+            ->assertSet('city', LaunchCityCode::JAKARTA)
+            ->assertSee('Langkah 2 dari 6');
+
         $component->call('goToStep', RenewalJourneyStep::CITY)
             ->assertSet('city', '')
             ->assertSee('Langkah 1 dari 6');
-
-        $component->call('goToStep', RenewalJourneyStep::FEE)
-            ->assertOk()
-            ->assertSet('city', LaunchCityCode::JAKARTA);
     }
 
     /**
