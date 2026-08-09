@@ -132,6 +132,34 @@ final class FaqIndexRouteTest extends TestCase
         $response->assertSee('Lihat kategori lain');
     }
 
+    public function test_bare_faq_index_renders_a_full_empty_state_when_the_whole_catalogue_is_unpublished(): void
+    {
+        // Same mechanism as the empty-category test above, widened to every
+        // published article — the "admin unpublished everything" scenario.
+        // Before the @else branch existed this rendered nothing but the
+        // sr-only count, which design-system.md §6.2 forbids twice over.
+        $unpublish = new UnpublishFaqArticle;
+        FaqArticle::published()->get()->each(
+            fn (FaqArticle $article) => $unpublish($article, actorReference: 1)
+        );
+
+        $this->assertSame(0, FaqArticle::published()->count());
+
+        $response = $this->get('/faq');
+
+        $response->assertOk();
+        // §6.2 part 1 — what is empty.
+        $response->assertSee('Belum ada artikel FAQ yang tersedia.');
+        // §6.2 part 2 — why, in copy unique to this branch.
+        $response->assertSee('Seluruh artikel FAQ sedang disiapkan atau diperbarui');
+        // §6.2 part 3 — what to do next.
+        $response->assertSee('Hubungi Customer Service');
+        $response->assertSee('/bantuan');
+        // The other two branches must not have been reached.
+        $response->assertDontSee('Tidak ada hasil');
+        $response->assertDontSee('Belum ada artikel di kategori ini.');
+    }
+
     public function test_livewire_component_validation_error_on_overlong_search_term(): void
     {
         Livewire::test(FaqIndex::class)

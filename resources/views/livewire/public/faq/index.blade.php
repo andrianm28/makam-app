@@ -277,6 +277,32 @@
                             Lihat kategori lain
                         </a>
                     </div>
+                @else
+                    {{-- Whole catalogue empty (§6.2) — bare /faq with no search
+                         and no category filter, and zero published articles
+                         anywhere. Reachable for real: every article pulled via
+                         UnpublishFaqArticle, or the §6.5 search fallback
+                         landing on an empty allPublished(). Before this branch
+                         existed the page fell through to nothing but the
+                         sr-only count, which is worse than the bare "Tidak ada
+                         data" §6.2 already forbids. No "Lihat kategori lain"
+                         affordance here — every category is empty too, so the
+                         only honest next action is the customer-service path.
+                         §6.2's icon is deliberately absent: OQ-05 (icon set) is
+                         still open and is ledgered, not resolved, by this
+                         retrofit. --}}
+                    <div class="flex flex-col items-center gap-3 py-12 text-center">
+                        <h2 class="text-lg font-semibold text-neutral-800">Belum ada artikel FAQ yang tersedia.</h2>
+                        <p class="max-w-prose text-base text-neutral-600">
+                            Seluruh artikel FAQ sedang disiapkan atau diperbarui, sehingga belum ada yang dapat ditampilkan. Anda tetap dapat menghubungi customer service untuk pertanyaan Anda.
+                        </p>
+                        <a
+                            href="{{ route('bantuan.index') }}"
+                            class="mt-2 inline-flex h-11 select-none items-center justify-center gap-2 rounded-md border border-primary-600 bg-neutral-0 px-4 text-base font-medium text-primary-700 transition-[color,background-color,border-color,box-shadow] duration-fast ease-standard hover:bg-primary-50 active:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
+                        >
+                            Hubungi Customer Service
+                        </a>
+                    </div>
                 @endif
             @else
                 <ul class="grid gap-4 md:grid-cols-2" aria-label="Daftar artikel FAQ">
