@@ -9,6 +9,7 @@ use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Livewire\Public\Booking\BookingWizard;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
@@ -127,6 +128,21 @@ final class BookingWizardRouteTest extends TestCase
         // degradation test, not a write-path test.
         $component = Livewire::test(BookingWizard::class)->call('saveStep1', LaunchCityCode::JAKARTA);
         $draftId = $component->get('draftId');
+
+        // Drop the draft's own FK constraints before taking the directory
+        // tables away. On PostgreSQL, `DROP TABLE` of a parent is blocked by
+        // any incoming FK constraint (2BP01) regardless of its ON DELETE
+        // action — `nullOnDelete` only applies to row DELETEs, never to
+        // DROP TABLE. `Schema::disableForeignKeyConstraints()` cannot help
+        // here: on Postgres it compiles to `SET CONSTRAINTS ALL DEFERRED`,
+        // which only affects DEFERRABLE constraints, and Laravel creates
+        // these as NOT DEFERRABLE. Dropping the two constraints is the
+        // cross-engine-safe way to make the directory unreadable while the
+        // draft row survives.
+        Schema::table('booking_drafts', function (Blueprint $table) {
+            $table->dropForeign(['cemetery_id']);
+            $table->dropForeign(['cemetery_package_id']);
+        });
 
         // Same reverse-dependency drop list as RenewalStartTest's
         // degradation test.

@@ -74,10 +74,16 @@
                     <ul class="grid gap-4 md:grid-cols-2" aria-label="Daftar TPU/TPS">
                         @foreach ($cemeteries as $cemetery)
                             <li>
-                                <x-mk.card as="button" interactive wire:click="saveStep2('{{ $cemetery->id }}')">
-                                    <span class="text-lg font-semibold text-neutral-900">{{ $cemetery->name }}</span>
-                                    <x-mk.badge intent="neutral">{{ $cemetery->type }}</x-mk.badge>
-                                </x-mk.card>
+                                <button
+                                    type="button"
+                                    wire:click="saveStep2('{{ $cemetery->id }}')"
+                                    class="block w-full rounded-lg border border-neutral-200 bg-neutral-0 p-4 text-left shadow-sm transition-[border-color,box-shadow] duration-fast ease-standard select-none hover:border-primary-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 md:p-6"
+                                >
+                                    <span class="flex flex-col gap-4">
+                                        <span class="text-lg font-semibold text-neutral-900">{{ $cemetery->name }}</span>
+                                        <x-mk.badge intent="neutral">{{ $cemetery->type }}</x-mk.badge>
+                                    </span>
+                                </button>
                             </li>
                         @endforeach
                     </ul>

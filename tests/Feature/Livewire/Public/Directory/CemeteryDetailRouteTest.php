@@ -272,6 +272,10 @@ final class CemeteryDetailRouteTest extends TestCase
     {
         $cemetery = $this->exampleCemetery();
 
+        // `booking_drafts` FK-references `cemetery_packages`, so PostgreSQL
+        // blocks the drop (2BP01). The table is empty here — no draft was
+        // created — so dropping it first takes the package table away.
+        Schema::dropIfExists('booking_drafts');
         Schema::drop('cemetery_packages');
 
         Livewire::test(CemeteryDetail::class, ['cemeterySlug' => $cemetery->slug])

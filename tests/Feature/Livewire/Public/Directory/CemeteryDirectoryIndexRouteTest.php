@@ -288,9 +288,16 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
      * `grave_records` first) because it was written after that migration
      * existed; this test needed the same fix once the dependency appeared
      * out from under it.
+     *
+     * FIXED 09 Aug 2026 — the same failure re-occurred with the `booking_drafts`
+     * migration (`2026_08_08_130000`), whose FKs to `cemetery_packages`/
+     * `cemeteries` block the drops on PostgreSQL (2BP01). `booking_drafts`
+     * is empty in this test, so it joins the drop list below; on SQLite
+     * `dropIfExists` on the empty table is a no-op.
      */
     public function test_the_page_survives_the_cemeteries_table_being_unreadable(): void
     {
+        Schema::dropIfExists('booking_drafts');
         Schema::dropIfExists('grave_records');
         Schema::drop('cemetery_capability_profiles');
         Schema::drop('cemetery_packages');

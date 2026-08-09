@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Query\Expression;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
@@ -54,7 +55,7 @@ return new class extends Migration
             $table->foreignId('user_id')->nullable()->constrained('users')->nullOnDelete();
 
             $table->unsignedTinyInteger('current_step')->default(1);
-            $table->json('completed_steps')->default(new \Illuminate\Database\Query\Expression("'[]'"));
+            $table->json('completed_steps')->default(new Expression("'[]'"));
 
             // `city_code` stores a `LaunchCityCode::KNOWN_CODES` value. Named for
             // brevity to match this table's `cemetery_id`/`service_type` pattern,
@@ -68,7 +69,7 @@ return new class extends Migration
 
             $table->string('service_type', 32)->nullable();
 
-            $table->json('selected_services')->default(new \Illuminate\Database\Query\Expression("'[]'"));
+            $table->json('selected_services')->default(new Expression("'[]'"));
 
             $table->unsignedInteger('version')->default(1);
             $table->string('last_idempotency_key', 64)->nullable();
