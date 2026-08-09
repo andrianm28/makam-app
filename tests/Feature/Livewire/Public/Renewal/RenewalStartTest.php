@@ -24,9 +24,9 @@ use Tests\TestCase;
  * component replaces the `RenewalComingSoon` stub, and `routes/web.php` is
  * a shared file this batch does not own — the exact route lines are
  * reported to the batch lead instead. **The route, its name, and its HTTP
- * status are therefore NOT TESTED here**, and `/perpanjangan` still serves
- * the old stub until those lines land. See `GraveSearchStatesTest`'s doc
- * block for the same note.
+ * status are therefore NOT TESTED here**: `routes/web.php` now routes
+ * `/perpanjangan` to this component, but that registration is not asserted
+ * in this file. See `GraveSearchStatesTest`'s doc block for the same note.
  */
 final class RenewalStartTest extends TestCase
 {
