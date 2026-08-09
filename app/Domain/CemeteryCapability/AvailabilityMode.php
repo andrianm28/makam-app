@@ -22,8 +22,10 @@ use InvalidArgumentException;
  * "indicative/package-class" phrase names the shared PRESENTATION label
  * both states carry (`.kiro/specs/cemetery-directory-and-availability/
  * design.md`'s UI mapping: both render `neutral` + `Perlu konfirmasi`), not
- * an alternate default value; `overview.md` §6 states the literal default
- * as `INDICATIVE` explicitly.
+ * an alternate default value. The literal default is stated by
+ * `docs/domain/cemetery-capability-model.md`'s "Safe default" column, which
+ * is the authority for all six safe defaults — `overview.md` §6 names the
+ * six modes and their value sets but states no default at all.
  *
  * Plain string column with application-layer validation, not a Postgres
  * enum type — same established convention as every other closed-list

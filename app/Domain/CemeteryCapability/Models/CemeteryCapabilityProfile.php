@@ -193,9 +193,12 @@ final class CemeteryCapabilityProfile extends Model
 
     /**
      * requirements.md AC4's safe defaults — `INDICATIVE` / `REQUEST_
-     * CONFIRMATION` / `LOCATION_ONLY` / `NONE` / `NONE` / `NONE`, exactly
-     * as `overview.md` §6 and this batch's own brief state them. The one
-     * place these six values are written; the migration's column defaults
+     * CONFIRMATION` / `LOCATION_ONLY` / `NONE` / `NONE` / `NONE`, exactly as
+     * `docs/domain/cemetery-capability-model.md`'s "Safe default" column
+     * states them. That table is the authority for the six defaults;
+     * `overview.md` §6 names the six modes and their value sets but states
+     * no default at all. The one place in code these six values are written;
+     * the migration's column defaults
      * and `Actions\ResolveCemeteryCapabilityProfile`'s fallback both read
      * from here rather than restating the six strings.
      *

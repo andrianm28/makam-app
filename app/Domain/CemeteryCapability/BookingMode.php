@@ -15,7 +15,10 @@ use InvalidArgumentException;
  * `AGENTS.md` §Domain and financial invariants: "Package/class confirmation
  * is default; specific plot requires authoritative inventory and atomic
  * reservation." `DEFAULT` below (`REQUEST_CONFIRMATION`) is the same safe
- * default `overview.md` §6 states literally.
+ * default `docs/domain/cemetery-capability-model.md`'s "Safe default"
+ * column states literally — that table, not `overview.md` §6, is the
+ * authority for the six safe defaults; §6 names the six modes and their
+ * value sets but states no default at all.
  *
  * Plain string column with application-layer validation, not a Postgres
  * enum type — same established convention as every other closed-list
