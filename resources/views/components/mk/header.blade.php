@@ -45,7 +45,7 @@
     'layananHref' => '/marketplace',
     'perpanjanganHref' => '/perpanjangan',
     'faqHref' => '/faq',
-    'akunHref' => '/akun',
+    'akunHref' => null,            // null = account area not built yet (see below); pass a real URL once it ships
     'bantuanHref' => '/bantuan',
     'logoHref' => '/',
     'id' => 'mk-header',
@@ -61,6 +61,15 @@
     ];
 
     $accountText = $accountLabel ?? ($authenticated ? 'Akun' : 'Masuk/Akun');
+
+    // The customer account area (information-architecture.md §1's /akun
+    // tree — /akun/draft, /akun/pesanan, /akun/perpanjangan, /akun/dokumen)
+    // has no route registered anywhere in routes/web.php; it has not been
+    // built. Until a caller passes a real $akunHref, this renders as an
+    // honest disabled control instead of a link that 404s — same "markup
+    // is correct, behaviour layer not written yet" pattern this file
+    // already uses for the mobile hamburger (see KNOWN GAP above).
+    $akunAvailable = filled($akunHref);
     $mobileMenuId = $id . '-mobile-menu';
 
     // §3.10: active item = text-primary-700 font-medium + 2px primary-600
@@ -152,9 +161,19 @@
                 </li>
             @endforeach
             <li>
-                <a href="{{ $akunHref }}" class="touch-target flex items-center text-base text-neutral-700">
-                    {{ $accountText }}
-                </a>
+                @if ($akunAvailable)
+                    <a href="{{ $akunHref }}" class="touch-target flex items-center text-base text-neutral-700">
+                        {{ $accountText }}
+                    </a>
+                @else
+                    <span
+                        class="touch-target flex items-center text-base text-neutral-400 cursor-not-allowed"
+                        aria-disabled="true"
+                        title="Segera hadir"
+                    >
+                        {{ $accountText }}
+                    </span>
+                @endif
             </li>
         </ul>
     </nav>
@@ -179,9 +198,19 @@
         </nav>
 
         <div class="flex shrink-0 items-center gap-4">
-            <a href="{{ $akunHref }}" class="text-base text-neutral-700 hover:text-primary-700">
-                {{ $accountText }}
-            </a>
+            @if ($akunAvailable)
+                <a href="{{ $akunHref }}" class="text-base text-neutral-700 hover:text-primary-700">
+                    {{ $accountText }}
+                </a>
+            @else
+                <span
+                    class="text-base text-neutral-400 cursor-not-allowed"
+                    aria-disabled="true"
+                    title="Segera hadir"
+                >
+                    {{ $accountText }}
+                </span>
+            @endif
             {{-- Same md (default) size as the mobile bar's Bantuan button —
                  see that comment. `sm` is reserved for dense Filament table
                  rows, not a public header. Hand-written, not <x-mk.button> —

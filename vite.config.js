@@ -8,7 +8,17 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
     plugins: [
         laravel({
-            input: ['resources/css/app.css', 'resources/js/app.js'],
+            input: [
+                'resources/css/app.css',
+                'resources/js/app.js',
+                // AdminPanelProvider::panel() -> ->viteTheme('resources/css/filament/admin/theme.css').
+                // Never built as a Vite entry, so `/admin` crashed on every
+                // request ("Unable to locate file in Vite manifest") — the
+                // theme file's own doc block flagged this exact gap as
+                // "not verified against an installed Filament 5" and it was
+                // never closed. Confirmed live on dev.makam.co.id (Vite.php:1042).
+                'resources/css/filament/admin/theme.css',
+            ],
             refresh: true,
         }),
         tailwindcss(),
