@@ -97,6 +97,33 @@ final class RenewalStart extends Component
     }
 
     /**
+     * Back-navigation target for a completed stepper dot.
+     * `<x-mk.stepper>` defaults its click target to `goToStep`
+     * (design-system.md §3.9's `complete` row: "Clickable — back nav
+     * preserves data", and `:559` documents the prop). On this screen the
+     * only step that can ever render `complete` is step 1 — step 2 is the
+     * furthest this component reaches and steps 3-6 live on another route
+     * or nowhere yet — so anything else is a silent no-op, the same
+     * failure mode selectCity() and mount() already use for a value this
+     * screen cannot honour (and the same convention BookingWizard::
+     * goToStep uses).
+     *
+     * An allow-list of one constant is deliberately used instead of a
+     * `LAST_IMPLEMENTED` range guard: an allow-list is strictly stronger
+     * than a range check, so adding `$step > LAST_IMPLEMENTED` here would
+     * be dead code guarding a branch the allow-list already excludes. The
+     * range guard belongs to Sprint 13's first method that accepts a
+     * RANGE of steps — the persisted `current_step` mutator — not to this
+     * one.
+     */
+    public function goToStep(int $step): void
+    {
+        if ($step === RenewalJourneyStep::CITY) {
+            $this->resetCity();
+        }
+    }
+
+    /**
      * AC1 step 1 until a city is chosen, then step 2. Derived from the one
      * piece of state this screen holds — see `$city`.
      */

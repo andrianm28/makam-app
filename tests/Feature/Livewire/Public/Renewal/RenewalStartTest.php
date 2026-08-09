@@ -7,6 +7,7 @@ namespace Tests\Feature\Livewire\Public\Renewal;
 use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\Renewal\RenewalJourneyStep;
 use App\Livewire\Public\Renewal\RenewalStart;
 use App\Platform\FeatureGate\Models\FeatureGate;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -164,6 +165,33 @@ final class RenewalStartTest extends TestCase
             ->assertSee('Langkah 1 dari 6')
             ->call('selectCity', LaunchCityCode::JAKARTA)
             ->assertSee('Langkah 2 dari 6');
+    }
+
+    /**
+     * `<x-mk.stepper>` defaults its click target to `goToStep`
+     * (design-system.md §3.9), so once step 1 renders as `complete` the
+     * dot becomes a live button calling a method THIS component must
+     * implement. The first assertion pins the seam — that the stepper
+     * still emits the default method name and that this component is the
+     * thing that must answer it; without it the test would pass even if
+     * the stepper stopped emitting the button, which is the drift that
+     * produced the original dead control. The last assertion pins that an
+     * unreachable step is a silent no-op and never a 500.
+     */
+    public function test_the_completed_step_one_dot_calls_a_method_this_component_implements(): void
+    {
+        $component = Livewire::test(RenewalStart::class);
+        $component->call('selectCity', LaunchCityCode::JAKARTA);
+
+        $component->assertSee('wire:click="goToStep(1)"', false);
+
+        $component->call('goToStep', RenewalJourneyStep::CITY)
+            ->assertSet('city', '')
+            ->assertSee('Langkah 1 dari 6');
+
+        $component->call('goToStep', RenewalJourneyStep::FEE)
+            ->assertOk()
+            ->assertSet('city', LaunchCityCode::JAKARTA);
     }
 
     // =====================================================================
