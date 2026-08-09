@@ -63,17 +63,32 @@ final class GraveRecord extends Model
     protected $table = 'grave_records';
 
     /**
+     * Two columns of this table are deliberately absent from this list.
+     *
+     * `deceased_name_normalized` is fully derived by the `saving` hook
+     * below, and the migration says so in its own words ("Never set by a
+     * caller, never edited by hand"). Leaving it mass-assignable advertised
+     * an input this model does not have — whatever a caller passed was
+     * overwritten before it reached the database.
+     *
+     * `heir_contact_reference` has no write path anywhere today
+     * (`app/Domain/GraveRegistry/Actions/` is empty and no seeded row
+     * populates it), and `AGENTS.md` §Authorization and files puts heir
+     * contact in the same protected class as KTP/KK/death documents.
+     * Whatever eventually writes it should do so deliberately, not by
+     * happening to be in an array a bulk import splats a CSV row into.
+     * `GraveRecordProjection` has no property for it under ANY access mode,
+     * so nothing can read it back out either.
+     *
      * @var list<string>
      */
     protected $fillable = [
         'id',
         'cemetery_id',
         'deceased_name',
-        'deceased_name_normalized',
         'block',
         'death_date',
         'due_date',
-        'heir_contact_reference',
         'access_mode',
         'source',
         'source_updated_at',
