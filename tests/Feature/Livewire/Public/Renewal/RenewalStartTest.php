@@ -131,6 +131,25 @@ final class RenewalStartTest extends TestCase
             ->assertSee('Pilih kota terlebih dahulu');
     }
 
+    /**
+     * mount()'s guard runs once; a client-initiated property update
+     * re-hydrates without re-running it, so before the fix an unknown
+     * `$city` pushed currentStep() to 2 while $selectedCityLabel stayed
+     * null and the 6.2 empty state degraded to "Belum ada TPU/TPS
+     * terdaftar di ." — losing the "what is empty" part its three-part
+     * contract requires. Normalising in render() subsumes every update
+     * path. The final assertDontSee pins the actual user-visible defect
+     * and must not be dropped as redundant.
+     */
+    public function test_a_client_supplied_unknown_city_is_discarded_on_update_not_only_on_mount(): void
+    {
+        Livewire::test(RenewalStart::class)
+            ->set('city', 'SURABAYA')
+            ->assertSet('city', '')
+            ->assertSee('Pilih kota terlebih dahulu')
+            ->assertDontSee('Belum ada TPU/TPS terdaftar di .');
+    }
+
     public function test_select_city_refuses_a_code_outside_the_launch_list(): void
     {
         Livewire::test(RenewalStart::class)

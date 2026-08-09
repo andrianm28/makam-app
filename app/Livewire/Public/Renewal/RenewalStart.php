@@ -73,12 +73,22 @@ final class RenewalStart extends Component
 
     public function mount(): void
     {
-        // A tampered or stale `?kota=` value is silently discarded rather
-        // than 404ing: nothing about this URL names a specific record whose
-        // existence could leak, and dropping the visitor back to a working
-        // step 1 is more useful than an error page. `CemeteryPublicQuery::
-        // inCity()` would return empty for an unknown code
-        // anyway; this makes the reset visible in the UI and the URL.
+        $this->normalizeCity();
+    }
+
+    /**
+     * A tampered or stale `?kota=` value is silently discarded rather than
+     * 404ing: nothing about this URL names a specific record whose
+     * existence could leak, and dropping the visitor back to a working
+     * step 1 is more useful than an error page. `CemeteryPublicQuery::
+     * inCity()` would return empty for an unknown code
+     * anyway; this makes the reset visible in the UI and the URL. Called
+     * from mount() AND render(): mount() runs once, and a client-initiated
+     * property update re-hydrates without re-running it, so render() is the
+     * one point every update path passes through.
+     */
+    private function normalizeCity(): void
+    {
         if ($this->city !== '' && ! LaunchCityCode::isKnown($this->city)) {
             $this->city = '';
         }
@@ -138,6 +148,8 @@ final class RenewalStart extends Component
 
     public function render(): View
     {
+        $this->normalizeCity();
+
         $cemeteries = new Collection;
         $this->cemeteryListUnavailable = false;
 
