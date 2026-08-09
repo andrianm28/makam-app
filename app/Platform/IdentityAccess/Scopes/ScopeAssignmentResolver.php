@@ -85,6 +85,40 @@ final class ScopeAssignmentResolver
     }
 
     /**
+     * The inverse of `grantedEntityIds()` — every actor holding an active
+     * (non-revoked) grant on `$entityType`/`$entityId`, deduplicated.
+     *
+     * Added by the L2 `platform-notifications` lane (branch
+     * `lane/l2-notifications`) for recipient resolution — ruling 3 of
+     * `docs/superpowers/plans/2026-08-10-wave1a-notifications-decisions.md`.
+     * Recipient resolution (AC6: "resolve recipient scope from record
+     * scope") needs to go from a record's scope entity (e.g. a cemetery) to
+     * the actors who may act on it, which none of this class's existing
+     * actor-first methods provide. Flagged here, as ruling 3 requires, so
+     * the next person working in `IdentityAccess/Scopes/` is not surprised
+     * by a cross-module addition: the caller is
+     * `App\Platform\Notification\RecipientResolver`, not anything in this
+     * module.
+     *
+     * @return list<string>
+     *
+     * @throws \InvalidArgumentException when `$entityType` is not one of
+     *                                   `ScopeEntityType::KNOWN_TYPES`.
+     */
+    public function actorsForEntity(string $entityType, int|string $entityId): array
+    {
+        ScopeEntityType::assertKnown($entityType);
+
+        return ScopeAssignment::query()
+            ->where('entity_type', $entityType)
+            ->where('entity_id', (string) $entityId)
+            ->whereNull('revoked_at')
+            ->distinct()
+            ->pluck('actor_identifier')
+            ->all();
+    }
+
+    /**
      * All of the given actor's active grants, formatted as
      * `"entity_type:entity_id"` strings — the shape `ActorContext::$scopes`
      * and `ActorContext::hasScope()` expect. See this class's own doc block
