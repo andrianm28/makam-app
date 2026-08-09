@@ -35,6 +35,36 @@ use Tests\TestCase;
  * `DisableMfaControllerTest::test_disable_with_a_fresh_authentication_
  * actually_revokes()`'s `ActorSession` fixture already established and
  * verified.
+ *
+ * ---------------------------------------------------------------------------
+ * Why this test calls `forgetScopedInstances()` and the single-request tests
+ * on this branch do not
+ * ---------------------------------------------------------------------------
+ * `ActorContext` and `ActorContextResolver` are `scoped()` container bindings
+ * (`Providers\IdentityAccessServiceProvider`), and `ActorContextResolver`
+ * caches its resolved `ActorContext` for the lifetime of that instance —
+ * "resolve once per request/job", requirements.md AC8. In production a real
+ * boundary always discards that cache: PHP-FPM builds a whole new
+ * `Application` per request (`public/index.php`), and Horizon's worker calls
+ * `$app->forgetScopedInstances()` between jobs (Laravel's own
+ * `QueueServiceProvider`, the framework's only caller of it).
+ *
+ * A feature test crosses no such boundary. `MakesHttpRequests::call()` reuses
+ * `$this->app` for every simulated request and, although it does call
+ * `$kernel->terminate()`, neither `Foundation\Http\Kernel::terminate()` nor
+ * `Application::terminate()` touches scoped instances — Laravel only rebuilds
+ * the container between test METHODS. So two `$this->actingAs(...)->get(...)`
+ * calls in one method share one cached `ActorContext`.
+ *
+ * That does not matter for the single-request tests (this branch's
+ * `EnforceMfaChallengeMiddlewareTest` and friends each make one HTTP call
+ * with the enrolment already set up). It matters here, because this is the
+ * only test that mutates MFA state BETWEEN two requests — which is exactly
+ * what it exists to prove. Each `forgetScopedInstances()` call below marks a
+ * point where a field the next request must re-read has just changed; without
+ * it the test would assert against step 1's stale, pre-enrolment snapshot.
+ * Same primitive, same purpose as `Correlation\CarriesCorrelationIdJobTest`'s
+ * own use of it.
  */
 final class MfaEndToEndFlowTest extends TestCase
 {
@@ -70,6 +100,10 @@ final class MfaEndToEndFlowTest extends TestCase
         $code = $this->totpCodeFor($pendingEnrolment, time());
         $settings->set('confirmationCode', $code)->call('confirmEnrolment');
         $this->assertNotEmpty($settings->get('displayedRecoveryCodes'));
+
+        // Request boundary: `mfaState` just became ENROLLED. Step 1's request
+        // cached it as NOT_ENROLLED — see this class's doc block.
+        $this->app->forgetScopedInstances();
 
         // 4. Now enrolled — the dashboard redirects to the challenge.
         $this->actingAs($user)
@@ -111,9 +145,21 @@ final class MfaEndToEndFlowTest extends TestCase
             'last_authenticated_at' => CarbonImmutable::now()->subSeconds(10),
         ]);
 
+        // Request boundary: `lastAuthenticatedAt` just became non-null. Step 7's
+        // request cached it as null, which is the very value that made step 7
+        // redirect — without this, RequireRecentAuthentication would still see
+        // a stale null and this disable would be redirected too, never revoking.
+        $this->app->forgetScopedInstances();
+
         $this->actingAs($user)->post(route('admin.mfa.disable'))->assertRedirect();
 
         $this->assertSame(MfaEnrolmentStatus::REVOKED, $this->latestEnrolmentFor($user)->status);
+
+        // Request boundary: the disable above revoked the enrolment, so
+        // `mfaState` changed again. Without this, step 9 would pass only
+        // incidentally — via the session flag set in step 5 — instead of via
+        // the not-enrolled branch it exists to exercise.
+        $this->app->forgetScopedInstances();
 
         // 9. Post-disable, the dashboard no longer challenges.
         $this->actingAs($user)->get('/admin')->assertOk();
