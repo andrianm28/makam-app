@@ -147,6 +147,27 @@ final class FaqArticleDraftExclusionTest extends TestCase
         );
         $this->assertFalse(FaqPublicQuery::allPublished()->pluck('id')->contains($seededDraft->id));
         $this->assertNull(FaqPublicQuery::findBySlug($seededDraft->slug));
+
+        // search() — the one public helper AC6's "or public search result"
+        // clause names by name, and the one this test's own name promised
+        // but did not exercise until the retrofit fix wave. The seeded
+        // draft's title, summary and body all contain "vendor", so a search
+        // for it genuinely matches the row and is excluded by state, not by
+        // failing to match.
+        $this->assertStringContainsStringIgnoringCase('vendor', $seededDraft->title);
+        $searchIds = FaqPublicQuery::search('vendor')->pluck('id');
+        $this->assertFalse($searchIds->contains($seededDraft->id));
+
+        // categories() returns FaqCategory rows only — it never projects
+        // article content, so there is no draft-derived field it could leak.
+        // Asserted rather than argued: the draft's own category is still
+        // listed (correctly — the category is real and holds other published
+        // articles), and no article relation is eager-loaded onto it.
+        $categories = FaqPublicQuery::categories();
+        $draftCategory = $categories->firstOrFail(
+            fn (FaqCategory $category) => $category->id === $seededDraft->category_id
+        );
+        $this->assertFalse($draftCategory->relationLoaded('articles'));
     }
 
     public function test_faq_public_query_helpers_exclude_draft_and_unpublished_articles(): void
