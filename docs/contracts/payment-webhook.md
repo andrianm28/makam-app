@@ -53,9 +53,43 @@ RECEIVED
 VALIDATED
 PROCESSED
 DUPLICATE
+REJECTED_PAYLOAD
 REJECTED_SIGNATURE
+REJECTED_REPLAY
 REJECTED_MERCHANT
+REJECTED_SESSION
+REJECTED_CURRENCY
 REJECTED_AMOUNT
 RETRYABLE_FAILURE
 MANUAL_REVIEW
 ```
+
+### Amendment — four states added 10 Aug 2026 (`platform-payment-adapter` Task 3)
+
+`REJECTED_PAYLOAD`, `REJECTED_REPLAY`, `REJECTED_CURRENCY`, and `REJECTED_SESSION`
+were added when the receiver was implemented. The original nine states are
+unchanged and keep their meanings; nothing that referenced them is affected.
+
+The reason is `platform-payment-adapter` AC6, which requires every webhook to be
+validated against five distinct things — "signature, merchant scope, amount,
+currency, and replay window" — and requires a failure to be *recorded*, not only
+rejected. Three of those five had no state to be recorded under, and a rejection
+filed under a status naming the wrong cause is not a usable record:
+
+- `REJECTED_PAYLOAD` — the body could not be read as the envelope above, so
+  nothing else could be checked. Also covers a body over the configured size cap,
+  which is refused before anything is stored.
+- `REJECTED_REPLAY` — the delivery was authentic but its signed timestamp fell
+  outside the acceptable skew (this section's Security bullet). Distinguished from
+  `REJECTED_SIGNATURE` only because the signature is verified *first*, so this
+  state always means a genuine delivery arriving late, never a forgery.
+- `REJECTED_CURRENCY` — the declared or session currency is not the configured
+  currency.
+- `REJECTED_SESSION` — no payment session is bound to the provider transaction,
+  so the merchant/`badan_usaha` binding and the amount have nothing authoritative
+  to be reconciled against. Under Wave 1b ruling 1b-L3-01 the payment guard is
+  deny-only and no session can exist yet, so this is currently the terminal state
+  of every otherwise-valid webhook — fail-closed by design.
+
+The application-side enum is `App\Platform\Payment\ProviderEventStatus`. This
+document remains the canonical list; the enum follows it.

@@ -3,6 +3,7 @@
 use App\Platform\Correlation\Providers\CorrelationServiceProvider;
 use App\Platform\FeatureGate\Providers\FeatureGateServiceProvider;
 use App\Platform\IdentityAccess\Providers\IdentityAccessServiceProvider;
+use App\Platform\Payment\Providers\PaymentServiceProvider;
 use App\Providers\AppServiceProvider;
 use App\Providers\Filament\AdminPanelProvider;
 
@@ -34,4 +35,11 @@ return [
     // in that batch's literal owned-files list either, but the brief
     // explicitly authorizes this one additive line.
     CorrelationServiceProvider::class,
+    // platform-payment-adapter Task 3 — registers the `payment-webhook` rate
+    // limiter the webhook route's `throttle:` middleware names, and binds
+    // SumoPodWebhookSignature to its configured credentials. Same precedent as
+    // the three lines above: this file is not in the task's literal owned-files
+    // list, but a named rate limiter has to be registered somewhere a service
+    // provider runs, and the route would 500 on an unregistered limiter name.
+    PaymentServiceProvider::class,
 ];

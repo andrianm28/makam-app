@@ -186,10 +186,49 @@ These are not defects in Task 2. They are requirements on whichever later task f
 - `RedactProviderPayload` middleware ensures raw payloads containing any credentials/PII are masked before any log/error-tracker exposure (AC14).
 - Ack timing: persist is a single fast insert; validation is in-memory; the 2-second target is met by design (no async work in the request path).
 
-- [ ] **Step 1:** Implement the receiver + route.
-- [ ] **Step 2:** Implement the validator (signature, merchant, amount minor units, currency, replay window).
-- [ ] **Step 3:** Implement `provider_events` model + redaction middleware.
-- [ ] **Step 4:** Tests: bad signature → REJECTED_SIGNATURE recorded + acked; wrong merchant → REJECTED_MERCHANT; wrong amount (float/int mismatch) → REJECTED_AMOUNT; replay (old timestamp) → REJECTED; duplicate event id → short-circuit ack, one row; ack latency assertion (receiver does no async work in request path); raw payload never contains a credential in logs (redaction test).
+- [x] **Step 1:** Implement the receiver + route.
+- [x] **Step 2:** Implement the validator (signature, merchant, amount minor units, currency, replay window).
+- [x] **Step 3:** Implement `provider_events` model + redaction middleware.
+- [x] **Step 4:** Tests: bad signature → REJECTED_SIGNATURE recorded + acked; wrong merchant → REJECTED_MERCHANT; wrong amount (float/int mismatch) → REJECTED_AMOUNT; replay (old timestamp) → REJECTED; duplicate event id → short-circuit ack, one row; ack latency assertion (receiver does no async work in request path); raw payload never contains a credential in logs (redaction test).
+
+**Task 3 outcome (10 Aug 2026) — what landed, and what is honestly NOT TESTED.** The four
+steps above are complete; the text is preserved byte-for-byte per this repo's append-correction
+convention.
+
+Task 3 hit the wall ruling 1b-L3-01 predicted for Tasks 3-8, and did not widen scope to get past
+it. Because the guard is deny-only, **no `payment_sessions` row can exist**, so every well-formed,
+correctly signed webhook terminates at `REJECTED_SESSION`. No session fixture was fabricated and no
+test-only bypass was added. The consequences, stated rather than implied:
+
+- **NOT TESTED — the pass path.** `VALIDATED` status, the `ProcessProviderEventJob` dispatch, and
+  the AC13 merchant/`badan_usaha` reconciliation and AC6 amount comparison *against a session* are
+  implemented for real in `WebhookValidator` but are unreachable today. What is tested of the job is
+  that it is queueable, targets `critical`, and carries only a row id.
+- **NOT TESTED — PostgreSQL.** The suite runs on SQLite. The `provider_events` status CHECK
+  constraint is Postgres-only, and the partial unique settlement index is created with driver-specific
+  SQL whose Postgres form CI executes first.
+- **NOT TESTED — the live SumoPod sandbox.** No sandbox webhook has been exercised; the signature
+  implementation is conformance-tested against the Svix scheme ADR-0033 names, not against a real
+  delivery. Task 8 owns that smoke run.
+
+Three decisions taken inside Task 3 that a reviewer should look at deliberately, all documented at
+their site: the secondary unique guard is a **partial** index scoped to settling event types (a total
+index would make Task 4's required out-of-order `expired`-after-`completed` delivery impossible to
+persist at all); the shared-token verification mechanism ADR-0033 permits **defaults to disabled**,
+because it carries no provider timestamp and so admits no replay window; and an **oversized body is
+refused with 413 and an audit row but no `provider_events` row**, since storing a truncated body
+would put something in the replay source of truth the provider never sent.
+
+Four failure states were added to `docs/contracts/payment-webhook.md` (`REJECTED_PAYLOAD`,
+`REJECTED_REPLAY`, `REJECTED_CURRENCY`, `REJECTED_SESSION`) because AC6 names five things to validate
+and three of them had no state to be recorded under. The amendment is dated and additive; the original
+nine states are unchanged.
+
+**Carried to Task 4, not fixed here.** The `(provider, provider_transaction_id, invoice_reference)`
+guard prevents the same (transaction, invoice) pair settling twice, but does NOT prevent one provider
+transaction settling two *different* invoices — `payment-webhook.md` §Idempotency's literal
+requirement. That needs a `(provider, provider_transaction_id)` claim at apply time, which is where
+this plan already assigns the secondary-guard re-check.
 
 ---
 
