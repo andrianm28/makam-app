@@ -289,6 +289,10 @@ git commit -m "feat(booking): emit booking.draft_started.v1 to the transactional
 
 **Why the version is in the idempotency key:** `version` is bumped exactly once per accepted save, so `draft:step:version` is unique per real save while still being deterministic. Step alone is not unique — back-navigation legitimately re-saves the same step (AC11), and each re-save is a distinct event, not a replay.
 
+**Note for the implementer (corrected 09 Aug 2026 against the real domain):** `booking_drafts.version` **defaults to 1**, not 0 (`BookingDraft::$attributes['version'] = 1` and the migration's `->default(1)`). `SaveBookingDraftStep` sets `version = $current->version + 1`, so after the FIRST accepted save `version` is **2**, and this event's idempotency key is therefore `booking_draft:{id}:step:1:v2`. Do not assume a first save yields `v1`.
+
+**Note for the implementer (corrected 09 Aug 2026 against the real domain):** the only valid `city_code` values are `LaunchCityCode::KNOWN_CODES` — `JAKARTA`, `BOGOR`, `DEPOK`, `TANGERANG`, `BEKASI`. `'JKT'` is **not** one of them and would throw `BookingStepValidationException`. Use `'JAKARTA'` in every test payload below.
+
 - [ ] **Step 1: Write the failing tests**
 
 Append these three methods to `BookingDraftOutboxTest`, and add `use App\Domain\Booking\Actions\SaveBookingDraftStep;` plus `use App\Domain\Booking\Models\BookingDraft;` to its imports:
@@ -298,7 +302,7 @@ Append these three methods to `BookingDraftOutboxTest`, and add `use App\Domain\
     {
         $draft = (new StartBookingDraft)(userId: null);
 
-        (new SaveBookingDraftStep)($draft, 1, ['city_code' => 'JKT'], 'key-1');
+        (new SaveBookingDraftStep)($draft, 1, ['city_code' => 'JAKARTA'], 'key-1');
 
         $event = OutboxEvent::query()->where('event_name', 'booking.draft_step_saved.v1')->sole();
 
@@ -315,8 +319,8 @@ Append these three methods to `BookingDraftOutboxTest`, and add `use App\Domain\
     {
         $draft = (new StartBookingDraft)(userId: null);
 
-        $saved = (new SaveBookingDraftStep)($draft, 1, ['city_code' => 'JKT'], 'replayed-key');
-        (new SaveBookingDraftStep)($saved, 1, ['city_code' => 'JKT'], 'replayed-key');
+        $saved = (new SaveBookingDraftStep)($draft, 1, ['city_code' => 'JAKARTA'], 'replayed-key');
+        (new SaveBookingDraftStep)($saved, 1, ['city_code' => 'JAKARTA'], 'replayed-key');
 
         $this->assertSame(
             1,
@@ -413,7 +417,28 @@ This is the task that actually closes S3-T11's gap 1. Everything before it only 
 - Consumes: Task 1's `booking.draft_started.v1` row shape and Task 2's `booking.draft_step_saved.v1` row shape, exactly as specified above.
 - Produces: nothing other tasks consume.
 
-**Publisher API (verified at plan time, use exactly this):** `App\Platform\Outbox\OutboxPublisher::publishBatch(int $batchSize = self::DEFAULT_BATCH_SIZE): int` — returns the number of events claimed and dispatched. `DEFAULT_BATCH_SIZE` is 50, so the default covers every case in this test. Resolve it from the container (`app(OutboxPublisher::class)->publishBatch()`) and cross-check the idiom against `tests/Feature/Outbox/OutboxRecoveryTest.php`, which already drives this loop; if that file establishes a different construction idiom for this codebase, follow it rather than inventing a second one.
+**Publisher API (verified at plan time, use exactly this):** `App\Platform\Outbox\OutboxPublisher::publishBatch(int $batchSize = self::DEFAULT_BATCH_SIZE): int` — returns the number of events claimed and dispatched. `DEFAULT_BATCH_SIZE` is 50, so the default covers every case in this test.
+
+**Corrected 09 Aug 2026 against the real module — two things the draft test code below gets wrong, fix both:**
+
+1. **Construction idiom.** `tests/Feature/Outbox/OutboxRecoveryTest.php:114` already establishes `(new OutboxPublisher)->publishBatch()`. Use that, **not** `app(OutboxPublisher::class)`, per this plan's own "follow it rather than inventing a second one."
+2. **This test MUST carry the Postgres guard.** `OutboxPublisher::claim()` does not skip on a non-Postgres driver — it **throws `RuntimeException`**. Without a guard this test hard-fails anywhere `DB_CONNECTION` is not `pgsql`. Copy `OutboxRecoveryTest`'s `setUp()` idiom verbatim:
+
+```php
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        if (DB::connection()->getDriverName() !== 'pgsql') {
+            $this->markTestSkipped(
+                'OutboxPublisher::claim() requires real Postgres row locking '.
+                '(SELECT ... FOR UPDATE SKIP LOCKED). Run with DB_CONNECTION=pgsql, as CI does.'
+            );
+        }
+    }
+```
+
+Add `use Illuminate\Support\Facades\DB;` for it. Note the third test (`..._route_to_the_default_queue`) is pure routing and needs no database — but it inherits the skip, which is acceptable: `OutboxQueueRoutingTest` already covers routing on every driver.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -476,7 +501,7 @@ final class OutboxBookingDraftPublicationTest extends TestCase
         Queue::fake();
 
         $draft = (new StartBookingDraft)(userId: null);
-        $saved = (new SaveBookingDraftStep)($draft, 1, ['city_code' => 'JKT'], 'step-1-key');
+        $saved = (new SaveBookingDraftStep)($draft, 1, ['city_code' => 'JAKARTA'], 'step-1-key');
 
         $this->assertSame(
             2,
@@ -493,7 +518,9 @@ final class OutboxBookingDraftPublicationTest extends TestCase
             OutboxEvent::query()->whereNull('dispatched_at')->count(),
             'Every pending event must have been claimed and dispatched.'
         );
-        $this->assertSame(1, $saved->version);
+        // `booking_drafts.version` DEFAULTS TO 1, so the first accepted
+        // save leaves it at 2. See Task 2's corrected implementer note.
+        $this->assertSame(2, $saved->version);
     }
 
     public function test_booking_draft_events_route_to_the_default_queue(): void
@@ -514,7 +541,7 @@ final class OutboxBookingDraftPublicationTest extends TestCase
 
     private function publishPendingEvents(): int
     {
-        return app(OutboxPublisher::class)->publishBatch();
+        return (new OutboxPublisher)->publishBatch();
     }
 }
 ```
