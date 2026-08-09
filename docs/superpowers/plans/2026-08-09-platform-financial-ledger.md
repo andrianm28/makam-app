@@ -135,6 +135,32 @@ Migrations (all additive, `2026_08_09_*`): `create_coa_accounts_table` (seed), `
 - `Journal::postReversal(string $originalBusinessKey, string $reason, ...)`: posts a new batch that reverses every original entry (direction flipped, amounts equal), `status = reversed` on the original (a forward-only status marker, NOT an edit — original entries untouched), references the original `business_key` as `reference`, new `business_key = refund:{original}` / `reversal:{original}`. Never edits or deletes the original rows (AC2, AC14).
 - A `reversed` status is a projection marker only; total/balances always read original + reversal entries.
 
+**Correction, 10 Aug 2026 (Wave 1b rulings, user-approved):** the two bullets above are
+append-corrected, not rewritten. As written they contradicted this plan's own Task 6 and
+Global Constraints:
+
+1. **No `status = reversed` UPDATE. Reversed-ness is derived, never stored.** The bullet above
+   told Task 3 to write `status = 'reversed'` on the original batch; Task 6 (§"Append-only
+   enforcement", this file) and Global Constraint 2 revoke UPDATE on `journal_batches` from the
+   app role entirely. Whatever Task 3 wrote, Task 6 would have broken. Calling the write "a
+   forward-only status marker, NOT an edit" does not change what the database sees — it is an
+   UPDATE on a table this plan declares append-only, and append-only is AC2/AC14 itself.
+   **Ruling: a batch is reversed if and only if a reversing batch referencing it exists.**
+   Compute it by lookup; write no status column. This makes AC2/AC14 literally true and lets
+   Task 6's blanket revoke apply exactly as written, with no column-level grant carve-out. It is
+   also the reading this plan's own next bullet already implies ("a projection marker only").
+2. **Add a `reverses_batch_id` FK.** The bullet above specified the reversal→original link as
+   the original `business_key` written into `reference` — i.e. `journal_entries.reference`, which
+   Task 2 built as a nullable, un-indexed, unconstrained `text` note column explicitly documented
+   as never holding PII. That link *is* the audit trail for AC2 and AC14, and ruling 1 above
+   depends on it being trustworthy, so it must be a real foreign key rather than a free-text note.
+   **Ruling: `journal_batches` gains a nullable, indexed, self-referencing `reverses_batch_id` FK.**
+   `journal_entries.reference` stays the human note column it was designed to be.
+
+   This adds a migration to Task 3, which the File Structure section above does not list. The
+   migration is additive and non-destructive: per this plan's own Current-state finding, no money
+   is stored in any deployed database today, so the table holds zero production rows.
+
 - [ ] **Step 1:** Implement `Contracts\Journal` + `Journal` implementation.
 - [ ] **Step 2:** Implement `postReversal`.
 - [ ] **Step 3:** Tests: post inside a caller transaction rolls back together with the state change (rollback test); duplicate business key posts nothing (caller's change also rolled back); reversal flips all entries and references the original; original rows byte-identical after reversal (immutability test); same-transaction proof mirrors `OutboxTransactionTest`/`AuditWrapTransactionTest`.
