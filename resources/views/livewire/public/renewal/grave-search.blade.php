@@ -268,8 +268,33 @@
                     </x-mk.alert>
 
                 @elseif ($resultsShown)
+                    {{-- The ONLY programmatic announcement of a search
+                         outcome. It used to be a bare count for every
+                         outcome, which meant a screen-reader user whose
+                         search matched nothing heard "0 data makam cocok
+                         dengan pencarian Anda" — a bare no-data
+                         announcement, which design-system.md §6.2 forbids in
+                         terms ("Three parts, always: what is empty · why ·
+                         what to do next. Never a bare 'Tidak ada data'").
+                         The visible no-result card below carries all three
+                         parts; the announcement carried none of them.
+
+                         Kept shorter than the visible copy on purpose — this
+                         is heard, not read — but it carries the same three
+                         parts, because the whole point of this screen is
+                         that "nothing matched" must never be heard as "the
+                         grave does not exist".
+
+                         Long sentences stay on ONE source line each, per
+                         this file's note further down: wrapping them inserts
+                         a newline into the rendered HTML and an assertSee()
+                         on the phrase silently fails. --}}
                     <p class="sr-only" role="status" aria-live="polite">
-                        {{ $outcome->matchCount() }} data makam cocok dengan pencarian Anda.
+                        @if ($outcome->isNoResult())
+                            Data makam tidak ditemukan di {{ $cemetery->name }}. Registri makam kami belum tentu lengkap, jadi hasil ini belum tentu berarti makam yang Anda cari tidak ada. Lanjutkan lewat tombol Input manual atau Hubungi bantuan di bawah.
+                        @else
+                            {{ $outcome->matchCount() }} data makam cocok dengan pencarian Anda.
+                        @endif
                     </p>
 
                     {{-- ------------------------------------------------------

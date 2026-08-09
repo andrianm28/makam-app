@@ -265,6 +265,60 @@ final class GraveSearchStatesTest extends TestCase
             ->assertSee('Hubungi bantuan');
     }
 
+    /**
+     * §6.2 applies to what is ANNOUNCED, not only to what is drawn. The
+     * screen's one `aria-live` region used to read "{count} data makam cocok
+     * dengan pencarian Anda" for every outcome, so a screen-reader user
+     * whose search matched nothing heard "0 data makam cocok dengan
+     * pencarian Anda" — a bare no-data announcement, forbidden in terms by
+     * design-system.md §6.2 ("Never a bare 'Tidak ada data'").
+     *
+     * Scope, stated rather than implied: this covers the announcement's
+     * COPY, which is server-rendered and therefore assertable here. Whether
+     * a live region present in the DOM from first paint is actually
+     * announced on a URL-arrival page load is a DOM-timing question no test
+     * in this repository can answer — there is no browser, Dusk, Playwright
+     * or Cypress harness. That half is ledgered under the program-level
+     * browser-harness gap, NOT TESTED.
+     */
+    public function test_the_no_result_announcement_carries_section_6_2s_three_parts_not_a_bare_count(): void
+    {
+        $this->openTheDataGate();
+
+        Livewire::withQueryParams([
+            'tpu' => $this->cemeteryId('tpu-jakarta-menteng'),
+            'blok' => 'ZZ-99',
+        ])
+            ->test(GraveSearch::class)
+            ->assertOk()
+            // The bare count, gone.
+            ->assertDontSee('0 data makam cocok dengan pencarian Anda')
+            // 1. What is empty, and where.
+            ->assertSee('Data makam tidak ditemukan di TPU Jakarta Menteng.')
+            // 2. Why — and explicitly not "the grave does not exist".
+            ->assertSee('Registri makam kami belum tentu lengkap, jadi hasil ini belum tentu berarti makam yang Anda cari tidak ada.')
+            // 3. What to do next.
+            ->assertSee('Lanjutkan lewat tombol Input manual atau Hubungi bantuan di bawah.');
+    }
+
+    /**
+     * The count announcement is still correct where a count is the honest
+     * thing to announce — the fix must not have flattened both branches
+     * into the no-result wording.
+     */
+    public function test_a_matching_search_still_announces_its_count(): void
+    {
+        $this->openTheDataGate();
+
+        Livewire::withQueryParams([
+            'tpu' => $this->cemeteryId('tpu-jakarta-menteng'),
+            'blok' => 'A-12',
+        ])
+            ->test(GraveSearch::class)
+            ->assertSee('1 data makam cocok dengan pencarian Anda.')
+            ->assertDontSee('Registri makam kami belum tentu lengkap');
+    }
+
     public function test_the_no_result_state_is_not_confused_with_the_other_two(): void
     {
         $this->openTheDataGate();
