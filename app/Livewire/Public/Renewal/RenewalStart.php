@@ -36,10 +36,12 @@ use Throwable;
  * ---------------------------------------------------------------------------
  * `G-DATA-01` closed means the grave-search capability is unavailable
  * (AC16). This screen is not the search — it is city and cemetery
- * selection, which works perfectly well either way and which
- * design-system.md §6.9 forbids removing: "a closed gate never removes a
- * required MVP step." So this screen renders `<x-mk.gate-closed-banner>`
- * up front, telling the visitor before they invest in two selections that
+ * selection, which works perfectly well either way, and
+ * design-system.md §9.2 MUST NOT 9 forbids hiding a documented step;
+ * the same reasoning `AGENTS.md` §Source precedence applies to a step
+ * a closed gate would remove extends, as an explicit analogy, to a step
+ * that is not built yet. So this screen renders `<x-mk.alert>` up front,
+ * telling the visitor before they invest in two selections that
  * the search step will need the manual-assistance path, and step 3 itself
  * (`GraveSearch`) renders §6.4's full explanatory page.
  *
@@ -71,12 +73,22 @@ final class RenewalStart extends Component
 
     public function mount(): void
     {
-        // A tampered or stale `?kota=` value is silently discarded rather
-        // than 404ing: nothing about this URL names a specific record whose
-        // existence could leak, and dropping the visitor back to a working
-        // step 1 is more useful than an error page. `CemeteryPublicQuery::
-        // inCity()` would return empty for an unknown code
-        // anyway; this makes the reset visible in the UI and the URL.
+        $this->normalizeCity();
+    }
+
+    /**
+     * A tampered or stale `?kota=` value is silently discarded rather than
+     * 404ing: nothing about this URL names a specific record whose
+     * existence could leak, and dropping the visitor back to a working
+     * step 1 is more useful than an error page. `CemeteryPublicQuery::
+     * inCity()` would return empty for an unknown code
+     * anyway; this makes the reset visible in the UI and the URL. Called
+     * from mount() AND render(): mount() runs once, and a client-initiated
+     * property update re-hydrates without re-running it, so render() is the
+     * one point every update path passes through.
+     */
+    private function normalizeCity(): void
+    {
         if ($this->city !== '' && ! LaunchCityCode::isKnown($this->city)) {
             $this->city = '';
         }
@@ -97,6 +109,33 @@ final class RenewalStart extends Component
     }
 
     /**
+     * Back-navigation target for a completed stepper dot.
+     * `<x-mk.stepper>` defaults its click target to `goToStep`
+     * (design-system.md §3.9's `complete` row: "Clickable — back nav
+     * preserves data", and `:559` documents the prop). On this screen the
+     * only step that can ever render `complete` is step 1 — step 2 is the
+     * furthest this component reaches and steps 3-6 live on another route
+     * or nowhere yet — so anything else is a silent no-op, the same
+     * failure mode selectCity() and mount() already use for a value this
+     * screen cannot honour (and the same convention BookingWizard::
+     * goToStep uses).
+     *
+     * An allow-list of one constant is deliberately used instead of a
+     * `LAST_IMPLEMENTED` range guard: an allow-list is strictly stronger
+     * than a range check, so adding `$step > LAST_IMPLEMENTED` here would
+     * be dead code guarding a branch the allow-list already excludes. The
+     * range guard belongs to Sprint 13's first method that accepts a
+     * RANGE of steps — the persisted `current_step` mutator — not to this
+     * one.
+     */
+    public function goToStep(int $step): void
+    {
+        if ($step === RenewalJourneyStep::CITY) {
+            $this->resetCity();
+        }
+    }
+
+    /**
      * AC1 step 1 until a city is chosen, then step 2. Derived from the one
      * piece of state this screen holds — see `$city`.
      */
@@ -109,6 +148,8 @@ final class RenewalStart extends Component
 
     public function render(): View
     {
+        $this->normalizeCity();
+
         $cemeteries = new Collection;
         $this->cemeteryListUnavailable = false;
 

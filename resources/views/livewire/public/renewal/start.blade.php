@@ -34,9 +34,10 @@
     <div class="mx-auto max-w-content px-4">
 
         {{-- AC1 — all six steps, always visible, even though only 1-3 are
-             built this sprint. §6.9's rule that a closed gate never removes
-             a required MVP step applies equally to a not-yet-built one: a
-             visitor must be able to see the whole journey they are
+             built this sprint. requirements.md AC1 binds six visible steps
+             and design-system.md §9.2 MUST NOT 9 forbids hiding a
+             documented step; that reasoning extends to a not-yet-built one:
+             a visitor must be able to see the whole journey they are
              entering. --}}
         <x-mk.stepper
             :labels="$stepLabels"
@@ -122,13 +123,9 @@
             @if ($city !== '')
                 <p class="mt-3 text-sm text-neutral-600">
                     Kota terpilih: <span class="font-medium text-neutral-900">{{ $selectedCityLabel }}</span>.
-                    <button
-                        type="button"
-                        wire:click="resetCity"
-                        class="underline underline-offset-2 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
-                    >
+                    <x-mk.button variant="link" wire:click="resetCity">
                         Ganti kota
-                    </button>
+                    </x-mk.button>
                 </p>
             @endif
         </section>

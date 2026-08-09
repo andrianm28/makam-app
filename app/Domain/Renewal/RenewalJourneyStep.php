@@ -21,8 +21,8 @@ use InvalidArgumentException;
  * "`labels` exists for a DIFFERENT JOURNEY, never for re-labelling
  * booking." Every renewal screen passes the same six, so they are defined
  * once here rather than retyped per view — retyped labels are how a
- * product contract quietly drifts, and `AGENTS.md` §Mandatory MVP UX
- * forbids renaming, reordering, or hiding a documented step.
+ * product contract quietly drifts, and design-system.md §9.2 MUST NOT
+ * 9 forbids renaming, reordering, or hiding a documented step.
  *
  * This is NOT a database-backed closed list, so it has no `access_mode`-
  * style column behind it and no `booted()` hook validates it; it is the
@@ -38,10 +38,14 @@ use InvalidArgumentException;
  * 4-6 (fee, payment, confirmation) render as `upcoming` dots on the
  * stepper and have no screen behind them yet; `docs/planning/
  * sprint-plan.md` §9 puts the tariff, payment and confirmation path in
- * Sprint 13. Showing all six from day one is required, not optional: §6.9's
- * rule that a closed gate "never removes a required MVP step" applies just
- * as much to a not-yet-built one. A user must be able to see the whole
- * journey they are entering.
+ * Sprint 13. Showing all six from day one is required, not optional:
+ * `requirements.md` AC1 (quoted above) binds all six as visible, and
+ * design-system.md §9.2 MUST NOT 9 forbids hiding a documented step.
+ * `AGENTS.md` §Source precedence states the same for a step a closed
+ * gate would remove; that reasoning extends, as an explicit analogy, to
+ * a step that is not built yet — design-system.md §6.9's `PaymentMode`
+ * row is the concrete instance ("Step 8 is never removed."). A user must
+ * be able to see the whole journey they are entering.
  */
 final class RenewalJourneyStep
 {

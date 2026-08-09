@@ -7,6 +7,7 @@ namespace Tests\Feature\Livewire\Public\Renewal;
 use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\Renewal\RenewalJourneyStep;
 use App\Livewire\Public\Renewal\RenewalStart;
 use App\Platform\FeatureGate\Models\FeatureGate;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -23,9 +24,9 @@ use Tests\TestCase;
  * component replaces the `RenewalComingSoon` stub, and `routes/web.php` is
  * a shared file this batch does not own — the exact route lines are
  * reported to the batch lead instead. **The route, its name, and its HTTP
- * status are therefore NOT TESTED here**, and `/perpanjangan` still serves
- * the old stub until those lines land. See `GraveSearchStatesTest`'s doc
- * block for the same note.
+ * status are therefore NOT TESTED here**: `routes/web.php` now routes
+ * `/perpanjangan` to this component, but that registration is not asserted
+ * in this file. See `GraveSearchStatesTest`'s doc block for the same note.
  */
 final class RenewalStartTest extends TestCase
 {
@@ -130,6 +131,25 @@ final class RenewalStartTest extends TestCase
             ->assertSee('Pilih kota terlebih dahulu');
     }
 
+    /**
+     * mount()'s guard runs once; a client-initiated property update
+     * re-hydrates without re-running it, so before the fix an unknown
+     * `$city` pushed currentStep() to 2 while $selectedCityLabel stayed
+     * null and the 6.2 empty state degraded to "Belum ada TPU/TPS
+     * terdaftar di ." — losing the "what is empty" part its three-part
+     * contract requires. Normalising in render() subsumes every update
+     * path. The final assertDontSee pins the actual user-visible defect
+     * and must not be dropped as redundant.
+     */
+    public function test_a_client_supplied_unknown_city_is_discarded_on_update_not_only_on_mount(): void
+    {
+        Livewire::test(RenewalStart::class)
+            ->set('city', 'SURABAYA')
+            ->assertSet('city', '')
+            ->assertSee('Pilih kota terlebih dahulu')
+            ->assertDontSee('Belum ada TPU/TPS terdaftar di .');
+    }
+
     public function test_select_city_refuses_a_code_outside_the_launch_list(): void
     {
         Livewire::test(RenewalStart::class)
@@ -166,6 +186,52 @@ final class RenewalStartTest extends TestCase
             ->assertSee('Langkah 2 dari 6');
     }
 
+    /**
+     * `<x-mk.stepper>` defaults its click target to `goToStep`
+     * (design-system.md §3.9), so once step 1 renders as `complete` the
+     * dot becomes a live button calling a method THIS component must
+     * implement. The first assertion pins the seam — that the stepper
+     * still emits the default method name and that this component is the
+     * thing that must answer it; without it the test would pass even if
+     * the stepper stopped emitting the button, which is the drift that
+     * produced the original dead control. The last assertion pins that an
+     * unreachable step is a silent no-op and never a 500.
+     */
+    public function test_the_completed_step_one_dot_calls_a_method_this_component_implements(): void
+    {
+        $component = Livewire::test(RenewalStart::class);
+        $component->call('selectCity', LaunchCityCode::JAKARTA);
+
+        $component->assertSee('wire:click="goToStep(1)"', false);
+
+        $component->call('goToStep', RenewalJourneyStep::FEE)
+            ->assertOk()
+            ->assertSet('city', LaunchCityCode::JAKARTA)
+            ->assertSee('Langkah 2 dari 6');
+
+        $component->call('goToStep', RenewalJourneyStep::CITY)
+            ->assertSet('city', '')
+            ->assertSee('Langkah 1 dari 6');
+    }
+
+    /**
+     * The "Ganti kota" control is a <x-mk.button variant="link"> (design-
+     * system.md 9.2 MUST #2 — the page header claims every button uses the
+     * primitive, and this was the one hand-forked holdout). It renders only
+     * once a city is selected. This test pins the behaviour across the swap;
+     * primitive conformance itself is verified by reading, not by a test —
+     * no CI gate enforces 9.2 MUST #2.
+     */
+    public function test_the_change_city_control_returns_to_step_one(): void
+    {
+        Livewire::test(RenewalStart::class)
+            ->call('selectCity', LaunchCityCode::JAKARTA)
+            ->assertSee('Ganti kota')
+            ->assertSet('city', LaunchCityCode::JAKARTA)
+            ->call('resetCity')
+            ->assertSet('city', '');
+    }
+
     // =====================================================================
     // AC16 / §6.9 — the gate banner
     // =====================================================================
@@ -183,8 +249,8 @@ final class RenewalStartTest extends TestCase
 
         Livewire::test(RenewalStart::class)
             ->assertSee('Pencarian Data Makam Belum Tersedia Online')
-            // §6.9: a closed gate never removes a required MVP step. City
-            // and cemetery selection must still work.
+            // design-system.md §9.2 MUST NOT 9: a documented step is never
+            // hidden — city and cemetery selection must still work.
             ->assertSee('Pilih Kota')
             ->assertSee('Jakarta')
             // Never an implication that the record does not exist.
@@ -196,7 +262,13 @@ final class RenewalStartTest extends TestCase
         FeatureGate::query()->where('gate_id', 'G-DATA-01')->update(['state' => 'open']);
 
         Livewire::test(RenewalStart::class)
-            ->assertDontSee('Pencarian Data Makam Belum Tersedia Online');
+            ->assertDontSee('Pencarian Data Makam Belum Tersedia Online')
+            // design-system.md §9.2 MUST NOT 9: the gate state changes the
+            // banner, never the journey — city and cemetery selection must
+            // survive BOTH gate states, and the closed-gate test asserts
+            // them while this one asserts them with the gate open.
+            ->assertSee('Pilih Kota')
+            ->assertSee('Jakarta');
     }
 
     // =====================================================================
