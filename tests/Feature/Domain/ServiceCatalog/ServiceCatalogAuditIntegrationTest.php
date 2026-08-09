@@ -15,6 +15,7 @@ use App\Domain\ServiceCatalog\ServiceCode;
 use App\Domain\ServiceCatalog\ServicePackageItemType;
 use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\Audit\SensitiveActions;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -139,5 +140,50 @@ final class ServiceCatalogAuditIntegrationTest extends TestCase
         $this->assertSame('service_definition', $event->subject_type);
         $this->assertSame((string) $service->id, $event->subject_id);
         $this->assertSame((string) $priceVersion->version_number, $event->subject_version);
+    }
+
+    /**
+     * F19 (09 Aug 2026 ServiceCatalog Superpowers retrofit). All five tests
+     * above prove the same direction — "mutation succeeds, therefore an audit
+     * row exists". None proved the opposite one: "mutation FAILS, therefore
+     * NO audit row exists". These four Actions do not use `Audit::wrap()`, so
+     * `tests/Feature/Audit/AuditWrapTransactionTest.php` does not cover them
+     * either; each relies on its own `DB::transaction` closure wrapping both
+     * the writes and the `Audit::record()` call.
+     *
+     * Pre-fix, removing the `DB::transaction` wrapper from
+     * `DefineServicePackage` left the whole suite green while the database
+     * held an orphan package AND an audit row claiming a package was defined
+     * that does not exist — the worst possible audit-trail failure, a record
+     * of a mutation that never happened.
+     */
+    public function test_a_failed_define_writes_no_audit_row_and_leaves_no_package_behind(): void
+    {
+        try {
+            (new DefineServicePackage)(
+                code: 'PAKET_UJI_AUDIT_GAGAL',
+                name: 'Paket Uji Audit Gagal',
+                items: [[
+                    'service_definition_id' => 999999,
+                    'item_type' => ServicePackageItemType::INCLUDED,
+                    'quantity' => 1,
+                    'unit' => 'paket',
+                    'fulfillment_owner' => FulfillmentOwner::PLATFORM,
+                ]],
+                actorReference: 11,
+            );
+
+            $this->fail('Defining a package with an unknown service_definition_id should have thrown.');
+        } catch (ModelNotFoundException) {
+            // expected
+        }
+
+        $this->assertSame(
+            0,
+            AuditEvent::query()->where('action', ServiceCatalogAuditActions::PACKAGE_DEFINED)->count(),
+            'A rolled-back DefineServicePackage must leave no audit row behind.'
+        );
+        $this->assertDatabaseCount('service_packages', 0);
+        $this->assertDatabaseCount('service_package_versions', 0);
     }
 }

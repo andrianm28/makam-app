@@ -90,9 +90,19 @@ final class ServiceDefinition extends Model
 
     /**
      * The one row (if any) with `superseded_at IS NULL` — this service's
-     * currently-in-effect price. `null` when no price has ever been
-     * recorded for this service yet (the seeded catalogue ships with none —
-     * see the seed migration's own doc block).
+     * currently-in-effect price.
+     *
+     * In practice this is never `null` in any environment: since
+     * `2026_07_26_220000_seed_service_definition_dummy_operational_data.php`
+     * landed, every one of the 12 seeded codes carries a v1 dev-only
+     * placeholder price out of the box (that migration's own doc block has
+     * the "not real catalogue pricing" disclaimer). The nullable return type
+     * is still correct and still load-bearing — a caller must handle the
+     * case, which is reachable for a service whose price rows were removed —
+     * but it is not the shipped state. (This doc block previously read "the
+     * seeded catalogue ships with none", which stopped being true the day
+     * that migration landed; corrected 09 Aug 2026 by the ServiceCatalog
+     * Superpowers retrofit, F9.)
      */
     public function currentPriceVersion(): ?PriceVersion
     {

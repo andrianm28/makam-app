@@ -68,7 +68,14 @@ final class ServiceDefinitionSeedTest extends TestCase
 
     public function test_every_seeded_row_is_active_with_no_description(): void
     {
-        foreach (ServiceDefinition::all() as $definition) {
+        $definitions = ServiceDefinition::all();
+
+        // M11: without this, the loop below passes vacuously on an empty
+        // table — a seed migration that stopped inserting anything would not
+        // be noticed here.
+        $this->assertNotEmpty($definitions);
+
+        foreach ($definitions as $definition) {
             $this->assertTrue($definition->is_active, "[{$definition->code}] should seed active.");
             $this->assertNull($definition->description, "[{$definition->code}] should seed with no description.");
         }

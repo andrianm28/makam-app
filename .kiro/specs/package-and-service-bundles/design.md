@@ -56,7 +56,13 @@ per `tasks.md`'s own primitives table.
 - **New version drafted while an old one is quoted:** the old version stays immutable and
   readable — never mutated out from under an already-issued quote.
 - **Discontinued item still attached to an active bundle:** unresolved by the current schema —
-  flagged, not designed around, since AC1–AC8 don't specify the behaviour.
+  flagged, not designed around, since AC1–AC8 don't specify the behaviour. Correction 09 Aug 2026
+  (ServiceCatalog retrofit): the *deletion* half is closed, not a hole —
+  `service_package_items.service_definition_id` (`2026_07_26_180300:87`) and
+  `substitution_policies.substitute_service_definition_id` (`2026_07_26_180500:59`) are both
+  `restrictOnDelete()`; only the *deactivation* (`is_active = false`) half is open, dispositioned in
+  `docs/planning/retrofit-backlog.md` §2 (closed at the Booking seam by an invariant test; needs a
+  new AC for the published-version case).
 
 ## Not covered, deliberately
 
