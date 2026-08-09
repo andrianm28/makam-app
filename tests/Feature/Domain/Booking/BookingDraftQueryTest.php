@@ -60,7 +60,7 @@ final class BookingDraftQueryTest extends TestCase
             'priceable_type' => ServiceDefinition::class,
             'priceable_id' => $service->id,
             'version_number' => 2,
-            'amount' => 150000,
+            'amount' => '150000.25',
             'currency' => 'IDR',
             'effective_from' => now(),
             'superseded_at' => null,
@@ -77,9 +77,9 @@ final class BookingDraftQueryTest extends TestCase
         $this->assertCount(1, $summary['lines']);
         $this->assertSame('DOCUMENT_PROCESSING', $summary['lines'][0]['code']);
         $this->assertSame(1, $summary['lines'][0]['quantity']);
-        $this->assertSame(150000.0, $summary['lines'][0]['unit_price']);
-        $this->assertSame(150000.0, $summary['lines'][0]['line_total']);
-        $this->assertSame(150000.0, $summary['total']);
+        $this->assertSame(15000025, $summary['lines'][0]['unit_price']);
+        $this->assertSame(15000025, $summary['lines'][0]['line_total']);
+        $this->assertSame(15000025, $summary['total']);
         $this->assertTrue($summary['all_prices_available']);
     }
 

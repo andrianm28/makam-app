@@ -6,6 +6,7 @@ namespace App\Domain\Booking;
 
 use App\Domain\Booking\Models\BookingDraft;
 use App\Domain\ServiceCatalog\Models\ServiceDefinition;
+use App\Platform\FinancialLedger\Money;
 use Illuminate\Support\Str;
 
 /**
@@ -50,12 +51,12 @@ final class BookingDraftQuery
      * an honest "harga belum tersedia" state, never a fabricated total that
      * silently excludes a line.
      *
-     * @return array{lines: list<array{code: string, label: string, quantity: int, unit_price: ?float, line_total: ?float}>, total: ?float, all_prices_available: bool}
+     * @return array{lines: list<array{code: string, label: string, quantity: int, unit_price: ?int, line_total: ?int}>, total: ?int, all_prices_available: bool}
      */
     public static function summary(BookingDraft $draft): array
     {
         $lines = [];
-        $total = 0.0;
+        $total = 0;
         $allPricesAvailable = true;
 
         foreach ($draft->selected_services as $selection) {
@@ -83,7 +84,9 @@ final class BookingDraftQuery
             $definition = ServiceDefinition::findByCode($code);
             $priceVersion = $quantityIsUsable ? $definition?->currentPriceVersion() : null;
 
-            $unitPrice = $priceVersion !== null ? (float) $priceVersion->amount : null;
+            $unitPrice = $priceVersion !== null
+                ? Money::fromDecimal((string) $priceVersion->amount)
+                : null;
             $lineTotal = $unitPrice !== null ? $unitPrice * $quantity : null;
 
             if ($unitPrice === null) {
