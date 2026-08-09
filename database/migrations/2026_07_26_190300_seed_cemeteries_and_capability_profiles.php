@@ -268,7 +268,7 @@ return new class extends Migration
         // different delete behaviours, not the two cascades this comment
         // used to claim:
         //
-        //   cemetery_capability_profiles.cemetery_id  cascade   2026_07_26_190100:82
+        //   cemetery_capability_profiles.cemetery_id  cascade   2026_07_26_190100:85
         //   cemetery_packages.cemetery_id             cascade   2026_07_26_190200:57
         //   grave_records.cemetery_id                 RESTRICT  2026_08_08_100000:130-132
         //   booking_drafts.cemetery_id                set null  2026_08_08_130000:67

@@ -107,11 +107,15 @@ final class CemeteryCapabilityProfileSafeDefaultsTest extends TestCase
      * storage engine returns first, which SQLite (local) and PostgreSQL 18
      * (CI/production) need not agree on.
      *
-     * Version 2 is inserted BEFORE version 1 deliberately: if the resolver
-     * were relying on insertion order rather than an explicit `ORDER BY`,
-     * that accident would return version 2 here and the test would pass for
-     * the wrong reason. Reversing the insert order makes the two hypotheses
-     * disagree.
+     * Version 1 is inserted BEFORE version 2 deliberately: an un-ordered
+     * `first()` on a two-row result returns whichever row the storage
+     * engine happens to return first, which for a freshly inserted pair is
+     * the first-inserted row on both SQLite and PostgreSQL. Inserting the
+     * lower version first makes that accidental read return version 1 —
+     * disagreeing with this test's `assertSame(2, …)` — so the assertion
+     * can only pass if the resolver's explicit `ORDER BY` is doing the
+     * work. Inserting the higher version first would let the accidental
+     * and the correct read agree, making the test pass either way.
      */
     public function test_resolver_picks_the_highest_version_when_two_current_rows_exist(): void
     {
@@ -124,7 +128,7 @@ final class CemeteryCapabilityProfileSafeDefaultsTest extends TestCase
             'address' => 'Jl. Uji Coba No. 3',
         ]);
 
-        foreach ([2, 1] as $versionNumber) {
+        foreach ([1, 2] as $versionNumber) {
             CemeteryCapabilityProfile::create(array_merge(
                 CemeteryCapabilityProfile::safeDefaults(),
                 [
