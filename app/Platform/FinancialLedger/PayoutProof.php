@@ -31,8 +31,9 @@ use App\Platform\FinancialLedger\Exceptions\InvalidPayoutException;
  * because the document-kind catalogue belongs to `platform-document-vault`,
  * which is being built in a sibling lane right now. Declaring a rival list
  * here would duplicate canonical data (`AGENTS.md` §Documentation) and collide
- * with that lane on merge. Validating it against the real catalogue is a
- * follow-up once that module lands.
+ * with that lane on merge. The `PayoutProofVerifier` seam performs the real
+ * existence, required-kind, `ACCEPTED`, private-storage, and record-scope
+ * checks; this value object never claims those checks passed.
  */
 final readonly class PayoutProof
 {

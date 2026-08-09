@@ -17,6 +17,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -257,6 +258,30 @@ final class VendorPayableAssessmentTest extends TestCase
         $this->expectException(QueryException::class);
 
         DB::table('vendor_payables')->where('id', $payable->id)->update(['state' => 'settled']);
+    }
+
+    public function test_the_database_requires_a_strictly_positive_vendor_payable_amount(): void
+    {
+        if (DB::connection()->getDriverName() !== 'pgsql') {
+            $this->markTestSkipped('The strict vendor payable amount CHECK is PostgreSQL-only.');
+        }
+
+        $this->expectException(QueryException::class);
+
+        DB::table('vendor_payables')->insert([
+            'id' => (string) Str::uuid(),
+            'vendor_id' => 'vendor-1',
+            'entity_ref' => 'badan-usaha-1',
+            'source_type' => 'marketplace_order',
+            'source_id' => 'zero-amount-order',
+            'amount_minor' => 0,
+            'state' => VendorPayableState::HELD,
+            'eligible_at' => null,
+            'paid_at' => null,
+            'correlation_id' => null,
+            'created_at' => CarbonImmutable::now(),
+            'updated_at' => CarbonImmutable::now(),
+        ]);
     }
 
     private function eligible(): VendorPayableEligibility

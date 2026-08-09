@@ -13,8 +13,11 @@ use App\Platform\FinancialLedger\Exceptions\PayoutProofNotAcceptedException;
  */
 final class RejectingPayoutProofVerifier implements PayoutProofVerifier
 {
-    public function assertAccepted(PayoutProof $proof, string $recordType, string $recordId): void
-    {
+    public function assertAcceptedPrivateRecordScoped(
+        PayoutProof $proof,
+        string $recordType,
+        string $recordId,
+    ): void {
         throw new PayoutProofNotAcceptedException;
     }
 }

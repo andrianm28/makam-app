@@ -116,18 +116,41 @@ final class ManualPayoutTest extends TestCase
         );
     }
 
-    public function test_accepted_document_vault_proof_is_verified_against_the_payable_record(): void
+    public function test_configured_proof_verifier_is_invoked_with_the_payable_record_scope(): void
     {
         $payable = $this->eligiblePayable();
         $this->grantPayoutAuthorisation();
         $this->satisfyReauthentication();
-        $verifier = new AcceptingPayoutProofVerifier;
+        $verifier = new RecordingPayoutProofVerifier;
 
         $this->pay($payable, verifier: $verifier);
 
         $this->assertSame([
             ['PAYMENT_PROOF', 'document-vault-ref-1', 'vendor_payable', (string) $payable->id],
         ], $verifier->calls);
+    }
+
+    public function test_the_default_proof_verifier_rejects_an_arbitrary_reference_until_document_vault_is_bound(): void
+    {
+        $payable = $this->eligiblePayable();
+        $this->grantPayoutAuthorisation();
+        $this->satisfyReauthentication();
+
+        $this->assertRefused(
+            fn (): Payout => (new ManualPayout(
+                actorContext: $this->app->make(ActorContext::class),
+            ))->pay(
+                payableId: (string) $payable->id,
+                amount: new Money(self::AMOUNT),
+                proof: new PayoutProof(
+                    documentKind: 'PAYMENT_PROOF',
+                    documentReference: 'arbitrary-reference',
+                ),
+                reason: 'Approved manual bank transfer for completed vendor work.',
+            ),
+            PayoutProofNotAcceptedException::class,
+            $payable,
+        );
     }
 
     public function test_a_non_accepted_document_vault_proof_fails_closed_before_persistence(): void
@@ -412,11 +435,13 @@ final class ManualPayoutTest extends TestCase
         // rewound by hand — the situation a repaired row, a restored backup or
         // a hand-edited workflow table could produce — leaving the journal
         // batch as the only remaining guard.
-        DB::table('payouts')->where('id', $firstPayout->id)->delete();
-        DB::table('vendor_payables')->where('id', $payable->id)->update([
-            'state' => VendorPayableState::PAYABLE,
-            'paid_at' => null,
-        ]);
+        DB::transaction(function () use ($firstPayout, $payable): void {
+            DB::table('payouts')->where('id', $firstPayout->id)->delete();
+            DB::table('vendor_payables')->where('id', $payable->id)->update([
+                'state' => VendorPayableState::PAYABLE,
+                'paid_at' => null,
+            ]);
+        });
 
         try {
             $this->pay($payable);
@@ -579,6 +604,56 @@ final class ManualPayoutTest extends TestCase
         DB::table('payouts')->insert($this->payoutAttributes($payable, [
             'vendor_id' => 'different-vendor',
         ]));
+
+        DB::statement('SET CONSTRAINTS payouts_payable_consistency IMMEDIATE');
+    }
+
+    public function test_the_database_rejects_a_direct_payout_insert_before_the_payable_is_paid(): void
+    {
+        $this->skipUnlessPostgres('The payout/payable consistency trigger is PostgreSQL-only.');
+
+        $payable = $this->eligiblePayable();
+
+        $this->expectException(QueryException::class);
+
+        DB::table('payouts')->insert($this->payoutAttributes($payable));
+
+        DB::statement('SET CONSTRAINTS payouts_payable_consistency IMMEDIATE');
+    }
+
+    public function test_the_database_rejects_deleting_the_only_payout_for_a_paid_payable(): void
+    {
+        $this->skipUnlessPostgres('The payout/payable consistency trigger is PostgreSQL-only.');
+
+        $payable = $this->eligiblePayable();
+        $this->grantPayoutAuthorisation();
+        $this->satisfyReauthentication();
+        $payout = $this->pay($payable);
+
+        $this->expectException(QueryException::class);
+
+        DB::table('payouts')->where('id', $payout->id)->delete();
+
+        DB::statement('SET CONSTRAINTS payouts_payable_consistency IMMEDIATE');
+    }
+
+    public function test_the_database_rejects_reassigning_a_payout_to_another_payable(): void
+    {
+        $this->skipUnlessPostgres('The payout/payable consistency trigger is PostgreSQL-only.');
+
+        $payable = $this->eligiblePayable();
+        $otherPayable = $this->eligiblePayable('order-2');
+        $this->grantPayoutAuthorisation();
+        $this->satisfyReauthentication();
+        $payout = $this->pay($payable);
+
+        $this->expectException(QueryException::class);
+
+        DB::table('payouts')->where('id', $payout->id)->update([
+            'payable_id' => $otherPayable->id,
+        ]);
+
+        DB::statement('SET CONSTRAINTS payouts_payable_consistency IMMEDIATE');
     }
 
     public function test_the_database_rejects_paid_payables_without_a_payout_row(): void
@@ -593,6 +668,8 @@ final class ManualPayoutTest extends TestCase
             'state' => VendorPayableState::PAID,
             'paid_at' => CarbonImmutable::now(),
         ]);
+
+        DB::statement('SET CONSTRAINTS vendor_payables_payout_consistency IMMEDIATE');
     }
 
     /**
@@ -636,7 +713,7 @@ final class ManualPayoutTest extends TestCase
     ): Payout {
         return new ManualPayout(
             actorContext: $this->app->make(ActorContext::class),
-            proofVerifier: $verifier ?? new AcceptingPayoutProofVerifier,
+            proofVerifier: $verifier ?? new RecordingPayoutProofVerifier,
             journal: $journal ?? new Journal,
         )->pay(
             payableId: (string) $payable->id,
@@ -684,13 +761,13 @@ final class ManualPayoutTest extends TestCase
         }
     }
 
-    private function eligiblePayable(): VendorPayableModel
+    private function eligiblePayable(string $sourceId = 'order-1'): VendorPayableModel
     {
         return $this->assess(new VendorPayableEligibility(
             orderPaid: true,
             fulfilmentEvidenceAccepted: true,
             disputeWindowEndsAt: CarbonImmutable::now()->subDay(),
-        ));
+        ), sourceId: $sourceId);
     }
 
     private function heldPayable(): VendorPayableModel
@@ -702,13 +779,15 @@ final class ManualPayoutTest extends TestCase
         ));
     }
 
-    private function assess(VendorPayableEligibility $eligibility): VendorPayableModel
-    {
+    private function assess(
+        VendorPayableEligibility $eligibility,
+        string $sourceId = 'order-1',
+    ): VendorPayableModel {
         return $this->app->make(VendorPayable::class)->assess(
             vendorId: self::VENDOR,
             entityRef: self::ENTITY,
             sourceType: 'marketplace_order',
-            sourceId: 'order-1',
+            sourceId: $sourceId,
             amount: new Money(self::AMOUNT),
             eligibility: $eligibility,
         );
@@ -744,32 +823,38 @@ final class ManualPayoutTest extends TestCase
     }
 }
 
-final class AcceptingPayoutProofVerifier implements PayoutProofVerifier
+/**
+ * Test-only spy for the cross-module seam. It does not validate a DocumentVault
+ * document and must never be described as evidence that one exists.
+ */
+final class RecordingPayoutProofVerifier implements PayoutProofVerifier
 {
     /**
      * @var list<array{0: string, 1: string, 2: string, 3: string}>
      */
     public array $calls = [];
 
-    public function assertAccepted(PayoutProof $proof, string $recordType, string $recordId): void
-    {
+    public function assertAcceptedPrivateRecordScoped(
+        PayoutProof $proof,
+        string $recordType,
+        string $recordId,
+    ): void {
         $this->calls[] = [
             $proof->documentKind,
             $proof->documentReference,
             $recordType,
             $recordId,
         ];
-
-        if ($proof->documentKind !== 'PAYMENT_PROOF') {
-            throw new PayoutProofNotAcceptedException;
-        }
     }
 }
 
 final class RejectingPayoutProofVerifier implements PayoutProofVerifier
 {
-    public function assertAccepted(PayoutProof $proof, string $recordType, string $recordId): void
-    {
+    public function assertAcceptedPrivateRecordScoped(
+        PayoutProof $proof,
+        string $recordType,
+        string $recordId,
+    ): void {
         throw new PayoutProofNotAcceptedException;
     }
 }

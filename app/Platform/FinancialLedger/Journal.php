@@ -28,7 +28,7 @@ use Illuminate\Support\Str;
  * codebase inserts a journal row.
  *
  * ---------------------------------------------------------------------------
- * Does NOT open its own transaction — identical discipline to
+ * `post()` does NOT open its own transaction — identical discipline to
  * `Outbox::record()` and `Audit::record()`
  * ---------------------------------------------------------------------------
  * Call `post()` from INSIDE an existing `DB::transaction()` that also performs
@@ -38,6 +38,10 @@ use Illuminate\Support\Str;
  * entry rows are two statements (see `PostJournalBatch`'s doc block). The
  * pairing guarantee is the caller's transaction, not anything here. That limit
  * is stated rather than implied, following `Outbox`'s own doc block.
+ *
+ * `postReversal()` is the exception: its journal batch and sensitive audit
+ * event are always wrapped in one transaction inside this API, even when the
+ * caller has no surrounding state mutation to provide that boundary.
  *
  * There is no `wrap()` counterpart. `Audit::wrap()` earns its existence
  * because every audited mutation has the identical "run this closure, then
@@ -166,81 +170,89 @@ final class Journal implements JournalContract
             throw InvalidJournalBatchException::forMissingReversalReason($originalBusinessKey);
         }
 
-        $original = JournalBatch::query()->where('business_key', $originalBusinessKey)->first();
+        return DB::transaction(function () use (
+            $originalBusinessKey,
+            $reason,
+            $kind,
+            $correlationId,
+            $occurredAt,
+        ): JournalBatch {
+            $original = JournalBatch::query()->where('business_key', $originalBusinessKey)->first();
 
-        if (! $original instanceof JournalBatch) {
-            throw UnknownJournalBatchException::forBusinessKey($originalBusinessKey);
-        }
+            if (! $original instanceof JournalBatch) {
+                throw UnknownJournalBatchException::forBusinessKey($originalBusinessKey);
+            }
 
-        $existingReversal = $original->reversedBy()->first();
+            $existingReversal = $original->reversedBy()->first();
 
-        if ($existingReversal instanceof JournalBatch) {
-            throw JournalBatchAlreadyReversedException::forBusinessKey(
-                $originalBusinessKey,
-                $existingReversal->business_key,
+            if ($existingReversal instanceof JournalBatch) {
+                throw JournalBatchAlreadyReversedException::forBusinessKey(
+                    $originalBusinessKey,
+                    $existingReversal->business_key,
+                );
+            }
+
+            $originalEntries = $original->entries()->orderBy('id')->get();
+
+            if ($originalEntries->isEmpty()) {
+                throw InvalidJournalBatchException::forEmptyEntries($originalBusinessKey);
+            }
+
+            $batchId = (string) Str::uuid();
+
+            // The reason goes in `reference`, the human note column Task 2
+            // designed for exactly this. It is NOT the reversal->original link —
+            // that is `reverses_batch_id`, a real FK (Ruling 2). Callers are
+            // responsible for keeping restricted data out of it, the same
+            // discipline `Audit::record()`'s `$reason` carries.
+            $entryRows = $originalEntries
+                ->map(fn (JournalEntry $entry): array => [
+                    'batch_id' => $batchId,
+                    'account_code' => $entry->account_code,
+                    'direction' => $entry->direction === 'DR' ? 'CR' : 'DR',
+                    'amount_minor' => $entry->amount_minor,
+                    'reference' => $reason,
+                ])
+                ->all();
+
+            $reversal = ($this->postJournalBatch)(
+                [
+                    'id' => $batchId,
+                    'business_key' => $kind->businessKeyFor($originalBusinessKey),
+                    'entity_ref' => $original->entity_ref,
+                    'source_type' => $kind->sourceType(),
+                    'source_id' => $original->id,
+                    'correlation_id' => $this->resolveCorrelationId($correlationId),
+                    // A reversal is its own economic event at its own time. The
+                    // original's `occurred_at` is deliberately not copied — doing
+                    // so would backdate the correction into a period that has
+                    // already been reported on.
+                    'occurred_at' => $this->resolveOccurredAt($occurredAt),
+                    'status' => self::POSTED_STATUS,
+                    'reverses_batch_id' => $original->id,
+                ],
+                $entryRows,
             );
-        }
 
-        $originalEntries = $original->entries()->orderBy('id')->get();
+            $actor = app(ActorContext::class);
+            $actorRole = $actor->roles[0] ?? ($actor->isAuthenticated() ? 'unresolved' : 'system');
 
-        if ($originalEntries->isEmpty()) {
-            throw InvalidJournalBatchException::forEmptyEntries($originalBusinessKey);
-        }
+            Audit::record(
+                action: 'JOURNAL_REVERSAL',
+                subject: new AuditSubject('journal_batch', $reversal->id),
+                outcome: AuditOutcome::Allowed,
+                actorRef: $actor->identityReference,
+                actorRole: $actorRole,
+                source: AuditSource::Panel,
+                reason: $reason,
+                correlationId: $this->resolveCorrelationId($correlationId),
+                metadata: [
+                    'reference_number' => $reversal->business_key,
+                ],
+            );
 
-        $batchId = (string) Str::uuid();
-
-        // The reason goes in `reference`, the human note column Task 2
-        // designed for exactly this. It is NOT the reversal->original link —
-        // that is `reverses_batch_id`, a real FK (Ruling 2). Callers are
-        // responsible for keeping restricted data out of it, the same
-        // discipline `Audit::record()`'s `$reason` carries.
-        $entryRows = $originalEntries
-            ->map(fn (JournalEntry $entry): array => [
-                'batch_id' => $batchId,
-                'account_code' => $entry->account_code,
-                'direction' => $entry->direction === 'DR' ? 'CR' : 'DR',
-                'amount_minor' => $entry->amount_minor,
-                'reference' => $reason,
-            ])
-            ->all();
-
-        $reversal = ($this->postJournalBatch)(
-            [
-                'id' => $batchId,
-                'business_key' => $kind->businessKeyFor($originalBusinessKey),
-                'entity_ref' => $original->entity_ref,
-                'source_type' => $kind->sourceType(),
-                'source_id' => $original->id,
-                'correlation_id' => $this->resolveCorrelationId($correlationId),
-                // A reversal is its own economic event at its own time. The
-                // original's `occurred_at` is deliberately not copied — doing
-                // so would backdate the correction into a period that has
-                // already been reported on.
-                'occurred_at' => $this->resolveOccurredAt($occurredAt),
-                'status' => self::POSTED_STATUS,
-                'reverses_batch_id' => $original->id,
-            ],
-            $entryRows,
-        );
-
-        $actor = app(ActorContext::class);
-        $actorRole = $actor->roles[0] ?? ($actor->isAuthenticated() ? 'unresolved' : 'system');
-
-        Audit::record(
-            action: 'JOURNAL_REVERSAL',
-            subject: new AuditSubject('journal_batch', $reversal->id),
-            outcome: AuditOutcome::Allowed,
-            actorRef: $actor->identityReference,
-            actorRole: $actorRole,
-            source: AuditSource::Panel,
-            reason: $reason,
-            correlationId: $this->resolveCorrelationId($correlationId),
-            metadata: [
-                'reference_number' => $reversal->business_key,
-            ],
-        );
-
-        return $reversal;
+            return $reversal;
+        });
     }
 
     /**

@@ -114,6 +114,36 @@ final class JournalReversalTest extends TestCase
         $this->assertSame(0, AuditEvent::query()->where('action', 'JOURNAL_REVERSAL')->count());
     }
 
+    public function test_reversal_batch_and_audit_are_atomic_inside_the_journal_api(): void
+    {
+        $this->postOriginal();
+        $auditFailed = false;
+
+        DB::listen(function ($query) use (&$auditFailed): void {
+            if ($auditFailed || ! str_contains(strtolower($query->sql), 'audit_events')) {
+                return;
+            }
+
+            $auditFailed = true;
+            throw new \RuntimeException('audit fixture failure');
+        });
+
+        try {
+            $this->journal()->postReversal(
+                originalBusinessKey: 'payment:original-event',
+                reason: 'Provider settlement retracted by bank',
+            );
+            $this->fail('Expected the audit fixture failure.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('audit fixture failure', $exception->getMessage());
+        }
+
+        $this->assertTrue($auditFailed);
+        $this->assertSame(1, JournalBatch::query()->count());
+        $this->assertSame(0, AuditEvent::query()->where('action', 'JOURNAL_REVERSAL')->count());
+        $this->assertFalse(JournalBatch::query()->firstOrFail()->isReversed());
+    }
+
     public function test_the_reason_is_written_to_the_reversing_entries_own_note_column(): void
     {
         $this->postOriginal();

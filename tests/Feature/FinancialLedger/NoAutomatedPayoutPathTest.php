@@ -105,6 +105,21 @@ final class NoAutomatedPayoutPathTest extends TestCase
         'transfer_verb_method' => '/\bfunction\s+\w*(transfer|disburse|remit|wire)\w*\s*\(/i',
     ];
 
+    /**
+     * Architectural signals for a gateway-backed transfer that avoids a
+     * transfer-named method. These scan the ledger module because unrelated
+     * platform modules may legitimately have senders or gateways.
+     *
+     * @var array<string, string>
+     */
+    private const array AUTOMATED_TRANSFER_ARCHITECTURE_PATTERNS = [
+        'transfer_gateway_import' => '/\buse\s+[^;]*(?:Transfer|Disbursement|Settlement|Payout)Gateway\w*\s*;/i',
+        'transfer_gateway_interface' => '/\binterface\s+\w*(?:Transfer|Disbursement|Settlement|Payout)Gateway\w*\b/i',
+        'transfer_gateway_dependency' => '/\b(?:private|protected|public)\s+(?:readonly\s+)?\w*(?:Transfer|Disbursement|Settlement|Payout)Gateway\w*\s+\$\w+\b/i',
+        'transfer_client_dependency' => '/\b(?:private|protected|public)\s+(?:readonly\s+)?\w*(?:Transfer|Disbursement|Settlement)Client\w*\s+\$\w+\b/i',
+        'transfer_gateway_call' => '/->\s*(?:transfer|disburse|remit|wire|send|execute|submit)\s*\(/i',
+    ];
+
     public function test_the_ledger_module_makes_no_outbound_network_call(): void
     {
         $this->assertNoMatches(
@@ -131,6 +146,15 @@ final class NoAutomatedPayoutPathTest extends TestCase
             self::PLATFORM_PATH,
             self::TRANSFER_VERB_PATTERNS,
             'A payout that moves money by itself needs a method that does the moving.',
+        );
+    }
+
+    public function test_the_ledger_has_no_gateway_dependency_or_transfer_call(): void
+    {
+        $this->assertNoMatches(
+            self::LEDGER_PATH,
+            self::AUTOMATED_TRANSFER_ARCHITECTURE_PATTERNS,
+            'A provider-backed gateway dependency or call would create an automated payout path.',
         );
     }
 
@@ -183,12 +207,42 @@ final class NoAutomatedPayoutPathTest extends TestCase
                     public function transferToVendorAccount(string $destination, int $amountMinor): string;
                 }
                 PHP,
+            'transfer_gateway_import' => <<<'PHP'
+                <?php
+                use App\Platform\Banking\Contracts\VendorSettlementGateway;
+                PHP,
+            'transfer_gateway_interface' => <<<'PHP'
+                <?php
+                interface VendorSettlementGateway
+                {
+                    public function execute(string $destination, int $amountMinor): string;
+                }
+                PHP,
+            'transfer_gateway_dependency' => <<<'PHP'
+                <?php
+                final class VendorPayoutSender
+                {
+                    public function __construct(private VendorSettlementGateway $gateway) {}
+                }
+                PHP,
+            'transfer_client_dependency' => <<<'PHP'
+                <?php
+                final class VendorPayoutSender
+                {
+                    public function __construct(private BankTransferClient $client) {}
+                }
+                PHP,
+            'transfer_gateway_call' => <<<'PHP'
+                <?php
+                $this->gateway->execute($destination, $amountMinor);
+                PHP,
         ];
 
         $allPatterns = array_merge(
             self::OUTBOUND_CALL_PATTERNS,
             self::PROVIDER_REFERENCE_PATTERNS,
             self::TRANSFER_VERB_PATTERNS,
+            self::AUTOMATED_TRANSFER_ARCHITECTURE_PATTERNS,
         );
 
         foreach ($samples as $expectedSignal => $sample) {
@@ -215,6 +269,7 @@ final class NoAutomatedPayoutPathTest extends TestCase
             self::OUTBOUND_CALL_PATTERNS,
             self::PROVIDER_REFERENCE_PATTERNS,
             self::TRANSFER_VERB_PATTERNS,
+            self::AUTOMATED_TRANSFER_ARCHITECTURE_PATTERNS,
         )));
     }
 
@@ -231,7 +286,15 @@ final class NoAutomatedPayoutPathTest extends TestCase
     {
         $columns = Schema::getColumnListing('payouts');
 
-        foreach (['provider_ref', 'provider_transaction_id', 'transfer_id', 'transfer_status'] as $forbidden) {
+        foreach ([
+            'provider_ref',
+            'provider_transaction_id',
+            'transfer_id',
+            'transfer_status',
+            'external_transfer_id',
+            'disbursement_id',
+            'destination_account_ref',
+        ] as $forbidden) {
             $this->assertNotContains(
                 $forbidden,
                 $columns,

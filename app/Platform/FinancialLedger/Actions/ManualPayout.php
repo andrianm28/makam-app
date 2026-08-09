@@ -235,14 +235,10 @@ final class ManualPayout
             throw PayoutActorMismatchException::forField('role');
         }
 
-        // A later FinancialLedger provider may bind the sibling DocumentVault
-        // adapter to this seam. Until then, the constructor's rejecting
-        // verifier remains the safe default.
-        $proofVerifier = app()->bound(PayoutProofVerifier::class)
-            ? app(PayoutProofVerifier::class)
-            : $this->proofVerifier;
-
-        $proofVerifier->assertAccepted(
+        // The sibling DocumentVault adapter is the only implementation that
+        // may allow this. Until L1 binds it, the constructor's rejecting
+        // verifier ensures an opaque reference can never pass by itself.
+        $this->proofVerifier->assertAcceptedPrivateRecordScoped(
             $proof,
             recordType: 'vendor_payable',
             recordId: $payableId,

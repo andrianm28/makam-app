@@ -9,11 +9,16 @@ use App\Platform\FinancialLedger\PayoutProof;
 /**
  * Narrow seam for the sibling DocumentVault module.
  *
- * Implementations must verify the canonical document kind, private accepted
- * state, and owner scope for the supplied record. This module receives only
- * the opaque reference and never reads or copies document contents.
+ * Implementations must verify that the opaque reference exists, has the
+ * required canonical proof kind, is in `ACCEPTED` state, is stored privately,
+ * and belongs to the supplied record scope. This module receives only the
+ * opaque reference and never reads or copies document contents.
  */
 interface PayoutProofVerifier
 {
-    public function assertAccepted(PayoutProof $proof, string $recordType, string $recordId): void;
+    public function assertAcceptedPrivateRecordScoped(
+        PayoutProof $proof,
+        string $recordType,
+        string $recordId,
+    ): void;
 }
