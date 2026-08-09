@@ -211,8 +211,8 @@ final class RenewalStartTest extends TestCase
 
         Livewire::test(RenewalStart::class)
             ->assertSee('Pencarian Data Makam Belum Tersedia Online')
-            // §6.9: a closed gate never removes a required MVP step. City
-            // and cemetery selection must still work.
+            // design-system.md §9.2 MUST NOT 9: a documented step is never
+            // hidden — city and cemetery selection must still work.
             ->assertSee('Pilih Kota')
             ->assertSee('Jakarta')
             // Never an implication that the record does not exist.

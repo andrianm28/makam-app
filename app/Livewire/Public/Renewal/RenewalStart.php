@@ -36,9 +36,11 @@ use Throwable;
  * ---------------------------------------------------------------------------
  * `G-DATA-01` closed means the grave-search capability is unavailable
  * (AC16). This screen is not the search — it is city and cemetery
- * selection, which works perfectly well either way and which
- * design-system.md §6.9 forbids removing: "a closed gate never removes a
- * required MVP step." So this screen renders `<x-mk.gate-closed-banner>`
+ * selection, which works perfectly well either way, and
+ * design-system.md §9.2 MUST NOT 9 forbids hiding a documented step;
+ * the same reasoning `AGENTS.md` §Source precedence applies to a step
+ * a closed gate would remove extends, as an explicit analogy, to a step
+ * that is not built yet. So this screen renders `<x-mk.gate-closed-banner>`
  * up front, telling the visitor before they invest in two selections that
  * the search step will need the manual-assistance path, and step 3 itself
  * (`GraveSearch`) renders §6.4's full explanatory page.
