@@ -29,6 +29,18 @@ use Illuminate\Support\Carbon;
  * new version and emits `cemetery.capability_changed.v1`
  * (`docs/contracts/event-catalog.md`).
  *
+ * `current()` filters on `superseded_at IS NULL` only, and the schema
+ * deliberately declines a uniqueness constraint on that predicate — so
+ * "current" is not structurally singular and two current rows are possible.
+ * `orderByDesc('version_number')` makes the tiebreak deterministic (highest
+ * version wins) instead of leaving it to whatever the storage engine
+ * returns first, which SQLite and PostgreSQL 18 need not agree on. This is
+ * a determinism guarantee, not a correctness one: it does not make two
+ * current rows impossible. A partial unique index on
+ * `(cemetery_id) WHERE superseded_at IS NULL` is what would, and that is a
+ * migration against an already deployed table — human review per `AGENTS.md`
+ * §Infrastructure-agent execution, deliberately not done here.
+ *
  * `version_number => 0` and `source => 'system:safe-default-fallback'` on
  * the fallback instance mark it, structurally, as not a real activated
  * version — every seeded/activated profile this codebase writes starts at
@@ -42,6 +54,7 @@ final readonly class ResolveCemeteryCapabilityProfile
         $current = CemeteryCapabilityProfile::query()
             ->where('cemetery_id', $cemetery->id)
             ->current()
+            ->orderByDesc('version_number')
             ->first();
 
         if ($current !== null) {
