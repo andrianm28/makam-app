@@ -8,6 +8,7 @@ use App\Domain\Booking\Actions\SaveBookingDraftStep;
 use App\Domain\Booking\Actions\StartBookingDraft;
 use App\Domain\Booking\Exceptions\BookingStepValidationException;
 use App\Domain\Booking\Models\BookingDraft;
+use App\Models\User;
 use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\Outbox\Models\OutboxEvent;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -61,14 +62,15 @@ final class BookingDraftOutboxTest extends TestCase
 
     public function test_an_authenticated_start_records_the_customer_role_not_the_identifier(): void
     {
-        (new StartBookingDraft)(userId: 4242);
+        $user = User::factory()->create();
+        (new StartBookingDraft)(userId: $user->id);
 
         $event = OutboxEvent::query()->where('event_name', 'booking.draft_started.v1')->sole();
 
         $this->assertSame('customer', $event->payload['actor_role']);
         // The identifier itself must never reach the payload — only the role.
         $this->assertArrayNotHasKey('user_id', $event->payload);
-        $this->assertNotContains(4242, $event->payload, 'The user identifier must not appear under any key.');
+        $this->assertNotContains($user->id, $event->payload, 'The user identifier must not appear under any key.');
     }
 
     public function test_saving_a_step_writes_one_outbox_event_referencing_the_draft_not_its_content(): void
