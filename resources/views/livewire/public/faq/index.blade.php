@@ -209,7 +209,7 @@
             <div class="mx-auto mb-6 max-w-content">
                 <x-mk.alert intent="pending" title="Pencarian sedang tidak tersedia" live="polite">
                     Pencarian tidak dapat diproses saat ini. Anda tetap dapat menjelajahi FAQ berdasarkan kategori di atas, atau
-                    <a href="/bantuan" class="underline underline-offset-2">hubungi customer service</a>.
+                    <a href="{{ route('bantuan.index') }}" class="underline underline-offset-2">hubungi customer service</a>.
                 </x-mk.alert>
             </div>
         @endif
@@ -254,7 +254,7 @@
                              buttons for why this is hand-written, not
                              <x-mk.button>. --}}
                         <a
-                            href="/bantuan"
+                            href="{{ route('bantuan.index') }}"
                             class="mt-2 inline-flex h-11 select-none items-center justify-center gap-2 rounded-md border border-primary-600 bg-neutral-0 px-4 text-base font-medium text-primary-700 transition-[color,background-color,border-color,box-shadow] duration-fast ease-standard hover:bg-primary-50 active:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
                         >
                             Hubungi Customer Service
