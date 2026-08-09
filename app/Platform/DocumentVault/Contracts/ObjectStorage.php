@@ -18,6 +18,10 @@ namespace App\Platform\DocumentVault\Contracts;
  * path, called exclusively by the (Task 5) promotion Action after a CLEAN
  * scan verdict — this is what keeps AC1's "no direct path to accepted
  * storage" true at the adapter boundary, not only in the calling Action.
+ * Every implementation MUST structurally reject a `put()` call whose path
+ * names the `accepted/` prefix (not merely rely on callers behaving) —
+ * `Adapters\LocalFilesystemObjectStorage::put()` does this by rejecting any
+ * path with an `accepted` segment before it touches the filesystem.
  *
  * All paths are the opaque, provider-neutral keys produced by
  * `StoragePathResolver` — never a client-supplied filename or path.

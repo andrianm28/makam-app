@@ -30,6 +30,8 @@ final class LocalFilesystemObjectStorage implements ObjectStorage
 
     public function put(string $path, $stream): void
     {
+        $this->assertNotAcceptedPrefix($path);
+
         $destination = $this->absolutePath($path);
         $this->ensureDirectoryExists(dirname($destination));
 
@@ -99,13 +101,51 @@ final class LocalFilesystemObjectStorage implements ObjectStorage
 
     private function absolutePath(string $path): string
     {
-        return $this->root().'/'.ltrim($path, '/');
+        $this->assertSafeRelativePath($path);
+
+        return $this->root().'/'.$path;
     }
 
     private function ensureDirectoryExists(string $directory): void
     {
         if (! is_dir($directory) && ! mkdir($directory, 0700, recursive: true) && ! is_dir($directory)) {
             throw ObjectStorageException::writeFailed($directory);
+        }
+    }
+
+    /**
+     * Structurally enforces AC1's "no direct path to accepted storage": the
+     * only route into the `accepted/` prefix is `copy()`'s destination
+     * argument. `put()` calls this on the raw, caller-supplied path before
+     * it ever reaches `absolutePath()`.
+     */
+    private function assertNotAcceptedPrefix(string $path): void
+    {
+        if (in_array('accepted', explode('/', $path), true)) {
+            throw ObjectStorageException::acceptedPrefixForbidden($path);
+        }
+    }
+
+    /**
+     * Path-traversal and shape defense applied on every path-taking entry
+     * point (`put`, `copy`'s source and destination, `delete`) via
+     * `absolutePath()`. This class must defend itself independently of
+     * caller correctness — Tasks 4-7 add callers this class cannot see —
+     * so a caller-supplied path is never trusted to already be safe.
+     *
+     * Rejects: empty paths, absolute paths (leading `/`), and any segment
+     * that is empty, `.`, or `..`.
+     */
+    private function assertSafeRelativePath(string $path): void
+    {
+        if ($path === '' || str_starts_with($path, '/')) {
+            throw ObjectStorageException::invalidPath($path);
+        }
+
+        foreach (explode('/', $path) as $segment) {
+            if ($segment === '' || $segment === '.' || $segment === '..') {
+                throw ObjectStorageException::invalidPath($path);
+            }
         }
     }
 }

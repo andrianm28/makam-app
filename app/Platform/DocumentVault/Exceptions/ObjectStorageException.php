@@ -34,4 +34,23 @@ final class ObjectStorageException extends RuntimeException
     {
         return new self("Object storage delete failed for path: {$path}");
     }
+
+    /**
+     * `put()` refused a path naming the `accepted/` lifecycle prefix — only
+     * `copy()` may write there (AC1, `ObjectStorage` interface doc block).
+     */
+    public static function acceptedPrefixForbidden(string $path): self
+    {
+        return new self("Object storage put() may not target the accepted/ prefix: {$path}");
+    }
+
+    /**
+     * A path failed traversal/shape validation: empty, absolute, or
+     * containing a `.`/`..`/empty segment. This class must reject such
+     * paths independently of caller correctness — see class doc block.
+     */
+    public static function invalidPath(string $path): self
+    {
+        return new self("Object storage path is invalid: {$path}");
+    }
 }

@@ -84,6 +84,109 @@ final class LocalFilesystemObjectStorageTest extends TestCase
         $storage->delete('KTP/quarantine/does-not-exist');
     }
 
+    public function test_put_refuses_a_path_naming_the_accepted_prefix(): void
+    {
+        $storage = new LocalFilesystemObjectStorage($this->root);
+
+        $this->expectException(ObjectStorageException::class);
+
+        try {
+            $storage->put('KTP/accepted/forged-key', $this->streamFor('forged content'));
+        } finally {
+            $this->assertFileDoesNotExist(
+                $this->root.'/KTP/accepted/forged-key',
+                'put() must never place a file under the accepted/ prefix.',
+            );
+        }
+    }
+
+    public function test_put_refuses_a_path_with_accepted_as_a_nested_segment(): void
+    {
+        $storage = new LocalFilesystemObjectStorage($this->root);
+
+        $this->expectException(ObjectStorageException::class);
+
+        $storage->put('KTP/quarantine/accepted/forged-key', $this->streamFor('forged content'));
+    }
+
+    public function test_put_refuses_a_traversal_path(): void
+    {
+        $storage = new LocalFilesystemObjectStorage($this->root);
+
+        // 'KTP/quarantine/../../../../etc/passwd' normalizes (2 segments
+        // down, 4 '..' up) to two levels above $this->root, i.e. a real
+        // writable path outside the intended sandbox — this is the exact
+        // path that, before this fix, actually wrote a file to
+        // /home/ubuntu/.tmp/etc/passwd on this host.
+        $escapedPath = dirname($this->root, 2).'/etc/passwd';
+
+        $this->expectException(ObjectStorageException::class);
+
+        try {
+            $storage->put('KTP/quarantine/../../../../etc/passwd', $this->streamFor('malicious content'));
+        } finally {
+            $this->assertFileDoesNotExist(
+                $escapedPath,
+                'put() must never resolve a traversal path to a location outside its configured root.',
+            );
+
+            @unlink($escapedPath);
+            @rmdir(dirname($escapedPath));
+        }
+    }
+
+    public function test_put_refuses_an_absolute_path(): void
+    {
+        $storage = new LocalFilesystemObjectStorage($this->root);
+
+        $this->expectException(ObjectStorageException::class);
+
+        $storage->put('/etc/passwd', $this->streamFor('malicious content'));
+    }
+
+    public function test_put_refuses_a_path_with_an_empty_segment(): void
+    {
+        $storage = new LocalFilesystemObjectStorage($this->root);
+
+        $this->expectException(ObjectStorageException::class);
+
+        $storage->put('KTP//quarantine/key', $this->streamFor('content'));
+    }
+
+    public function test_copy_refuses_a_traversal_source_path(): void
+    {
+        $storage = new LocalFilesystemObjectStorage($this->root);
+
+        $this->expectException(ObjectStorageException::class);
+
+        $storage->copy('../../../../etc/passwd', 'KTP/accepted/key');
+    }
+
+    public function test_copy_refuses_a_traversal_destination_path(): void
+    {
+        // Deliberately not asserting on a filesystem side effect here: with
+        // 4 '..' segments this particular destination normalizes to the
+        // real host /etc/passwd, which this test must not touch even to
+        // check for its absence. expectException() alone is the assertion
+        // — copy() must reject the path before ever calling the filesystem
+        // `copy()` function with it.
+        $storage = new LocalFilesystemObjectStorage($this->root);
+        $storage->put('KTP/quarantine/key-traversal', $this->streamFor('content'));
+
+        $this->expectException(ObjectStorageException::class);
+
+        $storage->copy('KTP/quarantine/key-traversal', '../../../../etc/passwd');
+    }
+
+    public function test_delete_refuses_a_traversal_path(): void
+    {
+        $storage = new LocalFilesystemObjectStorage($this->root);
+
+        $this->expectException(ObjectStorageException::class);
+
+        $storage->delete('KTP/quarantine/../../../../etc/passwd');
+    }
+
     public function test_temporary_url_resolves_to_the_literal_private_download_path(): void
     {
         $storage = new LocalFilesystemObjectStorage($this->root);
