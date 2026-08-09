@@ -87,12 +87,20 @@ final class BookingDraftQuery
             $unitPrice = $priceVersion !== null
                 ? Money::fromDecimal((string) $priceVersion->amount)
                 : null;
-            $lineTotal = $unitPrice !== null ? $unitPrice * $quantity : null;
+            $lineTotal = $unitPrice !== null
+                ? self::multiplyMinorUnits($unitPrice, $quantity)
+                : null;
 
-            if ($unitPrice === null) {
+            if ($unitPrice === null || $lineTotal === null) {
                 $allPricesAvailable = false;
             } else {
-                $total += $lineTotal;
+                $nextTotal = self::addMinorUnits($total, $lineTotal);
+
+                if ($nextTotal === null) {
+                    $allPricesAvailable = false;
+                } else {
+                    $total = $nextTotal;
+                }
             }
 
             $lines[] = [
@@ -109,5 +117,25 @@ final class BookingDraftQuery
             'total' => $allPricesAvailable && $lines !== [] ? $total : null,
             'all_prices_available' => $allPricesAvailable,
         ];
+    }
+
+    private static function multiplyMinorUnits(int $unitPrice, int $quantity): ?int
+    {
+        if (($unitPrice > 0 && $unitPrice > intdiv(PHP_INT_MAX, $quantity))
+            || ($unitPrice < 0 && $unitPrice < intdiv(PHP_INT_MIN, $quantity))) {
+            return null;
+        }
+
+        return $unitPrice * $quantity;
+    }
+
+    private static function addMinorUnits(int $left, int $right): ?int
+    {
+        if (($right > 0 && $left > PHP_INT_MAX - $right)
+            || ($right < 0 && $left < PHP_INT_MIN - $right)) {
+            return null;
+        }
+
+        return $left + $right;
     }
 }

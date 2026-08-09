@@ -83,6 +83,21 @@ final class BookingDraftQueryTest extends TestCase
         $this->assertTrue($summary['all_prices_available']);
     }
 
+    public function test_summary_does_not_enter_the_quote_path_when_quantity_overflows_minor_units(): void
+    {
+        $draft = BookingDraft::create([
+            'selected_services' => [
+                ['code' => 'DOCUMENT_PROCESSING', 'quantity' => PHP_INT_MAX],
+            ],
+        ]);
+
+        $summary = BookingDraftQuery::summary($draft);
+
+        $this->assertNull($summary['lines'][0]['line_total']);
+        $this->assertNull($summary['total']);
+        $this->assertFalse($summary['all_prices_available']);
+    }
+
     public function test_summary_marks_a_missing_price_honestly_instead_of_fabricating_a_total(): void
     {
         PriceVersion::query()

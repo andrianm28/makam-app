@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Platform\FinancialLedger;
 
 use App\Platform\FinancialLedger\Money;
+use OverflowException;
 use Tests\TestCase;
 use TypeError;
 
@@ -45,6 +46,13 @@ final class MoneyTest extends TestCase
     {
         $this->assertSame('Rp 150.000', (new Money(15000000))->format());
         $this->assertSame('Rp 150.000,25', (new Money(15000025))->format());
+    }
+
+    public function test_format_rejects_php_int_minimum_instead_of_negating_into_a_float(): void
+    {
+        $this->expectException(OverflowException::class);
+
+        (new Money(PHP_INT_MIN))->format();
     }
 
     public function test_float_constructor_input_is_rejected(): void

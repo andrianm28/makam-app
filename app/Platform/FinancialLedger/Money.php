@@ -97,6 +97,11 @@ final readonly class Money
     {
         $factor = self::factor(self::minorUnits());
         $isNegative = $this->minorUnits < 0;
+
+        if ($this->minorUnits === PHP_INT_MIN) {
+            throw new OverflowException('Money value cannot be formatted within the integer range.');
+        }
+
         $absolute = $isNegative ? -$this->minorUnits : $this->minorUnits;
         $whole = intdiv($absolute, $factor);
         $fraction = $absolute % $factor;
