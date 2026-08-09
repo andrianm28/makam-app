@@ -6,9 +6,9 @@ namespace Tests\Feature\IdentityAccess\Mfa;
 
 use App\Models\User;
 use App\Platform\Audit\AuditSource;
-use App\Platform\IdentityAccess\Mfa\Models\MfaEnrolment;
 use App\Platform\IdentityAccess\Mfa\MfaEnrolmentService;
 use App\Platform\IdentityAccess\Mfa\MfaEnrolmentStatus;
+use App\Platform\IdentityAccess\Mfa\Models\MfaEnrolment;
 use App\Platform\IdentityAccess\Mfa\Totp\Base32;
 use App\Platform\IdentityAccess\Mfa\Totp\Totp;
 use App\Platform\IdentityAccess\Models\ActorSession;
