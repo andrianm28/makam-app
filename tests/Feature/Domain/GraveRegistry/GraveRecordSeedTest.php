@@ -202,7 +202,7 @@ final class GraveRecordSeedTest extends TestCase
     {
         $cemeteryId = Cemetery::query()->where('slug', 'tpu-bogor-bantarjati')->sole()->id;
 
-        $record = new GraveRecord();
+        $record = new GraveRecord;
         $record->forceFill([
             'cemetery_id' => $cemeteryId,
             'deceased_name' => 'Contoh Nama  Uji-Coba',
@@ -232,7 +232,7 @@ final class GraveRecordSeedTest extends TestCase
      */
     public function test_derived_and_protected_columns_are_not_mass_assignable(): void
     {
-        $fillable = (new GraveRecord())->getFillable();
+        $fillable = (new GraveRecord)->getFillable();
 
         $this->assertNotContains('deceased_name_normalized', $fillable);
         $this->assertNotContains('heir_contact_reference', $fillable);
