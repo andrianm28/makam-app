@@ -230,8 +230,12 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
         }
 
         // Price range WITH source — AC3 requires the attribution, not just
-        // the figure.
+        // the figure. Both ends of the range are asserted:
+        // `CemeteryPresenter::priceRange()` renders "{symbol} {min} -
+        // {symbol} {max}", so asserting only the minimum let a regression
+        // that dropped or corrupted the upper half pass on both routes.
         $response->assertSee(number_format((float) $cemetery->price_min, 0, ',', '.'));
+        $response->assertSee(number_format((float) $cemetery->price_max, 0, ',', '.'));
         $response->assertSee((string) $cemetery->price_source);
 
         // Photo.
