@@ -10,8 +10,8 @@ namespace App\Platform\Audit;
  * SYSTEM SHALL require a mandatory reason where the domain requires
  * one — including DITOLAK, plot override, tariff-source change, gate
  * change, manual payment verification, certificate revoke, and vendor
- * payout." `tasks.md`: "Declare the sensitive-action list requiring a
- * mandatory reason."
+ * payout, and recorded price versions." `tasks.md`: "Declare the
+ * sensitive-action list requiring a mandatory reason."
  *
  * Deliberately a closed, explicitly-reviewed list rather than a
  * magic-string convention (e.g. "any action ending in _REJECTED" or
@@ -35,6 +35,7 @@ final class SensitiveActions
         'PAYMENT_MANUAL_VERIFICATION',
         'CERTIFICATE_REVOKE',
         'VENDOR_PAYOUT',
+        'PRICE_VERSION_RECORDED',
 
         // Added by S3-T2 (platform-identity-and-access MFA batch). Only
         // the explicit, human-initiated revoke

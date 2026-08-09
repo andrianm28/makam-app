@@ -27,6 +27,7 @@ final class SensitiveActionsTest extends TestCase
             'manual payment verification' => ['PAYMENT_MANUAL_VERIFICATION'],
             'certificate revoke' => ['CERTIFICATE_REVOKE'],
             'vendor payout' => ['VENDOR_PAYOUT'],
+            'price version recorded' => ['PRICE_VERSION_RECORDED'],
         ];
     }
 
@@ -58,9 +59,10 @@ final class SensitiveActionsTest extends TestCase
      * `MFA_RESET` — a genuine, documented addition (see
      * `SensitiveActions`'s own updated class doc comment for why only
      * that one MFA action, not all four, requires a reason), not a
-     * regression. Renamed and updated rather than left red.
+     * regression. Renamed and updated rather than left red. Wave 0c later
+     * added `PRICE_VERSION_RECORDED` as the financial price-version action.
      */
-    public function test_the_list_contains_exactly_the_seven_requirements_named_actions_plus_mfa_reset(): void
+    public function test_the_list_contains_the_requirements_named_actions_plus_mfa_reset_and_price_version_recorded(): void
     {
         $this->assertSame(
             [
@@ -71,6 +73,7 @@ final class SensitiveActionsTest extends TestCase
                 'PAYMENT_MANUAL_VERIFICATION',
                 'CERTIFICATE_REVOKE',
                 'VENDOR_PAYOUT',
+                'PRICE_VERSION_RECORDED',
                 'MFA_RESET',
             ],
             SensitiveActions::ACTIONS

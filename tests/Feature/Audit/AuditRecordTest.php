@@ -117,6 +117,20 @@ final class AuditRecordTest extends TestCase
         $this->assertSame('Duplicate certificate issued in error.', $event->reason);
     }
 
+    public function test_recording_a_price_version_without_a_reason_throws(): void
+    {
+        $this->expectException(AuditReasonRequiredException::class);
+
+        Audit::record(
+            action: 'PRICE_VERSION_RECORDED',
+            subject: new AuditSubject(type: 'price_version', id: 1),
+            outcome: AuditOutcome::Allowed,
+            actorRef: 1,
+            actorRole: 'admin',
+            source: AuditSource::Panel,
+        );
+    }
+
     public function test_a_non_sensitive_action_never_requires_a_reason(): void
     {
         $event = Audit::record(
