@@ -2437,7 +2437,22 @@ final class BookingWizardStepsFourAndFiveTest extends TestCase
             ->assertSet('currentStep', BookingWizardStep::SUMMARY);
     }
 
-    public function test_step_5_shows_an_honest_price_unavailable_state_when_no_price_is_seeded(): void
+    /**
+     * R3 (pre-flight ruling, human-confirmed 08 Aug 2026): the canonical
+     * seed migration (`2026_07_26_220000_seed_service_definition_dummy_
+     * operational_data.php`) seeds a real `price_versions` row for every
+     * one of the 12 catalogue services, including `DOCUMENT_PROCESSING`
+     * (350000.00) and `GRAVE_DIGGING` (750000.00) — so Step 5 with only
+     * the two mandatory basics selected always has both prices available
+     * in this environment; the honest "Harga belum tersedia" path is
+     * never reachable from this fixture and is NOT what this test should
+     * assert. That degraded state is already covered by Task 4's own
+     * dedicated fixture (`BookingDraftQueryTest::
+     * test_summary_marks_a_missing_price_honestly_instead_of_fabricating_a_total`,
+     * which supersedes the seeded price before asserting) — this test
+     * instead proves the real, seeded happy path renders a correct total.
+     */
+    public function test_step_5_shows_the_real_computed_total_from_seeded_prices(): void
     {
         $draftId = $this->draftAtStep4();
 
@@ -2446,7 +2461,10 @@ final class BookingWizardStepsFourAndFiveTest extends TestCase
                 ['code' => 'DOCUMENT_PROCESSING', 'quantity' => 1],
                 ['code' => 'GRAVE_DIGGING', 'quantity' => 1],
             ])
-            ->assertSee('Harga belum tersedia');
+            ->assertSee('Rp 350.000')
+            ->assertSee('Rp 750.000')
+            ->assertSee('Rp 1.100.000')
+            ->assertDontSee('Harga belum tersedia');
     }
 
     public function test_the_autosave_indicator_shows_saved_after_a_successful_step_save(): void
