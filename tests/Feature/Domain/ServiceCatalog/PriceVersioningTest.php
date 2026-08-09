@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Tests\Feature\Domain\ServiceCatalog;
 
 use App\Domain\ServiceCatalog\Actions\RecordServiceDefinitionPriceVersion;
+use App\Domain\ServiceCatalog\Exceptions\PriceVersionIsAppendOnlyException;
 use App\Domain\ServiceCatalog\Models\PriceVersion;
 use App\Domain\ServiceCatalog\Models\ServiceDefinition;
 use App\Domain\ServiceCatalog\ServiceCode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -42,6 +44,12 @@ final class PriceVersioningTest extends TestCase
      * this service's very first price version" from a genuinely empty
      * history, the same scenario these tests exercised before that
      * migration existed.
+     *
+     * This is a BUILDER-level mass delete, which fires no model events, so
+     * it is unaffected by the append-only guard `PriceVersion::booted()`
+     * gained on 09 Aug 2026 (F26) — deliberately, and the same reason the
+     * dev-data seed migration writes through `DB::table()`. The guard's
+     * scope is the Eloquent instance path; see that model's own doc block.
      */
     private function clearExistingPriceVersions(ServiceDefinition $service): void
     {
@@ -152,5 +160,173 @@ final class PriceVersioningTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
 
         (new RecordServiceDefinitionPriceVersion)(serviceDefinition: $service, amount: 'not-a-number', actorReference: 3);
+    }
+
+    // ------------------------------------------------------------------
+    // F20 + F26 + F7 — added 09 Aug 2026 by the ServiceCatalog Superpowers
+    // retrofit fix wave (Rounds 2). AC3's snapshot property, the
+    // append-only contract it rests on, and the money-shape guard in front
+    // of the `decimal(12,2)` column.
+    // ------------------------------------------------------------------
+
+    /**
+     * F20. AC3's actual snapshot PROPERTY, which no test asserted: the
+     * supersede CHAIN was proven, but `$first->amount` was never re-read
+     * after supersession. This is the one property a quote referencing a
+     * price version depends on.
+     */
+    public function test_a_superseded_price_version_still_holds_its_original_amount(): void
+    {
+        $service = ServiceDefinition::findByCode(ServiceCode::GRAVE_DIGGING);
+        $this->clearExistingPriceVersions($service);
+
+        $recordPrice = new RecordServiceDefinitionPriceVersion;
+
+        $first = $recordPrice(serviceDefinition: $service, amount: '1500000.00', actorReference: 3);
+        $recordPrice(serviceDefinition: $service, amount: '1750000.00', actorReference: 3);
+        $recordPrice(serviceDefinition: $service, amount: '2000000.00', actorReference: 3);
+
+        $this->assertSame('1500000.00', $first->refresh()->amount);
+        $this->assertNotNull($first->superseded_at);
+        $this->assertDatabaseHas('price_versions', ['id' => $first->id, 'version_number' => 1]);
+    }
+
+    /**
+     * F26. `price_versions`'s own class doc block and
+     * `2026_07_26_180400_create_price_versions_table.php:55-56` both claimed
+     * "append-only ... never updated afterward except to stamp
+     * `superseded_at`" / "never delete or renumber a version after the
+     * fact", while the model defined no `booted()` of any kind — so
+     * `$old->forceFill(['amount' => '1.00'])->save()` and `$old->delete()`
+     * both simply worked, which is why F20's property above was not merely
+     * untested but unenforceable.
+     */
+    public function test_a_recorded_price_version_can_never_be_rewritten_or_deleted(): void
+    {
+        $service = ServiceDefinition::findByCode(ServiceCode::GRAVE_DIGGING);
+        $this->clearExistingPriceVersions($service);
+
+        $recordPrice = new RecordServiceDefinitionPriceVersion;
+        $first = $recordPrice(serviceDefinition: $service, amount: '1500000.00', actorReference: 3);
+        $second = $recordPrice(serviceDefinition: $service, amount: '1750000.00', actorReference: 3);
+
+        // The legal supersede stamp already happened above — proof the
+        // guard is not blanket-blocking the one permitted update.
+        $this->assertNotNull($first->refresh()->superseded_at);
+        $this->assertTrue($second->refresh()->isCurrent());
+
+        $firstId = $first->id;
+        $secondId = $second->id;
+
+        // Each attempt loads its own fresh instance, so a rejected write can
+        // never leave dirty attributes behind that make the NEXT attempt
+        // throw for the wrong reason.
+        $attempts = [
+            'rewrite a superseded amount' => fn () => PriceVersion::query()->findOrFail($firstId)
+                ->forceFill(['amount' => '1.00'])->save(),
+            'renumber a superseded version' => fn () => PriceVersion::query()->findOrFail($firstId)
+                ->forceFill(['version_number' => 99])->save(),
+            're-stamp an already-superseded row' => fn () => PriceVersion::query()->findOrFail($firstId)
+                ->forceFill(['superseded_at' => now()])->save(),
+            'un-supersede a superseded row' => fn () => PriceVersion::query()->findOrFail($firstId)
+                ->forceFill(['superseded_at' => null])->save(),
+            'rewrite the current amount' => fn () => PriceVersion::query()->findOrFail($secondId)
+                ->forceFill(['amount' => '9.99'])->save(),
+            'rewrite a row through the model even with no change at all' => fn () => PriceVersion::query()
+                ->findOrFail($secondId)->save(),
+            'delete a superseded version' => fn () => PriceVersion::query()->findOrFail($firstId)->delete(),
+            'delete the current version' => fn () => PriceVersion::query()->findOrFail($secondId)->delete(),
+        ];
+
+        foreach ($attempts as $description => $attempt) {
+            try {
+                $attempt();
+                $this->fail("Attempting to {$description} should have thrown.");
+            } catch (PriceVersionIsAppendOnlyException) {
+                // expected
+            }
+        }
+
+        $this->assertDatabaseHas('price_versions', ['id' => $first->id, 'amount' => '1500000.00', 'version_number' => 1]);
+        $this->assertDatabaseHas('price_versions', ['id' => $second->id, 'amount' => '1750000.00', 'version_number' => 2]);
+        $this->assertSame('1500000.00', $first->fresh()->amount);
+        $this->assertSame('1750000.00', $second->fresh()->amount);
+        $this->assertNotNull($first->fresh()->superseded_at);
+        $this->assertNull($second->fresh()->superseded_at);
+    }
+
+    /**
+     * F7. `is_numeric($amount) || (float) $amount <= 0` was the only guard
+     * in front of a `decimal(12,2)` column. Each value below changed a MONEY
+     * value with no error and no trace (the audit `metadata` carries only a
+     * sentence, never the amount):
+     *
+     * - `'100.999'` was accepted and silently rounded by the database to
+     *   `101.00` — a stored amount differing from what the caller passed;
+     * - `' 5000'` and `'1e9'` are `is_numeric()`-true but are not the
+     *   plain decimal string the column's domain describes;
+     * - `'99999999999.99'` (11 integer digits) overflowed `decimal(12,2)`
+     *   and surfaced as a raw `QueryException`, not a domain error.
+     *
+     * @return list<array{string}>
+     */
+    public static function rejectedAmountProvider(): array
+    {
+        return [
+            'scale greater than 2 (silently rounded by the DB)' => ['100.999'],
+            'leading whitespace' => [' 5000'],
+            'exponent notation' => ['1e9'],
+            'eleven integer digits (decimal(12,2) overflow)' => ['99999999999.99'],
+            'zero' => ['0'],
+            'zero with a scale' => ['0.00'],
+            'negative' => ['-1'],
+            'not a number at all' => ['abc'],
+            'blank' => [''],
+        ];
+    }
+
+    #[DataProvider('rejectedAmountProvider')]
+    public function test_an_amount_outside_the_decimal_12_2_domain_is_rejected(string $amount): void
+    {
+        $service = ServiceDefinition::findByCode(ServiceCode::CATERING);
+
+        $this->expectException(InvalidArgumentException::class);
+
+        (new RecordServiceDefinitionPriceVersion)(
+            serviceDefinition: $service,
+            amount: $amount,
+            actorReference: 3,
+        );
+    }
+
+    /**
+     * @return list<array{string, string}>
+     */
+    public static function acceptedAmountProvider(): array
+    {
+        return [
+            'two fractional digits' => ['350000.00', '350000.00'],
+            'no fractional part' => ['350000', '350000.00'],
+            'one fractional digit' => ['350000.5', '350000.50'],
+            'ten integer digits (the column maximum)' => ['9999999999.99', '9999999999.99'],
+        ];
+    }
+
+    #[DataProvider('acceptedAmountProvider')]
+    public function test_an_amount_inside_the_decimal_12_2_domain_is_accepted_and_stored_exactly(
+        string $amount,
+        string $expectedStored,
+    ): void {
+        $service = ServiceDefinition::findByCode(ServiceCode::CATERING);
+        $this->clearExistingPriceVersions($service);
+
+        $priceVersion = (new RecordServiceDefinitionPriceVersion)(
+            serviceDefinition: $service,
+            amount: $amount,
+            actorReference: 3,
+        );
+
+        $this->assertSame($expectedStored, $priceVersion->refresh()->amount);
+        $this->assertDatabaseHas('price_versions', ['id' => $priceVersion->id, 'version_number' => 1]);
     }
 }
