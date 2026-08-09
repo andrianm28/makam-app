@@ -59,9 +59,12 @@ final class FaqArticleDetail extends Component
     {
         return view('livewire.public.faq.article-detail', [
             'category' => $this->article->category,
-            // publishedRelatedArticles() — the public-safe relation
-            // (FaqArticle's own class doc block). Never relatedArticles().
-            'relatedArticles' => $this->article->publishedRelatedArticles()->get(),
+            // Through FaqPublicQuery, like every other public read — this
+            // was the one call site reaching past it to the model directly.
+            // The method wraps publishedRelatedArticles(), the public-safe
+            // relation (FaqArticle's own class doc block), never
+            // relatedArticles().
+            'relatedArticles' => FaqPublicQuery::relatedArticles($this->article),
         ])->layout('layouts.app', [
             'title' => $this->article->title.' - FAQ - Makam.co.id',
             'active' => 'faq',

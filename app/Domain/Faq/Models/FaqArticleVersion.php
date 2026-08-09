@@ -14,6 +14,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * (`2026_07_26_170200_create_faq_article_versions_table.php`) for schema
  * and the versioning-timing decision this table implements.
  *
+ * Answers "what each publish event captured", NOT "what was public, since
+ * when" — the stronger claim this doc block used to imply and the migration
+ * stated outright. `Actions\UpdateFaqArticleContent` rewrites the content of
+ * an already-published article without appending a row here, so live content
+ * can drift arbitrarily from version N's snapshot between two publishes.
+ * That is a known limitation, recorded 09 Aug 2026 (retrofit-faq fix wave)
+ * and ledgered pending a design ruling — see the migration's own doc block
+ * for the full reasoning and why it was not simply changed.
+ *
  * Append-only: rows are written ONLY by `Actions\PublishFaqArticle`, one row
  * per successful publish, never updated or deleted afterward — mirrors this
  * codebase's established append-only-log pattern

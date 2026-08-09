@@ -110,4 +110,23 @@ final class FaqPublicQuery
     {
         return FaqArticle::publishedBySlug($slug);
     }
+
+    /**
+     * The published articles linked to one article — the `/faq/{articleSlug}`
+     * detail route's "Artikel terkait" section. Never includes a draft or
+     * unpublished article: `FaqArticle::publishedRelatedArticles()` composes
+     * `published()` onto the admin-facing `relatedArticles()` relation.
+     *
+     * Added 09 Aug 2026 (retrofit-faq fix wave). `FaqArticleDetail` read
+     * `publishedRelatedArticles()` off the model directly, which was the one
+     * public read in the codebase reaching past this class — see the class
+     * doc block above, and the retrofit plan's own Global Constraint that
+     * every public read goes through `FaqPublicQuery`.
+     *
+     * @return Collection<int, FaqArticle>
+     */
+    public static function relatedArticles(FaqArticle $article): Collection
+    {
+        return $article->publishedRelatedArticles()->get();
+    }
 }

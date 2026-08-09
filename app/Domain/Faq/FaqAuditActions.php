@@ -7,7 +7,7 @@ namespace App\Domain\Faq;
 /**
  * The action names this module writes to `audit_events` via
  * `App\Platform\Audit\Audit::record()`. Named constants (not inline string
- * literals scattered across the four Action classes) so tests and any future
+ * literals scattered across the five Action classes) so tests and any future
  * caller reference the same values the Actions actually emit — mirrors
  * `App\Platform\IdentityAccess\Mfa\MfaAuditActions`'s own doc block and
  * naming shape.
@@ -34,17 +34,27 @@ namespace App\Domain\Faq;
  * apply to `MFA_ENROLMENT_CONFIRMED`/`MFA_CHALLENGE_SUCCEEDED`/
  * `MFA_CHALLENGE_FAILED`/`MFA_RECOVERY_USED` (routine, machine-driven
  * outcomes: audited for a complete history, but not sensitive-listed),
- * applied here to FAQ content management. Every one of the four Actions
+ * applied here to FAQ content management. Every one of the five Actions
  * still calls `Audit::record()` (not skipped) so a complete "who changed
  * what, when" history exists for FAQ content the same way it does for every
  * other admin-facing mutation in this codebase — `Audit::record()`'s own
- * reason requirement simply never triggers for these four action names,
+ * reason requirement simply never triggers for these five action names,
  * because none of them appear on `SensitiveActions::ACTIONS`.
+ *
+ * COUNT CORRECTED 09 Aug 2026 (retrofit-faq fix wave) — this analysis said
+ * "four" throughout while there are five Actions and five action constants.
+ * The uncovered fifth is `REORDERED` (`Actions\ReorderFaqArticles`), and the
+ * reasoning above holds for it a fortiori rather than by accident: changing
+ * which order articles appear in is the most purely editorial of the five —
+ * it alters no article's content, publish state, or public reachability, so
+ * there is nothing fraud- or harm-shaped for a mandatory recorded reason to
+ * deter. It is correctly excluded from `SensitiveActions::ACTIONS`. Stating
+ * that rather than leaving it implied is the whole point of the correction.
  *
  * (This batch does not — and, per its own brief, must not — edit
  * `app/Platform/Audit/SensitiveActions.php` itself; app/Platform/** is a
  * read-only dependency for this batch. Even absent that constraint, the
- * analysis above concludes these four do not belong on that list.)
+ * analysis above concludes these five do not belong on that list.)
  */
 final class FaqAuditActions
 {
