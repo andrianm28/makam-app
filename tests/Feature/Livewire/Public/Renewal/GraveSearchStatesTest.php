@@ -361,6 +361,64 @@ final class GraveSearchStatesTest extends TestCase
             ->assertDontSee(self::NO_RESULT_MARKER);
     }
 
+    /**
+     * The same test the `?tpu=` tamper case already had, for the parameter
+     * that never got one — which is exactly why the production gap survived.
+     *
+     * `?tanggal=` is `#[Url]`-bound, so it arrives on a plain GET and never
+     * passes through `search()`. Before `mount()` validated, a malformed
+     * value went straight into `whereDate('death_date', …)`: on PostgreSQL
+     * that throws and the page renders §6.5 "provider unavailable", on SQLite
+     * it renders the no-result state. Both are wrong, and the SQLite one is
+     * the documented defect — a family told nothing matched when the real
+     * problem is a date they can fix.
+     *
+     * §6.3 is the correct state: an inline per-field error on the form, with
+     * no search run. Asserted as three separate facts (error present,
+     * message rendered, neither empty state rendered) because a page that
+     * merely avoids 500ing is not the same as a page that says what is
+     * wrong.
+     */
+    public function test_a_malformed_death_date_in_the_url_renders_the_validation_state_not_an_empty_one(): void
+    {
+        $this->openTheDataGate();
+
+        // '2018-13-45' is the interesting one: it is not a real calendar
+        // date, but a lenient parser rolls it forward into one.
+        foreach (['garbage', '11-04-2018', '2018-13-45', "' OR 1=1 --"] as $tampered) {
+            Livewire::withQueryParams([
+                'tpu' => $this->cemeteryId('tpu-jakarta-menteng'),
+                'tanggal' => $tampered,
+            ])
+                ->test(GraveSearch::class)
+                ->assertOk()
+                ->assertHasErrors('deathDate')
+                ->assertSee('Tanggal wafat harus berupa tanggal yang valid.')
+                ->assertDontSee(self::NO_RESULT_MARKER)
+                ->assertDontSee(self::PRIVACY_LIMITED_MARKER)
+                ->assertDontSee('Pencarian sedang tidak dapat diproses');
+        }
+    }
+
+    /**
+     * A well-formed `?tanggal=` still works — the guard above must reject
+     * malformed dates without also breaking the shared/bookmarked result
+     * link that `mount()` exists to support.
+     */
+    public function test_a_valid_death_date_in_the_url_still_runs_the_search(): void
+    {
+        $this->openTheDataGate();
+
+        Livewire::withQueryParams([
+            'tpu' => $this->cemeteryId('tpu-jakarta-menteng'),
+            'tanggal' => '2018-04-11',
+        ])
+            ->test(GraveSearch::class)
+            ->assertOk()
+            ->assertHasNoErrors()
+            ->assertSee('Contoh Budi Santoso');
+    }
+
     // =====================================================================
     // Provider unavailable (§6.5) — the fourth thing that is not an empty
     // state, and the easiest one to get wrong

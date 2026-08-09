@@ -12,6 +12,7 @@ use App\Domain\Renewal\RenewalJourneyStep;
 use App\Platform\FeatureGate\ModeResolver;
 use App\Platform\FeatureGate\Modes\GraveSearchMode;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Validator;
 use Livewire\Attributes\Url;
 use Livewire\Component;
 use Throwable;
@@ -122,6 +123,37 @@ final class GraveSearch extends Component
         // result link), so the results are rendered rather than an empty
         // form. `$searched` stays false for a bare arrival.
         $this->searched = $this->criteria()->hasAnyTerm();
+
+        // `#[Url]`-bound values also arrive straight from the query string on
+        // a plain GET, which never passes through `search()` and therefore
+        // never met `rules()`. An unvalidated `?tanggal=` reached
+        // `whereDate('death_date', …)`, which on PostgreSQL throws and renders
+        // §6.5 "provider unavailable" and on SQLite renders the no-result
+        // state — a family told their relative is not in the registry because
+        // a date was malformed.
+        //
+        // Deliberately NOT `$this->validate()`: that throws
+        // ValidationException, and thrown from mount() it surfaces as a 422 on
+        // an initial page load rather than as a rendered validation state. The
+        // error bag is populated directly instead — the same shape
+        // `CemeteryDirectoryIndex` uses for its own `#[Url]` properties — so
+        // render()'s existing `$shouldSearch` guard suppresses the query while
+        // §6.3's inline per-field error renders on the form.
+        $validator = Validator::make(
+            [
+                'name' => $this->name,
+                'block' => $this->block,
+                'deathDate' => $this->deathDate,
+            ],
+            $this->rules(),
+            $this->messages(),
+        );
+
+        foreach ($validator->errors()->messages() as $field => $messages) {
+            foreach ($messages as $message) {
+                $this->addError($field, $message);
+            }
+        }
     }
 
     /**
