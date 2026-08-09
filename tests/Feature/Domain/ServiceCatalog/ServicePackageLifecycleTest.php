@@ -20,8 +20,9 @@ use Tests\TestCase;
 /**
  * Proves `package-and-service-bundles/requirements.md` AC1 (a package
  * version's included/optional/excluded items, quantities, units,
- * fulfillment owner, service area/window, and evidence are all defined
- * correctly), AC7 (items fulfilled by cemetery/platform/vendor), and the
+ * fulfillment owner, service area, schedule window, and evidence are all
+ * defined correctly), AC7 (items fulfilled by cemetery/platform/vendor), and
+ * the
  * version-forward lifecycle `design.md` describes ("Later changes create
  * new versions, never mutate accepted quote contents"), end to end through
  * the real Actions — never a raw `Model::create()` call, mirroring
@@ -29,6 +30,12 @@ use Tests\TestCase;
  * "exercise the real write Actions" convention. AC2 immutability itself has
  * its own dedicated, deeper test:
  * `ServicePackageVersionImmutabilityTest.php`.
+ *
+ * The AC1 "service area" half of that claim was UNEARNED until 09 Aug 2026:
+ * `standardItems()` supplied no `service_area` and no test asserted one,
+ * while this block said it was proven. `standardItems()` now carries a real
+ * value and both the define and the revise tests assert it round-trips
+ * (ServiceCatalog Superpowers retrofit, F21).
  */
 final class ServicePackageLifecycleTest extends TestCase
 {
@@ -75,6 +82,9 @@ final class ServicePackageLifecycleTest extends TestCase
                 'quantity' => 1,
                 'unit' => 'unit',
                 'fulfillment_owner' => FulfillmentOwner::CEMETERY_OPERATOR,
+                // AC1's "service area" — supplied on exactly one item so the
+                // null default on the others stays exercised too.
+                'service_area' => 'DKI Jakarta',
                 'requires_schedule_window' => true,
             ],
             [
@@ -139,6 +149,15 @@ final class ServicePackageLifecycleTest extends TestCase
         $documentItem = $version->items()->where('service_definition_id', ServiceDefinition::findByCode(ServiceCode::DOCUMENT_PROCESSING)->id)->sole();
         $this->assertTrue((bool) $documentItem->evidence_required);
         $this->assertSame(1, $documentItem->evidenceRequirements()->count());
+
+        // AC1's "service area" — supplied by `standardItems()` on the
+        // grave-digging item only, `null` everywhere else.
+        $graveDiggingItem = $version->items()
+            ->where('service_definition_id', ServiceDefinition::findByCode(ServiceCode::GRAVE_DIGGING)->id)
+            ->sole();
+        $this->assertSame('DKI Jakarta', $graveDiggingItem->service_area);
+        $this->assertTrue((bool) $graveDiggingItem->requires_schedule_window);
+        $this->assertNull($documentItem->service_area);
     }
 
     public function test_defining_a_package_with_zero_items_is_rejected(): void
@@ -153,25 +172,82 @@ final class ServicePackageLifecycleTest extends TestCase
         );
     }
 
-    public function test_defining_an_item_with_an_unknown_service_definition_id_is_rejected(): void
+    /**
+     * F19 (09 Aug 2026 retrofit). The throw was already asserted; the
+     * ROLLBACK was not. `DefineServicePackage` creates the package and its
+     * version at `:86-101` and only then resolves each item's
+     * `service_definition_id` with `findOrFail` at `:156`, so without the
+     * `DB::transaction` wrapper this leaves an orphan package plus an empty
+     * version behind — and the suite stayed green either way.
+     */
+    public function test_defining_an_item_with_an_unknown_service_definition_id_is_rejected_and_rolls_the_whole_package_back(): void
     {
-        $this->expectException(ModelNotFoundException::class);
+        try {
+            (new DefineServicePackage)(
+                code: 'PAKET_SALAH',
+                name: 'Paket Salah',
+                items: [[
+                    'service_definition_id' => 999999,
+                    'item_type' => ServicePackageItemType::INCLUDED,
+                    'quantity' => 1,
+                    'unit' => 'unit',
+                    'fulfillment_owner' => FulfillmentOwner::PLATFORM,
+                ]],
+                actorReference: 7,
+            );
 
-        (new DefineServicePackage)(
-            code: 'PAKET_SALAH',
-            name: 'Paket Salah',
+            $this->fail('Defining a package with an unknown service_definition_id should have thrown.');
+        } catch (ModelNotFoundException) {
+            // expected
+        }
+
+        $this->assertDatabaseCount('service_packages', 0);
+        $this->assertDatabaseCount('service_package_versions', 0);
+        $this->assertDatabaseCount('service_package_items', 0);
+    }
+
+    /**
+     * F17 (09 Aug 2026 retrofit). `PublishServicePackageVersion.php:60-64`'s
+     * zero-item refusal had ZERO coverage anywhere in the module — deleting
+     * that guard left the whole suite green. The test whose NAME claimed to
+     * cover it (below, now renamed) never attempted an empty publish.
+     *
+     * A zero-item draft is not directly constructible — `DefineServicePackage`
+     * requires at least one item — so this builds one and then deletes it,
+     * which is legal precisely because the version is still a draft.
+     */
+    public function test_publishing_a_version_with_zero_items_is_rejected(): void
+    {
+        $package = (new DefineServicePackage)(
+            code: 'PAKET_UJI_TANPA_ITEM',
+            name: 'Paket Uji Tanpa Item',
             items: [[
-                'service_definition_id' => 999999,
+                'service_definition_id' => ServiceDefinition::findByCode(ServiceCode::DOCUMENT_PROCESSING)->id,
                 'item_type' => ServicePackageItemType::INCLUDED,
                 'quantity' => 1,
-                'unit' => 'unit',
+                'unit' => 'paket',
                 'fulfillment_owner' => FulfillmentOwner::PLATFORM,
             ]],
             actorReference: 7,
         );
+
+        $draft = $package->draftVersion();
+        $draft->items()->sole()->delete();
+        $this->assertSame(0, $draft->items()->count());
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('has zero items and cannot be published');
+
+        (new PublishServicePackageVersion)($draft, actorReference: 7);
     }
 
-    public function test_publishing_freezes_the_version_and_cannot_publish_an_empty_or_already_published_one_twice(): void
+    /**
+     * Renamed 09 Aug 2026 (F17): the old name
+     * `test_publishing_freezes_the_version_and_cannot_publish_an_empty_or_already_published_one_twice`
+     * named three guarantees and proved one. The empty-publish half now has
+     * its own test above; this one claims only what its body proves.
+     */
+    public function test_publishing_freezes_the_version_and_republishing_it_is_idempotent(): void
     {
         $package = (new DefineServicePackage)(
             code: 'PAKET_UJI_TERBIT',
@@ -209,11 +285,61 @@ final class ServicePackageLifecycleTest extends TestCase
 
         $this->assertSame(2, $v2->version_number);
         $this->assertTrue($v2->isDraft());
-        $this->assertSame($v1->items()->count(), $v2->items()->count());
-        $this->assertSame(
-            $v1->items()->ofType(ServicePackageItemType::OPTIONAL)->sole()->substitutionPolicies()->count(),
-            $v2->items()->ofType(ServicePackageItemType::OPTIONAL)->sole()->substitutionPolicies()->count(),
-        );
+
+        // F18 (09 Aug 2026 retrofit). This used to be
+        // `assertSame($v1->items()->count(), $v2->items()->count())` — two
+        // DERIVED values compared against each other, which a `copyItem()`
+        // that dropped or corrupted every attribute would still satisfy.
+        // Absolute count, then every attribute AC1 names, per item.
+        $this->assertSame(4, $v2->items()->count());
+
+        $sourceItems = $v1->items()->orderBy('id')->get()->keyBy('service_definition_id');
+        $copiedItems = $v2->items()->orderBy('id')->get()->keyBy('service_definition_id');
+
+        $this->assertSame($sourceItems->keys()->all(), $copiedItems->keys()->all());
+
+        foreach ($sourceItems as $serviceDefinitionId => $source) {
+            $copy = $copiedItems->get($serviceDefinitionId);
+            $this->assertNotNull($copy, "Item for service definition [{$serviceDefinitionId}] was not copied.");
+
+            $this->assertSame($source->item_type, $copy->item_type);
+            $this->assertSame($source->quantity, $copy->quantity);
+            $this->assertSame($source->unit, $copy->unit);
+            $this->assertSame($source->fulfillment_owner, $copy->fulfillment_owner);
+            $this->assertSame($source->service_area, $copy->service_area);
+            $this->assertSame((bool) $source->requires_schedule_window, (bool) $copy->requires_schedule_window);
+            $this->assertSame((bool) $source->evidence_required, (bool) $copy->evidence_required);
+            $this->assertSame($source->notes, $copy->notes);
+
+            // The copy is a genuinely new row, not the same one relinked.
+            $this->assertNotSame($source->id, $copy->id);
+            $this->assertSame($v2->id, $copy->service_package_version_id);
+        }
+
+        // Evidence requirements were asserted by NOTHING before this — a
+        // `copyItem()` that dropped every one of them kept the old test
+        // green (`ReviseServicePackageVersion.php:111-117`).
+        $sourceDocumentItem = $sourceItems->get(ServiceDefinition::findByCode(ServiceCode::DOCUMENT_PROCESSING)->id);
+        $copiedDocumentItem = $copiedItems->get(ServiceDefinition::findByCode(ServiceCode::DOCUMENT_PROCESSING)->id);
+
+        $this->assertSame(1, $copiedDocumentItem->evidenceRequirements()->count());
+        $sourceEvidence = $sourceDocumentItem->evidenceRequirements()->sole();
+        $copiedEvidence = $copiedDocumentItem->evidenceRequirements()->sole();
+        $this->assertSame($sourceEvidence->description, $copiedEvidence->description);
+        $this->assertSame((bool) $sourceEvidence->is_required, (bool) $copiedEvidence->is_required);
+        $this->assertNotSame($sourceEvidence->id, $copiedEvidence->id);
+
+        // Substitution policies, likewise by absolute count and by value.
+        $sourceHearseItem = $sourceItems->get(ServiceDefinition::findByCode(ServiceCode::HEARSE)->id);
+        $copiedHearseItem = $copiedItems->get(ServiceDefinition::findByCode(ServiceCode::HEARSE)->id);
+
+        $this->assertSame(1, $copiedHearseItem->substitutionPolicies()->count());
+        $sourcePolicy = $sourceHearseItem->substitutionPolicies()->sole();
+        $copiedPolicy = $copiedHearseItem->substitutionPolicies()->sole();
+        $this->assertSame($sourcePolicy->substitute_service_definition_id, $copiedPolicy->substitute_service_definition_id);
+        $this->assertSame((bool) $sourcePolicy->requires_customer_approval, (bool) $copiedPolicy->requires_customer_approval);
+        $this->assertSame($sourcePolicy->reason, $copiedPolicy->reason);
+        $this->assertNotSame($sourcePolicy->id, $copiedPolicy->id);
 
         // v1 is untouched — still published, still frozen, still 4 items.
         $this->assertTrue($v1->refresh()->isPublished());
@@ -227,6 +353,19 @@ final class ServicePackageLifecycleTest extends TestCase
         $this->assertSame(2, $package->currentPublishedVersion()->version_number);
     }
 
+    /**
+     * F16 (09 Aug 2026 retrofit) — this test used to PASS ON THE WRONG
+     * BRANCH. `DefineServicePackage` always leaves a version-1 draft, so
+     * `ReviseServicePackageVersion.php:57`'s open-draft guard threw first and
+     * the never-published branch at `:65-69` was reached by no test in the
+     * module; the bare `expectException(InvalidArgumentException::class)`
+     * could not tell the two apart, and the very next test asserts the
+     * open-draft branch on purpose. Deleting the never-published guard left
+     * the suite green.
+     *
+     * Discarding the draft first is what actually reaches the branch, and the
+     * message assertion is what keeps the two apart from here on.
+     */
     public function test_revise_is_rejected_when_the_package_has_never_been_published(): void
     {
         $package = (new DefineServicePackage)(
@@ -236,7 +375,13 @@ final class ServicePackageLifecycleTest extends TestCase
             actorReference: 7,
         );
 
+        // Legal: only PUBLISHED versions are protected from deletion.
+        $package->draftVersion()->delete();
+        $this->assertNull($package->draftVersion());
+        $this->assertNull($package->currentPublishedVersion());
+
         $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('has never been published; nothing to revise');
 
         (new ReviseServicePackageVersion)($package, actorReference: 7);
     }
@@ -254,6 +399,10 @@ final class ServicePackageLifecycleTest extends TestCase
         (new ReviseServicePackageVersion)($package, actorReference: 7); // creates v2 draft
 
         $this->expectException(InvalidArgumentException::class);
+        // The message assertion is not decoration: it is the only thing
+        // separating this branch from the never-published one above, which
+        // throws the same exception class (F16).
+        $this->expectExceptionMessage('already has an open draft version');
 
         (new ReviseServicePackageVersion)($package, actorReference: 7);
     }

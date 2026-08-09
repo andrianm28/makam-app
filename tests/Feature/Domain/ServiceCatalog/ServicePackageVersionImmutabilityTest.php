@@ -18,6 +18,7 @@ use App\Domain\ServiceCatalog\ServiceCode;
 use App\Domain\ServiceCatalog\ServicePackageItemType;
 use App\Domain\ServiceCatalog\ServicePackageVersionStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -137,8 +138,13 @@ final class ServicePackageVersionImmutabilityTest extends TestCase
         );
 
         $draft = $package->draftVersion();
+        // A no-op save on a draft is permitted (`save()` fires `saving` even
+        // when nothing is dirty, so this really does exercise the guard) —
+        // the row surviving unchanged below is the assertion, not the
+        // `assertTrue(true)` this line used to carry (M10).
         $draft->forceFill(['version_number' => 1])->save();
-        $this->assertTrue(true); // no exception thrown above.
+        $this->assertSame(1, $draft->refresh()->version_number);
+        $this->assertTrue($draft->isDraft());
 
         $item = $draft->items()->sole();
         $item->forceFill(['quantity' => 2])->save();
@@ -207,9 +213,11 @@ final class ServicePackageVersionImmutabilityTest extends TestCase
     {
         $version = $this->publishedVersionWithOneItem();
         $item = $version->items()->sole();
+        $publishedAtBefore = $version->refresh()->published_at;
+        $this->assertNotNull($publishedAtBefore);
 
         foreach ([
-            fn () => $version->forceFill(['published_at' => now()])->save(),
+            fn () => $version->forceFill(['published_at' => now()->addDay()])->save(),
             fn () => $item->forceFill(['quantity' => 99])->save(),
         ] as $attempt) {
             try {
@@ -220,6 +228,11 @@ final class ServicePackageVersionImmutabilityTest extends TestCase
         }
 
         $this->assertSame(1, $item->refresh()->quantity);
+        // M14: the rejected version-side attempt above is precisely a
+        // `published_at` write, and nothing used to assert `published_at`
+        // itself survived it — only the item's quantity and two row counts.
+        $this->assertEquals($publishedAtBefore, $version->fresh()->published_at);
+        $this->assertSame(ServicePackageVersionStatus::PUBLISHED, $version->fresh()->status);
         $this->assertDatabaseCount('service_package_versions', 1);
         $this->assertDatabaseCount('service_package_items', 1);
     }
@@ -478,5 +491,63 @@ final class ServicePackageVersionImmutabilityTest extends TestCase
 
         $policy->delete();
         $this->assertSame(0, $item->substitutionPolicies()->count());
+    }
+
+    /**
+     * C-7 — a CHARACTERIZATION test, not an endorsement. It asserts that the
+     * two structural bypasses below STILL SUCCEED today, and it is meant to
+     * FAIL the moment a database-level guard lands.
+     *
+     * `Models\ServicePackageVersion`'s doc block now names these explicitly
+     * in its NOT COVERED list: an Eloquent hook cannot see a raw
+     * `DB::table()->update()`, a builder-level mass delete, `Model::insert()`,
+     * `withoutEvents()`, or a database cascade. Closing them needs a CHECK
+     * constraint, a trigger, or an FK change against tables already deployed
+     * to `dev.makam.co.id`, which `AGENTS.md` §Infrastructure-agent execution
+     * puts behind human review — so F4b, F11 and F12 are ledgered, not fixed.
+     *
+     * Pinning them here does two things a prose disclosure cannot: it makes
+     * the gap's exact shape executable, and it guarantees that whoever
+     * implements the human ruling gets a loud red test rather than a silent
+     * change nobody notices — and cannot mistake the new refusal for a
+     * regression. `Faq`'s retrofit pinned its equivalent policy gap the same
+     * way.
+     */
+    public function test_characterization_the_ledgered_structural_bypasses_still_succeed_today(): void
+    {
+        $version = $this->publishedVersionWithOneItem();
+
+        // (1) Raw query-builder update on a published version — no Eloquent
+        // event fires, so the AC2 guard never runs. F11's CHECK-constraint
+        // ledger entry is what would close this.
+        DB::table('service_package_versions')
+            ->where('id', $version->id)
+            ->update(['status' => ServicePackageVersionStatus::DRAFT]);
+
+        $this->assertDatabaseHas('service_package_versions', [
+            'id' => $version->id,
+            'status' => ServicePackageVersionStatus::DRAFT,
+        ]);
+
+        // Put it back, the same way it was taken — the second half of this
+        // test needs a genuinely published version again.
+        DB::table('service_package_versions')
+            ->where('id', $version->id)
+            ->update(['status' => ServicePackageVersionStatus::PUBLISHED]);
+
+        $this->assertDatabaseHas('service_package_versions', [
+            'id' => $version->id,
+            'status' => ServicePackageVersionStatus::PUBLISHED,
+        ]);
+
+        // (2) Relation-level mass delete strips every item out of a frozen
+        // version. `Eloquent\Builder::delete()` never instantiates the
+        // models, so `ServicePackageItem::deleting` never fires.
+        $this->assertDatabaseCount('service_package_items', 1);
+
+        $version->items()->delete();
+
+        $this->assertDatabaseCount('service_package_items', 0);
+        $this->assertDatabaseCount('service_package_versions', 1);
     }
 }
