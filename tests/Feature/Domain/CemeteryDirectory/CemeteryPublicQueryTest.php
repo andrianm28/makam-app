@@ -227,4 +227,45 @@ final class CemeteryPublicQueryTest extends TestCase
         $this->assertCount(0, CemeteryPublicQuery::inCity('SURABAYA'));
         $this->assertGreaterThan(0, CemeteryPublicQuery::inCity(LaunchCityCode::JAKARTA)->count());
     }
+
+    public function test_active_packages_returns_a_published_cemeterys_active_packages(): void
+    {
+        $cemetery = Cemetery::query()->where('slug', 'tpu-jakarta-menteng')->firstOrFail();
+
+        $this->assertTrue($cemetery->isPublished());
+        $this->assertGreaterThan(0, CemeteryPublicQuery::activePackages($cemetery)->count());
+    }
+
+    /**
+     * AC2's published-only guarantee, held at this method's own seam rather
+     * than in caller discipline. `activePackages()` is the one method here
+     * that receives an already-loaded model instead of starting its own
+     * query, so nothing structural stopped an unpublished cemetery's package
+     * rows from being read — every current caller happens to pass a
+     * published-scoped model, which is a property of the callers, not of the
+     * interface.
+     *
+     * The fixture deliberately keeps the package rows in the database: this
+     * must return empty because the cemetery is unpublished, not because
+     * there is nothing to return.
+     */
+    public function test_active_packages_returns_empty_for_an_unpublished_cemetery(): void
+    {
+        $cemetery = Cemetery::query()->where('slug', 'tpu-jakarta-menteng')->firstOrFail();
+
+        $this->assertGreaterThan(
+            0,
+            $cemetery->packages()->count(),
+            'This test is only meaningful while the fixture cemetery really has package rows.'
+        );
+
+        $cemetery->publication_status = CemeteryPublicationStatus::UNPUBLISHED;
+        $cemetery->save();
+
+        $this->assertCount(0, CemeteryPublicQuery::activePackages($cemetery));
+
+        // The rows are still there — the empty result is the published-only
+        // guarantee, not an empty table.
+        $this->assertGreaterThan(0, $cemetery->packages()->count());
+    }
 }
