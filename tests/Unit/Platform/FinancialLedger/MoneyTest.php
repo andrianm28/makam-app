@@ -6,6 +6,7 @@ namespace Tests\Unit\Platform\FinancialLedger;
 
 use App\Platform\FinancialLedger\Money;
 use OverflowException;
+use Tests\Support\WeakMoneyCaller;
 use Tests\TestCase;
 use TypeError;
 
@@ -55,10 +56,10 @@ final class MoneyTest extends TestCase
         (new Money(PHP_INT_MIN))->format();
     }
 
-    public function test_float_constructor_input_is_rejected(): void
+    public function test_float_constructor_input_is_rejected_from_a_weak_caller(): void
     {
         $this->expectException(TypeError::class);
 
-        new Money(150000.0);
+        WeakMoneyCaller::construct(1.5);
     }
 }
