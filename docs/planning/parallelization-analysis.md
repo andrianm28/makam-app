@@ -1,5 +1,7 @@
 # Parallelization Analysis — Sprint Plan + Kiro Spec Tasks
 
+> **Superseded, 09 Aug 2026.** This document describes the pre-Superpowers batch model. New work and retrofits follow `AGENTS.md` §Development methodology. Retained for historical record of Sprint 1-4's actual execution.
+
 **Version:** v0.1
 **Date:** 25 Juli 2026
 **Question answered:** can the work in [`sprint-plan.md`](sprint-plan.md) and the 378 Kiro spec tasks be compressed by running multiple concurrent Claude subagents, and if so, by how much?

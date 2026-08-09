@@ -1,5 +1,7 @@
 # Agent Execution Plan — all sprints
 
+> **Superseded, 09 Aug 2026.** This document describes the pre-Superpowers batch model. New work and retrofits follow `AGENTS.md` §Development methodology. Retained for historical record of Sprint 1-4's actual execution.
+
 **Version:** v0.1
 **Date:** 25 Juli 2026
 **Purpose:** turn the 51 sprint tasks and 378 Kiro spec tasks into concrete, batched Claude subagent assignments.

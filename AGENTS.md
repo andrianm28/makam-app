@@ -1,4 +1,4 @@
-# Makam.co.id Project Instructions — v0.6
+# Makam.co.id Project Instructions — v0.7
 
 ## Source precedence
 
@@ -141,3 +141,14 @@ Never remove a stakeholder MVP item merely because an external gate is closed. I
 - Update spec, traceability, screen inventory, API contract, and test when behavior changes.
 - `tasks.md` is planning only; issue tracker owns progress.
 - Do not duplicate canonical catalog data in multiple hand-maintained documents or code locations.
+
+## Development methodology
+
+- New feature work and retrofits of already-shipped modules both follow Superpowers SDD: `brainstorming` -> `writing-plans` -> `subagent-driven-development` -> `finishing-a-development-branch`. Skip stages only for a change with no design decisions in it (typo, doc fix).
+- Every plan is committed at `docs/superpowers/plans/<date>-<slug>.md` before implementation starts.
+- Implementation happens in an isolated git worktree under `.worktrees/`, never on the working checkout directly.
+- Execution state (task briefs, task reports, review diffs) is ledgered at `.superpowers/sdd/<plan-slug>/progress.md` inside the worktree — git-ignored, ephemeral, scoped to one execution session. It answers "how did this pass go," not "what does the spec require" — `tasks.md` stays the durable answer to that question.
+- Review is two-tier: each task is reviewed against its brief before the next task starts, then the whole branch is reviewed once as a unit before merge. Findings are triaged Critical/Important/Minor; Critical and Important get one bounded fix wave with a scoped re-review; Minor is ledgered and parked unless trivial.
+- Every unit of work lands as its own PR against `docs/design-system-and-planning` (the working trunk — see the ADR recorded when `master` was formally retired as a promotion target). Direct commits to the trunk branch are no longer the default.
+- Kiro specs (`.kiro/specs/*/{requirements,design,tasks}.md`) remain the "what to build" authority — acceptance criteria, traceability, durable per-spec progress. A Superpowers plan implements one or more Kiro AC items; it does not restate or replace them. `grill-spec` interrogates Kiro artifacts before `writing-plans` starts, not instead of it.
+- This does not resolve the open "which issue tracker" decision — `tasks.md` still says the issue tracker owns progress and none is named; that stays open.
