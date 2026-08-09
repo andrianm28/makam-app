@@ -12,7 +12,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * Immutable render snapshot for `notification_templates`. Sent deliveries
  * will pin one of these rows; changing the active template creates another
- * row and never rewrites an existing snapshot.
+ * row and never rewrites an existing snapshot. Eloquent guards are backed by
+ * database triggers in the PostgreSQL and SQLite migrations so builder/raw
+ * UPDATE and DELETE paths cannot rewrite or remove a snapshot.
  */
 final class NotificationTemplateVersion extends Model
 {

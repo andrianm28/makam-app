@@ -10,7 +10,9 @@ use Illuminate\Support\Facades\Schema;
 /**
  * Versioned notification template catalogue. The event and recipient/channel
  * facts remain owned by `docs/contracts/notification-matrix.md`; this table
- * stores the current versioned rendering pointer for each matrix event.
+ * stores the current versioned rendering pointer for each matrix event. The
+ * default channel is nullable because matrix rows with only IN_APP/optional/
+ * status facts must not acquire an invented external delivery channel.
  *
  * `active_version_id` is added before the versions table exists so the two
  * tables can be created in dependency order. Its foreign key is attached by
@@ -23,7 +25,7 @@ return new class extends Migration
         Schema::create('notification_templates', function (Blueprint $table): void {
             $table->id();
             $table->string('event_name')->unique();
-            $table->string('default_channel');
+            $table->string('default_channel')->nullable();
             $table->unsignedBigInteger('active_version_id')->nullable();
             $table->index('active_version_id');
         });
@@ -31,7 +33,7 @@ return new class extends Migration
         if (DB::connection()->getDriverName() === 'pgsql') {
             DB::statement(
                 'ALTER TABLE notification_templates ADD CONSTRAINT notification_templates_default_channel_check '.
-                "CHECK (default_channel IN ('EMAIL', 'WA'))"
+                "CHECK (default_channel IS NULL OR default_channel IN ('EMAIL', 'WA'))"
             );
         }
     }

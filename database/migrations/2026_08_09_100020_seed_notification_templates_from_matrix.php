@@ -14,7 +14,8 @@ use Illuminate\Support\Facades\DB;
  * The matrix currently defines recipient/channel facts, not message copy.
  * Consequently each seeded body is explicitly marked as a matrix fact
  * snapshot and contains those facts verbatim; this migration invents no
- * customer-facing notification language.
+ * customer-facing notification language. Rows with no EMAIL/WA fact keep a
+ * NULL default channel rather than acquiring a fallback delivery claim.
  */
 return new class extends Migration
 {
@@ -54,41 +55,24 @@ return new class extends Migration
 
     public function down(): void
     {
-        $events = array_column((new NotificationMatrixSource)->rows(), 'event');
-        $templateIds = DB::table('notification_templates')
-            ->whereIn('event_name', $events)
-            ->pluck('id');
-
-        DB::table('notification_templates')
-            ->whereIn('id', $templateIds)
-            ->update(['active_version_id' => null]);
-
-        DB::table('notification_template_versions')
-            ->whereIn('template_id', $templateIds)
-            ->where('created_by', 'seed:notification-matrix')
-            ->delete();
-
-        DB::table('notification_templates')
-            ->whereIn('id', $templateIds)
-            ->delete();
+        // Version rows are append-only and the database trigger deliberately
+        // blocks even builder-level deletes. The following schema rollback
+        // drops the version table before the template table; leaving this
+        // data untouched here avoids creating a privileged deletion path.
     }
 
     /**
      * @param  array<string, string>  $recipients
      */
-    private function defaultChannel(array $recipients): string
+    private function defaultChannel(array $recipients): ?string
     {
         $facts = implode(' ', $recipients);
 
-        // EMAIL is the documented baseline whenever the matrix names both
-        // external channels. WA remains available for a future row that names
-        // only WA. Rows without an external recipient still need the schema's
-        // non-null structural default; no recipient is added by it.
-        if (! str_contains($facts, 'EMAIL') && str_contains($facts, 'WA')) {
-            return 'WA';
+        if (str_contains($facts, 'EMAIL')) {
+            return 'EMAIL';
         }
 
-        return 'EMAIL';
+        return str_contains($facts, 'WA') ? 'WA' : null;
     }
 
     /**
