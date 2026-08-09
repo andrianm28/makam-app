@@ -70,12 +70,33 @@ final class ServicePackageItem extends Model
             ServicePackageItemType::assertKnown($item->item_type);
             FulfillmentOwner::assertKnown($item->fulfillment_owner);
 
-            self::assertOwningVersionIsEditable((int) $item->service_package_version_id);
+            self::assertBothOwningVersionsAreEditable($item);
         });
 
         self::deleting(function (self $item): void {
-            self::assertOwningVersionIsEditable((int) $item->service_package_version_id);
+            self::assertBothOwningVersionsAreEditable($item);
         });
+    }
+
+    /**
+     * Checks the INCOMING owning version id and — for an already-persisted
+     * row — the ORIGINAL one too.
+     *
+     * Checking only the incoming id is one-directional: it blocks moving an
+     * item INTO a published version but permits the destructive direction,
+     * moving one OUT of a published version
+     * (`$item->service_package_version_id = $draftId; $item->save();`, or
+     * the same in-memory re-point followed by `delete()`). Either strips a
+     * line item out of a frozen version, which is exactly the modification
+     * AC2 forbids.
+     */
+    private static function assertBothOwningVersionsAreEditable(self $item): void
+    {
+        self::assertOwningVersionIsEditable((int) $item->service_package_version_id);
+
+        if ($item->exists) {
+            self::assertOwningVersionIsEditable((int) $item->getOriginal('service_package_version_id'));
+        }
     }
 
     private static function assertOwningVersionIsEditable(int $versionId): void
@@ -84,6 +105,32 @@ final class ServicePackageItem extends Model
 
         if ($status === ServicePackageVersionStatus::PUBLISHED) {
             throw PublishedServicePackageVersionIsImmutableException::forItemOfVersion($versionId);
+        }
+    }
+
+    /**
+     * The same AC2 check, one level down, for this item's own child rows
+     * (`Models\SubstitutionPolicy`, `Models\EvidenceRequirement`) — they
+     * carry no `status` and no version id of their own, so their editability
+     * is derived through their owning ITEM's owning VERSION. Resolved fresh
+     * on every call for the same reason this class never trusts a loaded
+     * `version` relation: it may be stale.
+     *
+     * An `$itemId` that resolves to no row is deliberately permitted — that
+     * is an FK violation for the database to report, not an AC2 breach.
+     */
+    public static function assertOwningVersionOfItemIsEditable(int|string|null $itemId, string $childTable): void
+    {
+        $versionId = self::query()->whereKey($itemId)->value('service_package_version_id');
+
+        if ($versionId === null) {
+            return;
+        }
+
+        $status = ServicePackageVersion::query()->whereKey($versionId)->value('status');
+
+        if ($status === ServicePackageVersionStatus::PUBLISHED) {
+            throw PublishedServicePackageVersionIsImmutableException::forChildOfItem($itemId, $childTable);
         }
     }
 

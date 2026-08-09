@@ -6,6 +6,7 @@ namespace Tests\Feature\Domain\ServiceCatalog;
 
 use App\Domain\ServiceCatalog\FulfillmentOwner;
 use App\Domain\ServiceCatalog\Models\ServiceDefinition;
+use App\Domain\ServiceCatalog\ServiceCatalogQuery;
 use App\Domain\ServiceCatalog\ServiceCategory;
 use App\Domain\ServiceCatalog\ServiceCode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -133,7 +134,14 @@ final class ServiceCodeDriftTest extends TestCase
      */
     public function test_every_seeded_service_now_has_a_known_fulfillment_owner_from_the_dev_data_migration(): void
     {
-        foreach (ServiceDefinition::all() as $definition) {
+        $definitions = ServiceDefinition::all();
+
+        // M11: without this, the loop below passes vacuously on an empty
+        // table — a seed migration that stopped inserting anything would not
+        // be noticed here.
+        $this->assertNotEmpty($definitions);
+
+        foreach ($definitions as $definition) {
             $this->assertNotNull(
                 $definition->fulfillment_owner,
                 "[{$definition->code}] should have a (dummy, dev-only) fulfillment owner assigned by the dev-data migration."
@@ -148,5 +156,60 @@ final class ServiceCodeDriftTest extends TestCase
     public function test_every_known_fulfillment_owner_is_a_valid_choice_for_a_future_admin_assignment(): void
     {
         $this->assertSame(['platform', 'cemetery_operator', 'vendor'], FulfillmentOwner::KNOWN_OWNERS);
+    }
+
+    /**
+     * F14 (09 Aug 2026 ServiceCatalog Superpowers retrofit) — an INVARIANT
+     * test protecting a live seam between this module and Booking, not a
+     * catalogue-fidelity assertion like the rest of this file.
+     *
+     * The seam: `BookingWizard.php:382-403` renders Step 4's "Wajib"
+     * (mandatory) group from `ServiceCatalogQuery::allActive()`, which IS
+     * `is_active`-filtered, while the enforced set —
+     * `SaveBookingDraftStep::validateServices()` and `$stagedServiceCodes`,
+     * seeded with `ServiceCode::BASIC_CODES` at `mount()`/`hydrateFrom()` —
+     * is NOT `is_active`-aware, and `BookingDraftQuery.php:83` prices a code
+     * through `ServiceDefinition::findByCode()` with no active filter either.
+     *
+     * So deactivating a BASIC service today produces a silent
+     * invisible-but-still-billed state: the service disappears from Step 4,
+     * yet is still submitted, still validated, still persisted, and still
+     * PRICED on Step 5 — and nothing anywhere notices.
+     * `ServiceDefinitionSeedTest::test_deactivating_a_service_removes_it_from_active_query_helpers_but_not_find_by_code`
+     * proves deactivation is a supported operation, so this is reachable, not
+     * hypothetical.
+     *
+     * This test does not fix the seam — the real fix (making `BASIC_CODES`
+     * catalogue-derived at read time) is a design change to a constant three
+     * modules depend on and needs its own plan. What it does is convert the
+     * silent divergence into a loud CI failure, which makes deactivating a
+     * mandatory service an explicit product decision instead of an accident
+     * that quietly changes billing.
+     */
+    public function test_every_mandatory_basic_service_is_active_so_the_booking_step_four_seam_cannot_diverge(): void
+    {
+        $this->assertNotEmpty(ServiceCode::BASIC_CODES);
+
+        foreach (ServiceCode::BASIC_CODES as $code) {
+            $definition = ServiceDefinition::findByCode($code);
+
+            $this->assertNotNull($definition, "Expected a seeded service_definitions row for basic code [{$code}].");
+            $this->assertTrue(
+                $definition->is_active,
+                "[{$code}] is a MANDATORY basic service. Deactivating it makes it invisible on Booking's ".
+                'Step 4 while it is still submitted, validated and priced on Step 5 — see this test\'s doc block.'
+            );
+        }
+
+        $activeCodes = ServiceCatalogQuery::allActive()->pluck('code')->all();
+
+        foreach (ServiceCode::BASIC_CODES as $code) {
+            $this->assertContains(
+                $code,
+                $activeCodes,
+                "[{$code}] must be reachable through ServiceCatalogQuery::allActive(), which is what ".
+                "BookingWizard renders Step 4's mandatory group from."
+            );
+        }
     }
 }
