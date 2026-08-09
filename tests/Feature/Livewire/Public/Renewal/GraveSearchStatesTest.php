@@ -334,6 +334,53 @@ final class GraveSearchStatesTest extends TestCase
     }
 
     // =====================================================================
+    // §6.1 loading
+    // =====================================================================
+
+    /**
+     * `tasks.md` lists the loading state FIRST among the states
+     * "Implemented and CI-green", and this file had no assertion about it
+     * anywhere — `AGENTS.md` §Testing: "Every traceability item marked
+     * `Covered` needs test evidence." The markup was genuinely present and
+     * genuinely server-rendered all along, so this closes a missing
+     * assertion, not a missing feature.
+     *
+     * What CAN be asserted here: the skeleton and its `sr-only`
+     * announcement are in the server-rendered HTML, keyed to the `search`
+     * action, and the container carries `aria-busy`. `wire:loading.delay` is
+     * asserted too, because that attribute is the whole mechanism — without
+     * it the skeleton would be permanently visible rather than shown during
+     * a request.
+     *
+     * What CANNOT be asserted here, stated rather than glossed: that the
+     * skeleton actually APPEARS during an in-flight request, and that its
+     * reserved heights hold CLS under 0.1. Both need a browser, and no
+     * browser/Dusk/Playwright/Cypress harness exists in this repository —
+     * NOT TESTED, ledgered under the program-level accessibility gap.
+     *
+     * `assertSeeHtml`, not `assertSee`: `assertSee` escapes its needle, so
+     * `aria-busy="true"` would be compared as `aria-busy=&quot;true&quot;`
+     * and never match.
+     */
+    public function test_the_loading_skeleton_and_its_screen_reader_announcement_are_rendered(): void
+    {
+        $this->openTheDataGate();
+
+        Livewire::withQueryParams(['tpu' => $this->cemeteryId('tpu-jakarta-menteng')])
+            ->test(GraveSearch::class)
+            ->assertOk()
+            // The announcement a screen-reader user gets — §6.1: "Every
+            // skeleton carries an sr-only announcement; a screen-reader user
+            // hears nothing from a pulsing box."
+            ->assertSee('Mencari data makam')
+            ->assertSeeHtml('aria-busy="true"')
+            // Shown only while the `search` action is in flight, and only
+            // after the delay — not a permanently-visible box.
+            ->assertSeeHtml('wire:loading.delay')
+            ->assertSeeHtml('wire:target="search"');
+    }
+
+    // =====================================================================
     // Results, and the states that must NOT appear
     // =====================================================================
 
