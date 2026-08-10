@@ -15,6 +15,8 @@ use App\Livewire\Public\Marketplace\ProductDetail;
 use App\Livewire\Public\Renewal\GraveSearch;
 use App\Livewire\Public\Renewal\RenewalStart;
 use App\Livewire\Public\Support\HelpCentre;
+use App\Platform\Payment\Http\Controllers\PaymentCancelController;
+use App\Platform\Payment\Http\Controllers\PaymentReturnController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -245,3 +247,37 @@ Route::get('/bantuan', HelpCentre::class)->name('bantuan.index');
 Route::post('/admin/mfa/disable', DisableMfaController::class)
     ->middleware(['web', 'auth', RequireRecentAuthentication::class.':mfa_disable,filament.admin.pages.mfa-challenge'])
     ->name('admin.mfa.disable');
+
+/*
+|--------------------------------------------------------------------------
+| Payment provider browser return — platform-payment-adapter AC4
+|--------------------------------------------------------------------------
+| ADR-0033 lets a hosted checkout be created with `success_return_url` and
+| `cancel_return_url`. These are the two routes the CUSTOMER'S BROWSER is
+| redirected back to afterwards. They are NOT the provider's callback — that
+| is `POST /api/payments/webhook/{merchant}` in routes/api.php, which is
+| signed, merchant-scoped, replay-protected and durable.
+|
+| AGENTS.md §Domain and financial invariants: "Never mark paid from browser
+| return URL." Requirements AC4 says the same in EARS form and adds the
+| negative criterion: "No paid state from a browser return, a client
+| callback, or a notification."
+|
+| The enforcement is route-controller separation, and it is why these two are
+| plain view-rendering controllers rather than Livewire components: a
+| Livewire component exposes callable actions to the browser, which is
+| exactly the surface AC4 wants absent. Neither controller takes a
+| dependency, reads the request, or touches a model — see their doc blocks,
+| and tests/Feature/Payment/PaymentReturnRouteTest.php, which fails if a
+| write-shaped name appears in either file or if hitting either route moves
+| any row.
+|
+| Two routes, two controllers, no shared parameter deciding which outcome to
+| render: a single endpoint branching on a query parameter would put the
+| visitor in charge of which page they are shown.
+|
+| Paths follow information-architecture.md §1's Indonesian public route tree.
+| Screen PUB-019 (screen-inventory.md §A).
+*/
+Route::get('/pembayaran/kembali', PaymentReturnController::class)->name('payments.return');
+Route::get('/pembayaran/batal', PaymentCancelController::class)->name('payments.cancel');
