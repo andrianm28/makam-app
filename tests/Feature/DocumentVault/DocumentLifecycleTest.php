@@ -498,6 +498,11 @@ final class TamperingObjectStorage implements ObjectStorage
         $this->delegate->deleteIfExists($path);
     }
 
+    public function deleteAcceptedIfExists(string $path): void
+    {
+        $this->delegate->deleteAcceptedIfExists($path);
+    }
+
     public function read(string $path)
     {
         return $this->delegate->read($path);
@@ -538,6 +543,11 @@ final class PartialCopyFailureStorage implements ObjectStorage
         $this->delegate->deleteIfExists($path);
     }
 
+    public function deleteAcceptedIfExists(string $path): void
+    {
+        $this->delegate->deleteAcceptedIfExists($path);
+    }
+
     public function read(string $path)
     {
         return $this->delegate->read($path);
@@ -571,6 +581,11 @@ final class DeleteFailureStorage implements ObjectStorage
     public function deleteIfExists(string $path): void
     {
         throw new RuntimeException('simulated cleanup delete failure');
+    }
+
+    public function deleteAcceptedIfExists(string $path): void
+    {
+        throw new RuntimeException('simulated accepted cleanup delete failure');
     }
 
     public function read(string $path)

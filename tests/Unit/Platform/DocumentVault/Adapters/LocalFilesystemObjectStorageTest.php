@@ -122,13 +122,24 @@ final class LocalFilesystemObjectStorageTest extends TestCase
         $storage->delete('KTP/accepted/key-accepted');
     }
 
-    public function test_delete_if_exists_allows_accepted_cleanup(): void
+    public function test_delete_if_exists_rejects_an_accepted_object(): void
     {
         $storage = new LocalFilesystemObjectStorage($this->root);
         $storage->put('KTP/quarantine/key-cleanup', $this->streamFor('content'));
         $storage->copy('KTP/quarantine/key-cleanup', 'KTP/accepted/key-cleanup');
 
+        $this->expectException(ObjectStorageException::class);
+
         $storage->deleteIfExists('KTP/accepted/key-cleanup');
+    }
+
+    public function test_explicit_accepted_cleanup_operation_removes_accepted_object(): void
+    {
+        $storage = new LocalFilesystemObjectStorage($this->root);
+        $storage->put('KTP/quarantine/key-cleanup', $this->streamFor('content'));
+        $storage->copy('KTP/quarantine/key-cleanup', 'KTP/accepted/key-cleanup');
+
+        $storage->deleteAcceptedIfExists('KTP/accepted/key-cleanup');
 
         $this->assertFileDoesNotExist($this->root.'/KTP/accepted/key-cleanup');
     }

@@ -35,6 +35,26 @@ final class DocumentValidatorTest extends TestCase
         }
     }
 
+    public function test_it_rejects_allowed_but_different_declared_and_actual_mime_values(): void
+    {
+        $validator = new DocumentValidator;
+        $zip = $this->minimalZip();
+        $stream = $this->streamFor($zip);
+
+        try {
+            $validator->validate(
+                DocumentKind::GraveImport,
+                'grave-import.xlsx',
+                strlen($zip),
+                $stream,
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            );
+            $this->fail('Expected DocumentValidationException for declared/actual MIME mismatch.');
+        } catch (DocumentValidationException $exception) {
+            $this->assertSame('declared_mime_mismatch', $exception->reason());
+        }
+    }
+
     public function test_a_genuine_png_is_accepted_for_a_kind_that_allows_images(): void
     {
         $validator = new DocumentValidator;

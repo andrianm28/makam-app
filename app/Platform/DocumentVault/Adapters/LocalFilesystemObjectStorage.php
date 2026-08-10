@@ -125,7 +125,26 @@ final class LocalFilesystemObjectStorage implements ObjectStorage
 
     public function deleteIfExists(string $path): void
     {
-        $this->assertCleanupDeletePath($path);
+        $this->assertQuarantineDeletePath($path);
+        $absolute = $this->absolutePath($path);
+
+        if (! is_file($absolute)) {
+            return;
+        }
+
+        if (! unlink($absolute)) {
+            throw ObjectStorageException::deleteFailed($path);
+        }
+    }
+
+    public function deleteAcceptedIfExists(string $path): void
+    {
+        $parts = $this->lifecyclePathParts($path);
+
+        if ($parts[1] !== 'accepted') {
+            throw ObjectStorageException::lifecycleBoundaryViolation($path);
+        }
+
         $absolute = $this->absolutePath($path);
 
         if (! is_file($absolute)) {
@@ -177,15 +196,6 @@ final class LocalFilesystemObjectStorage implements ObjectStorage
         $parts = $this->lifecyclePathParts($path);
 
         if ($parts[1] !== 'quarantine') {
-            throw ObjectStorageException::lifecycleBoundaryViolation($path);
-        }
-    }
-
-    private function assertCleanupDeletePath(string $path): void
-    {
-        $parts = $this->lifecyclePathParts($path);
-
-        if (! in_array($parts[1], ['quarantine', 'accepted'], true)) {
             throw ObjectStorageException::lifecycleBoundaryViolation($path);
         }
     }

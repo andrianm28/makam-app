@@ -174,7 +174,7 @@ final class CleanupPromotedDocumentStorageJob implements ShouldQueue
             }
 
             $acceptedPath = $pathResolver->acceptedPath($documentKind, $storageKey);
-            $objectStorage->deleteIfExists($acceptedPath);
+            $objectStorage->deleteAcceptedIfExists($acceptedPath);
         });
     }
 

@@ -100,6 +100,14 @@ final class DocumentValidator
             ) {
                 throw DocumentValidationException::declaredMimeMismatch($kind);
             }
+
+            $csvTextAlias = $extension === 'csv'
+                && $declaredMimeType === 'text/csv'
+                && $actualMimeType === 'text/plain';
+
+            if ($declaredMimeType !== $actualMimeType && ! $csvTextAlias) {
+                throw DocumentValidationException::declaredMimeMismatch($kind);
+            }
         }
 
         if (! in_array($actualMimeType, $expectedMimeTypes, true)) {

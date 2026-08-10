@@ -67,4 +67,11 @@ interface ObjectStorage
      * cleanup jobs can safely retry after partial completion.
      */
     public function deleteIfExists(string $path): void;
+
+    /**
+     * Remove an accepted object during explicit promotion cleanup or
+     * reconciliation. Callers must not use `deleteIfExists()` for accepted
+     * lifecycle objects.
+     */
+    public function deleteAcceptedIfExists(string $path): void;
 }
