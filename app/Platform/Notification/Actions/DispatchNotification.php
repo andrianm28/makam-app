@@ -11,6 +11,7 @@ use App\Platform\Notification\Contracts\NotificationMatrixSource;
 use App\Platform\Notification\Contracts\NotificationSubjectSource;
 use App\Platform\Notification\DeliveryResult;
 use App\Platform\Notification\DeliveryState;
+use App\Platform\Notification\Jobs\RetryFailedDeliveryJob;
 use App\Platform\Notification\Jobs\SendNotificationChannelJob;
 use App\Platform\Notification\Models\NotificationDelivery;
 use App\Platform\Notification\Models\NotificationTemplateVersion;
@@ -25,7 +26,7 @@ use App\Platform\Outbox\OutboxQueueName;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Throwable;
+use Illuminate\Support\Str;
 
 /**
  * Task 3 of the L2 `platform-notifications` lane
@@ -40,11 +41,9 @@ use Throwable;
  *   `notification_deliveries`/`in_app_notifications` in ONE transaction,
  *   then dispatches one `Jobs\SendNotificationChannelJob` per queued
  *   delivery AFTER that transaction commits.
- * - `sendViaChannel()` — called by `Jobs\SendNotificationChannelJob`. The
- *   ONLY place that updates a `notification_deliveries` row's state after
- *   its initial insert. Never lets a `Contracts\Channel::send()` exception
- *   propagate (AC5: channel failure never changes business state, and
- *   never fails the queue-visible consumer path either).
+ * - `Jobs\SendNotificationChannelJob` is the only provider-send boundary.
+ *   It uses the typed claim/outcome methods below; the action remains the
+ *   ONLY place that updates a `notification_deliveries` row after insertion.
  *
  * This class is the ONE write API for `notification_deliveries` — AC9 by
  * construction. No other class calls `NotificationDelivery::create()`/
@@ -53,6 +52,16 @@ use Throwable;
  */
 final class DispatchNotification
 {
+    // Queue retry_after is 90 seconds in the pinned local/Redis config. Keep
+    // the lease shorter so a worker killed after provider acceptance can be
+    // reclaimed by its queue retry, while the provider key prevents a second
+    // external effect if the original worker was merely slow.
+    private const int CLAIM_LEASE_SECONDS = 60;
+
+    private const string TEMPLATE_UNAVAILABLE_SUBJECT = 'Notifikasi tidak tersedia';
+
+    private const string TEMPLATE_UNAVAILABLE_BODY = 'Template notifikasi belum tersedia. Hubungi administrator.';
+
     /**
      * AC7's unconditional in-app roles — task-3-brief.md D4: "every
      * resolved recipient whose role is PLATFORM_ADMIN, CEMETERY_OPERATOR or
@@ -166,7 +175,7 @@ final class DispatchNotification
         // forever — no consumer would ever re-select them. Re-collecting
         // this event's QUEUED rows every time, regardless of whether this
         // call created them or a previous crashed call did, makes
-        // redelivery self-healing: `sendViaChannel()` already no-ops on any
+        // redelivery self-healing: the channel job already no-ops on any
         // row not in `Queued` state, so redispatching an already-resolved
         // row is a harmless, cheap no-op, and a genuinely stranded row
         // finally gets a channel job.
@@ -245,20 +254,15 @@ final class DispatchNotification
                 ($this->recordInAppNotification)(
                     $outboxRow->getKey(),
                     $recipient,
-                    $rendered['subject'] ?? null,
-                    $rendered['body'] ?? '',
+                    $rendered['subject'] ?? self::TEMPLATE_UNAVAILABLE_SUBJECT,
+                    $rendered['body'] ?? self::TEMPLATE_UNAVAILABLE_BODY,
                 );
             }
 
-            if ($version === null) {
-                // No renderable content — nothing external can be queued
-                // for this recipient, but their in-app row (if any, above)
-                // is already recorded.
-                continue;
-            }
-
             foreach ($this->dispatchableChannelsFor($matrixRecipients, $recipient) as $channel) {
-                $unavailable = $channel === 'WA' && $whatsAppMode === WhatsAppMode::EmailInAppFallback;
+                $unavailable = $version === null
+                    || ($channel === 'WA' && $whatsAppMode === WhatsAppMode::EmailInAppFallback);
+                $windowKey = $outboxRow->getKey();
 
                 $deliveryRows[] = [
                     'event_id' => $outboxRow->getKey(),
@@ -268,9 +272,18 @@ final class DispatchNotification
                     // D8: degenerate today — every one of the 6
                     // outbox-mapped events is transactional, so the outbox
                     // event id is itself the window.
-                    'window_key' => $outboxRow->getKey(),
+                    'window_key' => $windowKey,
                     'state' => ($unavailable ? DeliveryState::Unavailable : DeliveryState::Queued)->value,
-                    'template_version_id' => $version->id,
+                    'provider_idempotency_key' => $this->providerIdempotencyKey(
+                        $outboxRow->getKey(),
+                        (string) $recipient->actorRef,
+                        $channel,
+                        $windowKey,
+                    ),
+                    'claim_token' => null,
+                    'claimed_at' => null,
+                    'template_version_id' => $version?->id,
+                    'failure_message' => $version === null ? DeliveryResult::TEMPLATE_VERSION_UNAVAILABLE : null,
                     'attempt_count' => 0,
                     'created_at' => CarbonImmutable::now(),
                     'updated_at' => CarbonImmutable::now(),
@@ -287,61 +300,108 @@ final class DispatchNotification
         }
     }
 
-    /**
-     * Entry point for `Jobs\SendNotificationChannelJob`. AC5: a throwing
-     * (or otherwise failing) `$channel` NEVER propagates out of this
-     * method — it is recorded as a `Failed` delivery outcome instead. The
-     * mutation that produced the originating outbox event is, by
-     * construction, in an entirely separate, already-committed transaction
-     * (the outbox pattern's whole point) and is never touched from here.
-     */
-    public function sendViaChannel(int $deliveryId, Channel $channel): void
+    public function claimDeliveryForChannelJob(SendNotificationChannelJob $job): ?NotificationDelivery
+    {
+        return $this->claimDelivery($job->deliveryId);
+    }
+
+    public function recordChannelOutcome(
+        SendNotificationChannelJob $job,
+        NotificationDelivery $delivery,
+        DeliveryResult $result,
+    ): bool {
+        if ($job->deliveryId !== (int) $delivery->getKey()) {
+            return false;
+        }
+
+        $failureMessage = $result->state === DeliveryState::Failed
+            ? DeliveryResult::CHANNEL_SEND_FAILED
+            : ($result->state === DeliveryState::Unavailable
+                ? ($result->message ?? DeliveryResult::CHANNEL_UNAVAILABLE)
+                : null);
+
+        return NotificationDeliveryWriteGuard::withWritesUnlocked(function () use ($delivery, $result, $failureMessage): bool {
+            return DB::table('notification_deliveries')
+                ->where('id', $delivery->getKey())
+                ->where('state', DeliveryState::Queued->value)
+                ->where('claim_token', $delivery->claim_token)
+                ->update([
+                    'state' => $result->state->value,
+                    'provider_ref' => $result->providerRef,
+                    'failure_message' => $failureMessage,
+                    'claim_token' => null,
+                    'claimed_at' => null,
+                    'updated_at' => CarbonImmutable::now(),
+                ]) === 1;
+        });
+    }
+
+    public function requeueFailedDelivery(RetryFailedDeliveryJob $job, NotificationDelivery $delivery): bool
+    {
+        if ($job->deliveryId !== (int) $delivery->getKey()) {
+            return false;
+        }
+
+        return NotificationDeliveryWriteGuard::withWritesUnlocked(function () use ($delivery): bool {
+            return DB::table('notification_deliveries')
+                ->where('id', $delivery->getKey())
+                ->where('state', DeliveryState::Failed->value)
+                ->update([
+                    'state' => DeliveryState::Queued->value,
+                    'claim_token' => null,
+                    'claimed_at' => null,
+                    'updated_at' => CarbonImmutable::now(),
+                ]) === 1;
+        });
+    }
+
+    private function claimDelivery(int $deliveryId): ?NotificationDelivery
     {
         $delivery = NotificationDelivery::query()->find($deliveryId);
 
         if ($delivery === null || $delivery->state !== DeliveryState::Queued) {
-            // Vanished, or not in a state this method is responsible for
-            // (e.g. UNAVAILABLE rows are never dispatched to a channel job
-            // in the first place; a QUEUED row already resolved by a prior
-            // run of this same job is left alone rather than re-sent).
-            return;
+            return null;
         }
 
-        $version = NotificationTemplateVersion::query()->find($delivery->template_version_id);
+        $now = CarbonImmutable::now();
+        $claimToken = (string) Str::uuid();
+        $providerIdempotencyKey = $delivery->provider_idempotency_key
+            ?? $this->providerIdempotencyKey(
+                (string) $delivery->event_id,
+                (string) $delivery->recipient_ref,
+                (string) $delivery->channel,
+                (string) $delivery->window_key,
+            );
 
-        if ($version === null) {
-            $this->recordChannelOutcome($delivery, new DeliveryResult(
-                DeliveryState::Failed,
-                message: 'Pinned notification_template_versions row is missing.',
-            ));
+        $claimed = NotificationDeliveryWriteGuard::withWritesUnlocked(function () use (
+            $deliveryId,
+            $now,
+            $claimToken,
+            $providerIdempotencyKey,
+        ): int {
+            return DB::table('notification_deliveries')
+                ->where('id', $deliveryId)
+                ->where('state', DeliveryState::Queued->value)
+                ->where(function ($query) use ($now): void {
+                    $query
+                        ->whereNull('claim_token')
+                        ->orWhere('claimed_at', '<=', $now->subSeconds(self::CLAIM_LEASE_SECONDS));
+                })
+                ->update([
+                    'provider_idempotency_key' => $providerIdempotencyKey,
+                    'claim_token' => $claimToken,
+                    'claimed_at' => $now,
+                    'attempt_count' => DB::raw('attempt_count + 1'),
+                    'updated_at' => $now,
+                ]);
+        });
 
-            return;
-        }
-
-        try {
-            $result = $channel->send($delivery, $version);
-        } catch (Throwable $exception) {
-            $this->recordChannelOutcome($delivery, new DeliveryResult(
-                DeliveryState::Failed,
-                message: mb_substr($exception->getMessage(), 0, 2000),
-            ));
-
-            return;
-        }
-
-        $this->recordChannelOutcome($delivery, $result);
+        return $claimed === 1 ? NotificationDelivery::query()->find($deliveryId) : null;
     }
 
-    private function recordChannelOutcome(NotificationDelivery $delivery, DeliveryResult $result): void
+    private function providerIdempotencyKey(string $eventId, string $recipientRef, string $channel, string $windowKey): string
     {
-        NotificationDeliveryWriteGuard::withWritesUnlocked(function () use ($delivery, $result): void {
-            $delivery->forceFill([
-                'state' => $result->state,
-                'provider_ref' => $result->providerRef,
-                'failure_message' => $result->message,
-                'attempt_count' => $delivery->attempt_count + 1,
-            ])->save();
-        });
+        return hash('sha256', implode('|', [$eventId, $recipientRef, $channel, $windowKey]));
     }
 
     /**

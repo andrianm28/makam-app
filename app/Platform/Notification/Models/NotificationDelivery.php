@@ -17,7 +17,7 @@ use Illuminate\Database\Eloquent\Model;
  * `App\Platform\Notification\Actions\DispatchNotification` is the ONLY
  * class in this codebase that writes a row to this table — the initial
  * `QUEUED`/`UNAVAILABLE` insert (`consumeOutboxEvent()`) and every later
- * state transition (`sendViaChannel()`/`recordChannelOutcome()`). This is
+ * claim/state transition (`SendNotificationChannelJob`/`recordChannelOutcome()`). This is
  * enforced by CONVENTION (no other class calls `NotificationDelivery::
  * create()`/`::insert()`/`DB::table('notification_deliveries')->insert*()`)
  * and proven by `tests/Unit/Platform/Notification/
@@ -27,6 +27,11 @@ use Illuminate\Database\Eloquent\Model;
  * `QUEUED` row becomes `SENT`/`FAILED`), so a write-once trigger would be
  * the wrong tool; the property this class needs to protect is "who may
  * write," not "how many times."
+ *
+ * `provider_idempotency_key` is persisted from the durable delivery key. The
+ * nullable `claim_token`/`claimed_at` lease is private dispatch metadata: it
+ * prevents concurrent workers from entering the channel boundary together
+ * while leaving `QUEUED` as the truthful pending state for the UI.
  */
 final class NotificationDelivery extends Model
 {
@@ -42,6 +47,7 @@ final class NotificationDelivery extends Model
         return [
             'state' => DeliveryState::class,
             'attempt_count' => 'integer',
+            'claimed_at' => 'immutable_datetime',
         ];
     }
 }

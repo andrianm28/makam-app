@@ -18,14 +18,10 @@ namespace App\Platform\Notification;
  *
  * `Sent`/`Delivered` are two distinct states, not one — `Sent` means "the
  * channel accepted it," `Delivered` means "the provider confirmed receipt."
- * Task 3 only ever writes `Queued` and `Unavailable` (see
- * `Actions\DispatchNotification`); `Sent`/`Delivered`/`Failed` are written
- * by the per-channel outcome-recording path this task also builds
- * (`sendViaChannel()`), driven by whatever `DeliveryResult` a
- * `Contracts\Channel` implementation returns — Task 4 owns the real
- * outcome-mapping policy for those, including whether/when `Delivered` is
- * ever reachable given `Contracts\Channel::send()`'s synchronous return
- * shape.
+ * `Actions\DispatchNotification` records initial `Queued`/`Unavailable`
+ * rows; `SendNotificationChannelJob` records channel outcomes, and
+ * `RetryFailedDeliveryJob` moves transient failures back to `Queued` within
+ * its bounded retry policy.
  *
  * `Unavailable` is not a failure — it is the honest record of "this
  * channel was never attempted" (e.g. WhatsApp dropped by
@@ -39,4 +35,21 @@ enum DeliveryState: string
     case Delivered = 'DELIVERED';
     case Failed = 'FAILED';
     case Unavailable = 'UNAVAILABLE';
+
+    /**
+     * The only presentation mapping a delivery-state UI may use. A failed
+     * state remains visually distinct from an unavailable channel and from a
+     * queued pending delivery.
+     *
+     * @return array{intent: string, label: string}
+     */
+    public function presentation(): array
+    {
+        return match ($this) {
+            self::Queued => ['intent' => 'pending', 'label' => 'Sedang dikirim'],
+            self::Sent, self::Delivered => ['intent' => 'success', 'label' => 'Terkirim'],
+            self::Unavailable => ['intent' => 'neutral', 'label' => 'WhatsApp belum tersedia'],
+            self::Failed => ['intent' => 'danger', 'label' => 'Gagal mengirim'],
+        };
+    }
 }

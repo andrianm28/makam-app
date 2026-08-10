@@ -9,14 +9,13 @@ use App\Platform\Notification\DeliveryResult;
 use App\Platform\Notification\DeliveryState;
 use App\Platform\Notification\Models\NotificationDelivery;
 use App\Platform\Notification\Models\NotificationTemplateVersion;
+use App\Platform\Notification\RecipientSet;
 use RuntimeException;
 
 /**
- * Test double for `Contracts\Channel` — task-3-brief.md D5: "Task 3 creates
- * `Contracts/Channel.php` (the interface only) ... Your own tests bind a
- * test-double `Channel`." No `LogChannel`/`NullChannel` implementation
- * exists yet (Task 4's scope), so this is the only `Channel` this lane's
- * own tests can bind.
+ * Deterministic test double for `Contracts\Channel`. Task 4 also supplies
+ * the development `LogChannel`/`NullChannel`; this fixture remains useful for
+ * forcing success, failure, and permanent-failure outcomes.
  */
 final class FakeChannel implements Channel
 {
@@ -28,9 +27,10 @@ final class FakeChannel implements Channel
     public function __construct(
         private readonly bool $throws = false,
         private readonly DeliveryState $resultState = DeliveryState::Sent,
+        private readonly bool $retryable = true,
     ) {}
 
-    public function send(NotificationDelivery $delivery, NotificationTemplateVersion $version): DeliveryResult
+    public function send(NotificationDelivery $delivery, NotificationTemplateVersion $version, RecipientSet $recipients): DeliveryResult
     {
         $this->sent[] = $delivery;
 
@@ -38,6 +38,6 @@ final class FakeChannel implements Channel
             throw new RuntimeException('FakeChannel forced failure.');
         }
 
-        return new DeliveryResult($this->resultState, providerRef: 'fake-provider-ref');
+        return new DeliveryResult($this->resultState, providerRef: 'fake-provider-ref', retryable: $this->retryable);
     }
 }

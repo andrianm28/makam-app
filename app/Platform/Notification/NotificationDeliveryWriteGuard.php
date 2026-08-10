@@ -41,7 +41,8 @@ use Illuminate\Support\Facades\DB;
  * The hook fires BEFORE a query executes, so an unauthorised write cannot
  * land and then report its violation. Every real write site in this lane
  * (`Actions\DispatchNotification::recordRecipientsAndDeliveries()`'s
- * `insertOrIgnore()`, and `::recordChannelOutcome()`'s `forceFill()->save()`)
+ * `insertOrIgnore()`, `::claimDelivery()`'s claim update, and
+ * `::recordChannelOutcome()`'s outcome update)
  * runs inside `withWritesUnlocked()`, and both also run inside a surrounding
  * `DB::transaction()` (the first directly; the second is a single
  * autocommit statement — see that method's own call site). An unauthorised
@@ -120,8 +121,10 @@ final class NotificationDeliveryWriteGuard
             }
 
             return in_array($frame['function'] ?? null, [
+                'claimDelivery',
                 'recordRecipientsAndDeliveries',
                 'recordChannelOutcome',
+                'requeueFailedDelivery',
             ], true);
         }
 

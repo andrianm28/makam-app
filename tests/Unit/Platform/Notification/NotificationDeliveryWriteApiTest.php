@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Platform\Notification;
 
+use App\Platform\Notification\Actions\DispatchNotification;
+use App\Platform\Notification\Jobs\SendNotificationChannelJob;
 use Illuminate\Support\Facades\File;
+use ReflectionMethod;
 use Tests\TestCase;
 
 /**
@@ -56,5 +59,34 @@ final class NotificationDeliveryWriteApiTest extends TestCase
             $offenders,
             'Only '.self::ALLOWED_WRITER.' may write notification_deliveries rows (AC9).'
         );
+    }
+
+    public function test_channel_send_boundary_requires_the_channel_job(): void
+    {
+        $method = new ReflectionMethod(DispatchNotification::class, 'claimDeliveryForChannelJob');
+        $parameters = $method->getParameters();
+
+        $this->assertSame(SendNotificationChannelJob::class, (string) $parameters[0]->getType());
+    }
+
+    public function test_channel_send_is_called_only_by_the_channel_job(): void
+    {
+        $offenders = [];
+
+        foreach (File::allFiles(app_path('Platform/Notification')) as $file) {
+            $relativePath = str_replace('\\', '/', $file->getRelativePathname());
+
+            if ($relativePath === 'Jobs/SendNotificationChannelJob.php') {
+                continue;
+            }
+
+            $contents = file_get_contents($file->getPathname());
+
+            if ($contents !== false && preg_match('/->send\s*\(/', $contents) === 1) {
+                $offenders[] = $relativePath;
+            }
+        }
+
+        $this->assertSame([], $offenders, 'Provider sends must only occur inside SendNotificationChannelJob.');
     }
 }

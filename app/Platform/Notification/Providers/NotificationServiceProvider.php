@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Platform\Notification\Providers;
 
+use App\Platform\Notification\Channels\LogChannel;
+use App\Platform\Notification\Contracts\Channel;
 use App\Platform\Notification\Contracts\NotificationSubjectSource;
 use App\Platform\Notification\Contracts\RecipientRoleSource;
 use App\Platform\Notification\Listeners\DispatchNotificationConsumerOnOutboxEventPublished;
@@ -40,14 +42,10 @@ use Illuminate\Support\ServiceProvider;
  * `LocalUsersTableIdentityAccessAdapter` itself). `App\Platform\FeatureGate\
  * ModeResolver` is already bound `scoped()` by `FeatureGateServiceProvider`.
  *
- * *** `Contracts\Channel` has NO binding here. *** task-3-brief.md D5:
- * Task 4 creates `Channels\LogChannel`/`Channels\NullChannel` and adds the
- * binding line to this class — until then, `Jobs\SendNotificationChannelJob`
- * cannot resolve in production (this task's own tests bind a test double
- * directly into the container, so they do not depend on that binding
- * existing). Same "not yet registered, flagged explicitly" precedent
- * `FeatureGateServiceProvider`'s own doc block set for its
- * then-unregistered `bootstrap/providers.php` line.
+ * *** `Contracts\Channel` binding: *** Task 4 binds the development
+ * `Channels\LogChannel`; tests may replace it with a deterministic test
+ * double. `Channels\NullChannel` remains the explicit unavailable stand-in
+ * for a closed provider channel.
  */
 final class NotificationServiceProvider extends ServiceProvider
 {
@@ -55,6 +53,7 @@ final class NotificationServiceProvider extends ServiceProvider
     {
         $this->app->bind(RecipientRoleSource::class, ProvisionalScopeEntityRecipientRoleSource::class);
         $this->app->bind(NotificationSubjectSource::class, ProvisionalAggregateNotificationSubjectSource::class);
+        $this->app->bind(Channel::class, LogChannel::class);
     }
 
     public function boot(): void

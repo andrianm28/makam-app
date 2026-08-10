@@ -21,21 +21,27 @@ use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use App\Platform\Notification\Actions\DispatchNotification;
 use App\Platform\Notification\Contracts\Channel;
 use App\Platform\Notification\Contracts\NotificationSubjectSource;
+use App\Platform\Notification\DeliveryResult;
 use App\Platform\Notification\DeliveryState;
 use App\Platform\Notification\Jobs\ConsumeOutboxNotificationJob;
+use App\Platform\Notification\Jobs\RetryFailedDeliveryJob;
 use App\Platform\Notification\Jobs\SendNotificationChannelJob;
 use App\Platform\Notification\Models\InAppNotification;
 use App\Platform\Notification\Models\NotificationDelivery;
 use App\Platform\Notification\Models\NotificationEvent;
 use App\Platform\Notification\Models\NotificationRecipient;
+use App\Platform\Notification\Models\NotificationTemplateVersion;
 use App\Platform\Notification\RecipientResolutionSubject;
+use App\Platform\Notification\RecipientSet;
 use App\Platform\Outbox\Jobs\PublishOutboxEventJob;
 use App\Platform\Outbox\Models\OutboxEvent;
 use App\Platform\Outbox\Outbox;
 use App\Platform\Outbox\OutboxClassification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
+use ReflectionMethod;
 use Tests\Fixtures\Notification\FakeChannel;
 use Tests\TestCase;
 
@@ -115,6 +121,196 @@ final class NotificationDispatchPipelineTest extends TestCase
         Queue::assertPushed(SendNotificationChannelJob::class, 6);
     }
 
+    public function test_concurrent_channel_workers_claim_a_delivery_before_only_one_provider_send(): void
+    {
+        $this->bindWhatsAppMode(open: true);
+
+        [$draft] = $this->bookingSubmittedFixture();
+        $outboxEventId = $this->recordBookingSubmitted($draft->id);
+        Queue::fake();
+
+        $dispatcher = $this->app->make(DispatchNotification::class);
+        $dispatcher->consumeOutboxEvent($outboxEventId);
+        $delivery = NotificationDelivery::query()
+            ->where('event_id', $outboxEventId)
+            ->where('recipient_ref', (string) $draft->user_id)
+            ->where('channel', 'EMAIL')
+            ->sole();
+
+        $channel = new class($dispatcher, $delivery->id) implements Channel
+        {
+            public int $sendCount = 0;
+
+            public function __construct(
+                private readonly DispatchNotification $dispatcher,
+                private readonly int $deliveryId,
+            ) {}
+
+            public function send(NotificationDelivery $delivery, NotificationTemplateVersion $version, RecipientSet $recipients): DeliveryResult
+            {
+                $this->sendCount++;
+
+                if ($this->sendCount === 1) {
+                    (new SendNotificationChannelJob($this->deliveryId))->handle($this->dispatcher, $this);
+                }
+
+                return new DeliveryResult(
+                    DeliveryState::Sent,
+                    providerRef: 'reentrant-provider-ref',
+                );
+            }
+        };
+
+        (new SendNotificationChannelJob($delivery->id))->handle($dispatcher, $channel);
+
+        $this->assertSame(1, $channel->sendCount);
+        $this->assertSame('reentrant-provider-ref', NotificationDelivery::query()->findOrFail($delivery->id)->provider_ref);
+    }
+
+    public function test_missing_active_template_version_records_unavailable_delivery_without_blank_in_app_content(): void
+    {
+        $channel = new FakeChannel;
+        $this->bindChannel($channel);
+        $this->bindWhatsAppMode(open: true);
+
+        [$draft, $operatorRef] = $this->bookingSubmittedFixture();
+        DB::table('notification_templates')
+            ->where('event_name', 'Booking submitted')
+            ->update(['active_version_id' => null]);
+        $outboxEventId = $this->recordBookingSubmitted($draft->id);
+
+        (new ConsumeOutboxNotificationJob($outboxEventId))->handle($this->app->make(DispatchNotification::class));
+
+        $inApp = InAppNotification::query()
+            ->where('event_id', $outboxEventId)
+            ->where('recipient_ref', $operatorRef)
+            ->sole();
+        $this->assertNotSame('', trim((string) $inApp->body));
+        $this->assertNotNull($inApp->subject);
+
+        $deliveries = NotificationDelivery::query()->where('event_id', $outboxEventId)->get();
+        $this->assertCount(3, $deliveries);
+        $this->assertSame(3, $deliveries->where('state', DeliveryState::Unavailable)->count());
+        $this->assertSame(0, NotificationDelivery::query()->where('event_id', $outboxEventId)->where('state', DeliveryState::Queued)->count());
+        $this->assertSame(3, $deliveries->where('failure_message', 'NOTIFICATION_TEMPLATE_UNAVAILABLE')->count());
+        $this->assertSame(3, $deliveries->whereNull('template_version_id')->count());
+        $this->assertCount(0, $channel->sent);
+    }
+
+    public function test_reclaimed_delivery_reuses_provider_key_after_provider_success_before_state_write(): void
+    {
+        $this->bindWhatsAppMode(open: true);
+
+        [$draft] = $this->bookingSubmittedFixture();
+        $outboxEventId = $this->recordBookingSubmitted($draft->id);
+        Queue::fake();
+        $dispatcher = $this->app->make(DispatchNotification::class);
+        $dispatcher->consumeOutboxEvent($outboxEventId);
+        $delivery = NotificationDelivery::query()
+            ->where('event_id', $outboxEventId)
+            ->where('recipient_ref', (string) $draft->user_id)
+            ->where('channel', 'EMAIL')
+            ->sole();
+
+        $channel = new class implements Channel
+        {
+            /** @var list<string> */
+            public array $requestedKeys = [];
+
+            /** @var list<string> */
+            public array $acceptedKeys = [];
+
+            public function send(NotificationDelivery $delivery, NotificationTemplateVersion $version, RecipientSet $recipients): DeliveryResult
+            {
+                $key = (string) $delivery->provider_idempotency_key;
+                $this->requestedKeys[] = $key;
+
+                if (! in_array($key, $this->acceptedKeys, true)) {
+                    $this->acceptedKeys[] = $key;
+                }
+
+                return new DeliveryResult(
+                    DeliveryState::Sent,
+                    providerRef: 'idempotent-provider-ref',
+                );
+            }
+        };
+
+        $job = new SendNotificationChannelJob($delivery->id);
+        $job->handle($dispatcher, $channel);
+
+        // Simulate the process dying after the provider accepted the request
+        // but before the delivery outcome committed. This setup deliberately
+        // uses PDO so it does not exercise the production delivery write API.
+        $statement = DB::connection()->getPdo()->prepare(
+            'UPDATE notification_deliveries SET state = ?, claim_token = ?, claimed_at = ? WHERE id = ?'
+        );
+        $statement->execute([
+            DeliveryState::Queued->value,
+            'stale-provider-success',
+            now()->subSeconds(301)->toDateTimeString(),
+            $delivery->id,
+        ]);
+
+        $job->handle($dispatcher, $channel);
+
+        $this->assertCount(2, $channel->requestedKeys);
+        $this->assertCount(1, $channel->acceptedKeys);
+        $this->assertSame($channel->requestedKeys[0], $channel->requestedKeys[1]);
+        $this->assertSame(DeliveryState::Sent, NotificationDelivery::query()->findOrFail($delivery->id)->state);
+    }
+
+    public function test_sent_delivery_persists_provider_reference_and_provider_idempotency_key(): void
+    {
+        $this->bindChannel(new FakeChannel);
+        $this->bindWhatsAppMode(open: true);
+
+        [$draft] = $this->bookingSubmittedFixture();
+        $outboxEventId = $this->recordBookingSubmitted($draft->id);
+
+        (new PublishOutboxEventJob($outboxEventId))->handle();
+
+        $delivery = NotificationDelivery::query()
+            ->where('event_id', $outboxEventId)
+            ->where('recipient_ref', (string) $draft->user_id)
+            ->where('channel', 'EMAIL')
+            ->sole();
+        $this->assertSame(DeliveryState::Sent, $delivery->state);
+        $this->assertSame('fake-provider-ref', $delivery->provider_ref);
+        $this->assertSame(
+            hash('sha256', implode('|', [$delivery->event_id, $delivery->recipient_ref, $delivery->channel, $delivery->window_key])),
+            $delivery->provider_idempotency_key,
+        );
+    }
+
+    public function test_delivery_key_collision_is_rejected_by_the_database_unique_constraint(): void
+    {
+        $this->bindChannel(new FakeChannel);
+        $this->bindWhatsAppMode(open: true);
+
+        [$draft] = $this->bookingSubmittedFixture();
+        $outboxEventId = $this->recordBookingSubmitted($draft->id);
+        Queue::fake();
+        $dispatcher = $this->app->make(DispatchNotification::class);
+        $dispatcher->consumeOutboxEvent($outboxEventId);
+        $beforeDeliveries = NotificationDelivery::query()->where('event_id', $outboxEventId)->get();
+        $beforeIds = $beforeDeliveries->pluck('id')->all();
+
+        $method = new ReflectionMethod($dispatcher, 'recordRecipientsAndDeliveries');
+        $method->invoke(
+            $dispatcher,
+            OutboxEvent::query()->findOrFail($outboxEventId),
+            DB::table('notification_templates')->where('event_name', 'Booking submitted')->first(),
+        );
+
+        $afterDeliveries = NotificationDelivery::query()->where('event_id', $outboxEventId)->get();
+        $this->assertSame($beforeIds, $afterDeliveries->pluck('id')->all());
+        $this->assertSame(
+            $beforeDeliveries->pluck('provider_idempotency_key')->all(),
+            $afterDeliveries->pluck('provider_idempotency_key')->all(),
+        );
+    }
+
     public function test_ac7_the_in_app_record_survives_a_throwing_channel(): void
     {
         $this->bindChannel(new FakeChannel(throws: true));
@@ -139,8 +335,8 @@ final class NotificationDispatchPipelineTest extends TestCase
             ->sole();
 
         $this->assertSame(DeliveryState::Failed, $delivery->state);
-        $this->assertSame(1, $delivery->attempt_count);
-        $this->assertNotNull($delivery->failure_message);
+        $this->assertSame(RetryFailedDeliveryJob::MAX_ATTEMPTS, $delivery->attempt_count);
+        $this->assertSame('NOTIFICATION_CHANNEL_SEND_FAILED', $delivery->failure_message);
     }
 
     public function test_ac7_vendor_recipient_gets_an_in_app_record_without_an_external_channel(): void
@@ -346,6 +542,63 @@ final class NotificationDispatchPipelineTest extends TestCase
         $this->assertFalse(
             NotificationRecipient::query()->where('event_id', $outboxEventId)->where('recipient_ref', 'other-cemetery-operator')->exists()
         );
+    }
+
+    public function test_failed_delivery_is_retried_then_escalated_to_default_queue_after_max_attempts(): void
+    {
+        $channel = new FakeChannel(throws: true);
+        $this->bindChannel($channel);
+        $this->bindWhatsAppMode(open: true);
+        Queue::fake();
+
+        [$draft] = $this->bookingSubmittedFixture();
+        $outboxEventId = $this->recordBookingSubmitted($draft->id);
+        $dispatcher = $this->app->make(DispatchNotification::class);
+        $dispatcher->consumeOutboxEvent($outboxEventId);
+        $delivery = NotificationDelivery::query()
+            ->where('event_id', $outboxEventId)
+            ->where('recipient_ref', (string) $draft->user_id)
+            ->where('channel', 'EMAIL')
+            ->sole();
+
+        (new SendNotificationChannelJob($delivery->id))->handle($dispatcher, $channel);
+        Queue::assertPushed(RetryFailedDeliveryJob::class, fn (RetryFailedDeliveryJob $job): bool => $job->queue === 'notifications');
+
+        (new RetryFailedDeliveryJob($delivery->id))->handle($dispatcher);
+        $this->assertSame(DeliveryState::Queued, $delivery->fresh()->state);
+        Queue::assertPushed(SendNotificationChannelJob::class);
+
+        (new SendNotificationChannelJob($delivery->id))->handle($dispatcher, $channel);
+        (new RetryFailedDeliveryJob($delivery->id))->handle($dispatcher);
+        (new SendNotificationChannelJob($delivery->id))->handle($dispatcher, $channel);
+        (new RetryFailedDeliveryJob($delivery->id))->handle($dispatcher);
+
+        $this->assertSame(DeliveryState::Failed, $delivery->fresh()->state);
+        Queue::assertPushed(RetryFailedDeliveryJob::class, fn (RetryFailedDeliveryJob $job): bool => $job->operationalEscalation && $job->queue === 'default');
+    }
+
+    public function test_permanent_channel_failure_is_recorded_without_retry(): void
+    {
+        $channel = new FakeChannel(resultState: DeliveryState::Failed, retryable: false);
+        $this->bindChannel($channel);
+        $this->bindWhatsAppMode(open: true);
+        Queue::fake();
+
+        [$draft] = $this->bookingSubmittedFixture();
+        $outboxEventId = $this->recordBookingSubmitted($draft->id);
+        $dispatcher = $this->app->make(DispatchNotification::class);
+        $dispatcher->consumeOutboxEvent($outboxEventId);
+        $delivery = NotificationDelivery::query()
+            ->where('event_id', $outboxEventId)
+            ->where('recipient_ref', (string) $draft->user_id)
+            ->where('channel', 'EMAIL')
+            ->sole();
+
+        (new SendNotificationChannelJob($delivery->id))->handle($dispatcher, $channel);
+
+        $this->assertSame(DeliveryState::Failed, $delivery->fresh()->state);
+        Queue::assertNotPushed(RetryFailedDeliveryJob::class, fn (RetryFailedDeliveryJob $job): bool => ! $job->operationalEscalation);
+        Queue::assertPushed(RetryFailedDeliveryJob::class, fn (RetryFailedDeliveryJob $job): bool => $job->operationalEscalation && $job->queue === 'default');
     }
 
     private function deliveryCount(string $eventId, string $recipientRef, string $channel): int

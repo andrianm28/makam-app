@@ -14,10 +14,10 @@ use Illuminate\Support\Facades\Schema;
  * DispatchNotification` is the ONE write API for this table (AC9); no
  * other class inserts, updates, or deletes a row here.
  *
- * `channel` holds `EMAIL` or `WA` only — the two provider-backed channels
- * `App\Platform\Notification\Contracts\Channel` implementations exist for
- * (mirrors `notification_templates.default_channel`'s own `EMAIL|WA` CHECK
- * constraint). `IN_APP` is deliberately NOT a row in this table: AC7's
+ * `channel` holds `EMAIL` or `WA` only — the two channel values supported by
+ * `App\Platform\Notification\Contracts\Channel` (development uses
+ * `LogChannel`; a closed provider uses `NullChannel`). `IN_APP` is
+ * deliberately NOT a row in this table: AC7's
  * in-app record is unconditional for admin/operator/vendor recipients and
  * lives in `in_app_notifications` instead, written in the SAME transaction
  * as this table's rows so a failed/unavailable external channel can never
@@ -45,7 +45,10 @@ use Illuminate\Support\Facades\Schema;
  * `template_version_id` pins the exact immutable
  * `notification_template_versions` row a delivery was rendered against
  * (AC13) — a later template edit can never retroactively change what an
- * already-queued/sent record says it said.
+ * already-queued/sent record says it said. Migration
+ * `2026_08_09_100070` makes it nullable only for an explicit `UNAVAILABLE`
+ * configuration row when no active version exists; valid deliveries remain
+ * pinned.
  */
 return new class extends Migration
 {
