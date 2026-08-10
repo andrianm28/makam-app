@@ -12,17 +12,20 @@ use App\Platform\DocumentVault\Actions\RetainDocument;
 use App\Platform\DocumentVault\Actions\ScanDocument;
 use App\Platform\DocumentVault\Adapters\LocalFilesystemObjectStorage;
 use App\Platform\DocumentVault\Adapters\MockScanner;
-use App\Platform\DocumentVault\Contracts\MalwareScanner;
 use App\Platform\DocumentVault\Contracts\ObjectStorage;
 use App\Platform\DocumentVault\DocumentKind;
 use App\Platform\DocumentVault\DocumentState;
+use App\Platform\DocumentVault\Jobs\CleanupPromotedDocumentStorageJob;
 use App\Platform\DocumentVault\Jobs\ScanDocumentJob;
 use App\Platform\DocumentVault\Models\Document;
 use App\Platform\DocumentVault\Models\DocumentScan;
 use App\Platform\DocumentVault\ScanVerdict;
 use App\Platform\DocumentVault\StoragePathPolicy;
 use App\Platform\Outbox\Models\OutboxEvent;
+use Carbon\CarbonImmutable;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use LogicException;
@@ -65,6 +68,7 @@ final class DocumentLifecycleTest extends TestCase
 
         $this->assertSame(ScanVerdict::Clean, $scan->verdict);
         $this->assertSame(1, $scan->attempt);
+        $this->assertSame($document->checksum_sha256, $scan->checksum_sha256);
         $this->assertSame(DocumentState::Scanning, $document->fresh()->state);
         $this->assertSame('MockScanner', $scan->scanner_name);
         $this->assertNotSame('', $scan->scanner_engine_version);
@@ -118,21 +122,23 @@ final class DocumentLifecycleTest extends TestCase
         $this->assertSame(ScanVerdict::Suspicious, $suspiciousScan->verdict);
         $this->assertTrue($suspiciousScan->evidence['suspicious']);
         $this->assertSame(DocumentState::Scanning, $suspicious->fresh()->state);
+        $this->assertSame(2, AuditEvent::query()->where('action', 'DOCUMENT_SCAN')->where('outcome', 'denied')->count());
     }
 
-    public function test_a_document_with_scanning_disabled_records_clean_without_calling_the_scanner(): void
+    public function test_a_persisted_false_scanner_flag_cannot_bypass_a_restricted_kind_scan(): void
     {
+        Queue::fake();
         $document = $this->documentWithBytes($this->minimalPdf());
-        $document->forceFill(['scanner_required' => false])->save();
+        DB::table('documents')->where('id', $document->id)->update(['scanner_required' => false]);
+        config(['document-vault.scanner_outage' => true]);
 
         $scan = (new ScanDocument(
             new LocalFilesystemObjectStorage($this->root),
             $this->paths,
-            new ThrowingScanner,
+            new MockScanner,
         ))->scan($document);
 
-        $this->assertSame(ScanVerdict::Clean, $scan->verdict);
-        $this->assertSame('not-required', $scan->scanner_name);
+        $this->assertSame(ScanVerdict::Error, $scan->verdict);
         $this->assertSame(DocumentState::Scanning, $document->fresh()->state);
     }
 
@@ -160,16 +166,21 @@ final class DocumentLifecycleTest extends TestCase
         $this->assertSame(DocumentState::Accepted, $promoted->fresh()->state);
         $this->assertSame('accepted', $promoted->fresh()->storage_prefix);
         $this->assertFileExists($this->root.'/KTP/accepted/'.$document->storage_key);
-        $this->assertFileDoesNotExist($this->root.'/KTP/quarantine/'.$document->storage_key);
+        $this->assertFileExists($this->root.'/KTP/quarantine/'.$document->storage_key);
         $this->assertSame('DOCUMENT_ACCEPTED', AuditEvent::query()->where('action', 'DOCUMENT_ACCEPTED')->sole()->action);
         $outbox = OutboxEvent::query()->sole();
         $this->assertSame('document.accepted.v1', $outbox->event_name);
         $this->assertSame(['kind', 'state'], array_keys($outbox->payload));
         $this->assertSame("promote:{$document->id}", $outbox->idempotency_key);
+
+        (new CleanupPromotedDocumentStorageJob($document->id))->handle($storage, $this->paths);
+
+        $this->assertFileDoesNotExist($this->root.'/KTP/quarantine/'.$document->storage_key);
     }
 
     public function test_a_checksum_mismatch_blocks_promotion_and_preserves_quarantine(): void
     {
+        Queue::fake();
         $document = $this->documentWithBytes($this->minimalPdf());
         $storage = new TamperingObjectStorage(new LocalFilesystemObjectStorage($this->root), $this->root);
         $this->cleanScan($document, $storage);
@@ -181,8 +192,128 @@ final class DocumentLifecycleTest extends TestCase
         } finally {
             $this->assertSame(DocumentState::Scanning, $document->fresh()->state);
             $this->assertFileExists($this->root.'/KTP/quarantine/'.$document->storage_key);
-            $this->assertFileDoesNotExist($this->root.'/KTP/accepted/'.$document->storage_key);
+            $this->assertFileExists($this->root.'/KTP/accepted/'.$document->storage_key);
             $this->assertSame(0, OutboxEvent::query()->count());
+
+            (new CleanupPromotedDocumentStorageJob($document->id, reconcileAcceptedCopy: true))
+                ->handle($storage, $this->paths);
+
+            $this->assertFileDoesNotExist($this->root.'/KTP/accepted/'.$document->storage_key);
+        }
+    }
+
+    public function test_a_checksum_mismatch_between_document_and_scan_blocks_promotion(): void
+    {
+        $document = $this->documentWithBytes($this->minimalPdf());
+        $storage = new LocalFilesystemObjectStorage($this->root);
+        $this->cleanScan($document, $storage);
+        DB::table('documents')->where('id', $document->id)->update([
+            'checksum_sha256' => hash('sha256', 'different bytes'),
+        ]);
+
+        $this->expectException(LogicException::class);
+
+        (new PromoteDocument($storage, $this->paths))->promote($document);
+    }
+
+    public function test_a_clean_scan_followed_by_checksum_drift_becomes_error_and_cannot_promote(): void
+    {
+        Queue::fake();
+        $document = $this->documentWithBytes($this->minimalPdf());
+        $storage = new LocalFilesystemObjectStorage($this->root);
+        $this->cleanScan($document, $storage);
+        DB::table('documents')->where('id', $document->id)->update([
+            'checksum_sha256' => hash('sha256', 'different bytes'),
+        ]);
+
+        $scan = (new ScanDocument($storage, $this->paths, new MockScanner))->scan($document);
+
+        $this->assertSame(ScanVerdict::Error, $scan->verdict);
+        $this->assertSame(AuditOutcome::Denied->value, AuditEvent::query()->latest('id')->value('outcome'));
+        $this->expectException(LogicException::class);
+
+        (new PromoteDocument($storage, $this->paths))->promote($document);
+    }
+
+    public function test_document_scan_model_rejects_instance_mutation(): void
+    {
+        $document = $this->documentWithBytes($this->minimalPdf());
+        $scan = (new ScanDocument(
+            new LocalFilesystemObjectStorage($this->root),
+            $this->paths,
+            new MockScanner,
+        ))->scan($document);
+
+        $this->expectException(LogicException::class);
+
+        $scan->update(['evidence' => ['changed' => true]]);
+    }
+
+    public function test_a_promotion_rollback_keeps_quarantine_and_schedules_accepted_reconciliation(): void
+    {
+        Queue::fake();
+        $document = $this->documentWithBytes($this->minimalPdf());
+        $storage = new LocalFilesystemObjectStorage($this->root);
+        $this->cleanScan($document, $storage);
+        OutboxEvent::query()->create([
+            'event_name' => 'fixture.existing.v1',
+            'event_version' => 1,
+            'aggregate_type' => 'fixture',
+            'aggregate_id' => $document->id,
+            'payload' => ['state' => 'fixture'],
+            'classification' => 'INTERNAL',
+            'occurred_at' => now(),
+            'available_at' => now(),
+            'attempt_count' => 0,
+            'idempotency_key' => "promote:{$document->id}",
+        ]);
+
+        $this->expectException(QueryException::class);
+
+        try {
+            (new PromoteDocument($storage, $this->paths))->promote($document);
+        } finally {
+            $this->assertSame(DocumentState::Scanning, $document->fresh()->state);
+            $this->assertFileExists($this->root.'/KTP/quarantine/'.$document->storage_key);
+            Queue::assertPushed(CleanupPromotedDocumentStorageJob::class, function (CleanupPromotedDocumentStorageJob $job): bool {
+                return $job->reconcileAcceptedCopy;
+            });
+        }
+    }
+
+    public function test_a_failed_copy_schedules_cleanup_without_deleting_quarantine(): void
+    {
+        Queue::fake();
+        $document = $this->documentWithBytes($this->minimalPdf());
+        $storage = new PartialCopyFailureStorage(new LocalFilesystemObjectStorage($this->root), $this->root);
+        $this->cleanScan($document, $storage);
+
+        $this->expectException(RuntimeException::class);
+
+        try {
+            (new PromoteDocument($storage, $this->paths))->promote($document);
+        } finally {
+            $this->assertSame(DocumentState::Scanning, $document->fresh()->state);
+            $this->assertFileExists($this->root.'/KTP/quarantine/'.$document->storage_key);
+            Queue::assertPushed(CleanupPromotedDocumentStorageJob::class);
+        }
+    }
+
+    public function test_quarantine_cleanup_failure_is_left_for_job_retry(): void
+    {
+        Queue::fake();
+        $document = $this->documentWithBytes($this->minimalPdf());
+        $storage = new LocalFilesystemObjectStorage($this->root);
+        $this->cleanScan($document, $storage);
+        (new PromoteDocument($storage, $this->paths))->promote($document);
+        $failingStorage = new DeleteFailureStorage($storage);
+
+        $this->expectException(RuntimeException::class);
+
+        try {
+            (new CleanupPromotedDocumentStorageJob($document->id))->handle($failingStorage, $this->paths);
+        } finally {
+            $this->assertFileExists($this->root.'/KTP/quarantine/'.$document->storage_key);
         }
     }
 
@@ -192,11 +323,18 @@ final class DocumentLifecycleTest extends TestCase
         $storage = new LocalFilesystemObjectStorage($this->root);
         $this->cleanScan($document, $storage);
 
-        (new RetainDocument)->retain($document, 'Retention policy completed.');
+        config(['document-vault.retention_days.KTP' => 30]);
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-08-10 12:00:00'));
+
+        try {
+            (new RetainDocument)->retain($document, 'Retention policy completed.');
+        } finally {
+            CarbonImmutable::setTestNow();
+        }
 
         $retained = $document->fresh();
         $this->assertSame(DocumentState::Deleted, $retained->state);
-        $this->assertNotNull($retained->retention_until);
+        $this->assertSame('2026-09-09 12:00:00', $retained->retention_until->format('Y-m-d H:i:s'));
         $this->assertSame(1, DocumentScan::query()->count());
         $this->assertSame(1, AuditEvent::query()->where('action', 'DOCUMENT_DELETE')->count());
         $this->assertSame(1, OutboxEvent::query()->where('event_name', 'document.deleted.v1')->count());
@@ -212,14 +350,18 @@ final class DocumentLifecycleTest extends TestCase
         }
     }
 
-    public function test_logical_retention_refuses_a_document_with_a_legal_hold_flag(): void
+    public function test_logical_retention_refuses_a_persisted_legal_or_evidence_hold(): void
     {
         $document = $this->documentWithBytes($this->minimalPdf());
-        $document->setRawAttributes($document->getAttributes() + ['legal_hold' => true]);
+        DB::table('documents')->where('id', $document->id)->update(['legal_hold' => true]);
 
         $this->expectException(LogicException::class);
 
-        (new RetainDocument)->retain($document, 'Retention policy completed.');
+        try {
+            (new RetainDocument)->retain($document, 'Retention policy completed.');
+        } finally {
+            $this->assertSame(DocumentState::Quarantined, $document->fresh()->state);
+        }
     }
 
     private function cleanScan(Document $document, ObjectStorage $storage): void
@@ -304,6 +446,11 @@ final class TamperingObjectStorage implements ObjectStorage
         $this->delegate->delete($path);
     }
 
+    public function deleteIfExists(string $path): void
+    {
+        $this->delegate->deleteIfExists($path);
+    }
+
     public function read(string $path)
     {
         return $this->delegate->read($path);
@@ -320,10 +467,87 @@ final class TamperingObjectStorage implements ObjectStorage
     }
 }
 
-final class ThrowingScanner implements MalwareScanner
+final class PartialCopyFailureStorage implements ObjectStorage
 {
-    public function scan(DocumentKind $kind, $stream): ScanVerdict
+    public function __construct(
+        private readonly LocalFilesystemObjectStorage $delegate,
+        private readonly string $root,
+    ) {}
+
+    public function put(string $path, $stream): void
     {
-        throw new RuntimeException('scanner must not be called');
+        $this->delegate->put($path, $stream);
+    }
+
+    public function copy(string $sourcePath, string $destinationPath): void
+    {
+        $this->delegate->copy($sourcePath, $destinationPath);
+        file_put_contents($this->root.'/'.$destinationPath, 'partial');
+        throw new RuntimeException('simulated copy failure');
+    }
+
+    public function delete(string $path): void
+    {
+        $this->delegate->delete($path);
+    }
+
+    public function deleteIfExists(string $path): void
+    {
+        $this->delegate->deleteIfExists($path);
+    }
+
+    public function read(string $path)
+    {
+        return $this->delegate->read($path);
+    }
+
+    public function checksum(string $path): string
+    {
+        return $this->delegate->checksum($path);
+    }
+
+    public function temporaryUrl(string $documentId, string $token): string
+    {
+        return $this->delegate->temporaryUrl($documentId, $token);
+    }
+}
+
+final class DeleteFailureStorage implements ObjectStorage
+{
+    public function __construct(private readonly ObjectStorage $delegate) {}
+
+    public function put(string $path, $stream): void
+    {
+        $this->delegate->put($path, $stream);
+    }
+
+    public function copy(string $sourcePath, string $destinationPath): void
+    {
+        $this->delegate->copy($sourcePath, $destinationPath);
+    }
+
+    public function delete(string $path): void
+    {
+        $this->delegate->delete($path);
+    }
+
+    public function deleteIfExists(string $path): void
+    {
+        throw new RuntimeException('simulated cleanup delete failure');
+    }
+
+    public function read(string $path)
+    {
+        return $this->delegate->read($path);
+    }
+
+    public function checksum(string $path): string
+    {
+        return $this->delegate->checksum($path);
+    }
+
+    public function temporaryUrl(string $documentId, string $token): string
+    {
+        return $this->delegate->temporaryUrl($documentId, $token);
     }
 }

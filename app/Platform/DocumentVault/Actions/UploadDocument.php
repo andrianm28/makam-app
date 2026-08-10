@@ -262,7 +262,6 @@ final readonly class UploadDocument
                 'mime_verified' => $mimeVerified,
                 'checksum_sha256' => $checksum,
                 'client_upload_id' => $clientUploadId,
-                'scanner_required' => $kind->scannerRequired(),
             ]);
 
             // AC12: a reference plus the kind only — never content, never the

@@ -37,6 +37,7 @@ final class DocumentScan extends Model
         string $scannerEngineVersion,
         ScanVerdict $verdict,
         array $evidence,
+        ?string $checksumSha256,
         int $attempt,
     ): static {
         $scan = new self;
@@ -46,6 +47,7 @@ final class DocumentScan extends Model
             'scanner_engine_version' => $scannerEngineVersion,
             'verdict' => $verdict,
             'evidence' => $evidence,
+            'checksum_sha256' => $checksumSha256,
             'attempt' => $attempt,
             'scanned_at' => now(),
         ]);

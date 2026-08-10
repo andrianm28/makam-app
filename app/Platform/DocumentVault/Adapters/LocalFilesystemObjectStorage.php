@@ -123,6 +123,19 @@ final class LocalFilesystemObjectStorage implements ObjectStorage
         }
     }
 
+    public function deleteIfExists(string $path): void
+    {
+        $absolute = $this->absolutePath($path);
+
+        if (! is_file($absolute)) {
+            return;
+        }
+
+        if (! unlink($absolute)) {
+            throw ObjectStorageException::deleteFailed($path);
+        }
+    }
+
     /**
      * Builds the literal, non-route-dependent URL to Task 7's private
      * download endpoint (`task-3-brief.md` ambiguity ruling 3). `$documentId`

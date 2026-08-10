@@ -44,7 +44,13 @@ final class RetainDocument
                 throw new LogicException('A deleted document cannot be retained again.');
             }
 
-            $lockedDocument->fill(['retention_until' => now()]);
+            $retentionDays = config("document-vault.retention_days.{$lockedDocument->document_kind->value}");
+
+            if (! is_int($retentionDays) || $retentionDays < 1) {
+                throw new LogicException('Document retention policy is not configured.');
+            }
+
+            $lockedDocument->fill(['retention_until' => now()->addDays($retentionDays)]);
             $lockedDocument->transitionTo(DocumentState::Deleted);
 
             Audit::record(
@@ -76,8 +82,6 @@ final class RetainDocument
 
     private function hasHold(Document $document): bool
     {
-        return (bool) $document->getAttribute('legal_hold')
-            || (bool) $document->getAttribute('evidence_hold')
-            || (bool) $document->getAttribute('retention_hold');
+        return (bool) $document->legal_hold || (bool) $document->evidence_hold;
     }
 }

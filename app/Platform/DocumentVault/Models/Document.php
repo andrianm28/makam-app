@@ -40,6 +40,24 @@ final class Document extends Model
 {
     use HasUuids;
 
+    /**
+     * Content and storage identity become immutable once scanning begins.
+     * Promotion changes `storage_prefix` only through `promote()`.
+     *
+     * @var list<string>
+     */
+    private const array IMMUTABLE_AFTER_SCANNING = [
+        'document_kind',
+        'original_filename',
+        'storage_prefix',
+        'storage_key',
+        'size_bytes',
+        'mime_declared',
+        'mime_verified',
+        'checksum_sha256',
+        'scanner_required',
+    ];
+
     protected $table = 'documents';
 
     protected $keyType = 'string';
@@ -63,7 +81,8 @@ final class Document extends Model
         'mime_verified',
         'checksum_sha256',
         'client_upload_id',
-        'scanner_required',
+        'legal_hold',
+        'evidence_hold',
         'retention_until',
     ];
 
@@ -79,6 +98,12 @@ final class Document extends Model
     {
         $document = new self;
         $document->fill($attributes);
+
+        if (! $document->document_kind instanceof DocumentKind) {
+            throw new LogicException('A document kind is required before deriving scanner policy.');
+        }
+
+        $document->writeScannerPolicy($document->document_kind->scannerRequired());
         $document->writeState(DocumentState::Quarantined);
         $document->save();
 
@@ -144,6 +169,7 @@ final class Document extends Model
             throw new LogicException('Only a scanning document may be promoted.');
         }
 
+        $this->writeStoragePrefix('accepted');
         $this->writeState(DocumentState::Accepted);
         $this->save();
     }
@@ -157,6 +183,25 @@ final class Document extends Model
     {
         if ($key === 'state' && ! ($this->stateMutationAuthorized ?? false)) {
             throw new LogicException('Document state must be changed through its transition API.');
+        }
+
+        if ($key === 'scanner_required') {
+            if ($this->exists && ! ($this->scannerPolicyMutationAuthorized ?? false)) {
+                throw new LogicException('Scanner policy is derived from document kind and is immutable.');
+            }
+
+            if (! (bool) $value && $this->document_kind instanceof DocumentKind && $this->document_kind->scannerRequired()) {
+                throw new LogicException('Restricted document kinds require malware scanning.');
+            }
+        }
+
+        if (
+            in_array($key, self::IMMUTABLE_AFTER_SCANNING, true)
+            && $this->hasPassedScanningBoundary()
+            && ! ($this->storageMutationAuthorized ?? false)
+            && $key !== 'scanner_required'
+        ) {
+            throw new LogicException('Document content and storage metadata are immutable after scanning begins.');
         }
 
         return parent::setAttribute($key, $value);
@@ -175,6 +220,39 @@ final class Document extends Model
 
     private bool $stateMutationAuthorized = false;
 
+    private bool $scannerPolicyMutationAuthorized = false;
+
+    private bool $storageMutationAuthorized = false;
+
+    private function writeScannerPolicy(bool $scannerRequired): void
+    {
+        $this->scannerPolicyMutationAuthorized = true;
+
+        try {
+            $this->forceFill(['scanner_required' => $scannerRequired]);
+        } finally {
+            $this->scannerPolicyMutationAuthorized = false;
+        }
+    }
+
+    private function writeStoragePrefix(string $prefix): void
+    {
+        $this->storageMutationAuthorized = true;
+
+        try {
+            $this->forceFill(['storage_prefix' => $prefix]);
+        } finally {
+            $this->storageMutationAuthorized = false;
+        }
+    }
+
+    private function hasPassedScanningBoundary(): bool
+    {
+        return $this->exists
+            && $this->state instanceof DocumentState
+            && ! in_array($this->state, [DocumentState::Uploading, DocumentState::Quarantined], true);
+    }
+
     /**
      * @return array<string, string>
      */
@@ -185,6 +263,8 @@ final class Document extends Model
             'state' => DocumentState::class,
             'size_bytes' => 'integer',
             'scanner_required' => 'boolean',
+            'legal_hold' => 'boolean',
+            'evidence_hold' => 'boolean',
             'retention_until' => 'immutable_datetime',
         ];
     }

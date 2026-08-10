@@ -65,7 +65,19 @@ final readonly class ScanDocument
                 $lockedDocument->transitionTo(DocumentState::Scanning);
             }
 
-            [$verdict, $scannerName, $engineVersion, $evidence] = $this->runScan($lockedDocument);
+            [$verdict, $scannerName, $engineVersion, $evidence, $scanChecksum] = $this->runScan($lockedDocument);
+
+            if (
+                $verdict === ScanVerdict::Clean
+                && (! is_string($scanChecksum)
+                    || ! is_string($lockedDocument->checksum_sha256)
+                    || ! hash_equals(strtolower($lockedDocument->checksum_sha256), strtolower($scanChecksum)))
+            ) {
+                $verdict = ScanVerdict::Error;
+                $evidence = [
+                    'reason' => 'document_checksum_mismatch',
+                ];
+            }
 
             $scan = DocumentScan::recordAttempt(
                 document: $lockedDocument,
@@ -73,6 +85,7 @@ final readonly class ScanDocument
                 scannerEngineVersion: $engineVersion,
                 verdict: $verdict,
                 evidence: $evidence,
+                checksumSha256: $scanChecksum,
                 attempt: $attempt,
             );
 
@@ -98,25 +111,30 @@ final readonly class ScanDocument
     }
 
     /**
-     * @return array{0: ScanVerdict, 1: string, 2: string, 3: array<string, mixed>}
+     * @return array{0: ScanVerdict, 1: string, 2: string, 3: array<string, mixed>, 4: string|null}
      */
     private function runScan(Document $document): array
     {
-        if (! $document->scanner_required) {
-            return [
-                ScanVerdict::Clean,
-                'not-required',
-                'not-applicable',
-                ['scanner_required' => false],
-            ];
-        }
-
         $stream = null;
+        $scanChecksum = null;
 
         try {
             $stream = $this->objectStorage->read(
                 $this->pathResolver->quarantinePath($document->document_kind, $document->storage_key),
             );
+
+            $scanChecksum = $this->checksum($stream);
+
+            if (! $document->document_kind->scannerRequired()) {
+                return [
+                    ScanVerdict::Clean,
+                    'not-required',
+                    'not-applicable',
+                    ['scanner_required' => false],
+                    $scanChecksum,
+                ];
+            }
+
             $verdict = $this->scanner->scan($document->document_kind, $stream);
 
             return [
@@ -124,6 +142,7 @@ final readonly class ScanDocument
                 class_basename($this->scanner),
                 (string) config('document-vault.scanner_engine_version', 'unknown'),
                 $this->evidenceFor($verdict),
+                $scanChecksum,
             ];
         } catch (Throwable) {
             return [
@@ -131,12 +150,39 @@ final readonly class ScanDocument
                 class_basename($this->scanner),
                 (string) config('document-vault.scanner_engine_version', 'unknown'),
                 ['reason' => 'scanner_unavailable'],
+                $scanChecksum,
             ];
         } finally {
             if (is_resource($stream)) {
                 fclose($stream);
             }
         }
+    }
+
+    /**
+     * Hash the exact stream that will be handed to the scanner, then rewind it
+     * so the scanner receives those same bytes from the beginning.
+     *
+     * @param  resource  $stream
+     */
+    private function checksum($stream): string
+    {
+        rewind($stream);
+        $context = hash_init('sha256');
+
+        while (! feof($stream)) {
+            $chunk = fread($stream, 8192);
+
+            if ($chunk === false || $chunk === '') {
+                break;
+            }
+
+            hash_update($context, $chunk);
+        }
+
+        rewind($stream);
+
+        return hash_final($context);
     }
 
     /**

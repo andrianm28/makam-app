@@ -63,6 +63,12 @@ interface ObjectStorage
     public function delete(string $path): void;
 
     /**
+     * Remove an object if present. Missing objects are a successful no-op so
+     * cleanup jobs can safely retry after partial completion.
+     */
+    public function deleteIfExists(string $path): void;
+
+    /**
      * Build the platform-generated, purpose-scoped, time-limited download
      * URL for an already-issued signed URL grant.
      *

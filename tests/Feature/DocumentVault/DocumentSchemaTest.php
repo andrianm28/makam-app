@@ -11,6 +11,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -59,6 +60,34 @@ final class DocumentSchemaTest extends TestCase
         DB::table('documents')->insert($this->documentAttributes([
             'document_kind' => 'NOT_A_DOCUMENT_KIND',
         ]));
+    }
+
+    public function test_document_retention_controls_and_scan_checksum_are_persisted(): void
+    {
+        $this->assertTrue(Schema::hasColumns('documents', ['legal_hold', 'evidence_hold']));
+        $this->assertTrue(Schema::hasColumn('document_scans', 'checksum_sha256'));
+    }
+
+    public function test_postgresql_rejects_query_builder_updates_to_scan_evidence(): void
+    {
+        $this->skipUnlessPostgres('document_scans_append_only_trigger');
+
+        $scanId = $this->persistedScanId();
+
+        $this->expectException(QueryException::class);
+
+        DB::table('document_scans')->where('id', $scanId)->update(['attempt' => 2]);
+    }
+
+    public function test_postgresql_rejects_query_builder_deletes_to_scan_evidence(): void
+    {
+        $this->skipUnlessPostgres('document_scans_append_only_trigger');
+
+        $scanId = $this->persistedScanId();
+
+        $this->expectException(QueryException::class);
+
+        DB::table('document_scans')->where('id', $scanId)->delete();
     }
 
     public function test_the_database_rejects_an_unknown_document_state(): void
@@ -263,5 +292,22 @@ final class DocumentSchemaTest extends TestCase
         if (DB::connection()->getDriverName() !== 'pgsql') {
             $this->markTestSkipped("{$constraint} is only added on the pgsql driver.");
         }
+    }
+
+    private function persistedScanId(): int
+    {
+        $documentId = (string) Str::uuid();
+        DB::table('documents')->insert($this->documentAttributes(['id' => $documentId]));
+
+        return (int) DB::table('document_scans')->insertGetId([
+            'document_id' => $documentId,
+            'scanner_name' => 'fixture-scanner',
+            'scanner_engine_version' => '1.0.0',
+            'verdict' => 'CLEAN',
+            'evidence' => json_encode(['reason' => 'fixture'], JSON_THROW_ON_ERROR),
+            'checksum_sha256' => str_repeat('a', 64),
+            'attempt' => 1,
+            'scanned_at' => now(),
+        ]);
     }
 }

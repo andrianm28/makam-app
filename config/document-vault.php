@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Platform\DocumentVault\Adapters\LocalFilesystemObjectStorage;
 use App\Platform\DocumentVault\Adapters\MockScanner;
+use App\Platform\DocumentVault\DocumentKind;
 
 $isDevelopmentEnvironment = in_array(
     env('APP_ENV', 'production'),
@@ -39,6 +40,20 @@ $configuredMalwareScanner = env('DOCUMENT_VAULT_MALWARE_SCANNER');
  */
 return [
     'scanner_outage' => (bool) env('DOCUMENT_VAULT_SCANNER_OUTAGE', false),
+
+    // Defaults are configuration-overridable policy values, expressed in days
+    // from logical deletion. Holds always take precedence over this clock.
+    'retention_days' => [
+        DocumentKind::Ktp->value => 3650,
+        DocumentKind::Kk->value => 3650,
+        DocumentKind::DeathCertificate->value => 3650,
+        DocumentKind::PaymentProof->value => 2555,
+        DocumentKind::Agreement->value => 2555,
+        DocumentKind::Certificate->value => 2555,
+        DocumentKind::VendorEvidence->value => 1095,
+        DocumentKind::ProductImage->value => 365,
+        DocumentKind::GraveImport->value => 365,
+    ],
 
     // Local/mock defaults are intentionally limited to development-like
     // environments. Staging and production must name their providers
