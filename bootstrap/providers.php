@@ -3,6 +3,7 @@
 use App\Platform\Correlation\Providers\CorrelationServiceProvider;
 use App\Platform\FeatureGate\Providers\FeatureGateServiceProvider;
 use App\Platform\IdentityAccess\Providers\IdentityAccessServiceProvider;
+use App\Platform\Notification\Providers\NotificationServiceProvider;
 use App\Providers\AppServiceProvider;
 use App\Providers\Filament\AdminPanelProvider;
 
@@ -34,4 +35,12 @@ return [
     // in that batch's literal owned-files list either, but the brief
     // explicitly authorizes this one additive line.
     CorrelationServiceProvider::class,
+    // Task 3 of the L2 `platform-notifications` lane (task-3-brief.md D7)
+    // — binds RecipientRoleSource/NotificationSubjectSource and registers
+    // the OutboxEventPublished -> ConsumeOutboxNotificationJob listener.
+    // Same precedent as every provider above: this file is not in that
+    // task's literal owned-files list, but the brief explicitly authorizes
+    // this one additive line, and without it the whole outbox-fed
+    // dispatch path is dead code no consumer can reach.
+    NotificationServiceProvider::class,
 ];
