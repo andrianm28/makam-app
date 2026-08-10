@@ -18,6 +18,7 @@ use App\Platform\DocumentVault\Exceptions\SignedUrlGrantImmutableException;
 use App\Platform\DocumentVault\Models\Document;
 use App\Platform\DocumentVault\Models\DocumentAccessEvent;
 use App\Platform\DocumentVault\Models\SignedUrlGrant;
+use App\Platform\DocumentVault\Models\SignedUrlGrantQueryBuilder;
 use App\Platform\DocumentVault\Policies\DocumentAccessPolicy;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\Scopes\Models\ScopeAssignment;
@@ -463,6 +464,38 @@ final class IssueSignedUrlTest extends TestCase
         $this->expectException(SignedUrlGrantImmutableException::class);
 
         SignedUrlGrant::query()->whereKey($grant->getKey())->increment('id');
+    }
+
+    public function test_issued_grants_reject_query_builder_insert_or_ignore_using(): void
+    {
+        $grant = $this->action()->issue($this->relatedActor(), $this->relatedDocument(), DocumentAccessPurpose::Download);
+
+        try {
+            SignedUrlGrant::query()->insertOrIgnoreUsing(
+                ['id'],
+                DB::table('signed_url_grants')->select('id')->where('id', $grant->getKey()),
+            );
+        } catch (SignedUrlGrantImmutableException $exception) {
+            $this->assertTrue(collect($exception->getTrace())->contains(
+                static fn (array $frame): bool => ($frame['class'] ?? null) === SignedUrlGrantQueryBuilder::class
+                    && ($frame['function'] ?? null) === 'rejectMutation',
+            ));
+
+            return;
+        }
+
+        $this->fail('Expected the Eloquent query builder to reject insertOrIgnoreUsing.');
+    }
+
+    public function test_issued_grants_reject_query_builder_update_from(): void
+    {
+        $grant = $this->action()->issue($this->relatedActor(), $this->relatedDocument(), DocumentAccessPurpose::Download);
+
+        $this->expectException(SignedUrlGrantImmutableException::class);
+
+        SignedUrlGrant::query()->whereKey($grant->getKey())->updateFrom([
+            'token' => 'replacement-token',
+        ]);
     }
 
     public function test_issued_grants_reject_base_query_builder_mutation(): void

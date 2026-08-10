@@ -26,7 +26,9 @@ final class SignedUrlGrantQueryBuilder extends Builder
         'insert',
         'insertGetId',
         'insertOrIgnore',
+        'insertOrIgnoreUsing',
         'insertUsing',
+        'updateFrom',
         'updateOrInsert',
     ];
 
