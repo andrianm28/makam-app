@@ -14,14 +14,15 @@ use App\Platform\DocumentVault\Exceptions\DocumentValidationException;
  * than a second, potentially-drifting copy (`task-3-brief.md` ambiguity
  * ruling 2).
  *
- * The declared MIME type a client sends is never trusted or even accepted
- * as an argument here — only the stream's own bytes, sniffed with
- * `finfo`/`FILEINFO_MIME_TYPE`, decide the actual content type. Two
- * independent checks catch spoofing: the actual type must be in the kind's
- * allowlist at all, and it must also be the type the claimed extension
- * implies (`self::EXTENSION_MIME_MAP`) — so a `.pdf` that is really a zip,
- * or a `.png` that is really a `.jpg`, is rejected even when the sniffed
- * type would otherwise be acceptable for that kind in isolation.
+ * The declared MIME type is checked against the stream's own bytes, sniffed
+ * with `finfo`/`FILEINFO_MIME_TYPE`; it never replaces byte verification.
+ * Direct callers may omit it when no client metadata exists, while
+ * `UploadDocument` always supplies it after resolving upload/stream metadata.
+ * Two independent checks catch spoofing: the actual type must be in the
+ * kind's allowlist at all, and it must also be the type the claimed extension
+ * implies (`self::EXTENSION_MIME_MAP`) — so a `.pdf` that is really a zip, or
+ * a `.png` that is really a `.jpg`, is rejected even when the sniffed type
+ * would otherwise be acceptable for that kind in isolation.
  *
  * `$originalFilename` is used only to read its extension; it is never
  * treated as a storage-key authority (module-wide rule).
@@ -58,13 +59,20 @@ final class DocumentValidator
      *                            failure so the caller may reuse it (e.g.
      *                            to hand it to `ObjectStorage::put()`
      *                            immediately afterward).
+     * @param  string|null  $declaredMimeType  Client metadata when available;
+     *                                         null means no declaration exists.
      * @return string The finfo-verified actual MIME type, for the caller to
      *                persist as `documents.mime_verified`.
      *
      * @throws DocumentValidationException
      */
-    public function validate(DocumentKind $kind, string $originalFilename, int $sizeBytes, $stream): string
-    {
+    public function validate(
+        DocumentKind $kind,
+        string $originalFilename,
+        int $sizeBytes,
+        $stream,
+        ?string $declaredMimeType = null,
+    ): string {
         if ($sizeBytes > $kind->maxSizeBytes()) {
             throw DocumentValidationException::sizeExceeded($kind);
         }
@@ -82,6 +90,17 @@ final class DocumentValidator
         }
 
         $expectedMimeTypes = self::EXTENSION_MIME_MAP[$extension] ?? [];
+
+        if ($declaredMimeType !== null) {
+            $declaredMimeType = strtolower(trim($declaredMimeType));
+
+            if (
+                ! in_array($declaredMimeType, $kind->allowedMimeTypes(), true)
+                || ! in_array($declaredMimeType, $expectedMimeTypes, true)
+            ) {
+                throw DocumentValidationException::declaredMimeMismatch($kind);
+            }
+        }
 
         if (! in_array($actualMimeType, $expectedMimeTypes, true)) {
             throw DocumentValidationException::extensionMimeMismatch($kind);

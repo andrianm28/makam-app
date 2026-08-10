@@ -21,6 +21,20 @@ final class DocumentValidatorTest extends TestCase
         $this->assertSame('application/pdf', $mimeVerified);
     }
 
+    public function test_it_rejects_a_declared_mime_that_does_not_match_verified_content(): void
+    {
+        $validator = new DocumentValidator;
+        $pdf = $this->minimalPdf();
+        $stream = $this->streamFor($pdf);
+
+        try {
+            $validator->validate(DocumentKind::Ktp, 'ktp-scan.pdf', strlen($pdf), $stream, 'image/png');
+            $this->fail('Expected DocumentValidationException for a declared MIME mismatch.');
+        } catch (DocumentValidationException $exception) {
+            $this->assertSame('declared_mime_mismatch', $exception->reason());
+        }
+    }
+
     public function test_a_genuine_png_is_accepted_for_a_kind_that_allows_images(): void
     {
         $validator = new DocumentValidator;

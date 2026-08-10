@@ -26,6 +26,14 @@ final class DocumentStateViewTest extends TestCase
         $this->assertStringContainsString('Accepted', $accepted);
         $this->assertStringContainsString('File type is not allowed.', $rejected);
         $this->assertStringContainsString('Try again', $rejected);
+        $this->assertMatchesRegularExpression('/<progress\b[^>]*max="100"[^>]*value="42"/', $uploading);
+        $this->assertStringContainsString('data-action="cancel-upload"', $uploading);
+        $this->assertStringContainsString('data-progress="indeterminate"', $scanning);
+        $this->assertStringContainsString('data-action="retry-upload"', $rejected);
+
+        $uploadingWithoutControls = Blade::render('<x-document-vault.state state="uploading" />');
+        $this->assertStringNotContainsString('<progress', $uploadingWithoutControls);
+        $this->assertStringNotContainsString('data-action="cancel-upload"', $uploadingWithoutControls);
     }
 
     public function test_unaccepted_states_only_render_safe_file_metadata_and_never_preview_markup(): void

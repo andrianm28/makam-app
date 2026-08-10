@@ -204,7 +204,7 @@ final readonly class UploadDocument
             );
         }
 
-        $mimeVerified = $this->validator->validate($kind, $originalFilename, $sizeBytes, $resource);
+        $mimeVerified = $this->validator->validate($kind, $originalFilename, $sizeBytes, $resource, $mimeDeclared);
 
         $this->objectStorage->put($this->pathResolver->quarantinePath($kind, $document->storage_key), $resource);
 
@@ -236,7 +236,7 @@ final readonly class UploadDocument
         int $sizeBytes,
         string $checksum,
     ): Document {
-        $mimeVerified = $this->validator->validate($kind, $originalFilename, $sizeBytes, $resource);
+        $mimeVerified = $this->validator->validate($kind, $originalFilename, $sizeBytes, $resource, $mimeDeclared);
 
         $storageKey = Str::random(40);
 

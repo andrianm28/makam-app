@@ -52,6 +52,7 @@ final class LocalFilesystemObjectStorage implements ObjectStorage
 
     public function copy(string $sourcePath, string $destinationPath): void
     {
+        $this->assertPromotionPaths($sourcePath, $destinationPath);
         $source = $this->absolutePath($sourcePath);
         $destination = $this->absolutePath($destinationPath);
 
@@ -110,6 +111,7 @@ final class LocalFilesystemObjectStorage implements ObjectStorage
 
     public function delete(string $path): void
     {
+        $this->assertQuarantineDeletePath($path);
         $absolute = $this->absolutePath($path);
 
         if (! is_file($absolute)) {
@@ -123,6 +125,7 @@ final class LocalFilesystemObjectStorage implements ObjectStorage
 
     public function deleteIfExists(string $path): void
     {
+        $this->assertCleanupDeletePath($path);
         $absolute = $this->absolutePath($path);
 
         if (! is_file($absolute)) {
@@ -151,6 +154,55 @@ final class LocalFilesystemObjectStorage implements ObjectStorage
         if (! is_dir($directory) && ! mkdir($directory, 0700, recursive: true) && ! is_dir($directory)) {
             throw ObjectStorageException::writeFailed($directory);
         }
+    }
+
+    /** Only a matching quarantine object may be promoted to accepted storage. */
+    private function assertPromotionPaths(string $sourcePath, string $destinationPath): void
+    {
+        $source = $this->lifecyclePathParts($sourcePath);
+        $destination = $this->lifecyclePathParts($destinationPath);
+
+        if (
+            $source[1] !== 'quarantine'
+            || $destination[1] !== 'accepted'
+            || $source[0] !== $destination[0]
+            || $source[2] !== $destination[2]
+        ) {
+            throw ObjectStorageException::lifecycleBoundaryViolation($destinationPath);
+        }
+    }
+
+    private function assertQuarantineDeletePath(string $path): void
+    {
+        $parts = $this->lifecyclePathParts($path);
+
+        if ($parts[1] !== 'quarantine') {
+            throw ObjectStorageException::lifecycleBoundaryViolation($path);
+        }
+    }
+
+    private function assertCleanupDeletePath(string $path): void
+    {
+        $parts = $this->lifecyclePathParts($path);
+
+        if (! in_array($parts[1], ['quarantine', 'accepted'], true)) {
+            throw ObjectStorageException::lifecycleBoundaryViolation($path);
+        }
+    }
+
+    /**
+     * @return array{0: string, 1: string, 2: string}
+     */
+    private function lifecyclePathParts(string $path): array
+    {
+        $this->assertSafeRelativePath($path);
+        $parts = explode('/', $path);
+
+        if (count($parts) !== 3) {
+            throw ObjectStorageException::lifecycleBoundaryViolation($path);
+        }
+
+        return [$parts[0], $parts[1], $parts[2]];
     }
 
     /**

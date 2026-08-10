@@ -75,6 +75,35 @@ final class LocalFilesystemObjectStorageTest extends TestCase
         $storage->copy('KTP/quarantine/does-not-exist', 'KTP/accepted/does-not-exist');
     }
 
+    public function test_copy_rejects_an_accepted_source(): void
+    {
+        $storage = new LocalFilesystemObjectStorage($this->root);
+
+        $this->expectException(ObjectStorageException::class);
+
+        $storage->copy('KTP/accepted/source', 'KTP/accepted/destination');
+    }
+
+    public function test_copy_rejects_a_quarantine_destination(): void
+    {
+        $storage = new LocalFilesystemObjectStorage($this->root);
+        $storage->put('KTP/quarantine/source', $this->streamFor('content'));
+
+        $this->expectException(ObjectStorageException::class);
+
+        $storage->copy('KTP/quarantine/source', 'KTP/quarantine/destination');
+    }
+
+    public function test_copy_rejects_mismatched_lifecycle_identity(): void
+    {
+        $storage = new LocalFilesystemObjectStorage($this->root);
+        $storage->put('KTP/quarantine/source', $this->streamFor('content'));
+
+        $this->expectException(ObjectStorageException::class);
+
+        $storage->copy('KTP/quarantine/source', 'KTP/accepted/different-key');
+    }
+
     public function test_delete_of_a_missing_path_throws(): void
     {
         $storage = new LocalFilesystemObjectStorage($this->root);
@@ -82,6 +111,26 @@ final class LocalFilesystemObjectStorageTest extends TestCase
         $this->expectException(ObjectStorageException::class);
 
         $storage->delete('KTP/quarantine/does-not-exist');
+    }
+
+    public function test_delete_rejects_an_accepted_object(): void
+    {
+        $storage = new LocalFilesystemObjectStorage($this->root);
+
+        $this->expectException(ObjectStorageException::class);
+
+        $storage->delete('KTP/accepted/key-accepted');
+    }
+
+    public function test_delete_if_exists_allows_accepted_cleanup(): void
+    {
+        $storage = new LocalFilesystemObjectStorage($this->root);
+        $storage->put('KTP/quarantine/key-cleanup', $this->streamFor('content'));
+        $storage->copy('KTP/quarantine/key-cleanup', 'KTP/accepted/key-cleanup');
+
+        $storage->deleteIfExists('KTP/accepted/key-cleanup');
+
+        $this->assertFileDoesNotExist($this->root.'/KTP/accepted/key-cleanup');
     }
 
     public function test_put_refuses_a_path_naming_the_accepted_prefix(): void

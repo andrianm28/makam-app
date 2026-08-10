@@ -61,6 +61,15 @@ final class DocumentValidationException extends RuntimeException
         );
     }
 
+    public static function declaredMimeMismatch(DocumentKind $kind): self
+    {
+        return new self(
+            "The uploaded file's declared type does not match its actual content for {$kind->value} documents.",
+            'declared_mime_mismatch',
+            $kind,
+        );
+    }
+
     /**
      * A short, machine-checkable reason code for the rejection — the
      * "per-kind reason" the brief requires callers be able to surface

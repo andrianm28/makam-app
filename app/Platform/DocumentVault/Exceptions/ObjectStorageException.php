@@ -63,4 +63,9 @@ final class ObjectStorageException extends RuntimeException
     {
         return new self("Object storage path is invalid: {$path}");
     }
+
+    public static function lifecycleBoundaryViolation(string $path): self
+    {
+        return new self("Object storage lifecycle path is not permitted: {$path}");
+    }
 }

@@ -89,6 +89,26 @@ final class UploadDocumentTest extends TestCase
         );
     }
 
+    public function test_a_declared_mime_mismatch_rejects_the_upload_before_persistence(): void
+    {
+        try {
+            $this->action->upload(
+                DocumentKind::Ktp,
+                $this->uploadedFile($this->minimalPdf(), 'ktp.pdf', 'application/pdf'),
+                'booking_draft',
+                'declared-mime-mismatch',
+                null,
+                ['mime_declared' => 'image/png'],
+            );
+
+            $this->fail('Expected DocumentValidationException for a declared MIME mismatch.');
+        } catch (DocumentValidationException $exception) {
+            $this->assertSame('declared_mime_mismatch', $exception->reason());
+            $this->assertSame(0, Document::query()->count());
+            $this->assertDirectoryDoesNotExist($this->root.'/KTP/quarantine');
+        }
+    }
+
     public function test_the_outbox_row_carries_only_a_reference_never_content(): void
     {
         Queue::fake();
