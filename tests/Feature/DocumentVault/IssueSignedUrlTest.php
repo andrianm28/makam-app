@@ -259,6 +259,84 @@ final class IssueSignedUrlTest extends TestCase
         $this->assertStringNotContainsString((string) $existingButForbidden->getKey(), $forbidden->getMessage());
     }
 
+    /**
+     * `documents.id` is a real PostgreSQL `uuid` column, so a non-UUID id
+     * would make the driver raise a `QueryException` (a 500) instead of
+     * returning `null` — distinguishable from a clean refusal, and therefore
+     * an AC9 existence leak. The guard runs in PHP before any driver is
+     * involved, so this test is meaningful on SQLite even though SQLite could
+     * never reproduce the original PostgreSQL failure.
+     */
+    public function test_a_malformed_document_id_is_refused_identically_to_a_well_formed_unknown_one(): void
+    {
+        $stranger = new ActorContext(identityReference: 99, roles: ['admin']);
+        $wellFormedUnknown = $this->captureDenial(
+            fn () => $this->action()->issueForDocumentId(
+                $stranger,
+                (string) Str::uuid(),
+                DocumentAccessPurpose::Download,
+            ),
+        );
+
+        foreach ([
+            'not-a-uuid',
+            '',
+            '42',
+            "'; DROP TABLE documents; --",
+            str_repeat('a', 4096),
+            '00000000-0000-0000-0000-00000000000',
+        ] as $malformedId) {
+            $denial = $this->captureDenial(
+                fn () => $this->action()->issueForDocumentId(
+                    $stranger,
+                    $malformedId,
+                    DocumentAccessPurpose::Download,
+                ),
+            );
+
+            $this->assertSame($wellFormedUnknown::class, $denial::class);
+            $this->assertSame($wellFormedUnknown->getMessage(), $denial->getMessage());
+            $this->assertSame($wellFormedUnknown->getCode(), $denial->getCode());
+
+            if ($malformedId !== '') {
+                $this->assertStringNotContainsString($malformedId, $denial->getMessage());
+            }
+        }
+    }
+
+    public function test_a_malformed_document_id_appends_nothing_to_either_append_only_table(): void
+    {
+        $stranger = new ActorContext(identityReference: 99, roles: ['admin']);
+
+        foreach (['not-a-uuid', '', str_repeat('a', 4096)] as $malformedId) {
+            $this->captureDenial(
+                fn () => $this->action()->issueForDocumentId(
+                    $stranger,
+                    $malformedId,
+                    DocumentAccessPurpose::Download,
+                ),
+            );
+        }
+
+        // An unauditable subject must not be allowed to drive writes into
+        // tables that have no delete path.
+        $this->assertSame(0, AuditEvent::query()->count());
+        $this->assertSame(0, DocumentAccessEvent::query()->count());
+        $this->assertSame(0, SignedUrlGrant::query()->count());
+
+        // A WELL-FORMED unknown id still audits — the asymmetry is deliberate
+        // and invisible to the caller.
+        $this->captureDenial(
+            fn () => $this->action()->issueForDocumentId(
+                $stranger,
+                (string) Str::uuid(),
+                DocumentAccessPurpose::Download,
+            ),
+        );
+
+        $this->assertSame(1, AuditEvent::query()->where('action', 'DOCUMENT_ACCESS_DENIED')->count());
+    }
+
     public function test_an_accepted_document_reached_by_id_issues_the_same_grant_as_the_model_entry_point(): void
     {
         $document = $this->relatedDocument();

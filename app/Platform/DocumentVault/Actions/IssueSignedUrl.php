@@ -18,6 +18,7 @@ use App\Platform\DocumentVault\Policies\DocumentAccessPolicy;
 use App\Platform\IdentityAccess\ActorContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 /**
@@ -82,7 +83,29 @@ use InvalidArgumentException;
  *    (cross-purpose redemption is refused);
  *  - honour `expires_at` and single use via `consumed_at`;
  *  - call `RecordDocumentAccess` on BOTH the served and the refused path;
- *  - map `DocumentAccessDeniedException` to 404, never 403.
+ *  - map `DocumentAccessDeniedException` to 404, never 403;
+ *  - **authenticate FIRST, then do any work.** Resolve the actor before
+ *    touching the grant, the document, or either append-only table. An
+ *    unauthenticated request must be rejected by the middleware stack, not by
+ *    reaching this Action and being refused by the policy — the refusal is
+ *    correct either way, but only the ordering keeps an anonymous caller from
+ *    driving writes;
+ *  - **rate limit the route,** because both of this module's refusal paths are
+ *    deliberately loud: every refused issuance appends a
+ *    `document_access_events` row AND an `audit_events` row, and every refused
+ *    redemption appends another. Both tables are append-only by design, with
+ *    no delete path, so unthrottled probing is a storage-amplification vector
+ *    against exactly the evidence the vault depends on. Reuse
+ *    `IdentityAccess\Mfa\MfaRateLimiter`'s established shape — Laravel's
+ *    built-in `RateLimiter` facade, keyed by actor + IP, with a fixed attempt
+ *    ceiling and decay window — rather than inventing a second throttle
+ *    vocabulary; `IdentityAccess\Reauthentication\ReauthenticationService`
+ *    already reuses it for a second context and is the precedent for doing so.
+ *    A throttled request must refuse WITHOUT appending a row, or the throttle
+ *    does not actually bound the writes it exists to bound.
+ *
+ * `issueForDocumentId()`'s own doc block covers the third leak this Action
+ * closes in code rather than delegating: a malformed (non-UUID) document id.
  */
 final readonly class IssueSignedUrl
 {
@@ -104,6 +127,35 @@ final readonly class IssueSignedUrl
      * is what makes "document does not exist" and "actor may not see it"
      * structurally indistinguishable, instead of leaving each caller to
      * remember to translate a missing row into the same refusal.
+     *
+     * -----------------------------------------------------------------------
+     * Why the id shape is validated before the query
+     * -----------------------------------------------------------------------
+     * `documents.id` is a real PostgreSQL `uuid` column. Handing
+     * `Document::query()->find()` a value that is not a UUID makes the DRIVER
+     * raise a `QueryException` (invalid input syntax for type uuid) instead of
+     * returning `null` — which surfaces as a 500 and is therefore trivially
+     * distinguishable from a clean refusal, undercutting AC9's no-existence-
+     * leak guarantee at the one entry point built to guarantee it. SQLite, the
+     * local PHPUnit driver, accepts any string in that column and so cannot
+     * reproduce it; the guard below is the fix, and it runs in PHP before any
+     * driver is involved, so it behaves identically on both.
+     *
+     * A malformed id deliberately writes NOTHING before refusing, unlike a
+     * well-formed id that simply matches no row (which does write an audit
+     * row). Three reasons, and the asymmetry is invisible to the caller
+     * because both raise the same exception:
+     *   1. There is no auditable subject. `AuditSubject('document', $garbage)`
+     *      names a record that could not exist under any circumstances.
+     *   2. `audit_events.subject_id` is a `string` column. Writing an
+     *      attacker-controlled id longer than its length limit would raise a
+     *      `QueryException` on PostgreSQL — recreating the exact 500 this
+     *      guard exists to prevent.
+     *   3. A malformed id is the cheapest possible probe, and writing one row
+     *      per probe into two append-only tables is the amplification vector
+     *      the rate-limiting obligation below is about.
+     * A well-formed but unknown UUID is bounded at 36 characters, names a
+     * plausible subject, and is worth the audit row.
      */
     public function issueForDocumentId(
         ActorContext $actor,
@@ -112,6 +164,10 @@ final readonly class IssueSignedUrl
         ?int $ttlSeconds = null,
         ?string $ipAddress = null,
     ): SignedUrlGrant {
+        if (! Str::isUuid($documentId)) {
+            throw DocumentAccessDeniedException::denied();
+        }
+
         $document = Document::query()->find($documentId);
 
         if (! $document instanceof Document) {
