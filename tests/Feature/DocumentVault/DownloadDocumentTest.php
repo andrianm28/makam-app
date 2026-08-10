@@ -23,6 +23,7 @@ use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -104,7 +105,7 @@ final class DownloadDocumentTest extends TestCase
         $this->get($this->downloadUrl($unaccepted, $unacceptedGrant))->assertNotFound();
     }
 
-    public function test_served_and_refused_redemptions_record_access_rows_and_quarantine_has_no_public_url(): void
+    public function test_served_and_refused_redemptions_record_access_rows(): void
     {
         $document = $this->documentWithAcceptedBytes();
         $grant = $this->issue($document);
@@ -119,6 +120,22 @@ final class DownloadDocumentTest extends TestCase
         $this->assertSame(1, $downloadEvents->where('outcome', AuditOutcome::Denied->value)->count());
         $this->assertStringNotContainsString('/storage/', $this->app->make(IssueSignedUrl::class)->temporaryUrl($grant));
         $this->assertStringNotContainsString('quarantine', $this->app->make(IssueSignedUrl::class)->temporaryUrl($grant));
+    }
+
+    public function test_a_quarantined_object_cannot_be_served_by_the_local_public_url_contract(): void
+    {
+        $path = 'documents/'.DocumentKind::DeathCertificate->value.'/quarantine/'.Str::random(16).'.pdf';
+        Storage::disk('local')->put($path, $this->bytes());
+
+        try {
+            $publicUrl = Storage::disk('local')->url($path);
+
+            $this->get($publicUrl)
+                ->assertNotFound()
+                ->assertDontSee($this->bytes(), escape: false);
+        } finally {
+            Storage::disk('local')->delete($path);
+        }
     }
 
     private function issue(Document $document, ?ActorContext $actor = null, DocumentAccessPurpose $purpose = DocumentAccessPurpose::Download): SignedUrlGrant
