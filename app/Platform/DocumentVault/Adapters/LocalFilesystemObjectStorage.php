@@ -70,6 +70,46 @@ final class LocalFilesystemObjectStorage implements ObjectStorage
         chmod($destination, 0600);
     }
 
+    /**
+     * Open an object for the malware scanner. The caller owns the returned
+     * stream and must close it.
+     *
+     * @return resource
+     */
+    public function read(string $path)
+    {
+        $absolute = $this->absolutePath($path);
+
+        if (! is_file($absolute)) {
+            throw ObjectStorageException::sourceMissing($path);
+        }
+
+        $stream = fopen($absolute, 'rb');
+
+        if ($stream === false) {
+            throw ObjectStorageException::readFailed($path);
+        }
+
+        return $stream;
+    }
+
+    public function checksum(string $path): string
+    {
+        $absolute = $this->absolutePath($path);
+
+        if (! is_file($absolute)) {
+            throw ObjectStorageException::sourceMissing($path);
+        }
+
+        $checksum = hash_file('sha256', $absolute);
+
+        if ($checksum === false) {
+            throw ObjectStorageException::checksumFailed($path);
+        }
+
+        return $checksum;
+    }
+
     public function delete(string $path): void
     {
         $absolute = $this->absolutePath($path);

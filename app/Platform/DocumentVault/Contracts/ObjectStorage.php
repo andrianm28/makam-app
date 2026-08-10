@@ -45,6 +45,19 @@ interface ObjectStorage
     public function copy(string $sourcePath, string $destinationPath): void;
 
     /**
+     * Open a private object for a scanner or checksum consumer.
+     *
+     * @return resource A readable stream positioned at the start.
+     */
+    public function read(string $path);
+
+    /**
+     * Return the SHA-256 digest of a private object without exposing its
+     * contents to the caller.
+     */
+    public function checksum(string $path): string;
+
+    /**
      * Permanently remove the object at `$path`.
      */
     public function delete(string $path): void;

@@ -30,6 +30,16 @@ final class ObjectStorageException extends RuntimeException
         return new self("Object storage copy failed from [{$sourcePath}] to [{$destinationPath}]");
     }
 
+    public static function readFailed(string $path): self
+    {
+        return new self("Object storage read failed for path: {$path}");
+    }
+
+    public static function checksumFailed(string $path): self
+    {
+        return new self("Object storage checksum failed for path: {$path}");
+    }
+
     public static function deleteFailed(string $path): self
     {
         return new self("Object storage delete failed for path: {$path}");
