@@ -22,6 +22,7 @@ use App\Platform\FinancialLedger\ProviderStatement;
 use App\Platform\FinancialLedger\ReconciliationCorrection;
 use App\Platform\FinancialLedger\ReconciliationDecision;
 use App\Platform\FinancialLedger\ReconciliationExceptionStatus;
+use App\Platform\FinancialLedger\ReconciliationStatus;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\Scopes\Models\ScopeAssignment;
 use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
@@ -29,6 +30,7 @@ use App\Platform\IdentityAccess\Scopes\ScopeGrantLevel;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Symfony\Component\Finder\Finder;
 use Tests\TestCase;
 
@@ -104,6 +106,10 @@ final class ResolveReconciliationExceptionTest extends TestCase
         $this->assertNotNull($row->decided_at);
         $this->assertTrue(ReconciliationExceptionModel::query()->findOrFail($exception->id)->isResolved());
         $this->assertSame($exception->id, $resolved->id);
+        $this->assertSame(
+            ReconciliationStatus::MATCHED,
+            DB::table('reconciliations')->where('id', $exception->reconciliation_id)->value('status'),
+        );
 
         $event = AuditEvent::query()
             ->where('action', ResolveException::AUDIT_ACTION)
@@ -131,6 +137,38 @@ final class ResolveReconciliationExceptionTest extends TestCase
             ReconciliationNotAuthorisedException::class,
             $exception,
         );
+    }
+
+    public function test_unknown_and_unauthorised_exception_ids_have_the_same_opaque_failure(): void
+    {
+        $exception = $this->openException();
+
+        try {
+            $this->resolve($exception, ReconciliationDecision::ESCALATE);
+            $this->fail('Expected an unauthorised exception resolution to be refused.');
+        } catch (ReconciliationNotAuthorisedException $unauthorised) {
+            $knownFailure = $unauthorised;
+        }
+
+        $unknownException = new ReconciliationExceptionModel;
+        $unknownException->id = (string) Str::uuid();
+
+        try {
+            $this->resolve($unknownException, ReconciliationDecision::ESCALATE);
+            $this->fail('Expected an unknown exception resolution to be refused.');
+        } catch (ReconciliationNotAuthorisedException $unknown) {
+            $this->assertSame($knownFailure->getMessage(), $unknown->getMessage());
+        }
+
+        $malformedException = new ReconciliationExceptionModel;
+        $malformedException->id = 'not-an-exception-id';
+
+        try {
+            $this->resolve($malformedException, ReconciliationDecision::ESCALATE);
+            $this->fail('Expected a malformed exception resolution to be refused.');
+        } catch (ReconciliationNotAuthorisedException $malformed) {
+            $this->assertSame($knownFailure->getMessage(), $malformed->getMessage());
+        }
     }
 
     public function test_an_empty_role_list_is_not_permission(): void
@@ -249,6 +287,50 @@ final class ResolveReconciliationExceptionTest extends TestCase
         );
     }
 
+    public function test_parent_status_remains_open_until_the_last_exception_is_resolved(): void
+    {
+        $this->reconcile(self::PERIOD, [
+            'payment:evt-1' => self::AMOUNT,
+            'payment:evt-2' => self::AMOUNT + 1_000,
+        ]);
+        $exceptions = ReconciliationExceptionModel::query()->orderBy('subject_ref')->get();
+        $this->grantReconciliationAuthority();
+
+        $this->resolve($exceptions[0], ReconciliationDecision::ACCEPT_VARIANCE);
+
+        $this->assertSame(
+            ReconciliationStatus::EXCEPTIONS_OPEN,
+            DB::table('reconciliations')->where('id', $exceptions[0]->reconciliation_id)->value('status'),
+        );
+
+        $this->resolve($exceptions[1], ReconciliationDecision::ACCEPT_VARIANCE);
+
+        $this->assertSame(
+            ReconciliationStatus::MATCHED,
+            DB::table('reconciliations')->where('id', $exceptions[0]->reconciliation_id)->value('status'),
+        );
+    }
+
+    public function test_resolving_an_old_exception_does_not_hide_a_missing_latest_statement(): void
+    {
+        $this->postBatch('payment:evt-1', self::AMOUNT);
+        $exception = $this->openException(journalLines: ['payment:evt-1' => self::AMOUNT]);
+
+        $this->app->make(RunReconciliation::class)->run(
+            period: self::PERIOD,
+            entityRef: self::ENTITY,
+            statement: null,
+        );
+        $this->grantReconciliationAuthority();
+
+        $this->resolve($exception, ReconciliationDecision::ACCEPT_VARIANCE);
+
+        $this->assertSame(
+            ReconciliationStatus::STATEMENT_MISSING,
+            DB::table('reconciliations')->where('id', $exception->reconciliation_id)->value('status'),
+        );
+    }
+
     public function test_a_post_correction_posts_a_new_reversing_batch_and_never_edits_the_original(): void
     {
         $original = $this->postBatch('payment:evt-1', self::AMOUNT);
@@ -296,6 +378,7 @@ final class ResolveReconciliationExceptionTest extends TestCase
             correction: ReconciliationCorrection::adjustment(
                 businessKey: 'manual_verify:recon-adjustment-1',
                 entityRef: self::ENTITY,
+                subjectRef: 'payment:evt-1',
                 sourceType: 'manual_verification',
                 sourceId: 'recon-adjustment-1',
                 entries: [
@@ -316,6 +399,112 @@ final class ResolveReconciliationExceptionTest extends TestCase
         );
     }
 
+    public function test_a_reversal_correction_must_match_the_exception_subject(): void
+    {
+        $this->postBatch('payment:evt-1', self::AMOUNT);
+        $exception = $this->openException(journalLines: ['payment:evt-1' => self::AMOUNT]);
+        $this->grantReconciliationAuthority();
+
+        $this->assertRefused(
+            fn (): ReconciliationExceptionModel => $this->resolve(
+                $exception,
+                ReconciliationDecision::POST_CORRECTION,
+                correction: ReconciliationCorrection::reversalOf('payment:other'),
+            ),
+            InvalidReconciliationException::class,
+            $exception,
+            expectedBatches: 1,
+        );
+    }
+
+    public function test_an_adjustment_correction_must_match_the_exception_entity_and_subject(): void
+    {
+        $exception = $this->openException();
+        $this->grantReconciliationAuthority();
+
+        $this->assertRefused(
+            fn (): ReconciliationExceptionModel => $this->resolve(
+                $exception,
+                ReconciliationDecision::POST_CORRECTION,
+                correction: ReconciliationCorrection::adjustment(
+                    businessKey: 'manual_verify:wrong-entity',
+                    entityRef: 'badan-usaha-2',
+                    subjectRef: 'payment:other',
+                    sourceType: 'manual_verification',
+                    sourceId: 'wrong-entity',
+                    entries: [
+                        ['account' => '7000', 'direction' => 'DR', 'amountMinor' => 1_000],
+                        ['account' => '4000', 'direction' => 'CR', 'amountMinor' => 1_000],
+                    ],
+                ),
+            ),
+            InvalidReconciliationException::class,
+            $exception,
+        );
+    }
+
+    public function test_an_adjustment_correction_must_match_the_exception_subject_when_entity_matches(): void
+    {
+        $exception = $this->openException();
+        $this->grantReconciliationAuthority();
+
+        $this->assertRefused(
+            fn (): ReconciliationExceptionModel => $this->resolve(
+                $exception,
+                ReconciliationDecision::POST_CORRECTION,
+                correction: ReconciliationCorrection::adjustment(
+                    businessKey: 'manual_verify:wrong-subject',
+                    entityRef: self::ENTITY,
+                    subjectRef: 'payment:other',
+                    sourceType: 'manual_verification',
+                    sourceId: 'wrong-subject',
+                    entries: [
+                        ['account' => '7000', 'direction' => 'DR', 'amountMinor' => 1_000],
+                        ['account' => '4000', 'direction' => 'CR', 'amountMinor' => 1_000],
+                    ],
+                ),
+            ),
+            InvalidReconciliationException::class,
+            $exception,
+        );
+    }
+
+    public function test_changed_statement_after_resolution_creates_a_new_exception_version(): void
+    {
+        $this->postBatch('payment:evt-1', self::AMOUNT);
+        $exception = $this->openException(journalLines: ['payment:evt-1' => self::AMOUNT]);
+        $this->grantReconciliationAuthority();
+        $this->resolve($exception, ReconciliationDecision::ACCEPT_VARIANCE);
+
+        $this->reconcile(
+            self::PERIOD,
+            ['payment:evt-1' => self::AMOUNT + 2_000],
+            reference: 'statement-ref-new',
+        );
+
+        $versions = ReconciliationExceptionModel::query()
+            ->where('entity_ref', self::ENTITY)
+            ->where('period', self::PERIOD)
+            ->where('type', 'amount_mismatch')
+            ->where('subject_ref', 'payment:evt-1')
+            ->orderBy('version')
+            ->get();
+
+        $this->assertCount(2, $versions);
+        $this->assertSame(ReconciliationExceptionStatus::RESOLVED, $versions[0]->status);
+        $this->assertSame(ReconciliationDecision::ACCEPT_VARIANCE, $versions[0]->decision);
+        $this->assertSame(1, $versions[0]->version);
+        $this->assertSame(ReconciliationExceptionStatus::OPEN, $versions[1]->status);
+        $this->assertSame(2, $versions[1]->version);
+        $this->assertSame($versions[0]->id, $versions[1]->supersedes_id);
+        $this->assertSame('statement-ref-new', $versions[1]->statement_reference);
+        $this->assertSame(self::AMOUNT + 2_000, $versions[1]->statement_amount_minor);
+        $this->assertSame(ReconciliationStatus::EXCEPTIONS_OPEN, DB::table('reconciliations')
+            ->where('entity_ref', self::ENTITY)
+            ->where('period', self::PERIOD)
+            ->value('status'));
+    }
+
     public function test_a_failing_correction_rolls_back_the_resolution_and_the_audit_row(): void
     {
         $exception = $this->openException();
@@ -327,7 +516,7 @@ final class ResolveReconciliationExceptionTest extends TestCase
             fn (): ReconciliationExceptionModel => $this->resolve(
                 $exception,
                 ReconciliationDecision::POST_CORRECTION,
-                correction: ReconciliationCorrection::reversalOf('payment:never-posted'),
+                correction: ReconciliationCorrection::reversalOf('payment:evt-1'),
             ),
             UnknownJournalBatchException::class,
             $exception,
@@ -510,13 +699,15 @@ final class ResolveReconciliationExceptionTest extends TestCase
     /**
      * @param  array<string, int>  $lines
      */
-    private function reconcile(string $period, array $lines): void
+    private function reconcile(string $period, array $lines, string $reference = ''): void
     {
+        $reference = $reference !== '' ? $reference : 'statement-ref-'.$period;
+
         $this->app->make(RunReconciliation::class)->run(
             period: $period,
             entityRef: self::ENTITY,
             statement: new ProviderStatement(
-                reference: 'statement-ref-'.$period,
+                reference: $reference,
                 period: $period,
                 entityRef: self::ENTITY,
                 lines: $lines,

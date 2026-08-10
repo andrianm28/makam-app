@@ -81,6 +81,7 @@ final class RunReconciliationTest extends TestCase
         $this->assertSame(ReconciliationStatus::EXCEPTIONS_OPEN, $row->status);
         $this->assertSame(self::AMOUNT, (int) $row->journal_total_minor);
         $this->assertSame(self::AMOUNT + 1_000, (int) $row->statement_total_minor);
+        $this->assertSame('statement-ref-1', $exception->statement_reference);
 
         // And the ledger itself is byte-identical.
         $this->assertSame(1, JournalBatch::query()->count());
@@ -206,6 +207,51 @@ final class RunReconciliationTest extends TestCase
         $this->assertSame($firstException->id, $reread->id);
         $this->assertSame($firstException->created_at?->toIso8601String(), $reread->created_at?->toIso8601String());
         $this->assertSame(ReconciliationExceptionStatus::OPEN, $reread->status);
+    }
+
+    public function test_a_changed_open_statement_updates_the_current_exception_amounts_and_reference(): void
+    {
+        $this->postBatch('payment:evt-1', self::AMOUNT);
+
+        $this->reconcile($this->statement(['payment:evt-1' => self::AMOUNT + 1_000]));
+        $first = ReconciliationException::query()->sole();
+
+        $this->app->make(RunReconciliation::class)->run(
+            period: self::PERIOD,
+            entityRef: self::ENTITY,
+            statement: new ProviderStatement(
+                reference: 'statement-ref-2',
+                period: self::PERIOD,
+                entityRef: self::ENTITY,
+                lines: ['payment:evt-1' => self::AMOUNT + 2_000],
+            ),
+        );
+
+        $current = ReconciliationException::query()->sole();
+
+        $this->assertSame($first->id, $current->id);
+        $this->assertSame(self::AMOUNT, $current->journal_amount_minor);
+        $this->assertSame(self::AMOUNT + 2_000, $current->statement_amount_minor);
+        $this->assertSame('statement-ref-2', $current->statement_reference);
+        $this->assertSame(ReconciliationExceptionStatus::OPEN, $current->status);
+    }
+
+    public function test_first_reconciliation_write_uses_a_conflict_safe_period_key(): void
+    {
+        /** @var list<string> $statements */
+        $statements = [];
+        DB::listen(function ($query) use (&$statements): void {
+            $statements[] = strtolower($query->sql);
+        });
+
+        $this->reconcile($this->statement([]));
+
+        $this->assertTrue(
+            collect($statements)->contains(
+                fn (string $sql): bool => str_contains($sql, 'reconciliations')
+                    && str_contains($sql, 'on conflict'),
+            ),
+        );
     }
 
     public function test_the_database_refuses_a_duplicate_finding_even_without_the_application_guard(): void
@@ -449,6 +495,40 @@ final class RunReconciliationTest extends TestCase
             'decision' => null,
             'decided_by' => null,
             'decided_at' => null,
+        ]));
+    }
+
+    public function test_the_database_refuses_a_negative_reconciliation_total(): void
+    {
+        $this->skipUnlessPostgres('The non-negative reconciliation amount CHECK constraints are PostgreSQL-only.');
+
+        $this->expectException(QueryException::class);
+
+        DB::table('reconciliations')->insert([
+            'id' => (string) Str::uuid(),
+            'entity_ref' => self::ENTITY,
+            'period' => self::PERIOD,
+            'status' => ReconciliationStatus::MATCHED,
+            'statement_reference' => 'statement-ref-1',
+            'statement_total_minor' => -1,
+            'journal_total_minor' => 0,
+            'correlation_id' => null,
+            'ran_at' => CarbonImmutable::now(),
+            'created_at' => CarbonImmutable::now(),
+            'updated_at' => CarbonImmutable::now(),
+        ]);
+    }
+
+    public function test_the_database_refuses_a_negative_exception_amount(): void
+    {
+        $this->skipUnlessPostgres('The non-negative exception amount CHECK constraints are PostgreSQL-only.');
+
+        $reconciliation = $this->reconcile($this->statement([]));
+
+        $this->expectException(QueryException::class);
+
+        DB::table('reconciliation_exceptions')->insert($this->exceptionAttributes($reconciliation, [
+            'journal_amount_minor' => -1,
         ]));
     }
 

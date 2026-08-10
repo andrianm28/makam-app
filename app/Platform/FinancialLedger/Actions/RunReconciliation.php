@@ -59,22 +59,19 @@ use Illuminate\Support\Str;
  * that guarantee:
  *
  *  - `reconciliations (entity_ref, period)` — one conclusion per period;
- *  - `reconciliation_exceptions (entity_ref, period, type, subject_ref)` — one
- *    finding per difference, the natural key stated in natural terms rather
- *    than on a surrogate id.
+ *  - `reconciliation_exceptions (entity_ref, period, type, subject_ref,
+ *    version)` — one observation per finding version, with the natural key
+ *    stated in natural terms rather than on a surrogate id.
  *
- * Exceptions are written with `insertOrIgnore` against that second index, which
- * is race-safe where a read-then-insert check in PHP would not be. A second run
- * therefore leaves every existing exception exactly as it found it: a resolved
- * one is not reopened, a recorded decision is not overwritten, and the amounts a
- * human already looked at are not rewritten underneath them.
+ * Reconciliation locks the parent before locking a current finding. An open
+ * finding is updated with changed evidence; a resolved one is retained and a
+ * new version is inserted. A second run therefore never reopens a resolved
+ * row, overwrites its decision, or discards the statement amount/reference it
+ * superseded.
  *
- * One consequence worth stating plainly rather than discovering later: because
- * an existing finding is never rewritten, a difference whose AMOUNT changes
- * between runs keeps its original recorded amounts. That is the deliberate
- * trade — a decided finding is evidence, and evidence that silently updates is
- * not evidence. A genuinely new difference has a different subject or type and
- * gets its own row.
+ * A changed open finding keeps its row because it has no historical decision to
+ * preserve. A changed resolved finding gets a new version linked to the old
+ * row, so the original decision remains evidence rather than silently changing.
  *
  * ---------------------------------------------------------------------------
  * What "the period" means
@@ -164,7 +161,15 @@ final class RunReconciliation
                 $ranAt,
             );
 
-            $this->recordFindings($reconciliationId, $period, $entityRef, $findings, $correlationId, $ranAt);
+            $this->recordFindings(
+                reconciliationId: $reconciliationId,
+                period: $period,
+                entityRef: $entityRef,
+                findings: $findings,
+                statementReference: $statement?->reference,
+                correlationId: $correlationId,
+                ranAt: $ranAt,
+            );
 
             $this->settleStatus($reconciliationId, $period, $entityRef, $statement, $ranAt);
 
@@ -305,10 +310,9 @@ final class RunReconciliation
     }
 
     /**
-     * One conclusion per (entity, period). The UNIQUE index is the authority;
-     * this lookup is only how a second run produces a sensible result rather
-     * than a raw constraint violation — the same relationship
-     * `Actions\VendorPayable::assess()` has with its own UNIQUE index.
+     * One conclusion per (entity, period). The database upsert is the authority
+     * and serializes concurrent first runs on the natural key; a unique
+     * collision cannot abort a valid run after it has found exceptions.
      *
      * The status written here is provisional: `settleStatus()` derives the
      * final one after the findings are persisted, because it depends on how
@@ -323,12 +327,6 @@ final class RunReconciliation
         ?string $correlationId,
         CarbonImmutable $ranAt,
     ): string {
-        $existingId = DB::table('reconciliations')
-            ->where('entity_ref', $entityRef)
-            ->where('period', $period)
-            ->lockForUpdate()
-            ->value('id');
-
         $attributes = [
             'status' => $statement === null
                 ? ReconciliationStatus::STATEMENT_MISSING
@@ -341,27 +339,29 @@ final class RunReconciliation
             'updated_at' => $ranAt,
         ];
 
-        if ($existingId !== null) {
-            DB::table('reconciliations')->where('id', $existingId)->update($attributes);
-
-            return (string) $existingId;
-        }
-
         $id = (string) Str::uuid();
 
-        DB::table('reconciliations')->insert($attributes + [
-            'id' => $id,
-            'entity_ref' => $entityRef,
-            'period' => $period,
-            'created_at' => $ranAt,
-        ]);
+        DB::table('reconciliations')->upsert(
+            [$attributes + [
+                'id' => $id,
+                'entity_ref' => $entityRef,
+                'period' => $period,
+                'created_at' => $ranAt,
+            ]],
+            ['entity_ref', 'period'],
+            array_keys($attributes),
+        );
 
-        return $id;
+        return (string) DB::table('reconciliations')
+            ->where('entity_ref', $entityRef)
+            ->where('period', $period)
+            ->value('id');
     }
 
     /**
-     * `insertOrIgnore` against the natural-key UNIQUE index. A finding that is
-     * already on file — open OR resolved — is left exactly as it is.
+     * Preserve changed evidence without silently rewriting a decision. An open
+     * current finding may receive its latest amount/reference; a resolved
+     * current finding gets a new version linked to the historical row.
      *
      * @param  list<array{type: string, subject_ref: string, journal_amount_minor: int|null, statement_amount_minor: int|null}>  $findings
      */
@@ -370,6 +370,7 @@ final class RunReconciliation
         string $period,
         string $entityRef,
         array $findings,
+        ?string $statementReference,
         ?string $correlationId,
         CarbonImmutable $ranAt,
     ): void {
@@ -377,16 +378,46 @@ final class RunReconciliation
             return;
         }
 
-        $rows = [];
-
         foreach ($findings as $finding) {
-            $rows[] = [
+            $current = DB::table('reconciliation_exceptions')
+                ->where('entity_ref', $entityRef)
+                ->where('period', $period)
+                ->where('type', $finding['type'])
+                ->where('subject_ref', $finding['subject_ref'])
+                ->orderByDesc('version')
+                ->lockForUpdate()
+                ->first();
+
+            if ($current !== null && $this->findingMatches($current, $finding, $statementReference)) {
+                continue;
+            }
+
+            $evidence = [
+                'journal_amount_minor' => $finding['journal_amount_minor'],
+                'statement_amount_minor' => $finding['statement_amount_minor'],
+                'statement_reference' => $statementReference,
+                'correlation_id' => $correlationId,
+                'updated_at' => $ranAt,
+            ];
+
+            if ($current !== null && $current->status === ReconciliationExceptionStatus::OPEN) {
+                DB::table('reconciliation_exceptions')
+                    ->where('id', $current->id)
+                    ->update($evidence);
+
+                continue;
+            }
+
+            DB::table('reconciliation_exceptions')->insert([
                 'id' => (string) Str::uuid(),
                 'reconciliation_id' => $reconciliationId,
                 'entity_ref' => $entityRef,
                 'period' => $period,
                 'type' => $finding['type'],
                 'subject_ref' => $finding['subject_ref'],
+                'statement_reference' => $statementReference,
+                'version' => $current === null ? 1 : ((int) $current->version + 1),
+                'supersedes_id' => $current?->id,
                 'journal_amount_minor' => $finding['journal_amount_minor'],
                 'statement_amount_minor' => $finding['statement_amount_minor'],
                 'status' => ReconciliationExceptionStatus::OPEN,
@@ -396,10 +427,18 @@ final class RunReconciliation
                 'correlation_id' => $correlationId,
                 'created_at' => $ranAt,
                 'updated_at' => $ranAt,
-            ];
+            ]);
         }
+    }
 
-        DB::table('reconciliation_exceptions')->insertOrIgnore($rows);
+    /**
+     * @param  array{type: string, subject_ref: string, journal_amount_minor: int|null, statement_amount_minor: int|null}  $finding
+     */
+    private function findingMatches(object $current, array $finding, ?string $statementReference): bool
+    {
+        return (int) $current->journal_amount_minor === (int) $finding['journal_amount_minor']
+            && (int) $current->statement_amount_minor === (int) $finding['statement_amount_minor']
+            && $current->statement_reference === $statementReference;
     }
 
     /**

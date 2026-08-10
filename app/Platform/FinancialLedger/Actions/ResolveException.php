@@ -22,9 +22,11 @@ use App\Platform\FinancialLedger\Models\ReconciliationException as Reconciliatio
 use App\Platform\FinancialLedger\ReconciliationCorrection;
 use App\Platform\FinancialLedger\ReconciliationDecision;
 use App\Platform\FinancialLedger\ReconciliationExceptionStatus;
+use App\Platform\FinancialLedger\ReconciliationStatus;
 use App\Platform\IdentityAccess\ActorContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * AC10 + AC12: an authorised human decides one reconciliation exception.
@@ -40,7 +42,7 @@ use Illuminate\Support\Facades\DB;
  *
  * That is enforced structurally rather than by convention: no model method
  * flips the status (see `Models\ReconciliationException`), `RunReconciliation`
- * writes exceptions with `insertOrIgnore` and never updates one, and
+ * updates only open evidence or inserts a new version after a resolved finding, and
  * `tests/Feature/FinancialLedger/ResolveReconciliationExceptionTest.php`
  * asserts over the whole module tree that this file is the only writer of
  * `resolved`.
@@ -123,10 +125,10 @@ final class ResolveException
      *                                                     only when, `$decision` is `post_correction`.
      *
      * @throws AuditReasonRequiredException on a blank reason.
-     * @throws InvalidReconciliationException on an unknown decision, an unknown
-     *                                        exception, or a correction that does not match the decision.
-     * @throws ReconciliationNotAuthorisedException when the actor holds no
-     *                                              finance authority for this badan usaha.
+     * @throws InvalidReconciliationException on an unknown decision or a
+     *                                        correction that does not match the decision or exception.
+     * @throws ReconciliationNotAuthorisedException when the actor lacks finance
+     *                                              authority or the exception is unavailable to this actor.
      * @throws ReconciliationExceptionAlreadyResolvedException on a second
      *                                                         decision for an exception a human already decided.
      */
@@ -152,20 +154,32 @@ final class ResolveException
             throw InvalidReconciliationException::forPostCorrectionWithoutCorrection();
         }
 
+        if (! Str::isUuid($exceptionId)) {
+            throw ReconciliationNotAuthorisedException::forUnavailableException();
+        }
+
         $exception = ReconciliationExceptionModel::query()->find($exceptionId);
 
         if (! $exception instanceof ReconciliationExceptionModel) {
-            throw InvalidReconciliationException::forUnknownException($exceptionId);
+            throw ReconciliationNotAuthorisedException::forUnavailableException();
         }
 
-        $actorRef = $this->actorReference((string) $exception->entity_ref);
-        $actorRole = $this->authorizer->authorize($this->actorContext, (string) $exception->entity_ref);
+        $actorRef = $this->actorReference();
+
+        try {
+            $actorRole = $this->authorizer->authorize($this->actorContext, (string) $exception->entity_ref);
+        } catch (ReconciliationNotAuthorisedException) {
+            throw ReconciliationNotAuthorisedException::forUnavailableException();
+        }
 
         $decidedAt ??= CarbonImmutable::now();
         $correlationId ??= app(CorrelationContext::class)->current()?->value;
 
+        $reconciliationId = (string) $exception->reconciliation_id;
+
         return DB::transaction(function () use (
             $exceptionId,
+            $reconciliationId,
             $decision,
             $reason,
             $correction,
@@ -174,6 +188,18 @@ final class ResolveException
             $correlationId,
             $decidedAt,
         ): ReconciliationExceptionModel {
+            // Lock the parent first. Reconciliation runs lock it before touching
+            // findings too, so resolution and a concurrent first run have one
+            // lock order and cannot race their version/status decisions.
+            $reconciliation = DB::table('reconciliations')
+                ->where('id', $reconciliationId)
+                ->lockForUpdate()
+                ->first();
+
+            if ($reconciliation === null) {
+                throw ReconciliationNotAuthorisedException::forUnavailableException();
+            }
+
             // Re-read under a row lock rather than trusting the instance loaded
             // before the guards ran: between those two points another request
             // may have decided this exception. On PostgreSQL the lock serialises
@@ -186,7 +212,7 @@ final class ResolveException
                 ->first();
 
             if ($locked === null) {
-                throw InvalidReconciliationException::forUnknownException($exceptionId);
+                throw ReconciliationNotAuthorisedException::forUnavailableException();
             }
 
             if ($locked->status !== ReconciliationExceptionStatus::OPEN) {
@@ -195,6 +221,12 @@ final class ResolveException
                     (string) $locked->decision,
                 );
             }
+
+            $correction?->assertMatches(
+                entityRef: (string) $locked->entity_ref,
+                subjectRef: (string) $locked->subject_ref,
+            );
+            $this->assertCorrectionJournalEntity($correction, (string) $locked->entity_ref, (string) $locked->subject_ref);
 
             // Posted BEFORE the status flip on purpose: a correction that
             // collides on its business key throws, and this whole transaction —
@@ -211,6 +243,23 @@ final class ResolveException
                     'decided_by' => $actorRef,
                     'decided_at' => $decidedAt,
                     'correlation_id' => $correlationId,
+                    'updated_at' => $decidedAt,
+                ]);
+
+            $openCount = DB::table('reconciliation_exceptions')
+                ->where('entity_ref', (string) $locked->entity_ref)
+                ->where('period', (string) $locked->period)
+                ->where('status', ReconciliationExceptionStatus::OPEN)
+                ->count();
+
+            DB::table('reconciliations')
+                ->where('id', $reconciliationId)
+                ->update([
+                    'status' => $reconciliation->status === ReconciliationStatus::STATEMENT_MISSING
+                        ? ReconciliationStatus::STATEMENT_MISSING
+                        : ($openCount > 0
+                            ? ReconciliationStatus::EXCEPTIONS_OPEN
+                            : ReconciliationStatus::MATCHED),
                     'updated_at' => $decidedAt,
                 ]);
 
@@ -239,13 +288,34 @@ final class ResolveException
         });
     }
 
-    private function actorReference(string $entityRef): string
+    private function actorReference(): string
     {
         if ($this->actorContext->identityReference === null) {
-            throw ReconciliationNotAuthorisedException::forActorContext($entityRef);
+            throw ReconciliationNotAuthorisedException::forUnavailableException();
         }
 
         return (string) $this->actorContext->identityReference;
+    }
+
+    private function assertCorrectionJournalEntity(
+        ?ReconciliationCorrection $correction,
+        string $entityRef,
+        string $subjectRef,
+    ): void {
+        if ($correction === null || ! $correction->isReversal()) {
+            return;
+        }
+
+        $journalEntityRef = DB::table('journal_batches')
+            ->where('business_key', $subjectRef)
+            ->value('entity_ref');
+
+        if ($journalEntityRef !== null && (string) $journalEntityRef !== $entityRef) {
+            throw InvalidReconciliationException::forCorrectionJournalEntityMismatch(
+                expected: $entityRef,
+                actual: (string) $journalEntityRef,
+            );
+        }
     }
 
     /**

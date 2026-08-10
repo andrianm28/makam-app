@@ -68,6 +68,7 @@ final readonly class ReconciliationCorrection
         private ?string $sourceId = null,
         private array $entries = [],
         private ?string $entityRef = null,
+        private ?string $subjectRef = null,
     ) {}
 
     /**
@@ -87,6 +88,7 @@ final readonly class ReconciliationCorrection
             kind: self::KIND_REVERSAL,
             originalBusinessKey: trim($originalBusinessKey),
             reversalKind: $kind,
+            subjectRef: trim($originalBusinessKey),
         );
     }
 
@@ -96,6 +98,8 @@ final readonly class ReconciliationCorrection
      * @param  list<array{account: string, direction: string, amountMinor: int, reference?: string|null}>  $entries
      *                                                                                                               Validated by `Journal::post()` itself — account codes and integer minor
      *                                                                                                               units only, never customer PII.
+     * @param  string  $subjectRef  The reconciliation exception subject this
+     *                              correction is allowed to resolve.
      *
      * @throws InvalidReconciliationException on a blank business key or an
      *                                        empty entry list.
@@ -103,6 +107,7 @@ final readonly class ReconciliationCorrection
     public static function adjustment(
         string $businessKey,
         int|string $entityRef,
+        string $subjectRef,
         string $sourceType,
         int|string $sourceId,
         array $entries,
@@ -115,6 +120,10 @@ final readonly class ReconciliationCorrection
             throw InvalidReconciliationException::forEmptyCorrectionEntries($businessKey);
         }
 
+        if (trim($subjectRef) === '') {
+            throw InvalidReconciliationException::forBlankCorrectionSubjectReference();
+        }
+
         return new self(
             kind: self::KIND_ADJUSTMENT,
             businessKey: trim($businessKey),
@@ -122,7 +131,30 @@ final readonly class ReconciliationCorrection
             sourceId: (string) $sourceId,
             entries: $entries,
             entityRef: (string) $entityRef,
+            subjectRef: trim($subjectRef),
         );
+    }
+
+    public function isReversal(): bool
+    {
+        return $this->kind === self::KIND_REVERSAL;
+    }
+
+    public function assertMatches(string $entityRef, string $subjectRef): void
+    {
+        if (! $this->isReversal() && (string) $this->entityRef !== $entityRef) {
+            throw InvalidReconciliationException::forCorrectionEntityMismatch(
+                expected: $entityRef,
+                actual: (string) $this->entityRef,
+            );
+        }
+
+        if ((string) $this->subjectRef !== $subjectRef) {
+            throw InvalidReconciliationException::forCorrectionSubjectMismatch(
+                expected: $subjectRef,
+                actual: (string) $this->subjectRef,
+            );
+        }
     }
 
     /**

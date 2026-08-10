@@ -88,13 +88,6 @@ final class InvalidReconciliationException extends InvalidArgumentException
         );
     }
 
-    public static function forUnknownException(string $exceptionId): self
-    {
-        return new self(
-            "No reconciliation exception [{$exceptionId}] exists to resolve."
-        );
-    }
-
     public static function forCorrectionWithoutPostCorrection(string $decision): self
     {
         return new self(
@@ -127,6 +120,38 @@ final class InvalidReconciliationException extends InvalidArgumentException
         return new self(
             "Corrective batch [{$businessKey}] has no entries. A batch with no entry rows ".
             'fires no balance trigger at all, so an empty one would post silently.'
+        );
+    }
+
+    public static function forBlankCorrectionSubjectReference(): self
+    {
+        return new self(
+            'A corrective journal posting requires the reconciliation exception subject reference; '
+            .'without it, the correction cannot be bound to the finding it resolves.'
+        );
+    }
+
+    public static function forCorrectionEntityMismatch(string $expected, string $actual): self
+    {
+        return new self(
+            "Corrective posting entity [{$actual}] does not match the authorized reconciliation "
+            ."exception entity [{$expected}]."
+        );
+    }
+
+    public static function forCorrectionSubjectMismatch(string $expected, string $actual): self
+    {
+        return new self(
+            "Corrective posting subject [{$actual}] does not match the reconciliation exception "
+            ."subject [{$expected}]."
+        );
+    }
+
+    public static function forCorrectionJournalEntityMismatch(string $expected, string $actual): self
+    {
+        return new self(
+            "The journal batch for reconciliation subject entity [{$actual}] does not belong to "
+            ."authorized entity [{$expected}]."
         );
     }
 }

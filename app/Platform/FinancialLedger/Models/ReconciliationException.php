@@ -53,6 +53,17 @@ final class ReconciliationException extends Model
         return $this->belongsTo(Reconciliation::class, 'reconciliation_id');
     }
 
+    /**
+     * The prior observation for this subject, if a resolved finding was
+     * superseded by changed statement evidence.
+     *
+     * @return BelongsTo<self, $this>
+     */
+    public function supersedes(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'supersedes_id');
+    }
+
     public function isOpen(): bool
     {
         return $this->status === ReconciliationExceptionStatus::OPEN;
@@ -81,6 +92,7 @@ final class ReconciliationException extends Model
         return [
             'journal_amount_minor' => 'integer',
             'statement_amount_minor' => 'integer',
+            'version' => 'integer',
             'decided_at' => 'immutable_datetime',
         ];
     }
