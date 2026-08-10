@@ -63,7 +63,7 @@ final class NotificationServiceProvider extends ServiceProvider
 
         // Fix round 1, IMPORTANT 1: runtime enforcement of AC9 — see
         // NotificationDeliveryWriteGuard's own doc block for why a
-        // DB::listen()-based guard replaced the original (vacuous) regex
+        // connection-hook-based guard replaced the original (vacuous) regex
         // test.
         NotificationDeliveryWriteGuard::register();
     }
