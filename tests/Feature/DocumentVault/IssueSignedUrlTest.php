@@ -427,6 +427,55 @@ final class IssueSignedUrlTest extends TestCase
         $grant->delete();
     }
 
+    public function test_issued_grants_reject_query_builder_upsert(): void
+    {
+        $grant = $this->action()->issue($this->relatedActor(), $this->relatedDocument(), DocumentAccessPurpose::Download);
+
+        $this->expectException(SignedUrlGrantImmutableException::class);
+
+        SignedUrlGrant::query()->upsert([
+            [
+                'id' => $grant->getKey(),
+                'document_id' => $grant->document_id,
+                'actor_ref' => $grant->actor_ref,
+                'purpose' => $grant->purpose->value,
+                'token' => 'replacement-token',
+                'expires_at' => $grant->expires_at,
+                'consumed_at' => null,
+                'created_at' => $grant->created_at,
+            ],
+        ], ['id'], ['token']);
+    }
+
+    public function test_issued_grants_reject_query_builder_force_delete(): void
+    {
+        $grant = $this->action()->issue($this->relatedActor(), $this->relatedDocument(), DocumentAccessPurpose::Download);
+
+        $this->expectException(SignedUrlGrantImmutableException::class);
+
+        SignedUrlGrant::query()->whereKey($grant->getKey())->forceDelete();
+    }
+
+    public function test_issued_grants_reject_query_builder_increment(): void
+    {
+        $grant = $this->action()->issue($this->relatedActor(), $this->relatedDocument(), DocumentAccessPurpose::Download);
+
+        $this->expectException(SignedUrlGrantImmutableException::class);
+
+        SignedUrlGrant::query()->whereKey($grant->getKey())->increment('id');
+    }
+
+    public function test_issued_grants_reject_base_query_builder_mutation(): void
+    {
+        $grant = $this->action()->issue($this->relatedActor(), $this->relatedDocument(), DocumentAccessPurpose::Download);
+
+        $this->expectException(SignedUrlGrantImmutableException::class);
+
+        SignedUrlGrant::query()->whereKey($grant->getKey())->toBase()->update([
+            'token' => 'replacement-token',
+        ]);
+    }
+
     /**
      * @return iterable<string, array{string, mixed}>
      */

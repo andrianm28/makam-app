@@ -10,6 +10,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Eloquent model for `signed_url_grants`
@@ -45,8 +46,6 @@ final class SignedUrlGrant extends Model
      */
     protected $guarded = ['*'];
 
-    private bool $allowIssuanceSave = false;
-
     public static function issueGrant(
         Document $document,
         int|string $actorRef,
@@ -66,13 +65,12 @@ final class SignedUrlGrant extends Model
             'created_at' => $issuedAt,
         ]);
 
-        $grant->allowIssuanceSave = true;
-
-        try {
-            $grant->save();
-        } finally {
-            $grant->allowIssuanceSave = false;
-        }
+        $grant->setAttribute(
+            $grant->getKeyName(),
+            DB::table($grant->getTable())->insertGetId($grant->getAttributes()),
+        );
+        $grant->exists = true;
+        $grant->syncOriginal();
 
         return $grant;
     }
@@ -87,13 +85,9 @@ final class SignedUrlGrant extends Model
         }
 
         $consumedAt = CarbonImmutable::now();
-        $updated = self::query()
-            ->whereKey($this->getKey())
-            ->whereNull('consumed_at')
-            ->toBase()
-            ->update(['consumed_at' => $consumedAt]);
+        $updated = self::query()->consume((string) $this->getKey(), $consumedAt);
 
-        if ($updated !== 1) {
+        if (! $updated) {
             return false;
         }
 
@@ -104,11 +98,7 @@ final class SignedUrlGrant extends Model
 
     public function save(array $options = []): bool
     {
-        if (! $this->allowIssuanceSave) {
-            throw SignedUrlGrantImmutableException::forOperation('save');
-        }
-
-        return parent::save($options);
+        throw SignedUrlGrantImmutableException::forOperation('save');
     }
 
     /**
