@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -25,18 +26,33 @@ use Illuminate\Support\Facades\Schema;
  * still allows them right now (a revoked scope assignment must invalidate an
  * outstanding grant, so the binding never replaces the re-check).
  *
- * Additive and forward-only, matching the already-landed vault migrations:
- * the create migration is never edited in place, and `down()` is deliberately
- * non-destructive because grant history is durable access evidence.
+ * Additive and forward-only: `2026_08_09_100030` is never edited in place,
+ * and `down()` is deliberately non-destructive because grant history is
+ * durable access evidence.
  *
- * The column is nullable only because an additive `NOT NULL` column cannot be
- * added to a table that may already hold rows without inventing a backfill
- * value for grants whose issuing actor was never captured. Nullability is NOT
- * a permission: `Actions\IssueSignedUrl` can only reach the write after
- * `DocumentAccessPolicy` has established an authenticated actor, so every
- * grant it mints has a non-null `actor_ref`, and any row with a NULL
- * `actor_ref` predates this binding and MUST be treated as non-redeemable
- * (fail closed) by the Task 7 redemption path.
+ * ---------------------------------------------------------------------------
+ * Why the column is nullable AND check-constrained, not `NOT NULL`
+ * ---------------------------------------------------------------------------
+ * An unbound grant must be impossible, not merely discouraged. An earlier
+ * revision of this migration left the column plain nullable and asserted in
+ * three doc blocks that the Task 7 redemption path "MUST" treat a NULL
+ * `actor_ref` as non-redeemable — a prose obligation a future implementer can
+ * simply not honour, which is exactly the review finding this constraint
+ * closes. `CHECK (actor_ref IS NOT NULL)` makes the database refuse the row
+ * instead, so "every grant is bound to an actor" is an invariant rather than
+ * an instruction.
+ *
+ * The column itself stays nullable at the Blueprint level and the constraint
+ * is added separately under a pgsql guard, because SQLite — the local PHPUnit
+ * driver — cannot add a constraint with `ALTER TABLE`. This is the same
+ * convention every other closed-list and range constraint in this module
+ * already uses (`documents`, `document_scans`, `document_access_events`,
+ * `signed_url_grants`), so **the invariant is enforced in CI and production
+ * on PostgreSQL, and is NOT enforced on the local SQLite driver.** The
+ * application-side guarantee is unchanged and independent:
+ * `Actions\IssueSignedUrl` can only reach the write after
+ * `DocumentAccessPolicy` has established an authenticated actor, and asserts
+ * a non-null reference before writing.
  *
  * `actor_ref` is a plain string for the same forward-compatibility reason
  * `scope_assignments.actor_identifier` and `document_access_events.actor_ref`
@@ -52,6 +68,13 @@ return new class extends Migration
 
             $table->index(['actor_ref', 'expires_at'], 'signed_url_grants_actor_expires_index');
         });
+
+        if (DB::connection()->getDriverName() === 'pgsql') {
+            DB::statement(
+                'ALTER TABLE signed_url_grants ADD CONSTRAINT signed_url_grants_actor_ref_not_null_check '.
+                'CHECK (actor_ref IS NOT NULL)'
+            );
+        }
     }
 
     public function down(): void

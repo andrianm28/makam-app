@@ -53,6 +53,56 @@ final class DocumentAccessPolicyTest extends TestCase
         $this->assertFalse($this->policy()->canView($this->actor(42, ['finance']), $document));
     }
 
+    /**
+     * User ruling, 10 Aug 2026. `rbac-matrix.md:12` gives the Vendor column
+     * "No default" on restricted documents — the identical value it gives
+     * Finance/Issuer/Auditor — so vendor is EXCLUDED from the allow-list on
+     * the same basis finance is. This fails if `vendor` is ever re-added.
+     */
+    public function test_a_vendor_is_denied_even_with_a_record_relationship(): void
+    {
+        $document = $this->documentOwnedBy(ScopeEntityType::ORDER, 'order-1');
+        $this->grant(42, ScopeEntityType::ORDER, 'order-1');
+
+        $this->assertNotContains('vendor', DocumentAccessPolicy::ROLES_WITH_RESTRICTED_DOCUMENT_ACCESS);
+        $this->assertFalse($this->policy()->canView($this->actor(42, ['vendor']), $document));
+
+        // The same actor and the same grant, with an included role, IS
+        // allowed — so this proves the role is what denied them, not a
+        // missing relationship.
+        $this->assertTrue($this->policy()->canView($this->actor(42, ['case_manager']), $document));
+    }
+
+    /**
+     * Same ruling, other direction: Case Manager's "Assigned/purpose" is an
+     * affirmative grant, so it is INCLUDED. The "assigned" half is the
+     * scope assignment.
+     */
+    public function test_a_case_manager_with_a_record_relationship_is_allowed(): void
+    {
+        $document = $this->documentOwnedBy(ScopeEntityType::ORDER, 'order-1');
+        $this->grant(42, ScopeEntityType::ORDER, 'order-1');
+
+        $this->assertContains('case_manager', DocumentAccessPolicy::ROLES_WITH_RESTRICTED_DOCUMENT_ACCESS);
+        $this->assertTrue($this->policy()->canView($this->actor(42, ['case_manager']), $document));
+    }
+
+    public function test_a_case_manager_without_a_record_relationship_is_still_denied(): void
+    {
+        $document = $this->documentOwnedBy(ScopeEntityType::ORDER, 'order-1');
+        $this->grant(42, ScopeEntityType::ORDER, 'order-2');
+
+        $this->assertFalse($this->policy()->canView($this->actor(42, ['case_manager']), $document));
+    }
+
+    public function test_the_permitted_role_list_matches_the_ruled_membership_rule(): void
+    {
+        $this->assertSame(
+            ['admin', 'operator', 'case_manager', 'customer'],
+            DocumentAccessPolicy::ROLES_WITH_RESTRICTED_DOCUMENT_ACCESS,
+        );
+    }
+
     public function test_a_permitted_role_with_an_active_scope_assignment_is_allowed(): void
     {
         $document = $this->documentOwnedBy(ScopeEntityType::ORDER, 'order-1');

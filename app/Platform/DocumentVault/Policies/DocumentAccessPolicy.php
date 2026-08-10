@@ -62,28 +62,55 @@ final readonly class DocumentAccessPolicy
     public const string OWNER_TYPE_ACTOR = 'actor';
 
     /**
-     * The roles `rbac-matrix.md`'s "Restricted documents" row gives any path
-     * to a restricted document at all, in the precedence order
-     * `auditRoleFor()` reports.
+     * The roles permitted any path to a restricted document at all, in the
+     * precedence order `auditRoleFor()` reports.
      *
-     * Every one of them is qualified in that row rather than unconditional
-     * ("Own/purpose", "Explicit need only", "No default", "Authorized"), which
-     * is exactly why membership here is only the FIRST half of the check — the
-     * record relationship supplies the "own"/"assigned"/"explicit need" part.
+     * ONE RULE, applied consistently (user ruling, 10 Aug 2026):
+     * **membership requires an affirmative or qualified grant in
+     * `docs/security/rbac-matrix.md`'s "Restricted documents" row
+     * (`rbac-matrix.md:12`); a cell reading "No default" means EXCLUDED from
+     * this allow-list.** Both consequences of that single rule:
      *
-     * Deliberately absent, and both are one-line additions once a real role
-     * vocabulary exists: `case_manager` (the matrix gives it
-     * "Assigned/purpose", so it arguably belongs, but no role vocabulary in
-     * this repository defines the string and this task's brief names only
-     * these four) and `finance`/`issuer`/`auditor` (the matrix gives that
-     * column "No default"). Under-permitting is the safe direction to guess.
+     *  - `vendor` is EXCLUDED. That row gives the Vendor column "No default"
+     *    — the identical value it gives Finance/Issuer/Auditor. Admitting one
+     *    while excluding the other on the same cell value was the
+     *    inconsistency this list previously carried.
+     *  - `finance`/`issuer`/`auditor` stay EXCLUDED, on exactly that same
+     *    "No default" basis rather than a separate judgement.
+     *  - `case_manager` is INCLUDED. That row gives Case Manager
+     *    "Assigned/purpose", an affirmative grant, and the "assigned" half is
+     *    supplied by the record-relationship check below.
+     *  - `admin` ("Authorized"), `operator` ("Explicit need only") and
+     *    `customer` ("Own/purpose") are INCLUDED as affirmative or qualified
+     *    grants.
+     *
+     * Membership here is only ever the FIRST half of the check. Every
+     * included cell is qualified rather than unconditional
+     * ("Own/purpose", "Assigned/purpose", "Explicit need only"), and the
+     * record relationship supplies the "own"/"assigned"/"explicit need" part
+     * — which is why no role, `admin` included, reaches a document without
+     * one.
+     *
+     * KNOWN ACCEPTED SIMPLIFICATION (ruled, do not build machinery for it):
+     * the row's finer per-role distinctions are deliberately FLATTENED into
+     * this one role+relationship gate. Operator's "Explicit need only" and
+     * Admin's "Authorized" are different strengths of grant in the matrix but
+     * are treated identically here. Distinguishing them needs a real
+     * authorization model (per-purpose grants, need-to-know justification
+     * capture) that neither K1/K2 nor this repository provides yet. Revisit
+     * when it does; do not approximate it in the meantime.
+     *
+     * Least-privilege was chosen deliberately where the matrix is ambiguous:
+     * it is v0.2 and states outright "Exact roles depend on K1/K2", so this
+     * list is meant to be WIDENED once real roles land, never quietly relied
+     * on as complete.
      *
      * @var list<string>
      */
     public const array ROLES_WITH_RESTRICTED_DOCUMENT_ACCESS = [
         'admin',
         'operator',
-        'vendor',
+        'case_manager',
         'customer',
     ];
 
@@ -106,6 +133,13 @@ final readonly class DocumentAccessPolicy
         private ScopeAssignmentResolver $scopeAssignments,
     ) {}
 
+    /**
+     * Purpose is deliberately NOT enforced here — the issuing Action owns it;
+     * see `Actions\IssueSignedUrl`, which scopes each grant to a single
+     * `DocumentAccessPurpose`. This policy answers only "may this actor reach
+     * this record at all"; the split across two layers is intentional, not an
+     * omission.
+     */
     public function canView(ActorContext $actor, Document $document): bool
     {
         if (! $actor->isAuthenticated()) {

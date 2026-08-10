@@ -8,6 +8,7 @@ use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\AuditSubject;
+use App\Platform\DocumentVault\Contracts\ObjectStorage;
 use App\Platform\DocumentVault\DocumentAccessPurpose;
 use App\Platform\DocumentVault\DocumentState;
 use App\Platform\DocumentVault\Exceptions\DocumentAccessDeniedException;
@@ -26,9 +27,9 @@ use InvalidArgumentException;
  * document — the module's single write API for `signed_url_grants`, and the
  * only place AC6/AC7/AC8/AC9 are decided for the read side.
  *
- * The URL itself is never stored or returned here. The caller renders it with
- * `Contracts\ObjectStorage::temporaryUrl($documentId, $token)`, so swapping a
- * real S3 presigner in later (Task 8) needs no change to this Action.
+ * The URL itself is never stored. Callers resolve a returned grant through
+ * `temporaryUrl()`, which delegates to `Contracts\ObjectStorage`, so swapping
+ * a real S3 presigner in later (Task 8) needs no change to this Action.
  *
  * ---------------------------------------------------------------------------
  * Two guards, one refusal (AC7 + AC9)
@@ -74,9 +75,14 @@ use InvalidArgumentException;
  *  - re-run `DocumentAccessPolicy::canView()` for the REQUESTING actor, so a
  *    scope assignment revoked after issuance invalidates the outstanding
  *    grant;
- *  - require `signed_url_grants.actor_ref` to equal the requesting actor, and
- *    treat a NULL `actor_ref` as non-redeemable (see
- *    `2026_08_10_100020_add_signed_url_grant_actor_binding.php`);
+ *  - require `signed_url_grants.actor_ref` to equal the requesting actor. A
+ *    NULL `actor_ref` no longer needs handling as a special case: PostgreSQL
+ *    refuses to store one
+ *    (`signed_url_grants_actor_ref_not_null_check`, added by
+ *    `2026_08_10_100020_add_signed_url_grant_actor_binding.php`), so an
+ *    unbound grant cannot exist. That CHECK is pgsql-only, as every
+ *    constraint in this module is, so it does not run on the local SQLite
+ *    test driver;
  *  - re-check `state === ACCEPTED` — a document may have been rejected,
  *    expired or logically deleted since issuance;
  *  - require the grant's `purpose` to equal the purpose being exercised
@@ -119,7 +125,21 @@ final readonly class IssueSignedUrl
 
     public function __construct(
         private DocumentAccessPolicy $policy,
+        private ObjectStorage $objectStorage,
     ) {}
+
+    /**
+     * Resolve an issued grant through the provider-neutral storage adapter.
+     * URL rendering does not validate or consume the grant; Task 7 owns those
+     * redemption rules at the private download route.
+     */
+    public function temporaryUrl(SignedUrlGrant $grant): string
+    {
+        return $this->objectStorage->temporaryUrl(
+            (string) $grant->document_id,
+            (string) $grant->token,
+        );
+    }
 
     /**
      * Resolve a document by id and issue against it. This is the entry point a

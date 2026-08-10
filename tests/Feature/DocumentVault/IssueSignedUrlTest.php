@@ -27,6 +27,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
+use RuntimeException;
 use Tests\TestCase;
 
 /**
@@ -367,6 +368,25 @@ final class IssueSignedUrlTest extends TestCase
         $this->assertStringNotContainsString((string) $grant->token, json_encode($audit->metadata, JSON_THROW_ON_ERROR));
     }
 
+    public function test_the_action_delegates_grant_url_resolution_to_object_storage(): void
+    {
+        $document = $this->relatedDocument();
+        $grant = $this->action()->issue($this->relatedActor(), $document, DocumentAccessPurpose::Download);
+
+        $storage = new IssueSignedUrlStorageSpy;
+
+        $url = (new IssueSignedUrl(
+            new DocumentAccessPolicy(new ScopeAssignmentResolver(ActorContext::guest())),
+            $storage,
+        ))->temporaryUrl($grant);
+
+        $this->assertSame('https://storage.example/signed', $url);
+        $this->assertSame((string) $document->getKey(), $storage->documentId);
+        $this->assertSame((string) $grant->token, $storage->token);
+        $this->assertSame(1, SignedUrlGrant::query()->count());
+        $this->assertSame(1, DocumentAccessEvent::query()->count());
+    }
+
     private function captureDenial(callable $callback): DocumentAccessDeniedException
     {
         try {
@@ -380,7 +400,10 @@ final class IssueSignedUrlTest extends TestCase
 
     private function action(): IssueSignedUrl
     {
-        return new IssueSignedUrl(new DocumentAccessPolicy(new ScopeAssignmentResolver(ActorContext::guest())));
+        return new IssueSignedUrl(
+            new DocumentAccessPolicy(new ScopeAssignmentResolver(ActorContext::guest())),
+            app(ObjectStorage::class),
+        );
     }
 
     private function relatedActor(): ActorContext
@@ -416,5 +439,38 @@ final class IssueSignedUrlTest extends TestCase
         ]);
 
         return Document::query()->findOrFail($documentId);
+    }
+}
+
+final class IssueSignedUrlStorageSpy implements ObjectStorage
+{
+    public ?string $documentId = null;
+
+    public ?string $token = null;
+
+    public function put(string $path, $stream): void {}
+
+    public function copy(string $sourcePath, string $destinationPath): void {}
+
+    public function read(string $path)
+    {
+        throw new RuntimeException('The URL test spy does not read objects.');
+    }
+
+    public function checksum(string $path): string
+    {
+        throw new RuntimeException('The URL test spy does not checksum objects.');
+    }
+
+    public function delete(string $path): void {}
+
+    public function deleteIfExists(string $path): void {}
+
+    public function temporaryUrl(string $documentId, string $token): string
+    {
+        $this->documentId = $documentId;
+        $this->token = $token;
+
+        return 'https://storage.example/signed';
     }
 }

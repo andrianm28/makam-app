@@ -186,6 +186,7 @@ final class DocumentSchemaTest extends TestCase
 
         DB::table('signed_url_grants')->insert([
             'document_id' => $documentId,
+            'actor_ref' => 'actor-123',
             'purpose' => 'DOWNLOAD',
             'token' => 'opaque-token-123',
             'expires_at' => $createdAt->addSeconds(301),
@@ -248,6 +249,7 @@ final class DocumentSchemaTest extends TestCase
         $createdAt = CarbonImmutable::parse('2026-08-09 12:00:00');
         DB::table('signed_url_grants')->insert([
             'document_id' => $documentId,
+            'actor_ref' => 'actor-123',
             'purpose' => 'DOWNLOAD',
             'token' => 'opaque-token-restrict',
             'expires_at' => $createdAt->addMinutes(5),
