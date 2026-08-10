@@ -15,6 +15,7 @@ use App\Platform\DocumentVault\DocumentState;
 use App\Platform\DocumentVault\Jobs\CleanupPromotedDocumentStorageJob;
 use App\Platform\DocumentVault\Models\Document;
 use App\Platform\DocumentVault\Models\DocumentScan;
+use App\Platform\DocumentVault\Models\DocumentStorageCleanup;
 use App\Platform\DocumentVault\ScanVerdict;
 use App\Platform\Outbox\Outbox;
 use App\Platform\Outbox\OutboxClassification;
@@ -125,8 +126,13 @@ final readonly class PromoteDocument
                     idempotencyKey: "promote:{$lockedDocument->getKey()}",
                 );
 
-                DB::afterCommit(function () use ($documentId): void {
-                    CleanupPromotedDocumentStorageJob::dispatch($documentId)
+                $cleanup = DocumentStorageCleanup::recordPending($lockedDocument);
+
+                DB::afterCommit(function () use ($documentId, $cleanup): void {
+                    CleanupPromotedDocumentStorageJob::dispatch(
+                        documentId: $documentId,
+                        cleanupId: (int) $cleanup->getKey(),
+                    )
                         ->onQueue(OutboxQueueName::Media->value);
                 });
 

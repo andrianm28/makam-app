@@ -16,9 +16,11 @@ use App\Platform\DocumentVault\Contracts\ObjectStorage;
 use App\Platform\DocumentVault\DocumentKind;
 use App\Platform\DocumentVault\DocumentState;
 use App\Platform\DocumentVault\Jobs\CleanupPromotedDocumentStorageJob;
+use App\Platform\DocumentVault\Jobs\ReconcileDocumentStorageCleanupJob;
 use App\Platform\DocumentVault\Jobs\ScanDocumentJob;
 use App\Platform\DocumentVault\Models\Document;
 use App\Platform\DocumentVault\Models\DocumentScan;
+use App\Platform\DocumentVault\Models\DocumentStorageCleanup;
 use App\Platform\DocumentVault\ScanVerdict;
 use App\Platform\DocumentVault\StoragePathPolicy;
 use App\Platform\Outbox\Models\OutboxEvent;
@@ -157,6 +159,7 @@ final class DocumentLifecycleTest extends TestCase
 
     public function test_promotion_copies_verifies_then_deletes_quarantine_and_records_the_transition(): void
     {
+        Queue::fake();
         $document = $this->documentWithBytes($this->minimalPdf());
         $storage = new LocalFilesystemObjectStorage($this->root);
         $this->cleanScan($document, $storage);
@@ -172,10 +175,29 @@ final class DocumentLifecycleTest extends TestCase
         $this->assertSame('document.accepted.v1', $outbox->event_name);
         $this->assertSame(['kind', 'state'], array_keys($outbox->payload));
         $this->assertSame("promote:{$document->id}", $outbox->idempotency_key);
+        $cleanup = DocumentStorageCleanup::query()->sole();
+        $this->assertSame($document->id, $cleanup->document_id);
+        $this->assertSame('QUARANTINE_DELETE', $cleanup->operation);
+        $this->assertNull($cleanup->completed_at);
 
         (new CleanupPromotedDocumentStorageJob($document->id))->handle($storage, $this->paths);
 
         $this->assertFileDoesNotExist($this->root.'/KTP/quarantine/'.$document->storage_key);
+        $this->assertNotNull($cleanup->fresh()->completed_at);
+    }
+
+    public function test_reconciliation_discovers_a_committed_pending_cleanup_without_the_original_worker(): void
+    {
+        Queue::fake();
+        $document = $this->documentWithBytes($this->minimalPdf());
+        $storage = new LocalFilesystemObjectStorage($this->root);
+        $this->cleanScan($document, $storage);
+        (new PromoteDocument($storage, $this->paths))->promote($document);
+
+        (new ReconcileDocumentStorageCleanupJob)->handle($storage, $this->paths);
+
+        $this->assertFileDoesNotExist($this->root.'/KTP/quarantine/'.$document->storage_key);
+        $this->assertNotNull(DocumentStorageCleanup::query()->sole()->completed_at);
     }
 
     public function test_a_checksum_mismatch_blocks_promotion_and_preserves_quarantine(): void
@@ -275,6 +297,7 @@ final class DocumentLifecycleTest extends TestCase
         } finally {
             $this->assertSame(DocumentState::Scanning, $document->fresh()->state);
             $this->assertFileExists($this->root.'/KTP/quarantine/'.$document->storage_key);
+            $this->assertSame(0, DocumentStorageCleanup::query()->count());
             Queue::assertPushed(CleanupPromotedDocumentStorageJob::class, function (CleanupPromotedDocumentStorageJob $job): bool {
                 return $job->reconcileAcceptedCopy;
             });
@@ -314,6 +337,10 @@ final class DocumentLifecycleTest extends TestCase
             (new CleanupPromotedDocumentStorageJob($document->id))->handle($failingStorage, $this->paths);
         } finally {
             $this->assertFileExists($this->root.'/KTP/quarantine/'.$document->storage_key);
+            $marker = DocumentStorageCleanup::query()->sole();
+            $this->assertNull($marker->completed_at);
+            $this->assertSame(1, $marker->attempt_count);
+            $this->assertNotNull($marker->last_error);
         }
     }
 
