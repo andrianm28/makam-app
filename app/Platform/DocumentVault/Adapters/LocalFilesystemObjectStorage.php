@@ -6,7 +6,6 @@ namespace App\Platform\DocumentVault\Adapters;
 
 use App\Platform\DocumentVault\Contracts\ObjectStorage;
 use App\Platform\DocumentVault\Exceptions\ObjectStorageException;
-use Illuminate\Support\Facades\URL;
 
 /**
  * Filesystem `ObjectStorage` adapter for the combined dev/staging host
@@ -14,9 +13,8 @@ use Illuminate\Support\Facades\URL;
  * every object under `storage/app/private/documents/{kind}/{prefix}/{key}`
  * — never under `public/`, never behind `storage:link`
  * (`task-3-brief.md` ambiguity ruling 6). Nothing in this class registers a
- * route or otherwise makes these files reachable over HTTP; the only way a
- * document leaves this adapter is through `temporaryUrl()`'s literal path,
- * which Task 7's private, access-audited route resolves.
+ * route or otherwise makes these files reachable over HTTP; Task 7's private,
+ * access-audited application route is the only download seam.
  *
  * The default root is `storage_path('app/private/documents')`; the
  * constructor also accepts an explicit root so tests can point this adapter
@@ -134,17 +132,6 @@ final class LocalFilesystemObjectStorage implements ObjectStorage
         if (! unlink($absolute)) {
             throw ObjectStorageException::deleteFailed($path);
         }
-    }
-
-    /**
-     * Builds the literal, non-route-dependent URL to Task 7's private
-     * download endpoint (`task-3-brief.md` ambiguity ruling 3). `$documentId`
-     * and `$token` are minted by the caller; this adapter never generates
-     * either.
-     */
-    public function temporaryUrl(string $documentId, string $token): string
-    {
-        return URL::to("/internal/documents/{$documentId}/download/{$token}");
     }
 
     private function root(): string

@@ -187,18 +187,6 @@ final class LocalFilesystemObjectStorageTest extends TestCase
         $storage->delete('KTP/quarantine/../../../../etc/passwd');
     }
 
-    public function test_temporary_url_resolves_to_the_literal_private_download_path(): void
-    {
-        $storage = new LocalFilesystemObjectStorage($this->root);
-
-        $url = $storage->temporaryUrl('11111111-1111-1111-1111-111111111111', 'opaque-grant-token');
-
-        $this->assertStringEndsWith(
-            '/internal/documents/11111111-1111-1111-1111-111111111111/download/opaque-grant-token',
-            $url,
-        );
-    }
-
     public function test_default_root_is_the_private_storage_documents_directory(): void
     {
         $storage = new LocalFilesystemObjectStorage;

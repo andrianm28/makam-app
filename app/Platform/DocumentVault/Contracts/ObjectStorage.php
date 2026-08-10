@@ -67,20 +67,4 @@ interface ObjectStorage
      * cleanup jobs can safely retry after partial completion.
      */
     public function deleteIfExists(string $path): void;
-
-    /**
-     * Build the platform-generated, purpose-scoped, time-limited download
-     * URL for an already-issued signed URL grant.
-     *
-     * `$documentId` and `$token` are minted by the caller (the Task 6
-     * `IssueSignedUrl` Action, from its `signed_url_grants` row) — this
-     * method only renders them into a URL; it never mints or validates a
-     * grant itself. The Local adapter resolves this to the literal path
-     * `/internal/documents/{id}/download/{token}` (Task 7's private route)
-     * without depending on a named route, since that route does not exist
-     * yet when this adapter is built (Task 3). A real S3 adapter would
-     * instead return a genuine provider-presigned URL — the swap is
-     * config-only (ADR-0033 provider-neutrality precedent).
-     */
-    public function temporaryUrl(string $documentId, string $token): string;
 }

@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Platform\DocumentVault\Models;
 
 use App\Platform\DocumentVault\DocumentAccessPurpose;
+use App\Platform\DocumentVault\Exceptions\SignedUrlGrantImmutableException;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -27,10 +29,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * pgsql-only, so on the local SQLite test driver the Action's clamp is the
  * only thing enforcing it.
  *
- * This class deliberately exposes no `consume()`/`isExpired()` helper. Task 7
- * owns the redemption path and its rules (single-use, expiry, actor binding,
- * and a fresh `DocumentAccessPolicy` re-check); adding speculative accessors
- * here before that path exists would guess at them.
+ * The model and its custom query builder reject post-issuance mutation of the
+ * document, actor binding, purpose, token, expiry, and deletion. The only
+ * permitted transition is the conditional, single-use `consume()` write to
+ * `consumed_at`; Task 7 owns when to call it after redemption checks pass.
  */
 final class SignedUrlGrant extends Model
 {
@@ -42,6 +44,8 @@ final class SignedUrlGrant extends Model
      * @var list<string>
      */
     protected $guarded = ['*'];
+
+    private bool $allowIssuanceSave = false;
 
     public static function issueGrant(
         Document $document,
@@ -61,9 +65,74 @@ final class SignedUrlGrant extends Model
             'consumed_at' => null,
             'created_at' => $issuedAt,
         ]);
-        $grant->save();
+
+        $grant->allowIssuanceSave = true;
+
+        try {
+            $grant->save();
+        } finally {
+            $grant->allowIssuanceSave = false;
+        }
 
         return $grant;
+    }
+
+    /**
+     * Allow exactly one concurrent caller to mark the grant consumed.
+     */
+    public function consume(): bool
+    {
+        if (! $this->exists || $this->consumed_at !== null) {
+            return false;
+        }
+
+        $consumedAt = CarbonImmutable::now();
+        $updated = self::query()
+            ->whereKey($this->getKey())
+            ->whereNull('consumed_at')
+            ->toBase()
+            ->update(['consumed_at' => $consumedAt]);
+
+        if ($updated !== 1) {
+            return false;
+        }
+
+        $this->setAttribute('consumed_at', $consumedAt);
+
+        return true;
+    }
+
+    public function save(array $options = []): bool
+    {
+        if (! $this->allowIssuanceSave) {
+            throw SignedUrlGrantImmutableException::forOperation('save');
+        }
+
+        return parent::save($options);
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  array<string, mixed>  $options
+     */
+    public function update(array $attributes = [], array $options = []): bool
+    {
+        throw SignedUrlGrantImmutableException::forOperation('update');
+    }
+
+    protected function performUpdate(Builder $query): bool
+    {
+        throw SignedUrlGrantImmutableException::forOperation('performUpdate');
+    }
+
+    public function delete(): ?bool
+    {
+        throw SignedUrlGrantImmutableException::forOperation('delete');
+    }
+
+    public function newEloquentBuilder($query): SignedUrlGrantQueryBuilder
+    {
+        return new SignedUrlGrantQueryBuilder($query);
     }
 
     /**

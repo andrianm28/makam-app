@@ -197,7 +197,11 @@ final readonly class DocumentAccessPolicy
         $ownerId = (string) $document->owner_id;
         $actorIdentifier = $actor->identityReference;
 
-        if ($actorIdentifier === null || $ownerId === '') {
+        if (
+            $actorIdentifier === null
+            || (is_string($actorIdentifier) && trim($actorIdentifier) === '')
+            || $ownerId === ''
+        ) {
             return false;
         }
 

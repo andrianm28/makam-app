@@ -8,7 +8,6 @@ use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\AuditSubject;
-use App\Platform\DocumentVault\Contracts\ObjectStorage;
 use App\Platform\DocumentVault\DocumentAccessPurpose;
 use App\Platform\DocumentVault\DocumentState;
 use App\Platform\DocumentVault\Exceptions\DocumentAccessDeniedException;
@@ -19,6 +18,7 @@ use App\Platform\DocumentVault\Policies\DocumentAccessPolicy;
 use App\Platform\IdentityAccess\ActorContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 
@@ -28,8 +28,9 @@ use InvalidArgumentException;
  * only place AC6/AC7/AC8/AC9 are decided for the read side.
  *
  * The URL itself is never stored. Callers resolve a returned grant through
- * `temporaryUrl()`, which delegates to `Contracts\ObjectStorage`, so swapping
- * a real S3 presigner in later (Task 8) needs no change to this Action.
+ * `temporaryUrl()`, which always targets the audited private application
+ * route. Storage adapters cannot replace this with a provider-presigned URL;
+ * Task 7 owns the route's redemption-time authorization and streaming seam.
  *
  * ---------------------------------------------------------------------------
  * Two guards, one refusal (AC7 + AC9)
@@ -125,20 +126,17 @@ final readonly class IssueSignedUrl
 
     public function __construct(
         private DocumentAccessPolicy $policy,
-        private ObjectStorage $objectStorage,
     ) {}
 
     /**
-     * Resolve an issued grant through the provider-neutral storage adapter.
+     * Resolve an issued grant through the audited private application route.
      * URL rendering does not validate or consume the grant; Task 7 owns those
-     * redemption rules at the private download route.
+     * redemption rules at this route, including policy, state, expiry, and
+     * single-use checks plus access recording.
      */
     public function temporaryUrl(SignedUrlGrant $grant): string
     {
-        return $this->objectStorage->temporaryUrl(
-            (string) $grant->document_id,
-            (string) $grant->token,
-        );
+        return URL::to("/internal/documents/{$grant->document_id}/download/{$grant->token}");
     }
 
     /**

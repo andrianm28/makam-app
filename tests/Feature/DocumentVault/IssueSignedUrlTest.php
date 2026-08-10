@@ -14,6 +14,7 @@ use App\Platform\DocumentVault\Contracts\ObjectStorage;
 use App\Platform\DocumentVault\DocumentAccessPurpose;
 use App\Platform\DocumentVault\DocumentState;
 use App\Platform\DocumentVault\Exceptions\DocumentAccessDeniedException;
+use App\Platform\DocumentVault\Exceptions\SignedUrlGrantImmutableException;
 use App\Platform\DocumentVault\Models\Document;
 use App\Platform\DocumentVault\Models\DocumentAccessEvent;
 use App\Platform\DocumentVault\Models\SignedUrlGrant;
@@ -27,7 +28,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
-use RuntimeException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -358,33 +359,84 @@ final class IssueSignedUrlTest extends TestCase
 
         $grant = $this->action()->issue($this->relatedActor(), $document, DocumentAccessPurpose::Download);
 
-        $url = app(ObjectStorage::class)->temporaryUrl((string) $document->getKey(), (string) $grant->token);
+        $url = $this->action()->temporaryUrl($grant);
 
-        $this->assertStringContainsString((string) $document->getKey(), $url);
-        $this->assertStringContainsString((string) $grant->token, $url);
+        $this->assertStringEndsWith(
+            "/internal/documents/{$document->getKey()}/download/{$grant->token}",
+            $url,
+        );
 
         // The token is never copied into audit metadata or the access event.
         $audit = AuditEvent::query()->where('action', 'DOCUMENT_ACCESS_GRANT')->sole();
         $this->assertStringNotContainsString((string) $grant->token, json_encode($audit->metadata, JSON_THROW_ON_ERROR));
     }
 
-    public function test_the_action_delegates_grant_url_resolution_to_object_storage(): void
+    public function test_issued_urls_use_the_private_application_route_instead_of_storage_adapter(): void
     {
         $document = $this->relatedDocument();
         $grant = $this->action()->issue($this->relatedActor(), $document, DocumentAccessPurpose::Download);
 
-        $storage = new IssueSignedUrlStorageSpy;
+        $url = $this->action()->temporaryUrl($grant);
 
-        $url = (new IssueSignedUrl(
-            new DocumentAccessPolicy(new ScopeAssignmentResolver(ActorContext::guest())),
-            $storage,
-        ))->temporaryUrl($grant);
-
-        $this->assertSame('https://storage.example/signed', $url);
-        $this->assertSame((string) $document->getKey(), $storage->documentId);
-        $this->assertSame((string) $grant->token, $storage->token);
+        $this->assertStringEndsWith(
+            "/internal/documents/{$document->getKey()}/download/{$grant->token}",
+            $url,
+        );
+        $this->assertFalse(method_exists(ObjectStorage::class, 'temporaryUrl'));
         $this->assertSame(1, SignedUrlGrant::query()->count());
         $this->assertSame(1, DocumentAccessEvent::query()->count());
+    }
+
+    #[DataProvider('immutableGrantAttributeProvider')]
+    public function test_issued_grants_reject_model_mutation_of_immutable_attributes(string $attribute, mixed $value): void
+    {
+        $grant = $this->action()->issue($this->relatedActor(), $this->relatedDocument(), DocumentAccessPurpose::Download);
+
+        $grant->setAttribute($attribute, $value);
+
+        $this->expectException(SignedUrlGrantImmutableException::class);
+
+        $grant->save();
+    }
+
+    #[DataProvider('immutableGrantAttributeProvider')]
+    public function test_issued_grants_reject_query_builder_mutation_of_immutable_attributes(string $attribute, mixed $value): void
+    {
+        $grant = $this->action()->issue($this->relatedActor(), $this->relatedDocument(), DocumentAccessPurpose::Download);
+
+        $this->expectException(SignedUrlGrantImmutableException::class);
+
+        SignedUrlGrant::query()->whereKey($grant->getKey())->update([$attribute => $value]);
+    }
+
+    public function test_an_issued_grant_can_only_transition_consumed_at_once(): void
+    {
+        $grant = $this->action()->issue($this->relatedActor(), $this->relatedDocument(), DocumentAccessPurpose::Download);
+
+        $this->assertTrue($grant->consume());
+        $this->assertNotNull($grant->fresh()->consumed_at);
+        $this->assertFalse($grant->consume());
+    }
+
+    public function test_an_issued_grant_cannot_be_deleted(): void
+    {
+        $grant = $this->action()->issue($this->relatedActor(), $this->relatedDocument(), DocumentAccessPurpose::Download);
+
+        $this->expectException(SignedUrlGrantImmutableException::class);
+
+        $grant->delete();
+    }
+
+    /**
+     * @return iterable<string, array{string, mixed}>
+     */
+    public static function immutableGrantAttributeProvider(): iterable
+    {
+        yield 'token' => ['token', 'replacement-token'];
+        yield 'purpose' => ['purpose', DocumentAccessPurpose::View];
+        yield 'expiry' => ['expires_at', CarbonImmutable::parse('2026-08-10 10:00:00')];
+        yield 'document' => ['document_id', (string) Str::uuid()];
+        yield 'actor binding' => ['actor_ref', 'replacement-actor'];
     }
 
     private function captureDenial(callable $callback): DocumentAccessDeniedException
@@ -400,10 +452,7 @@ final class IssueSignedUrlTest extends TestCase
 
     private function action(): IssueSignedUrl
     {
-        return new IssueSignedUrl(
-            new DocumentAccessPolicy(new ScopeAssignmentResolver(ActorContext::guest())),
-            app(ObjectStorage::class),
-        );
+        return new IssueSignedUrl(new DocumentAccessPolicy(new ScopeAssignmentResolver(ActorContext::guest())));
     }
 
     private function relatedActor(): ActorContext
@@ -439,38 +488,5 @@ final class IssueSignedUrlTest extends TestCase
         ]);
 
         return Document::query()->findOrFail($documentId);
-    }
-}
-
-final class IssueSignedUrlStorageSpy implements ObjectStorage
-{
-    public ?string $documentId = null;
-
-    public ?string $token = null;
-
-    public function put(string $path, $stream): void {}
-
-    public function copy(string $sourcePath, string $destinationPath): void {}
-
-    public function read(string $path)
-    {
-        throw new RuntimeException('The URL test spy does not read objects.');
-    }
-
-    public function checksum(string $path): string
-    {
-        throw new RuntimeException('The URL test spy does not checksum objects.');
-    }
-
-    public function delete(string $path): void {}
-
-    public function deleteIfExists(string $path): void {}
-
-    public function temporaryUrl(string $documentId, string $token): string
-    {
-        $this->documentId = $documentId;
-        $this->token = $token;
-
-        return 'https://storage.example/signed';
     }
 }

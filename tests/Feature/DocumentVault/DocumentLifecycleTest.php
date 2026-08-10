@@ -507,11 +507,6 @@ final class TamperingObjectStorage implements ObjectStorage
     {
         return $this->delegate->checksum($path);
     }
-
-    public function temporaryUrl(string $documentId, string $token): string
-    {
-        return $this->delegate->temporaryUrl($documentId, $token);
-    }
 }
 
 final class PartialCopyFailureStorage implements ObjectStorage
@@ -552,11 +547,6 @@ final class PartialCopyFailureStorage implements ObjectStorage
     {
         return $this->delegate->checksum($path);
     }
-
-    public function temporaryUrl(string $documentId, string $token): string
-    {
-        return $this->delegate->temporaryUrl($documentId, $token);
-    }
 }
 
 final class DeleteFailureStorage implements ObjectStorage
@@ -591,10 +581,5 @@ final class DeleteFailureStorage implements ObjectStorage
     public function checksum(string $path): string
     {
         return $this->delegate->checksum($path);
-    }
-
-    public function temporaryUrl(string $documentId, string $token): string
-    {
-        return $this->delegate->temporaryUrl($documentId, $token);
     }
 }

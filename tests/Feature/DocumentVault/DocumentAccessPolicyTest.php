@@ -119,6 +119,23 @@ final class DocumentAccessPolicyTest extends TestCase
         $this->assertFalse($this->policy()->canView($this->actor(42, ['operator']), $document));
     }
 
+    public function test_empty_or_whitespace_identity_references_cannot_match_scope_assignments(): void
+    {
+        $document = $this->documentOwnedBy(ScopeEntityType::ORDER, 'order-1');
+
+        $this->grant('', ScopeEntityType::ORDER, 'order-1');
+        $this->grant('   ', ScopeEntityType::ORDER, 'order-1');
+
+        foreach ([null, '', '   '] as $identityReference) {
+            $actor = new ActorContext(identityReference: $identityReference, roles: ['operator']);
+
+            $this->assertFalse(
+                $this->policy()->canView($actor, $document),
+                'Blank identity references must fail closed before scope lookup.',
+            );
+        }
+    }
+
     public function test_a_scope_assignment_of_a_different_entity_type_is_denied(): void
     {
         $document = $this->documentOwnedBy(ScopeEntityType::ORDER, 'shared-id');
