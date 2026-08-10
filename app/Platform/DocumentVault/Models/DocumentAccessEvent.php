@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Platform\DocumentVault\Models;
 
+use App\Platform\Audit\AuditOutcome;
+use App\Platform\DocumentVault\DocumentAccessPurpose;
 use App\Platform\DocumentVault\Exceptions\DocumentAccessEventIsImmutableException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -18,6 +20,18 @@ use Illuminate\Database\Eloquent\Model;
  * application-role REVOKE for UPDATE/DELETE is intentionally owned by Task 8;
  * query-builder and raw SQL writes remain outside this model-level defense
  * until that deployment change is applied.
+ *
+ * Rows are written exclusively through `recordAccess()`, called by
+ * `Actions\RecordDocumentAccess` (every real access) and
+ * `Actions\IssueSignedUrl` (every issuance, allowed or denied) — the module's
+ * "one write API per table" rule, same shape as
+ * `DocumentScan::recordAttempt()`.
+ *
+ * `actor_role` is NOT NULL by schema and has no corresponding single field on
+ * `ActorContext`, so it is always derived by
+ * `Policies\DocumentAccessPolicy::auditRoleFor()`; see that method for the
+ * deterministic mapping (including the `'guest'` value used on
+ * unauthenticated denial paths).
  */
 final class DocumentAccessEvent extends Model
 {
@@ -30,12 +44,36 @@ final class DocumentAccessEvent extends Model
      */
     protected $guarded = ['*'];
 
+    public static function recordAccess(
+        Document $document,
+        int|string|null $actorRef,
+        string $actorRole,
+        DocumentAccessPurpose $purpose,
+        AuditOutcome $outcome,
+        ?string $ipAddress,
+    ): static {
+        $event = new self;
+        $event->forceFill([
+            'document_id' => $document->getKey(),
+            'actor_ref' => $actorRef === null ? null : (string) $actorRef,
+            'actor_role' => $actorRole,
+            'purpose' => $purpose,
+            'outcome' => $outcome->value,
+            'ip_address' => $ipAddress,
+            'occurred_at' => now(),
+        ]);
+        $event->save();
+
+        return $event;
+    }
+
     /**
      * @return array<string, string>
      */
     protected function casts(): array
     {
         return [
+            'purpose' => DocumentAccessPurpose::class,
             'occurred_at' => 'immutable_datetime',
         ];
     }
