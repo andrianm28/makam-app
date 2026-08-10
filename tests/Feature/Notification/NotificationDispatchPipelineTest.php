@@ -18,18 +18,23 @@ use App\Platform\FeatureGate\GateState;
 use App\Platform\FeatureGate\ModeResolver;
 use App\Platform\IdentityAccess\Scopes\Models\ScopeAssignment;
 use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
+use App\Platform\Notification\Actions\DispatchNotification;
 use App\Platform\Notification\Contracts\Channel;
+use App\Platform\Notification\Contracts\NotificationSubjectSource;
 use App\Platform\Notification\DeliveryState;
 use App\Platform\Notification\Jobs\ConsumeOutboxNotificationJob;
+use App\Platform\Notification\Jobs\SendNotificationChannelJob;
 use App\Platform\Notification\Models\InAppNotification;
 use App\Platform\Notification\Models\NotificationDelivery;
 use App\Platform\Notification\Models\NotificationEvent;
 use App\Platform\Notification\Models\NotificationRecipient;
+use App\Platform\Notification\RecipientResolutionSubject;
 use App\Platform\Outbox\Jobs\PublishOutboxEventJob;
 use App\Platform\Outbox\Models\OutboxEvent;
 use App\Platform\Outbox\Outbox;
 use App\Platform\Outbox\OutboxClassification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
 use Tests\Fixtures\Notification\FakeChannel;
 use Tests\TestCase;
@@ -86,6 +91,30 @@ final class NotificationDispatchPipelineTest extends TestCase
         $this->assertSame(1, InAppNotification::query()->where('event_id', $outboxEventId)->where('recipient_ref', $operatorRef)->count());
     }
 
+    public function test_redelivery_requeues_stranded_queued_deliveries_after_a_consumer_crash(): void
+    {
+        $this->bindChannel(new FakeChannel);
+        $this->bindWhatsAppMode(open: true);
+
+        [$draft] = $this->bookingSubmittedFixture();
+        $outboxEventId = $this->recordBookingSubmitted($draft->id);
+        Queue::fake();
+
+        $dispatcher = $this->app->make(DispatchNotification::class);
+        $dispatcher->consumeOutboxEvent($outboxEventId);
+
+        $this->assertSame(3, NotificationDelivery::query()
+            ->where('event_id', $outboxEventId)
+            ->where('state', DeliveryState::Queued)
+            ->count());
+
+        // The first invocation has committed its rows but its channel jobs
+        // are imagined lost. Redelivery must not stop at the event anchor.
+        $dispatcher->consumeOutboxEvent($outboxEventId);
+
+        Queue::assertPushed(SendNotificationChannelJob::class, 6);
+    }
+
     public function test_ac7_the_in_app_record_survives_a_throwing_channel(): void
     {
         $this->bindChannel(new FakeChannel(throws: true));
@@ -112,6 +141,72 @@ final class NotificationDispatchPipelineTest extends TestCase
         $this->assertSame(DeliveryState::Failed, $delivery->state);
         $this->assertSame(1, $delivery->attempt_count);
         $this->assertNotNull($delivery->failure_message);
+    }
+
+    public function test_ac7_vendor_recipient_gets_an_in_app_record_without_an_external_channel(): void
+    {
+        $this->bindChannel(new FakeChannel);
+        $this->bindWhatsAppMode(open: true);
+
+        $vendorRef = 'vendor-1';
+        ScopeAssignment::query()->create([
+            'actor_identifier' => $vendorRef,
+            'entity_type' => ScopeEntityType::VENDOR,
+            'entity_id' => 'vendor-record-1',
+        ]);
+        $this->bindSubject(ownerRef: 'customer-1', scopeType: ScopeEntityType::VENDOR, scopeId: 'vendor-record-1');
+
+        $outboxEventId = Outbox::record(
+            eventName: 'payment.received.v1',
+            eventVersion: 1,
+            aggregateType: 'order',
+            aggregateId: 'order-1',
+            data: [],
+            classification: OutboxClassification::Internal,
+        )->getKey();
+
+        ConsumeOutboxNotificationJob::dispatchSync($outboxEventId);
+
+        $this->assertTrue(InAppNotification::query()
+            ->where('event_id', $outboxEventId)
+            ->where('recipient_ref', $vendorRef)
+            ->where('actor_role', 'vendor')
+            ->exists());
+        $this->assertSame(0, NotificationDelivery::query()
+            ->where('event_id', $outboxEventId)
+            ->where('recipient_ref', $vendorRef)
+            ->count());
+    }
+
+    public function test_ac7_platform_admin_recipient_gets_an_in_app_record(): void
+    {
+        $this->bindChannel(new FakeChannel);
+        $this->bindWhatsAppMode(open: true);
+
+        $adminRef = 'admin-1';
+        ScopeAssignment::query()->create([
+            'actor_identifier' => $adminRef,
+            'entity_type' => ScopeEntityType::BUSINESS_ENTITY,
+            'entity_id' => 'business-entity-1',
+        ]);
+        $this->bindSubject(ownerRef: 'customer-1', scopeType: ScopeEntityType::BUSINESS_ENTITY, scopeId: 'business-entity-1');
+
+        $outboxEventId = Outbox::record(
+            eventName: 'booking.draft_submitted.v2',
+            eventVersion: 2,
+            aggregateType: 'booking_draft',
+            aggregateId: 'draft-1',
+            data: [],
+            classification: OutboxClassification::Internal,
+        )->getKey();
+
+        ConsumeOutboxNotificationJob::dispatchSync($outboxEventId);
+
+        $this->assertTrue(InAppNotification::query()
+            ->where('event_id', $outboxEventId)
+            ->where('recipient_ref', $adminRef)
+            ->where('actor_role', 'platform_admin')
+            ->exists());
     }
 
     public function test_ac5_a_throwing_channel_never_changes_business_state_or_propagates(): void
@@ -327,5 +422,22 @@ final class NotificationDispatchPipelineTest extends TestCase
         };
 
         $this->app->instance(ModeResolver::class, new ModeResolver(new FeatureGateResolver($source)));
+    }
+
+    private function bindSubject(int|string $ownerRef, string $scopeType, int|string $scopeId): void
+    {
+        $this->app->instance(NotificationSubjectSource::class, new class($ownerRef, $scopeType, $scopeId) implements NotificationSubjectSource
+        {
+            public function __construct(
+                private readonly int|string $ownerRef,
+                private readonly string $scopeType,
+                private readonly int|string $scopeId,
+            ) {}
+
+            public function subjectFor(string $aggregateType, int|string $aggregateId): ?RecipientResolutionSubject
+            {
+                return new RecipientResolutionSubject($this->ownerRef, $this->scopeType, $this->scopeId);
+            }
+        });
     }
 }

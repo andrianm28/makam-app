@@ -21,10 +21,12 @@ use Illuminate\Support\Facades\Schema;
  * in-app record is unconditional for admin/operator/vendor recipients and
  * lives in `in_app_notifications` instead, written in the SAME transaction
  * as this table's rows so a failed/unavailable external channel can never
- * erase it. `MANUAL` is recognised by the channel-token scanner
- * (task-3-brief.md D4) but never appears in any current matrix cell (see
- * `task-3-report.md`) and has no `Channel` implementation to dispatch to —
- * flagged there for Task 6, not modelled here.
+ * erase it. `MANUAL` is a legend token `task-3-brief.md` D4 names, but the
+ * channel-token scanner (`Actions\DispatchNotification::
+ * DISPATCHABLE_CHANNEL_TOKENS`) deliberately does NOT scan for it — it
+ * never appears in any current matrix cell (see `task-3-report.md`) and
+ * has no `Channel` implementation to dispatch to. Flagged there for Task 6,
+ * not modelled here.
  *
  * `window_key` (task-3-brief.md D8): a real column with a real unique
  * constraint below, degenerate today — every one of the 6 outbox-mapped

@@ -14,6 +14,7 @@ use App\Platform\Notification\DeliveryState;
 use App\Platform\Notification\Jobs\SendNotificationChannelJob;
 use App\Platform\Notification\Models\NotificationDelivery;
 use App\Platform\Notification\Models\NotificationTemplateVersion;
+use App\Platform\Notification\NotificationDeliveryWriteGuard;
 use App\Platform\Notification\Recipient;
 use App\Platform\Notification\RecipientResolver;
 use App\Platform\Notification\RecipientRole;
@@ -124,15 +125,13 @@ final class DispatchNotification
             return;
         }
 
-        $queuedDeliveryIds = [];
-
-        DB::transaction(function () use ($outboxRow, $template, &$queuedDeliveryIds): void {
+        DB::transaction(function () use ($outboxRow, $template): void {
             // AC8: the idempotency anchor for the WHOLE per-event pipeline.
             // insertOrIgnore (not a SELECT-then-INSERT pre-check, D8) races
             // safely against a concurrent redelivery of the same outbox
             // event: only one transaction's INSERT wins the
             // notification_events.event_id primary key, the other affects
-            // zero rows and returns below having written nothing.
+            // zero rows and writes nothing further.
             $inserted = DB::table('notification_events')->insertOrIgnore([[
                 'event_id' => $outboxRow->getKey(),
                 'event_name' => $outboxRow->event_name,
@@ -143,120 +142,148 @@ final class DispatchNotification
                 'consumed_at' => CarbonImmutable::now(),
             ]]);
 
-            if ($inserted === 0) {
-                // Already fully processed by a previous delivery of this
-                // same outbox event — every write this method makes is
-                // inside this one transaction, so an existing row can only
-                // mean a prior run already committed the whole pipeline.
-                // Full no-op.
-                return;
+            if ($inserted === 1) {
+                $this->recordRecipientsAndDeliveries($outboxRow, $template);
             }
 
-            $subject = $this->subjectSource->subjectFor($outboxRow->aggregate_type, $outboxRow->aggregate_id);
-
-            if ($subject === null) {
-                // task-3-brief.md D3: an unmapped aggregate type or a
-                // missing row. Never an error — the notification_events row
-                // above stands, recorded with zero recipients.
-                Log::warning('Notification dispatch: no subject source for this aggregate, resolving no recipients.', [
-                    'aggregate_type' => $outboxRow->aggregate_type,
-                    'aggregate_id' => $outboxRow->aggregate_id,
-                ]);
-
-                return;
-            }
-
-            $recipients = $this->recipientResolver->resolve($template->event_name, $subject);
-
-            if ($recipients->isEmpty()) {
-                return;
-            }
-
-            $matrixRow = $this->matrixSource->forEvent($template->event_name);
-            $matrixRecipients = $matrixRow['recipients'] ?? [];
-
-            $version = $template->active_version_id !== null
-                ? NotificationTemplateVersion::query()->find($template->active_version_id)
-                : null;
-
-            // D6: every seeded version has an empty variable_allowlist and
-            // no {{ placeholder }} in its body — render($version, []) is
-            // the only call that can ever succeed against this data.
-            // Rendering here, inside the transaction, fails fast (rolls
-            // back this event's recording) if a template can never be
-            // rendered, rather than queuing deliveries for content that
-            // cannot be produced.
-            $rendered = $version !== null ? $this->renderer->render($version, []) : null;
-
-            $whatsAppMode = $this->modeResolver->whatsAppMode();
-
-            $deliveryRows = [];
-
-            foreach ($recipients->all() as $recipient) {
-                $recipientId = DB::table('notification_recipients')->insertGetId([
-                    'event_id' => $outboxRow->getKey(),
-                    'recipient_ref' => (string) $recipient->actorRef,
-                    'actor_role' => $recipient->actorRole,
-                    'scope_entity_type' => $recipient->scopeEntityType,
-                    'scope_entity_id' => $recipient->scopeEntityId !== null ? (string) $recipient->scopeEntityId : null,
-                ]);
-
-                if (in_array($recipient->actorRole, self::UNCONDITIONAL_IN_APP_ROLES, true)) {
-                    ($this->recordInAppNotification)(
-                        $outboxRow->getKey(),
-                        $recipient,
-                        $rendered['subject'] ?? null,
-                        $rendered['body'] ?? '',
-                    );
-                }
-
-                if ($version === null) {
-                    // No renderable content — nothing external can be
-                    // queued for this recipient, but their in-app row (if
-                    // any, above) is already recorded.
-                    continue;
-                }
-
-                foreach ($this->dispatchableChannelsFor($matrixRecipients, $recipient) as $channel) {
-                    $unavailable = $channel === 'WA' && $whatsAppMode === WhatsAppMode::EmailInAppFallback;
-
-                    $deliveryRows[] = [
-                        'event_id' => $outboxRow->getKey(),
-                        'notification_recipient_id' => $recipientId,
-                        'recipient_ref' => (string) $recipient->actorRef,
-                        'channel' => $channel,
-                        // D8: degenerate today — every one of the 6
-                        // outbox-mapped events is transactional, so the
-                        // outbox event id is itself the window.
-                        'window_key' => $outboxRow->getKey(),
-                        'state' => ($unavailable ? DeliveryState::Unavailable : DeliveryState::Queued)->value,
-                        'template_version_id' => $version->id,
-                        'attempt_count' => 0,
-                        'created_at' => CarbonImmutable::now(),
-                        'updated_at' => CarbonImmutable::now(),
-                    ];
-                }
-            }
-
-            if ($deliveryRows !== []) {
-                // D8: insert-ignoring-conflicts, not a pre-check — belt and
-                // braces alongside the notification_events anchor above.
-                DB::table('notification_deliveries')->insertOrIgnore($deliveryRows);
-            }
-
-            $queuedDeliveryIds = DB::table('notification_deliveries')
-                ->where('event_id', $outboxRow->getKey())
-                ->where('state', DeliveryState::Queued->value)
-                ->pluck('id')
-                ->all();
+            // $inserted === 0: already fully processed by a previous
+            // delivery of this same outbox event's ROW-CREATING pipeline —
+            // recipients/deliveries were built exactly once, above, on
+            // whichever run first won the event_id insert. This run writes
+            // nothing further inside this branch. It does NOT return early
+            // out of the whole transaction, though — see the durability
+            // note on the always-run re-collection below.
         });
 
-        // Dispatched AFTER the transaction commits — a delivery row queued
-        // for a per-channel job must already be durable before that job can
-        // run (QUEUE_CONNECTION=sync in tests would otherwise run the
-        // channel job before this transaction's COMMIT is even visible).
+        // Durability fix (fix round 1, IMPORTANT 3): deliberately re-run
+        // OUTSIDE the `if ($inserted === 1)` branch above, and unconditionally
+        // — not only when this call was the one that just inserted rows.
+        // Redelivery is at-least-once (queue-and-outbox.md): if a prior
+        // process committed the transaction above (rows exist, QUEUED) and
+        // then crashed before reaching the per-channel dispatch loop below,
+        // the notification_events insert on redelivery affects zero rows and
+        // the OLD code returned early, leaving those QUEUED rows stranded
+        // forever — no consumer would ever re-select them. Re-collecting
+        // this event's QUEUED rows every time, regardless of whether this
+        // call created them or a previous crashed call did, makes
+        // redelivery self-healing: `sendViaChannel()` already no-ops on any
+        // row not in `Queued` state, so redispatching an already-resolved
+        // row is a harmless, cheap no-op, and a genuinely stranded row
+        // finally gets a channel job.
+        $queuedDeliveryIds = DB::table('notification_deliveries')
+            ->where('event_id', $outboxRow->getKey())
+            ->where('state', DeliveryState::Queued->value)
+            ->pluck('id')
+            ->all();
+
         foreach ($queuedDeliveryIds as $deliveryId) {
             SendNotificationChannelJob::dispatch((int) $deliveryId)->onQueue(OutboxQueueName::Notifications->value);
+        }
+    }
+
+    /**
+     * The fresh-event path: resolves recipients, records them, renders the
+     * pinned template version, and writes `notification_deliveries`/
+     * `in_app_notifications` rows. Only ever called once per outbox event
+     * (guarded by the `notification_events` insert in the caller) — this
+     * method's own early returns are its own function boundary, not the
+     * caller's, precisely so the caller can always reach its
+     * always-re-collect-QUEUED-rows step regardless of which branch here
+     * was taken.
+     */
+    private function recordRecipientsAndDeliveries(OutboxEvent $outboxRow, object $template): void
+    {
+        $subject = $this->subjectSource->subjectFor($outboxRow->aggregate_type, $outboxRow->aggregate_id);
+
+        if ($subject === null) {
+            // task-3-brief.md D3: an unmapped aggregate type or a missing
+            // row. Never an error — the notification_events row already
+            // written by the caller stands, recorded with zero recipients.
+            Log::warning('Notification dispatch: no subject source for this aggregate, resolving no recipients.', [
+                'aggregate_type' => $outboxRow->aggregate_type,
+                'aggregate_id' => $outboxRow->aggregate_id,
+            ]);
+
+            return;
+        }
+
+        $recipients = $this->recipientResolver->resolve($template->event_name, $subject);
+
+        if ($recipients->isEmpty()) {
+            return;
+        }
+
+        $matrixRow = $this->matrixSource->forEvent($template->event_name);
+        $matrixRecipients = $matrixRow['recipients'] ?? [];
+
+        $version = $template->active_version_id !== null
+            ? NotificationTemplateVersion::query()->find($template->active_version_id)
+            : null;
+
+        // D6: every seeded version has an empty variable_allowlist and no
+        // {{ placeholder }} in its body — render($version, []) is the only
+        // call that can ever succeed against this data. Rendering here,
+        // inside the caller's transaction, fails fast (rolls back this
+        // event's recording) if a template can never be rendered, rather
+        // than queuing deliveries for content that cannot be produced.
+        $rendered = $version !== null ? $this->renderer->render($version, []) : null;
+
+        $whatsAppMode = $this->modeResolver->whatsAppMode();
+
+        $deliveryRows = [];
+
+        foreach ($recipients->all() as $recipient) {
+            $recipientId = DB::table('notification_recipients')->insertGetId([
+                'event_id' => $outboxRow->getKey(),
+                'recipient_ref' => (string) $recipient->actorRef,
+                'actor_role' => $recipient->actorRole,
+                'scope_entity_type' => $recipient->scopeEntityType,
+                'scope_entity_id' => $recipient->scopeEntityId !== null ? (string) $recipient->scopeEntityId : null,
+            ]);
+
+            if (in_array($recipient->actorRole, self::UNCONDITIONAL_IN_APP_ROLES, true)) {
+                ($this->recordInAppNotification)(
+                    $outboxRow->getKey(),
+                    $recipient,
+                    $rendered['subject'] ?? null,
+                    $rendered['body'] ?? '',
+                );
+            }
+
+            if ($version === null) {
+                // No renderable content — nothing external can be queued
+                // for this recipient, but their in-app row (if any, above)
+                // is already recorded.
+                continue;
+            }
+
+            foreach ($this->dispatchableChannelsFor($matrixRecipients, $recipient) as $channel) {
+                $unavailable = $channel === 'WA' && $whatsAppMode === WhatsAppMode::EmailInAppFallback;
+
+                $deliveryRows[] = [
+                    'event_id' => $outboxRow->getKey(),
+                    'notification_recipient_id' => $recipientId,
+                    'recipient_ref' => (string) $recipient->actorRef,
+                    'channel' => $channel,
+                    // D8: degenerate today — every one of the 6
+                    // outbox-mapped events is transactional, so the outbox
+                    // event id is itself the window.
+                    'window_key' => $outboxRow->getKey(),
+                    'state' => ($unavailable ? DeliveryState::Unavailable : DeliveryState::Queued)->value,
+                    'template_version_id' => $version->id,
+                    'attempt_count' => 0,
+                    'created_at' => CarbonImmutable::now(),
+                    'updated_at' => CarbonImmutable::now(),
+                ];
+            }
+        }
+
+        if ($deliveryRows !== []) {
+            // D8: insert-ignoring-conflicts, not a pre-check — belt and
+            // braces alongside the notification_events anchor.
+            NotificationDeliveryWriteGuard::withWritesUnlocked(
+                fn (): int => DB::table('notification_deliveries')->insertOrIgnore($deliveryRows)
+            );
         }
     }
 
@@ -307,12 +334,14 @@ final class DispatchNotification
 
     private function recordChannelOutcome(NotificationDelivery $delivery, DeliveryResult $result): void
     {
-        $delivery->forceFill([
-            'state' => $result->state,
-            'provider_ref' => $result->providerRef,
-            'failure_message' => $result->message,
-            'attempt_count' => $delivery->attempt_count + 1,
-        ])->save();
+        NotificationDeliveryWriteGuard::withWritesUnlocked(function () use ($delivery, $result): void {
+            $delivery->forceFill([
+                'state' => $result->state,
+                'provider_ref' => $result->providerRef,
+                'failure_message' => $result->message,
+                'attempt_count' => $delivery->attempt_count + 1,
+            ])->save();
+        });
     }
 
     /**

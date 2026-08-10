@@ -7,6 +7,7 @@ namespace App\Platform\Notification\Providers;
 use App\Platform\Notification\Contracts\NotificationSubjectSource;
 use App\Platform\Notification\Contracts\RecipientRoleSource;
 use App\Platform\Notification\Listeners\DispatchNotificationConsumerOnOutboxEventPublished;
+use App\Platform\Notification\NotificationDeliveryWriteGuard;
 use App\Platform\Notification\ProvisionalAggregateNotificationSubjectSource;
 use App\Platform\Notification\ProvisionalScopeEntityRecipientRoleSource;
 use App\Platform\Outbox\Events\OutboxEventPublished;
@@ -59,5 +60,11 @@ final class NotificationServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Event::listen(OutboxEventPublished::class, DispatchNotificationConsumerOnOutboxEventPublished::class);
+
+        // Fix round 1, IMPORTANT 1: runtime enforcement of AC9 — see
+        // NotificationDeliveryWriteGuard's own doc block for why a
+        // DB::listen()-based guard replaced the original (vacuous) regex
+        // test.
+        NotificationDeliveryWriteGuard::register();
     }
 }
