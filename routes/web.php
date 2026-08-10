@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\DisableMfaController;
+use App\Http\Controllers\DocumentVault\DownloadDocumentController;
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Livewire\Public\Booking\BookingWizard;
 use App\Livewire\Public\Directory\CemeteryDetail;
@@ -243,5 +244,9 @@ Route::get('/bantuan', HelpCentre::class)->name('bantuan.index');
 | `MfaChallenge` instead of letting the disable through.
 */
 Route::post('/admin/mfa/disable', DisableMfaController::class)
-    ->middleware(['web', 'auth', RequireRecentAuthentication::class.':mfa_disable,filament.admin.pages.mfa-challenge'])
-    ->name('admin.mfa.disable');
+     ->middleware(['web', 'auth', RequireRecentAuthentication::class.':mfa_disable,filament.admin.pages.mfa-challenge'])
+     ->name('admin.mfa.disable');
+
+Route::get('/internal/documents/{document}/download/{token}', DownloadDocumentController::class)
+    ->middleware(['web', 'auth', 'throttle:document-download'])
+    ->name('internal.documents.download');
