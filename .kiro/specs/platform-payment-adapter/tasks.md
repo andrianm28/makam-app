@@ -14,7 +14,7 @@
 - [ ] Implement refund/chargeback/reversal as explicit non-destructive operations. _Requirements: 12_
 - [ ] Add guard tests: closed gate, expired quote, expired reservation, amount mismatch, unauthorized opening. _Requirements: 2_
 - [ ] Add webhook tests: bad signature, wrong merchant, wrong amount, duplicate, replay, out-of-order, dead dispatcher. _Requirements: 6, 7_
-- [ ] Add tests proving no paid state can be reached from a browser return. _Requirements: 4_
+- [x] Add tests proving no paid state can be reached from a browser return. _Requirements: 4_
 
 ## Design system
 
@@ -41,3 +41,9 @@ Nothing here is implemented. The provider is **not chosen** and gate `G-PAY-01` 
 2. **The provider IS now chosen** — ADR-0033 selects the SumoPod sandbox for dev/staging. The `G-PAY-01`-status and FIN-DEC points still stand: the gate stays **closed for production**, the FIN-DEC approvals in `release-gates.md` §H remain ungranted, and no sandbox has been exercised yet.
 
 Still genuinely NOT TESTED: the Postgres-only CHECK constraints (the local suite runs on SQLite, so they are unverified until CI), and every provider/webhook/manual-fallback/reversal surface, none of which exists yet.
+
+**Correction, 10 Aug 2026 (Task 4, Wave 1b ruling 1b-L3-04):** the paragraph above remains incomplete for the reduced Task 4 slice and is superseded on the following points; appended rather than rewritten, per this repository's correction convention.
+
+1. **The durable webhook receiver and validation surface now exists** as of commits `0f35c54` through `76a1c93`, and the provider is chosen per ADR-0033. The receiver's session-bound `VALIDATED` path remains unreachable while the deny-only payment guard prevents `payment_sessions` creation.
+2. **The Task 4 claim slice is implemented and tested in sequence:** `VALIDATED -> PROCESSING` under the async claim action, the apply-time `(provider, provider_transaction_id)` settlement guard, and the browser-return negative proof. The browser-return proof is covered by the existing task below; it is not an untested future item.
+3. **Still genuinely NOT TESTED:** PostgreSQL row-lock/concurrency behavior and PostgreSQL-only CHECK/index behavior; the session-dependent paid/apply path, Journal write, order `DIBAYAR` transition, outbox effects, failure/expiry handling, and live provider delivery. No payment session or test-only pass fixture was fabricated for these unavailable upstream contracts.

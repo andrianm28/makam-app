@@ -68,7 +68,7 @@
                         <h2 id="butuh-bantuan" class="text-2xl font-semibold text-neutral-900">Butuh bantuan?</h2>
                         <p>
                             Jika status tidak berubah dalam waktu yang wajar, hubungi kami melalui
-                            <a href="{{ route('bantuan.index') }}" class="font-medium text-primary-700 underline underline-offset-2 hover:text-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2">halaman Bantuan</a>.
+                            <a href="{{ route('bantuan.index') }}" class="touch-target font-medium text-primary-700 underline underline-offset-2 hover:text-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2">halaman Bantuan</a>.
                         </p>
                     </section>
                 </div>
