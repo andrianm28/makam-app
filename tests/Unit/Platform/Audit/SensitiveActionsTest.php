@@ -30,6 +30,7 @@ final class SensitiveActionsTest extends TestCase
             'journal reversal' => ['JOURNAL_REVERSAL'],
             'price version recorded' => ['PRICE_VERSION_RECORDED'],
             'service definition price version recorded' => ['SERVICE_DEFINITION_PRICE_VERSION_RECORDED'],
+            'reconciliation exception resolved' => ['RECONCILIATION_EXCEPTION_RESOLVED'],
         ];
     }
 
@@ -64,6 +65,13 @@ final class SensitiveActionsTest extends TestCase
      * regression. Renamed and updated rather than left red. Wave 0c later
      * added `PRICE_VERSION_RECORDED` as the financial price-version action.
      * The ServiceCatalog action uses its domain-qualified emitted name too.
+     *
+     * UPDATED 10 Aug 2026 — Task 5 of the `platform-financial-ledger` lane
+     * appended `RECONCILIATION_EXCEPTION_RESOLVED` under the user-approved
+     * Wave 1c ruling in
+     * `docs/superpowers/plans/2026-08-10-wave1b-financial-decisions.md`. This
+     * assertion is an exact-list check on purpose, so every growth of that
+     * array has to arrive here with a stated authority rather than slipping in.
      */
     public function test_the_list_contains_the_requirements_named_actions_plus_mfa_reset_and_price_version_recorded(): void
     {
@@ -80,6 +88,7 @@ final class SensitiveActionsTest extends TestCase
                 'PRICE_VERSION_RECORDED',
                 'SERVICE_DEFINITION_PRICE_VERSION_RECORDED',
                 'MFA_RESET',
+                'RECONCILIATION_EXCEPTION_RESOLVED',
             ],
             SensitiveActions::ACTIONS
         );

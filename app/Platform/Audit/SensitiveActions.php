@@ -57,6 +57,20 @@ final class SensitiveActions
         // dead end, not a real control. `MFA_RESET` alone is the
         // deliberate, reasoned action in this group.
         'MFA_RESET',
+
+        // Added by Task 5 of the `platform-financial-ledger` lane, under the
+        // user-approved Wave 1c ruling recorded in
+        // `docs/superpowers/plans/2026-08-10-wave1b-financial-decisions.md`
+        // §"Reconciliation-exception audit". Written by
+        // `App\Platform\FinancialLedger\Actions\ResolveException`, the only
+        // path by which a reconciliation exception ever reaches `resolved`.
+        //
+        // Listed for the same reason `JOURNAL_REVERSAL` is: the decision
+        // itself — accept a variance, escalate, or post a correcting batch —
+        // changes a financial outcome, and the decider's justification is the
+        // entire substance of it. An accepted variance with no recorded reason
+        // is indistinguishable from a difference somebody made go away.
+        'RECONCILIATION_EXCEPTION_RESOLVED',
     ];
 
     public static function requiresReason(string $action): bool
