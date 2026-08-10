@@ -115,6 +115,30 @@ final class PaymentReturnRouteTest extends TestCase
         }
     }
 
+    public function test_neither_return_page_claims_the_payment_succeeded_or_failed(): void
+    {
+        foreach (['payments.return', 'payments.cancel'] as $route) {
+            $body = (string) $this->get(route($route, self::HOSTILE_QUERY))->assertOk()->getContent();
+
+            foreach ([
+                'Pembayaran berhasil',
+                'Lunas',
+                'DIBAYAR',
+                'Terbayar',
+                'Pembayaran Tidak Diselesaikan',
+                'tanpa menyelesaikan transaksi',
+                'pembayaran gagal',
+                'dibatalkan',
+            ] as $claim) {
+                $this->assertStringNotContainsString(
+                    $claim,
+                    $body,
+                    "[{$route}] asserts a payment outcome from a browser return"
+                );
+            }
+        }
+    }
+
     public function test_neither_return_page_echoes_the_query_string_back_to_the_visitor(): void
     {
         // Reflecting an attacker-supplied value would both invite an injection

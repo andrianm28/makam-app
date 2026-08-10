@@ -24,28 +24,28 @@
     Same token discipline as return.blade.php — ordinary Tailwind
     utilities backed by tokens.css, no hex, no arbitrary value.
 --}}
-@component('layouts.app', ['title' => 'Pembayaran Tidak Diselesaikan — Makam.co.id'])
+@component('layouts.app', ['title' => 'Status Pembayaran — Makam.co.id'])
     <div class="py-8 md:py-12">
         <div class="mx-auto max-w-content px-4">
             <article class="mx-auto max-w-prose">
                 <header class="mb-6 space-y-2">
-                    <h1 class="text-3xl font-semibold tracking-tight text-neutral-900">Pembayaran Tidak Diselesaikan</h1>
+                    <h1 class="text-3xl font-semibold tracking-tight text-neutral-900">Status Pembayaran</h1>
                     <p class="text-base text-neutral-700">
-                        Anda kembali dari halaman pembayaran tanpa menyelesaikan transaksi.
+                        Anda telah kembali dari halaman pembayaran. Halaman ini belum dapat memastikan hasil transaksi Anda.
                     </p>
                 </header>
 
-                <x-mk.alert intent="info" title="Tidak ada perubahan yang kami lakukan">
-                    Halaman ini tidak mengubah status pesanan maupun status pembayaran Anda. Jika Anda sebenarnya sudah menyelesaikan pembayaran, status akan diperbarui setelah kami menerima konfirmasi resmi dari penyedia pembayaran.
+                <x-mk.alert intent="info" title="Menunggu konfirmasi penyedia pembayaran">
+                    Status pembayaran hanya kami perbarui setelah menerima konfirmasi resmi dari penyedia pembayaran. Konfirmasi dari halaman ini, dari alamat web, atau dari tautan yang Anda buka tidak pernah kami gunakan sebagai bukti pembayaran.
                 </x-mk.alert>
 
                 <div class="mt-8 space-y-8 text-base text-neutral-700">
                     <section aria-labelledby="langkah-berikutnya" class="space-y-3">
                         <h2 id="langkah-berikutnya" class="text-2xl font-semibold text-neutral-900">Langkah berikutnya</h2>
                         <ul class="list-disc space-y-2 pl-5">
-                            <li>Data yang sudah Anda isi tidak dihapus oleh halaman ini.</li>
-                            <li>Anda dapat mengulangi proses pembayaran dari halaman pesanan Anda.</li>
-                            <li>Jika Anda sudah membayar, tunggu konfirmasi kami sebelum membayar kembali.</li>
+                            <li>Simpan bukti pembayaran dari penyedia pembayaran Anda.</li>
+                            <li>Kami akan memperbarui status pesanan Anda setelah konfirmasi resmi kami terima.</li>
+                            <li>Jangan melakukan pembayaran ulang untuk transaksi yang sama sebelum status diperbarui.</li>
                         </ul>
                     </section>
 
