@@ -70,6 +70,50 @@ final class DocumentVaultConfigurationTest extends TestCase
         }
     }
 
+    public function test_staging_rejects_an_explicit_mock_scanner_configuration(): void
+    {
+        $variables = [
+            'APP_ENV' => getenv('APP_ENV'),
+            'DOCUMENT_VAULT_OBJECT_STORAGE' => getenv('DOCUMENT_VAULT_OBJECT_STORAGE'),
+            'DOCUMENT_VAULT_MALWARE_SCANNER' => getenv('DOCUMENT_VAULT_MALWARE_SCANNER'),
+        ];
+        $serverVariables = [
+            'APP_ENV' => $_ENV['APP_ENV'] ?? null,
+            'DOCUMENT_VAULT_OBJECT_STORAGE' => $_ENV['DOCUMENT_VAULT_OBJECT_STORAGE'] ?? null,
+            'DOCUMENT_VAULT_MALWARE_SCANNER' => $_ENV['DOCUMENT_VAULT_MALWARE_SCANNER'] ?? null,
+        ];
+
+        putenv('APP_ENV=staging');
+        putenv('DOCUMENT_VAULT_MALWARE_SCANNER='.MockScanner::class);
+        $_ENV['APP_ENV'] = 'staging';
+        $_ENV['DOCUMENT_VAULT_MALWARE_SCANNER'] = MockScanner::class;
+        Env::enablePutenv();
+
+        try {
+            $configuration = require base_path('config/document-vault.php');
+
+            $this->assertNull($configuration['malware_scanner']);
+        } finally {
+            foreach ($variables as $name => $value) {
+                if ($value === false) {
+                    putenv($name);
+                } else {
+                    putenv("{$name}={$value}");
+                }
+            }
+
+            foreach ($serverVariables as $name => $value) {
+                if ($value === null) {
+                    unset($_ENV[$name]);
+                } else {
+                    $_ENV[$name] = $value;
+                }
+            }
+
+            Env::enablePutenv();
+        }
+    }
+
     public function test_provider_fails_closed_when_a_provider_is_not_configured(): void
     {
         config([

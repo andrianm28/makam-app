@@ -15,6 +15,13 @@ $isDevelopmentEnvironment = in_array(
 $configuredObjectStorage = env('DOCUMENT_VAULT_OBJECT_STORAGE');
 $configuredMalwareScanner = env('DOCUMENT_VAULT_MALWARE_SCANNER');
 
+// Mock scanning is a development/testing convenience, never a staging or
+// production safety boundary. Treat an explicit non-development mock value as
+// unavailable so the provider fails closed instead of booting with it.
+if (! $isDevelopmentEnvironment && $configuredMalwareScanner === MockScanner::class) {
+    $configuredMalwareScanner = null;
+}
+
 /**
  * Platform Document Vault configuration.
  *
