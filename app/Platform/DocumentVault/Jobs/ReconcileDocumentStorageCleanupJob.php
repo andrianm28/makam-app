@@ -67,9 +67,10 @@ final class ReconcileDocumentStorageCleanupJob implements ShouldQueue
             ->cursor()
             ->each(function (Document $document) use ($objectStorage, $pathResolver, &$failures): void {
                 try {
-                    $objectStorage->deleteIfExists(
-                        $pathResolver->acceptedPath($document->document_kind, $document->storage_key),
-                    );
+                    (new CleanupPromotedDocumentStorageJob(
+                        documentId: $document->getKey(),
+                        reconcileAcceptedCopy: true,
+                    ))->handle($objectStorage, $pathResolver);
                 } catch (Throwable $exception) {
                     $failures[] = $exception;
                 }

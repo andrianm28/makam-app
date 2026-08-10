@@ -27,6 +27,9 @@ final class DocumentStorageCleanup extends Model
         $cleanup->forceFill([
             'document_id' => $document->getKey(),
             'operation' => self::QUARANTINE_DELETE,
+            'document_kind' => $document->document_kind->value,
+            'storage_key' => $document->storage_key,
+            'checksum_sha256' => $document->checksum_sha256,
             'attempt_count' => 0,
             'available_at' => now(),
         ]);

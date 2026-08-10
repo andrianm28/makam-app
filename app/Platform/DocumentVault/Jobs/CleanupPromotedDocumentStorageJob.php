@@ -81,24 +81,49 @@ final class CleanupPromotedDocumentStorageJob implements ShouldQueue
             return;
         }
 
-        $document = Document::query()->find($cleanup->document_id);
-
-        if (! $document instanceof Document) {
-            return;
-        }
-
         try {
-            if (
-                $cleanup->operation !== DocumentStorageCleanup::QUARANTINE_DELETE
-                || $document->storage_prefix !== 'accepted'
-                || ! in_array($document->state, [DocumentState::Accepted, DocumentState::Deleted, DocumentState::Expired], true)
-            ) {
-                throw new \LogicException('Promotion cleanup is waiting for an accepted document state.');
-            }
+            DB::transaction(function () use ($cleanup, $objectStorage, $pathResolver): void {
+                $cleanupReference = DocumentStorageCleanup::query()->find($cleanup->getKey());
 
-            $quarantinePath = $pathResolver->quarantinePath($document->document_kind, $document->storage_key);
-            $objectStorage->deleteIfExists($quarantinePath);
-            $cleanup->markCompleted();
+                if (! $cleanupReference instanceof DocumentStorageCleanup) {
+                    return;
+                }
+
+                $document = Document::query()
+                    ->lockForUpdate()
+                    ->find($cleanupReference->document_id);
+
+                if (! $document instanceof Document) {
+                    throw new \LogicException('Promotion cleanup document is missing.');
+                }
+
+                // Promotion locks the document before inserting its marker;
+                // take locks in the same order here to avoid a promotion/
+                // cleanup deadlock under PostgreSQL.
+                $lockedCleanup = DocumentStorageCleanup::query()
+                    ->whereKey($cleanup->getKey())
+                    ->whereNull('completed_at')
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $lockedCleanup instanceof DocumentStorageCleanup) {
+                    return;
+                }
+
+                $this->assertMarkerMatchesDocument($lockedCleanup, $document);
+
+                if (
+                    $lockedCleanup->operation !== DocumentStorageCleanup::QUARANTINE_DELETE
+                    || $document->storage_prefix !== 'accepted'
+                    || ! in_array($document->state, [DocumentState::Accepted, DocumentState::Deleted, DocumentState::Expired], true)
+                ) {
+                    throw new \LogicException('Promotion cleanup is waiting for an accepted document state.');
+                }
+
+                $quarantinePath = $pathResolver->quarantinePath($document->document_kind, $document->storage_key);
+                $objectStorage->deleteIfExists($quarantinePath);
+                $lockedCleanup->markCompleted();
+            });
         } catch (\Throwable $exception) {
             $cleanup->markFailed();
 
@@ -118,11 +143,53 @@ final class CleanupPromotedDocumentStorageJob implements ShouldQueue
             return;
         }
 
-        if ($document->state === DocumentState::Accepted || $document->storage_prefix === 'accepted') {
-            return;
-        }
+        DB::transaction(function () use ($document, $objectStorage, $pathResolver): void {
+            $lockedDocument = Document::query()->lockForUpdate()->find($document->getKey());
 
-        $acceptedPath = $pathResolver->acceptedPath($document->document_kind, $document->storage_key);
-        $objectStorage->deleteIfExists($acceptedPath);
+            if (! $lockedDocument instanceof Document) {
+                return;
+            }
+
+            $pendingMarker = DocumentStorageCleanup::query()
+                ->where('document_id', $lockedDocument->getKey())
+                ->whereNull('completed_at')
+                ->lockForUpdate()
+                ->first();
+
+            $checksum = $lockedDocument->checksum_sha256;
+            $storageKey = $lockedDocument->storage_key;
+            $documentKind = $lockedDocument->document_kind;
+
+            if (
+                $lockedDocument->state === DocumentState::Accepted
+                || $lockedDocument->storage_prefix === 'accepted'
+                || ! is_string($checksum)
+                || $checksum === ''
+            ) {
+                return;
+            }
+
+            if ($pendingMarker instanceof DocumentStorageCleanup) {
+                $this->assertMarkerMatchesDocument($pendingMarker, $lockedDocument);
+            }
+
+            $acceptedPath = $pathResolver->acceptedPath($documentKind, $storageKey);
+            $objectStorage->deleteIfExists($acceptedPath);
+        });
+    }
+
+    private function assertMarkerMatchesDocument(DocumentStorageCleanup $marker, Document $document): void
+    {
+        if (
+            (string) $marker->document_id !== (string) $document->getKey()
+            ||
+            $marker->document_kind !== $document->document_kind->value
+            || $marker->storage_key !== $document->storage_key
+            || ! is_string($marker->checksum_sha256)
+            || ! is_string($document->checksum_sha256)
+            || ! hash_equals(strtolower($marker->checksum_sha256), strtolower($document->checksum_sha256))
+        ) {
+            throw new \LogicException('Promotion cleanup identity no longer matches the document.');
+        }
     }
 }
