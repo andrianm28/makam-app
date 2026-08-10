@@ -66,4 +66,24 @@ final class PaymentAuditActions
      * without touching the append-only original.
      */
     public const string WEBHOOK_DUPLICATE = 'PAYMENT_WEBHOOK_DUPLICATE';
+
+    /**
+     * A settling provider event refused at apply time because its provider
+     * transaction was already claimed by a different settling event —
+     * `payment-webhook.md` §Idempotency: "A secondary guard should prevent the
+     * same provider transaction from settling multiple invoices."
+     *
+     * Written by `ProcessWebhookEvent` with `AuditOutcome::Denied` alongside the
+     * `provider_events.status = MANUAL_REVIEW` row. The status is the machine
+     * record and the reason the event is never applied; this is the trail that
+     * tells an operator a human decision is owed, and which other row holds the
+     * claim.
+     *
+     * Not on `SensitiveActions::ACTIONS`, for the same reason as the two actions
+     * above and because the plan's Global Constraints say this lane adds no new
+     * entry beyond the two already present. Nothing here is a human-initiated
+     * action with a reason to state — it is a machine refusal, and the
+     * structured status plus the closed-list `note` carry the explanation.
+     */
+    public const string WEBHOOK_SETTLEMENT_CONFLICT = 'PAYMENT_WEBHOOK_SETTLEMENT_CONFLICT';
 }
