@@ -591,9 +591,9 @@ final class ManualPayoutTest extends TestCase
      * Three shapes are compared: a fictitious id, a real id with no grant, and
      * a real id with no identity at all.
      *
-     * MUTATION RESISTANCE: restore
-     * `InvalidPayoutException::forUnknownPayable($payableId)` and the first
-     * `assertSame` on the messages fails. Move `actorReference()` back outside
+     * MUTATION RESISTANCE: reintroduce a distinct "no such payable" refusal
+     * (the deleted `InvalidPayoutException::forUnknownPayable()` factory) and
+     * the first `assertSame` on the messages fails. Move `actorReference()` back outside
      * the try and the third shape diverges instead.
      */
     public function test_an_unknown_payable_and_an_unauthorised_one_are_indistinguishable(): void

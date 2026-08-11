@@ -35,8 +35,9 @@ final class PayoutNotAuthorisedException extends RuntimeException
      * scope, a caller with no identity, a caller with no role, and a caller
      * whose grant was revoked.
      *
-     * Minor M6: `pay()` used to look the payable up FIRST and raise
-     * `InvalidPayoutException::forUnknownPayable()` for a miss, then authorise
+     * Minor M6: `pay()` used to look the payable up FIRST and raise a distinct
+     * "no such payable" error for a miss (a factory since DELETED, because
+     * leaving it invited the oracle straight back in), then authorise
      * and raise this type for a real-but-unauthorised id. The two different
      * refusals made the action an existence oracle over payable UUIDs — feed it
      * ids and the error tells you which ones are real. Low impact on its own

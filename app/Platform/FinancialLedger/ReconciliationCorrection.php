@@ -44,17 +44,78 @@ use App\Platform\FinancialLedger\Models\JournalBatch;
  * Neither shape can express an edit. There is no third constructor, and there
  * is no field on this class that names an existing row to change.
  *
- * `$sourceType` for an adjustment must be a member of `journal_batches`'
- * source-type closed list, which Task 2's PostgreSQL CHECK owns and this class
- * deliberately does not restate (`AGENTS.md` §Documentation forbids duplicating
- * canonical data). An unknown value is refused by that CHECK, not by a rival
- * list here.
+ * `$sourceType` for an adjustment must be a member of
+ * `self::CORRECTABLE_SOURCE_TYPES` — a deliberately NARROWER list than
+ * `journal_batches`' own source-type closed list, not a restatement of it.
+ * This is not the duplication `AGENTS.md` §Documentation forbids: the schema's
+ * list answers "what may exist in the ledger at all", this one answers "what a
+ * reconciliation decision may conjure", and they are different questions with
+ * different answers. An unknown value is still refused by the PostgreSQL CHECK;
+ * a KNOWN value that this seam has no business posting is refused here. See
+ * that constant for why each excluded type is excluded.
  */
 final readonly class ReconciliationCorrection
 {
     private const string KIND_REVERSAL = 'reversal';
 
     private const string KIND_ADJUSTMENT = 'adjustment';
+
+    /**
+     * The source types an ADJUSTMENT may declare. Deliberately far narrower
+     * than `journal_batches`' own closed list, and this is the guard that
+     * actually closes slice-3 Minor M5.
+     *
+     * ---------------------------------------------------------------------
+     * Why the prefix rule alone did not close M5
+     * ---------------------------------------------------------------------
+     * The first attempt required the business-key prefix to equal
+     * `$sourceType`. That closes a MISMATCH (`manual_verification:x` declaring
+     * `payout`) — but M5's own scenario was never a mismatch. It was
+     * `sourceType: 'payout'` with key `payout:v-9:x`, where prefix and source
+     * type agree perfectly and sail through. Confirmed by execution before
+     * writing this: `adjustment()` accepted that exact input and posted a batch
+     * the ledger reads as a payout. A guard that is correct for the case it was
+     * tested against, and silent on the case that motivated it.
+     *
+     * ---------------------------------------------------------------------
+     * Why `manual_verification` is the whole list
+     * ---------------------------------------------------------------------
+     * Every other member of `journal_batches_source_type_check` is OWNED by a
+     * producer that carries controls a reconciliation correction does not have:
+     *
+     *  - `payout` — `Actions\ManualPayout`, which requires an authorizer, a
+     *    document-vault proof, an approver, recent re-authentication, a
+     *    `payouts` row and a `VENDOR_PAYOUT` audit event.
+     *  - `vendor_payable` — `Actions\VendorPayable::accrue()`, behind its own
+     *    authorization seam and `VENDOR_PAYABLE_ASSESSED` audit.
+     *  - `reversal` / `refund` — `Journal::postReversal()`, reached from this
+     *    same class via `reversalOf()`. Allowing them HERE would be actively
+     *    harmful, not merely redundant: `adjustment()` posts through
+     *    `Journal::post()`, which never sets `reverses_batch_id`, so a
+     *    "reversal" posted this way would carry no link to what it reverses AND
+     *    would evade the one-reversal-ever UNIQUE index — a database-level
+     *    financial policy that is item 1 of the merge sign-off bundle. That is
+     *    a second, uncontrolled reversal path, which is why this list is
+     *    narrower than the review's suggestion rather than equal to it.
+     *  - `payment`, `renewal`, `chargeback` — economic events other modules and
+     *    lanes own (`AC7` gives refund and chargeback to the payment adapter).
+     *
+     * What is left is exactly what a corrective posting IS: a human verified a
+     * discrepancy and posted a balancing entry for it. Every legitimate
+     * `adjustment()` call in the tree already declares `manual_verification`
+     * and nothing else — enumerated before this list was written, not after.
+     *
+     * Widening this is a deliberate, reviewable change and belongs to a human:
+     * it is financial-authorization policy, `AGENTS.md` human-sign-off class.
+     * Adding a member here must come with the argument for why that event type
+     * may be conjured by a reconciliation decision rather than by the Action
+     * that owns it.
+     *
+     * @var list<string>
+     */
+    public const array CORRECTABLE_SOURCE_TYPES = [
+        'manual_verification',
+    ];
 
     /**
      * @param  list<array{account: string, direction: string, amountMinor: int, reference?: string|null}>  $entries
@@ -169,6 +230,7 @@ final readonly class ReconciliationCorrection
             throw InvalidReconciliationException::forBlankCorrectionSubjectReference();
         }
 
+        self::assertCorrectableSourceType($sourceType);
         self::assertPrefixDeclaresSourceType(trim($businessKey), $sourceType);
 
         return new self(
@@ -190,6 +252,22 @@ final readonly class ReconciliationCorrection
      * it instead would ACCEPT input the database currently rejects, which is a
      * loosening this change has no business making.
      */
+    /**
+     * The guard that closes M5. Runs BEFORE the prefix check, so a correction
+     * claiming to be a payout is refused for the reason that actually matters
+     * — "a reconciliation correction may not declare itself a payout" — rather
+     * than for a key-formatting reason that happens to catch some of the cases.
+     */
+    private static function assertCorrectableSourceType(string $sourceType): void
+    {
+        if (! in_array($sourceType, self::CORRECTABLE_SOURCE_TYPES, true)) {
+            throw InvalidReconciliationException::forUncorrectableSourceType(
+                $sourceType,
+                self::CORRECTABLE_SOURCE_TYPES,
+            );
+        }
+    }
+
     private static function assertPrefixDeclaresSourceType(string $businessKey, string $sourceType): void
     {
         $separator = strpos($businessKey, ':');

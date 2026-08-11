@@ -7,6 +7,7 @@ namespace Tests\Feature\FinancialLedger;
 use App\Platform\Audit\AuditSource;
 use App\Platform\FinancialLedger\Actions\VendorPayable;
 use App\Platform\FinancialLedger\Contracts\Journal as JournalContract;
+use App\Platform\FinancialLedger\Contracts\VendorPayableAuthorizer;
 use App\Platform\FinancialLedger\Exceptions\InvalidVendorPayableException;
 use App\Platform\FinancialLedger\Exceptions\VendorPayableNotAuthorisedException;
 use App\Platform\FinancialLedger\JournalReversalKind;
@@ -444,6 +445,59 @@ final class VendorPayableAssessmentTest extends TestCase
     }
 
     /**
+     * Defence in depth: the Action proves the actor's identity ITSELF, rather
+     * than trusting the authorizer to have done it.
+     *
+     * `FinanceVendorPayableAuthorizer::authorize()` does refuse a null
+     * `identityReference` first, so this can never fire against the only
+     * implementation that exists — which is exactly why it needs a fake. The
+     * point is that the truthfulness of a money-recognising audit row must not
+     * depend on an implementation of a SEAM. A permissive authorizer that
+     * returned a role without checking identity presence previously made
+     * `assess()` write `actorRef: ''` — a blank actor on a row recognising a
+     * debt — because the reference was a bare cast.
+     *
+     * `ManualPayout::actorReference()` is the pattern the ruling said to match
+     * exactly, and it guards independently of its authorizer. This aligns.
+     *
+     * MUTATION RESISTANCE: restore the bare
+     * `(string) $this->actorContext->identityReference` cast and this goes red
+     * — the assessment succeeds and persists an audit row with a blank
+     * `actor_ref` instead of refusing. Verified by executing that revert.
+     */
+    public function test_a_permissive_authorizer_cannot_produce_a_blank_actor_on_the_audit_row(): void
+    {
+        $action = new VendorPayable(
+            actorContext: ActorContext::guest(),
+            authorizer: new PermissiveVendorPayableAuthorizer,
+        );
+
+        try {
+            $action->assess(
+                vendorId: 'vendor-1',
+                entityRef: 'badan-usaha-1',
+                sourceType: 'marketplace_order',
+                sourceId: 'order-1',
+                amount: new Money(250_000),
+                eligibility: $this->eligible(),
+                trigger: VendorPayableAssessmentTrigger::HumanDecision,
+            );
+
+            $this->fail('Expected the Action to refuse an actor context with no identity.');
+        } catch (VendorPayableNotAuthorisedException) {
+            // The refusal is the point.
+        }
+
+        $this->assertSame(0, VendorPayableModel::query()->count());
+        $this->assertSame(0, JournalBatch::query()->count());
+        $this->assertSame(
+            0,
+            DB::table('audit_events')->where('action', VendorPayable::AUDIT_ACTION_ASSESSED)->count(),
+            'A blank actor must never reach an audit row that recognises a debt.',
+        );
+    }
+
+    /**
      * And the genuine automated trigger still works, audited truthfully as the
      * system. If this went red the production path would be broken, which is
      * the failure mode the coordinator's ruling explicitly warned against.
@@ -620,6 +674,25 @@ final class VendorPayableAssessmentTest extends TestCase
     private function action(): VendorPayable
     {
         return $this->app->make(VendorPayable::class);
+    }
+}
+
+/**
+ * Test-only authorizer that grants a role WITHOUT checking that an identity is
+ * present — the shape a careless alternative implementation could take. It
+ * exists to prove the Action does not depend on a seam implementation for the
+ * truthfulness of its audit row. It must never be described as a policy.
+ */
+final class PermissiveVendorPayableAuthorizer implements VendorPayableAuthorizer
+{
+    public function authorize(ActorContext $actor, string $vendorId): string
+    {
+        return 'finance';
+    }
+
+    public function authorizeUnattended(ActorContext $actor, string $vendorId): string
+    {
+        return 'system';
     }
 }
 

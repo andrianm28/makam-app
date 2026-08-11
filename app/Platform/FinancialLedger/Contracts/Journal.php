@@ -73,8 +73,33 @@ interface Journal
      *                                   now. Not the same as when the row was written.
      *
      * @throws InvalidJournalBatchException on a malformed business key,
-     *                                      an empty entry list, an unknown account code, a direction that is
-     *                                      not `DR`/`CR`, or a negative/non-integer amount.
+     *                                      a blank `$entityRef`, an empty entry list, an unknown account code,
+     *                                      a direction that is not `DR`/`CR`, or a negative/non-integer amount.
+     *
+     * ---------------------------------------------------------------------
+     * CONSUMERS OF THIS CONTRACT, READ THIS: the blank-`$entityRef` refusal is
+     * newer than the stub
+     * ---------------------------------------------------------------------
+     * `Journal::post()` began refusing a blank (or whitespace-only)
+     * `$entityRef` in Task 9b. `entity_ref` is `NOT NULL`, but `''` satisfies
+     * `NOT NULL` and no CHECK rejects it, so a batch scoped to no badan usaha
+     * was silently accepted — invisible to every entity-scoped report and
+     * export while still counting toward an unscoped total, with the two views
+     * disagreeing permanently and no error anywhere.
+     *
+     * `tests/Contract/Support/LedgerSeamStub.php` does NOT enforce this, so the
+     * stub and the real implementation now diverge on it. That divergence is
+     * recorded deliberately rather than fixed here: the stub is
+     * `lane/l3-payment-adapter`'s artifact, copied into this repository
+     * byte-for-byte, and editing another lane's file unilaterally is how the
+     * two copies stop being the same file. It belongs with merge sign-off
+     * bundle item 17 (E1), which already records the stub teaching a false
+     * EXCEPTION MODEL for two other contract terms — same file, same class of
+     * problem, and it should be resolved once, across both lanes, rather than
+     * twice in one of them.
+     *
+     * No L3 caller passes a blank `$entityRef` today (checked), so this is a
+     * latent contract divergence, not a live break.
      */
     public function post(
         string $businessKey,

@@ -32,13 +32,6 @@ final class InvalidPayoutException extends InvalidArgumentException
         );
     }
 
-    public static function forUnknownPayable(string $payableId): self
-    {
-        return new self(
-            "No vendor payable [{$payableId}] exists to pay out."
-        );
-    }
-
     public static function forPayableNotPayable(string $payableId, string $state): self
     {
         return new self(

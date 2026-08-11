@@ -116,6 +116,24 @@ final class InvalidReconciliationException extends InvalidArgumentException
     }
 
     /**
+     * Slice-3 Minor M5's actual closure: a corrective posting may not declare
+     * itself an event type that some other Action owns, even when its business
+     * key agrees with the claim.
+     *
+     * @param  list<string>  $correctable
+     */
+    public static function forUncorrectableSourceType(string $sourceType, array $correctable): self
+    {
+        return new self(
+            "A reconciliation correction may not post a journal batch of source type [{$sourceType}]. "
+            .'That event type is owned by the Action that carries its own authorization, proof and '
+            .'audit — a correction declaring it would produce a batch the ledger reads as one of '
+            .'those events with none of the controls behind it. Correctable source types: '
+            .implode(', ', $correctable).'.'
+        );
+    }
+
+    /**
      * Slice-3 Minor M5, closed at this seam and deliberately NOT at
      * `Journal::post()` — see `ReconciliationCorrection::adjustment()` for why
      * the shared cross-lane seam was left alone.

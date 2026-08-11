@@ -657,12 +657,15 @@ final class ResolveReconciliationExceptionTest extends TestCase
                 $exception,
                 ReconciliationDecision::POST_CORRECTION,
                 correction: ReconciliationCorrection::adjustment(
-                    // A legal source type in the schema's closed list, and a
-                    // business key that says something else entirely.
-                    businessKey: 'manual_verification:recon-mislabelled-1',
+                    // A CORRECTABLE source type, keyed as something else
+                    // entirely. It must use an allowed source type, or
+                    // `assertCorrectableSourceType()` fires first and this test
+                    // stops exercising the prefix rule it exists for — the
+                    // exact way this pair of guards could hide each other.
+                    businessKey: 'payment:recon-mislabelled-1',
                     entityRef: self::ENTITY,
                     subjectRef: 'payment:evt-1',
-                    sourceType: 'payout',
+                    sourceType: 'manual_verification',
                     sourceId: 'recon-mislabelled-1',
                     entries: [
                         ['account' => '7000', 'direction' => 'DR', 'amountMinor' => 1_000],
@@ -676,9 +679,99 @@ final class ResolveReconciliationExceptionTest extends TestCase
 
         $this->assertSame(
             0,
-            JournalBatch::query()->where('source_type', 'payout')->count(),
+            JournalBatch::query()->where('business_key', 'payment:recon-mislabelled-1')->count(),
             'A mislabelled corrective batch must not reach the ledger at all.',
         );
+    }
+
+    /**
+     * **M5's own scenario, verbatim — the test that was missing.**
+     *
+     * The slice-3 verdict described it as `sourceType: 'payout'` with key
+     * `payout:v-9:x`. The first fix required prefix == sourceType, which closes
+     * a MISMATCH but sails straight past this: prefix `payout` equals source
+     * type `payout`. I confirmed by execution that `adjustment()` accepted this
+     * exact input and posted a batch the ledger reads as a payout — so the
+     * addendum's "M5 FIXED" claim was wrong, and this lane's documented failure
+     * mode (overstated closure) had claimed another one.
+     *
+     * `CORRECTABLE_SOURCE_TYPES` is what actually closes it.
+     *
+     * MUTATION RESISTANCE: remove `assertCorrectableSourceType()` from
+     * `adjustment()` and this goes red while the earlier mismatch test stays
+     * green — which is precisely the asymmetry that let the gap through the
+     * first time. Verified by executing that removal.
+     *
+     * The batch-count assertion is again the load-bearing half: a guard
+     * "fixed" by silently rewriting `payout` to `manual_verification` would
+     * throw nothing and still post a batch.
+     */
+    public function test_a_correction_may_not_declare_itself_a_payout_even_with_a_matching_prefix(): void
+    {
+        $exception = $this->openException();
+        $this->grantReconciliationAuthority();
+
+        $this->assertRefused(
+            fn (): ReconciliationExceptionModel => $this->resolve(
+                $exception,
+                ReconciliationDecision::POST_CORRECTION,
+                correction: ReconciliationCorrection::adjustment(
+                    businessKey: 'payout:v-9:x',
+                    entityRef: self::ENTITY,
+                    subjectRef: 'payment:evt-1',
+                    sourceType: 'payout',
+                    sourceId: 'v-9-x',
+                    entries: [
+                        ['account' => '7000', 'direction' => 'DR', 'amountMinor' => 1_000],
+                        ['account' => '4000', 'direction' => 'CR', 'amountMinor' => 1_000],
+                    ],
+                ),
+            ),
+            InvalidReconciliationException::class,
+            $exception,
+        );
+
+        $this->assertSame(
+            0,
+            JournalBatch::query()->where('source_type', 'payout')->count(),
+            'A reconciliation correction must never conjure a payout-labelled batch: there would be '
+            .'no payouts row, no proof, no approver, no re-authentication and no VENDOR_PAYOUT audit '
+            .'behind it, yet the report and the reconciliation would both read it as a payout.',
+        );
+    }
+
+    /**
+     * The rest of the excluded list, so the guard is pinned as a CLOSED LIST
+     * rather than as a special case for `payout`. `reversal` and `refund` are
+     * in here for a specific reason beyond ownership: `adjustment()` posts via
+     * `Journal::post()`, which never sets `reverses_batch_id`, so a reversal
+     * posted this way would carry no link to what it reverses and would evade
+     * the one-reversal-ever UNIQUE index — merge sign-off bundle item 1.
+     */
+    public function test_no_other_actions_event_type_may_be_conjured_by_a_correction(): void
+    {
+        foreach (['payout', 'vendor_payable', 'reversal', 'refund', 'chargeback', 'payment', 'renewal'] as $sourceType) {
+            try {
+                ReconciliationCorrection::adjustment(
+                    businessKey: "{$sourceType}:probe-{$sourceType}",
+                    entityRef: self::ENTITY,
+                    subjectRef: 'payment:evt-1',
+                    sourceType: $sourceType,
+                    sourceId: "probe-{$sourceType}",
+                    entries: [
+                        ['account' => '7000', 'direction' => 'DR', 'amountMinor' => 1_000],
+                        ['account' => '4000', 'direction' => 'CR', 'amountMinor' => 1_000],
+                    ],
+                );
+
+                $this->fail("A correction was allowed to declare source type [{$sourceType}].");
+            } catch (InvalidReconciliationException $exception) {
+                $this->assertStringContainsString($sourceType, $exception->getMessage());
+            }
+        }
+
+        // And the list is genuinely a list, not an accident of this loop.
+        $this->assertSame(['manual_verification'], ReconciliationCorrection::CORRECTABLE_SOURCE_TYPES);
     }
 
     /**
@@ -746,10 +839,17 @@ final class ResolveReconciliationExceptionTest extends TestCase
      * `forActorContext('unknown')`, which is what made the M6 fix necessary
      * THERE and not here. The two Actions were never the same shape.
      *
-     * No production code was changed for this. The test lands anyway because
-     * the property was entirely unpinned: anyone "simplifying"
-     * `actorReference()` to raise a distinguishable error, or moving a guard,
-     * would reopen the oracle silently.
+     * No production code was changed for this.
+     *
+     * SECOND CORRECTION, to my own first one: the property was NOT "entirely
+     * unpinned" either, as this doc block originally claimed.
+     * `test_unknown_and_unauthorised_exception_ids_have_the_same_opaque_failure`
+     * already covered the unknown, unauthorised and malformed-id shapes. What
+     * it does NOT cover — and the only thing this test adds — is the
+     * UNAUTHENTICATED caller, which is exactly the shape my wrong observation
+     * was about. Kept for that one case, and for asserting the exception TYPE
+     * alongside the message; if it is ever consolidated into the older test,
+     * the guest case is the part that must survive.
      *
      * MUTATION RESISTANCE, verified by execution: change `actorReference()` to
      * throw `forActorContext()` instead and the third comparison fails.

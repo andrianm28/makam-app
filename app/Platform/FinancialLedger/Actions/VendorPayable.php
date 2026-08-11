@@ -187,8 +187,17 @@ final class VendorPayable
             ),
         };
 
+        // Derived through an explicit guard, NOT a cast — matching
+        // `ManualPayout::actorReference()`, which the ruling said to follow
+        // exactly. `FinanceVendorPayableAuthorizer::authorize()` does refuse a
+        // null `identityReference` first, so the cast was correct today; but
+        // that made the truthfulness of the audit row depend on an
+        // IMPLEMENTATION of the seam rather than on this Action. An alternative
+        // `VendorPayableAuthorizer` that returned a role without checking
+        // identity presence would have written `actorRef: ''` — a blank actor
+        // on a row recognising a debt — instead of failing closed.
         $actorRef = $trigger === VendorPayableAssessmentTrigger::HumanDecision
-            ? (string) $this->actorContext->identityReference
+            ? $this->actorReference($vendorId)
             : null;
 
         $now ??= CarbonImmutable::now();
@@ -417,6 +426,20 @@ final class VendorPayable
             correlationId: $correlationId,
             metadata: $metadata,
         );
+    }
+
+    /**
+     * The acting human's server-derived reference, or a refusal. Never a cast.
+     *
+     * @throws VendorPayableNotAuthorisedException
+     */
+    private function actorReference(string $vendorId): string
+    {
+        if ($this->actorContext->identityReference === null) {
+            throw VendorPayableNotAuthorisedException::forActorContext($vendorId);
+        }
+
+        return (string) $this->actorContext->identityReference;
     }
 
     private function assertPresent(string $field, string $value): void
