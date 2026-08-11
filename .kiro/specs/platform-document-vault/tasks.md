@@ -38,7 +38,9 @@ Upload UI is consumed by other specs, but the **state machine it renders** is ow
   the combined 2/4 host. Development/testing use the local object-storage
   adapter and deterministic mock scanner; staging/production must provide
   `DOCUMENT_VAULT_OBJECT_STORAGE` and `DOCUMENT_VAULT_MALWARE_SCANNER` or the
-  provider fails closed.
+  provider fails closed — enforced at binding resolution, so bootstrap
+  commands (`composer install`/`package:discover`, `config:cache`,
+  `route:cache`) still succeed and the vault throws only when actually used.
 - The lane's AC13 evidence covers the Blade state contract and server-side
   resume enforcement. Consuming Livewire/browser cancellation, retry, and
   parent-draft preservation are NOT TESTED here and remain deferred to

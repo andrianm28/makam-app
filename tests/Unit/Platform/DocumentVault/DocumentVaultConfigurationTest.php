@@ -6,6 +6,8 @@ namespace Tests\Unit\Platform\DocumentVault;
 
 use App\Platform\DocumentVault\Adapters\LocalFilesystemObjectStorage;
 use App\Platform\DocumentVault\Adapters\MockScanner;
+use App\Platform\DocumentVault\Contracts\MalwareScanner;
+use App\Platform\DocumentVault\Contracts\ObjectStorage;
 use App\Platform\DocumentVault\Providers\DocumentVaultServiceProvider;
 use Illuminate\Support\Env;
 use LogicException;
@@ -114,6 +116,19 @@ final class DocumentVaultConfigurationTest extends TestCase
         }
     }
 
+    public function test_provider_registration_survives_bootstrap_without_configured_providers(): void
+    {
+        config([
+            'document-vault.object_storage' => null,
+            'document-vault.malware_scanner' => null,
+        ]);
+
+        (new DocumentVaultServiceProvider($this->app))->register();
+
+        $this->assertTrue($this->app->bound(ObjectStorage::class));
+        $this->assertTrue($this->app->bound(MalwareScanner::class));
+    }
+
     public function test_provider_fails_closed_when_a_provider_is_not_configured(): void
     {
         config([
@@ -121,8 +136,9 @@ final class DocumentVaultConfigurationTest extends TestCase
             'document-vault.malware_scanner' => null,
         ]);
 
-        $this->expectException(LogicException::class);
-
         (new DocumentVaultServiceProvider($this->app))->register();
+
+        $this->assertThrows(fn (): mixed => $this->app->make(ObjectStorage::class), LogicException::class);
+        $this->assertThrows(fn (): mixed => $this->app->make(MalwareScanner::class), LogicException::class);
     }
 }

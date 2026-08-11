@@ -8,6 +8,7 @@ use App\Platform\DocumentVault\Contracts\MalwareScanner;
 use App\Platform\DocumentVault\Contracts\ObjectStorage;
 use App\Platform\DocumentVault\Contracts\StoragePathResolver;
 use App\Platform\DocumentVault\StoragePathPolicy;
+use Closure;
 use Illuminate\Support\ServiceProvider;
 use LogicException;
 
@@ -51,17 +52,27 @@ final class DocumentVaultServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $objectStorage = config('document-vault.object_storage');
-        $malwareScanner = config('document-vault.malware_scanner');
+        $this->app->bind(
+            ObjectStorage::class,
+            $this->failClosedBinding(config('document-vault.object_storage'), 'object storage'),
+        );
+        $this->app->bind(
+            MalwareScanner::class,
+            $this->failClosedBinding(config('document-vault.malware_scanner'), 'malware scanner'),
+        );
+        $this->app->bind(StoragePathResolver::class, StoragePathPolicy::class);
+    }
 
-        if (! is_string($objectStorage) || ! is_string($malwareScanner)) {
-            throw new LogicException(
-                'Document Vault storage and malware scanner providers must be explicitly configured outside development.',
-            );
+    private function failClosedBinding(?string $implementation, string $label): string|Closure
+    {
+        if (is_string($implementation)) {
+            return $implementation;
         }
 
-        $this->app->bind(ObjectStorage::class, $objectStorage);
-        $this->app->bind(MalwareScanner::class, $malwareScanner);
-        $this->app->bind(StoragePathResolver::class, StoragePathPolicy::class);
+        return static function () use ($label): never {
+            throw new LogicException(
+                "Document Vault {$label} provider must be explicitly configured outside development.",
+            );
+        };
     }
 }
