@@ -259,9 +259,12 @@ final class RunReconciliationTest extends TestCase
         $this->postBatch('payment:evt-1', self::AMOUNT);
         $reconciliation = $this->reconcile($this->statement(['payment:evt-1' => self::AMOUNT + 1_000]));
 
-        // `insertOrIgnore` is a read-free write, but the authority for "one
-        // finding per difference" is the UNIQUE index — proven here by
-        // bypassing the Action entirely.
+        // The Action's own read-then-write versioning path is not the
+        // authority for "one finding per difference at a given version" — the
+        // UNIQUE index is, proven here by bypassing the Action entirely.
+        // (`insertOrIgnore`, which an earlier version of this comment
+        // described, was removed from `RunReconciliation` in Task 5's fix
+        // round.)
         $this->expectException(QueryException::class);
 
         DB::table('reconciliation_exceptions')->insert([

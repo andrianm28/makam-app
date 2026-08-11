@@ -8,6 +8,7 @@ use App\Platform\FinancialLedger\Exceptions\InvalidLedgerReportException;
 use App\Platform\FinancialLedger\Journal;
 use App\Platform\FinancialLedger\LedgerReport;
 use App\Platform\FinancialLedger\LedgerReportKind;
+use App\Platform\FinancialLedger\VendorPayableState;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -86,7 +87,13 @@ final class LedgerReportTest extends TestCase
             'source_type' => 'payment',
             'source_id' => 'provider-event-report-2',
             'amount_minor' => 999_999,
-            'state' => 'accrued',
+            // `VendorPayableState::KNOWN_STATES` is the closed list the
+            // PostgreSQL `vendor_payables_state_check` constraint is built
+            // from, and `payable` is the only member consistent with a
+            // non-null `eligible_at` and a null `paid_at` (see that table's
+            // `eligible_at`/`paid_at` CHECKs). Written as the constant, not a
+            // literal, so the fixture cannot drift from the constraint again.
+            'state' => VendorPayableState::PAYABLE,
             'eligible_at' => '2026-08-12 09:00:00',
             'paid_at' => null,
             'correlation_id' => 'trace-report-2',
@@ -183,12 +190,25 @@ final class LedgerReportTest extends TestCase
         app(LedgerReport::class)->summary('2026-8');
     }
 
-    public function test_a_malformed_period_is_refused_even_when_trimmed_input_is_valid(): void
+    /**
+     * The old name claimed a refusal while every assertion below proves an
+     * acceptance. Padding is normalised, not rejected — and
+     * `BulkFinancialExport::export()` now trims before it validates, so the
+     * two entry points agree instead of one accepting what the other refuses.
+     */
+    public function test_a_padded_period_is_trimmed_and_accepted(): void
     {
         $result = app(LedgerReport::class)->summary('  2026-08  ');
 
         $this->assertSame('2026-08', $result->period);
         $this->assertSame([], $result->rows);
+    }
+
+    public function test_an_empty_entity_scope_is_refused_rather_than_treated_as_unscoped(): void
+    {
+        $this->expectException(InvalidLedgerReportException::class);
+
+        app(LedgerReport::class)->summary('2026-08', []);
     }
 
     private function journal(): Journal

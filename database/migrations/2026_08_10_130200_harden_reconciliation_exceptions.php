@@ -93,6 +93,16 @@ return new class extends Migration
             );
         }
 
+        // DESTRUCTIVE, and not merely by dropping columns: re-adding the
+        // pre-version natural-key UNIQUE index below FAILS with a duplicate-key
+        // error the moment any subject has more than one evidence version —
+        // which is exactly what the `version`/`supersedes_id` columns this
+        // migration adds exist to produce. `AGENTS.md` §Database already
+        // forbids relying on a destructive `down()` for a production rollback;
+        // stating it here so nobody discovers it by running one. This path is
+        // for local and CI teardown of a database that never versioned a
+        // finding. Rolling back a deployment that did is a data decision (which
+        // version survives), not a schema operation.
         Schema::table('reconciliation_exceptions', function (Blueprint $table): void {
             $table->dropUnique('reconciliation_exceptions_natural_version_unique');
             $table->dropForeign(['supersedes_id']);

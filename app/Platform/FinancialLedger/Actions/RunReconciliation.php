@@ -436,9 +436,25 @@ final class RunReconciliation
      */
     private function findingMatches(object $current, array $finding, ?string $statementReference): bool
     {
-        return (int) $current->journal_amount_minor === (int) $finding['journal_amount_minor']
-            && (int) $current->statement_amount_minor === (int) $finding['statement_amount_minor']
+        return $this->sameAmount($current->journal_amount_minor, $finding['journal_amount_minor'])
+            && $this->sameAmount($current->statement_amount_minor, $finding['statement_amount_minor'])
             && $current->statement_reference === $statementReference;
+    }
+
+    /**
+     * Null is "no amount recorded on this side", which is not the same fact as
+     * zero. A blanket `(int)` cast on both sides collapsed the two, so a
+     * finding that genuinely changed from "the statement had no line at all"
+     * to "the statement had a line for 0" compared equal and was skipped as
+     * unchanged — losing the evidence version this method exists to preserve.
+     */
+    private function sameAmount(mixed $current, mixed $incoming): bool
+    {
+        if ($current === null || $incoming === null) {
+            return $current === null && $incoming === null;
+        }
+
+        return (int) $current === (int) $incoming;
     }
 
     /**

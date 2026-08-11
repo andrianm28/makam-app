@@ -10,8 +10,13 @@
 
     Design-system mapping (`.kiro/specs/platform-financial-ledger/tasks.md`
     §Design system):
-      - all money is right-aligned, `tabular-nums`, `font-mono`, integer
-        minor units only — never a float;
+      - all money is right-aligned, `tabular-nums`, `font-mono`, and rendered
+        through `Money::format()` — the module's canonical presenter, which
+        divides `amount_minor` by `config('money.minor_units')`. The columns
+        used to print the raw minor-unit integer under an "(IDR)" header, so
+        every figure read as 100x the real rupiah amount. The underlying value
+        stays an integer minor-unit amount end to end; only the presentation
+        is formatted, so AC11's never-a-float rule is untouched;
       - the TOTAL row uses `font-bold` (the `--font-weight-bold` token);
       - the bulk export button is `variant=secondary` (§3.5: never primary,
         never adjacent to a benign action). `<x-filament::button color="gray"`
@@ -79,27 +84,27 @@
                         <thead class="bg-neutral-50 text-left">
                             <tr>
                                 <th scope="col" class="px-4 py-2 font-medium text-neutral-800">Kode akun</th>
-                                <th scope="col" class="px-4 py-2 text-right font-medium text-neutral-800">Debit (IDR)</th>
-                                <th scope="col" class="px-4 py-2 text-right font-medium text-neutral-800">Kredit (IDR)</th>
-                                <th scope="col" class="px-4 py-2 text-right font-medium text-neutral-800">Selisih (IDR)</th>
+                                <th scope="col" class="px-4 py-2 text-right font-medium text-neutral-800">Debit</th>
+                                <th scope="col" class="px-4 py-2 text-right font-medium text-neutral-800">Kredit</th>
+                                <th scope="col" class="px-4 py-2 text-right font-medium text-neutral-800">Selisih</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-neutral-200">
                             @foreach ($reportRows as $row)
                                 <tr class="tabular-nums">
                                     <td class="px-4 py-2 font-mono text-neutral-900">{{ $row['account_code'] }}</td>
-                                    <td class="px-4 py-2 text-right font-mono text-neutral-900">{{ number_format($row['debit_total'], 0, ',', '.') }}</td>
-                                    <td class="px-4 py-2 text-right font-mono text-neutral-900">{{ number_format($row['credit_total'], 0, ',', '.') }}</td>
-                                    <td class="px-4 py-2 text-right font-mono text-neutral-900">{{ number_format($row['net'], 0, ',', '.') }}</td>
+                                    <td class="px-4 py-2 text-right font-mono text-neutral-900">{{ (new \App\Platform\FinancialLedger\Money($row['debit_total']))->format() }}</td>
+                                    <td class="px-4 py-2 text-right font-mono text-neutral-900">{{ (new \App\Platform\FinancialLedger\Money($row['credit_total']))->format() }}</td>
+                                    <td class="px-4 py-2 text-right font-mono text-neutral-900">{{ (new \App\Platform\FinancialLedger\Money($row['net']))->format() }}</td>
                                 </tr>
                             @endforeach
                         </tbody>
                         <tfoot>
                             <tr class="border-t border-neutral-200 font-bold tabular-nums">
                                 <td class="px-4 py-2 text-neutral-900">TOTAL</td>
-                                <td class="px-4 py-2 text-right font-mono text-neutral-900">{{ number_format($debitTotal, 0, ',', '.') }}</td>
-                                <td class="px-4 py-2 text-right font-mono text-neutral-900">{{ number_format($creditTotal, 0, ',', '.') }}</td>
-                                <td class="px-4 py-2 text-right font-mono text-neutral-900">{{ number_format($debitTotal - $creditTotal, 0, ',', '.') }}</td>
+                                <td class="px-4 py-2 text-right font-mono text-neutral-900">{{ (new \App\Platform\FinancialLedger\Money($debitTotal))->format() }}</td>
+                                <td class="px-4 py-2 text-right font-mono text-neutral-900">{{ (new \App\Platform\FinancialLedger\Money($creditTotal))->format() }}</td>
+                                <td class="px-4 py-2 text-right font-mono text-neutral-900">{{ (new \App\Platform\FinancialLedger\Money($debitTotal - $creditTotal))->format() }}</td>
                             </tr>
                         </tfoot>
                     </table>
@@ -127,7 +132,7 @@
                 <x-filament::button
                     color="gray"
                     tag="a"
-                    :href="route('admin.finance.exports', ['period' => $period])"
+                    :href="route('admin.finance.exports', $this->exportQuery())"
                 >
                     Ekspor CSV
                 </x-filament::button>

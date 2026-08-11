@@ -80,7 +80,19 @@ final class JournalAppendOnlyTest extends TestCase
             occurredAt: '2026-08-10T09:10:00+07:00',
         );
 
-        $this->assertGreaterThan(0, $statements, 'The write path must actually touch the database.');
+        // `assertGreaterThan(0, $statements)` was the original guard and was
+        // vacuous: `[] > 0` is `true` in PHP, so an empty capture passed and
+        // the `foreach` below became a no-op that asserted nothing. Anyone who
+        // later moved the `DB::listen()` registration, switched `Journal` to a
+        // connection the listener is not attached to, or wrapped the writes so
+        // no `QueryExecuted` fires would have turned this — the lane's central
+        // AC2 test — into a permanent silent green.
+        $this->assertNotEmpty($statements, 'The write path must actually touch the database.');
+        $this->assertNotEmpty(
+            array_filter($statements, static fn (string $sql): bool => stripos($sql, 'insert') !== false),
+            'The write path must emit at least one INSERT — a capture of only SELECTs means the '
+            .'listener saw a different connection than the one the journal wrote on.',
+        );
 
         foreach ($statements as $sql) {
             $this->assertDoesNotMatchRegularExpression(

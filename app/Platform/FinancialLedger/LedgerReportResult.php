@@ -23,15 +23,37 @@ use Carbon\CarbonImmutable;
 final readonly class LedgerReportResult
 {
     /**
+     * @param  string|list<string>|null  $entityRef  The scope the report was
+     *                                               run for: one badan usaha, the set an authorized actor holds
+     *                                               grants for, or `null` for an unscoped read.
      * @param  list<array{account_code: string, debit_total: int, credit_total: int, net: int}>  $rows
      *                                                                                                  Sorted by `account_code` ascending; `net` is `debit_total - credit_total`.
      */
     public function __construct(
         public string $kind,
         public string $period,
-        public ?string $entityRef,
+        public string|array|null $entityRef,
         public string $source,
         public CarbonImmutable $generatedAt,
         public array $rows,
     ) {}
+
+    /**
+     * The report's scope as one short, stable string — the single place the
+     * label used by the audit row, the export filename metadata, and the page
+     * header is derived, so those three can never disagree.
+     *
+     * `all` is reachable only from an UNSCOPED read (`$entityRef === null`),
+     * which no authorized caller in this module performs: every mounted
+     * caller passes the set `Contracts\LedgerReadAuthorizer` derived from the
+     * actor's own grants.
+     */
+    public function scopeLabel(): string
+    {
+        return match (true) {
+            $this->entityRef === null => 'all',
+            is_array($this->entityRef) => implode('|', $this->entityRef),
+            default => $this->entityRef,
+        };
+    }
 }

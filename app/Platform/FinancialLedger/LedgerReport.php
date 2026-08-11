@@ -56,19 +56,42 @@ final class LedgerReport
     private const string PERIOD_PATTERN = '/\A\d{4}-(0[1-9]|1[0-2])\z/D';
 
     /**
-     * Per-account debit/credit totals for one `YYYY-MM` period, optionally
-     * scoped to a single `badan usaha`.
+     * Per-account debit/credit totals for one `YYYY-MM` period, scoped to one
+     * or more `badan usaha`.
      *
+     * `$entityRef` accepts a single reference or a list of them. The list form
+     * is what an authorized caller passes: `Contracts\LedgerReadAuthorizer`
+     * returns the set of badan usaha the actor actually holds a grant for, and
+     * that set — never a wildcard — is the filter. `null` is an UNSCOPED read
+     * across every badan usaha; it remains available because this is a plain
+     * query class with no authorization responsibility of its own (Filament
+     * resources and Blade views must not take authorization decisions, per
+     * `AGENTS.md`), but every mounted caller in this module passes a scope. An
+     * empty list is refused rather than silently treated as "no filter" — that
+     * degradation is precisely how an unscoped cross-entity export happens.
+     *
+     * @param  string|list<string>|null  $entityRef
      * @return LedgerReportResult Rows sorted by `account_code` ascending;
      *                            an empty `rows` list for a period with no
      *                            journal activity is a valid, honest result.
      *
-     * @throws InvalidLedgerReportException on a malformed period.
+     * @throws InvalidLedgerReportException on a malformed period or an empty
+     *                                      entity-reference list.
      */
-    public function summary(string $period, ?string $entityRef = null): LedgerReportResult
+    public function summary(string $period, string|array|null $entityRef = null): LedgerReportResult
     {
         $period = trim($period);
         $this->assertPeriod($period);
+
+        if (is_array($entityRef) && $entityRef === []) {
+            throw InvalidLedgerReportException::forEmptyEntityScope();
+        }
+
+        $entityRefs = match (true) {
+            $entityRef === null => null,
+            is_array($entityRef) => array_values($entityRef),
+            default => [$entityRef],
+        };
 
         [$start, $endExclusive] = $this->periodBounds($period);
 
@@ -81,7 +104,7 @@ final class LedgerReport
             ->join('journal_batches', 'journal_batches.id', '=', 'journal_entries.batch_id')
             ->where('journal_batches.occurred_at', '>=', $start)
             ->where('journal_batches.occurred_at', '<', $endExclusive)
-            ->when($entityRef !== null, static fn ($query) => $query->where('journal_batches.entity_ref', $entityRef))
+            ->when($entityRefs !== null, static fn ($query) => $query->whereIn('journal_batches.entity_ref', $entityRefs))
             ->groupBy('journal_entries.account_code')
             ->orderBy('journal_entries.account_code')
             ->get()

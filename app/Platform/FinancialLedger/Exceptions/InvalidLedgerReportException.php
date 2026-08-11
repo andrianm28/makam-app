@@ -25,4 +25,17 @@ final class InvalidLedgerReportException extends InvalidArgumentException
             .'e.g. 2026-08.'
         );
     }
+
+    /**
+     * An explicitly empty entity-reference list. Refused rather than treated
+     * as "no filter", because silently widening an empty scope to every badan
+     * usaha is the exact failure mode `LedgerReadScope` exists to prevent.
+     */
+    public static function forEmptyEntityScope(): self
+    {
+        return new self(
+            'A ledger report scoped to an empty list of badan usaha is refused. '
+            .'Pass null for a deliberately unscoped report.'
+        );
+    }
 }
