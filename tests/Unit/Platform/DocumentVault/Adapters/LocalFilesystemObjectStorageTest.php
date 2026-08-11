@@ -173,17 +173,19 @@ final class LocalFilesystemObjectStorageTest extends TestCase
     {
         $storage = new LocalFilesystemObjectStorage($this->root);
 
-        // 'KTP/quarantine/../../../../etc/passwd' normalizes (2 segments
-        // down, 4 '..' up) to two levels above $this->root, i.e. a real
-        // writable path outside the intended sandbox — this is the exact
-        // path that, before this fix, actually wrote a file to
-        // /home/ubuntu/.tmp/etc/passwd on this host.
-        $escapedPath = dirname($this->root, 2).'/etc/passwd';
+        // 'KTP/quarantine/../../../../<name>' normalizes (2 segments down,
+        // 4 '..' up) to two levels above $this->root, i.e. a writable path
+        // outside the intended sandbox. A unique filename keeps the asserted
+        // escape location portable: with a fixed 'etc/passwd' target the
+        // path collides with the real host /etc/passwd when the temp dir sits
+        // directly under '/' (CI), making the absence assertion meaningless.
+        $escapeName = 'document-vault-traversal-'.Str::random(12);
+        $escapedPath = dirname($this->root, 2).'/'.$escapeName;
 
         $this->expectException(ObjectStorageException::class);
 
         try {
-            $storage->put('KTP/quarantine/../../../../etc/passwd', $this->streamFor('malicious content'));
+            $storage->put('KTP/quarantine/../../../../'.$escapeName, $this->streamFor('malicious content'));
         } finally {
             $this->assertFileDoesNotExist(
                 $escapedPath,
