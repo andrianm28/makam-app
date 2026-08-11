@@ -12,8 +12,18 @@ use App\Platform\Notification\Models\NotificationTemplateVersion;
 use App\Platform\Notification\RecipientSet;
 
 /**
- * Explicit stand-in for a channel that is closed by configuration. It never
- * retries and never returns a provider reference or a sent state.
+ * Explicit `Channel` implementation for a channel that is closed by
+ * configuration. It never retries and never returns a provider reference or
+ * a sent state.
+ *
+ * NOT currently bound to `Contracts\Channel` (`Providers\
+ * NotificationServiceProvider` binds only `LogChannel`) and NOT reachable
+ * today: the one closed channel this module has (WA under
+ * `WhatsAppMode::EmailInAppFallback`) is recorded `UNAVAILABLE` directly by
+ * `Actions\DispatchNotification::consumeOutboxEvent()` before dispatch, so
+ * it never reaches a `Channel::send()` call. This class is a ready-made
+ * binding target for a future channel that must report `UNAVAILABLE` from
+ * inside `send()` instead.
  */
 final class NullChannel implements Channel
 {

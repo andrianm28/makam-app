@@ -11,10 +11,12 @@ use App\Platform\Notification\RecipientSet;
 
 /**
  * task-3-brief.md D5: Task 3 created this interface for the per-channel
- * dispatch job. Task 4 supplies and binds the provider-neutral
- * implementations (`Channels\LogChannel`/`Channels\NullChannel`). Tests may
- * replace the default binding with a test double
- * (`tests/Fixtures/Notification/FakeChannel.php`).
+ * dispatch job. Task 4 supplies the provider-neutral implementations
+ * `Channels\LogChannel` (bound, the dev/CI default) and `Channels\
+ * NullChannel` (a real implementation, currently unbound and unreachable —
+ * the WA-closed case never calls into a `Channel` at all; see `Channels\
+ * NullChannel`'s own doc block). Tests may replace the default binding with
+ * a test double (`tests/Fixtures/Notification/FakeChannel.php`).
  *
  * `$delivery->channel` (`EMAIL`/`WA`) tells an implementation which
  * provider to address; `$version` is the pinned, immutable template

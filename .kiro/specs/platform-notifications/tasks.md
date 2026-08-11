@@ -37,8 +37,12 @@ surface:
 
 - No email or WhatsApp provider is configured: real provider delivery is NOT
   TESTED. `LogChannel` is the honest dev/CI stand-in (`sent` means "written to
-  the dev log", never a real external claim); `NullChannel` stands in for
-  closed channels.
+  the dev log", never a real external claim) and is the only `Channel` bound
+  today. `NullChannel` is a real `Channel` implementation for a closed
+  channel but is unbound and unreachable: the module's one closed channel
+  (WA under `WhatsAppMode::EmailInAppFallback`) is recorded `UNAVAILABLE`
+  directly before dispatch, never through a `Channel` call (found and
+  corrected during Task 7a review, 11 Aug 2026 — see progress.md).
 - `G-WA-01` is closed: the closed-gate behavior is tested locally (WhatsApp
   recorded `UNAVAILABLE`, UI renders the neutral "WhatsApp belum tersedia"
   state), but the approved-BSP/template-approval flow (AC12's other half) is

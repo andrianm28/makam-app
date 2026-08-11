@@ -44,8 +44,14 @@ use Illuminate\Support\ServiceProvider;
  *
  * *** `Contracts\Channel` binding: *** Task 4 binds the development
  * `Channels\LogChannel`; tests may replace it with a deterministic test
- * double. `Channels\NullChannel` remains the explicit unavailable stand-in
- * for a closed provider channel.
+ * double. `Channels\NullChannel` is a real `Channel` implementation but is
+ * NOT bound here and is never invoked by the current dispatch flow: a
+ * closed WA gate is recorded `UNAVAILABLE` directly by
+ * `Actions\DispatchNotification::consumeOutboxEvent()` (AC12), which never
+ * reaches the `Channel` boundary for that recipient/channel pair. It exists
+ * as a ready-made binding target for a future channel that genuinely needs
+ * to report `UNAVAILABLE` from inside `Channel::send()` (found during
+ * Task 7a slice 3 review — see progress.md).
  */
 final class NotificationServiceProvider extends ServiceProvider
 {
