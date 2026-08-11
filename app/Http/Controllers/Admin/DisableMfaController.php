@@ -10,7 +10,6 @@ use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\Mfa\MfaEnrolmentService;
 use App\Platform\IdentityAccess\Mfa\MfaEnrolmentStatus;
 use App\Platform\IdentityAccess\Mfa\Models\MfaEnrolment;
-use App\Platform\IdentityAccess\Reauthentication\ReauthenticationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 
@@ -21,34 +20,25 @@ use Illuminate\Support\Facades\Auth;
  * Reached only after that middleware's freshness check has already passed
  * (either the actor's session was already fresh, or they just completed
  * `MfaChallenge` and were redirected back here via the `url.intended`
- * session key both classes share). Calls `ReauthenticationService::satisfy()`
- * first to close out that challenge's audit trail — see that service's own
- * class doc block for why this is a future controller's job, never the
- * middleware's — then performs the actual revoke through
+ * session key both classes share). Performs the revoke through
  * `MfaEnrolmentService::revoke()`, the only writer of `mfa_enrolments` rows.
+ *
+ * This controller deliberately records NO re-authentication event. It used
+ * to call `ReauthenticationService::satisfy()` unconditionally on every
+ * invocation, which verified nothing and minted the very proof a sensitive
+ * action is supposed to require — `FinancialLedger`'s bulk export controller
+ * was corrected for the identical anti-pattern. `MfaChallenge::submit()`,
+ * the one surface that actually verifies a re-proof, now writes that row
+ * (carrying this route's own `mfa_disable` reason, threaded through
+ * `RequireRecentAuthentication::REASON_SESSION_KEY`), so there is nothing
+ * left for this controller to close out.
  */
 final class DisableMfaController extends Controller
 {
-    /**
-     * Must match the `$reason` this controller's own route passes to
-     * `RequireRecentAuthentication::class.':...'` in `routes/web.php` — the
-     * two are not otherwise linked by any shared constant (no enum owns
-     * re-authentication reason strings; see that middleware's own doc
-     * block for why).
-     */
-    private const string REASON = 'mfa_disable';
-
     public function __invoke(): RedirectResponse
     {
         $user = Auth::user();
         $actorContext = app(ActorContext::class);
-
-        app(ReauthenticationService::class)->satisfy(
-            actorRef: $actorContext->identityReference,
-            actorRole: 'authenticated_actor',
-            reason: self::REASON,
-            source: AuditSource::Panel,
-        );
 
         $enrolment = MfaEnrolment::query()
             ->where('user_id', $user->id)

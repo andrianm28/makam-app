@@ -60,6 +60,12 @@ final class EnforceMfaChallenge
      */
     public const string SESSION_KEY = 'mfa_challenge_satisfied_at';
 
+    /**
+     * Named once, used for both the redirect target below and the exemption
+     * that keeps this middleware from redirecting that target to itself.
+     */
+    public const string CHALLENGE_ROUTE_NAME = 'filament.admin.pages.mfa-challenge';
+
     public function handle(Request $request, Closure $next): Response
     {
         $actorContext = app(ActorContext::class);
@@ -76,8 +82,19 @@ final class EnforceMfaChallenge
             return $next($request);
         }
 
+        // The challenge page is a panel route, so this middleware guards it
+        // too — and an actor arrives there precisely BECAUSE they have no
+        // session key yet. Without this exemption the page redirects to
+        // itself (an actual redirect loop, so no enrolled actor can reach
+        // the panel at all) and the `url.intended` write below overwrites
+        // the sensitive action the actor was attempting with this page's own
+        // URL.
+        if ($request->route()?->getName() === self::CHALLENGE_ROUTE_NAME) {
+            return $next($request);
+        }
+
         $request->session()->put('url.intended', $request->fullUrl());
 
-        return redirect()->route('filament.admin.pages.mfa-challenge');
+        return redirect()->route(self::CHALLENGE_ROUTE_NAME);
     }
 }

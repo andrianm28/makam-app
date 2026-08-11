@@ -82,6 +82,53 @@ use Symfony\Component\HttpFoundation\Response;
  */
 final class RequireRecentAuthentication
 {
+    /**
+     * Carries `$reason` — the sensitive action that triggered THIS challenge
+     * — to the challenge page, which otherwise has no way to know it: the
+     * page is a separate request, and is the redirect target of
+     * `EnforceMfaChallenge` too, whose challenges guard no sensitive action
+     * at all.
+     *
+     * It has to be threaded, not guessed, because the reason is load-bearing
+     * for authorization, not just for audit prose: sensitive actions check
+     * `reauthentication_events` for a satisfied row carrying THEIR OWN
+     * reason (`FinancialLedger\Actions\ManualPayout` and `BulkFinancialExport`
+     * both do). A satisfied row with a generic reason would leave those
+     * actions permanently refused.
+     *
+     * Written on every challenge redirect, so the value always names the
+     * most recent challenge rather than an older abandoned one, and consumed
+     * (`session()->pull()`) by `MfaChallenge` on success, so one challenge
+     * yields proof for exactly one action.
+     *
+     * ---------------------------------------------------------------------
+     * KNOWN LIMIT — this reaches the STALE actor only
+     * ---------------------------------------------------------------------
+     * The freshness check below returns early, BEFORE this key is written. So
+     * an actor who is already fresh is waved through with no challenge, no
+     * reason threaded, and therefore no per-action `satisfied` row ever
+     * written for them.
+     *
+     * That matters because this middleware's freshness model
+     * (`actor_sessions.last_authenticated_at`) and the reason-scoped model a
+     * sensitive action enforces for itself (a `reauthentication_events` row
+     * matching its own reason — `FinancialLedger\Actions\ManualPayout` and
+     * `BulkFinancialExport` both query for one) are two DIFFERENT gates that
+     * this key only partly reconciles. A freshly-logged-in actor passes this
+     * middleware and is then refused by the action's own check, with no way
+     * to satisfy it: visiting the challenge page voluntarily mints only the
+     * generic `MfaChallenge::REAUTHENTICATION_REASON`, never a per-action
+     * reason, because no challenge for that action was ever raised.
+     *
+     * That refusal fails closed and is not a security hole, but it is a real
+     * functional gap. Closing it means either having the sensitive action
+     * raise its own challenge when its reason-scoped check fails, or
+     * unifying the two freshness models — a design decision deliberately
+     * left to a follow-up rather than smuggled into this middleware. Do not
+     * read this key as evidence that reason-scoped gates are fully wired.
+     */
+    public const string REASON_SESSION_KEY = 'reauthentication_pending_reason';
+
     public function handle(Request $request, Closure $next, string $reason, string $challengeRouteName): Response
     {
         $actorContext = app(ActorContext::class);
@@ -117,6 +164,7 @@ final class RequireRecentAuthentication
         // call sends the actor back to the sensitive action they were
         // attempting, not to the start.
         $request->session()->put('url.intended', $request->fullUrl());
+        $request->session()->put(self::REASON_SESSION_KEY, $reason);
 
         return redirect()->route($challengeRouteName);
     }
