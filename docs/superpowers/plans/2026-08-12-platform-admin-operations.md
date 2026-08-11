@@ -127,23 +127,141 @@ Verified by grep, not inferred:
 
 ---
 
-## Scope Decision — PENDING COORDINATOR RULING
+## Scope Decision — RULED
 
-Two questions were escalated before task decomposition and **must be answered before the task list below is executed**:
+Coordinator ruling, 12 Aug 2026. It corrects two things this lane's own survey got wrong, and both corrections are load-bearing.
 
-- **Q1.** Who creates the `orders` table and model? Three lanes (L7, L9, L11) need it and none owns it. If L7 owns it, this lane defers ADM-040/050/060 and AC4/AC9/AC11 to a follow-up rather than racing to invent a schema.
-- **Q2.** Is a `vendors` table in this lane's scope, or does it belong to the not-yet-dispatched vendor-portal lane? Either way it is a new migration against a database already deployed to `dev.makam.co.id`, so it is human-review gated.
+- **L7 exists and is actively building the order model.** Worktree `.worktrees/platform-order-orchestration`, branch `lane/l7-order-orchestration` — created after this lane's survey snapshot, which is why the survey reported it absent. It owns `orders`, `quotes`, and the order state machine. **Do not build a rival order model.** AC4/AC9/AC11 admin screens consume L7's schema.
+- **L11 owns the vendor schema.** Branch `lane/l11-marketplace-checkout` is building `vendors`, `vendor_users`, `vendor_orders` and related tables. **Do not create a `vendors` table in this lane.** AC3's admin vendor-management UI consumes L11's schema once it exists.
+- **Follow the house authorizer idiom**, not a new Laravel policy: a constructor-injected `Contracts\XAuthorizer` whose `authorize()` throws. This overrides the retrofit ticket's "add a policy class" wording and this plan's earlier leaning.
+- **`FaqArticleAuthorizationCharacterizationTest`'s four gap tests are rewritten to prove the exploit is now inert — never deleted.** They are the evidence trail; inverting the assertions preserves it, removing them destroys it.
+- **Money: convert at the read seam** using the established `Money::fromDecimal(string $amount): int` (verified present at `app/Platform/FinancialLedger/Money.php:39`).
 
-A third item was escalated for confirmation rather than decision: fixing `AdminPanelAccessPolicy` is proposed for this lane, but it is a shared file and roughly ten existing test files `actingAs()` a roleless user against `/admin`, so tightening it has cross-lane blast radius.
+**Verified at planning time:** `git log d9fea9f..lane/l7-order-orchestration` and the same for `lane/l11-marketplace-checkout` both return **empty** — neither lane has committed schema yet. Task ordering below is therefore deliberate: every task that depends only on models that already exist runs first, giving L7 and L11 maximum time to land. The dependent tasks sit last and carry an explicit escalation trigger rather than a guess.
 
-**Working assumption pending the ruling** (build only what has a real data model; ledger the rest honestly, as AC7's "where data exists" clause already sanctions):
+### Two open authorization questions
 
-- *Full rigor:* panel gate, `FaqArticlePolicy` + `->authorize()` on the four actions, sensitive-action authorization and audit wiring.
-- *Light tier:* ADM-010 cemetery/TPU-TPS, ADM-020 package/service/tariff, ADM-030 product/variant, ADM-070 payment/transaction + manual verification, ADM-090 reports scoped via `FinanceLedgerReadAuthorizer`, ADM-100 audit review, ADM-001 dashboard.
-- *Ledgered, not built:* AC3 vendor entity, AC4, AC9, AC11 except failed-payment, and the order-dependent parts of AC7.
+**A. Which roles may manage FAQ content?** `docs/security/rbac-matrix.md` (v0.2, 31 lines) has **no FAQ or content-management row at all**. The nearest analogue is "Memorial edit/publish → Admin: Moderation". The authorization model for FAQ management is genuinely unspecified, and this lane will not invent one.
+
+Task 1 therefore implements the **most restrictive defensible grant — `ActorRole::ADMIN` only.** This is a refusal to grant rather than an invented model: it cannot over-permit, and widening it later to `restricted_admin` or `operator` is a deliberate, reviewable decision. The PR flags this for human ruling and proposes the corresponding new `rbac-matrix.md` row rather than silently shipping an access model.
+
+**B. The panel gate is a live hole and is NOT fixed by Task 1.** `AdminPanelAccessPolicy::allows()` still returns bare `isAuthenticated()`. Every Resource this lane adds must therefore carry its own authorization — which Tasks 2-8 do — so the lane is correct whether or not the gate is tightened. Tightening it is drafted as **Task 10, conditional**, held back because it is a shared file and roughly ten existing test files `actingAs()` a roleless user against `/admin`; changing it unilaterally would break three concurrent lanes. It ships only on explicit coordinator approval.
+
+### Scope summary
+
+- *Full rigor:* Task 1 (FAQ authorizer), Task 6 (report/export scoping), Task 10 (panel gate, conditional).
+- *Light tier:* Tasks 2-5, 7-8.
+- *Ledgered, not built:* AC3 vendor entity (L11's), AC4/AC9 order workflows (L7's), AC11 beyond failed-payment, order-dependent parts of AC7. AC7's own **"where data exists"** clause sanctions this.
+
+---
+
+## File Structure
+
+| Path | Responsibility |
+|---|---|
+| `app/Domain/Faq/Contracts/FaqAuthorizer.php` | Interface: `authorizeManage()` throws, `canManage()` returns bool |
+| `app/Domain/Faq/Authorization/RoleBasedFaqAuthorizer.php` | Role check against `ActorContext` |
+| `app/Domain/Faq/Exceptions/FaqActionNotAuthorisedException.php` | Module-specific throw, mirroring `LedgerReadNotAuthorisedException` |
+| `app/Domain/CemeteryDirectory/Actions/` | New write Actions — none exist today |
+| `app/Domain/Marketplace/Actions/` | New write Actions — directory exists but is empty |
+| `app/Filament/Admin/Resources/<Name>/` | One dir per Resource, following the `FaqArticles/` split: `Schemas/`, `Tables/`, `Pages/` |
+| `app/Filament/Admin/Pages/` | Dashboard, reports, audit review |
 
 ---
 
 ## Tasks
 
-> Task decomposition follows once Q1/Q2 are ruled on. Writing it before then would bake in an ownership assumption this lane is explicitly not authorised to make.
+Each task ends with `php artisan test` green against the recorded baseline (1812 tests, 2 pre-existing host-only errors) plus `bash ci/verify-docs.sh` all-pass, then a commit. **No task marks an AC `Covered` in the traceability matrix without a real test file on disk** — Gate 7 enforces this.
+
+### Task 1: FAQ authorization (FULL RIGOR)
+
+**Files:**
+- Create: `app/Domain/Faq/Contracts/FaqAuthorizer.php`, `app/Domain/Faq/Authorization/RoleBasedFaqAuthorizer.php`, `app/Domain/Faq/Exceptions/FaqActionNotAuthorisedException.php`
+- Modify: `app/Filament/Admin/Resources/FaqArticles/Tables/FaqArticlesTable.php:151-228`, `app/Filament/Admin/Resources/FaqArticles/FaqArticleResource.php`, the Faq service provider (binding)
+- Modify: `tests/Feature/Filament/Admin/Faq/FaqArticleAuthorizationCharacterizationTest.php` — invert, do not delete
+
+**Interfaces — Produces:**
+```php
+interface FaqAuthorizer
+{
+    public function canManage(ActorContext $actor): bool;
+    public function authorizeManage(ActorContext $actor): void; // throws FaqActionNotAuthorisedException
+}
+```
+
+- [ ] **Step 1: Write the failing tests.** Rewrite each of the four existing `test_gap_*` methods to assert denial instead of success, renaming `test_gap_any_authenticated_user_can_publish_an_article` → `test_a_roleless_user_cannot_publish_an_article`, and keep a docblock recording that this test previously pinned the gap (cite `retrofit-backlog.md:88`). Add a positive counterpart per action granting `ActorRole::ADMIN` via `GrantActorRole`, asserting the action still succeeds. **Both directions are required** — a denial-only test suite passes just as well against a resource that denies everyone.
+- [ ] **Step 2: Run them and watch them fail.** `php artisan test --filter=FaqArticleAuthorization`. Expected: the four denial tests FAIL (the action still succeeds today). If any denial test passes before the implementation exists, the test is vacuous — fix it before continuing.
+- [ ] **Step 3: Implement the authorizer.** `RoleBasedFaqAuthorizer::canManage()` returns `$actor->hasRole(ActorRole::ADMIN)`. `authorizeManage()` calls it and throws `FaqActionNotAuthorisedException` otherwise. Bind the interface in the Faq service provider.
+- [ ] **Step 4: Wire both layers on all four actions.** Add `->authorize(fn (): bool => app(FaqAuthorizer::class)->canManage(app(ActorContext::class)))` **and** call `app(FaqAuthorizer::class)->authorizeManage(app(ActorContext::class));` as the first statement inside each `->action()` closure. Both are required: `->authorize()` governs whether the control renders and mounts, the throwing call is the server-side enforcement that holds even if the action is invoked directly. Preserve every existing `->visible()`/`->hidden()` record-state guard — those are orthogonal to authorization and must not be replaced by it.
+- [ ] **Step 5: Add resource-level authorization.** Implement `canViewAny()`/`canCreate()`/`canEdit()` on `FaqArticleResource` delegating to the same authorizer, so `ViewAction`/`EditAction` and the list page are covered too, not only the four custom actions.
+- [ ] **Step 6: Correct the stale comments.** Remove the "`ActorContext::$roles` is always `[]`" claims from `AdminPanelAccessPolicy` and the characterization test — L5 made them false and they actively mislead.
+- [ ] **Step 7: Run the full suite.** `php artisan test`. Expected: baseline + the new tests, no regressions.
+- [ ] **Step 8: Commit** as its own reviewable authorization unit, message noting AGENTS.md §Infrastructure-agent execution human review is required and that the role grant is `admin`-only pending the ruling on open question A.
+
+### Task 2: ADM-020 service catalogue and price/tariff admin (light) — AC2
+
+Write Actions already exist (`DefineServicePackage`, `PublishServicePackageVersion`, `ReviseServicePackageVersion`, `RecordServiceDefinitionPriceVersion`), so this is Resource wiring over a complete domain — the best first light-tier task.
+
+- [ ] Resource for `ServicePackage` + `ServicePackageVersion` + `ServicePackageItem`, delegating every write to the existing Actions. Never touch Eloquent directly.
+- [ ] Price/tariff screen over `PriceVersion`. `PRICE_VERSION_RECORDED` and `SERVICE_DEFINITION_PRICE_VERSION_RECORDED` are both `SensitiveActions`-listed, so the form **must** capture a mandatory non-blank reason and the confirm modal must state the consequence and not default-focus the destructive button.
+- [ ] `price_versions.amount` is `decimal`; convert with `Money::fromDecimal()` at the read seam before comparing against any ledger figure.
+- [ ] Authorization via an injected authorizer, same idiom as Task 1. Tests cover authorized success and unauthorized denial.
+
+### Task 3: ADM-010 cemetery / TPU-TPS admin (light) — AC2
+
+- [ ] Create write Actions under `app/Domain/CemeteryDirectory/Actions/` — **none exist**; every `cemeteries` row today comes from a seed migration.
+- [ ] Resource over `Cemetery` (UUID pk) plus `CemeteryCapabilityProfile` and `CemeteryPackage`. Closed lists (`CemeteryType`, `CemeteryPublicationStatus`, `LaunchCityCode`, the capability modes) drive every select — never a free-text field.
+- [ ] City, facility, class and availability have **no entity**; manage them as the columns they are (`city` string against `LaunchCityCode`, `facilities` json, `class_label` string) and record in the ledger that AC2's "city/facility/class/availability management" is columns-not-entities.
+
+### Task 4: ADM-030 product and variant admin (light) — AC3 partial
+
+- [ ] Create write Actions under `app/Domain/Marketplace/Actions/` — the directory exists but is empty.
+- [ ] Resource over `Product` and `ProductVariant`. `products.base_price_idr` is a **minor-unit integer**, unlike the catalogue's decimals — do not mix them.
+- [ ] **Vendor management is explicitly out of scope here** (L11 owns the schema). Do not create a `vendors` table, and do not build CRUD over `products.vendor_name`, which is dummy free text.
+
+### Task 5: ADM-070 payment and transaction views (light) — AC5
+
+- [ ] Read-only Resources/Pages over `PaymentIntent`, `PaymentSession`, `ProviderEvent`, `PaymentVerification`, `PaymentReversal`. Backend is complete with zero UI today.
+- [ ] Manual outgoing-payment recording with proof, delegating to the existing `VerifyManualPayment` / payout Actions. `PAYMENT_MANUAL_VERIFICATION` and `VENDOR_PAYOUT` are `SensitiveActions`-listed → mandatory reason.
+- [ ] `MENUNGGU_VERIFIKASI_PEMBAYARAN` renders `pending`, **never** `success`. Resolve through `StatusIntent::filamentColor($state, StatusIntent::FAMILY_ORDER_LIFECYCLE)` — always pass the family explicitly.
+- [ ] Coordinate with the live `fix/payment-controller-authorization` hotfix worktree before touching payment authorization.
+
+### Task 6: ADM-090 reports and export scoping (FULL RIGOR) — AC7, AC10
+
+- [ ] Reports over `LedgerReport::summary()`, scoped through the existing `FinanceLedgerReadAuthorizer` (requires `ActorRole::FINANCE` **and** a `business_entity` scope grant at `privileged`). This is the working precedent — reuse it, do not write a parallel one.
+- [ ] AC10: an out-of-scope record must return an explanatory state and **must not reveal whether the record exists** (design-system §6.4). Test this explicitly.
+- [ ] Bulk export renders `secondary`, never adjacent to a benign action, and requires recent re-authentication.
+- [ ] Financial totals reconcile to journal references, not to mutable order status (design.md §Reporting).
+
+### Task 7: ADM-100 audit and sensitive-action review (light) — AC8
+
+- [ ] Read-only Resource over `AuditEvent`. Append-only — no edit or delete path.
+- [ ] Filter by action, actor, and date. Confirm no restricted data is rendered into logs or error trackers.
+
+### Task 8: ADM-001 dashboard and failed-payment exception queue (light) — AC1, AC11 partial
+
+- [ ] Dashboard widgets for the modules that exist. Empty state per widget hides rather than renders an empty shell (§6.2); loading uses skeleton tiles (§6.1).
+- [ ] Failed-payment exception queue from `provider_events.status` and `reconciliation_exceptions` — `danger` intent.
+- [ ] The other three AC11 queues (missing operator response, vendor delay, unmatched renewal) have no data model. Render nothing and ledger them; **do not fabricate data to fill a widget.**
+
+### Task 9: Documentation and traceability
+
+- [ ] Extend the existing ADM rows in `docs/product/screen-inventory.md` §B using §A's established annotation convention. Do not invent a rival table.
+- [ ] Update `docs/domain/traceability-matrix.md` — only mark `Covered` where a real test path exists (Gate 7 enforces).
+- [ ] Update `.kiro/specs/admin-operations/tasks.md` progress honestly, and add ledger rows to `docs/planning/retrofit-backlog.md` for every deferred AC with its owning lane.
+- [ ] Propose the missing FAQ/content row for `docs/security/rbac-matrix.md` (open question A) rather than leaving the model undocumented.
+
+### Task 10: Panel gate (FULL RIGOR — CONDITIONAL, ships only on coordinator approval)
+
+- [ ] Narrow `AdminPanelAccessPolicy::allows()` from bare `isAuthenticated()` to a role check (`admin`, `restricted_admin`, `finance`, `operator`).
+- [ ] Update every affected test to grant an appropriate role — roughly ten files across FAQ, finance reports, notifications, MFA, and `AdminPanelHttpAccessTest`.
+- [ ] Held back by default: shared file, cross-lane blast radius while L7/L8/L11 are live.
+
+---
+
+## Verification
+
+- `php artisan test` — must match baseline plus new tests; any other failure is this lane's.
+- `bash ci/verify-docs.sh` — all 13 gates.
+- **Real PostgreSQL 18** verification for anything schema-touching, against `makam-nonprod-postgres-1`. SQLite-only runs are not sufficient evidence for a migration.
+- Never report `PASS` for a check not executed — `BLOCKED` or `NOT TESTED` explicitly.
