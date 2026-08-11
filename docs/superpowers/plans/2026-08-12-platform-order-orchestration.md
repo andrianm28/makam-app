@@ -654,9 +654,12 @@ Tests: each of conditions 2-5 denies for a real, specific domain reason (`Domain
 
 **Ratified design (Q3).** The keystone task. `ProcessWebhookEvent` deliberately only *claims* an event and applies no paid effect; this is the deferred apply step.
 
+> **SEQUENCING CONSTRAINT — do not edit `app/Platform/Payment/Http/Controllers/VerifyManualPaymentController.php` in this task until the coordinator confirms the payment-auth hotfix has landed.** A concurrent lane is actively editing that file (adding an authorization check before the existing `verify()` call, and replacing the hardcoded `actorRole: 'authenticated_actor'` with a real resolved role). `GuardPaymentSession`, `GuardCondition`, and `ProcessWebhookEvent` are confirmed **not** touched by that hotfix and are safe to modify. If this task is reached before the hotfix lands, implement everything except the controller wiring, and report the controller hook as **NOT DONE — BLOCKED on the payment-auth hotfix** rather than editing the file anyway.
+
 **Files:**
 - Create: `app/Domain/OrderWorkflow/Actions/ApplyPaidEffects.php`, `PaidTrigger.php`
 - Modify: `app/Platform/Payment/ProcessWebhookEvent.php` (call the apply step on a claimed settling event)
+- Modify (**only after the hotfix lands** — see constraint above): `app/Platform/Payment/Http/Controllers/VerifyManualPaymentController.php`
 - Modify: `app/Platform/Audit/SensitiveActions.php` if a new action is ratified
 - Test: `tests/Feature/OrderWorkflow/ApplyPaidEffectsTest.php`
 
@@ -687,6 +690,25 @@ Tests: a webhook applies effects once; a manual verification applies effects onc
 Exposes, server-side: order reference, status (as a `StatusIntent`-resolved intent, never a raw string match), **invoice state as a read-model state only** — `FIN-DEC-02` is `TBD`, so no invoice is produced — channel-delivery state, next action, and a support reference. Distinguishes *no data yet* / *no result for this filter* / *access-restricted* rather than collapsing them to null (§6.2), returns field-keyed validation errors (§6.3), and carries a correlation reference safe to show a user while the raw id goes to logs (§6.10).
 
 Fallback modes (`PaymentMode::MANUAL_COORDINATION`, `WhatsAppMode::EMAIL_IN_APP_FALLBACK`, `PreNeedMode::INTEREST_ONLY`, `GraveSearchMode::MANUAL_ASSISTANCE`) are read from the **server**; a front-end flag is insufficient (§6.9). Tests must assert no request input can select a mode.
+
+**AC12 coverage is explicit, not inferred.** AC12 (preserve the admin/case-manager fallback while an operator has not responded) is otherwise satisfied only incidentally — by `MENUNGGU_KETERSEDIAAN` being non-blocking in Task 1's graph plus the next-action field here. That is sound but leaves a named acceptance criterion with no test of its own, so add one directly asserting it:
+
+```php
+public function test_the_admin_fallback_stays_reachable_while_an_operator_has_not_responded(): void
+{
+    $order = $this->makeOrder(OrderStatus::MENUNGGU_KETERSEDIAAN);
+
+    $view = app(OrderReadModel::class)->forOrder($order);
+
+    // Operator silence is a pending state, never a blocking one.
+    self::assertSame('pending', $view->statusIntent);
+    self::assertNotNull($view->nextAction, 'Operator silence must leave an actionable next step');
+
+    // The admin/case-manager path out of this state is still open.
+    self::assertContains('PENAWARAN_TERKIRIM', OrderTransition::allowedFrom(OrderStatus::MENUNGGU_KETERSEDIAAN));
+    self::assertTrue($view->manualFallbackAvailable);
+}
+```
 
 - [ ] **Step 1-5:** failing test → verify fail → implement → verify pass → commit.
 
