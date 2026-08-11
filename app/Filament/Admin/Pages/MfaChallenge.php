@@ -14,6 +14,7 @@ use App\Platform\IdentityAccess\Mfa\MfaEnrolmentStatus;
 use App\Platform\IdentityAccess\Mfa\MfaRecoveryService;
 use App\Platform\IdentityAccess\Mfa\Models\MfaEnrolment;
 use App\Platform\IdentityAccess\Reauthentication\ReauthenticationService;
+use Filament\Facades\Filament;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
 
@@ -105,9 +106,14 @@ final class MfaChallenge extends Page
         // written at login and nowhere else — so an actor who re-proved
         // their identity right here was still stale on the next request and
         // was redirected straight back to this page, forever.
+        // The PANEL's guard, not `Auth::getDefaultDriver()`: the two agree
+        // today only because `AdminPanelProvider` declares no `->authGuard()`,
+        // and the login listener writes the guard actually used
+        // (`$event->guard`). Reading the panel's own guard keeps the two
+        // writers of this column from drifting if a panel ever declares one.
         app(RecordActorSessionAuthentication::class)(
             $user->getAuthIdentifier(),
-            Auth::getDefaultDriver(),
+            Filament::getAuthGuard(),
             request(),
         );
 

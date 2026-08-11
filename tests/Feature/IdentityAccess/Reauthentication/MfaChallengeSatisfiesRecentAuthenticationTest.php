@@ -153,6 +153,14 @@ final class MfaChallengeSatisfiesRecentAuthenticationTest extends TestCase
         $this->get('/__test/sensitive-action')
             ->assertOk()
             ->assertJson(['ok' => true]);
+
+        // The step-up row must name the panel's guard, the same value the
+        // login listener writes from `$event->guard` — the two writers of
+        // this column must not drift.
+        $this->assertSame(
+            'web',
+            ActorSession::query()->where('user_id', $user->id)->latest('id')->value('guard'),
+        );
     }
 
     public function test_a_stale_actor_passes_the_same_gate_after_redeeming_a_recovery_code(): void
