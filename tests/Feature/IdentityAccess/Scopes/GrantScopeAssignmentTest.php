@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\IdentityAccess\Scopes;
 
 use App\Platform\Audit\Exceptions\AuditReasonRequiredException;
+use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\IdentityAccess\Scopes\Actions\GrantScopeAssignment;
 use App\Platform\IdentityAccess\Scopes\Actions\RevokeScopeAssignment;
 use App\Platform\IdentityAccess\Scopes\ScopeAssignmentReader;
@@ -133,5 +134,34 @@ final class GrantScopeAssignmentTest extends TestCase
         $this->expectException(AuditReasonRequiredException::class);
 
         app(RevokeScopeAssignment::class)(42, ScopeEntityType::CEMETERY, 4, '   ', 1);
+    }
+
+    public function test_the_reason_is_never_written_to_metadata(): void
+    {
+        // Twin of GrantActorRoleTest's test of the same name. The reason is
+        // operator-authored free text: it belongs in the audit `reason`
+        // column and nowhere else. Copying it into metadata would route
+        // unbounded operator prose into a field governed by
+        // MetadataAllowlist, against AGENTS.md §Observability.
+        app(GrantScopeAssignment::class)(
+            actorIdentifier: 42,
+            entityType: ScopeEntityType::CEMETERY,
+            entityId: 4,
+            grantLevel: ScopeGrantLevel::PRIVILEGED,
+            reason: 'Cemetery operator onboarding, ticket OPS-115',
+            grantedBy: 1,
+        );
+
+        $event = AuditEvent::query()
+            ->where('action', ScopeAuditActions::GRANT)
+            ->firstOrFail();
+
+        $this->assertSame('Cemetery operator onboarding, ticket OPS-115', $event->reason);
+
+        // Pin that metadata is genuinely populated before asserting what is
+        // absent from it — otherwise an empty metadata array would satisfy
+        // the assertion below without the guarantee holding for real.
+        $this->assertSame(['new_state' => 'cemetery:4'], $event->metadata);
+        $this->assertArrayNotHasKey('reason', $event->metadata ?? []);
     }
 }

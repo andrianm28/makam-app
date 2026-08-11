@@ -699,6 +699,17 @@ git commit -m "docs(identity-seam): point rbac matrix at the real role vocabular
 
 ## NOT TESTED (this lane)
 
+- **The "validate before the transaction opens" ordering claim in Task 4 is not
+  independently tested** (Task 4 review, Minor). Removing the pre-transaction
+  `assertKnown()` calls does not fail any test, because `ActorRoleAssignment`
+  and `ScopeAssignment` re-validate in their own `saving` listeners inside the
+  transaction, and `Audit::wrap()` rolls the whole thing back either way. The
+  outcome is identical from the outside — no assignment row, no audit row — so
+  the two layers cannot be distinguished by a behavioural test. Kept as
+  deliberate defence in depth rather than removed, and recorded here so the
+  redundancy is not mistaken for coverage: if a future change removes the model
+  listener, nothing will fail until the pre-check is also verified.
+
 - Behaviour of the five previously-inert authorizers under a *real* granted role in a *real* HTTP request. Their own suites construct `ActorContext` directly. Exercising them end to end belongs to the lanes that own those surfaces.
 - The `FaqArticlesTable` authorization gap. Unblocked here, closed elsewhere.
 - Any K1/K2 adapter. Still unseen; the interface remains a drop-in swap.
