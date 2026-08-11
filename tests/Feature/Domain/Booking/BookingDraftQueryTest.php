@@ -60,7 +60,7 @@ final class BookingDraftQueryTest extends TestCase
             'priceable_type' => ServiceDefinition::class,
             'priceable_id' => $service->id,
             'version_number' => 2,
-            'amount' => 150000,
+            'amount' => '150000.25',
             'currency' => 'IDR',
             'effective_from' => now(),
             'superseded_at' => null,
@@ -77,10 +77,25 @@ final class BookingDraftQueryTest extends TestCase
         $this->assertCount(1, $summary['lines']);
         $this->assertSame('DOCUMENT_PROCESSING', $summary['lines'][0]['code']);
         $this->assertSame(1, $summary['lines'][0]['quantity']);
-        $this->assertSame(150000.0, $summary['lines'][0]['unit_price']);
-        $this->assertSame(150000.0, $summary['lines'][0]['line_total']);
-        $this->assertSame(150000.0, $summary['total']);
+        $this->assertSame(15000025, $summary['lines'][0]['unit_price']);
+        $this->assertSame(15000025, $summary['lines'][0]['line_total']);
+        $this->assertSame(15000025, $summary['total']);
         $this->assertTrue($summary['all_prices_available']);
+    }
+
+    public function test_summary_does_not_enter_the_quote_path_when_quantity_overflows_minor_units(): void
+    {
+        $draft = BookingDraft::create([
+            'selected_services' => [
+                ['code' => 'DOCUMENT_PROCESSING', 'quantity' => PHP_INT_MAX],
+            ],
+        ]);
+
+        $summary = BookingDraftQuery::summary($draft);
+
+        $this->assertNull($summary['lines'][0]['line_total']);
+        $this->assertNull($summary['total']);
+        $this->assertFalse($summary['all_prices_available']);
     }
 
     public function test_summary_marks_a_missing_price_honestly_instead_of_fabricating_a_total(): void

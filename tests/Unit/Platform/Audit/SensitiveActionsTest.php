@@ -32,6 +32,8 @@ final class SensitiveActionsTest extends TestCase
             'price version recorded' => ['PRICE_VERSION_RECORDED'],
             'service definition price version recorded' => ['SERVICE_DEFINITION_PRICE_VERSION_RECORDED'],
             'reconciliation exception resolved' => ['RECONCILIATION_EXCEPTION_RESOLVED'],
+            'payment refund' => ['PAYMENT_REFUND'],
+            'payment chargeback' => ['PAYMENT_CHARGEBACK'],
         ];
     }
 
@@ -73,6 +75,14 @@ final class SensitiveActionsTest extends TestCase
      * `docs/superpowers/plans/2026-08-10-wave1b-financial-decisions.md`. This
      * assertion is an exact-list check on purpose, so every growth of that
      * array has to arrive here with a stated authority rather than slipping in.
+     *
+     * UPDATED 11 Aug 2026 — platform-payment-adapter Task 6 (Wave 1d
+     * Append-Correction) added `PAYMENT_REFUND`/`PAYMENT_CHARGEBACK`: the
+     * only writers of `payment_reversals` rows
+     * (`App\Platform\Payment\Actions\RecordRefund`/`RecordChargeback`) are
+     * explicit, human-initiated financial operations, the same risk
+     * category as `VENDOR_PAYOUT` already on this list — another genuine,
+     * documented addition, not a regression.
      */
     public function test_the_list_contains_the_requirements_named_actions_plus_the_documented_additions(): void
     {
@@ -91,6 +101,8 @@ final class SensitiveActionsTest extends TestCase
                 'MFA_RESET',
                 'DOCUMENT_DELETE',
                 'RECONCILIATION_EXCEPTION_RESOLVED',
+                'PAYMENT_REFUND',
+                'PAYMENT_CHARGEBACK',
             ],
             SensitiveActions::ACTIONS
         );

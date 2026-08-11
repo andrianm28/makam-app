@@ -268,14 +268,14 @@
                             'label' => $line['label'],
                             'quantity' => $line['quantity'],
                             'price' => $line['line_total'] !== null
-                                ? 'Rp ' . number_format($line['line_total'], 0, ',', '.')
+                                ? (new \App\Platform\FinancialLedger\Money($line['line_total']))->format()
                                 : 'Harga belum tersedia',
                         ])->all()"
                     />
 
                     <p class="mt-4 text-base font-semibold text-neutral-900">
                         @if ($summary['total'] !== null)
-                            Total: Rp {{ number_format($summary['total'], 0, ',', '.') }}
+                            Total: {{ (new \App\Platform\FinancialLedger\Money($summary['total']))->format() }}
                         @else
                             Total belum dapat dihitung &mdash; sebagian harga layanan belum tersedia.
                         @endif

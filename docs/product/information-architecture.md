@@ -22,6 +22,9 @@
 │   ├── /kategori/{categorySlug}
 │   └── /{articleSlug}
 ├── /pesanan/{orderReference}
+├── /pembayaran
+│   ├── /kembali
+│   └── /batal
 ├── /akun
 │   ├── /draft
 │   ├── /pesanan
@@ -29,6 +32,8 @@
 │   └── /dokumen
 └── /bantuan
 ```
+
+`/pembayaran/kembali` dan `/pembayaran/batal` (ditambahkan 10 Agu 2026, `platform-payment-adapter` AC4) adalah tujuan redirect BROWSER dari penyedia pembayaran — `success_return_url`/`cancel_return_url` pada ADR-0033. Keduanya hanya merender halaman: tidak ada transisi status, tidak ada jurnal, tidak ada klaim "sudah dibayar". Callback penyedia yang sesungguhnya adalah `POST /api/payments/webhook/{merchant}` (`docs/contracts/payment-webhook.md`), bukan kedua rute ini. Lihat `AGENTS.md` §Domain and financial invariants: "Never mark paid from browser return URL."
 
 ## 2. Global header
 
