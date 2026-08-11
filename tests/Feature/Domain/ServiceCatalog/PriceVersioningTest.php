@@ -33,6 +33,13 @@ use Tests\TestCase;
  * several tests below now explicitly clear a service's pre-existing seeded
  * price first, so they can still isolate "recording a version from a clean
  * slate" the way they always have, independent of that seeded baseline.
+ *
+ * Every call below passes an explicit `reason:` — `$reason` became a
+ * REQUIRED, non-blank parameter of `RecordServiceDefinitionPriceVersion`
+ * on 10 Aug 2026 (Task 2R baseline repair), closing a regression this
+ * lane's own Task 1 left behind: `SensitiveActions::ACTIONS` already
+ * required one at runtime, but the signature still defaulted it to
+ * `null`.
  */
 final class PriceVersioningTest extends TestCase
 {
@@ -68,6 +75,7 @@ final class PriceVersioningTest extends TestCase
             serviceDefinition: $service,
             amount: '1500000.00',
             actorReference: 3,
+            reason: 'Initial price version recorded for grave digging service test fixture.',
             source: 'Rate card operator uji.',
         );
 
@@ -87,12 +95,14 @@ final class PriceVersioningTest extends TestCase
             serviceDefinition: $service,
             amount: '1500000.00',
             actorReference: 3,
+            reason: 'Recording the first price version ahead of a scheduled supersession test.',
         );
 
         $second = (new RecordServiceDefinitionPriceVersion)(
             serviceDefinition: $service,
             amount: '1750000.00',
             actorReference: 3,
+            reason: 'Recording the second price version to supersede the first.',
         );
 
         $this->assertSame(1, $first->version_number);
@@ -116,8 +126,18 @@ final class PriceVersioningTest extends TestCase
         $this->clearExistingPriceVersions($ambulance);
 
         $recordPrice = new RecordServiceDefinitionPriceVersion;
-        $recordPrice(serviceDefinition: $graveDigging, amount: '1500000.00', actorReference: 3);
-        $ambulancePrice = $recordPrice(serviceDefinition: $ambulance, amount: '800000.00', actorReference: 3);
+        $recordPrice(
+            serviceDefinition: $graveDigging,
+            amount: '1500000.00',
+            actorReference: 3,
+            reason: 'Recording grave digging price to prove per-service version isolation.',
+        );
+        $ambulancePrice = $recordPrice(
+            serviceDefinition: $ambulance,
+            amount: '800000.00',
+            actorReference: 3,
+            reason: 'Recording ambulance price to prove per-service version isolation.',
+        );
 
         $this->assertSame(1, $ambulancePrice->version_number);
         $this->assertSame($ambulance->id, $ambulancePrice->priceable_id);
@@ -150,7 +170,12 @@ final class PriceVersioningTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
 
-        (new RecordServiceDefinitionPriceVersion)(serviceDefinition: $service, amount: '0', actorReference: 3);
+        (new RecordServiceDefinitionPriceVersion)(
+            serviceDefinition: $service,
+            amount: '0',
+            actorReference: 3,
+            reason: 'Attempting to record a non-positive amount to prove the guard rejects it.',
+        );
     }
 
     public function test_a_non_numeric_amount_is_rejected(): void
@@ -159,7 +184,12 @@ final class PriceVersioningTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
 
-        (new RecordServiceDefinitionPriceVersion)(serviceDefinition: $service, amount: 'not-a-number', actorReference: 3);
+        (new RecordServiceDefinitionPriceVersion)(
+            serviceDefinition: $service,
+            amount: 'not-a-number',
+            actorReference: 3,
+            reason: 'Attempting to record a non-numeric amount to prove the guard rejects it.',
+        );
     }
 
     // ------------------------------------------------------------------
@@ -182,9 +212,24 @@ final class PriceVersioningTest extends TestCase
 
         $recordPrice = new RecordServiceDefinitionPriceVersion;
 
-        $first = $recordPrice(serviceDefinition: $service, amount: '1500000.00', actorReference: 3);
-        $recordPrice(serviceDefinition: $service, amount: '1750000.00', actorReference: 3);
-        $recordPrice(serviceDefinition: $service, amount: '2000000.00', actorReference: 3);
+        $first = $recordPrice(
+            serviceDefinition: $service,
+            amount: '1500000.00',
+            actorReference: 3,
+            reason: 'Recording version 1 to prove a superseded version keeps its original amount.',
+        );
+        $recordPrice(
+            serviceDefinition: $service,
+            amount: '1750000.00',
+            actorReference: 3,
+            reason: 'Recording version 2 to supersede version 1 for the snapshot-amount test.',
+        );
+        $recordPrice(
+            serviceDefinition: $service,
+            amount: '2000000.00',
+            actorReference: 3,
+            reason: 'Recording version 3 to supersede version 2 for the snapshot-amount test.',
+        );
 
         $this->assertSame('1500000.00', $first->refresh()->amount);
         $this->assertNotNull($first->superseded_at);
@@ -207,8 +252,18 @@ final class PriceVersioningTest extends TestCase
         $this->clearExistingPriceVersions($service);
 
         $recordPrice = new RecordServiceDefinitionPriceVersion;
-        $first = $recordPrice(serviceDefinition: $service, amount: '1500000.00', actorReference: 3);
-        $second = $recordPrice(serviceDefinition: $service, amount: '1750000.00', actorReference: 3);
+        $first = $recordPrice(
+            serviceDefinition: $service,
+            amount: '1500000.00',
+            actorReference: 3,
+            reason: 'Recording version 1 to prove append-only immutability once superseded.',
+        );
+        $second = $recordPrice(
+            serviceDefinition: $service,
+            amount: '1750000.00',
+            actorReference: 3,
+            reason: 'Recording version 2 to prove append-only immutability of the current version.',
+        );
 
         // The legal supersede stamp already happened above — proof the
         // guard is not blanket-blocking the one permitted update.
@@ -296,6 +351,7 @@ final class PriceVersioningTest extends TestCase
             serviceDefinition: $service,
             amount: $amount,
             actorReference: 3,
+            reason: 'Attempting to record an amount outside the decimal(12,2) domain to prove the guard rejects it.',
         );
     }
 
@@ -324,6 +380,7 @@ final class PriceVersioningTest extends TestCase
             serviceDefinition: $service,
             amount: $amount,
             actorReference: 3,
+            reason: 'Recording an amount inside the decimal(12,2) domain to prove it is stored exactly as given.',
         );
 
         $this->assertSame($expectedStored, $priceVersion->refresh()->amount);

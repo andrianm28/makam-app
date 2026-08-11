@@ -1,0 +1,22 @@
+version: 2
+
+# Local-scan config for `ggshield` (pre-commit / CLI). NOTE: per GitGuardian's
+# own documentation, this file's ignores do NOT propagate to the
+# dashboard-integrated "GitGuardian Security Checks" GitHub status check —
+# that check scans commit-by-commit against the GitGuardian dashboard and can
+# only be resolved there (per-incident "mark as false positive" / "used in
+# tests", or the check run's own Skip action), not by anything committed to
+# the repository. This file is still worth keeping for contributors running
+# `ggshield secret scan` locally.
+secret:
+  ignored_matches:
+    # phpunit.xml APP_KEY: a fixed, committed, test-only Laravel encryption
+    # key (see the comment directly above it in phpunit.xml). It protects
+    # nothing — used only under APP_ENV=testing against an in-memory SQLite
+    # database — and exists specifically so the suite is hermetic across
+    # runs without a .env file, and so encrypted-cast columns
+    # (provider_events.raw_payload, migration 2026_08_09_100200) round-trip
+    # deterministically. It is not a production secret; GitGuardian incident
+    # IDs 35950911, 35950912, 35950913.
+    - name: phpunit.xml fixed test-only APP_KEY
+      match: 'base64:RKxTuGlM4MNUB65volwGUsTfCiDumShAS0GGdu5zXn4='

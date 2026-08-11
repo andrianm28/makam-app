@@ -10,8 +10,8 @@ namespace App\Platform\Audit;
  * SYSTEM SHALL require a mandatory reason where the domain requires
  * one — including DITOLAK, plot override, tariff-source change, gate
  * change, manual payment verification, certificate revoke, and vendor
- * payout." `tasks.md`: "Declare the sensitive-action list requiring a
- * mandatory reason."
+ * payout, and recorded price versions." `tasks.md`: "Declare the
+ * sensitive-action list requiring a mandatory reason."
  *
  * Deliberately a closed, explicitly-reviewed list rather than a
  * magic-string convention (e.g. "any action ending in _REJECTED" or
@@ -35,6 +35,9 @@ final class SensitiveActions
         'PAYMENT_MANUAL_VERIFICATION',
         'CERTIFICATE_REVOKE',
         'VENDOR_PAYOUT',
+        'JOURNAL_REVERSAL',
+        'PRICE_VERSION_RECORDED',
+        'SERVICE_DEFINITION_PRICE_VERSION_RECORDED',
 
         // Added by S3-T2 (platform-identity-and-access MFA batch). Only
         // the explicit, human-initiated revoke
@@ -55,6 +58,30 @@ final class SensitiveActions
         // deliberate, reasoned action in this group.
         'MFA_RESET',
         'DOCUMENT_DELETE',
+
+        // Added by Task 5 of the `platform-financial-ledger` lane, under the
+        // user-approved Wave 1c ruling recorded in
+        // `docs/superpowers/plans/2026-08-10-wave1b-financial-decisions.md`
+        // §"Reconciliation-exception audit". Written by
+        // `App\Platform\FinancialLedger\Actions\ResolveException`, the only
+        // path by which a reconciliation exception ever reaches `resolved`.
+        //
+        // Listed for the same reason `JOURNAL_REVERSAL` is: the decision
+        // itself — accept a variance, escalate, or post a correcting batch —
+        // changes a financial outcome, and the decider's justification is the
+        // entire substance of it. An accepted variance with no recorded reason
+        // is indistinguishable from a difference somebody made go away.
+        'RECONCILIATION_EXCEPTION_RESOLVED',
+
+        // Added by platform-payment-adapter Task 6 (Wave 1d
+        // Append-Correction, `.superpowers/sdd/2026-08-09-platform-payment-
+        // adapter/task-6-brief.md`). `App\Platform\Payment\Actions\
+        // RecordRefund`/`RecordChargeback` are the only writers of
+        // `payment_reversals` rows; both are explicit, human-initiated
+        // financial operations in the same risk category as
+        // `VENDOR_PAYOUT` above, so a recorded justification is mandatory.
+        'PAYMENT_REFUND',
+        'PAYMENT_CHARGEBACK',
     ];
 
     public static function requiresReason(string $action): bool

@@ -59,12 +59,26 @@ use InvalidArgumentException;
  * its authority; both corrected 09 Aug 2026 by the ServiceCatalog
  * Superpowers retrofit, F9.)
  *
- * Audited via `Audit::record()` but not `SensitiveActions`-listed — see
- * `App\Domain\ServiceCatalog\ServiceCatalogAuditActions`'s own doc block.
- * (`App\Platform\Audit\SensitiveActions::ACTIONS` already lists
- * `TARIFF_SOURCE_CHANGE` for the unrelated grave-renewal tariff-source
- * concept — this catalogue price-versioning action is a distinct concept
- * from that one and is not added to it.)
+ * Audited via `Audit::record()` and listed in `SensitiveActions` under the
+ * emitted domain-qualified action name. (`App\Platform\Audit\SensitiveActions::ACTIONS`
+ * already lists `TARIFF_SOURCE_CHANGE` for the unrelated grave-renewal
+ * tariff-source concept; this catalogue price-versioning action is distinct
+ * and has its own explicit sensitive action.)
+ *
+ * `$reason` is a REQUIRED, non-blank `string` — not the `?string = null`
+ * this signature carried before 10 Aug 2026. `SensitiveActions::ACTIONS`
+ * lists both `PRICE_VERSION_RECORDED` and this Action's actually-emitted
+ * `ServiceCatalogAuditActions::PRICE_VERSION_RECORDED` value
+ * (`SERVICE_DEFINITION_PRICE_VERSION_RECORDED`), so `Audit::record()` already
+ * required a non-empty reason here — it just enforced that at runtime, from
+ * inside this method's own `DB::transaction()`, against every caller that
+ * omitted one. Requiring it at the signature and rejecting a blank one
+ * before the transaction opens (see the guard below, same shape as the
+ * `$currency` blank check) turns that failure into a plain argument error
+ * instead of a half-open transaction. (Baseline repair, Task 2R, 10 Aug
+ * 2026 — closes a regression this lane's own Task 1 introduced when it
+ * added this action to `SensitiveActions::ACTIONS` without updating this
+ * signature to match.)
  */
 final readonly class RecordServiceDefinitionPriceVersion
 {
@@ -72,11 +86,11 @@ final readonly class RecordServiceDefinitionPriceVersion
         ServiceDefinition $serviceDefinition,
         string $amount,
         int|string $actorReference,
+        string $reason,
         string $currency = 'IDR',
         ?string $source = null,
         string $actorRole = 'admin',
         AuditSource $auditSource = AuditSource::Panel,
-        ?string $reason = null,
     ): PriceVersion {
         // Shape assertion, not `is_numeric()` — see this class's own doc
         // block. At most 10 integer digits and at most 2 fractional digits
@@ -99,6 +113,15 @@ final readonly class RecordServiceDefinitionPriceVersion
 
         if (trim($currency) === '') {
             throw new InvalidArgumentException('Price version currency must not be blank.');
+        }
+
+        // AC3 / SensitiveActions: this action requires a mandatory, non-blank
+        // reason. Checked here — before DB::transaction() opens — so a
+        // blank/whitespace-only reason fails as a plain argument error, not
+        // a half-open transaction that Audit::record() only rejects once
+        // already inside it.
+        if (trim($reason) === '') {
+            throw new InvalidArgumentException('Price version reason must not be blank.');
         }
 
         return DB::transaction(function () use ($serviceDefinition, $amount, $currency, $source, $actorReference, $actorRole, $auditSource, $reason): PriceVersion {

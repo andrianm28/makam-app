@@ -6,6 +6,7 @@ namespace App\Domain\Booking;
 
 use App\Domain\Booking\Models\BookingDraft;
 use App\Domain\ServiceCatalog\Models\ServiceDefinition;
+use App\Platform\FinancialLedger\Money;
 use Illuminate\Support\Str;
 
 /**
@@ -50,12 +51,12 @@ final class BookingDraftQuery
      * an honest "harga belum tersedia" state, never a fabricated total that
      * silently excludes a line.
      *
-     * @return array{lines: list<array{code: string, label: string, quantity: int, unit_price: ?float, line_total: ?float}>, total: ?float, all_prices_available: bool}
+     * @return array{lines: list<array{code: string, label: string, quantity: int, unit_price: ?int, line_total: ?int}>, total: ?int, all_prices_available: bool}
      */
     public static function summary(BookingDraft $draft): array
     {
         $lines = [];
-        $total = 0.0;
+        $total = 0;
         $allPricesAvailable = true;
 
         foreach ($draft->selected_services as $selection) {
@@ -83,13 +84,23 @@ final class BookingDraftQuery
             $definition = ServiceDefinition::findByCode($code);
             $priceVersion = $quantityIsUsable ? $definition?->currentPriceVersion() : null;
 
-            $unitPrice = $priceVersion !== null ? (float) $priceVersion->amount : null;
-            $lineTotal = $unitPrice !== null ? $unitPrice * $quantity : null;
+            $unitPrice = $priceVersion !== null
+                ? Money::fromDecimal((string) $priceVersion->amount)
+                : null;
+            $lineTotal = $unitPrice !== null
+                ? self::multiplyMinorUnits($unitPrice, $quantity)
+                : null;
 
-            if ($unitPrice === null) {
+            if ($unitPrice === null || $lineTotal === null) {
                 $allPricesAvailable = false;
             } else {
-                $total += $lineTotal;
+                $nextTotal = self::addMinorUnits($total, $lineTotal);
+
+                if ($nextTotal === null) {
+                    $allPricesAvailable = false;
+                } else {
+                    $total = $nextTotal;
+                }
             }
 
             $lines[] = [
@@ -106,5 +117,25 @@ final class BookingDraftQuery
             'total' => $allPricesAvailable && $lines !== [] ? $total : null,
             'all_prices_available' => $allPricesAvailable,
         ];
+    }
+
+    private static function multiplyMinorUnits(int $unitPrice, int $quantity): ?int
+    {
+        if (($unitPrice > 0 && $unitPrice > intdiv(PHP_INT_MAX, $quantity))
+            || ($unitPrice < 0 && $unitPrice < intdiv(PHP_INT_MIN, $quantity))) {
+            return null;
+        }
+
+        return $unitPrice * $quantity;
+    }
+
+    private static function addMinorUnits(int $left, int $right): ?int
+    {
+        if (($right > 0 && $left > PHP_INT_MAX - $right)
+            || ($right < 0 && $left < PHP_INT_MIN - $right)) {
+            return null;
+        }
+
+        return $left + $right;
     }
 }

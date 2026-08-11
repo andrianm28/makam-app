@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\Admin\DisableMfaController;
+use App\Http\Controllers\Admin\FinanceExportController;
 use App\Http\Controllers\DocumentVault\DownloadDocumentController;
+use App\Http\Middleware\EnforceMfaChallenge;
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Livewire\Public\Booking\BookingWizard;
 use App\Livewire\Public\Directory\CemeteryDetail;
@@ -16,6 +18,10 @@ use App\Livewire\Public\Marketplace\ProductDetail;
 use App\Livewire\Public\Renewal\GraveSearch;
 use App\Livewire\Public\Renewal\RenewalStart;
 use App\Livewire\Public\Support\HelpCentre;
+use App\Platform\Payment\Http\Controllers\PaymentCancelController;
+use App\Platform\Payment\Http\Controllers\PaymentReturnController;
+use App\Platform\Payment\Http\Controllers\RecordPaymentReversalController;
+use App\Platform\Payment\Http\Controllers\VerifyManualPaymentController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -246,6 +252,126 @@ Route::get('/bantuan', HelpCentre::class)->name('bantuan.index');
 Route::post('/admin/mfa/disable', DisableMfaController::class)
     ->middleware(['web', 'auth', RequireRecentAuthentication::class.':mfa_disable,filament.admin.pages.mfa-challenge'])
     ->name('admin.mfa.disable');
+
+/*
+|--------------------------------------------------------------------------
+| Admin — bulk financial export (L4 Task 6, AC13)
+|--------------------------------------------------------------------------
+| Registered here rather than as a Filament page because the response is a
+| streamed file download, not a rendered page. That placement is what made
+| the route miss the panel's own middleware stack, so the two protections it
+| would have inherited are attached explicitly:
+|
+|   - `EnforceMfaChallenge` — a no-op for an actor with no confirmed MFA
+|     enrolment, and for an enrolled actor the same per-session challenge the
+|     panel requires (`AdminPanelProvider`).
+|   - `RequireRecentAuthentication` — session-freshness only. It is NOT the
+|     authorization check: `Actions\BulkFinancialExport` owns the finance
+|     policy and the query-level badan-usaha scope, so a non-HTTP caller is
+|     gated identically and no route configuration can widen it.
+|
+| `throttle:financial-export` mirrors `internal.documents.download` below: a
+| bulk export of a period's books deserves at least the rate limit a single
+| document download already carries.
+*/
+Route::get('/admin/finance/exports', FinanceExportController::class)
+    ->middleware([
+        'web',
+        'auth',
+        'throttle:financial-export',
+        EnforceMfaChallenge::class,
+        RequireRecentAuthentication::class.':bulk_financial_export,filament.admin.pages.mfa-challenge',
+    ])
+    ->name('admin.finance.exports');
+
+/*
+|--------------------------------------------------------------------------
+| Payment provider browser return — platform-payment-adapter AC4
+|--------------------------------------------------------------------------
+| ADR-0033 lets a hosted checkout be created with `success_return_url` and
+| `cancel_return_url`. These are the two routes the CUSTOMER'S BROWSER is
+| redirected back to afterwards. They are NOT the provider's callback — that
+| is `POST /api/payments/webhook/{merchant}` in routes/api.php, which is
+| signed, merchant-scoped, replay-protected and durable.
+|
+| AGENTS.md §Domain and financial invariants: "Never mark paid from browser
+| return URL." Requirements AC4 says the same in EARS form and adds the
+| negative criterion: "No paid state from a browser return, a client
+| callback, or a notification."
+|
+| The enforcement is route-controller separation, and it is why these two are
+| plain view-rendering controllers rather than Livewire components: a
+| Livewire component exposes callable actions to the browser, which is
+| exactly the surface AC4 wants absent. Neither controller takes a
+| dependency, reads the request, or touches a model — see their doc blocks,
+| and tests/Feature/Payment/PaymentReturnRouteTest.php, which fails if a
+| write-shaped name appears in either file or if hitting either route moves
+| any row.
+|
+| Two routes, two controllers, no shared parameter deciding which outcome to
+| render: a single endpoint branching on a query parameter would put the
+| visitor in charge of which page they are shown.
+|
+| Paths follow information-architecture.md §1's Indonesian public route tree.
+| Screen PUB-019 (screen-inventory.md §A).
+*/
+Route::get('/pembayaran/kembali', PaymentReturnController::class)->name('payments.return');
+Route::get('/pembayaran/batal', PaymentCancelController::class)->name('payments.cancel');
+
+/*
+|--------------------------------------------------------------------------
+| Admin — manual payment verification (Task 5, Wave 1c Append-Correction)
+|--------------------------------------------------------------------------
+| AC8 ("Admin verification SHALL be a separate authorized action") and AC9
+| (recent re-authentication). `RequireRecentAuthentication`'s SECOND real
+| attachment anywhere in this repo — the first is `/admin/mfa/disable`
+| above, and this route follows its exact precedent: a plain controller
+| route (not a Filament panel page) in the standard `web` group, its own
+| explicit `auth` guard, and the same `filament.admin.pages.mfa-challenge`
+| challenge destination (no dedicated payment-verification challenge page
+| exists, and this task does not invent one).
+|
+| Approves/rejects a `payment_verifications` row — a NEW, self-contained
+| table with no foreign key to `payment_sessions` or any order/booking
+| table (see the migration's own doc block). Does NOT transition
+| `payment_sessions`, post a journal entry, or write any order/invoice
+| status — see `App\Platform\Payment\VerifyManualPayment`'s own doc block
+| for why those remain structurally absent under the current deny-only
+| payment guard (Wave 1b ruling 1b-L3-01).
+*/
+Route::post('/admin/payments/manual-verifications/{paymentVerification}/verify', VerifyManualPaymentController::class)
+    ->middleware(['web', 'auth', RequireRecentAuthentication::class.':payment_manual_verification,filament.admin.pages.mfa-challenge'])
+    ->name('admin.payments.manual-verifications.verify');
+
+/*
+|--------------------------------------------------------------------------
+| Admin — payment reversals (Task 6, Wave 1d Append-Correction)
+|--------------------------------------------------------------------------
+| `RequireRecentAuthentication`'s THIRD real attachment anywhere in this
+| repo — after `/admin/mfa/disable` and
+| `/admin/payments/manual-verifications/{id}/verify` above, following their
+| exact precedent: a plain controller route in the standard `web` group,
+| its own explicit `auth` guard, and the same
+| `filament.admin.pages.mfa-challenge` challenge destination.
+|
+| Records a `payment_reversals` row (`REFUND` or `CHARGEBACK`) — a NEW,
+| self-contained table decoupled from `Journal`, `payment_sessions`, any
+| order aggregate, and `payment_verifications` (see the migration's own
+| doc block). Does NOT post a journal reversal batch, call
+| `PaymentProvider::refund()`, or touch any customer-balance concept — see
+| `App\Platform\Payment\Actions\RecordRefund`'s own doc block for why those
+| remain structurally absent.
+|
+| One parameterized route for both reversal types (`{reversalType}`
+| constrained to `refund|chargeback`) rather than two separate routes — a
+| flagged judgement call, see
+| `App\Platform\Payment\Http\Controllers\RecordPaymentReversalController`'s
+| own doc block for why.
+*/
+Route::post('/admin/payments/reversals/{reversalType}', RecordPaymentReversalController::class)
+    ->whereIn('reversalType', ['refund', 'chargeback'])
+    ->middleware(['web', 'auth', RequireRecentAuthentication::class.':payment_reversal,filament.admin.pages.mfa-challenge'])
+    ->name('admin.payments.reversals.record');
 
 Route::get('/internal/documents/{document}/download/{token}', DownloadDocumentController::class)
     ->middleware(['web', 'auth', 'throttle:document-download'])

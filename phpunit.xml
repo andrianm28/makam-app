@@ -11,6 +11,9 @@
         <testsuite name="Feature">
             <directory>tests/Feature</directory>
         </testsuite>
+        <testsuite name="Contract">
+            <directory>tests/Contract</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>
@@ -19,6 +22,24 @@
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
+        <!--
+            A fixed, throwaway encryption key so the suite is hermetic: it runs
+            without a .env file present (a fresh git worktree has none), and
+            every run decrypts what the previous one encrypted.
+
+            This is NOT a credential. It protects nothing: it is committed in
+            the clear, it is used only under APP_ENV=testing against an
+            in-memory SQLite database, and no deployed environment reads it
+            (dev/staging/production each generate their own APP_KEY — CI does
+            `cp .env.example .env && php artisan key:generate`, and PHPUnit's
+            own env vars are set before Dotenv loads, which does not overwrite
+            them, so CI uses this value too and never its generated one).
+
+            Needed since `provider_events.raw_payload` became an `encrypted`
+            cast (2026_08_09_100200) — payment-webhook.md §Security, "Store raw
+            payload privately".
+        -->
+        <env name="APP_KEY" value="base64:RKxTuGlM4MNUB65volwGUsTfCiDumShAS0GGdu5zXn4="/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>

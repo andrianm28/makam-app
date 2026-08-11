@@ -3,7 +3,10 @@
 use App\Platform\Correlation\Providers\CorrelationServiceProvider;
 use App\Platform\DocumentVault\Providers\DocumentVaultServiceProvider;
 use App\Platform\FeatureGate\Providers\FeatureGateServiceProvider;
+use App\Platform\FinancialLedger\Providers\FinancialLedgerServiceProvider;
 use App\Platform\IdentityAccess\Providers\IdentityAccessServiceProvider;
+use App\Platform\Notification\Providers\NotificationServiceProvider;
+use App\Platform\Payment\Providers\PaymentServiceProvider;
 use App\Providers\AppServiceProvider;
 use App\Providers\Filament\AdminPanelProvider;
 
@@ -35,6 +38,13 @@ return [
     // in that batch's literal owned-files list either, but the brief
     // explicitly authorizes this one additive line.
     CorrelationServiceProvider::class,
+    // platform-payment-adapter Task 3 — registers the `payment-webhook` rate
+    // limiter the webhook route's `throttle:` middleware names, and binds
+    // SumoPodWebhookSignature to its configured credentials. Same precedent as
+    // the three lines above: this file is not in the task's literal owned-files
+    // list, but a named rate limiter has to be registered somewhere a service
+    // provider runs, and the route would 500 on an unregistered limiter name.
+    PaymentServiceProvider::class,
     // Task 4 (platform-document-vault lane, task-4-brief.md ambiguity
     // ruling 2) — binds ObjectStorage/MalwareScanner/StoragePathResolver.
     // Same precedent as IdentityAccessServiceProvider/
@@ -43,4 +53,21 @@ return [
     // UploadDocument's container-resolved dependencies are reachable —
     // see DocumentVaultServiceProvider's own class-level comment.
     DocumentVaultServiceProvider::class,
+    // Task 7 (platform-financial-ledger lane) — binds Contracts\Journal plus
+    // this module's three authorizer seams. Same precedent as
+    // IdentityAccessServiceProvider/CorrelationServiceProvider/
+    // DocumentVaultServiceProvider above: bootstrap/providers.php is not in
+    // Task 7's literal owned-files list, but its brief explicitly authorizes
+    // this one additive line. Without it lane/l3-payment-adapter's
+    // app(Contracts\Journal::class) does not resolve at all — see
+    // FinancialLedgerServiceProvider's own class-level comment.
+    FinancialLedgerServiceProvider::class,
+    // Task 3 of the L2 `platform-notifications` lane (task-3-brief.md D7)
+    // — binds RecipientRoleSource/NotificationSubjectSource and registers
+    // the OutboxEventPublished -> ConsumeOutboxNotificationJob listener.
+    // Same precedent as every provider above: this file is not in that
+    // task's literal owned-files list, but the brief explicitly authorizes
+    // this one additive line, and without it the whole outbox-fed
+    // dispatch path is dead code no consumer can reach.
+    NotificationServiceProvider::class,
 ];

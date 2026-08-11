@@ -135,6 +135,32 @@ Migrations (all additive, `2026_08_09_*`): `create_coa_accounts_table` (seed), `
 - `Journal::postReversal(string $originalBusinessKey, string $reason, ...)`: posts a new batch that reverses every original entry (direction flipped, amounts equal), `status = reversed` on the original (a forward-only status marker, NOT an edit — original entries untouched), references the original `business_key` as `reference`, new `business_key = refund:{original}` / `reversal:{original}`. Never edits or deletes the original rows (AC2, AC14).
 - A `reversed` status is a projection marker only; total/balances always read original + reversal entries.
 
+**Correction, 10 Aug 2026 (Wave 1b rulings, user-approved):** the two bullets above are
+append-corrected, not rewritten. As written they contradicted this plan's own Task 6 and
+Global Constraints:
+
+1. **No `status = reversed` UPDATE. Reversed-ness is derived, never stored.** The bullet above
+   told Task 3 to write `status = 'reversed'` on the original batch; Task 6 (§"Append-only
+   enforcement", this file) and Global Constraint 2 revoke UPDATE on `journal_batches` from the
+   app role entirely. Whatever Task 3 wrote, Task 6 would have broken. Calling the write "a
+   forward-only status marker, NOT an edit" does not change what the database sees — it is an
+   UPDATE on a table this plan declares append-only, and append-only is AC2/AC14 itself.
+   **Ruling: a batch is reversed if and only if a reversing batch referencing it exists.**
+   Compute it by lookup; write no status column. This makes AC2/AC14 literally true and lets
+   Task 6's blanket revoke apply exactly as written, with no column-level grant carve-out. It is
+   also the reading this plan's own next bullet already implies ("a projection marker only").
+2. **Add a `reverses_batch_id` FK.** The bullet above specified the reversal→original link as
+   the original `business_key` written into `reference` — i.e. `journal_entries.reference`, which
+   Task 2 built as a nullable, un-indexed, unconstrained `text` note column explicitly documented
+   as never holding PII. That link *is* the audit trail for AC2 and AC14, and ruling 1 above
+   depends on it being trustworthy, so it must be a real foreign key rather than a free-text note.
+   **Ruling: `journal_batches` gains a nullable, indexed, self-referencing `reverses_batch_id` FK.**
+   `journal_entries.reference` stays the human note column it was designed to be.
+
+   This adds a migration to Task 3, which the File Structure section above does not list. The
+   migration is additive and non-destructive: per this plan's own Current-state finding, no money
+   is stored in any deployed database today, so the table holds zero production rows.
+
 - [ ] **Step 1:** Implement `Contracts\Journal` + `Journal` implementation.
 - [ ] **Step 2:** Implement `postReversal`.
 - [ ] **Step 3:** Tests: post inside a caller transaction rolls back together with the state change (rollback test); duplicate business key posts nothing (caller's change also rolled back); reversal flips all entries and references the original; original rows byte-identical after reversal (immutability test); same-transaction proof mirrors `OutboxTransactionTest`/`AuditWrapTransactionTest`.
@@ -225,19 +251,197 @@ Per the two-tier review convention (Critical + Important fixed in one bounded wa
 
 ## Task 10: Finish the branch
 
-- [ ] Merge to trunk `docs/design-system-and-planning` via PR against the Wave 1 review checkpoint (cross-lane note for the shared `Contracts/Journal` + `SensitiveActions` edits).
-- [ ] Update `sprint-plan.md` S8–9 row — ledger platform complete with PR + CI run; FIN-DEC/`G-PAYOUT-01` still closed note appended.
-- [ ] Update `docs/planning/retrofit-backlog.md` §2 for surfaced findings.
-- [ ] Verify static analysis, tests on PostgreSQL 18, Blade content-survival gate in CI (staggered per Wave 0 capacity baseline).
+- [ ] **Merge** to trunk `docs/design-system-and-planning` — PR opened by this lane; **merging is a human's decision, not this lane's.** Cross-lane note for the shared `Contracts/Journal` + `SensitiveActions` edits is in the PR body and in bundle items 15–17.
+- [x] Update `sprint-plan.md` — the `platform-financial-ledger` NOT TESTED note extended (§Foundations, not §9, to avoid L2/L3's contested hunk); FIN-DEC / `G-PAY-01` / `G-PAYOUT-01` still-closed statement appended. **PR + CI run appended once the PR exists.**
+- [x] Update `docs/planning/retrofit-backlog.md` §2 for surfaced findings.
+- [x] Verify static analysis and tests on PostgreSQL 18 locally. **CI is the authority and runs on push** — Blade content-survival gate is CI-only and is `NOT TESTED` here (composer/npm builds must not run on this host).
 
 ## Verification
 
-- [ ] `vendor/bin/pest` green on PostgreSQL 18, including `tests/Feature/FinancialLedger/`, `tests/Unit/Platform/FinancialLedger/`, and the shared ledger seam contract test.
-- [ ] Unbalanced batch rejected at the DB; duplicate business key posts once; reversal leaves original rows immutable; same-transaction proof; rollback preserves journal + audit history.
-- [ ] Payable/payout: paid ≠ payable ≠ paid-out proven; manual-only payout (no automated-transfer code path); sensitive audit + re-auth enforced.
-- [ ] Reconciliation produces exceptions, never adjustments; exceptions require authorized decision.
-- [ ] Reports reconcile to journal, not order status (test).
-- [ ] No float anywhere (`grep -rn "(float)" app/Platform/FinancialLedger app/Domain/Booking` empty; `Money` end to end).
-- [ ] `PRICE_VERSION_RECORDED` in `SensitiveActions` and requires a reason.
-- [ ] App role cannot UPDATE/DELETE journal tables (revoke test).
-- [ ] Static analysis + lint clean; Blade content-survival gate passes.
+Executed 11 Aug 2026 at branch head. Every box below was run, not reasoned about.
+
+- [x] Full suite green on **real PostgreSQL 18** (disposable container `l4-task10-pg-55571`, removed by exact name; shared `makam-nonprod` stack never touched): **1410 tests / 5618 assertions / 1 skip / 0 failures / 0 errors**, including `tests/Feature/FinancialLedger/`, `tests/Unit/Platform/FinancialLedger/`, and the shared ledger seam contract test. SQLite full: 1410 / 5499 / **2 errors — the two documented pre-existing baselines**, confirmed by name (`EloquentGateRegistrySourceTest`, `HomePageRouteTest`, both SQLite-only `DROP TABLE ... CASCADE`), neither in this lane.
+- [~] **PARTIAL.** Unbalanced batch rejected at the DB, duplicate business key posts once, reversal leaves original rows immutable, same-transaction proof — all covered. **`rollback preserves journal + audit history` is NOT covered: AC14 has no evidence of any kind** (bundle item 6). Every suite hit is a *transaction* rollback, a different property. This box must not be ticked whole.
+- [x] Payable/payout: paid ≠ payable ≠ paid-out proven; manual-only payout (no automated-transfer code path); sensitive audit + re-auth enforced — with the I5 qualification in bundle item 8 (re-auth is login-recency, not step-up) and the untested `EnforceMfaChallenge` in item 9.
+- [x] Reconciliation produces exceptions, never adjustments; exceptions require authorized decision. Since M5, a correction also cannot declare itself a payout — `CORRECTABLE_SOURCE_TYPES` is exactly `['manual_verification']`.
+- [x] Reports reconcile to journal, not order status (test).
+- [ ] **CANNOT PASS ON L4 ALONE — verified, not assumed.** `grep -rn "(float)" app/Platform/FinancialLedger app/Domain/Booking` returns `app/Domain/Booking/BookingDraftQuery.php:86`. That line is fixed on L3 and is the reason **merge order L2 → L3 → L4 is load-bearing** (bundle item 16). `Money` is end-to-end float-free *within* `app/Platform/FinancialLedger`. This box can only be ticked after L3 merges.
+- [x] `PRICE_VERSION_RECORDED` is in `SensitiveActions` (`app/Platform/Audit/SensitiveActions.php:39-40`, both the bare and namespaced values) and `requiresReason()` exists (`:77`).
+- [ ] **BLOCKED, intentionally — must stay this way.** `sql/revoke-journal-mutations.sql` has NOT been run (bundle item 14, finding N-1: the host provisions one PostgreSQL role per environment, so there is no separate app role to revoke from). Two bypass tests assert the model-layer gap still exists, so they fail loudly once the role split lands; `ci/verify-docs.sh` GATE 13 keeps the file honest.
+- [x] Static analysis + lint clean: Pint `passed`, targeted PHPStan `[OK]`, whole-repo PHPStan unchanged at the one pre-existing `GraveRegistryPublicQuery` error, `ci/verify-docs.sh` **13/13**. Blade content-survival gate is **CI-only — NOT TESTED here.**
+
+---
+
+## Merge sign-off bundle — L4 (recorded 11 Aug 2026)
+
+**Why this section exists.** Every item below was accumulated across Tasks 1–8 in
+this lane's SDD ledger, `.superpowers/sdd/2026-08-09-platform-financial-ledger/progress.md`.
+That path is **git-ignored** (`.gitignore:85`), so it does not survive the merge
+and disappears entirely when the worktree is removed. This section is the
+**durable copy**, not a duplicate: it moves the only record of these items into
+the tracked tree. Task 10's PR body must restate it in full — a reviewer
+approving financial code is entitled to see every one of these without access to
+a deleted worktree.
+
+`AGENTS.md` §Infrastructure-agent execution requires human review before
+security, authorization, financial, privacy, or destructive-migration changes.
+This lane is all five. Nothing here is a recommendation to merge.
+
+### Database-level financial policy needing explicit sign-off
+
+1. **M6 — one reversal ever, enforced by a UNIQUE index** on
+   `journal_batches.reverses_batch_id`. This makes "a batch may be reversed at
+   most once, permanently" a *database* policy, not a code choice someone can
+   revise cheaply later. The reasoning was reviewed and judged sound, but the
+   class of decision requires a human.
+2. **`payouts.payable_id` UNIQUE** — one payout per payable, same character.
+
+### Known-open defects, deliberately not fixed
+
+3. **T4-M1 — the `vendor_payables` DELETE trigger rejects even a consistent
+   delete.** `assert_vendor_payable_payout_pair(OLD.id)` raises `NOT FOUND` on
+   any DELETE, and fails with a misleading FK-style message rather than a
+   deliberate policy one. Latent today (nothing deletes `vendor_payables`).
+   **Not closed by `sql/revoke-journal-mutations.sql`** — that file covers only
+   `journal_batches`/`journal_entries`. Closing it is a policy decision: correct
+   the trigger to treat "parent row already gone" as nothing-to-check, or write
+   an explicit not-deletable message.
+4. **T4-M2 / T4-M3 — the deferred constraint trigger's positive path is never
+   exercised**, because `RefreshDatabase` rolls back before COMMIT, and one
+   invariant test no longer reaches the branch it claims to cover. A `REVOKE`
+   cannot close a coverage gap. Needs a non-transactional harness on PostgreSQL.
+5. **T4-M5 — migration `2026_08_10_120300`'s `down()` is a no-op**, asymmetric
+   with the migration it supersedes.
+6. **AC14 — release rollback preserving journal + audit history has NO evidence
+   of any kind.** Task 8 grepped the suite; every hit is a *transaction*
+   rollback, which is a different thing. This needs a real decision at merge:
+   build it, or accept it as risk explicitly. It must not ride through silently.
+7. **AC7 is partial** — refund and chargeback are two of four operation types;
+   refund is journal-shape-only and chargeback is a reserved value with no
+   behaviour behind it.
+
+### Authorization and identity gaps
+
+8. **I5 — the re-authentication gate is login-recency, not step-up.**
+   `last_authenticated_at` is written only at login; `MfaChallenge::submit()`
+   never refreshes it. Owned by `fix/reauthentication-satisfy-wiring`, not this
+   lane. **Amended 11 Aug 2026:** that lane's own review found the fix helps only
+   a *stale* actor — a freshly-logged-in finance admin is waved through the
+   middleware with no challenge raised, so no satisfied event is minted and the
+   export's own gate then refuses them until their freshness lapses. Both
+   directions fail closed, so this is a usability gap, not a security one, but it
+   is the inverse of the intuitive expectation. **Do not describe the bulk export
+   as "step-up protected" without this qualification.**
+9. **`EnforceMfaChallenge` is attached to the export route but NOT TESTED in this
+   lane** — no test binds `mfaState`, so every route test passes *through* that
+   middleware without exercising it. It also currently routes MFA-enrolled admins
+   into that middleware's known self-redirect loop, pending the reauth lane.
+10. **N3 — `LedgerReport::summary($period, null)` is still a live unscoped-read
+    shape**, reachable by no current caller. It is the residual hazard class of
+    the Critical authorization finding (C1) and is carried here deliberately so
+    it survives Task 9/10 slipping.
+11. **The whole feature has never run against the real identity adapter.**
+    `ActorContext::$roles` is always `[]`, so every authorized-path assertion in
+    the suite goes through a bound fake. This is the correct fail-closed state —
+    but it means this sign-off is doing real work, not rubber-stamping.
+
+### Sequencing deviations to name explicitly in the PR body
+
+12. **`JOURNAL_REVERSAL`** joined `SensitiveActions::ACTIONS` in Task 4, not Task
+    6 as the plan anticipated (a review finding required reversal atomicity).
+13. **`RECONCILIATION_EXCEPTION_RESOLVED`** was added in Task 5 under the
+    user-approved Wave 1c ruling, beyond the single addition the plan's Global
+    Constraints anticipated for this lane.
+
+### Not executed — must stay that way
+
+14. **`sql/revoke-journal-mutations.sql` has NOT been run** and must not be. It
+    is blocked on finding N-1 (the host provisions one PostgreSQL role per
+    environment, so there is no separate app role whose UPDATE/DELETE can be
+    revoked). `ci/verify-docs.sh` GATE 13 keeps the file honest; two bypass tests
+    assert the model-layer gap still exists so they fail loudly at the database
+    once the role split lands.
+
+### Cross-lane merge state (re-verify immediately before merging)
+
+15. **Five files conflict with `lane/l3-payment-adapter`** as of L3 head
+    `4e18276`, verified by comparing merge-base blobs on both sides:
+    - `Money.php` — take either ordering (semantically identical; prefer L4's
+      guard-before-compute).
+    - `MoneyTest.php` — keep L4's `test_from_decimal_rejects_non_zero_excess_precision`
+      (added for a Task 1 review finding); keep **exactly one** of the two
+      byte-identical `PHP_INT_MIN` tests, which the two lanes named differently.
+      A blind union duplicates that assertion.
+    - `SensitiveActions.php` and `SensitiveActionsTest.php` — keep **both** lanes'
+      actions. Never take either side wholesale; the test asserts the array as an
+      exact list.
+    - `routes/web.php` — adjacent appends (L4 bulk-export vs L3 payment-return),
+      no semantic disagreement: **keep both blocks**.
+
+    **Amended 11 Aug 2026 (Task 10) — two PLANNING DOCS now conflict as well,
+    created by this lane's own Task 10 updates. Seven files total, not five:**
+    - `docs/planning/sprint-plan.md` — L4 appends to the `platform-financial-ledger`
+      NOT TESTED note at **§Foundations (~line 191–203)**. L2 and L3 both edit
+      **§9 "Beyond Sprint 5" (~lines 775–783)** and so conflict with *each other*
+      there; L4 deliberately targeted the distant §Foundations region to stay out
+      of that hunk. If a conflict still surfaces, the blocks are independent:
+      **keep all sides.**
+    - `docs/planning/retrofit-backlog.md` — L3 and L4 both **append a new `###`
+      section at end of file**. Pure appends of distinct, non-overlapping
+      sections: **keep both blocks**, same resolution as `routes/web.php`.
+
+    L3 is still actively pushing, so **re-run the `git merge-tree` simulation at
+    merge time** rather than trusting this list.
+
+16. **Merge order is L2 → L3 → L4, one at a time.** This is load-bearing for F15:
+    `app/Domain/Booking/BookingDraftQuery.php:86` still carries
+    `(float) $priceVersion->amount` on this branch and is fixed on L3's. Merging
+    L4 first would put a float in the money path on the trunk. It also means the
+    Verification item above — `grep -rn "(float)" app/Platform/FinancialLedger
+    app/Domain/Booking` returning empty — **cannot pass on L4 alone**; it passes
+    only once L3 has merged.
+
+17. **E1 — L3's `LedgerSeamStub` diverges from the real `Journal` in TWO ways.**
+    Both must be resolved together; fixing one and believing item 17 is discharged
+    is the specific failure this wording exists to prevent.
+    - **17a — false exception model.** The stub raises `InvalidArgumentException`
+      where the real `Journal` surfaces a `QueryException`, for both the
+      duplicate-business-key and balance properties. The contract's own Terms 2
+      and 4 make the real implementation the faithful party and the stub the
+      divergent one.
+    - **17b — blank `$entityRef` refusal (added 11 Aug 2026, Task 9b/9c).** L4's
+      `Journal::post()` now refuses a blank `$entityRef` via
+      `assertEntityScoped()`, throwing
+      `InvalidJournalBatchException::forBlankEntityRef()`. L3's stub does not
+      refuse it. The refusal is documented in `Contracts\Journal`'s `@throws`
+      and a CONSUMERS-READ-THIS block, but the stub was deliberately left
+      untouched because it is a cross-lane file. No L3 caller passes a blank
+      `$entityRef` today (checked).
+
+    **Latent, not live** for both — no L3 production code consumes the seam yet
+    (verified by searching all of L3's `app/`), so the fix window is open and no
+    L3 audit is required.
+
+18. **B6 — the shared contract documents a business-key format its own consumer
+    now refuses. NEEDS A HUMAN DECISION; do not let this merge as settled.**
+    `Contracts\Journal::post()`'s `@param $businessKey` doc block
+    (`app/Platform/FinancialLedger/Contracts/Journal.php:60`) lists
+    `manual_verify:{verification_id}` as a documented format, and this plan's own
+    §Global Constraints (line 62) says the same. But since M5,
+    `ReconciliationCorrection::adjustment()` requires the key's prefix to equal
+    `$sourceType`, and `CORRECTABLE_SOURCE_TYPES` is exactly
+    `['manual_verification']` — so a correction following the shared contract's
+    documented format is refused. Nothing is broken today: `manual_verify:`
+    appears in no production caller and no test, only in those two documents, and
+    `Journal::post()` itself does not enforce prefix/source-type agreement, so a
+    direct non-correction caller could still use it. The resolution is a choice,
+    not a cleanup, which is why this lane did not make it unilaterally:
+    - **(a)** align both documents to `manual_verification:{verification_id}` and
+      retire `manual_verify:`; or
+    - **(b)** keep `manual_verify:` as the format for direct `Journal::post()`
+      manual verifications and state explicitly that reconciliation corrections
+      require `manual_verification:`.
+
+    Option (a) edits `Contracts\Journal.php`, a file that already conflicts with
+    `lane/l3-payment-adapter` — so it should land in the same coordinated pass as
+    item 17, not before it.
