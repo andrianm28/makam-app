@@ -57,6 +57,7 @@ final class SensitiveActions
         // dead end, not a real control. `MFA_RESET` alone is the
         // deliberate, reasoned action in this group.
         'MFA_RESET',
+        'DOCUMENT_DELETE',
 
         // Added by Task 5 of the `platform-financial-ledger` lane, under the
         // user-approved Wave 1c ruling recorded in

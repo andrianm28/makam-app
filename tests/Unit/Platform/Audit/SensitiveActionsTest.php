@@ -27,6 +27,7 @@ final class SensitiveActionsTest extends TestCase
             'manual payment verification' => ['PAYMENT_MANUAL_VERIFICATION'],
             'certificate revoke' => ['CERTIFICATE_REVOKE'],
             'vendor payout' => ['VENDOR_PAYOUT'],
+            'document delete' => ['DOCUMENT_DELETE'],
             'journal reversal' => ['JOURNAL_REVERSAL'],
             'price version recorded' => ['PRICE_VERSION_RECORDED'],
             'service definition price version recorded' => ['SERVICE_DEFINITION_PRICE_VERSION_RECORDED'],
@@ -73,7 +74,7 @@ final class SensitiveActionsTest extends TestCase
      * assertion is an exact-list check on purpose, so every growth of that
      * array has to arrive here with a stated authority rather than slipping in.
      */
-    public function test_the_list_contains_the_requirements_named_actions_plus_mfa_reset_and_price_version_recorded(): void
+    public function test_the_list_contains_the_requirements_named_actions_plus_the_documented_additions(): void
     {
         $this->assertSame(
             [
@@ -88,6 +89,7 @@ final class SensitiveActionsTest extends TestCase
                 'PRICE_VERSION_RECORDED',
                 'SERVICE_DEFINITION_PRICE_VERSION_RECORDED',
                 'MFA_RESET',
+                'DOCUMENT_DELETE',
                 'RECONCILIATION_EXCEPTION_RESOLVED',
             ],
             SensitiveActions::ACTIONS

@@ -1,4 +1,4 @@
-# Event Catalog — v0.4
+# Event Catalog — v0.5
 
 Durable events use the transactional outbox and envelope in `outbox-event-contract.md`. All events include `event_id`, `event_version`, `occurred_at`, actor/service identity, `trace_id`, aggregate reference, idempotency key, and data classification. Restricted documents or permanent file URLs are never embedded.
 
@@ -21,7 +21,10 @@ Durable events use the transactional outbox and envelope in `outbox-event-contra
 | `agreement.accepted.v1` | Agreement | PreNeed/operations | Exact version and evidence |
 | `certificate.issued.v1` | AgreementCertificate | Customer/audit | Unique issuer number |
 | `certificate.replaced.v1` | AgreementCertificate | Customer/audit | Preserves previous version |
+| `document.uploaded.v1` | DocumentVault | Scan workflow, audit | Private quarantine reference only |
+| `document.accepted.v1` | DocumentVault | Booking, audit | Emitted after clean scan and accepted transition |
 | `document.accessed.v1` | DocumentVaultAdapter | Audit/security | Sensitive event |
+| `document.deleted.v1` | DocumentVault | Retention/audit | Emitted after approved deletion; no file contents |
 | `grave.import_completed.v1` | GraveRegistry | Admin notification | Success/error/dedup counts |
 | `renewal.marked_external.v1` | Renewal | Billing guard | Prevents duplicate period |
 | `grave.reminder_sent.v1` | GraveRegistry | Reporting | Idempotent window key |
