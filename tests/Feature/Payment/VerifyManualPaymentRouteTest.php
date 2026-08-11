@@ -14,6 +14,7 @@ use App\Platform\Payment\PaymentAuditActions;
 use App\Platform\Payment\PaymentVerificationStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -111,6 +112,49 @@ final class VerifyManualPaymentRouteTest extends TestCase
 
         $verification->refresh();
         $this->assertSame(PaymentVerificationStatus::Submitted, $verification->status());
+    }
+
+    /**
+     * See the sibling test in `RecordPaymentReversalRouteTest` for the full
+     * explanation: a control or private-use character survives Laravel's
+     * `TrimStrings` middleware, so before `NonBlankReason` was attached it
+     * reached `Audit::record()` and surfaced as a 500 rather than a 422.
+     */
+    #[DataProvider('blankReasonsThatSurviveTrimStrings')]
+    public function test_a_reason_the_audit_layer_calls_blank_is_rejected_as_validation_not_as_a_server_error(string $reason): void
+    {
+        $user = User::factory()->create();
+        $verification = $this->submittedVerification();
+
+        ActorSession::query()->create([
+            'user_id' => $user->id,
+            'session_id' => 'test-session-'.$user->id,
+            'guard' => 'web',
+            'last_authenticated_at' => CarbonImmutable::now()->subSeconds(10),
+        ]);
+
+        $response = $this->actingAs($user)
+            ->post($this->verifyUrl($verification), [
+                'decision' => 'approve',
+                'reason' => $reason,
+            ]);
+
+        $this->assertNotSame(500, $response->getStatusCode());
+        $response->assertSessionHasErrors('reason');
+
+        $verification->refresh();
+        $this->assertSame(PaymentVerificationStatus::Submitted, $verification->status());
+        $this->assertSame(0, AuditEvent::query()->where('action', PaymentAuditActions::MANUAL_VERIFICATION)->count());
+    }
+
+    /**
+     * @return iterable<string, array{0: string}>
+     */
+    public static function blankReasonsThatSurviveTrimStrings(): iterable
+    {
+        yield 'control character U+0001' => ["\u{0001}"];
+        yield 'private-use character U+E000' => ["\u{E000}"];
+        yield 'non-breaking space U+00A0' => ["\u{00A0}"];
     }
 
     public function test_an_invalid_decision_value_is_rejected_at_the_http_layer(): void

@@ -14,6 +14,7 @@ use App\Platform\Audit\Models\AuditEvent;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -100,6 +101,134 @@ final class AuditRecordTest extends TestCase
             source: AuditSource::Panel,
             reason: '   ',
         );
+    }
+
+    /**
+     * `trim()` strips only the ASCII whitespace set, so a reason made
+     * entirely of Unicode blanks used to pass the AC3 check and record a
+     * sensitive action against a justification invisible to a human
+     * reading the audit trail.
+     */
+    #[DataProvider('unicodeBlankReasonProvider')]
+    public function test_a_sensitive_action_with_only_unicode_whitespace_as_reason_throws(string $reason): void
+    {
+        $this->expectException(AuditReasonRequiredException::class);
+
+        try {
+            Audit::record(
+                action: 'VENDOR_PAYOUT',
+                subject: new AuditSubject(type: 'payout', id: 1),
+                outcome: AuditOutcome::Allowed,
+                actorRef: 1,
+                actorRole: 'finance',
+                source: AuditSource::Panel,
+                reason: $reason,
+            );
+        } finally {
+            $this->assertSame(0, AuditEvent::query()->count());
+        }
+    }
+
+    /**
+     * @return iterable<string, array{0: string}>
+     */
+    public static function unicodeBlankReasonProvider(): iterable
+    {
+        yield 'non-breaking space U+00A0' => ["\u{00A0}"];
+        yield 'ideographic space U+3000' => ["\u{3000}"];
+        yield 'zero-width space U+200B' => ["\u{200B}"];
+        yield 'zero-width no-break space (BOM) U+FEFF' => ["\u{FEFF}"];
+        yield 'figure space U+2007' => ["\u{2007}"];
+        yield 'soft hyphen U+00AD' => ["\u{00AD}"];
+        yield 'word joiner U+2060' => ["\u{2060}"];
+        yield 'ASCII and Unicode blanks mixed' => [" \t\u{00A0}\u{200B}\n"];
+    }
+
+    /**
+     * A reason whose bytes are not valid UTF-8 cannot be decoded, so it
+     * cannot be read by a human reviewing the audit trail either. The
+     * check must fail closed on it rather than let it through because
+     * the regex engine could not evaluate it.
+     */
+    #[DataProvider('malformedUtf8ReasonProvider')]
+    public function test_a_sensitive_action_with_a_malformed_utf8_reason_throws(string $reason): void
+    {
+        $this->expectException(AuditReasonRequiredException::class);
+
+        try {
+            Audit::record(
+                action: 'VENDOR_PAYOUT',
+                subject: new AuditSubject(type: 'payout', id: 1),
+                outcome: AuditOutcome::Allowed,
+                actorRef: 1,
+                actorRole: 'finance',
+                source: AuditSource::Panel,
+                reason: $reason,
+            );
+        } finally {
+            $this->assertSame(0, AuditEvent::query()->count());
+        }
+    }
+
+    /**
+     * @return iterable<string, array{0: string}>
+     */
+    public static function malformedUtf8ReasonProvider(): iterable
+    {
+        yield 'lone 0xA0 (Latin-1 NBSP byte)' => ["\xA0"];
+        yield 'truncated two-byte sequence 0xC2' => ["\xC2"];
+        yield 'bad continuation byte 0xC3 0x28' => ["\xC3\x28"];
+        yield 'UTF-16 BOM bytes 0xFF 0xFE' => ["\xFF\xFE"];
+        yield 'overlong NUL 0xC0 0x80' => ["\xC0\x80"];
+        yield 'UTF-16 surrogate 0xED 0xA0 0x80' => ["\xED\xA0\x80"];
+        yield 'valid NBSP followed by a bad byte' => ["\u{00A0}\xA0"];
+    }
+
+    /**
+     * The blank check must reject only reasons that are entirely blank —
+     * over-rejecting real Indonesian prose would block legitimate
+     * sensitive actions outright.
+     */
+    #[DataProvider('realProseReasonProvider')]
+    public function test_a_sensitive_action_with_real_prose_as_reason_is_accepted(string $reason): void
+    {
+        $event = Audit::record(
+            action: 'VENDOR_PAYOUT',
+            subject: new AuditSubject(type: 'payout', id: 1),
+            outcome: AuditOutcome::Allowed,
+            actorRef: 1,
+            actorRole: 'finance',
+            source: AuditSource::Panel,
+            reason: $reason,
+        );
+
+        // Read back from the database, not from the in-memory model:
+        // `AuditEvent::create()` returns the instance it just filled, so
+        // asserting against that only proves the argument equals itself.
+        // These cases include prose with an embedded non-breaking space,
+        // and that the NBSP survives the write is the interesting half of
+        // "we still accept this".
+        $this->assertDatabaseHas('audit_events', [
+            'id' => $event->id,
+            'reason' => $reason,
+        ]);
+    }
+
+    /**
+     * @return iterable<string, array{0: string}>
+     */
+    public static function realProseReasonProvider(): iterable
+    {
+        yield 'Indonesian prose with an em-dash' => [
+            'Pembayaran ganda — dikembalikan atas permintaan ahli waris.',
+        ];
+        yield 'Indonesian prose with accented characters' => [
+            'Permintaan résmi dari kepala makam, disetujui Café Cabang Utama.',
+        ];
+        yield 'prose containing a non-breaking space between words' => [
+            "Pencairan dana vendor\u{00A0}Rp 5.000.000 disetujui.",
+        ];
+        yield 'single ordinary word' => ['Duplikat'];
     }
 
     public function test_a_sensitive_action_with_a_real_reason_succeeds(): void

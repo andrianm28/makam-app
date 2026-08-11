@@ -77,11 +77,11 @@ final class Audit
      * @param  string  $actorRole  AC2: required for every event, including
      *                             one with a null `$actorRef`.
      * @param  AuditSource  $source  AC2: panel | api | job.
-     * @param  string|null  $reason  AC3: required (non-empty after
-     *                               `trim()`) when `$action` is on
-     *                               `SensitiveActions::ACTIONS` — throws
-     *                               `AuditReasonRequiredException` otherwise. Optional for
-     *                               every other action.
+     * @param  string|null  $reason  AC3: required, and must carry readable
+     *                               content — see `reasonIsBlank()` — when
+     *                               `$action` is on `SensitiveActions::ACTIONS`
+     *                               — throws `AuditReasonRequiredException`
+     *                               otherwise. Optional for every other action.
      * @param  string|null  $correlationId  Schema column only — AC10's
      *                                      propagation mechanism is S3-T10, a separate later batch.
      *                                      Pass one through if the caller already has it; leave null
@@ -101,7 +101,7 @@ final class Audit
         ?string $correlationId = null,
         array $metadata = [],
     ): AuditEvent {
-        if (SensitiveActions::requiresReason($action) && ($reason === null || trim($reason) === '')) {
+        if (SensitiveActions::requiresReason($action) && self::reasonIsBlank($reason)) {
             throw AuditReasonRequiredException::forAction($action);
         }
 
@@ -121,6 +121,85 @@ final class Audit
             'outcome' => $outcome->value,
             'metadata' => $metadata,
         ]);
+    }
+
+    /**
+     * AC3's authoritative blank-reason check for every action on
+     * `SensitiveActions::ACTIONS`.
+     *
+     * Deliberately not `trim()`. `trim()` strips only the ASCII
+     * whitespace set (" \t\n\r\0\x0B"), so `trim("\u{00A0}") === ''` is
+     * `false` — a reason consisting solely of a non-breaking space, an
+     * ideographic space (U+3000), or a zero-width space reads as a
+     * non-blank justification while being invisible to a human reading
+     * the audit trail. A refund or payout whose recorded justification
+     * is one invisible character is indistinguishable, in review, from
+     * one nobody authorised.
+     *
+     * `\p{Z}` covers Unicode separators and `\p{C}` covers
+     * control/format characters, so this rejects the whole class rather
+     * than playing whack-a-mole with individual code points. Only a
+     * wholly-blank reason is rejected: prose containing a non-breaking
+     * space between words is still accepted.
+     *
+     * The check fails closed. Under `/u`, `preg_match()` returns
+     * `false` — not `0` — when the subject is not valid UTF-8, so the
+     * result is compared against `0` rather than `1`: anything that is
+     * not a clean "no match" counts as blank. A `=== 1` test would read
+     * that `false` as "not blank" and let the action through. Bytes
+     * that cannot be decoded cannot be read by a human reviewing the
+     * audit trail either, so they are rejected rather than trusted.
+     *
+     * Known residual: the Hangul fillers (U+3164, U+1160, U+FFA0) are
+     * category `Lo` (Letter, other), not `Z`/`C`, so a reason consisting
+     * solely of them is still accepted despite rendering invisible in
+     * most fonts. Enumerating those code points would trade away the
+     * "reject the whole class, don't play whack-a-mole" property this
+     * pattern is chosen for, so it is accepted and recorded here
+     * instead.
+     *
+     * ---------------------------------------------------------------
+     * This is the authoritative check. Everything above it is advisory
+     * ---------------------------------------------------------------
+     * Six gates in this repository reject a blank reason. This one is
+     * the only one that is load-bearing: every other path reaches
+     * `Audit::record()`, so a reason this method rejects cannot be
+     * recorded no matter which layer let it through.
+     *
+     * Two share this Unicode-aware pattern and must be changed with it:
+     *   - `Console\Commands\Concerns\RequiresAuditReason` — the four
+     *     `identity:*` commands; owns the operator-facing message.
+     *   - `Platform\Audit\Rules\NonBlankReason` — the HTTP boundary;
+     *     delegates here, so it cannot drift.
+     *
+     * Four are plain `trim()` pre-checks that predate this method and
+     * were deliberately left alone. They still catch ASCII-blank input
+     * early, before their surrounding `DB::transaction()` opens, which
+     * is all they were ever written to do — but they do NOT catch
+     * Unicode-blank input, which now falls through to this check from
+     * inside the transaction instead:
+     *   - `Platform\FinancialLedger\Actions\ManualPayout` (`VENDOR_PAYOUT`)
+     *   - `Platform\FinancialLedger\Actions\ResolveException`
+     *     (`RECONCILIATION_EXCEPTION_RESOLVED`)
+     *   - `Domain\ServiceCatalog\Actions\RecordServiceDefinitionPriceVersion`
+     *     (`PRICE_VERSION_RECORDED`)
+     *   - `Platform\FeatureGate\GateActivationRecorder` (`GATE_CHANGE`)
+     *
+     * Do not read those four as redundant copies of this check. They
+     * are a usability layer whose only guarantee is early ASCII-blank
+     * rejection; the security guarantee lives here.
+     *
+     * Public so the HTTP boundary can ask the same question this class
+     * answers, rather than keeping a seventh copy of the pattern.
+     */
+    public static function reasonIsBlank(?string $reason): bool
+    {
+        if ($reason === null) {
+            return true;
+        }
+
+        // `!== 0`, not `=== 1`: a `false` return must count as blank.
+        return preg_match('/^[\p{Z}\p{C}\s]*$/u', $reason) !== 0;
     }
 
     /**

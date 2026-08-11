@@ -13,6 +13,7 @@ use App\Platform\Payment\Models\PaymentSession;
 use App\Platform\Payment\PaymentAuditActions;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -119,6 +120,62 @@ final class RecordPaymentReversalRouteTest extends TestCase
             ->assertSessionHasErrors('reason');
 
         $this->assertSame(0, PaymentReversal::query()->where('reference', 'TRX-route-4')->count());
+    }
+
+    /**
+     * `Audit::record()` treats the whole of `\p{C}` as blank, but Laravel's
+     * `TrimStrings` middleware only strips the subset it considers
+     * invisible whitespace (`Str::INVISIBLE_CHARACTERS` plus Unicode
+     * `\s`). A non-breaking space is in that subset, so it never reaches
+     * the controller as a non-empty value — but a control character
+     * (U+0001) or a private-use character (U+E000) is not, and before
+     * `NonBlankReason` was attached those passed `required`, reached
+     * `Audit::record()`, and raised `AuditReasonRequiredException` — a
+     * plain `RuntimeException` with no `render()` — so the operator got a
+     * 500 and lost their input, for what is a validation failure. The
+     * audit outcome was already correct (`Audit::wrap()` rolls back);
+     * only the reporting was wrong.
+     */
+    #[DataProvider('blankReasonsThatSurviveTrimStrings')]
+    public function test_a_reason_the_audit_layer_calls_blank_is_rejected_as_validation_not_as_a_server_error(string $reason): void
+    {
+        $user = User::factory()->create();
+
+        ActorSession::query()->create([
+            'user_id' => $user->id,
+            'session_id' => 'test-session-'.$user->id,
+            'guard' => 'web',
+            'last_authenticated_at' => CarbonImmutable::now()->subSeconds(10),
+        ]);
+
+        $response = $this->actingAs($user)
+            ->post($this->url('refund'), [
+                'reference' => 'TRX-route-blank',
+                'reason' => $reason,
+            ]);
+
+        $this->assertNotSame(500, $response->getStatusCode());
+        $response->assertSessionHasErrors('reason');
+
+        $this->assertSame(0, PaymentReversal::query()->where('reference', 'TRX-route-blank')->count());
+        $this->assertSame(0, AuditEvent::query()->where('action', PaymentAuditActions::REFUND)->count());
+    }
+
+    /**
+     * @return iterable<string, array{0: string}>
+     */
+    public static function blankReasonsThatSurviveTrimStrings(): iterable
+    {
+        // Not stripped by TrimStrings; these are the cases that actually
+        // reached Audit::record() and produced a 500.
+        yield 'control character U+0001' => ["\u{0001}"];
+        yield 'private-use character U+E000' => ["\u{E000}"];
+
+        // Stripped by TrimStrings before validation runs, so this one is
+        // already rejected by `required` alone. Kept to pin that boundary:
+        // if TrimStrings ever stops covering it, this stays green via
+        // NonBlankReason rather than silently becoming a 500.
+        yield 'non-breaking space U+00A0' => ["\u{00A0}"];
     }
 
     public function test_a_missing_reference_is_rejected_at_the_http_layer(): void

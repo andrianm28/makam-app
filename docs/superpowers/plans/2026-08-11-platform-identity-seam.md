@@ -743,6 +743,12 @@ misjudge a change to one of these authorizers.
 
 ## Second cross-cutting finding — `NotificationDeliveryWriteGuard` can fail open
 
+**CLOSED.** Fixed on branch `fix/audit-reason-and-notification-guard` by
+`09d716d` (re-key to `WeakMap`) and `456ffcd` (docblock correction), planned in
+[`2026-08-12-security-hotfixes.md`](2026-08-12-security-hotfixes.md). The
+description below is the finding as first recorded; see "Correction on closure"
+at the end of this section for the part of it that turned out to be wrong.
+
 Surfaced by this lane's full-suite run, but **not caused by it**, and it lives in
 already-merged L2 code.
 
@@ -774,20 +780,42 @@ filter. That intermittency is what GC-timing-dependent id reuse looks like.
 This lane's contribution was only extra object churn (about 74 new tests),
 which changed allocation timing enough to hit the collision once.
 
-Beyond tests, the same hazard applies in production to any long-lived process
-that builds and discards connections — Horizon queue workers are the concrete
-case in this codebase, and `ActorContextResolver`'s own doc block already warns
-that "a static that survives a request boundary is a real bug class."
+A durable fix keys registration off something stable (the connection *name*, or
+`WeakMap`) rather than a recyclable object id. Not attempted here: it is another
+lane's module, already merged, and a change to a security guard needs its own
+review and regression pass.
 
-A durable fix probably keys registration off something stable (the connection
-*name*, or `WeakMap`) rather than a recyclable object id. Not attempted here:
-it is another lane's module, already merged, and a change to a security guard
-needs its own review and regression pass.
+### Correction on closure
 
-Owner: the `platform-notifications` lane (L2). Decision needed from the
-coordinator.
+The original finding above also claimed that "the same hazard applies in
+production to any long-lived process that builds and discards connections —
+Horizon queue workers are the concrete case in this codebase." **That
+attribution is wrong** and was retracted while fixing it. `456ffcd` verified
+both halves: `Illuminate\Queue\Worker` never purges the connection, and
+`DatabaseManager::reconnect()` swaps the PDO on the *same* `Connection` object,
+so the hook survives ordinary lost-connection recovery and a plain queue worker
+never reaches the collision.
 
-## Cross-cutting finding for the merge sign-off bundle — NOT fixed in this lane
+The real trigger is repeated application bootstraps inside one process — the
+test suite, which boots the providers afresh for each test (exactly what
+produced the intermittent failure recorded above), and Octane, which is not
+installed here. The authoritative statement now lives in the docblock on
+`NotificationDeliveryWriteGuard::$registeredConnections`; prefer it over this
+document if the two ever diverge again.
+
+The fix re-keys to a `WeakMap` on the connection object, which cannot collide.
+One gap is deliberately left open and tracked in the hotfix plan: `register()`
+still runs only once per bootstrap, so nothing re-attaches the hook if something
+purges the connection mid-process. Closing that needs a listener on
+`Illuminate\Database\Events\ConnectionEstablished`.
+
+## Cross-cutting finding for the merge sign-off bundle — `Audit::record()` Unicode-blank reason
+
+**CLOSED.** Fixed on branch `fix/audit-reason-and-notification-guard` by
+`1cb124c` (Unicode-aware blank check at the shared root), `6dba6c1` (fail closed
+when the reason is not valid UTF-8 — `1cb124c`'s first implementation was still
+fail-open on malformed input) and `b26a50c` (test-comment correction), planned in
+[`2026-08-12-security-hotfixes.md`](2026-08-12-security-hotfixes.md).
 
 **`Audit::record()`'s mandatory-reason check can be bypassed with Unicode
 whitespace, for every sensitive action in the application.**
@@ -809,14 +837,21 @@ already merged.
 
 This lane closed the hole **only at its own console layer**
 (`app/Console/Commands/Concerns/RequiresAuditReason.php`, a Unicode-aware
-`\p{Z}\p{C}\s` check, with four regression tests). That is defence in depth:
-the `identity:*` commands are safe, the platform is not. Fixing the shared
-`Audit::record()` check was deliberately left alone — it is shared
-infrastructure that already-merged lanes depend on, and a change there needs
+`\p{Z}\p{C}\s` check, with four regression tests). That was defence in depth:
+the `identity:*` commands were safe, the platform was not. Fixing the shared
+`Audit::record()` check was deliberately left out of *this* lane — it is shared
+infrastructure that already-merged lanes depend on, and a change there needed
 its own review and its own regression pass across every calling module.
 
-Decision needed from the coordinator: whether this becomes its own lane, a
-hotfix against trunk, or a ledgered backlog item.
+### Resolution
+
+The coordinator's decision was a hotfix against trunk, which is the branch named
+at the top of this section. `Audit::record()` now applies the same
+`/^[\p{Z}\p{C}\s]*$/u` check at the shared root, so the platform is covered, not
+just the `identity:*` commands. The console-layer guard in
+`RequiresAuditReason.php` is **retained** as defence in depth — the root check
+supersedes it as the authoritative rule, but the trait still produces the
+command-layer error message operators see, and its own tests continue to pin it.
 
 ## NOT TESTED (this lane)
 

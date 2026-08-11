@@ -25,26 +25,36 @@ namespace App\Console\Commands\Concerns;
  * with individual code points.
  *
  * ---------------------------------------------------------------------------
- * This is defence in depth, NOT the root fix
+ * This is defence in depth; the root fix lives in Audit::reasonIsBlank()
  * ---------------------------------------------------------------------------
  * `Audit::record()` performs the authoritative mandatory-reason check for
- * every action on `SensitiveActions::ACTIONS`, and it uses `trim()` — so the
- * same bypass exists there for every already-merged sensitive action across
- * the application (`PAYMENT_REFUND`, `VENDOR_PAYOUT`, `MFA_RESET`,
+ * every action on `SensitiveActions::ACTIONS`. It used to use `trim()`, so
+ * the same bypass existed there for every already-merged sensitive action
+ * across the application (`PAYMENT_REFUND`, `VENDOR_PAYOUT`, `MFA_RESET`,
  * `DOCUMENT_DELETE`, `JOURNAL_REVERSAL`, and others), not only this lane's
- * four. Fixing that shared check is deliberately out of this lane's scope: it
- * is shared infrastructure that already-merged lanes depend on, and changing
- * it needs its own review. Recorded as a cross-cutting finding in this lane's
- * merge sign-off bundle.
+ * four. That shared check now runs this same pattern, so the platform-wide
+ * hole is closed at its root; this trait remains as the command-layer
+ * defence-in-depth layer above it.
  *
- * Consequence worth stating plainly: closing the hole here means the
- * `identity:*` commands are safe, NOT that the platform is.
+ * This copy of the pattern is deliberately identical to the root one and must
+ * be changed with it. `Platform\Audit\Rules\NonBlankReason` guards the HTTP
+ * boundary the same way, but delegates to `Audit::reasonIsBlank()` instead of
+ * copying it — this trait keeps its own copy only because it must produce the
+ * command-layer error message operators see before any Action is invoked.
+ *
+ * Four further blank-reason gates exist elsewhere and still use plain
+ * `trim()`; they are listed in `Audit::reasonIsBlank()`'s docblock. Do not
+ * assume the pattern below is one of only two copies. See
+ * `Audit::reasonIsBlank()` for the full rationale, including why both failure
+ * paths fail closed and which invisible code points remain a known residual.
  */
 trait RequiresAuditReason
 {
     /**
-     * True when `$reason` is absent, empty, or consists only of whitespace
-     * — including Unicode whitespace that `trim()` would leave in place.
+     * True when `$reason` is absent, empty, consists only of whitespace
+     * — including Unicode whitespace that `trim()` would leave in place —
+     * or cannot be evaluated at all (malformed UTF-8, or any other PCRE
+     * error).
      */
     private function reasonIsBlank(?string $reason): bool
     {
@@ -52,6 +62,7 @@ trait RequiresAuditReason
             return true;
         }
 
-        return preg_match('/^[\p{Z}\p{C}\s]*$/u', $reason) === 1;
+        // `!== 0`, not `=== 1`: a `false` return must count as blank.
+        return preg_match('/^[\p{Z}\p{C}\s]*$/u', $reason) !== 0;
     }
 }

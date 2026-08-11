@@ -6,6 +6,7 @@ namespace App\Platform\Payment\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Platform\Audit\AuditSource;
+use App\Platform\Audit\Rules\NonBlankReason;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\Reauthentication\ReauthenticationService;
 use App\Platform\Payment\Models\PaymentVerification;
@@ -64,7 +65,10 @@ final class VerifyManualPaymentController extends Controller
 
         $validated = $request->validate([
             'decision' => ['required', 'string', Rule::in(['approve', 'reject'])],
-            'reason' => ['required', 'string'],
+            // `required` plus the `TrimStrings` middleware still let a
+            // control or private-use character through; it would then reach
+            // `Audit::record()` and surface as a 500 rather than a 422.
+            'reason' => ['required', 'string', new NonBlankReason],
         ]);
 
         $verification = PaymentVerification::query()->findOrFail($paymentVerification);

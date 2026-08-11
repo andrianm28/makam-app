@@ -6,7 +6,9 @@ namespace App\Platform\Notification;
 
 use App\Platform\Notification\Actions\DispatchNotification;
 use App\Platform\Notification\Exceptions\NotificationDeliveryWriteNotAllowedException;
+use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\DB;
+use WeakMap;
 
 /**
  * Runtime enforcement of AC9 ("`DispatchNotification` is the only class
@@ -39,13 +41,16 @@ use Illuminate\Support\Facades\DB;
  * What this does and does not prove
  * ---------------------------------------------------------------------------
  * The hook fires BEFORE a query executes, so an unauthorised write cannot
- * land and then report its violation. Every real write site in this lane
- * (`Actions\DispatchNotification::recordRecipientsAndDeliveries()`'s
- * `insertOrIgnore()`, `::claimDelivery()`'s claim update, and
- * `::recordChannelOutcome()`'s outcome update)
- * runs inside `withWritesUnlocked()`, and both also run inside a surrounding
- * `DB::transaction()` (the first directly; the second is a single
- * autocommit statement — see that method's own call site). An unauthorised
+ * land and then report its violation. All four real write sites in this
+ * lane run inside `withWritesUnlocked()`, and they are exactly the four
+ * methods the allowlist in `calledFromDispatchNotification()` names:
+ * `Actions\DispatchNotification::recordRecipientsAndDeliveries()`'s
+ * `insertOrIgnore()`, `::claimDelivery()`'s claim update,
+ * `::recordChannelOutcome()`'s outcome update, and
+ * `::requeueFailedDelivery()`'s requeue update. Only the first runs inside
+ * a surrounding `DB::transaction()` (opened by `::consumeOutboxEvent()`);
+ * the other three are single autocommit statements guarded by their own
+ * `where` predicates. An unauthorised
  * write attempted from anywhere else throws before execution and is
  * provable in a test
  * (`tests/Unit/Platform/Notification/NotificationDeliveryWriteGuardTest.php`),
@@ -58,9 +63,51 @@ final class NotificationDeliveryWriteGuard
     private static bool $unlocked = false;
 
     /**
-     * @var array<int, true>
+     * Keyed by the connection object itself, NOT by `spl_object_id()`.
+     *
+     * PHP reuses an object id once the original object is collected, so
+     * an id-keyed record could not distinguish "this connection is
+     * already hooked" from "a destroyed connection once held this id".
+     * A replacement connection handed a recycled id looked
+     * already-registered, `register()` returned early, and that
+     * connection carried no `beforeExecuting()` hook at all: every write
+     * to `notification_deliveries` on it silently unguarded. The guard
+     * failed OPEN, and only under whatever GC timing the surrounding
+     * workload happened to produce.
+     *
+     * The trigger is repeated application bootstraps inside one process
+     * — the test suite, which boots the providers afresh for every test,
+     * and Octane, which is not installed here. It is specifically NOT a
+     * plain queue worker: `Illuminate\Queue\Worker` never purges the
+     * connection, and `DatabaseManager::reconnect()` swaps the PDO on
+     * the same `Connection` object, so the hook survives ordinary
+     * lost-connection recovery. That last part holds only while the
+     * connection is still registered — `reconnect()` on an
+     * already-purged name falls through to `connection()`, which builds
+     * a fresh object, which is the gap below rather than an exception
+     * to it.
+     *
+     * A `WeakMap` keys on true object identity, which cannot collide,
+     * and drops its entry when the connection is actually collected —
+     * which is the real question being asked: "has THIS live connection
+     * object been hooked?"
+     *
+     * Known gap, unchanged by this keying and tracked separately:
+     * `register()` runs once per bootstrap from
+     * `Providers\NotificationServiceProvider::boot()`, so nothing
+     * re-attaches the hook if something purges the connection mid-process.
+     * This makes re-registration correct whenever it happens; it does not
+     * make it happen. Closing that needs a listener on
+     * `Illuminate\Database\Events\ConnectionEstablished`, for which this
+     * keying is the right substrate — repeated registration is safe and
+     * self-cleaning.
+     *
+     * Not initialised inline: PHP's "new in initializers" does not
+     * extend to property defaults, so it is built on first use.
+     *
+     * @var WeakMap<Connection, true>|null
      */
-    private static array $registeredConnections = [];
+    private static ?WeakMap $registeredConnections = null;
 
     /**
      * Idempotent per connection — safe to call from a service provider's
@@ -69,13 +116,14 @@ final class NotificationDeliveryWriteGuard
     public static function register(): void
     {
         $connection = DB::connection();
-        $connectionId = spl_object_id($connection);
 
-        if (isset(self::$registeredConnections[$connectionId])) {
+        self::$registeredConnections ??= new WeakMap;
+
+        if (isset(self::$registeredConnections[$connection])) {
             return;
         }
 
-        self::$registeredConnections[$connectionId] = true;
+        self::$registeredConnections[$connection] = true;
 
         $connection->beforeExecuting(function (string $sql): void {
             if (self::$unlocked) {
@@ -133,10 +181,22 @@ final class NotificationDeliveryWriteGuard
 
     /**
      * Test-only escape hatch: forces the lock back to its default (locked)
-     * state. `self::$unlocked` and `self::$registeredConnections` are process-global
-     * static state — like `OutboxEvent::flushEventListeners()` elsewhere in
-     * this codebase, a test that deliberately triggers a violation must
-     * not leak `$unlocked = true` into a later, unrelated test.
+     * state.
+     *
+     * Currently has NO callers anywhere in `app/` or `tests/`, and is
+     * retained deliberately rather than wired up. The leak it would guard
+     * against — a test that triggers a violation leaving `$unlocked = true`
+     * behind for a later, unrelated test — cannot presently occur:
+     * `withWritesUnlocked()` saves the previous state and restores it in a
+     * `finally`, so `$unlocked` survives no callback, exception path
+     * included. It is kept as a cheap belt-and-braces hatch in case a
+     * future code path sets the flag outside that method; if none appears,
+     * it can be deleted with no loss.
+     *
+     * `self::$registeredConnections` deliberately is NOT cleared: it
+     * holds live connection objects weakly and empties itself as they
+     * are collected, so clearing it would only risk hooking a still-live
+     * connection twice.
      */
     public static function resetForTests(): void
     {
