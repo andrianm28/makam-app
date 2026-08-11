@@ -145,7 +145,11 @@ Coordinator ruling, 12 Aug 2026. It corrects two things this lane's own survey g
 
 Task 1 therefore implements the **most restrictive defensible grant — `ActorRole::ADMIN` only.** This is a refusal to grant rather than an invented model: it cannot over-permit, and widening it later to `restricted_admin` or `operator` is a deliberate, reviewable decision. The PR flags this for human ruling and proposes the corresponding new `rbac-matrix.md` row rather than silently shipping an access model.
 
-**B. The panel gate is a live hole and is NOT fixed by Task 1.** `AdminPanelAccessPolicy::allows()` still returns bare `isAuthenticated()`. Every Resource this lane adds must therefore carry its own authorization — which Tasks 2-8 do — so the lane is correct whether or not the gate is tightened. Tightening it is drafted as **Task 10, conditional**, held back because it is a shared file and roughly ten existing test files `actingAs()` a roleless user against `/admin`; changing it unilaterally would break three concurrent lanes. It ships only on explicit coordinator approval.
+**B. The panel gate — RULED, fix it in this lane.** `AdminPanelAccessPolicy::allows()` returns bare `isAuthenticated()`, so any authenticated user reaches `/admin`. The policy's own docblock records that this was always meant to be temporary: *"Tightening this to a real role/scope check is S3-T2/T3 and Batch 3.2 Agent C's job, once `ActorContext::$roles`/`$scopes` are actually populated."* That precondition was met when the identity seam merged, so the placeholder is now a live, exploitable hole.
+
+User ruling, 12 Aug 2026 (explicit): **this lane fixes it**, full rigor, flagged in the PR as an authorization change needing human sign-off. Restrict to `admin`, `restricted_admin`, `operator`, `finance`. The roughly ten existing tests that `actingAs()` a roleless user against `/admin` were exercising the same gap — giving them real role grants is correct test hygiene, not collateral damage. Cross-lane risk was weighed and accepted in choosing this over a separate hotfix lane. **Task 10 is therefore unconditional.**
+
+> **Interaction that makes tests vacuous if missed.** Once the gate is tightened, a roleless user is rejected at the *panel* boundary and never reaches any Resource. Every resource-level denial test written against a roleless user then passes even if its authorizer were deleted — it would be verifying the panel gate, not the resource. So every resource-level denial test in this lane must **also** assert denial for an actor holding a panel-authorized role that lacks rights on that resource (`operator` is the natural choice). Roleless-denied proves the original gap is closed; `operator`-denied proves the resource check does independent work.
 
 ### Scope summary
 
@@ -251,11 +255,21 @@ Write Actions already exist (`DefineServicePackage`, `PublishServicePackageVersi
 - [ ] Update `.kiro/specs/admin-operations/tasks.md` progress honestly, and add ledger rows to `docs/planning/retrofit-backlog.md` for every deferred AC with its owning lane.
 - [ ] Propose the missing FAQ/content row for `docs/security/rbac-matrix.md` (open question A) rather than leaving the model undocumented.
 
-### Task 10: Panel gate (FULL RIGOR — CONDITIONAL, ships only on coordinator approval)
+### Task 10: Panel gate (FULL RIGOR) — runs immediately after Task 1
 
-- [ ] Narrow `AdminPanelAccessPolicy::allows()` from bare `isAuthenticated()` to a role check (`admin`, `restricted_admin`, `finance`, `operator`).
-- [ ] Update every affected test to grant an appropriate role — roughly ten files across FAQ, finance reports, notifications, MFA, and `AdminPanelHttpAccessTest`.
-- [ ] Held back by default: shared file, cross-lane blast radius while L7/L8/L11 are live.
+Approved by explicit user ruling; see open question B. Sequenced second, not last, because every Resource added by Tasks 2-8 inherits its protection and its test conventions.
+
+**Files:**
+- Modify: `app/Platform/IdentityAccess/Panel/AdminPanelAccessPolicy.php`
+- Modify: `tests/Unit/Platform/IdentityAccess/Panel/AdminPanelAccessPolicyTest.php`, `tests/Feature/IdentityAccess/UserCanAccessPanelTest.php`, `tests/Feature/IdentityAccess/AdminPanelHttpAccessTest.php`, the four `tests/Feature/IdentityAccess/Mfa/*` page tests, `tests/Feature/FinancialLedger/FinanceReportsPageTest.php`, `tests/Feature/Notification/InAppNotificationListPageTest.php`, and the three `tests/Feature/Filament/Admin/Faq/*` files
+
+- [ ] **Step 1: Write the failing test.** In `AdminPanelAccessPolicyTest`, assert a `customer`-role actor and a roleless actor are both denied, and that each of `admin`, `restricted_admin`, `operator`, `finance` is allowed. Add an HTTP-level test in `AdminPanelHttpAccessTest` asserting a `customer` gets 403 at `/admin`.
+- [ ] **Step 2: Run and watch it fail.** Expected: the denial assertions fail, because `allows()` currently returns `true` for anyone authenticated.
+- [ ] **Step 3: Implement.** `allows()` returns `$actor->isAuthenticated()` **and** holds one of `ActorRole::ADMIN`, `RESTRICTED_ADMIN`, `OPERATOR`, `FINANCE`. Keep the authenticated check — a guest must never pass on role absence alone. Replace the stale docblock with what the policy now does.
+- [ ] **Step 4: Repair the affected tests.** Each test that `actingAs()` a roleless user against `/admin` gets a real role grant via `GrantActorRole` (mandatory non-blank reason — `ROLE_GRANT` is `SensitiveActions`-listed). Grant the *least* role that makes each test's intent true: MFA and notification page tests want "some panel user" → `operator`; finance reports → `finance`; FAQ management → `admin`. **Do not blanket-grant `admin`** — that would erase the distinctions Task 1 established.
+- [ ] **Step 5: Verify Task 1's denial tests did not become vacuous.** The `operator`-denied FAQ tests must still fail for the right reason — resource authorization, not panel rejection. Temporarily stub `RoleBasedFaqAuthorizer::canManage()` to `return true;`, confirm those tests FAIL, then revert the stub. Record the output in the report. If they pass with the authorizer neutered, the test is measuring the wrong thing and must be fixed.
+- [ ] **Step 6: Full suite + `bash ci/verify-docs.sh`.**
+- [ ] **Step 7: Commit** as its own authorization unit, flagged for human review per `AGENTS.md` §Infrastructure-agent execution.
 
 ---
 
