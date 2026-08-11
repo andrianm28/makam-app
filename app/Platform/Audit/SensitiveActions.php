@@ -54,6 +54,7 @@ final class SensitiveActions
         // dead end, not a real control. `MFA_RESET` alone is the
         // deliberate, reasoned action in this group.
         'MFA_RESET',
+        'DOCUMENT_DELETE',
     ];
 
     public static function requiresReason(string $action): bool

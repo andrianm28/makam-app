@@ -52,6 +52,24 @@ final class MetadataAllowlist
         // unused recovery codes remain after a redemption), never a code
         // value or hash.
         'recovery_codes_remaining',
+
+        // Added by Lane L1 Task 6 (platform-document-vault read-side batch,
+        // `app/Platform/DocumentVault/**`). Non-secret, non-identifying, and
+        // specifically re-checked against this lane's "restricted data never
+        // leaves the module" constraint and requirements.md's Negative
+        // criteria ("No KTP, KK, death-certificate content, bank detail,
+        // credential, or full address in an audit payload") before being
+        // added.
+        //
+        // 'purpose': WHY a restricted document was reached for — always one
+        // of `App\Platform\DocumentVault\DocumentAccessPurpose`'s closed
+        // list of cases ('VIEW' | 'DOWNLOAD' | 'UPDATE' | 'DELETE' |
+        // 'GRANT'), written as `$purpose->value`. Never free text, never a
+        // filename, never file content or a MIME type, never a storage path,
+        // never a signed-URL token, and never anything identifying an
+        // individual. The same closed list backs the `purpose` column's
+        // PostgreSQL CHECK on `document_access_events`/`signed_url_grants`.
+        'purpose',
     ];
 
     /**

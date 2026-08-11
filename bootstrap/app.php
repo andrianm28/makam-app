@@ -1,6 +1,9 @@
 <?php
 
 use App\Http\Middleware\AssignCorrelationId;
+use App\Platform\DocumentVault\Jobs\ReconcileDocumentStorageCleanupJob;
+use App\Platform\Outbox\OutboxQueueName;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -12,6 +15,16 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+    ->withSchedule(function (Schedule $schedule): void {
+        $schedule->job(
+            new ReconcileDocumentStorageCleanupJob,
+            OutboxQueueName::Media->value,
+        )
+            ->name('document-vault:reconcile-storage-cleanups')
+            ->everyFiveMinutes()
+            ->withoutOverlapping(10)
+            ->onOneServer();
+    })
     ->withMiddleware(function (Middleware $middleware): void {
         // Every environment in deployment.md §2/§3 puts a reverse proxy in
         // front of the app (host nginx for dev/stg, LB/CDN for production);

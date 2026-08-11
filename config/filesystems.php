@@ -33,7 +33,9 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
+            // The local root contains private document quarantine objects;
+            // never expose it through Laravel's generic storage routes.
+            'serve' => false,
             'throw' => false,
             'report' => false,
         ],

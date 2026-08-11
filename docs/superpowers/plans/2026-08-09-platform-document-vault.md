@@ -70,7 +70,7 @@ New files under `app/Platform/DocumentVault/`:
 
 | File | Responsibility |
 |---|---|
-| `Contracts/ObjectStorage.php` | `put(prefix, key, stream, meta)`, `copy(prefixFrom,keyFrom,prefixTo,keyTo)`, `delete(prefix,key)`, `temporaryUrl(key, expiresAt, options)` |
+| `Contracts/ObjectStorage.php` | private object `put`, `copy`, `read`, `checksum`, `delete`, and idempotent cleanup operations; download URLs stay in the application route |
 | `Contracts/MalwareScanner.php` | `scan(reference) -> ScanVerdict (CLEAN|INFECTED|SUSPICIOUS|ERROR)` |
 | `Contracts/StoragePathResolver.php` | maps document kind → prefix policy (quarantine/accepted/expired) |
 | `DocumentState.php` | closed-list enum `UPLOADING|QUARANTINED|SCANNING|ACCEPTED|REJECTED|EXPIRED|DELETED` |
@@ -86,7 +86,7 @@ New files under `app/Platform/DocumentVault/`:
 | `Adapters/LocalFilesystemObjectStorage.php` | filesystem implementation under `storage/app/private/documents` |
 | `Adapters/MockScanner.php` | deterministic dev scanner (EICAR hash → INFECTED; size spike → SUSPICIOUS; else CLEAN) |
 | `Policies/DocumentAccessPolicy.php` | AC9: role AND record relationship required |
-| `Models/Document.php`, `Models/DocumentScan.php`, `Models/DocumentAccessEvent.php`, `Models/SignedUrlGrant.php` | Eloquent models with `$guarded = ['*']` and immutable `document_access_events` |
+| `Models/Document.php`, `Models/DocumentScan.php`, `Models/DocumentAccessEvent.php`, `Models/SignedUrlGrant.php` | Eloquent models with `$guarded = ['*']`, immutable access events, and grants mutable only through the controlled single-use `consumed_at` transition |
 | `DocumentVaultServiceProvider.php` | binds `ObjectStorage` → LocalFilesystem, `MalwareScanner` → MockScanner in dev; config-driven in prod |
 | `sql/revoke-document-mutations.sql` | append-only grants for `document_access_events` |
 | `Jobs/ScanDocumentJob.php` | dispatches scan on the `media` queue |
@@ -115,7 +115,7 @@ Migrations (all additive, numbered `2026_08_09_*`): `create_documents_table`, `c
 **Files:** `database/migrations/2026_08_09_100020_create_document_access_events_table.php`, `..._100030_create_signed_url_grants_table.php`
 
 - `document_access_events` (append-only): `id`, `document_id` (FK restrict), `actor_ref`, `actor_role`, `purpose` (closed-list enum: `VIEW|DOWNLOAD|UPDATE|DELETE|GRANT`), `outcome` (`allowed|denied|failed` — mirror `AuditOutcome`), `ip_address`, `occurred_at`. No `updated_at`. No UPDATE/DELETE grant for the app role (revoke SQL applied in Task 8).
-- `signed_url_grants`: `id`, `document_id`, `purpose` (single-purpose, AC6), `token` (opaque), `expires_at` (migration CHECK: `expires_at <= created_at + interval '5 minutes'` — DB-enforced 300 s max, AC6), `consumed_at` (nullable), `created_at`. One grant row per issuance; issuance is the audited event.
+- `signed_url_grants`: `id`, `document_id`, `actor_ref`, `purpose` (single-purpose, AC6), `token` (opaque), `expires_at` (migration CHECK: `expires_at <= created_at + interval '5 minutes'` — DB-enforced 300 s max, AC6), `consumed_at` (nullable), `created_at`. One grant row per issuance; issuance is the audited event. Issued rows are immutable except for the controlled single-use `consumed_at` transition.
 
 - [ ] **Step 1:** Write both migrations; the 5-minute cap is enforced at the DB level (CHECK on `expires_at` vs `created_at`), not only in the Action.
 - [ ] **Step 2:** `DocumentAccessEvent` model with `$guarded = ['*']`, `$casts`, and a class-level doc block stating the append-only rule (mirror `AuditEvent`'s).
@@ -127,7 +127,7 @@ Migrations (all additive, numbered `2026_08_09_*`): `create_documents_table`, `c
 
 **Files:** `Contracts/ObjectStorage.php`, `Contracts/MalwareScanner.php`, `Contracts/StoragePathResolver.php`, `DocumentValidator.php`, `Adapters/LocalFilesystemObjectStorage.php`, `Adapters/MockScanner.php`, `StoragePathPolicy.php`
 
-- `ObjectStorage` interface: `put`, `copy`, `delete`, `temporaryUrl`. `temporaryUrl` returns the platform-generated signed URL (Local adapter produces a 300 s URL that resolves to the private route `GET /internal/documents/{id}/download/{token}` guarded by `RecordDocumentAccess`; a real S3 adapter would produce a real presigned URL — swap is config-only, ADR-0033 provider-neutrality precedent).
+- `ObjectStorage` interface: private object `put`, `copy`, `read`, `checksum`, `delete`, and idempotent cleanup operations. It deliberately has NO URL-producing method: `IssueSignedUrl` always emits the application route `GET /internal/documents/{id}/download/{token}`, so a provider adapter cannot bypass redemption-time policy, state, single-use, and access auditing. Task 7 owns the route implementation and may add an equivalent durable provider-access mechanism only if it preserves those checks.
 - `DocumentValidator`: finfo `mime_content_type` on the stream (actual type), extension allowlist per `DocumentKind`, max size per kind (identity docs small cap; grave import larger cap), extension↔actual-type cross-check; rejects MIME spoofing with a per-kind reason. No executable/script formats for identity documents (`file-upload-pipeline.md` §5).
 - `LocalFilesystemObjectStorage`: writes under `storage/app/private/documents/{kind}/{prefix}/{key}`. `quarantine/` and `accepted/` prefixes are distinct directories; the adapter has no API that writes to `accepted/` directly except `copy` (so AC1's "no direct path to accepted storage" holds at the adapter boundary too).
 - `StoragePathPolicy`: only the promotion Action may reference the `accepted/` prefix.
@@ -186,13 +186,13 @@ Migrations (all additive, numbered `2026_08_09_*`): `create_documents_table`, `c
 
 **Files:** `Actions/IssueSignedUrl.php`, `Actions/RecordDocumentAccess.php`, `Policies/DocumentAccessPolicy.php`, `Models/SignedUrlGrant.php`
 
-- `DocumentAccessPolicy::canView(ActorContext $actor, Document $document)`: role AND record relationship both required (AC9). Role: admin/vendor/operator/customer per matrix; relationship: actor must hold a `ScopeAssignment` or an explicit record link (owner match / case assignment / vendor order) — a role alone returns `denied`. Uses `ScopeAssignmentResolver` / `ActorContext` from `platform-identity-and-access`; no existence leak on denial.
+- `DocumentAccessPolicy::canView(ActorContext $actor, Document $document)`: role AND record relationship both required (AC9). Role: admin/operator/case_manager/customer (CORRECTED 10 Aug 2026 by user ruling — the original text read "admin/vendor/operator/customer per matrix", which the matrix does not support: `docs/security/rbac-matrix.md:12` gives Vendor "No default" on restricted documents, the same value as the excluded Finance/Issuer/Auditor column, while Case Manager's "Assigned/purpose" is an affirmative grant that the original list omitted. Ruling: "No default" means EXCLUDED from the allow-list, so vendor is removed and finance stays out on the same consistent basis; case_manager is added. Least-privilege reading chosen deliberately because rbac-matrix.md is v0.2 and states "Exact roles depend on K1/K2" — widen later once real roles land); relationship: actor must hold a `ScopeAssignment` or an explicit record link (owner match / case assignment / vendor order) — a role alone returns `denied`. Uses `ScopeAssignmentResolver` / `ActorContext` from `platform-identity-and-access`; no existence leak on denial.
 - `IssueSignedUrl::issue(ActorContext $actor, Document $document, string $purpose) : SignedUrlGrant`:
   - Guard 1: policy passes, else audit `DOCUMENT_ACCESS_DENIED` and return a denial (never "no such document" — AC9 no existence leak).
   - Guard 2: `state === ACCEPTED`, else no URL (AC7) + audit.
   - Create `signed_url_grants` row with `expires_at = now + min(300s, purpose-capped)` (deceased documents hard 300 s, AC6), single purpose.
   - `Audit::record('DOCUMENT_ACCESS_GRANT', subject: document, outcome: allowed, purpose in metadata)` (AC8: actor, purpose, record, timestamp, outcome).
-  - Return the grant; the signed URL is resolved via `ObjectStorage::temporaryUrl`.
+  - Return the grant; the issued link resolves through the audited private application route, not a provider-presigned URL.
 - `RecordDocumentAccess::record(...)`: append-only `document_access_events` row on every actual access (route middleware for the private download route). `document.accessed.v1` outbox event (RESTRICTED, `event-catalog.md:24`) — idempotent per access event.
 
 - [ ] **Step 1:** Policy with role+relationship check.

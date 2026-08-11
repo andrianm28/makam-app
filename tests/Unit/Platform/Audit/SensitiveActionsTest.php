@@ -27,6 +27,7 @@ final class SensitiveActionsTest extends TestCase
             'manual payment verification' => ['PAYMENT_MANUAL_VERIFICATION'],
             'certificate revoke' => ['CERTIFICATE_REVOKE'],
             'vendor payout' => ['VENDOR_PAYOUT'],
+            'document delete' => ['DOCUMENT_DELETE'],
         ];
     }
 
@@ -60,7 +61,7 @@ final class SensitiveActionsTest extends TestCase
      * that one MFA action, not all four, requires a reason), not a
      * regression. Renamed and updated rather than left red.
      */
-    public function test_the_list_contains_exactly_the_seven_requirements_named_actions_plus_mfa_reset(): void
+    public function test_the_list_contains_the_requirements_named_actions_plus_mfa_reset_and_document_delete(): void
     {
         $this->assertSame(
             [
@@ -72,6 +73,7 @@ final class SensitiveActionsTest extends TestCase
                 'CERTIFICATE_REVOKE',
                 'VENDOR_PAYOUT',
                 'MFA_RESET',
+                'DOCUMENT_DELETE',
             ],
             SensitiveActions::ACTIONS
         );
