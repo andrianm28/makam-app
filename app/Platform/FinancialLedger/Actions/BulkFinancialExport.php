@@ -181,7 +181,10 @@ final class BulkFinancialExport
 
         Audit::record(
             action: self::AUDIT_ACTION,
-            subject: new AuditSubject('financial_ledger_report', $this->subjectReference($reference, $result)),
+            subject: new AuditSubject(
+                'financial_ledger_report',
+                $this->subjectReference($kind, $period, $reference, $result),
+            ),
             outcome: AuditOutcome::Allowed,
             actorRef: $actorRef,
             actorRole: $scope->role,
@@ -287,15 +290,26 @@ final class BulkFinancialExport
      * counts `varchar` in characters, and a string's byte length is always >=
      * its character length, so passing this check passes the column's.
      */
-    private function subjectReference(string $reference, LedgerReportResult $result): string
-    {
+    private function subjectReference(
+        string $kind,
+        string $period,
+        string $reference,
+        LedgerReportResult $result,
+    ): string {
         if (strlen($reference) <= self::AUDIT_SUBJECT_MAX_LENGTH) {
             return $reference;
         }
 
         $digest = substr(hash('sha256', $result->scopeLabel()), 0, 16);
 
-        return "{$result->kind}:{$result->period}:{$result->scopeSize()}-entities:{$digest}";
+        // `$kind`/`$period` deliberately, NOT `$result->kind`/`$result->period`:
+        // `LedgerReport::summary()` hardcodes `kind: LedgerReportKind::SUMMARY`,
+        // so reading the kind back off the result would make this branch always
+        // say `summary` while the verbatim branch above — and the filename —
+        // said whatever was asked for. Harmless while `KNOWN_KINDS` has one
+        // member, and a silent divergence the moment a second one lands. Both
+        // branches now derive from the same validated, normalised arguments.
+        return "{$kind}:{$period}:{$result->scopeSize()}-entities:{$digest}";
     }
 
     /**

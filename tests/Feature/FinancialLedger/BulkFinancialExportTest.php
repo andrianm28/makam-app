@@ -231,12 +231,35 @@ final class BulkFinancialExportTest extends TestCase
         $entityRefs = [];
 
         for ($i = 1; $i <= 40; $i++) {
-            $entityRef = sprintf('badan-usaha-%02d', $i);
-            $entityRefs[] = $entityRef;
+            $entityRefs[] = sprintf('badan-usaha-%02d', $i);
+        }
+
+        // Granted in a SHUFFLED order on purpose, so insertion order is not
+        // also the expected order. Deterministically seeded so any failure is
+        // reproducible rather than intermittent.
+        //
+        // Honest limitation, measured rather than assumed: this still does NOT
+        // fail if the authorizer's ordering is removed. Dropping
+        // `orderBy('entity_id')` was tried against real PostgreSQL 18 and this
+        // test stayed green, because the planner served the query from
+        // `scope_assignments_entity_idx` on `(entity_type, entity_id)` and
+        // returned entity-sorted rows regardless. No fixture can reliably force
+        // the planner's hand, so the ordering guarantee is NOT owned by this
+        // test — it is owned by the explicit `sort()` in
+        // `FinanceLedgerReadAuthorizer`, which is driver- and
+        // collation-independent. What this test does pin is the bounded
+        // reference, the entity count, and the digest input.
+        $shuffled = $entityRefs;
+        mt_srand(20260811);
+        shuffle($shuffled);
+        mt_srand();
+
+        foreach ($shuffled as $entityRef) {
             $this->grantLedgerReadAuthority(entityRef: $entityRef);
         }
 
-        sort($entityRefs);
+        $this->assertNotSame($entityRefs, $shuffled, 'The fixture must not be granted in sorted order.');
+
         $joined = implode('|', $entityRefs);
 
         // The guard is only meaningful if the fixture really does overflow.

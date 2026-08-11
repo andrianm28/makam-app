@@ -98,6 +98,29 @@ final class FinanceLedgerReadAuthorizer implements LedgerReadAuthorizer
             throw LedgerReadNotAuthorisedException::forActorContext();
         }
 
+        // Sorted again in PHP, deliberately, and not as belt-and-braces
+        // duplication of the `orderBy` above.
+        //
+        // Callers depend on this order for more than presentation:
+        // `Actions\BulkFinancialExport` digests the joined list into the audit
+        // subject reference when the scope outgrows `audit_events.subject_id`,
+        // so an unstable order silently produces a different reference for the
+        // same set and two identical exports stop correlating.
+        //
+        // Leaving that guarantee to the database makes it incidental rather
+        // than owned. `ORDER BY` is honoured, but the resulting collation is
+        // the server's (locale-aware on PostgreSQL, BINARY on SQLite), so the
+        // same grant set can order differently across drivers or deployments.
+        // `sort()` is byte-wise and identical everywhere, which is exactly the
+        // property a digest needs. Verified by execution rather than assumed:
+        // dropping the `orderBy` alone did NOT make the ordering test fail,
+        // because the planner satisfied the query from
+        // `scope_assignments_entity_idx` on `(entity_type, entity_id)` and
+        // handed back entity-sorted rows anyway. That is a planner accident
+        // that a different row count or index choice can withdraw at any time —
+        // precisely the kind of guarantee that must not live in the query plan.
+        sort($granted);
+
         return new LedgerReadScope(role: $role, entityRefs: $granted);
     }
 
