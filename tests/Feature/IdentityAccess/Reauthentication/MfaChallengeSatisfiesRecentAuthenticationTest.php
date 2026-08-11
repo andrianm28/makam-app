@@ -39,6 +39,15 @@ final class MfaChallengeSatisfiesRecentAuthenticationTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * Stands in for a real per-action reason such as
+     * `FinancialLedger\Actions\BulkFinancialExport::REAUTHENTICATION_REASON`
+     * — those actions query `reauthentication_events` for a satisfied row
+     * carrying their own reason, so the exact string has to survive the trip
+     * from the middleware to the challenge page.
+     */
+    private const string SENSITIVE_REASON = 'bank_account_change';
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -47,7 +56,7 @@ final class MfaChallengeSatisfiesRecentAuthenticationTest extends TestCase
             ->get('/__test/sensitive-action', function () {
                 return response()->json(['ok' => true]);
             })
-            ->middleware(RequireRecentAuthentication::class.':bank_account_change,test.reauth.challenge');
+            ->middleware(RequireRecentAuthentication::class.':'.self::SENSITIVE_REASON.',test.reauth.challenge');
 
         Route::middleware('web')
             ->get('/__test/reauth-challenge', function () {
@@ -84,11 +93,19 @@ final class MfaChallengeSatisfiesRecentAuthenticationTest extends TestCase
      * confirmation already consumed the current time-step as
      * `last_verified_counter`, so a code for that step is a replay.
      */
-    private function currentCodeFor(MfaEnrolment $enrolment): string
+    private function currentCodeFor(MfaEnrolment $enrolment, int $stepsAhead = 1): string
     {
         $totp = new Totp(t0: 0, period: $enrolment->period_seconds);
 
-        return $totp->generate(Base32::decode($enrolment->secret), time() + $enrolment->period_seconds, $enrolment->digits);
+        // Based on the Carbon clock, not `time()`, because
+        // `MfaChallengeService` verifies against
+        // `CarbonImmutable::now()->getTimestamp()` — so a test that travels
+        // in time gets a code the service will actually accept.
+        return $totp->generate(
+            Base32::decode($enrolment->secret),
+            CarbonImmutable::now()->getTimestamp() + ($stepsAhead * $enrolment->period_seconds),
+            $enrolment->digits,
+        );
     }
 
     private function staleSessionFor(User $user): ActorSession
@@ -183,6 +200,140 @@ final class MfaChallengeSatisfiesRecentAuthenticationTest extends TestCase
         $this->assertNotNull($satisfied, 'A completed challenge must record a satisfied reauthentication event.');
         $this->assertSame((string) $user->id, $satisfied->actor_ref);
         $this->assertSame(MfaChallenge::REAUTHENTICATION_REASON, $satisfied->reason);
+    }
+
+    public function test_the_satisfied_event_carries_the_sensitive_action_that_raised_the_challenge(): void
+    {
+        $user = User::factory()->create();
+        $enrolment = $this->confirmedEnrolmentFor($user);
+        $this->staleSessionFor($user);
+        $this->actingAs($user);
+
+        $this->get('/__test/sensitive-action')->assertRedirect(route('test.reauth.challenge'));
+
+        $this->crossRequestBoundary();
+
+        Livewire::actingAs($user)
+            ->test(MfaChallenge::class)
+            ->set('code', $this->currentCodeFor($enrolment))
+            ->call('submit')
+            ->assertRedirect();
+
+        $satisfied = ReauthenticationEvent::query()
+            ->where('outcome', ReauthenticationOutcome::SATISFIED)
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($satisfied);
+        $this->assertSame(
+            self::SENSITIVE_REASON,
+            $satisfied->reason,
+            'A sensitive action checks reauthentication_events for its OWN reason; a generic one leaves it refused forever.',
+        );
+    }
+
+    public function test_the_reason_is_single_use_so_one_challenge_proves_one_action(): void
+    {
+        $user = User::factory()->create();
+        $enrolment = $this->confirmedEnrolmentFor($user);
+        $this->staleSessionFor($user);
+        $this->actingAs($user);
+
+        $this->get('/__test/sensitive-action')->assertRedirect(route('test.reauth.challenge'));
+
+        $this->crossRequestBoundary();
+
+        Livewire::actingAs($user)
+            ->test(MfaChallenge::class)
+            ->set('code', $this->currentCodeFor($enrolment))
+            ->call('submit')
+            ->assertRedirect();
+
+        // A second challenge nobody was redirected into: the sensitive
+        // action's reason must NOT be minted again. Time travel past the
+        // step the submission above consumed as `last_verified_counter`,
+        // rather than reaching for a code outside the service's own
+        // acceptance window.
+        $this->travel(2 * $enrolment->period_seconds)->seconds();
+
+        Livewire::actingAs($user)
+            ->test(MfaChallenge::class)
+            ->set('code', $this->currentCodeFor($enrolment, stepsAhead: 0))
+            ->call('submit')
+            ->assertRedirect();
+
+        $this->assertSame(
+            1,
+            ReauthenticationEvent::query()
+                ->where('outcome', ReauthenticationOutcome::SATISFIED)
+                ->where('reason', self::SENSITIVE_REASON)
+                ->count(),
+            'One challenge must prove exactly one sensitive action.',
+        );
+        $this->assertSame(
+            1,
+            ReauthenticationEvent::query()
+                ->where('outcome', ReauthenticationOutcome::SATISFIED)
+                ->where('reason', MfaChallenge::REAUTHENTICATION_REASON)
+                ->count(),
+            'The unchallenged second completion falls back to the generic reason.',
+        );
+    }
+
+    public function test_a_challenge_with_no_sensitive_action_behind_it_records_the_generic_reason(): void
+    {
+        $user = User::factory()->create();
+        $enrolment = $this->confirmedEnrolmentFor($user);
+        $this->staleSessionFor($user);
+
+        // No middleware redirect happened — this is the login-time
+        // `EnforceMfaChallenge` shape, which guards panel access, not an
+        // action.
+        Livewire::actingAs($user)
+            ->test(MfaChallenge::class)
+            ->set('code', $this->currentCodeFor($enrolment))
+            ->call('submit')
+            ->assertRedirect();
+
+        $satisfied = ReauthenticationEvent::query()
+            ->where('outcome', ReauthenticationOutcome::SATISFIED)
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($satisfied);
+        $this->assertSame(MfaChallenge::REAUTHENTICATION_REASON, $satisfied->reason);
+    }
+
+    public function test_a_mistyped_code_leaves_the_reason_intact_for_the_retry(): void
+    {
+        $user = User::factory()->create();
+        $enrolment = $this->confirmedEnrolmentFor($user);
+        $this->staleSessionFor($user);
+        $this->actingAs($user);
+
+        $this->get('/__test/sensitive-action')->assertRedirect(route('test.reauth.challenge'));
+
+        $this->crossRequestBoundary();
+
+        Livewire::actingAs($user)
+            ->test(MfaChallenge::class)
+            ->set('code', '000000')
+            ->call('submit')
+            ->assertHasErrors(['code']);
+
+        Livewire::actingAs($user)
+            ->test(MfaChallenge::class)
+            ->set('code', $this->currentCodeFor($enrolment))
+            ->call('submit')
+            ->assertRedirect();
+
+        $satisfied = ReauthenticationEvent::query()
+            ->where('outcome', ReauthenticationOutcome::SATISFIED)
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($satisfied);
+        $this->assertSame(self::SENSITIVE_REASON, $satisfied->reason);
     }
 
     public function test_an_invalid_code_refreshes_no_timestamp_and_satisfies_nothing(): void

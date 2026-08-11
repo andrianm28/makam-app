@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Admin\Pages;
 
 use App\Http\Middleware\EnforceMfaChallenge;
+use App\Http\Middleware\RequireRecentAuthentication;
 use App\Platform\Audit\AuditSource;
 use App\Platform\IdentityAccess\Actions\RecordActorSessionAuthentication;
 use App\Platform\IdentityAccess\ActorContext;
@@ -35,16 +36,16 @@ use Illuminate\Support\Facades\Auth;
 final class MfaChallenge extends Page
 {
     /**
-     * The `$reason` recorded on the `reauthentication_events` row this page
-     * writes on success. Deliberately generic: this page is the redirect
-     * target of BOTH `EnforceMfaChallenge` (login-time panel access, which
-     * has no sensitive action behind it at all) and
-     * `RequireRecentAuthentication` (which does know a per-action reason,
-     * but threads only `url.intended` through the session, not the reason).
-     * Nothing observable at this point in the flow distinguishes the two,
-     * so recording the actual proof that happened here — an MFA challenge —
-     * is the honest value. Naming a specific sensitive action would be
-     * fabricated: the `challenged` row already carries the real reason.
+     * The fallback `$reason` for a challenge that guards no sensitive action
+     * — i.e. an `EnforceMfaChallenge` login-time challenge, or someone
+     * opening this page directly. A `RequireRecentAuthentication` challenge
+     * supplies the real per-action reason instead, through
+     * `RequireRecentAuthentication::REASON_SESSION_KEY`; see
+     * `reasonForThisChallenge()`.
+     *
+     * Generic, and deliberately not a per-action string: naming a sensitive
+     * action that nothing in the request actually points at would fabricate
+     * proof for an action the actor was never challenged for.
      */
     public const string REAUTHENTICATION_REASON = 'mfa_challenge';
 
@@ -118,7 +119,7 @@ final class MfaChallenge extends Page
         app(ReauthenticationService::class)->satisfy(
             actorRef: $actorContext->identityReference,
             actorRole: 'authenticated_actor',
-            reason: self::REAUTHENTICATION_REASON,
+            reason: $this->reasonForThisChallenge(),
             source: AuditSource::Panel,
             ip: $ip,
         );
@@ -134,5 +135,23 @@ final class MfaChallenge extends Page
         // `redirect()->intended()` uses on the HTTP side — the same key
         // `EnforceMfaChallenge`/`RequireRecentAuthentication` already populate.
         $this->redirectIntended(route('filament.admin.pages.dashboard'));
+    }
+
+    /**
+     * The sensitive action this challenge was raised for, if any.
+     *
+     * `pull()`, not `get()`: one completed challenge must yield proof for
+     * exactly one sensitive action. Leaving the key in the session would let
+     * a later, unchallenged visit to this page mint a second satisfied row
+     * for the same action.
+     *
+     * Reached only on a valid result, so a mistyped code leaves the key in
+     * place for the retry the actor is about to make.
+     */
+    private function reasonForThisChallenge(): string
+    {
+        $reason = session()->pull(RequireRecentAuthentication::REASON_SESSION_KEY);
+
+        return is_string($reason) && $reason !== '' ? $reason : self::REAUTHENTICATION_REASON;
     }
 }

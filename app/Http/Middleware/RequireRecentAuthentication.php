@@ -82,6 +82,27 @@ use Symfony\Component\HttpFoundation\Response;
  */
 final class RequireRecentAuthentication
 {
+    /**
+     * Carries `$reason` — the sensitive action that triggered THIS challenge
+     * — to the challenge page, which otherwise has no way to know it: the
+     * page is a separate request, and is the redirect target of
+     * `EnforceMfaChallenge` too, whose challenges guard no sensitive action
+     * at all.
+     *
+     * It has to be threaded, not guessed, because the reason is load-bearing
+     * for authorization, not just for audit prose: sensitive actions check
+     * `reauthentication_events` for a satisfied row carrying THEIR OWN
+     * reason (`FinancialLedger\Actions\ManualPayout` and `BulkFinancialExport`
+     * both do). A satisfied row with a generic reason would leave those
+     * actions permanently refused.
+     *
+     * Written on every challenge redirect, so the value always names the
+     * most recent challenge rather than an older abandoned one, and consumed
+     * (`session()->pull()`) by `MfaChallenge` on success, so one challenge
+     * yields proof for exactly one action.
+     */
+    public const string REASON_SESSION_KEY = 'reauthentication_pending_reason';
+
     public function handle(Request $request, Closure $next, string $reason, string $challengeRouteName): Response
     {
         $actorContext = app(ActorContext::class);
@@ -117,6 +138,7 @@ final class RequireRecentAuthentication
         // call sends the actor back to the sensitive action they were
         // attempting, not to the start.
         $request->session()->put('url.intended', $request->fullUrl());
+        $request->session()->put(self::REASON_SESSION_KEY, $reason);
 
         return redirect()->route($challengeRouteName);
     }
