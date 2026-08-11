@@ -344,6 +344,51 @@ final class MfaChallengeSatisfiesRecentAuthenticationTest extends TestCase
         $this->assertSame(self::SENSITIVE_REASON, $satisfied->reason);
     }
 
+    /**
+     * KNOWN LIMIT, pinned deliberately rather than described in prose: the
+     * reason threading reaches the STALE actor only.
+     *
+     * `RequireRecentAuthentication::handle()` returns early when the actor is
+     * already fresh, before it writes the reason — so no challenge is raised
+     * and no per-action `satisfied` row is ever written for a fresh actor. A
+     * sensitive action that enforces its own reason-scoped check (L4's
+     * `BulkFinancialExport` queries `reauthentication_events` for
+     * `reason = 'bulk_financial_export'`) therefore refuses a
+     * freshly-logged-in actor, with no way to satisfy it — visiting the
+     * challenge page voluntarily mints only the generic reason.
+     *
+     * Fails closed, so not a security hole; a real functional gap. This test
+     * documents the boundary and is EXPECTED TO FAIL, loudly and by design,
+     * whoever closes it — see the report's D3 follow-up. Do not "fix" it by
+     * relaxing the assertion.
+     */
+    public function test_a_fresh_actor_is_waved_through_and_therefore_gets_no_per_action_proof(): void
+    {
+        $user = User::factory()->create();
+        $this->confirmedEnrolmentFor($user);
+
+        // Fresh, not stale: the middleware's early return is the path here.
+        ActorSession::query()->create([
+            'user_id' => $user->id,
+            'session_id' => 'fresh-session-'.$user->id,
+            'guard' => 'web',
+            'last_authenticated_at' => CarbonImmutable::now()->subSeconds(10),
+        ]);
+        $this->actingAs($user);
+
+        $this->get('/__test/sensitive-action')->assertOk();
+
+        $this->assertNull(
+            session()->get(RequireRecentAuthentication::REASON_SESSION_KEY),
+            'No challenge was raised, so no reason is threaded.',
+        );
+        $this->assertSame(
+            0,
+            ReauthenticationEvent::query()->where('reason', self::SENSITIVE_REASON)->count(),
+            'A fresh actor produces neither a challenged nor a satisfied row for the sensitive action.',
+        );
+    }
+
     public function test_an_invalid_code_refreshes_no_timestamp_and_satisfies_nothing(): void
     {
         $user = User::factory()->create();
