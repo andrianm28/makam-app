@@ -77,8 +77,8 @@ final class Audit
      * @param  string  $actorRole  AC2: required for every event, including
      *                             one with a null `$actorRef`.
      * @param  AuditSource  $source  AC2: panel | api | job.
-     * @param  string|null  $reason  AC3: required (non-empty after
-     *                               `trim()`) when `$action` is on
+     * @param  string|null  $reason  AC3: required (and not entirely
+     *                               whitespace — see `reasonIsBlank()`) when `$action` is on
      *                               `SensitiveActions::ACTIONS` — throws
      *                               `AuditReasonRequiredException` otherwise. Optional for
      *                               every other action.
@@ -101,7 +101,7 @@ final class Audit
         ?string $correlationId = null,
         array $metadata = [],
     ): AuditEvent {
-        if (SensitiveActions::requiresReason($action) && ($reason === null || trim($reason) === '')) {
+        if (SensitiveActions::requiresReason($action) && self::reasonIsBlank($reason)) {
             throw AuditReasonRequiredException::forAction($action);
         }
 
@@ -121,6 +121,39 @@ final class Audit
             'outcome' => $outcome->value,
             'metadata' => $metadata,
         ]);
+    }
+
+    /**
+     * AC3's authoritative blank-reason check for every action on
+     * `SensitiveActions::ACTIONS`.
+     *
+     * Deliberately not `trim()`. `trim()` strips only the ASCII
+     * whitespace set (" \t\n\r\0\x0B"), so `trim("\u{00A0}") === ''` is
+     * `false` — a reason consisting solely of a non-breaking space, an
+     * ideographic space (U+3000), or a zero-width space reads as a
+     * non-blank justification while being invisible to a human reading
+     * the audit trail. A refund or payout whose recorded justification
+     * is one invisible character is indistinguishable, in review, from
+     * one nobody authorised.
+     *
+     * `\p{Z}` covers Unicode separators and `\p{C}` covers
+     * control/format characters, so this rejects the whole class rather
+     * than playing whack-a-mole with individual code points. Only a
+     * wholly-blank reason is rejected: prose containing a non-breaking
+     * space between words is still accepted.
+     *
+     * Same pattern as `Console\Commands\Concerns\RequiresAuditReason`,
+     * which guards the four `identity:*` commands one layer above this
+     * one. This is the authoritative check; that one is defence in
+     * depth.
+     */
+    private static function reasonIsBlank(?string $reason): bool
+    {
+        if ($reason === null) {
+            return true;
+        }
+
+        return preg_match('/^[\p{Z}\p{C}\s]*$/u', $reason) === 1;
     }
 
     /**
