@@ -27,6 +27,20 @@ namespace App\Platform\Notification;
  * channel was never attempted" (e.g. WhatsApp dropped by
  * `WhatsAppMode::EmailInAppFallback`, task-3-brief.md D4/AC2/AC12): a real
  * row in this state, not a silently missing one, is what AC4 requires.
+ *
+ * `Unavailable` has more than one cause — the WA-gate closure is only one
+ * of them; a missing active template version (`DeliveryResult::
+ * TEMPLATE_VERSION_UNAVAILABLE`, `Actions\DispatchNotification` and
+ * `Jobs\SendNotificationChannelJob`) and a channel-reported unavailable
+ * outcome (`DeliveryResult::CHANNEL_UNAVAILABLE`) both also record
+ * `Unavailable`, on ANY channel including EMAIL. `presentation()` therefore
+ * takes the row's `failure_message` to tell these apart: the WA-gate case
+ * is the only one that leaves `failure_message` null (Actions\
+ * DispatchNotification never sets one when the cause is the mode gate), so
+ * only that case may render the WhatsApp-specific copy. Every other cause
+ * renders a channel-neutral label — never the raw `failure_message`, which
+ * may carry a provider-controlled error code and must not reach the UI
+ * verbatim.
  */
 enum DeliveryState: string
 {
@@ -41,14 +55,20 @@ enum DeliveryState: string
      * state remains visually distinct from an unavailable channel and from a
      * queued pending delivery.
      *
+     * `$failureMessage` is the delivery row's own `failure_message` column —
+     * required to disambiguate `Unavailable`'s causes (see the enum doc
+     * block). Ignored for every other state.
+     *
      * @return array{intent: string, label: string}
      */
-    public function presentation(): array
+    public function presentation(?string $failureMessage = null): array
     {
         return match ($this) {
             self::Queued => ['intent' => 'pending', 'label' => 'Sedang dikirim'],
             self::Sent, self::Delivered => ['intent' => 'success', 'label' => 'Terkirim'],
-            self::Unavailable => ['intent' => 'neutral', 'label' => 'WhatsApp belum tersedia'],
+            self::Unavailable => ['intent' => 'neutral', 'label' => $failureMessage === null
+                ? 'WhatsApp belum tersedia'
+                : 'Notifikasi tidak tersedia'],
             self::Failed => ['intent' => 'danger', 'label' => 'Gagal mengirim'],
         };
     }

@@ -102,6 +102,33 @@ final class InAppNotificationListPageTest extends TestCase
             ->assertDontSee('Terkirim');
     }
 
+    /**
+     * Task 7a slice 3 fix: UNAVAILABLE is also recorded for a missing
+     * active template version (`DeliveryResult::TEMPLATE_VERSION_UNAVAILABLE`),
+     * on any channel including EMAIL — not only for the WA-gate closure.
+     * Before the fix, `DeliveryState::presentation()` always rendered the
+     * WA-gate-specific "WhatsApp belum tersedia" for ANY unavailable row,
+     * so an EMAIL row with this cause rendered the self-contradicting
+     * "Email · WhatsApp belum tersedia". A non-null `failure_message` must
+     * render the channel-neutral label instead.
+     */
+    public function test_an_unavailable_email_delivery_for_a_non_whatsapp_gate_cause_never_shows_the_whatsapp_gate_label(): void
+    {
+        $operator = User::factory()->create();
+        $this->grant($operator->id, ScopeEntityType::CEMETERY, 'cemetery-a');
+        $this->seedEventWithDeliveries(
+            $operator->id,
+            ['EMAIL' => DeliveryState::Unavailable],
+            ['EMAIL' => 'NOTIFICATION_TEMPLATE_UNAVAILABLE']
+        );
+
+        Livewire::actingAs($operator)
+            ->test(InAppNotificationList::class)
+            ->assertSee('Email · Notifikasi tidak tersedia')
+            ->assertDontSee('WhatsApp belum tersedia')
+            ->assertDontSee('Terkirim');
+    }
+
     public function test_sent_deliveries_render_terkirim(): void
     {
         $operator = User::factory()->create();
@@ -187,7 +214,7 @@ final class InAppNotificationListPageTest extends TestCase
      *
      * @param  array<string, DeliveryState>  $deliveriesByChannel
      */
-    private function seedEventWithDeliveries(int|string $operatorRef, array $deliveriesByChannel): InAppNotification
+    private function seedEventWithDeliveries(int|string $operatorRef, array $deliveriesByChannel, array $failureMessagesByChannel = []): InAppNotification
     {
         $eventId = 'event-delivery-'.md5(implode('|', array_keys($deliveriesByChannel)));
 
@@ -248,7 +275,7 @@ final class InAppNotificationListPageTest extends TestCase
                 $state->value,
                 $versionId,
                 null,
-                null,
+                $failureMessagesByChannel[$channel] ?? null,
                 0,
                 now()->toDateTimeString(),
                 now()->toDateTimeString(),

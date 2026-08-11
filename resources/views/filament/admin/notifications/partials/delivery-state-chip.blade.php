@@ -13,16 +13,21 @@
     `--mk-intent-success-*`, neutral -> `--mk-intent-neutral-*`, danger ->
     `--mk-intent-danger-*`.
 
-    A UNAVAILABLE delivery renders the enum's own neutral "WhatsApp belum
-    tersedia" label — it can never render "Terkirim", because "Terkirim"
-    exists only on the enum's SENT/DELIVERED branch (AC4: no false sent).
-    There is no "Email & WhatsApp terkirim" string here or anywhere in the
-    inbox (grep gate).
+    A UNAVAILABLE delivery renders one of the enum's own neutral labels — it
+    can never render "Terkirim", because "Terkirim" exists only on the
+    enum's SENT/DELIVERED branch (AC4: no false sent). The delivery's own
+    `failure_message` is passed to `presentation()` so the WA-gate-specific
+    "WhatsApp belum tersedia" copy is only used for its real cause, never
+    for an unrelated UNAVAILABLE cause (e.g. a missing template) on any
+    channel including EMAIL — see `DeliveryState`'s doc block. The raw
+    `failure_message` value itself is never rendered here. There is no
+    "Email & WhatsApp terkirim" string here or anywhere in the inbox (grep
+    gate).
 --}}
 @props(['delivery'])
 @php
     $state = $delivery->state;
-    $presentation = $state->presentation();
+    $presentation = $state->presentation($delivery->failure_message);
 
     $intentClasses = [
         'pending' => 'bg-warning-100 text-warning-800 border-warning-300',
