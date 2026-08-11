@@ -32,6 +32,15 @@ final class InvalidJournalBatchException extends InvalidArgumentException
         );
     }
 
+    public static function forBlankEntityRef(): self
+    {
+        return new self(
+            'A journal batch must name the badan usaha it belongs to. A blank entity '
+            .'reference is scoped to nothing: the batch would be invisible to every '
+            .'entity-scoped report while still counting toward an unscoped total.'
+        );
+    }
+
     public static function forEmptyEntries(string $businessKey): self
     {
         return new self(

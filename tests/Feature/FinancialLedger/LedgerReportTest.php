@@ -108,6 +108,40 @@ final class LedgerReportTest extends TestCase
         $this->assertSame(200_000, array_sum(array_column($result->rows, 'credit_total')));
     }
 
+    /**
+     * AC12's deterministic row order — the property that makes "same ledger +
+     * same period => same exported bytes" true.
+     *
+     * ---------------------------------------------------------------------
+     * The fixture is four codes INCLUDING `2000`, and that is not arbitrary
+     * ---------------------------------------------------------------------
+     * The three-code fixture this test used to carry (`4000, 5000, 7000`) came
+     * back already sorted from PostgreSQL's HashAggregate BY LUCK, so it could
+     * not detect the ordering being removed at all. A reviewer measured the
+     * real hash-bucket output on `postgres:18`: `2000, 4000, 5000, 7000`
+     * grouped WITHOUT any ordering comes back as `4000, 2000, 5000, 7000` —
+     * scrambled. `2000` is in this fixture because it lands in a different
+     * bucket, not for accounting reasons.
+     *
+     * ---------------------------------------------------------------------
+     * What this test can and cannot detect — stated, not implied
+     * ---------------------------------------------------------------------
+     * Ordering is now owned by `LedgerReport::sortRowsByAccountCode()`, a PHP
+     * `strcmp` sort. The SQL `ORDER BY` is retained as an optimisation.
+     *
+     *  - Deleting BOTH: this test goes RED (verified by executing exactly that
+     *    mutation on real PostgreSQL 18).
+     *  - Deleting the PHP sort alone: this test stays GREEN, because the SQL
+     *    clause still returns these four codes in this order. The test that
+     *    covers that mutation is
+     *    `test_row_order_is_byte_wise_and_not_the_servers_collation()` below.
+     *  - Deleting the SQL `ORDER BY` alone: NO test detects it, and none can —
+     *    the PHP sort produces identical output either way. This is precisely
+     *    the trap finding N5 sprang in `FinanceLedgerReadAuthorizer`, recorded
+     *    here in writing rather than left for the next reader to rediscover.
+     *    The consequence is bounded: the clause is not the guarantee, so losing
+     *    it costs efficiency, not correctness.
+     */
     public function test_rows_are_sorted_deterministically_by_account_code(): void
     {
         $this->journal()->post(
@@ -136,12 +170,106 @@ final class LedgerReportTest extends TestCase
             occurredAt: '2026-08-14T09:00:00+07:00',
         );
 
+        $this->journal()->post(
+            businessKey: 'payment:provider-event-report-4b',
+            entityRef: 'badan-usaha-1',
+            sourceType: 'payment',
+            sourceId: 'provider-event-report-4b',
+            entries: [
+                ['account' => '2000', 'direction' => 'DR', 'amountMinor' => 7_000],
+                ['account' => '4000', 'direction' => 'CR', 'amountMinor' => 7_000],
+            ],
+            correlationId: 'trace-report-4b',
+            occurredAt: '2026-08-14T10:00:00+07:00',
+        );
+
         $result = app(LedgerReport::class)->summary('2026-08');
 
-        $this->assertSame(['4000', '5000', '7000'], array_column($result->rows, 'account_code'));
-        $this->assertSame(30_000, $result->rows[0]['credit_total']);
-        $this->assertSame(10_000, $result->rows[1]['debit_total']);
-        $this->assertSame(20_000, $result->rows[2]['net']);
+        $this->assertSame(['2000', '4000', '5000', '7000'], array_column($result->rows, 'account_code'));
+        $this->assertSame(7_000, $result->rows[0]['debit_total']);
+        $this->assertSame(37_000, $result->rows[1]['credit_total']);
+        $this->assertSame(10_000, $result->rows[2]['debit_total']);
+        $this->assertSame(20_000, $result->rows[3]['net']);
+    }
+
+    /**
+     * The one test that goes red if the PHP sort is removed.
+     *
+     * Row order must be BYTE-WISE, not whatever the database server's locale
+     * says. Those differ: measured on this project's `postgres:18` image
+     * (`datcollate = en_US.utf8`), `ORDER BY code` returns `40001` BEFORE
+     * `4000-A`, while byte order puts `4000-A` first (`-` is 0x2D, `1` is
+     * 0x31). SQLite sorts byte-wise, so the two drivers disagree on the same
+     * data — and so would two PostgreSQL deployments that differ only in
+     * `lc_collate`.
+     *
+     * Why that matters rather than being trivia: `BulkFinancialExport` renders
+     * these rows into a byte-exact CSV, and AC12 requires the same ledger state
+     * to reproduce the same artifact. Leaving the order to the server means the
+     * artifact depends on a locale nobody in this repository chose.
+     *
+     * The account codes are synthetic. Every code in `ChartOfAccounts` today is
+     * four digits, and all collations agree on equal-length digit strings —
+     * which is exactly why this defect would stay invisible until the day
+     * finance extends the chart, since `coa_accounts.code` is `varchar(16)`
+     * with no format CHECK.
+     *
+     * MUTATION RESISTANCE: with `sortRowsByAccountCode()` removed, PostgreSQL
+     * returns `40001` before `4000-A` and this test fails on the very first
+     * assertion. Verified by executing that mutation, not by reasoning about
+     * it. It is PostgreSQL-only because SQLite's byte-wise ordering agrees with
+     * `strcmp` and therefore cannot express the divergence.
+     */
+    public function test_row_order_is_byte_wise_and_not_the_servers_collation(): void
+    {
+        if (DB::connection()->getDriverName() !== 'pgsql') {
+            $this->markTestSkipped(
+                'Only PostgreSQL has a locale-aware collation that can disagree with byte order; '
+                .'SQLite sorts byte-wise and cannot express this divergence.'
+            );
+        }
+
+        // Two extra chart accounts whose codes order differently under
+        // `en_US.utf8` than they do byte-wise.
+        foreach (['4000-A', '40001'] as $code) {
+            DB::table('coa_accounts')->insert([
+                'code' => $code,
+                'name' => 'Test — collation probe '.$code,
+                'normal_balance' => 'DR',
+            ]);
+        }
+
+        $this->journal()->post(
+            businessKey: 'payment:provider-event-collation',
+            entityRef: 'badan-usaha-1',
+            sourceType: 'payment',
+            sourceId: 'provider-event-collation',
+            entries: [
+                ['account' => '4000-A', 'direction' => 'DR', 'amountMinor' => 11_000],
+                ['account' => '40001', 'direction' => 'CR', 'amountMinor' => 11_000],
+            ],
+            correlationId: 'trace-report-collation',
+            occurredAt: '2026-08-16T09:00:00+07:00',
+        );
+
+        $result = app(LedgerReport::class)->summary('2026-08');
+
+        $this->assertSame(['4000-A', '40001'], array_column($result->rows, 'account_code'));
+
+        // And the server really would have disagreed — asserted rather than
+        // assumed, so this test cannot quietly become vacuous if a future image
+        // ships a byte-wise default collation. If this assertion ever fails,
+        // the test above stopped proving anything and must be revisited.
+        $this->assertSame(
+            ['40001', '4000-A'],
+            DB::table('coa_accounts')
+                ->whereIn('code', ['4000-A', '40001'])
+                ->orderBy('code')
+                ->pluck('code')
+                ->all(),
+            'The server collation no longer disagrees with byte order, so this test no longer '
+            .'distinguishes the PHP sort from the SQL ORDER BY.',
+        );
     }
 
     public function test_period_and_entity_filters_exclude_out_of_scope_rows(): void

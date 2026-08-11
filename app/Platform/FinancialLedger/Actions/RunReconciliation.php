@@ -6,6 +6,7 @@ namespace App\Platform\FinancialLedger\Actions;
 
 use App\Platform\Correlation\CorrelationContext;
 use App\Platform\FinancialLedger\Exceptions\InvalidReconciliationException;
+use App\Platform\FinancialLedger\LedgerPeriod;
 use App\Platform\FinancialLedger\Models\Reconciliation;
 use App\Platform\FinancialLedger\ProviderStatement;
 use App\Platform\FinancialLedger\ReconciliationExceptionStatus;
@@ -86,15 +87,6 @@ use Illuminate\Support\Str;
 final class RunReconciliation
 {
     /**
-     * `YYYY-MM`. The `reconciliations` migration restates this as a PostgreSQL
-     * CHECK; this pattern exists so a malformed period fails with a message
-     * that names the expected form, and fails the same way on SQLite. Same
-     * relationship `Journal::assertSourcePrefixed()` has with the business-key
-     * CHECK.
-     */
-    private const string PERIOD_PATTERN = '/\A\d{4}-(0[1-9]|1[0-2])\z/D';
-
-    /**
      * Reconcile one badan usaha's period against a provider statement.
      *
      * @param  string  $period  `YYYY-MM`.
@@ -118,7 +110,7 @@ final class RunReconciliation
         $period = trim($period);
         $entityRef = trim((string) $entityRef);
 
-        if (preg_match(self::PERIOD_PATTERN, $period) !== 1) {
+        if (! LedgerPeriod::matches($period)) {
             throw InvalidReconciliationException::forMalformedPeriod($period);
         }
 
@@ -133,12 +125,19 @@ final class RunReconciliation
         $ranAt ??= CarbonImmutable::now();
         $correlationId ??= app(CorrelationContext::class)->current()?->value;
 
-        // Safe to parse: the period matched `PERIOD_PATTERN` above, so it is a
-        // real `YYYY-MM` month. Half-open `[start, start + 1 month)` so a batch
-        // at midnight on the first of the next month belongs to that month and
-        // to exactly one period.
-        $windowStart = CarbonImmutable::parse($period.'-01 00:00:00')->startOfMonth();
-        $windowEnd = $windowStart->addMonth();
+        // Safe to build: the period matched `LedgerPeriod::matches()` above, so
+        // it is a real `YYYY-MM` month.
+        //
+        // The window comes from `LedgerPeriod`, the module's single definition
+        // of which batches belong to a period. This Action used to build it
+        // here with `CarbonImmutable::parse()` in the app timezone while
+        // `LedgerReport` built the same window in `Asia/Jakarta` — the two
+        // agreed only because the persistence layer formats a
+        // `DateTimeInterface` without converting zones. Sharing one definition
+        // removes a seven-hour disagreement that a single `->utc()` or a date
+        // cast would otherwise have introduced silently between a report and
+        // the reconciliation of the same period.
+        [$windowStart, $windowEnd] = LedgerPeriod::boundsFor($period);
 
         $journalTotals = $this->journalTotalsFor($entityRef, $windowStart, $windowEnd);
         $findings = $this->findings($journalTotals, $statement);

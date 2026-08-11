@@ -582,6 +582,77 @@ final class BulkFinancialExportTest extends TestCase
         ]);
     }
 
+    /**
+     * A malformed period must be a 4xx, not the app's own incident page.
+     *
+     * This is reachable from the panel's own button: `FinanceReports` shows the
+     * inline validation error for `2026-13` and STILL emits the raw period into
+     * the export link, so pressing Ekspor CSV afterwards used to return an
+     * uncaught 500. `InvalidLedgerReportException` extends
+     * `InvalidArgumentException`, implements no `HttpExceptionInterface`, and
+     * `bootstrap/app.php` registers no mapping for it, so nothing turned it
+     * into a response.
+     *
+     * MUTATION RESISTANCE: remove the `catch (InvalidLedgerReportException)`
+     * arm from `FinanceExportController` and this returns 500, failing the
+     * status assertion. Confirmed by executing that removal.
+     *
+     * The actor here is fully authorized and re-authenticated, so the 4xx is
+     * proved to come from input validation rather than from a gate refusing for
+     * an unrelated reason — the failure mode that would make this test pass
+     * while proving nothing.
+     */
+    public function test_a_malformed_period_at_the_route_is_a_client_error_not_an_uncaught_500(): void
+    {
+        $this->seedLedger();
+
+        $user = $this->freshlyAuthenticatedUser();
+        $actorRef = (string) $user->getAuthIdentifier();
+
+        $this->actAsFinanceActor($actorRef, fresh: true);
+        $this->grantLedgerReadAuthority(actorRef: $actorRef);
+        $this->reauthenticateRecently($actorRef);
+
+        // The same actor, same route, is served a 200 for a well-formed period
+        // — so the status below is about the period, not about authorization.
+        $this->actingAs($user)
+            ->get(route('admin.finance.exports', ['period' => '2026-08']))
+            ->assertOk();
+
+        $this->actingAs($user)
+            ->get(route('admin.finance.exports', ['period' => '2026-13']))
+            ->assertStatus(400);
+    }
+
+    /**
+     * The same treatment for an unknown `?kind=`, which reached the route as a
+     * bare `InvalidArgumentException` from `LedgerReportKind::assertKnown()`
+     * and rendered a 500 for the same reason. That factory now throws
+     * `InvalidLedgerReportException` instead — a narrowing, since it extends
+     * `InvalidArgumentException`.
+     */
+    public function test_an_unknown_report_kind_at_the_route_is_a_client_error(): void
+    {
+        $this->seedLedger();
+
+        $user = $this->freshlyAuthenticatedUser();
+        $actorRef = (string) $user->getAuthIdentifier();
+
+        $this->actAsFinanceActor($actorRef, fresh: true);
+        $this->grantLedgerReadAuthority(actorRef: $actorRef);
+        $this->reauthenticateRecently($actorRef);
+
+        $this->actingAs($user)
+            ->get(route('admin.finance.exports', ['period' => '2026-08', 'kind' => 'balance-sheet']))
+            ->assertStatus(400);
+
+        // A refused request must not have exported anything.
+        $this->assertDatabaseMissing('audit_events', [
+            'action' => BulkFinancialExport::AUDIT_ACTION,
+            'subject_id' => 'balance-sheet:2026-08:'.self::ENTITY,
+        ]);
+    }
+
     // -----------------------------------------------------------------------
     // Fixtures
     // -----------------------------------------------------------------------

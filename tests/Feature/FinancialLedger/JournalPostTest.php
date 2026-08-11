@@ -355,6 +355,41 @@ final class JournalPostTest extends TestCase
         ];
     }
 
+    /**
+     * Slice-1 Minor 1, folded in: `entity_ref` is NOT NULL, but `''` satisfies
+     * NOT NULL and no CHECK rejects it.
+     *
+     * MUTATION RESISTANCE: remove `assertEntityScoped()` from `post()` and this
+     * goes red — but the ASSERTION THAT MATTERS is the second one, not the
+     * exception. A test that only caught the throw would still pass if someone
+     * "fixed" this by defaulting a blank reference to something. The second
+     * half proves the consequence the validation exists to prevent: a blank
+     * entity_ref makes a batch invisible to every entity-scoped report while
+     * still counting toward the unscoped total, so the two views disagree
+     * silently and permanently.
+     */
+    public function test_a_blank_entity_reference_is_refused_because_it_is_scoped_to_nothing(): void
+    {
+        try {
+            $this->journal()->post(
+                businessKey: 'payment:blank-entity',
+                entityRef: '   ',
+                sourceType: 'payment',
+                sourceId: 'blank-entity',
+                entries: [
+                    ['account' => '7000', 'direction' => 'DR', 'amountMinor' => 10_000],
+                    ['account' => '4000', 'direction' => 'CR', 'amountMinor' => 10_000],
+                ],
+            );
+            $this->fail('Expected a blank entity reference to be refused.');
+        } catch (InvalidJournalBatchException $exception) {
+            $this->assertStringContainsString('badan usaha', $exception->getMessage());
+        }
+
+        $this->assertSame(0, JournalBatch::query()->count());
+        $this->assertSame(0, DB::table('journal_entries')->count());
+    }
+
     private function journal(): Journal
     {
         return $this->app->make(Journal::class);

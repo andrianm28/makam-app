@@ -8,9 +8,11 @@ use App\Platform\FinancialLedger\Contracts\Journal as JournalContract;
 use App\Platform\FinancialLedger\Contracts\LedgerReadAuthorizer;
 use App\Platform\FinancialLedger\Contracts\PayoutAuthorizer;
 use App\Platform\FinancialLedger\Contracts\ReconciliationAuthorizer;
+use App\Platform\FinancialLedger\Contracts\VendorPayableAuthorizer;
 use App\Platform\FinancialLedger\FinanceLedgerReadAuthorizer;
 use App\Platform\FinancialLedger\FinanceOrRestrictedAdminPayoutAuthorizer;
 use App\Platform\FinancialLedger\FinanceReconciliationAuthorizer;
+use App\Platform\FinancialLedger\FinanceVendorPayableAuthorizer;
 use App\Platform\FinancialLedger\Journal;
 use Illuminate\Support\ServiceProvider;
 
@@ -59,7 +61,7 @@ use Illuminate\Support\ServiceProvider;
  *  3. **`scoped()` would be safe today but says something untrue.**
  *     `scoped()` means "this object caches per-request state that must not
  *     leak into the next request" — the reason `ActorContext` and
- *     `CorrelationContext` use it. None of these four caches anything. Using
+ *     `CorrelationContext` use it. None of these five caches anything. Using
  *     it here would imply a request-lifetime identity these objects do not
  *     have, and it would still mask hazard (1) inside a single request rather
  *     than removing it.
@@ -102,6 +104,7 @@ final class FinancialLedgerServiceProvider extends ServiceProvider
         $this->app->bind(LedgerReadAuthorizer::class, FinanceLedgerReadAuthorizer::class);
         $this->app->bind(ReconciliationAuthorizer::class, FinanceReconciliationAuthorizer::class);
         $this->app->bind(PayoutAuthorizer::class, FinanceOrRestrictedAdminPayoutAuthorizer::class);
+        $this->app->bind(VendorPayableAuthorizer::class, FinanceVendorPayableAuthorizer::class);
 
         // `Contracts\PayoutProofVerifier` is intentionally absent from this
         // list and must stay absent until L1's DocumentVault adapter exists —

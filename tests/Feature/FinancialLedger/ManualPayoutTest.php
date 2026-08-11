@@ -27,6 +27,7 @@ use App\Platform\FinancialLedger\Money;
 use App\Platform\FinancialLedger\PayoutMethod;
 use App\Platform\FinancialLedger\PayoutProof;
 use App\Platform\FinancialLedger\PayoutState;
+use App\Platform\FinancialLedger\VendorPayableAssessmentTrigger;
 use App\Platform\FinancialLedger\VendorPayableEligibility;
 use App\Platform\FinancialLedger\VendorPayableState;
 use App\Platform\IdentityAccess\ActorContext;
@@ -580,6 +581,72 @@ final class ManualPayoutTest extends TestCase
         $this->assertNotNull($payout);
     }
 
+    /**
+     * Minor M6: an unknown payable and an unauthorised one must be
+     * indistinguishable, or `pay()` is an existence oracle over payable UUIDs.
+     *
+     * The assertion is on the exception TYPE AND MESSAGE, because the whole
+     * property is that the two refusals are identical — a test asserting only
+     * "it throws" would pass with two distinguishable errors and prove nothing.
+     * Three shapes are compared: a fictitious id, a real id with no grant, and
+     * a real id with no identity at all.
+     *
+     * MUTATION RESISTANCE: restore
+     * `InvalidPayoutException::forUnknownPayable($payableId)` and the first
+     * `assertSame` on the messages fails. Move `actorReference()` back outside
+     * the try and the third shape diverges instead.
+     */
+    public function test_an_unknown_payable_and_an_unauthorised_one_are_indistinguishable(): void
+    {
+        $realPayable = $this->eligiblePayable();
+
+        // (a) A payable that does not exist. No grant is set up at all.
+        $unknown = $this->refusalMessageFor((string) Str::uuid());
+
+        // (b) A real payable, real actor, but no vendor grant.
+        $unauthorised = $this->refusalMessageFor((string) $realPayable->id);
+
+        $this->assertSame(
+            $unknown,
+            $unauthorised,
+            'A caller must not be able to tell a fictitious payable id from one they may not see.',
+        );
+
+        // (c) A real payable, but no identity on the context at all.
+        $this->app->instance(ActorContext::class, ActorContext::guest());
+
+        $this->assertSame(
+            $unknown,
+            $this->refusalMessageFor((string) $realPayable->id),
+            'An unauthenticated caller must not be able to tell a real payable from a fictitious one either.',
+        );
+    }
+
+    /**
+     * @return array{class-string, string}
+     */
+    private function refusalMessageFor(string $payableId): array
+    {
+        try {
+            new ManualPayout(
+                actorContext: $this->app->make(ActorContext::class),
+                proofVerifier: new RecordingPayoutProofVerifier,
+            )->pay(
+                payableId: $payableId,
+                amount: new Money(self::AMOUNT),
+                proof: new PayoutProof(
+                    documentKind: 'PAYMENT_PROOF',
+                    documentReference: 'document-vault-ref-1',
+                ),
+                reason: 'Approved manual bank transfer for completed vendor work.',
+            );
+
+            $this->fail("Expected [{$payableId}] to be refused.");
+        } catch (\Throwable $thrown) {
+            return [$thrown::class, $thrown->getMessage()];
+        }
+    }
+
     public function test_the_database_requires_a_strictly_positive_payout_amount(): void
     {
         $this->skipUnlessPostgres('The strict payout amount CHECK is PostgreSQL-only.');
@@ -593,19 +660,52 @@ final class ManualPayoutTest extends TestCase
         ]));
     }
 
+    /**
+     * ---------------------------------------------------------------------
+     * Why the five tests below assert an exception MESSAGE and a trigger's
+     * EXISTENCE, rather than `expectException(QueryException::class)`
+     * ---------------------------------------------------------------------
+     * They used to do the latter, and all five stayed GREEN when the trigger
+     * they exist to protect was dropped. A reviewer proved it on the live
+     * schema: the triggers are `DEFERRABLE INITIALLY DEFERRED`, so the
+     * offending statement never throws — the `SET CONSTRAINTS ... IMMEDIATE`
+     * line is what raises. When the constraint is ABSENT, that same line raises
+     * `42704 constraint "..." does not exist`, which Laravel wraps in the same
+     * `QueryException` the tests expected. Delete migration
+     * `2026_08_10_120300`'s two `CREATE CONSTRAINT TRIGGER` statements and CI
+     * reports green while the entire cross-table payable/payout invariant is
+     * gone. These five tests are its only protection.
+     *
+     * `assertDeferredCheckRejects()` closes that two ways, both cheap:
+     * it asserts the trigger is really registered in `pg_trigger` BEFORE
+     * mutating (so absence fails loudly and specifically), and it asserts the
+     * refusal carries the invariant's own message (so a different error cannot
+     * satisfy the test). Per the review, this does NOT need T4-M2's
+     * non-transactional harness, and none is built here.
+     */
     public function test_the_database_rejects_payout_values_that_do_not_match_the_payable(): void
     {
         $this->skipUnlessPostgres('The payout/payable consistency trigger is PostgreSQL-only.');
 
         $payable = $this->eligiblePayable();
 
-        $this->expectException(QueryException::class);
-
-        DB::table('payouts')->insert($this->payoutAttributes($payable, [
-            'vendor_id' => 'different-vendor',
-        ]));
-
-        DB::statement('SET CONSTRAINTS payouts_payable_consistency IMMEDIATE');
+        $this->assertDeferredCheckRejects(
+            'payouts_payable_consistency',
+            'payouts',
+            fn () => DB::table('payouts')->insert($this->payoutAttributes($payable, [
+                'vendor_id' => 'different-vendor',
+            ])),
+            // T4-M3, now VISIBLE rather than inferred: this fixture never
+            // reaches `assert_vendor_payable_payout_pair`'s vendor/entity/
+            // amount/proof/state COMPARISON branch. The payable is still
+            // `payable`, so the "a payout row means the payable must be paid"
+            // check fires first and this test duplicates the one below it.
+            // T4-M3 is an accepted open item in the merge sign-off bundle and
+            // is deliberately NOT fixed here — but the message assertion means
+            // the duplication is now stated by the test itself instead of
+            // being discoverable only by reading PL/pgSQL.
+            'with a payout row must be paid',
+        );
     }
 
     public function test_the_database_rejects_a_direct_payout_insert_before_the_payable_is_paid(): void
@@ -614,11 +714,12 @@ final class ManualPayoutTest extends TestCase
 
         $payable = $this->eligiblePayable();
 
-        $this->expectException(QueryException::class);
-
-        DB::table('payouts')->insert($this->payoutAttributes($payable));
-
-        DB::statement('SET CONSTRAINTS payouts_payable_consistency IMMEDIATE');
+        $this->assertDeferredCheckRejects(
+            'payouts_payable_consistency',
+            'payouts',
+            fn () => DB::table('payouts')->insert($this->payoutAttributes($payable)),
+            'with a payout row must be paid',
+        );
     }
 
     public function test_the_database_rejects_deleting_the_only_payout_for_a_paid_payable(): void
@@ -630,11 +731,12 @@ final class ManualPayoutTest extends TestCase
         $this->satisfyReauthentication();
         $payout = $this->pay($payable);
 
-        $this->expectException(QueryException::class);
-
-        DB::table('payouts')->where('id', $payout->id)->delete();
-
-        DB::statement('SET CONSTRAINTS payouts_payable_consistency IMMEDIATE');
+        $this->assertDeferredCheckRejects(
+            'payouts_payable_consistency',
+            'payouts',
+            fn () => DB::table('payouts')->where('id', $payout->id)->delete(),
+            'must have exactly one payout row',
+        );
     }
 
     public function test_the_database_rejects_reassigning_a_payout_to_another_payable(): void
@@ -647,13 +749,16 @@ final class ManualPayoutTest extends TestCase
         $this->satisfyReauthentication();
         $payout = $this->pay($payable);
 
-        $this->expectException(QueryException::class);
-
-        DB::table('payouts')->where('id', $payout->id)->update([
-            'payable_id' => $otherPayable->id,
-        ]);
-
-        DB::statement('SET CONSTRAINTS payouts_payable_consistency IMMEDIATE');
+        $this->assertDeferredCheckRejects(
+            'payouts_payable_consistency',
+            'payouts',
+            fn () => DB::table('payouts')->where('id', $payout->id)->update([
+                'payable_id' => $otherPayable->id,
+            ]),
+            // The OLD side is checked first: the paid payable the payout was
+            // moved away from now has none.
+            'must have exactly one payout row',
+        );
     }
 
     public function test_the_database_rejects_paid_payables_without_a_payout_row(): void
@@ -662,14 +767,57 @@ final class ManualPayoutTest extends TestCase
 
         $payable = $this->eligiblePayable();
 
-        $this->expectException(QueryException::class);
+        $this->assertDeferredCheckRejects(
+            'vendor_payables_payout_consistency',
+            'vendor_payables',
+            fn () => DB::table('vendor_payables')->where('id', $payable->id)->update([
+                'state' => VendorPayableState::PAID,
+                'paid_at' => CarbonImmutable::now(),
+            ]),
+            'must have exactly one payout row',
+        );
+    }
 
-        DB::table('vendor_payables')->where('id', $payable->id)->update([
-            'state' => VendorPayableState::PAID,
-            'paid_at' => CarbonImmutable::now(),
-        ]);
+    /**
+     * @param  \Closure(): mixed  $mutation
+     */
+    private function assertDeferredCheckRejects(
+        string $trigger,
+        string $table,
+        \Closure $mutation,
+        string $expectedMessageFragment,
+    ): void {
+        // FIRST: the constraint trigger must actually exist. Without this,
+        // dropping it turns the refusal below into `42704 constraint does not
+        // exist` — an error, therefore a `QueryException`, therefore a pass.
+        $this->assertTrue(
+            DB::table('pg_trigger as t')
+                ->join('pg_class as c', 'c.oid', '=', 't.tgrelid')
+                ->where('t.tgname', $trigger)
+                ->where('c.relname', $table)
+                ->exists(),
+            "The [{$trigger}] constraint trigger is not registered on [{$table}]. The cross-table "
+            .'payable/payout invariant is unenforced, and every refusal test for it would otherwise '
+            .'pass on the wrong error.',
+        );
 
-        DB::statement('SET CONSTRAINTS vendor_payables_payout_consistency IMMEDIATE');
+        // Nested so the aborted transaction unwinds to a SAVEPOINT rather than
+        // poisoning `RefreshDatabase`'s outer transaction for everything after.
+        try {
+            DB::transaction(function () use ($mutation, $trigger): void {
+                $mutation();
+                DB::statement("SET CONSTRAINTS {$trigger} IMMEDIATE");
+            });
+
+            $this->fail("Expected [{$trigger}] to refuse the mutation, but it committed.");
+        } catch (QueryException $exception) {
+            $this->assertStringContainsString(
+                $expectedMessageFragment,
+                $exception->getMessage(),
+                "[{$trigger}] raised, but not for the invariant this test protects. "
+                ."Got: {$exception->getMessage()}",
+            );
+        }
     }
 
     /**
@@ -779,17 +927,32 @@ final class ManualPayoutTest extends TestCase
         ));
     }
 
+    /**
+     * Fixture setup, not the subject of any test in this file: these payables
+     * exist so a payout has something to discharge.
+     *
+     * Built through the UNATTENDED path with an explicit guest context, because
+     * `setUp()` binds an authenticated finance actor and this file's tests
+     * grant that actor's vendor scope at different points — several call this
+     * BEFORE `grantPayoutAuthorisation()`. Taking the human path here would
+     * couple every payout test to the ordering of an authorization that belongs
+     * to a different Action. The container's `ActorContext` is deliberately NOT
+     * reused: the unattended path refuses an authenticated context, and that
+     * refusal is a property `VendorPayableAssessmentTest` covers rather than
+     * something to work around here.
+     */
     private function assess(
         VendorPayableEligibility $eligibility,
         string $sourceId = 'order-1',
     ): VendorPayableModel {
-        return $this->app->make(VendorPayable::class)->assess(
+        return new VendorPayable(actorContext: ActorContext::guest())->assess(
             vendorId: self::VENDOR,
             entityRef: self::ENTITY,
             sourceType: 'marketplace_order',
             sourceId: $sourceId,
             amount: new Money(self::AMOUNT),
             eligibility: $eligibility,
+            trigger: VendorPayableAssessmentTrigger::UnattendedAssessment,
         );
     }
 

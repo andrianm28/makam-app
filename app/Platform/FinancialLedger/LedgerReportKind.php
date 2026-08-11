@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Platform\FinancialLedger;
 
-use InvalidArgumentException;
+use App\Platform\FinancialLedger\Exceptions\InvalidLedgerReportException;
 
 /**
  * The closed list of `LedgerReport` kinds a `BulkFinancialExport` may produce —
@@ -39,16 +39,25 @@ final class LedgerReportKind
     }
 
     /**
-     * @throws InvalidArgumentException when `$kind` is not one of
-     *                                  `self::KNOWN_KINDS`.
+     * Throws `InvalidLedgerReportException`, NOT a bare
+     * `InvalidArgumentException`, since Task 9b.
+     *
+     * The bare type made an unknown `?kind=` at the export route an uncaught
+     * 500: `FinanceExportController` cannot catch `InvalidArgumentException`
+     * without also swallowing genuine programming errors from anywhere below
+     * it, so it caught neither. `InvalidLedgerReportException` EXTENDS
+     * `InvalidArgumentException`, so this narrows the type without breaking any
+     * existing catch — and the malformed-period and unknown-kind refusals, two
+     * halves of "this report request is not well formed", now share one type
+     * the HTTP layer can map to a 400.
+     *
+     * @throws InvalidLedgerReportException when `$kind` is not one of
+     *                                      `self::KNOWN_KINDS`.
      */
     public static function assertKnown(string $kind): void
     {
         if (! self::isKnown($kind)) {
-            throw new InvalidArgumentException(
-                "Unknown ledger report kind [{$kind}]. Known kinds: "
-                .implode(', ', self::KNOWN_KINDS).'.'
-            );
+            throw InvalidLedgerReportException::forUnknownKind($kind, self::KNOWN_KINDS);
         }
     }
 }

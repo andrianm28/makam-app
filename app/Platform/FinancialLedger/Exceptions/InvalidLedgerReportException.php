@@ -27,6 +27,17 @@ final class InvalidLedgerReportException extends InvalidArgumentException
     }
 
     /**
+     * @param  list<string>  $knownKinds
+     */
+    public static function forUnknownKind(string $kind, array $knownKinds): self
+    {
+        return new self(
+            "Unknown ledger report kind [{$kind}]. Known kinds: "
+            .implode(', ', $knownKinds).'.'
+        );
+    }
+
+    /**
      * An explicitly empty entity-reference list. Refused rather than treated
      * as "no filter", because silently widening an empty scope to every badan
      * usaha is the exact failure mode `LedgerReadScope` exists to prevent.

@@ -10,12 +10,17 @@ use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\AuditSubject;
 use App\Platform\Correlation\CorrelationContext;
 use App\Platform\FinancialLedger\Contracts\Journal as JournalContract;
+use App\Platform\FinancialLedger\Contracts\VendorPayableAuthorizer;
 use App\Platform\FinancialLedger\Exceptions\InvalidVendorPayableException;
+use App\Platform\FinancialLedger\Exceptions\VendorPayableNotAuthorisedException;
+use App\Platform\FinancialLedger\FinanceVendorPayableAuthorizer;
 use App\Platform\FinancialLedger\Journal;
 use App\Platform\FinancialLedger\Models\VendorPayable as VendorPayableModel;
 use App\Platform\FinancialLedger\Money;
+use App\Platform\FinancialLedger\VendorPayableAssessmentTrigger;
 use App\Platform\FinancialLedger\VendorPayableEligibility;
 use App\Platform\FinancialLedger\VendorPayableState;
+use App\Platform\IdentityAccess\ActorContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -52,6 +57,28 @@ use Illuminate\Support\Str;
  * which are decisions somebody makes and records, not a silent downgrade a
  * scheduled re-assessment performs on its own. Re-assessing a `paid` payable
  * changes nothing at all.
+ *
+ * ---------------------------------------------------------------------------
+ * Authorization: server-side actor, same discipline as payout (added Task 9b)
+ * ---------------------------------------------------------------------------
+ * This Action writes the append-only ledger. Until Task 9b it did so with NO
+ * authorization at all — the only such path in the module — and its audit row
+ * recorded `actorRole: 'system'` whoever triggered it, so a human-triggered
+ * assessment produced an audit trail asserting the system did it. AC7 requires
+ * each operation type to have "its own authorization, journal shape, and
+ * audit"; this had two of the three.
+ *
+ * It now matches the sibling pattern exactly: `ActorContext` as the first
+ * constructor argument plus a real policy seam
+ * (`Contracts\VendorPayableAuthorizer`), server-derived only, as
+ * `ManualPayout`, `ResolveException` and `BulkFinancialExport` do.
+ *
+ * The legitimate automated trigger is preserved as its OWN explicitly-named
+ * path — `VendorPayableAssessmentTrigger::UnattendedAssessment` — never as a
+ * null or unauthenticated DEFAULT. The default is the human path, which fails
+ * closed; the unattended path must be asked for by name and is refused if the
+ * actor context shows a human is present. So `actorRole: 'system'` in an audit
+ * row now means the system, by construction rather than by convention.
  */
 final class VendorPayable
 {
@@ -73,7 +100,14 @@ final class VendorPayable
      */
     public const string AUDIT_ACTION_ASSESSED = 'VENDOR_PAYABLE_ASSESSED';
 
+    /**
+     * Dependencies are explicit seams so the Action fails closed until the
+     * sibling identity module provides an authoritative role source — the same
+     * shape and the same wording as `ManualPayout` and `ResolveException`.
+     */
     public function __construct(
+        private readonly ActorContext $actorContext,
+        private readonly VendorPayableAuthorizer $authorizer = new FinanceVendorPayableAuthorizer,
         private readonly JournalContract $journal = new Journal,
     ) {}
 
@@ -98,10 +132,17 @@ final class VendorPayable
      *                         from a queued job payload or a form would be silently truncated.
      *                         `Money`'s constructor is the one place that check lives, and this
      *                         seam reuses it rather than restating it.
+     * @param  VendorPayableAssessmentTrigger  $trigger  Who is causing this
+     *                                                   assessment. Defaults to the HUMAN path, which is the one that
+     *                                                   fails closed; the unattended path must be named explicitly and
+     *                                                   is refused when a human actor is present on the context.
      *
      * @throws InvalidVendorPayableException on a blank identifier, a non-positive
      *                                       amount, or an attempt to restate the amount of a payable that is
      *                                       already eligible.
+     * @throws VendorPayableNotAuthorisedException when the actor holds no
+     *                                             finance authority for this vendor, or when the unattended path is
+     *                                             requested while an authenticated actor is present.
      */
     public function assess(
         string $vendorId,
@@ -110,6 +151,7 @@ final class VendorPayable
         int|string $sourceId,
         Money $amount,
         VendorPayableEligibility $eligibility,
+        VendorPayableAssessmentTrigger $trigger = VendorPayableAssessmentTrigger::HumanDecision,
         ?string $correlationId = null,
         ?CarbonImmutable $now = null,
     ): VendorPayableModel {
@@ -124,6 +166,30 @@ final class VendorPayable
         if ($amountMinor <= 0) {
             throw InvalidVendorPayableException::forNonPositiveAmount($amountMinor);
         }
+
+        // Authorization runs BEFORE the transaction opens and before any row is
+        // read or written, so a refused assessment leaves no payable, no
+        // journal batch and no audit row — the ordering
+        // `ResolveException`/`ManualPayout` already follow.
+        //
+        // `$actorRole` is the authorizer's VERDICT, never a caller's claim, and
+        // it is what the audit row records. `$actorRef` is null on the
+        // unattended path only because the authorizer proved no human is
+        // present.
+        $actorRole = match ($trigger) {
+            VendorPayableAssessmentTrigger::HumanDecision => $this->authorizer->authorize(
+                $this->actorContext,
+                $vendorId,
+            ),
+            VendorPayableAssessmentTrigger::UnattendedAssessment => $this->authorizer->authorizeUnattended(
+                $this->actorContext,
+                $vendorId,
+            ),
+        };
+
+        $actorRef = $trigger === VendorPayableAssessmentTrigger::HumanDecision
+            ? (string) $this->actorContext->identityReference
+            : null;
 
         $now ??= CarbonImmutable::now();
         $correlationId ??= app(CorrelationContext::class)->current()?->value;
@@ -140,6 +206,8 @@ final class VendorPayable
             $eligibility,
             $correlationId,
             $now,
+            $actorRef,
+            $actorRole,
         ): VendorPayableModel {
             $existing = VendorPayableModel::query()
                 ->where('vendor_id', $vendorId)
@@ -149,7 +217,7 @@ final class VendorPayable
                 ->first();
 
             return $existing instanceof VendorPayableModel
-                ? $this->reassess($existing, $amountMinor, $eligibility, $now)
+                ? $this->reassess($existing, $amountMinor, $eligibility, $now, $correlationId, $actorRef, $actorRole)
                 : $this->open(
                     $vendorId,
                     $entityRef,
@@ -159,6 +227,8 @@ final class VendorPayable
                     $eligibility,
                     $correlationId,
                     $now,
+                    $actorRef,
+                    $actorRole,
                 );
         });
     }
@@ -172,6 +242,8 @@ final class VendorPayable
         VendorPayableEligibility $eligibility,
         ?string $correlationId,
         CarbonImmutable $now,
+        ?string $actorRef,
+        string $actorRole,
     ): VendorPayableModel {
         $eligible = $eligibility->isEligibleAt($now);
         $id = (string) Str::uuid();
@@ -197,7 +269,13 @@ final class VendorPayable
             $this->accrue($payable, $correlationId, $now);
         }
 
-        $this->audit($payable, previousState: null, correlationId: $correlationId);
+        $this->audit(
+            $payable,
+            previousState: null,
+            correlationId: $correlationId,
+            actorRef: $actorRef,
+            actorRole: $actorRole,
+        );
 
         return $payable;
     }
@@ -207,6 +285,9 @@ final class VendorPayable
         int $amountMinor,
         VendorPayableEligibility $eligibility,
         CarbonImmutable $now,
+        ?string $correlationId,
+        ?string $actorRef,
+        string $actorRole,
     ): VendorPayableModel {
         // A settled debt is finished. Nothing a later assessment discovers
         // re-opens it — a correction after payout is a new economic event with
@@ -238,11 +319,20 @@ final class VendorPayable
         ])->save();
 
         if ($eligible) {
-            $this->accrue($payable, $payable->correlation_id, $now);
+            // The CURRENT correlation id, not `$payable->correlation_id`.
+            // That column holds the correlation of the FIRST assessment — the
+            // run that decided NOT to recognise the debt — so tracing the
+            // accrual and its audit row through it led to the wrong job.
+            // `AGENTS.md` §Observability treats a money row's trace id as
+            // load-bearing, and the row being traced here is the one that
+            // recognised the liability.
+            $this->accrue($payable, $correlationId, $now);
             $this->audit(
                 $payable,
                 previousState: VendorPayableState::HELD,
-                correlationId: $payable->correlation_id,
+                correlationId: $correlationId,
+                actorRef: $actorRef,
+                actorRole: $actorRole,
             );
         }
 
@@ -297,6 +387,8 @@ final class VendorPayable
         VendorPayableModel $payable,
         ?string $previousState,
         ?string $correlationId,
+        ?string $actorRef,
+        string $actorRole,
     ): void {
         $metadata = ['new_state' => (string) $payable->state];
 
@@ -308,13 +400,20 @@ final class VendorPayable
             action: self::AUDIT_ACTION_ASSESSED,
             subject: new AuditSubject('vendor_payable', (string) $payable->id),
             outcome: AuditOutcome::Allowed,
-            // Assessment is machine-driven: a scheduled re-evaluation of facts
-            // other modules recorded, with no acting human. `actorRole` is
-            // still required even when `actorRef` is null — `Audit::record()`'s
-            // own rule.
-            actorRef: null,
-            actorRole: 'system',
-            source: AuditSource::Job,
+            // Both of these are the AUTHORIZER's verdict, threaded down from
+            // `assess()`. They used to be hardcoded `null` / `'system'`, which
+            // meant a human-triggered assessment wrote an audit row asserting
+            // the system did it. Now `null`/`system` appears only when
+            // `authorizeUnattended()` proved no human was present.
+            //
+            // `actorRole` is required even when `actorRef` is null —
+            // `Audit::record()`'s own rule.
+            actorRef: $actorRef,
+            actorRole: $actorRole,
+            // A panel action and a scheduled run are genuinely different
+            // sources, and an audit reader filtering on `Job` should not see
+            // human decisions in the results.
+            source: $actorRef === null ? AuditSource::Job : AuditSource::Panel,
             correlationId: $correlationId,
             metadata: $metadata,
         );

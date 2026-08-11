@@ -12,6 +12,7 @@ use App\Platform\FinancialLedger\Exceptions\JournalBatchAlreadyReversedException
 use App\Platform\FinancialLedger\Exceptions\UnknownJournalBatchException;
 use App\Platform\FinancialLedger\Journal;
 use App\Platform\FinancialLedger\JournalReversalKind;
+use App\Platform\FinancialLedger\LedgerReport;
 use App\Platform\FinancialLedger\Models\JournalBatch;
 use App\Platform\FinancialLedger\Models\JournalEntry;
 use Illuminate\Database\QueryException;
@@ -368,6 +369,133 @@ final class JournalReversalTest extends TestCase
     /**
      * @return list<array{0: string, 1: string, 2: int}>
      */
+    /**
+     * AC12's reproducibility, at the one place it can be silently broken.
+     *
+     * `Journal::postReversal()` documents in prose that "a reversal is its own
+     * economic event at its own time. The original's `occurred_at` is
+     * deliberately not copied — doing so would backdate the correction into a
+     * period that has already been reported on." Until this test, nothing
+     * asserted it: an independent reviewer changed `Journal.php:230` to
+     * `'occurred_at' => $original->occurred_at` and the ENTIRE suite stayed
+     * green on both drivers.
+     *
+     * ---------------------------------------------------------------------
+     * Why this asserts through `LedgerReport` and not only on the column
+     * ---------------------------------------------------------------------
+     * The consequence that matters is not the column value, it is that
+     * `LedgerReport::summary()` filters the period on
+     * `journal_batches.occurred_at`. Under the mutation, reversing a July batch
+     * in August files the correction into JULY — a period already reported and
+     * signed off — so `summary('2026-07')` silently returns a different number
+     * the next time it is generated. Asserting the report totals pins the
+     * property at the level AC12 states it.
+     *
+     * The shape is deliberately borrowed from
+     * `LedgerReportTest::test_period_and_entity_filters_exclude_out_of_scope_rows`,
+     * which is what already protects `post()`'s own `occurredAt` argument, so
+     * the two halves of the same property are protected the same way.
+     *
+     * MUTATION RESISTANCE, reasoned explicitly rather than assumed: under
+     * `'occurred_at' => $original->occurred_at` the reversal's DR 4000 /
+     * CR 7000 land in 2026-07 instead of 2026-08. July's debit total moves from
+     * 250_000 to 500_000 and August's from 250_000 to 0. Four of the
+     * assertions below change value, not merely one, and the raw-column
+     * assertion changes too. Verified red by running exactly that mutation.
+     */
+    public function test_a_reversal_lands_in_its_own_period_and_is_never_backdated_into_the_originals(): void
+    {
+        $this->journal()->post(
+            businessKey: 'payment:july-event',
+            entityRef: 'badan-usaha-1',
+            sourceType: 'payment',
+            sourceId: 'july-event',
+            entries: [
+                ['account' => '7000', 'direction' => 'DR', 'amountMinor' => 250_000],
+                ['account' => '4000', 'direction' => 'CR', 'amountMinor' => 250_000],
+            ],
+            occurredAt: '2026-07-15T09:00:00',
+        );
+
+        $reversal = $this->journal()->postReversal(
+            originalBusinessKey: 'payment:july-event',
+            reason: 'Provider settlement retracted after the July books closed',
+            occurredAt: '2026-08-03T09:00:00',
+        );
+
+        // The column itself: the reversal carries its own time, not the
+        // original's.
+        $this->assertSame(
+            '2026-08-03 09:00:00',
+            (string) DB::table('journal_batches')->where('id', $reversal->id)->value('occurred_at'),
+        );
+
+        $july = app(LedgerReport::class)->summary('2026-07');
+        $august = app(LedgerReport::class)->summary('2026-08');
+
+        // July still reads exactly as it did when it was reported: the original
+        // batch and nothing else. A backdated reversal would double it.
+        $this->assertSame(250_000, array_sum(array_column($july->rows, 'debit_total')));
+        $this->assertSame(250_000, array_sum(array_column($july->rows, 'credit_total')));
+
+        // August carries the correction, in the period it actually happened in.
+        $this->assertSame(250_000, array_sum(array_column($august->rows, 'debit_total')));
+        $this->assertSame(250_000, array_sum(array_column($august->rows, 'credit_total')));
+
+        // And the two periods net to zero together — the reversal cancels the
+        // original across the ledger as a whole, which is the point of posting
+        // it forward rather than editing backwards.
+        $this->assertSame(
+            0,
+            array_sum(array_column($july->rows, 'net')) + array_sum(array_column($august->rows, 'net')),
+        );
+    }
+
+    /**
+     * The default path — no explicit `occurredAt` — must also land in the
+     * present, not in the original's period. This is the shape a real
+     * correction takes (a human reverses a batch today), and it is the one the
+     * mutation above would break most quietly.
+     */
+    public function test_a_reversal_with_no_explicit_time_lands_in_the_current_period(): void
+    {
+        $this->travelTo('2026-07-15 09:00:00');
+
+        $this->journal()->post(
+            businessKey: 'payment:travelled-event',
+            entityRef: 'badan-usaha-1',
+            sourceType: 'payment',
+            sourceId: 'travelled-event',
+            entries: [
+                ['account' => '7000', 'direction' => 'DR', 'amountMinor' => 100_000],
+                ['account' => '4000', 'direction' => 'CR', 'amountMinor' => 100_000],
+            ],
+        );
+
+        $this->travelTo('2026-08-03 09:00:00');
+
+        $reversal = $this->journal()->postReversal(
+            originalBusinessKey: 'payment:travelled-event',
+            reason: 'Corrected in the month it was discovered',
+        );
+
+        $this->assertSame('2026-08', $reversal->occurred_at->format('Y-m'));
+        $this->assertSame(
+            100_000,
+            array_sum(array_column(
+                app(LedgerReport::class)->summary('2026-07')->rows,
+                'debit_total',
+            )),
+        );
+        $this->assertSame(
+            100_000,
+            array_sum(array_column(
+                app(LedgerReport::class)->summary('2026-08')->rows,
+                'debit_total',
+            )),
+        );
+    }
+
     private function entryTuples(string $batchId): array
     {
         return JournalEntry::query()

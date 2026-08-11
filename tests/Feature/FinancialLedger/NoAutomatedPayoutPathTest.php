@@ -35,7 +35,7 @@ use Tests\TestCase;
  * If those samples ever stop being flagged, this test fails just as loudly as
  * if a real one appeared.
  *
- * Three signals, each with its own scope and its own reason:
+ * Four signals, each with its own scope and its own reason:
  *
  *  1. **An outbound network call from `app/Platform/FinancialLedger/**`.**
  *     Moving money to a vendor bank account requires talking to something
@@ -49,26 +49,89 @@ use Tests\TestCase;
  *  2. **A reference from the ledger module to the provider adapter's
  *     namespace.** The obvious way to sidestep signal 1 is to let
  *     `app/Platform/Payment/**` make the call and have the ledger ask it to.
- *  3. **A transfer-verb method declared anywhere under `app/Platform/**`.**
+ *  3. **A transfer-verb method declared anywhere under `app/**`.**
  *     The way to sidestep both of the above is to put the method behind an
  *     interface the ledger resolves from the container without naming. The
  *     method still has to be declared somewhere, and it still has to be called
- *     something.
+ *     something. (Scoped to `app/Platform` until Task 9b; see below.)
+ *  4. **Payout ORCHESTRATION from outside the ledger module** — the gap the
+ *     three rules above left wide open, closed at Task 9b.
  *
- * Residual gap, stated rather than hidden: a determined author could declare
- * `function execute()` on a class the ledger resolves through a
- * container-bound interface, and no textual rule would catch it. That is why
- * this file also asserts the closed lists and the schema — an automated payout
- * still needs somewhere to record that it happened, and `PayoutMethod`,
- * `PayoutState` and the `payouts` table give it nowhere.
+ * ---------------------------------------------------------------------------
+ * Why signal 4 exists: where an automated payout would actually be written
+ * ---------------------------------------------------------------------------
+ * Three of the four rules used to scan only `app/Platform/FinancialLedger`, and
+ * the fourth only `app/Platform`. `app/Console`, `app/Http`, `app/Domain`,
+ * `app/Filament`, `app/Livewire` and anything else under `app/` were scanned by
+ * NOTHING. So this, which is exactly where somebody would put it, passed every
+ * assertion in this file:
+ *
+ *     // app/Console/Commands/SettleVendorPayables.php
+ *     public function handle(): int
+ *     {
+ *         $response = Http::withToken($token)->post($bankApi, [...]);
+ *         $this->payout->pay($payable->id, ...);   // records it as MANUAL
+ *     }
+ *
+ * The outbound-call and gateway rules never looked outside the module, and
+ * `handle` is not a transfer verb. The schema then records the result as
+ * `method = 'manual_bank_transfer'`, because nothing distinguishes "a human
+ * moved this money" from "a program did".
+ *
+ * Signal 4's rule is deliberately conditional rather than a blanket ban, so it
+ * stays keepable: a file anywhere under `app/` that REFERENCES the payout
+ * surface must carry no outbound-call, provider-adapter or transfer-gateway
+ * signal. A notification module may call an HTTP API; a class that calls
+ * `ManualPayout::pay()` may not.
+ *
+ * ---------------------------------------------------------------------------
+ * The real residual gap, corrected
+ * ---------------------------------------------------------------------------
+ * This doc block used to claim the residual gap was "`function execute()` on a
+ * container-bound interface". That is FALSE — `execute(` is covered, by the
+ * `transfer_gateway_call` pattern. For a test whose whole purpose is honest
+ * structural absence, a disclosed gap that is not real is worse than no
+ * disclosure: it invites a reader to trust the parts that ARE claimed.
+ *
+ * The genuine residual gaps, as of Task 9b:
+ *
+ *  - A payout orchestrated from a file that names NONE of the payout-surface
+ *    tokens signal 4 keys on — writing raw SQL against `payouts` through a
+ *    variable table name, for instance.
+ *  - Anything outside `app/` entirely: `routes/`, `database/`, a queue worker
+ *    configured to call a webhook, or infrastructure.
+ *  - A provider that accepts a transfer by e-mail or file drop, which needs no
+ *    HTTP call at all.
+ *
+ * Which is why this file also asserts the closed lists and the schema — an
+ * automated payout still needs somewhere to record that it happened, and
+ * `PayoutMethod`, `PayoutState` and the `payouts` table give it nowhere.
  */
 final class NoAutomatedPayoutPathTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const string PLATFORM_PATH = 'app/Platform';
+    private const string APP_PATH = 'app';
 
     private const string LEDGER_PATH = 'app/Platform/FinancialLedger';
+
+    /**
+     * "This file is about paying vendors." Any one of these tokens is enough to
+     * bring a file under signal 4's stricter rule, wherever it lives.
+     *
+     * Kept broad on purpose: a false positive here costs a developer one
+     * conversation about why their payout orchestrator wants an HTTP client,
+     * which is a conversation AC9 wants to happen.
+     *
+     * @var array<string, string>
+     */
+    private const array PAYOUT_SURFACE_PATTERNS = [
+        'names_manual_payout' => '/\bManualPayout\b/',
+        'names_vendor_payable' => '/\bVendorPayable\b/',
+        'names_payout_vocabulary' => '/\bPayout(Method|State|Proof|Authorizer|ProofVerifier)\b/',
+        'touches_the_payouts_table' => '/[\'"]payouts[\'"]/',
+        'calls_pay' => '/->\s*pay\s*\(/',
+    ];
 
     /**
      * An outbound network call. Namespace separators are doubled because these
@@ -140,12 +203,79 @@ final class NoAutomatedPayoutPathTest extends TestCase
         );
     }
 
-    public function test_no_transfer_verb_method_is_declared_anywhere_under_app_platform(): void
+    /**
+     * Widened at Task 9b from `app/Platform` to the whole of `app/`. Verified
+     * before widening that the tree is genuinely clean — no method matching
+     * `transfer|disburse|remit|wire` is declared anywhere under `app/` — so
+     * this is a rule the repository can actually keep rather than one that will
+     * need suppressing next week.
+     */
+    public function test_no_transfer_verb_method_is_declared_anywhere_under_app(): void
     {
         $this->assertNoMatches(
-            self::PLATFORM_PATH,
+            self::APP_PATH,
             self::TRANSFER_VERB_PATTERNS,
             'A payout that moves money by itself needs a method that does the moving.',
+        );
+    }
+
+    /**
+     * Signal 4: nothing outside the ledger module orchestrates a payout AND
+     * talks to something outside this process.
+     *
+     * This is the rule that would have caught
+     * `app/Console/Commands/SettleVendorPayables.php` calling a bank API and
+     * then recording the result through `ManualPayout::pay()` — a file none of
+     * the other three rules ever looked at.
+     */
+    public function test_nothing_outside_the_ledger_module_orchestrates_a_payout_over_the_network(): void
+    {
+        $forbidden = array_merge(
+            self::OUTBOUND_CALL_PATTERNS,
+            self::PROVIDER_REFERENCE_PATTERNS,
+            self::AUTOMATED_TRANSFER_ARCHITECTURE_PATTERNS,
+        );
+
+        $offences = [];
+        $payoutAwareFiles = 0;
+
+        foreach ($this->phpFilesIn(self::APP_PATH) as $path => $contents) {
+            // The ledger module has its own, stricter, unconditional rules
+            // above; scanning it again here would double-report.
+            if (str_starts_with($path, 'Platform/FinancialLedger/')) {
+                continue;
+            }
+
+            if ($this->signalsIn($contents, self::PAYOUT_SURFACE_PATTERNS) === []) {
+                continue;
+            }
+
+            $payoutAwareFiles++;
+
+            foreach ($this->signalsIn($contents, $forbidden) as $signal) {
+                $offences[] = "{$path}: {$signal}";
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offences,
+            'A file outside the ledger module both orchestrates a payout and reaches outside this '
+            ."process. That is the automated transfer path AC9 forbids while G-PAYOUT-01 is closed.\nFound:\n"
+            .implode("\n", $offences),
+        );
+
+        // A conditional rule whose condition never matches asserts nothing.
+        // This is that rule's own teeth-check, in the same spirit as
+        // `phpFilesIn()`'s empty-directory guard: if the payout surface is ever
+        // renamed so no file outside the module references it any more, this
+        // fails rather than passing vacuously forever.
+        $this->assertGreaterThan(
+            0,
+            $payoutAwareFiles,
+            'No file outside the ledger module references the payout surface at all, so this rule '
+            .'scanned nothing. Either the surface was renamed and PAYOUT_SURFACE_PATTERNS is stale, '
+            .'or the condition needs rethinking — it is not currently proving anything.',
         );
     }
 
@@ -253,6 +383,63 @@ final class NoAutomatedPayoutPathTest extends TestCase
                 'implementation, so the structural assertions above prove nothing.',
             );
         }
+    }
+
+    /**
+     * Signal 4's teeth-check, written as the real thing rather than as a canary
+     * string: the nightly settlement command from the review's own failure
+     * scenario. Before Task 9b this file passed every assertion in this test
+     * class. It must now be flagged BOTH as payout-orchestrating AND as
+     * reaching outside the process — either half alone is insufficient, so both
+     * are asserted separately.
+     */
+    public function test_the_detector_catches_a_settlement_command_that_calls_a_bank_api(): void
+    {
+        $sample = <<<'PHP'
+            <?php
+
+            namespace App\Console\Commands;
+
+            use App\Platform\FinancialLedger\Actions\ManualPayout;
+            use Illuminate\Console\Command;
+            use Illuminate\Support\Facades\Http;
+
+            final class SettleVendorPayables extends Command
+            {
+                protected $signature = 'vendor:settle';
+
+                public function handle(ManualPayout $payout): int
+                {
+                    foreach ($this->duePayables() as $payable) {
+                        $response = Http::withToken(config('bank.token'))->post(config('bank.transfer_url'), [
+                            'account_number' => $payable->vendor_account,
+                            'amount' => $payable->amount_minor,
+                        ]);
+
+                        $payout->pay($payable->id, $payable->amount(), $this->proofFrom($response));
+                    }
+
+                    return self::SUCCESS;
+                }
+            }
+            PHP;
+
+        $this->assertNotSame(
+            [],
+            $this->signalsIn($sample, self::PAYOUT_SURFACE_PATTERNS),
+            'The sample must be recognised as payout orchestration, or the conditional rule never '
+            .'applies to it and the outbound-call check below is never reached.',
+        );
+
+        $this->assertNotSame(
+            [],
+            $this->signalsIn($sample, array_merge(
+                self::OUTBOUND_CALL_PATTERNS,
+                self::PROVIDER_REFERENCE_PATTERNS,
+                self::AUTOMATED_TRANSFER_ARCHITECTURE_PATTERNS,
+            )),
+            'The sample reaches a bank API and must be flagged for it.',
+        );
     }
 
     public function test_the_detector_does_not_flag_the_module_as_it_stands(): void

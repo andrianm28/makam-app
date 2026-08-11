@@ -220,12 +220,23 @@ final class ManualPayout
 
         $payable = VendorPayableModel::query()->find($payableId);
 
+        // Minor M6: an unknown id and an id outside this actor's scope must be
+        // indistinguishable, or `pay()` is an existence oracle over payable
+        // UUIDs. Same shape `ResolveException` already uses.
         if (! $payable instanceof VendorPayableModel) {
-            throw InvalidPayoutException::forUnknownPayable($payableId);
+            throw PayoutNotAuthorisedException::forUnavailablePayable();
         }
 
-        $actorRef = $this->actorReference();
-        $actorRole = $this->authorizer->authorize($this->actorContext, (string) $payable->vendor_id);
+        // Both of these are inside ONE catch on purpose. Authorising first and
+        // resolving the actor second would re-open the oracle from the other
+        // side: an unauthenticated caller would get "no actor context" for a
+        // real payable and "unavailable" for a fictitious one.
+        try {
+            $actorRef = $this->actorReference();
+            $actorRole = $this->authorizer->authorize($this->actorContext, (string) $payable->vendor_id);
+        } catch (PayoutNotAuthorisedException) {
+            throw PayoutNotAuthorisedException::forUnavailablePayable();
+        }
 
         if ($approverRef !== null && trim($approverRef) !== $actorRef) {
             throw PayoutActorMismatchException::forField('reference');

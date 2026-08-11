@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Platform\FinancialLedger\Actions\BulkFinancialExport;
 use App\Platform\FinancialLedger\Exceptions\BulkFinancialExportReauthenticationRequiredException;
+use App\Platform\FinancialLedger\Exceptions\InvalidLedgerReportException;
 use App\Platform\FinancialLedger\Exceptions\LedgerReadNotAuthorisedException;
 use App\Platform\FinancialLedger\LedgerReportKind;
 use Carbon\CarbonImmutable;
@@ -56,6 +57,26 @@ final class FinanceExportController extends Controller
             );
         } catch (LedgerReadNotAuthorisedException) {
             abort(403);
+        } catch (InvalidLedgerReportException $exception) {
+            // A malformed `?period=` or an unknown `?kind=` used to render an
+            // uncaught 500 — reachable from the page's own Ekspor CSV button,
+            // because `FinanceReports::exportQuery()` puts the raw period into
+            // the export link even when the inline validation has already
+            // rejected it. A user-triggerable incident page in a financial
+            // panel is not an acceptable response to bad input.
+            //
+            // 400 rather than 422: the request is malformed at the query-string
+            // level, not semantically invalid after successful parsing.
+            //
+            // The message is safe to surface — `InvalidLedgerReportException`
+            // names only the offending period or kind and the expected format,
+            // never a badan usaha, an amount, or an identity. Note this refusal
+            // deliberately happens BEFORE authorization (`export()` validates
+            // input first, so a malformed request never records a
+            // re-authentication challenge it did not need), so it must not be
+            // allowed to say anything an unauthorized caller should not learn.
+            // It says nothing about the ledger at all.
+            abort(400, $exception->getMessage());
         } catch (BulkFinancialExportReauthenticationRequiredException) {
             // Mirror `RequireRecentAuthentication`: preserve where the actor
             // was going and send them to the challenge page, rather than

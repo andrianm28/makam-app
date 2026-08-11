@@ -9,9 +9,11 @@ use App\Platform\FinancialLedger\Contracts\LedgerReadAuthorizer;
 use App\Platform\FinancialLedger\Contracts\PayoutAuthorizer;
 use App\Platform\FinancialLedger\Contracts\PayoutProofVerifier;
 use App\Platform\FinancialLedger\Contracts\ReconciliationAuthorizer;
+use App\Platform\FinancialLedger\Contracts\VendorPayableAuthorizer;
 use App\Platform\FinancialLedger\FinanceLedgerReadAuthorizer;
 use App\Platform\FinancialLedger\FinanceOrRestrictedAdminPayoutAuthorizer;
 use App\Platform\FinancialLedger\FinanceReconciliationAuthorizer;
+use App\Platform\FinancialLedger\FinanceVendorPayableAuthorizer;
 use App\Platform\FinancialLedger\Journal;
 use App\Platform\FinancialLedger\Providers\FinancialLedgerServiceProvider;
 use Tests\TestCase;
@@ -55,6 +57,10 @@ final class FinancialLedgerBindingsTest extends TestCase
             $this->app->make(ReconciliationAuthorizer::class),
         );
         $this->assertInstanceOf(
+            FinanceVendorPayableAuthorizer::class,
+            $this->app->make(VendorPayableAuthorizer::class),
+        );
+        $this->assertInstanceOf(
             FinanceOrRestrictedAdminPayoutAuthorizer::class,
             $this->app->make(PayoutAuthorizer::class),
         );
@@ -83,6 +89,7 @@ final class FinancialLedgerBindingsTest extends TestCase
             LedgerReadAuthorizer::class,
             ReconciliationAuthorizer::class,
             PayoutAuthorizer::class,
+            VendorPayableAuthorizer::class,
         ] as $seam) {
             $this->assertNotSame(
                 $this->app->make($seam),

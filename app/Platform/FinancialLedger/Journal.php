@@ -103,6 +103,7 @@ final class Journal implements JournalContract
         ?string $occurredAt = null,
     ): JournalBatch {
         $this->assertSourcePrefixed($businessKey);
+        $this->assertEntityScoped($entityRef);
 
         $batchId = (string) Str::uuid();
         $entryRows = $this->buildEntryRows($businessKey, $batchId, $entries);
@@ -338,6 +339,31 @@ final class Journal implements JournalContract
 
         if ($separator === false || $separator < 1) {
             throw InvalidJournalBatchException::forUnprefixedBusinessKey($businessKey);
+        }
+    }
+
+    /**
+     * `entity_ref` is NOT NULL, but `''` satisfies NOT NULL and no CHECK
+     * rejects it. A batch scoped to no badan usaha is invisible to every
+     * entity-scoped report and export (`LedgerReport` filters with
+     * `whereIn('journal_batches.entity_ref', ...)`) while still counting toward
+     * an unscoped total — so the two views disagree, permanently, with no error
+     * anywhere.
+     *
+     * Latent rather than live: all three current callers guard independently
+     * (`VendorPayable::assertPresent`, `ManualPayout` reads a NOT NULL column,
+     * `ReconciliationCorrection::assertMatches`). Validated here because this
+     * method already checks five other shape properties for exactly the "a
+     * better message than a raw constraint error" reason — and unlike those
+     * five, there is no constraint behind this one to fall back on.
+     *
+     * `trim()` so a whitespace-only reference is refused too: it is blank for
+     * every purpose except `!= ''`.
+     */
+    private function assertEntityScoped(int|string $entityRef): void
+    {
+        if (trim((string) $entityRef) === '') {
+            throw InvalidJournalBatchException::forBlankEntityRef();
         }
     }
 
