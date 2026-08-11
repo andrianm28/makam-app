@@ -158,12 +158,41 @@ final class Audit
      * pattern is chosen for, so it is accepted and recorded here
      * instead.
      *
-     * Same pattern as `Console\Commands\Concerns\RequiresAuditReason`,
-     * which guards the four `identity:*` commands one layer above this
-     * one. This is the authoritative check; that one is defence in
-     * depth. Keep the two in step.
+     * ---------------------------------------------------------------
+     * This is the authoritative check. Everything above it is advisory
+     * ---------------------------------------------------------------
+     * Six gates in this repository reject a blank reason. This one is
+     * the only one that is load-bearing: every other path reaches
+     * `Audit::record()`, so a reason this method rejects cannot be
+     * recorded no matter which layer let it through.
+     *
+     * Two share this Unicode-aware pattern and must be changed with it:
+     *   - `Console\Commands\Concerns\RequiresAuditReason` — the four
+     *     `identity:*` commands; owns the operator-facing message.
+     *   - `Platform\Audit\Rules\NonBlankReason` — the HTTP boundary;
+     *     delegates here, so it cannot drift.
+     *
+     * Four are plain `trim()` pre-checks that predate this method and
+     * were deliberately left alone. They still catch ASCII-blank input
+     * early, before their surrounding `DB::transaction()` opens, which
+     * is all they were ever written to do — but they do NOT catch
+     * Unicode-blank input, which now falls through to this check from
+     * inside the transaction instead:
+     *   - `Platform\FinancialLedger\Actions\ManualPayout` (`VENDOR_PAYOUT`)
+     *   - `Platform\FinancialLedger\Actions\ResolveException`
+     *     (`RECONCILIATION_EXCEPTION_RESOLVED`)
+     *   - `Domain\ServiceCatalog\Actions\RecordServiceDefinitionPriceVersion`
+     *     (`PRICE_VERSION_RECORDED`)
+     *   - `Platform\FeatureGate\GateActivationRecorder` (`GATE_CHANGE`)
+     *
+     * Do not read those four as redundant copies of this check. They
+     * are a usability layer whose only guarantee is early ASCII-blank
+     * rejection; the security guarantee lives here.
+     *
+     * Public so the HTTP boundary can ask the same question this class
+     * answers, rather than keeping a seventh copy of the pattern.
      */
-    private static function reasonIsBlank(?string $reason): bool
+    public static function reasonIsBlank(?string $reason): bool
     {
         if ($reason === null) {
             return true;

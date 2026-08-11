@@ -36,10 +36,17 @@ namespace App\Console\Commands\Concerns;
  * hole is closed at its root; this trait remains as the command-layer
  * defence-in-depth layer above it.
  *
- * The two implementations are deliberately identical. Change them together —
- * see `Audit::reasonIsBlank()` for the full rationale, including why both
- * failure paths fail closed and which invisible code points remain a known
- * residual.
+ * This copy of the pattern is deliberately identical to the root one and must
+ * be changed with it. `Platform\Audit\Rules\NonBlankReason` guards the HTTP
+ * boundary the same way, but delegates to `Audit::reasonIsBlank()` instead of
+ * copying it — this trait keeps its own copy only because it must produce the
+ * command-layer error message operators see before any Action is invoked.
+ *
+ * Four further blank-reason gates exist elsewhere and still use plain
+ * `trim()`; they are listed in `Audit::reasonIsBlank()`'s docblock. Do not
+ * assume the pattern below is one of only two copies. See
+ * `Audit::reasonIsBlank()` for the full rationale, including why both failure
+ * paths fail closed and which invisible code points remain a known residual.
  */
 trait RequiresAuditReason
 {

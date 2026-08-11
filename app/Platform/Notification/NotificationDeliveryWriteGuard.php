@@ -81,7 +81,11 @@ final class NotificationDeliveryWriteGuard
      * plain queue worker: `Illuminate\Queue\Worker` never purges the
      * connection, and `DatabaseManager::reconnect()` swaps the PDO on
      * the same `Connection` object, so the hook survives ordinary
-     * lost-connection recovery.
+     * lost-connection recovery. That last part holds only while the
+     * connection is still registered — `reconnect()` on an
+     * already-purged name falls through to `connection()`, which builds
+     * a fresh object, which is the gap below rather than an exception
+     * to it.
      *
      * A `WeakMap` keys on true object identity, which cannot collide,
      * and drops its entry when the connection is actually collected —

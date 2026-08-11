@@ -10,6 +10,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
+use WeakReference;
 
 final class NotificationDeliveryWriteGuardTest extends TestCase
 {
@@ -127,9 +128,23 @@ final class NotificationDeliveryWriteGuardTest extends TestCase
 
             NotificationDeliveryWriteGuard::register();
             $registeredId = spl_object_id(DB::connection());
+            $registered = WeakReference::create(DB::connection());
 
             DB::purge();
             gc_collect_cycles();
+
+            // Id equality alone cannot tell "a new object recycled the id"
+            // from "the purge never dropped the object, so this IS the same
+            // instance". The degenerate case still has the original hook
+            // attached, so the insert below would be rejected and the test
+            // would pass green under the buggy keying too — asserting
+            // nothing while looking healthy. Proving the original object is
+            // gone is what makes the id match mean what the next assertion
+            // says it means.
+            $this->assertNull(
+                $registered->get(),
+                'precondition: expected the registered connection object to be destroyed by the purge',
+            );
 
             $this->assertSame(
                 $registeredId,

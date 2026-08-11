@@ -202,7 +202,16 @@ final class AuditRecordTest extends TestCase
             reason: $reason,
         );
 
-        $this->assertSame($reason, $event->reason);
+        // Read back from the database, not from the in-memory model:
+        // `AuditEvent::create()` returns the instance it just filled, so
+        // asserting against that only proves the argument equals itself.
+        // These cases include prose with an embedded non-breaking space,
+        // and that the NBSP survives the write is the interesting half of
+        // "we still accept this".
+        $this->assertDatabaseHas('audit_events', [
+            'id' => $event->id,
+            'reason' => $reason,
+        ]);
     }
 
     /**
