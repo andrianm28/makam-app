@@ -133,7 +133,13 @@ final class NotificationTemplatePersistenceTest extends TestCase
                 ->where('name', 'notification_template_versions_template_version_unique')
                 ->value('sql');
 
-        $this->assertStringContainsString('where version is not null', strtolower((string) $indexDefinition));
+        // PostgreSQL's pg_get_indexdef() reconstructs the predicate wrapped in
+        // parentheses ("where (version is not null)"); SQLite's stored CREATE
+        // INDEX text carries the clause verbatim, unparenthesized. Strip
+        // parens so the same assertion holds for both catalogue formats.
+        $normalizedDefinition = str_replace(['(', ')'], '', strtolower((string) $indexDefinition));
+
+        $this->assertStringContainsString('where version is not null', $normalizedDefinition);
     }
 
     public function test_matrix_rows_without_external_channels_have_no_default_channel(): void
@@ -155,7 +161,7 @@ final class NotificationTemplatePersistenceTest extends TestCase
         // partial rerun that lost the active pointer and corrupted the
         // outbox event key.
         DB::table('notification_templates')
-            ->whereKey($draftTemplate->id)
+            ->where('id', $draftTemplate->id)
             ->update(['default_channel' => 'EMAIL', 'active_version_id' => null]);
 
         DB::table('notification_templates')
