@@ -18,6 +18,7 @@ use App\Livewire\Public\Renewal\RenewalStart;
 use App\Livewire\Public\Support\HelpCentre;
 use App\Platform\Payment\Http\Controllers\PaymentCancelController;
 use App\Platform\Payment\Http\Controllers\PaymentReturnController;
+use App\Platform\Payment\Http\Controllers\VerifyManualPaymentController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -282,6 +283,31 @@ Route::post('/admin/mfa/disable', DisableMfaController::class)
 */
 Route::get('/pembayaran/kembali', PaymentReturnController::class)->name('payments.return');
 Route::get('/pembayaran/batal', PaymentCancelController::class)->name('payments.cancel');
+
+/*
+|--------------------------------------------------------------------------
+| Admin — manual payment verification (Task 5, Wave 1c Append-Correction)
+|--------------------------------------------------------------------------
+| AC8 ("Admin verification SHALL be a separate authorized action") and AC9
+| (recent re-authentication). `RequireRecentAuthentication`'s SECOND real
+| attachment anywhere in this repo — the first is `/admin/mfa/disable`
+| above, and this route follows its exact precedent: a plain controller
+| route (not a Filament panel page) in the standard `web` group, its own
+| explicit `auth` guard, and the same `filament.admin.pages.mfa-challenge`
+| challenge destination (no dedicated payment-verification challenge page
+| exists, and this task does not invent one).
+|
+| Approves/rejects a `payment_verifications` row — a NEW, self-contained
+| table with no foreign key to `payment_sessions` or any order/booking
+| table (see the migration's own doc block). Does NOT transition
+| `payment_sessions`, post a journal entry, or write any order/invoice
+| status — see `App\Platform\Payment\VerifyManualPayment`'s own doc block
+| for why those remain structurally absent under the current deny-only
+| payment guard (Wave 1b ruling 1b-L3-01).
+*/
+Route::post('/admin/payments/manual-verifications/{paymentVerification}/verify', VerifyManualPaymentController::class)
+    ->middleware(['web', 'auth', RequireRecentAuthentication::class.':payment_manual_verification,filament.admin.pages.mfa-challenge'])
+    ->name('admin.payments.manual-verifications.verify');
 
 Route::get('/internal/documents/{document}/download/{token}', DownloadDocumentController::class)
     ->middleware(['web', 'auth', 'throttle:document-download'])

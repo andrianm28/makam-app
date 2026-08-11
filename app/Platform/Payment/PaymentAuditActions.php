@@ -86,4 +86,31 @@ final class PaymentAuditActions
      * structured status plus the closed-list `note` carry the explanation.
      */
     public const string WEBHOOK_SETTLEMENT_CONFLICT = 'PAYMENT_WEBHOOK_SETTLEMENT_CONFLICT';
+
+    /**
+     * Task 5 (Wave 1c Append-Correction) — written by `SubmitManualPayment`
+     * with `AuditOutcome::Allowed`, subject = the new `PaymentVerification`
+     * row, on every manual payment submission (with or without a proof
+     * file).
+     *
+     * Not on `SensitiveActions::ACTIONS`, for the same category of reason as
+     * the three actions above: a customer submitting a manual payment
+     * reference is a routine, self-service action with no free-text
+     * "reason" to give — only evidence (the submitted fields and,
+     * optionally, a proof document reference).
+     */
+    public const string MANUAL_SUBMITTED = 'PAYMENT_MANUAL_SUBMITTED';
+
+    /**
+     * AC8/AC9 — written by `VerifyManualPayment` with `AuditOutcome::Allowed`
+     * (approve) or `AuditOutcome::Denied` (reject), subject = the
+     * `PaymentVerification` row.
+     *
+     * ALREADY on `SensitiveActions::ACTIONS` (added by an earlier task per
+     * the plan's own Files note: "SensitiveActions (already has
+     * `PAYMENT_MANUAL_VERIFICATION`)") — `Audit::record()`'s existing
+     * `SensitiveActions::requiresReason()` check enforces the mandatory
+     * reason; `VerifyManualPayment` does not re-implement that check.
+     */
+    public const string MANUAL_VERIFICATION = 'PAYMENT_MANUAL_VERIFICATION';
 }
