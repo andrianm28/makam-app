@@ -267,3 +267,130 @@ Per the two-tier review convention (Critical + Important fixed in one bounded wa
 - [ ] `PRICE_VERSION_RECORDED` in `SensitiveActions` and requires a reason.
 - [ ] App role cannot UPDATE/DELETE journal tables (revoke test).
 - [ ] Static analysis + lint clean; Blade content-survival gate passes.
+
+---
+
+## Merge sign-off bundle — L4 (recorded 11 Aug 2026)
+
+**Why this section exists.** Every item below was accumulated across Tasks 1–8 in
+this lane's SDD ledger, `.superpowers/sdd/2026-08-09-platform-financial-ledger/progress.md`.
+That path is **git-ignored** (`.gitignore:85`), so it does not survive the merge
+and disappears entirely when the worktree is removed. This section is the
+**durable copy**, not a duplicate: it moves the only record of these items into
+the tracked tree. Task 10's PR body must restate it in full — a reviewer
+approving financial code is entitled to see every one of these without access to
+a deleted worktree.
+
+`AGENTS.md` §Infrastructure-agent execution requires human review before
+security, authorization, financial, privacy, or destructive-migration changes.
+This lane is all five. Nothing here is a recommendation to merge.
+
+### Database-level financial policy needing explicit sign-off
+
+1. **M6 — one reversal ever, enforced by a UNIQUE index** on
+   `journal_batches.reverses_batch_id`. This makes "a batch may be reversed at
+   most once, permanently" a *database* policy, not a code choice someone can
+   revise cheaply later. The reasoning was reviewed and judged sound, but the
+   class of decision requires a human.
+2. **`payouts.payable_id` UNIQUE** — one payout per payable, same character.
+
+### Known-open defects, deliberately not fixed
+
+3. **T4-M1 — the `vendor_payables` DELETE trigger rejects even a consistent
+   delete.** `assert_vendor_payable_payout_pair(OLD.id)` raises `NOT FOUND` on
+   any DELETE, and fails with a misleading FK-style message rather than a
+   deliberate policy one. Latent today (nothing deletes `vendor_payables`).
+   **Not closed by `sql/revoke-journal-mutations.sql`** — that file covers only
+   `journal_batches`/`journal_entries`. Closing it is a policy decision: correct
+   the trigger to treat "parent row already gone" as nothing-to-check, or write
+   an explicit not-deletable message.
+4. **T4-M2 / T4-M3 — the deferred constraint trigger's positive path is never
+   exercised**, because `RefreshDatabase` rolls back before COMMIT, and one
+   invariant test no longer reaches the branch it claims to cover. A `REVOKE`
+   cannot close a coverage gap. Needs a non-transactional harness on PostgreSQL.
+5. **T4-M5 — migration `2026_08_10_120300`'s `down()` is a no-op**, asymmetric
+   with the migration it supersedes.
+6. **AC14 — release rollback preserving journal + audit history has NO evidence
+   of any kind.** Task 8 grepped the suite; every hit is a *transaction*
+   rollback, which is a different thing. This needs a real decision at merge:
+   build it, or accept it as risk explicitly. It must not ride through silently.
+7. **AC7 is partial** — refund and chargeback are two of four operation types;
+   refund is journal-shape-only and chargeback is a reserved value with no
+   behaviour behind it.
+
+### Authorization and identity gaps
+
+8. **I5 — the re-authentication gate is login-recency, not step-up.**
+   `last_authenticated_at` is written only at login; `MfaChallenge::submit()`
+   never refreshes it. Owned by `fix/reauthentication-satisfy-wiring`, not this
+   lane. **Amended 11 Aug 2026:** that lane's own review found the fix helps only
+   a *stale* actor — a freshly-logged-in finance admin is waved through the
+   middleware with no challenge raised, so no satisfied event is minted and the
+   export's own gate then refuses them until their freshness lapses. Both
+   directions fail closed, so this is a usability gap, not a security one, but it
+   is the inverse of the intuitive expectation. **Do not describe the bulk export
+   as "step-up protected" without this qualification.**
+9. **`EnforceMfaChallenge` is attached to the export route but NOT TESTED in this
+   lane** — no test binds `mfaState`, so every route test passes *through* that
+   middleware without exercising it. It also currently routes MFA-enrolled admins
+   into that middleware's known self-redirect loop, pending the reauth lane.
+10. **N3 — `LedgerReport::summary($period, null)` is still a live unscoped-read
+    shape**, reachable by no current caller. It is the residual hazard class of
+    the Critical authorization finding (C1) and is carried here deliberately so
+    it survives Task 9/10 slipping.
+11. **The whole feature has never run against the real identity adapter.**
+    `ActorContext::$roles` is always `[]`, so every authorized-path assertion in
+    the suite goes through a bound fake. This is the correct fail-closed state —
+    but it means this sign-off is doing real work, not rubber-stamping.
+
+### Sequencing deviations to name explicitly in the PR body
+
+12. **`JOURNAL_REVERSAL`** joined `SensitiveActions::ACTIONS` in Task 4, not Task
+    6 as the plan anticipated (a review finding required reversal atomicity).
+13. **`RECONCILIATION_EXCEPTION_RESOLVED`** was added in Task 5 under the
+    user-approved Wave 1c ruling, beyond the single addition the plan's Global
+    Constraints anticipated for this lane.
+
+### Not executed — must stay that way
+
+14. **`sql/revoke-journal-mutations.sql` has NOT been run** and must not be. It
+    is blocked on finding N-1 (the host provisions one PostgreSQL role per
+    environment, so there is no separate app role whose UPDATE/DELETE can be
+    revoked). `ci/verify-docs.sh` GATE 13 keeps the file honest; two bypass tests
+    assert the model-layer gap still exists so they fail loudly at the database
+    once the role split lands.
+
+### Cross-lane merge state (re-verify immediately before merging)
+
+15. **Five files conflict with `lane/l3-payment-adapter`** as of L3 head
+    `4e18276`, verified by comparing merge-base blobs on both sides:
+    - `Money.php` — take either ordering (semantically identical; prefer L4's
+      guard-before-compute).
+    - `MoneyTest.php` — keep L4's `test_from_decimal_rejects_non_zero_excess_precision`
+      (added for a Task 1 review finding); keep **exactly one** of the two
+      byte-identical `PHP_INT_MIN` tests, which the two lanes named differently.
+      A blind union duplicates that assertion.
+    - `SensitiveActions.php` and `SensitiveActionsTest.php` — keep **both** lanes'
+      actions. Never take either side wholesale; the test asserts the array as an
+      exact list.
+    - `routes/web.php` — adjacent appends (L4 bulk-export vs L3 payment-return),
+      no semantic disagreement: **keep both blocks**.
+
+    L3 is still actively pushing, so **re-run the `git merge-tree` simulation at
+    merge time** rather than trusting this list.
+
+16. **Merge order is L2 → L3 → L4, one at a time.** This is load-bearing for F15:
+    `app/Domain/Booking/BookingDraftQuery.php:86` still carries
+    `(float) $priceVersion->amount` on this branch and is fixed on L3's. Merging
+    L4 first would put a float in the money path on the trunk. It also means the
+    Verification item above — `grep -rn "(float)" app/Platform/FinancialLedger
+    app/Domain/Booking` returning empty — **cannot pass on L4 alone**; it passes
+    only once L3 has merged.
+
+17. **E1 — L3's `LedgerSeamStub` teaches a false exception model.** It raises
+    `InvalidArgumentException` where the real `Journal` surfaces a
+    `QueryException`, for both the duplicate-business-key and balance
+    properties. The contract's own Terms 2 and 4 make the real implementation the
+    faithful party and the stub the divergent one. **Latent, not live** — no L3
+    production code consumes the seam yet (verified by searching all of L3's
+    `app/`), so the fix window is open and no L3 audit is required.

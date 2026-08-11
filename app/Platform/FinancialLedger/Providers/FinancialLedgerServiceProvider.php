@@ -17,7 +17,7 @@ use Illuminate\Support\ServiceProvider;
 /**
  * Wires this module's container seams. Registered in `bootstrap/providers.php`
  * — that file is not in this task's literal owned-files list, but Task 7's
- * brief explicitly authorizes the one additive line, on the four-way precedent
+ * brief explicitly authorizes the one additive line, on the five-way precedent
  * `AdminPanelProvider`/`FeatureGateServiceProvider`/`IdentityAccessServiceProvider`/
  * `CorrelationServiceProvider`/`DocumentVaultServiceProvider` already set there.
  *
