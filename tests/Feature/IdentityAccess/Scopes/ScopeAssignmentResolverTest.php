@@ -81,4 +81,51 @@ final class ScopeAssignmentResolverTest extends TestCase
 
         $this->assertNull($resolver->currentActorIdentifier());
     }
+
+    /**
+     * `actorsForEntity()` — added by the L2 notifications lane for
+     * recipient resolution (ruling 3, `docs/superpowers/plans/
+     * 2026-08-10-wave1a-notifications-decisions.md`). Reverse of
+     * `grantedEntityIds()`: given an entity, which actors hold an active
+     * grant on it.
+     */
+    public function test_actors_for_entity_returns_only_active_grants_on_the_given_entity(): void
+    {
+        ScopeAssignment::query()->create(['actor_identifier' => '1', 'entity_type' => ScopeEntityType::CEMETERY, 'entity_id' => '10']);
+        ScopeAssignment::query()->create(['actor_identifier' => '2', 'entity_type' => ScopeEntityType::CEMETERY, 'entity_id' => '10']);
+        // Different entity id — must not appear.
+        ScopeAssignment::query()->create(['actor_identifier' => '3', 'entity_type' => ScopeEntityType::CEMETERY, 'entity_id' => '20']);
+        // Different entity type, same id — must not appear.
+        ScopeAssignment::query()->create(['actor_identifier' => '4', 'entity_type' => ScopeEntityType::VENDOR, 'entity_id' => '10']);
+        // Revoked — must not appear.
+        ScopeAssignment::query()->create(['actor_identifier' => '5', 'entity_type' => ScopeEntityType::CEMETERY, 'entity_id' => '10'])->revoke();
+
+        $resolver = $this->app->make(ScopeAssignmentResolver::class);
+
+        $actors = $resolver->actorsForEntity(ScopeEntityType::CEMETERY, '10');
+
+        sort($actors);
+        $this->assertSame(['1', '2'], $actors);
+    }
+
+    public function test_actors_for_entity_returns_distinct_actor_identifiers(): void
+    {
+        // Same actor granted the same entity twice (e.g. re-granted after a
+        // prior revocation) — must appear only once.
+        ScopeAssignment::query()->create(['actor_identifier' => '1', 'entity_type' => ScopeEntityType::VENDOR, 'entity_id' => '99'])->revoke();
+        ScopeAssignment::query()->create(['actor_identifier' => '1', 'entity_type' => ScopeEntityType::VENDOR, 'entity_id' => '99']);
+
+        $resolver = $this->app->make(ScopeAssignmentResolver::class);
+
+        $actors = $resolver->actorsForEntity(ScopeEntityType::VENDOR, '99');
+
+        $this->assertSame(['1'], $actors);
+    }
+
+    public function test_actors_for_entity_rejects_an_unknown_entity_type(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        $this->app->make(ScopeAssignmentResolver::class)->actorsForEntity('spaceship', '10');
+    }
 }

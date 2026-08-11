@@ -4,6 +4,7 @@ use App\Platform\Correlation\Providers\CorrelationServiceProvider;
 use App\Platform\DocumentVault\Providers\DocumentVaultServiceProvider;
 use App\Platform\FeatureGate\Providers\FeatureGateServiceProvider;
 use App\Platform\IdentityAccess\Providers\IdentityAccessServiceProvider;
+use App\Platform\Notification\Providers\NotificationServiceProvider;
 use App\Platform\Payment\Providers\PaymentServiceProvider;
 use App\Providers\AppServiceProvider;
 use App\Providers\Filament\AdminPanelProvider;
@@ -51,4 +52,12 @@ return [
     // UploadDocument's container-resolved dependencies are reachable —
     // see DocumentVaultServiceProvider's own class-level comment.
     DocumentVaultServiceProvider::class,
+    // Task 3 of the L2 `platform-notifications` lane (task-3-brief.md D7)
+    // — binds RecipientRoleSource/NotificationSubjectSource and registers
+    // the OutboxEventPublished -> ConsumeOutboxNotificationJob listener.
+    // Same precedent as every provider above: this file is not in that
+    // task's literal owned-files list, but the brief explicitly authorizes
+    // this one additive line, and without it the whole outbox-fed
+    // dispatch path is dead code no consumer can reach.
+    NotificationServiceProvider::class,
 ];

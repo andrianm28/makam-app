@@ -775,6 +775,9 @@ Now expressed as **specs**, in the dependency order §3.4 derives, so the sequen
 | Sprint | Specs implemented | Tier | Blocked on |
 |---|---|---|---|
 | **6** | `platform-notifications` (full) · `platform-document-vault` · `platform-outbox` (Horizon, replay, 10k isolation) | 2 | **OQ-4** object storage · **OQ-7** scanner |
+
+> **Correction, 11 Aug 2026:** `platform-notifications` (full) build is complete on `lane/l2-notifications`, two-tier Superpowers SDD reviewed (6 task-scoped reviews + a 3-slice whole-branch review, one Important + one Minor finding both fixed with regression tests), CI green on PostgreSQL 18. PR [#18](https://github.com/andrianm28/makam-app/pull/18), CI run [`31459605248`](https://github.com/andrianm28/makam-app/actions/runs/31459605248). **NOT TESTED / dormant in production:** none of the module's 6 outbox-mapped events has a live producer yet — the booking wizard stops at Step 5 of 9, and availability/quote/payment domains are unbuilt — so this module is correct-but-dormant until a later sprint wires a real producer; no email/WhatsApp provider is configured (`LogChannel` dev/CI stand-in only); `G-WA-01`'s approved-BSP flow and the external K7 contract remain unseen. Full disposition: `.superpowers/sdd/2026-08-09-platform-notifications/progress.md` (local SDD ledger, not committed) and the PR description.
+
 | **7** | `public-booking-wizard` Steps 6–9 · `booking-and-order-orchestration` (order state machine, quotation, immutable versions) · `package-and-service-bundles` · `admin-operations` (full) | — | Sprint 6 |
 | **8–9** | `platform-payment-adapter` · `platform-financial-ledger` — manual fallback first, then online if `G-PAY-01` opens | 3 | **OQ-5** · **FIN-DEC** approvals · heavy human gates |
 
