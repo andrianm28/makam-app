@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Filament\Admin\Pages;
 
+use App\Platform\FinancialLedger\Contracts\LedgerReadAuthorizer;
 use App\Platform\FinancialLedger\Exceptions\InvalidLedgerReportException;
 use App\Platform\FinancialLedger\Exceptions\LedgerReadNotAuthorisedException;
-use App\Platform\FinancialLedger\FinanceLedgerReadAuthorizer;
 use App\Platform\FinancialLedger\LedgerReport;
 use App\Platform\IdentityAccess\ActorContext;
 use Carbon\CarbonImmutable;
@@ -29,12 +29,13 @@ use Filament\Pages\Page;
  * may be taken in a Blade view or Filament page; calling a policy is not
  * taking the decision.
  *
- * The concrete class is named here rather than the `Contracts
- * \LedgerReadAuthorizer` interface because this module has no service provider
- * yet — Task 3 deferred `FinancialLedgerServiceProvider` and the container
- * bindings for this module's seams to Task 7. `BulkFinancialExport` types the
- * interface and defaults to this same implementation; when Task 7 binds the
- * interface, this call site becomes the interface with no behaviour change.
+ * Both call sites resolve the `Contracts\LedgerReadAuthorizer` INTERFACE, not
+ * the concrete class. They named the concrete class until Task 7, only because
+ * this module had no service provider and the interface therefore did not
+ * resolve; `FinancialLedgerServiceProvider` now binds it to
+ * `FinanceLedgerReadAuthorizer`, which is the same implementation
+ * `BulkFinancialExport` defaults to — so the page and the export still cannot
+ * disagree about scope, and this change carries no behaviour difference.
  *
  * The Filament panel's own `AdminPanelAccessPolicy` is only
  * `$actor->isAuthenticated()`, so without `canAccess()` here every panel user
@@ -79,7 +80,7 @@ final class FinanceReports extends Page
     public static function canAccess(): bool
     {
         try {
-            app(FinanceLedgerReadAuthorizer::class)->authorize(app(ActorContext::class));
+            app(LedgerReadAuthorizer::class)->authorize(app(ActorContext::class));
         } catch (LedgerReadNotAuthorisedException) {
             return false;
         }
@@ -116,7 +117,7 @@ final class FinanceReports extends Page
         $this->resetErrorBag('period');
 
         try {
-            $scope = app(FinanceLedgerReadAuthorizer::class)->authorize(
+            $scope = app(LedgerReadAuthorizer::class)->authorize(
                 app(ActorContext::class),
                 $this->entityRef !== '' ? $this->entityRef : null,
             );

@@ -3,6 +3,7 @@
 use App\Platform\Correlation\Providers\CorrelationServiceProvider;
 use App\Platform\DocumentVault\Providers\DocumentVaultServiceProvider;
 use App\Platform\FeatureGate\Providers\FeatureGateServiceProvider;
+use App\Platform\FinancialLedger\Providers\FinancialLedgerServiceProvider;
 use App\Platform\IdentityAccess\Providers\IdentityAccessServiceProvider;
 use App\Providers\AppServiceProvider;
 use App\Providers\Filament\AdminPanelProvider;
@@ -43,4 +44,13 @@ return [
     // UploadDocument's container-resolved dependencies are reachable —
     // see DocumentVaultServiceProvider's own class-level comment.
     DocumentVaultServiceProvider::class,
+    // Task 7 (platform-financial-ledger lane) — binds Contracts\Journal plus
+    // this module's three authorizer seams. Same precedent as
+    // IdentityAccessServiceProvider/CorrelationServiceProvider/
+    // DocumentVaultServiceProvider above: bootstrap/providers.php is not in
+    // Task 7's literal owned-files list, but its brief explicitly authorizes
+    // this one additive line. Without it lane/l3-payment-adapter's
+    // app(Contracts\Journal::class) does not resolve at all — see
+    // FinancialLedgerServiceProvider's own class-level comment.
+    FinancialLedgerServiceProvider::class,
 ];
