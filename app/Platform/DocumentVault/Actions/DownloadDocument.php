@@ -10,7 +10,6 @@ use App\Platform\DocumentVault\Contracts\StoragePathResolver;
 use App\Platform\DocumentVault\DocumentAccessPurpose;
 use App\Platform\DocumentVault\DocumentState;
 use App\Platform\DocumentVault\Exceptions\DocumentAccessDeniedException;
-use App\Platform\DocumentVault\Exceptions\ObjectStorageException;
 use App\Platform\DocumentVault\Models\Document;
 use App\Platform\DocumentVault\Models\SignedUrlGrant;
 use App\Platform\DocumentVault\Policies\DocumentAccessPolicy;
@@ -18,6 +17,7 @@ use App\Platform\IdentityAccess\ActorContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 final readonly class DownloadDocument
 {
@@ -55,8 +55,8 @@ final readonly class DownloadDocument
 
         try {
             $stream = $this->storage->read($this->paths->acceptedPath($document->document_kind, $document->storage_key));
-        } catch (ObjectStorageException) {
-            $this->deny($actor, $document, $ipAddress);
+        } catch (Throwable) {
+            $this->deny($actor, $document, $ipAddress, AuditOutcome::Failed);
         }
 
         if (! $grant->consume()) {
@@ -76,10 +76,14 @@ final readonly class DownloadDocument
         }, $filename, ['Content-Type' => $mime]);
     }
 
-    private function deny(ActorContext $actor, ?Document $document, ?string $ipAddress): never
-    {
+    private function deny(
+        ActorContext $actor,
+        ?Document $document,
+        ?string $ipAddress,
+        AuditOutcome $outcome = AuditOutcome::Denied,
+    ): never {
         if ($document instanceof Document) {
-            $this->recordAccess->record($document, $actor, DocumentAccessPurpose::Download, AuditOutcome::Denied, $ipAddress);
+            $this->recordAccess->record($document, $actor, DocumentAccessPurpose::Download, $outcome, $ipAddress);
         }
 
         throw DocumentAccessDeniedException::denied();

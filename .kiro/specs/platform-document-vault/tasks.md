@@ -10,7 +10,8 @@
 - [x] Implement purpose-scoped signed URLs with a 300-second maximum. _Requirements: 6, 9
 - [x] Block signed-URL issuance for any non-accepted state. _Requirements: 7_
 - [x] Implement append-only access audit for every grant and use. _Requirements: 8_
-- [x] Implement upload progress, cancel, and retry without losing the parent draft. _Requirements: 13
+- [x] Define the upload progress, cancel, and retry state contract. _Requirements: 13
+- [ ] Implement executable upload progress, cancellation, and retry without losing the parent draft in consuming Livewire/browser specs. _Requirements: 13
 - [x] Route grave-registry import files through the same pipeline. _Requirements: 14
 - [x] Add tests: EICAR, MIME spoof, oversize, scanner outage, no-URL-before-accepted. _Requirements: 3, 4, 7
 - [x] Add tests: cross-record and cross-purpose access denial. _Requirements: 9
@@ -38,5 +39,8 @@ Upload UI is consumed by other specs, but the **state machine it renders** is ow
   adapter and deterministic mock scanner; staging/production must provide
   `DOCUMENT_VAULT_OBJECT_STORAGE` and `DOCUMENT_VAULT_MALWARE_SCANNER` or the
   provider fails closed.
+- The lane's AC13 evidence covers only the Blade state contract. Consuming
+  Livewire/browser cancellation, retry, and parent-draft preservation are NOT
+  TESTED here and remain deferred to consuming specs.
 - Production role resolution remains external to this spec and fail-closed;
   the K6 identity contract is not available in this repository.

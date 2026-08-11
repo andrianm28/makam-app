@@ -25,6 +25,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use RuntimeException;
 use Tests\TestCase;
 
 final class DownloadDocumentTest extends TestCase
@@ -110,7 +111,8 @@ final class DownloadDocumentTest extends TestCase
         $document = $this->documentWithAcceptedBytes();
         $grant = $this->issue($document);
         $this->get($this->downloadUrl($document, $grant))->assertOk();
-        $this->get($this->downloadUrl($document, $grant))->assertNotFound();
+        $response = $this->get($this->downloadUrl($document, $grant));
+        $response->assertNotFound();
 
         $events = DocumentAccessEvent::query()->where('document_id', $document->id)->get();
         $this->assertSame(3, $events->count());
@@ -120,6 +122,28 @@ final class DownloadDocumentTest extends TestCase
         $this->assertSame(1, $downloadEvents->where('outcome', AuditOutcome::Denied->value)->count());
         $this->assertStringNotContainsString('/storage/', $this->app->make(IssueSignedUrl::class)->temporaryUrl($grant));
         $this->assertStringNotContainsString('quarantine', $this->app->make(IssueSignedUrl::class)->temporaryUrl($grant));
+    }
+
+    public function test_an_unexpected_provider_read_failure_returns_404_records_failed_access_and_exposes_no_bytes(): void
+    {
+        $document = $this->documentWithAcceptedBytes();
+        $grant = $this->issue($document);
+        $this->app->instance(
+            ObjectStorage::class,
+            new ThrowingReadObjectStorage(new LocalFilesystemObjectStorage($this->root)),
+        );
+
+        $response = $this->get($this->downloadUrl($document, $grant));
+        $response->assertNotFound();
+
+        $failed = DocumentAccessEvent::query()
+            ->where('document_id', $document->id)
+            ->where('outcome', AuditOutcome::Failed->value)
+            ->sole();
+
+        $this->assertSame(DocumentAccessPurpose::Download, $failed->purpose);
+        $this->assertNull($grant->fresh()->consumed_at);
+        $this->assertStringNotContainsString($this->bytes(), (string) $response->getContent());
     }
 
     public function test_a_quarantined_object_cannot_be_served_by_the_local_public_url_contract(): void
@@ -200,5 +224,45 @@ final class DownloadDocumentTest extends TestCase
         }
 
         rmdir($directory);
+    }
+}
+
+final class ThrowingReadObjectStorage implements ObjectStorage
+{
+    public function __construct(private readonly LocalFilesystemObjectStorage $delegate) {}
+
+    public function put(string $path, $stream): void
+    {
+        $this->delegate->put($path, $stream);
+    }
+
+    public function copy(string $sourcePath, string $destinationPath): void
+    {
+        $this->delegate->copy($sourcePath, $destinationPath);
+    }
+
+    public function read(string $path)
+    {
+        throw new RuntimeException('simulated provider read failure');
+    }
+
+    public function checksum(string $path): string
+    {
+        return $this->delegate->checksum($path);
+    }
+
+    public function delete(string $path): void
+    {
+        $this->delegate->delete($path);
+    }
+
+    public function deleteIfExists(string $path): void
+    {
+        $this->delegate->deleteIfExists($path);
+    }
+
+    public function deleteAcceptedIfExists(string $path): void
+    {
+        $this->delegate->deleteAcceptedIfExists($path);
     }
 }

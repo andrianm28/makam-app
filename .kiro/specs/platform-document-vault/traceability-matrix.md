@@ -19,7 +19,7 @@ the combined development host.
 | AC10 | Private encrypted S3-compatible storage | `tests/Unit/Platform/DocumentVault/DocumentVaultConfigurationTest.php`; `tests/Unit/Platform/DocumentVault/Task8DocumentVaultTest.php` | NOT TESTED: real S3-compatible provider |
 | AC11 | Retention and deletion policy | `tests/Feature/DocumentVault/DocumentLifecycleTest.php` | Closed (local evidence) |
 | AC12 | No external-channel attachments | - | NOT TESTED: external-channel integration is outside this lane |
-| AC13 | Progress, cancellation, and retry state contract | `tests/Feature/DocumentVault/UploadDocumentTest.php`; `tests/Feature/DocumentVault/DocumentStateViewTest.php` | Closed (local state evidence) |
+| AC13 | Progress, cancellation, and retry state contract | `tests/Feature/DocumentVault/DocumentStateViewTest.php` | State contract covered locally; consuming Livewire/browser cancellation, retry, and parent-draft preservation NOT TESTED |
 | AC14 | Grave import uses the quarantine pipeline | `tests/Feature/DocumentVault/UploadDocumentTest.php` | Closed (local evidence) |
 
 ## Task 8 Evidence
