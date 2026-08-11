@@ -34,6 +34,10 @@ final class SensitiveActionsTest extends TestCase
             'reconciliation exception resolved' => ['RECONCILIATION_EXCEPTION_RESOLVED'],
             'payment refund' => ['PAYMENT_REFUND'],
             'payment chargeback' => ['PAYMENT_CHARGEBACK'],
+            'role grant' => ['ROLE_GRANT'],
+            'role revoke' => ['ROLE_REVOKE'],
+            'scope grant' => ['SCOPE_GRANT'],
+            'scope revoke' => ['SCOPE_REVOKE'],
         ];
     }
 
@@ -83,6 +87,17 @@ final class SensitiveActionsTest extends TestCase
      * explicit, human-initiated financial operations, the same risk
      * category as `VENDOR_PAYOUT` already on this list — another genuine,
      * documented addition, not a regression.
+     *
+     * UPDATED 12 Aug 2026 — Task 4 of the `platform-identity-seam` lane
+     * (design doc decision 5) added `ROLE_GRANT`/`ROLE_REVOKE`/
+     * `SCOPE_GRANT`/`SCOPE_REVOKE`: the only writers of
+     * `actor_role_assignments`/`scope_assignments` rows
+     * (`App\Platform\IdentityAccess\Roles\Actions\GrantActorRole`/
+     * `RevokeActorRole`, `App\Platform\IdentityAccess\Scopes\Actions\
+     * GrantScopeAssignment`/`RevokeScopeAssignment`) grant or withdraw a
+     * role or record-visibility scope — the same privilege-escalation
+     * category as `MFA_RESET`/`CERTIFICATE_REVOKE` already on this list —
+     * another genuine, documented addition, not a regression.
      */
     public function test_the_list_contains_the_requirements_named_actions_plus_the_documented_additions(): void
     {
@@ -103,6 +118,10 @@ final class SensitiveActionsTest extends TestCase
                 'RECONCILIATION_EXCEPTION_RESOLVED',
                 'PAYMENT_REFUND',
                 'PAYMENT_CHARGEBACK',
+                'ROLE_GRANT',
+                'ROLE_REVOKE',
+                'SCOPE_GRANT',
+                'SCOPE_REVOKE',
             ],
             SensitiveActions::ACTIONS
         );

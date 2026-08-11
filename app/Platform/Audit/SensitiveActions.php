@@ -82,6 +82,26 @@ final class SensitiveActions
         // `VENDOR_PAYOUT` above, so a recorded justification is mandatory.
         'PAYMENT_REFUND',
         'PAYMENT_CHARGEBACK',
+
+        // Added by the `platform-identity-seam` lane (design doc decision 5),
+        // written by `App\Platform\IdentityAccess\Roles\Actions
+        // \GrantActorRole`/`RevokeActorRole` — the only write path to
+        // `actor_role_assignments`. Granting or revoking a role such as
+        // `admin` or `finance` is the same privilege-escalation category as
+        // `MFA_RESET`/`CERTIFICATE_REVOKE` above: a grant with no recorded
+        // justification is indistinguishable from one nobody authorised.
+        'ROLE_GRANT',
+        'ROLE_REVOKE',
+
+        // Added alongside the two above, by the same lane. Written by
+        // `App\Platform\IdentityAccess\Scopes\Actions
+        // \GrantScopeAssignment`/`RevokeScopeAssignment` — the only write
+        // path to `scope_assignments`. A scope grant decides which records
+        // an actor can even see (`ScopeAssignmentGlobalScope`'s query
+        // boundary), the same access-control category as a role grant, so
+        // the same mandatory-reason reasoning applies.
+        'SCOPE_GRANT',
+        'SCOPE_REVOKE',
     ];
 
     public static function requiresReason(string $action): bool
