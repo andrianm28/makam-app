@@ -7,9 +7,15 @@ namespace Tests\Feature\IdentityAccess;
 use App\Models\User;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\Adapters\LocalUsersTableIdentityAccessAdapter;
+use App\Platform\IdentityAccess\Contracts\IdentityAccessAdapter;
 use App\Platform\IdentityAccess\Mfa\MfaEnrolmentStatus;
 use App\Platform\IdentityAccess\Mfa\Models\MfaEnrolment;
 use App\Platform\IdentityAccess\Models\ActorSession;
+use App\Platform\IdentityAccess\Roles\ActorRole;
+use App\Platform\IdentityAccess\Roles\Models\ActorRoleAssignment;
+use App\Platform\IdentityAccess\Scopes\Models\ScopeAssignment;
+use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
+use App\Platform\IdentityAccess\Scopes\ScopeGrantLevel;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -110,10 +116,13 @@ final class LocalUsersTableIdentityAccessAdapterTest extends TestCase
         );
     }
 
-    public function test_authenticated_identity_always_has_empty_roles_and_scopes_today(): void
+    public function test_authenticated_identity_with_no_grants_has_empty_roles_and_scopes(): void
     {
-        // Locks in the flagged gap documented on ActorContext/this adapter
-        // — must not silently start returning fabricated roles/scopes.
+        // An empty roles/scopes list still means "this actor has no
+        // grants" — it must never be misread as "no roles required". This
+        // is no longer the unconditional placeholder it used to be (roles
+        // and scopes now resolve from real tables); this test only pins
+        // the correct behaviour for an actor with zero grant rows.
         $user = User::factory()->create();
         $adapter = new LocalUsersTableIdentityAccessAdapter;
 
@@ -121,6 +130,52 @@ final class LocalUsersTableIdentityAccessAdapterTest extends TestCase
 
         $this->assertSame([], $context->roles);
         $this->assertSame([], $context->scopes);
+    }
+
+    public function test_it_resolves_real_roles_and_scopes_for_an_authenticated_actor(): void
+    {
+        $user = User::factory()->create();
+
+        ActorRoleAssignment::create(['actor_identifier' => (string) $user->id, 'role' => ActorRole::FINANCE]);
+        ScopeAssignment::create([
+            'actor_identifier' => (string) $user->id,
+            'entity_type' => ScopeEntityType::CEMETERY,
+            'entity_id' => '4',
+            'grant_level' => ScopeGrantLevel::PRIVILEGED,
+        ]);
+
+        $context = app(IdentityAccessAdapter::class)->resolveActorContext($user);
+
+        $this->assertTrue($context->hasRole(ActorRole::FINANCE));
+        $this->assertTrue($context->hasScope('cemetery:4'));
+    }
+
+    public function test_a_guest_carries_no_roles_or_scopes(): void
+    {
+        $context = app(IdentityAccessAdapter::class)->resolveActorContext(null);
+
+        $this->assertSame([], $context->roles);
+        $this->assertSame([], $context->scopes);
+    }
+
+    public function test_resolving_actor_context_through_the_container_does_not_recurse(): void
+    {
+        // Regression guard for the verified container cycle: if the adapter
+        // ever depends on something that depends on ActorContext, this
+        // hangs and OOMs rather than failing. See the design doc, decision
+        // 4.
+        $this->assertInstanceOf(ActorContext::class, app(ActorContext::class));
+    }
+
+    public function test_another_actors_grants_do_not_leak(): void
+    {
+        $user = User::factory()->create();
+        $other = User::factory()->create();
+        ActorRoleAssignment::create(['actor_identifier' => (string) $other->id, 'role' => ActorRole::ADMIN]);
+
+        $context = app(IdentityAccessAdapter::class)->resolveActorContext($user);
+
+        $this->assertSame([], $context->roles);
     }
 
     /**

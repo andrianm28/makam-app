@@ -16,4 +16,16 @@
 | Payout/refund | No | No | No | View own | Restricted | Dedicated finance |
 | Feature/capability gate | No | No | No | No | Dedicated privileged | Approval/audit |
 
-Exact roles depend on K1/K2. Query-level scope is mandatory.
+The canonical role vocabulary is `App\Platform\IdentityAccess\Roles\ActorRole::KNOWN_ROLES`,
+and the roles are resolved per request into `ActorContext::$roles`. The columns above are
+capability groupings for review, not the role list itself — read the closed list from that
+class rather than inferring it from this table, and extend it there.
+
+This replaces the earlier note that exact roles depend on an external K1/K2 identity contract.
+That contract was never specified anywhere in this repository, so the roles are now mastered
+locally; the `IdentityAccessAdapter` seam remains, so a future K1/K2-backed adapter is still a
+binding swap rather than a rewrite.
+
+Query-level scope is mandatory, and is enforced separately from roles via `scope_assignments`
+(`ScopeAssignmentGlobalScope`). A role never by itself grants access to a record: the shipped
+authorizers require a role **and** a scope grant.
