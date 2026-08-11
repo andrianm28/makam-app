@@ -741,6 +741,52 @@ prose is stale. Flagged so whoever next edits those files corrects it rather
 than trusting it. A reader who believes "this always denies" could easily
 misjudge a change to one of these authorizers.
 
+## Second cross-cutting finding — `NotificationDeliveryWriteGuard` can fail open
+
+Surfaced by this lane's full-suite run, but **not caused by it**, and it lives in
+already-merged L2 code.
+
+`app/Platform/Notification/NotificationDeliveryWriteGuard::register()` skips
+attaching its `beforeExecuting` hook when it believes a connection is already
+registered:
+
+```php
+private static array $registeredConnections = [];
+$connectionId = spl_object_id($connection);
+if (isset(self::$registeredConnections[$connectionId])) { return; }
+```
+
+**PHP reuses `spl_object_id` values after an object is garbage-collected** —
+demonstrated directly: free an object, allocate another, and the new one can
+receive the dead one's id. So a *fresh* connection can inherit a destroyed
+connection's id, `register()` early-returns, no hook is attached, and that
+connection is silently unguarded.
+
+The guard therefore **fails open**, which is the wrong direction for a control
+whose entire job is to reject unauthorised writes to `notification_deliveries`.
+
+Evidence: on one full-suite run this branch produced
+`NotificationDeliveryWriteGuardTest::test_a_direct_delivery_write_is_rejected_before_the_row_lands`
+failing — the forbidden row landed. A second identical full run passed, and the
+test passes in isolation and under a narrow `IdentityAccess|Notification`
+filter. That intermittency is what GC-timing-dependent id reuse looks like.
+
+This lane's contribution was only extra object churn (about 74 new tests),
+which changed allocation timing enough to hit the collision once.
+
+Beyond tests, the same hazard applies in production to any long-lived process
+that builds and discards connections — Horizon queue workers are the concrete
+case in this codebase, and `ActorContextResolver`'s own doc block already warns
+that "a static that survives a request boundary is a real bug class."
+
+A durable fix probably keys registration off something stable (the connection
+*name*, or `WeakMap`) rather than a recyclable object id. Not attempted here:
+it is another lane's module, already merged, and a change to a security guard
+needs its own review and regression pass.
+
+Owner: the `platform-notifications` lane (L2). Decision needed from the
+coordinator.
+
 ## Cross-cutting finding for the merge sign-off bundle — NOT fixed in this lane
 
 **`Audit::record()`'s mandatory-reason check can be bypassed with Unicode
