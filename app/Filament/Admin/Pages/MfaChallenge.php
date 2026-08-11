@@ -6,11 +6,13 @@ namespace App\Filament\Admin\Pages;
 
 use App\Http\Middleware\EnforceMfaChallenge;
 use App\Platform\Audit\AuditSource;
+use App\Platform\IdentityAccess\Actions\RecordActorSessionAuthentication;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\Mfa\MfaChallengeService;
 use App\Platform\IdentityAccess\Mfa\MfaEnrolmentStatus;
 use App\Platform\IdentityAccess\Mfa\MfaRecoveryService;
 use App\Platform\IdentityAccess\Mfa\Models\MfaEnrolment;
+use App\Platform\IdentityAccess\Reauthentication\ReauthenticationService;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
 
@@ -32,6 +34,20 @@ use Illuminate\Support\Facades\Auth;
  */
 final class MfaChallenge extends Page
 {
+    /**
+     * The `$reason` recorded on the `reauthentication_events` row this page
+     * writes on success. Deliberately generic: this page is the redirect
+     * target of BOTH `EnforceMfaChallenge` (login-time panel access, which
+     * has no sensitive action behind it at all) and
+     * `RequireRecentAuthentication` (which does know a per-action reason,
+     * but threads only `url.intended` through the session, not the reason).
+     * Nothing observable at this point in the flow distinguishes the two,
+     * so recording the actual proof that happened here — an MFA challenge —
+     * is the honest value. Naming a specific sensitive action would be
+     * fabricated: the `challenged` row already carries the real reason.
+     */
+    public const string REAUTHENTICATION_REASON = 'mfa_challenge';
+
     protected static ?string $slug = 'mfa-challenge';
 
     protected static bool $shouldRegisterNavigation = false;
@@ -78,6 +94,34 @@ final class MfaChallenge extends Page
         }
 
         session()->put(EnforceMfaChallenge::SESSION_KEY, now()->toIso8601String());
+
+        // Both writes below are reached ONLY on `$result->valid === true`.
+        //
+        // The `actor_sessions` refresh is what makes
+        // `RequireRecentAuthentication` work at all: that middleware reads
+        // `ActorContext::$lastAuthenticatedAt`, which the adapter derives
+        // from this table, and until this call existed the column was
+        // written at login and nowhere else — so an actor who re-proved
+        // their identity right here was still stale on the next request and
+        // was redirected straight back to this page, forever.
+        app(RecordActorSessionAuthentication::class)(
+            $user->getAuthIdentifier(),
+            Auth::getDefaultDriver(),
+            request(),
+        );
+
+        // The `satisfied` half of the pair `RequireRecentAuthentication`
+        // already writes the `challenged` half of — same actor/role/source/
+        // ip shape that middleware passes to `challenge()`. Never given the
+        // submitted code or any other restricted value; this service takes
+        // none.
+        app(ReauthenticationService::class)->satisfy(
+            actorRef: $actorContext->identityReference,
+            actorRole: 'authenticated_actor',
+            reason: self::REAUTHENTICATION_REASON,
+            source: AuditSource::Panel,
+            ip: $ip,
+        );
 
         // Dashboard's real registered route name is `filament.admin.pages.dashboard`
         // (same `Page::registerRoutes()` -> `Route::name('pages.')` wrapping this

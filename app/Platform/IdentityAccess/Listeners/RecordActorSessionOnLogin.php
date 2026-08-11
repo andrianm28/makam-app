@@ -4,12 +4,10 @@ declare(strict_types=1);
 
 namespace App\Platform\IdentityAccess\Listeners;
 
-use App\Platform\IdentityAccess\Models\ActorSession;
-use Carbon\CarbonImmutable;
+use App\Platform\IdentityAccess\Actions\RecordActorSessionAuthentication;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 
 /**
  * Populates `actor_sessions` (this batch's migration) by listening for
@@ -31,6 +29,10 @@ use Illuminate\Support\Str;
  * is "best correlation available to the framework `sessions` table", not a
  * guaranteed join key — documented on the migration's `session_id` column
  * too.
+ *
+ * The write itself lives in `Actions\RecordActorSessionAuthentication`,
+ * shared with the step-up challenge path — see that class for why the two
+ * must not drift.
  */
 final class RecordActorSessionOnLogin
 {
@@ -38,22 +40,10 @@ final class RecordActorSessionOnLogin
 
     public function handle(Login $event): void
     {
-        $request = $this->app->make(Request::class);
-
-        ActorSession::query()->updateOrCreate(
-            [
-                'user_id' => $event->user->getAuthIdentifier(),
-                'session_id' => $request->hasSession()
-                    ? $request->session()->getId()
-                    : (string) Str::uuid(),
-            ],
-            [
-                'guard' => $event->guard,
-                'ip_address' => $request->ip(),
-                'user_agent' => $request->userAgent(),
-                'last_authenticated_at' => CarbonImmutable::now(),
-                'revoked_at' => null,
-            ]
+        $this->app->make(RecordActorSessionAuthentication::class)(
+            $event->user->getAuthIdentifier(),
+            $event->guard,
+            $this->app->make(Request::class),
         );
     }
 }
