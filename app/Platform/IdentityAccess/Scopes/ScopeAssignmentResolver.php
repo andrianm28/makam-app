@@ -20,12 +20,18 @@ use App\Platform\IdentityAccess\ActorContext;
  *    deliberately).
  *
  * ---------------------------------------------------------------------------
- * The `ActorContext::$scopes` wiring — where it actually lives
+ * The `ActorContext::$scopes` wiring — where it belongs, and why not here
  * ---------------------------------------------------------------------------
- * `ActorContext::$scopes` is populated by
- * `App\Platform\IdentityAccess\Adapters\LocalUsersTableIdentityAccessAdapter
- * ::resolveActorContext()`, using `ScopeAssignmentReader::scopeStringsForActor()`
- * — **not** this class. The wiring cannot go through this resolver: its
+ * `ActorContext::$scopes` is the identity adapter's to populate
+ * (`App\Platform\IdentityAccess\Adapters\LocalUsersTableIdentityAccessAdapter
+ * ::resolveActorContext()`), reading through
+ * `ScopeAssignmentReader::scopeStringsForActor()` — **not** this class.
+ *
+ * Check the adapter itself for whether that wiring has landed; this doc
+ * block states where the wiring belongs, not what the adapter currently
+ * does, so that it cannot rot into a false claim either way.
+ *
+ * The wiring cannot go through this resolver: its
  * constructor takes an `ActorContext`
  * (`App\Platform\IdentityAccess\ActorContext`), and `ActorContext` is
  * itself resolved through the identity adapter. If the adapter depended on
