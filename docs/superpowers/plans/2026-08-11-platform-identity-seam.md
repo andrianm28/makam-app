@@ -697,6 +697,50 @@ git commit -m "docs(identity-seam): point rbac matrix at the real role vocabular
 | No grant without an audited reason | `GrantActorRoleTest`, `IdentityGrantCommandsTest` |
 | Schema works on real PostgreSQL 18 | Task 6, disposable container |
 
+## Findings for the PR body — outside this lane's scope, named for their owners
+
+### 1. `Journal.php:239` is a sixth consumer of `ActorContext::$roles`
+
+`app/Platform/FinancialLedger/Journal.php:239` reads:
+
+```php
+$actorRole = $actor->roles[0] ?? ($actor->isAuthenticated() ? 'unresolved' : 'system');
+```
+
+It was not in this lane's list of five known consumers, and its behaviour
+changes here: `JOURNAL_REVERSAL` audit rows previously always recorded
+`unresolved` (or `system` for a guest), because `$roles` was always empty.
+They now record an actual role.
+
+**This is not a correctness bug, and the "non-deterministic order" framing it
+was first reported under is wrong.** `ActorRoleReader` emits roles sorted by
+`ActorRole::KNOWN_ROLES` declaration order, which is precedence order, so
+`$roles[0]` is deterministically the actor's most privileged role. The value
+is also an audit label only — it feeds `Audit::record()`'s `actorRole`, never
+an authorization decision.
+
+What it *is*: an undocumented coupling. `Journal` depends on the adapter's
+emission order without saying so at the call site, so reordering
+`KNOWN_ROLES` would silently change what `JOURNAL_REVERSAL` rows record.
+`DocumentAccessPolicy::auditRoleFor()` solves the same problem explicitly,
+with its own documented precedence walk, and is the pattern to copy.
+
+Owner: the `platform-financial-ledger` lane (L4). Not changed here — this lane
+does not edit consumer modules.
+
+### 2. Doc rot in the five consumers
+
+`FinanceLedgerReadAuthorizer`, `FinanceReconciliationAuthorizer`,
+`FinanceVendorPayableAuthorizer`, `FinanceOrRestrictedAdminPayoutAuthorizer`,
+and `DocumentVault\Policies\DocumentAccessPolicy` each carry doc blocks
+stating that `ActorContext::$roles` is "always `[]`" and that they therefore
+refuse every request. Both halves are now false.
+
+Their *code* is correct and deliberately untouched by this lane — only the
+prose is stale. Flagged so whoever next edits those files corrects it rather
+than trusting it. A reader who believes "this always denies" could easily
+misjudge a change to one of these authorizers.
+
 ## Cross-cutting finding for the merge sign-off bundle — NOT fixed in this lane
 
 **`Audit::record()`'s mandatory-reason check can be bypassed with Unicode
