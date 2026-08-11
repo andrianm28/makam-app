@@ -12,8 +12,8 @@ use App\Platform\IdentityAccess\Scopes\ScopeAssignmentReader;
 use App\Platform\IdentityAccess\Scopes\ScopeAuditActions;
 use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use App\Platform\IdentityAccess\Scopes\ScopeGrantLevel;
-use InvalidArgumentException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use InvalidArgumentException;
 use Tests\TestCase;
 
 /**
@@ -42,7 +42,7 @@ final class GrantScopeAssignmentTest extends TestCase
             'actor_ref' => '1',
             'source' => 'console',
         ]);
-        $this->assertSame(['cemetery:4'], (new ScopeAssignmentReader())->scopeStringsForActor(42));
+        $this->assertSame(['cemetery:4'], (new ScopeAssignmentReader)->scopeStringsForActor(42));
     }
 
     public function test_it_grants_a_scope_with_no_grant_level(): void
@@ -124,7 +124,7 @@ final class GrantScopeAssignmentTest extends TestCase
             'actor_ref' => '1',
             'source' => 'console',
         ]);
-        $this->assertSame([], (new ScopeAssignmentReader())->scopeStringsForActor(42));
+        $this->assertSame([], (new ScopeAssignmentReader)->scopeStringsForActor(42));
     }
 
     public function test_revoke_requires_a_reason(): void

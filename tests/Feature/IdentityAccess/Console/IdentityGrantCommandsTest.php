@@ -6,9 +6,9 @@ namespace Tests\Feature\IdentityAccess\Console;
 
 use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\IdentityAccess\Roles\ActorRole;
-use App\Platform\IdentityAccess\Roles\RoleAuditActions;
 use App\Platform\IdentityAccess\Roles\ActorRoleReader;
 use App\Platform\IdentityAccess\Roles\Models\ActorRoleAssignment;
+use App\Platform\IdentityAccess\Roles\RoleAuditActions;
 use App\Platform\IdentityAccess\Scopes\Models\ScopeAssignment;
 use App\Platform\IdentityAccess\Scopes\ScopeAssignmentReader;
 use App\Platform\IdentityAccess\Scopes\ScopeAuditActions;
@@ -45,7 +45,7 @@ final class IdentityGrantCommandsTest extends TestCase
             'role' => ActorRole::FINANCE,
             'revoked_at' => null,
         ]);
-        $this->assertSame([ActorRole::FINANCE], (new ActorRoleReader())->rolesForActor(42));
+        $this->assertSame([ActorRole::FINANCE], (new ActorRoleReader)->rolesForActor(42));
     }
 
     public function test_grant_role_command_fails_without_a_reason(): void
@@ -104,7 +104,7 @@ final class IdentityGrantCommandsTest extends TestCase
         // Soft-revoke: the row survives for history, but the actor no
         // longer resolves the role.
         $this->assertDatabaseCount('actor_role_assignments', 1);
-        $this->assertSame([], (new ActorRoleReader())->rolesForActor(42));
+        $this->assertSame([], (new ActorRoleReader)->rolesForActor(42));
     }
 
     public function test_revoke_role_command_fails_without_a_reason(): void
@@ -114,7 +114,7 @@ final class IdentityGrantCommandsTest extends TestCase
         $this->artisan('identity:revoke-role', ['actor' => '42', 'role' => ActorRole::FINANCE])
             ->assertFailed();
 
-        $this->assertSame([ActorRole::FINANCE], (new ActorRoleReader())->rolesForActor(42));
+        $this->assertSame([ActorRole::FINANCE], (new ActorRoleReader)->rolesForActor(42));
     }
 
     public function test_revoke_role_command_rejects_an_unknown_role(): void
@@ -146,7 +146,7 @@ final class IdentityGrantCommandsTest extends TestCase
             'entity_id' => '4',
             'revoked_at' => null,
         ]);
-        $this->assertSame(['cemetery:4'], (new ScopeAssignmentReader())->scopeStringsForActor(42));
+        $this->assertSame(['cemetery:4'], (new ScopeAssignmentReader)->scopeStringsForActor(42));
     }
 
     public function test_grant_scope_command_fails_without_a_reason(): void
@@ -200,7 +200,7 @@ final class IdentityGrantCommandsTest extends TestCase
         ])->assertSuccessful();
 
         $this->assertDatabaseCount('scope_assignments', 1);
-        $this->assertSame([], (new ScopeAssignmentReader())->scopeStringsForActor(42));
+        $this->assertSame([], (new ScopeAssignmentReader)->scopeStringsForActor(42));
     }
 
     public function test_revoke_scope_command_fails_without_a_reason(): void
@@ -215,7 +215,7 @@ final class IdentityGrantCommandsTest extends TestCase
             'actor' => '42', 'entityType' => ScopeEntityType::CEMETERY, 'entityId' => '4',
         ])->assertFailed();
 
-        $this->assertSame(['cemetery:4'], (new ScopeAssignmentReader())->scopeStringsForActor(42));
+        $this->assertSame(['cemetery:4'], (new ScopeAssignmentReader)->scopeStringsForActor(42));
     }
 
     public function test_revoke_scope_command_rejects_an_unknown_entity_type(): void
@@ -234,7 +234,7 @@ final class IdentityGrantCommandsTest extends TestCase
         ])->assertFailed();
 
         // The real grant must survive a rejected revoke of a bogus type.
-        $this->assertSame(['cemetery:4'], (new ScopeAssignmentReader())->scopeStringsForActor(42));
+        $this->assertSame(['cemetery:4'], (new ScopeAssignmentReader)->scopeStringsForActor(42));
     }
 
     // -----------------------------------------------------------------
@@ -347,7 +347,7 @@ final class IdentityGrantCommandsTest extends TestCase
             '--reason' => "\u{3000}",
         ])->assertFailed();
 
-        $this->assertSame([ActorRole::FINANCE], (new ActorRoleReader())->rolesForActor(42));
+        $this->assertSame([ActorRole::FINANCE], (new ActorRoleReader)->rolesForActor(42));
     }
 
     public function test_grant_scope_command_rejects_a_unicode_whitespace_only_reason(): void
@@ -378,6 +378,6 @@ final class IdentityGrantCommandsTest extends TestCase
             '--reason' => "\u{00A0}",
         ])->assertFailed();
 
-        $this->assertSame(['cemetery:4'], (new ScopeAssignmentReader())->scopeStringsForActor(42));
+        $this->assertSame(['cemetery:4'], (new ScopeAssignmentReader)->scopeStringsForActor(42));
     }
 }

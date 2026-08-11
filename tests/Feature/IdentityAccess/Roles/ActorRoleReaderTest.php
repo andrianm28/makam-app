@@ -29,7 +29,7 @@ final class ActorRoleReaderTest extends TestCase
 
         $this->assertSame(
             [ActorRole::ADMIN, ActorRole::CUSTOMER],
-            (new ActorRoleReader())->rolesForActor(5),
+            (new ActorRoleReader)->rolesForActor(5),
         );
     }
 
@@ -38,7 +38,7 @@ final class ActorRoleReaderTest extends TestCase
         $grant = ActorRoleAssignment::create(['actor_identifier' => '5', 'role' => ActorRole::FINANCE]);
         $grant->revoke();
 
-        $this->assertSame([], (new ActorRoleReader())->rolesForActor(5));
+        $this->assertSame([], (new ActorRoleReader)->rolesForActor(5));
     }
 
     public function test_it_deduplicates_repeated_grants_of_the_same_role(): void
@@ -46,18 +46,18 @@ final class ActorRoleReaderTest extends TestCase
         ActorRoleAssignment::create(['actor_identifier' => '5', 'role' => ActorRole::FINANCE]);
         ActorRoleAssignment::create(['actor_identifier' => '5', 'role' => ActorRole::FINANCE]);
 
-        $this->assertSame([ActorRole::FINANCE], (new ActorRoleReader())->rolesForActor(5));
+        $this->assertSame([ActorRole::FINANCE], (new ActorRoleReader)->rolesForActor(5));
     }
 
     public function test_an_actor_with_no_grants_gets_an_empty_list(): void
     {
-        $this->assertSame([], (new ActorRoleReader())->rolesForActor(999));
+        $this->assertSame([], (new ActorRoleReader)->rolesForActor(999));
     }
 
     public function test_another_actors_grants_do_not_leak_into_this_actors_result(): void
     {
         ActorRoleAssignment::create(['actor_identifier' => '5', 'role' => ActorRole::ADMIN]);
 
-        $this->assertSame([], (new ActorRoleReader())->rolesForActor(6));
+        $this->assertSame([], (new ActorRoleReader)->rolesForActor(6));
     }
 }

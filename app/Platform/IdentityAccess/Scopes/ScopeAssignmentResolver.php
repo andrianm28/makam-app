@@ -64,7 +64,7 @@ final class ScopeAssignmentResolver
 {
     public function __construct(
         private readonly ActorContext $actorContext,
-        private readonly ScopeAssignmentReader $reader = new ScopeAssignmentReader(),
+        private readonly ScopeAssignmentReader $reader = new ScopeAssignmentReader,
     ) {}
 
     /**

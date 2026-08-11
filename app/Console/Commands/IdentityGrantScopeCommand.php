@@ -6,7 +6,6 @@ namespace App\Console\Commands;
 
 use App\Console\Commands\Concerns\IdentifiesConsoleOperator;
 use App\Console\Commands\Concerns\RequiresAuditReason;
-
 use App\Platform\Audit\Exceptions\AuditReasonRequiredException;
 use App\Platform\IdentityAccess\Scopes\Actions\GrantScopeAssignment;
 use Illuminate\Console\Command;

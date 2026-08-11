@@ -33,7 +33,7 @@ final class ScopeAssignmentReaderTest extends TestCase
         // The whole point of this class: no ActorContext in its graph, so
         // the identity adapter can depend on it without closing a
         // container cycle.
-        $this->assertInstanceOf(ScopeAssignmentReader::class, new ScopeAssignmentReader());
+        $this->assertInstanceOf(ScopeAssignmentReader::class, new ScopeAssignmentReader);
     }
 
     public function test_scope_strings_use_the_entity_type_colon_entity_id_shape(): void
@@ -44,7 +44,7 @@ final class ScopeAssignmentReaderTest extends TestCase
             'entity_id' => '1',
         ]);
 
-        $this->assertSame(['cemetery:1'], (new ScopeAssignmentReader())->scopeStringsForActor(7));
+        $this->assertSame(['cemetery:1'], (new ScopeAssignmentReader)->scopeStringsForActor(7));
     }
 
     public function test_revoked_grants_are_excluded(): void
@@ -56,8 +56,8 @@ final class ScopeAssignmentReaderTest extends TestCase
         ]);
         $grant->revoke();
 
-        $this->assertSame([], (new ScopeAssignmentReader())->scopeStringsForActor(7));
-        $this->assertSame([], (new ScopeAssignmentReader())->grantedEntityIds(7, ScopeEntityType::VENDOR));
+        $this->assertSame([], (new ScopeAssignmentReader)->scopeStringsForActor(7));
+        $this->assertSame([], (new ScopeAssignmentReader)->grantedEntityIds(7, ScopeEntityType::VENDOR));
     }
 
     public function test_granted_entity_ids_returns_only_active_grants_for_the_given_actor_and_type(): void
@@ -71,7 +71,7 @@ final class ScopeAssignmentReaderTest extends TestCase
         // Revoked — must not appear.
         ScopeAssignment::query()->create(['actor_identifier' => '1', 'entity_type' => ScopeEntityType::CEMETERY, 'entity_id' => '50'])->revoke();
 
-        $ids = (new ScopeAssignmentReader())->grantedEntityIds('1', ScopeEntityType::CEMETERY);
+        $ids = (new ScopeAssignmentReader)->grantedEntityIds('1', ScopeEntityType::CEMETERY);
 
         sort($ids);
         $this->assertSame(['10', '20'], $ids);
@@ -81,7 +81,7 @@ final class ScopeAssignmentReaderTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
 
-        (new ScopeAssignmentReader())->grantedEntityIds('1', 'spaceship');
+        (new ScopeAssignmentReader)->grantedEntityIds('1', 'spaceship');
     }
 
     public function test_actors_for_entity_returns_only_active_grants_on_the_given_entity(): void
@@ -95,7 +95,7 @@ final class ScopeAssignmentReaderTest extends TestCase
         // Revoked — must not appear.
         ScopeAssignment::query()->create(['actor_identifier' => '5', 'entity_type' => ScopeEntityType::CEMETERY, 'entity_id' => '10'])->revoke();
 
-        $actors = (new ScopeAssignmentReader())->actorsForEntity(ScopeEntityType::CEMETERY, '10');
+        $actors = (new ScopeAssignmentReader)->actorsForEntity(ScopeEntityType::CEMETERY, '10');
 
         sort($actors);
         $this->assertSame(['1', '2'], $actors);
@@ -108,7 +108,7 @@ final class ScopeAssignmentReaderTest extends TestCase
         ScopeAssignment::query()->create(['actor_identifier' => '1', 'entity_type' => ScopeEntityType::VENDOR, 'entity_id' => '99'])->revoke();
         ScopeAssignment::query()->create(['actor_identifier' => '1', 'entity_type' => ScopeEntityType::VENDOR, 'entity_id' => '99']);
 
-        $actors = (new ScopeAssignmentReader())->actorsForEntity(ScopeEntityType::VENDOR, '99');
+        $actors = (new ScopeAssignmentReader)->actorsForEntity(ScopeEntityType::VENDOR, '99');
 
         $this->assertSame(['1'], $actors);
     }
@@ -117,6 +117,6 @@ final class ScopeAssignmentReaderTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
 
-        (new ScopeAssignmentReader())->actorsForEntity('spaceship', '10');
+        (new ScopeAssignmentReader)->actorsForEntity('spaceship', '10');
     }
 }

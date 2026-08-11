@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace Tests\Feature\IdentityAccess\Roles;
 
 use App\Platform\Audit\Exceptions\AuditReasonRequiredException;
-use App\Platform\IdentityAccess\Roles\ActorRole;
-use App\Platform\IdentityAccess\Roles\ActorRoleReader;
+use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\IdentityAccess\Roles\Actions\GrantActorRole;
 use App\Platform\IdentityAccess\Roles\Actions\RevokeActorRole;
+use App\Platform\IdentityAccess\Roles\ActorRole;
+use App\Platform\IdentityAccess\Roles\ActorRoleReader;
 use App\Platform\IdentityAccess\Roles\RoleAuditActions;
-use InvalidArgumentException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use InvalidArgumentException;
 use Tests\TestCase;
 
 /**
@@ -40,7 +41,7 @@ final class GrantActorRoleTest extends TestCase
             'actor_ref' => '1',
             'source' => 'console',
         ]);
-        $this->assertSame([ActorRole::FINANCE], (new ActorRoleReader())->rolesForActor(42));
+        $this->assertSame([ActorRole::FINANCE], (new ActorRoleReader)->rolesForActor(42));
     }
 
     public function test_it_refuses_a_role_outside_the_closed_list(): void
@@ -99,7 +100,7 @@ final class GrantActorRoleTest extends TestCase
             'actor_ref' => '1',
             'source' => 'console',
         ]);
-        $this->assertSame([], (new ActorRoleReader())->rolesForActor(42));
+        $this->assertSame([], (new ActorRoleReader)->rolesForActor(42));
     }
 
     public function test_revoke_requires_a_reason(): void
@@ -115,7 +116,7 @@ final class GrantActorRoleTest extends TestCase
     {
         app(GrantActorRole::class)(42, ActorRole::FINANCE, 'Finance lead onboarding, ticket OPS-114', 1);
 
-        $event = \App\Platform\Audit\Models\AuditEvent::query()
+        $event = AuditEvent::query()
             ->where('action', RoleAuditActions::GRANT)
             ->firstOrFail();
 
