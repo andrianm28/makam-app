@@ -28,6 +28,8 @@ final class SensitiveActionsTest extends TestCase
             'certificate revoke' => ['CERTIFICATE_REVOKE'],
             'vendor payout' => ['VENDOR_PAYOUT'],
             'document delete' => ['DOCUMENT_DELETE'],
+            'payment refund' => ['PAYMENT_REFUND'],
+            'payment chargeback' => ['PAYMENT_CHARGEBACK'],
         ];
     }
 
@@ -60,8 +62,16 @@ final class SensitiveActionsTest extends TestCase
      * `SensitiveActions`'s own updated class doc comment for why only
      * that one MFA action, not all four, requires a reason), not a
      * regression. Renamed and updated rather than left red.
+     *
+     * UPDATED 11 Aug 2026 — platform-payment-adapter Task 6 (Wave 1d
+     * Append-Correction) added `PAYMENT_REFUND`/`PAYMENT_CHARGEBACK`: the
+     * only writers of `payment_reversals` rows
+     * (`App\Platform\Payment\Actions\RecordRefund`/`RecordChargeback`) are
+     * explicit, human-initiated financial operations, the same risk
+     * category as `VENDOR_PAYOUT` already on this list — another genuine,
+     * documented addition, not a regression.
      */
-    public function test_the_list_contains_the_requirements_named_actions_plus_mfa_reset_and_document_delete(): void
+    public function test_the_list_contains_the_requirements_named_actions_plus_mfa_reset_document_delete_and_payment_reversals(): void
     {
         $this->assertSame(
             [
@@ -74,6 +84,8 @@ final class SensitiveActionsTest extends TestCase
                 'VENDOR_PAYOUT',
                 'MFA_RESET',
                 'DOCUMENT_DELETE',
+                'PAYMENT_REFUND',
+                'PAYMENT_CHARGEBACK',
             ],
             SensitiveActions::ACTIONS
         );

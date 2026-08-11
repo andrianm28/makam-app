@@ -17,7 +17,7 @@
 - `app/Platform/Payment/` contains only `.gitkeep` — the module does not exist.
 - `PaymentMode` enum exists (`app/Platform/FeatureGate/Modes/PaymentMode.php`): `Online` / `ManualCoordination`, resolved server-side via `ModeResolver::paymentMode()` from `G-PAY-01` (AC1's "server-resolved, never a front-end flag" is already the established, tested pattern).
 - ADR-0033 (Wave 0) fixes the provider choice and the sandbox contract surface for dev/staging: `POST https://api-pay-sandbox.sumopod.com/api/v1/payments` with `X-Api-Key`, QRIS supported, ≤ 24 h `expires_in_hours`, hosted `payment_link_url`, Svix signatures or `X-Webhook-Token` verification, 10 s ack deadline, events `payment.completed|failed|expired|test`.
-- `docs/contracts/payment-webhook.md` v0.4 defines the application-side pipeline (`RECEIVED → VALIDATED → PROCESSED → DUPLICATE → REJECTED_* → RETRYABLE_FAILURE → MANUAL_REVIEW`) and the idempotency rule ("Primary key should use provider + event ID. A secondary guard should prevent the same provider transaction from settling multiple invoices.").
+- `docs/contracts/payment-webhook.md` v0.4 defines the application-side pipeline (`RECEIVED → VALIDATED → PROCESSING → PROCESSED → DUPLICATE → REJECTED_* → RETRYABLE_FAILURE → MANUAL_REVIEW`) and the idempotency rule ("Primary key should use provider + event ID. A secondary guard should prevent the same provider transaction from settling multiple invoices.").
 - `SensitiveActions::ACTIONS` already includes `PAYMENT_MANUAL_VERIFICATION` and `VENDOR_PAYOUT` (mandatory-reason actions) — the manual-verification and payout audit guards are pre-wired.
 - `ReauthenticationService` (`app/Platform/IdentityAccess/Reauthentication/ReauthenticationService.php`) and the `RequireRecentAuthentication` middleware pattern exist (prepared, no real controller yet) — AC9's "recent re-authentication on manual verification" consumes this prepared mechanism.
 - `Audit::record()/wrap()`, `Outbox::record()`, `OutboxClassification`, `OutboxQueueRouter` (with `critical` queue), `OutboxQueueName::Critical` all exist and are tested. `payment.received.v1` is in `event-catalog.md` (`:19`, "Valid webhook only").
@@ -140,6 +140,37 @@ Migrations (all additive, `2026_08_09_*`): `create_payment_intents_table`, `crea
 - [ ] **Step 3:** Implement `payment_intents`/`payment_sessions` models.
 - [ ] **Step 4:** Tests: all six guard failures each produce a denial (closed gate, expired quote, expired reservation, amount mismatch, unauthorized opening, missing merchant binding); a passed guard creates a session with `AWAITING_PAYMENT`; mode never read from request input; provider-unavailable returns truthful pending not a dead end.
 
+**Ruling (approved 10 Aug 2026, Wave 1b ruling 1b-L3-01) — Task 2 is re-scoped to a DENY-ONLY guard.** The four steps above are superseded by the six below; the text above is preserved byte-for-byte per this repo's append-correction convention.
+
+**Finding.** Task 2 as written above assumes upstream domain records that do not exist anywhere in this repository. Verified 10 Aug 2026: there is no `Confirmation` and no `PlotReservation` model/table/state (condition 2); no persisted `Quote` — `BookingDraftQuery::summary()` computes a draft-local total from *current* catalog price versions and `create_booking_drafts_table` explicitly defers quote issuance (conditions 3 and 5); no order/case opening-authorization API, and `ActorContext` exposes no roles or scopes accessors (condition 4); no merchant or `badan_usaha` model or binding record (condition 6). Only condition 1 is implementable today — `ModeResolver::paymentMode()` and `FeatureGateResolver` exist and are tested.
+
+This plan's own "Current state" section flags the absent L4 ledger but does not flag conditions 2/3/4/6, so Task 2 was written against records that were assumed present. Separately, `.kiro/specs/booking-and-order-orchestration/tasks.md` names *itself* the owner of the "payment guard", plus "Generalize confirmation guard for manual or reservation evidence" and "Preserve immutable quote/version acceptance" — all unchecked, and `sprint-plan.md` schedules that spec's build for Sprint 7 against the project's current Sprint 4. The upstream records are therefore not arriving soon.
+
+**Ruling.** Build the guard structure, `GuardResult`, `SessionState`, the `payment_intents`/`payment_sessions` tables, and condition 1 for real. Every other condition resolves to an explicit `UnavailableUpstream` outcome that **DENIES**. Do not implement the pass path, and do not implement `CreatePaymentSession`'s provider call, for conditions that cannot be truthfully evaluated.
+
+**Why deny-only rather than the Task 7 stub pattern.** Task 7 stubs the `Journal` — an output the guard *writes to*. Conditions 2/3/4/6 are the *truth sources the guard reads*. A stub answering "confirmation valid / quote accepted / opening authorized" would construct precisely what `AGENTS.md` §Domain and financial invariants forbids ("Never create payment before valid confirmation/reservation, accepted quote, and authorized opening") and would ship a guard whose passing path was never once exercised against a real record. Fail-closed is the only safe shape while the upstream is absent: a deny-only guard cannot create a payment, so it is safe to merge ahead of the orchestration spec.
+
+**Consequence, recorded so it is not re-litigated.** Tasks 3-8 (webhook receiver, async apply, manual fallback, reversals) all sit downstream of a *created* session, which conditions 2-6 gate. They hit this same wall. When they do, escalate rather than widening scope or stubbing the upstream.
+
+**Ruling 1b-L3-02 (approved 10 Aug 2026) — ownership split.** `booking-and-order-orchestration` owns the real domain records: `Confirmation`, `PlotReservation`, `Quote`, order/case opening-authorization, and the merchant registry. **This lane (L3) owns** `payment_intents`, `payment_sessions`, and the guard logic that reads those records once they exist. Nothing is built differently as a result — this makes explicit what ruling 1b-L3-01 already implied, so the boundary is not re-argued when the orchestration spec lands.
+
+**Ruling 1b-L3-03 (approved 10 Aug 2026) — six conditions, not five.** `requirements.md` AC2 lists five guard conditions; `design.md` names six, adding the merchant/`badan_usaha` binding. **Six is adopted.** AC13 independently requires that binding, and six is strictly stricter than five, so it cannot under-enforce. AC2's text is stale and carries a doc correction; this is not a spec conflict requiring escalation.
+
+### Forward constraints on later tasks (from the Task 2 review — binding, do not drop)
+
+These are not defects in Task 2. They are requirements on whichever later task first creates the named surface.
+
+- **Authentication/throttling before the first HTTP caller.** `GuardPaymentSession` writes one `payment_intents` row plus one audit row per invocation, with no auth check and no rate limit. That is correct today because nothing calls it (verified by grep), but it becomes an unauthenticated write-amplification vector the moment a real entry point exists. **The task that wires the first HTTP caller MUST require an authenticated actor and/or throttle before the guard is invoked.**
+- **Reject non-positive amounts on the pass path.** `Money(0)` and `Money(-1)` are both recorded today. Harmless in a deny-only guard, but **the task that makes a real session creatable MUST reject non-positive amounts.**
+- **Adding `PaymentIntentDecision::Allowed`** requires its own reviewed migration to widen the Postgres CHECK, and is a financial change needing human sign-off.
+
+- [x] **Step 1 (superseding):** `SessionState` closed-list enum + `GuardResult` with a `DENIED(condition, publicMessage)` shape and an explicit `UnavailableUpstream` denial reason distinct from a genuine domain denial.
+- [x] **Step 2 (superseding):** `GuardPaymentSession` evaluating all six conditions in fixed order; condition 1 real, conditions 2/3/4/5/6 returning `UnavailableUpstream` denials that cite the missing upstream by name.
+- [x] **Step 3 (superseding):** `payment_intents` + `payment_sessions` migrations and models (this lane owns them per §File Structure). Every guard evaluation — pass or deny — writes a `payment_intents` decision record; denials also write audit `PAYMENT_GUARD_DENIED` (outcome denied).
+- [x] **Step 4 (superseding):** Tests: each of the six conditions denies, with conditions 2/3/4/5/6 asserting the `UnavailableUpstream` reason; a closed gate denies via condition 1; mode is never read from request input; no input combination reaches a PASS; no provider call is reachable from the guard.
+- [x] **Step 5 (superseding):** Assert the fail-closed invariant directly — a test proving `GuardPaymentSession` has no reachable PASS outcome under the current upstream, so no `payment_sessions` row can be created by any caller.
+- [x] **Step 6 (superseding):** Commit citing Wave 1b ruling 1b-L3-01. `CreatePaymentSession` and the provider seam are NOT implemented in this task.
+
 ---
 
 ## Task 3: Webhook receiver — persist, validate, ack ≤ 2 s (AC5, AC6, AC13)
@@ -155,10 +186,50 @@ Migrations (all additive, `2026_08_09_*`): `create_payment_intents_table`, `crea
 - `RedactProviderPayload` middleware ensures raw payloads containing any credentials/PII are masked before any log/error-tracker exposure (AC14).
 - Ack timing: persist is a single fast insert; validation is in-memory; the 2-second target is met by design (no async work in the request path).
 
-- [ ] **Step 1:** Implement the receiver + route.
-- [ ] **Step 2:** Implement the validator (signature, merchant, amount minor units, currency, replay window).
-- [ ] **Step 3:** Implement `provider_events` model + redaction middleware.
-- [ ] **Step 4:** Tests: bad signature → REJECTED_SIGNATURE recorded + acked; wrong merchant → REJECTED_MERCHANT; wrong amount (float/int mismatch) → REJECTED_AMOUNT; replay (old timestamp) → REJECTED; duplicate event id → short-circuit ack, one row; ack latency assertion (receiver does no async work in request path); raw payload never contains a credential in logs (redaction test).
+- [x] **Step 1:** Implement the receiver + route.
+- [x] **Step 2:** Implement the validator (signature, merchant, amount minor units, currency, replay window).
+- [x] **Step 3:** Implement `provider_events` model + redaction middleware.
+- [x] **Step 4:** Tests: bad signature → REJECTED_SIGNATURE recorded + acked; wrong merchant → REJECTED_MERCHANT; wrong amount (float/int mismatch) → REJECTED_AMOUNT; replay (old timestamp) → REJECTED; duplicate event id → short-circuit ack, one row; ack latency assertion (receiver does no async work in request path); raw payload never contains a credential in logs (redaction test).
+
+**Task 3 outcome (10 Aug 2026) — what landed, and what is honestly NOT TESTED.** The four
+steps above are complete; the text is preserved byte-for-byte per this repo's append-correction
+convention.
+
+Task 3 hit the wall ruling 1b-L3-01 predicted for Tasks 3-8, and did not widen scope to get past
+it. Because the guard is deny-only, **no `payment_sessions` row can exist**, so every well-formed,
+correctly signed webhook terminates at `REJECTED_SESSION`. No session fixture was fabricated and no
+test-only bypass was added. The consequences, stated rather than implied:
+
+- **NOT TESTED — the pass path.** `VALIDATED` status, the `ProcessProviderEventJob` dispatch, and
+  the AC13 merchant/`badan_usaha` reconciliation and AC6 amount comparison *against a session* are
+  implemented for real in `WebhookValidator` but are unreachable today. What is tested of the job is
+  that it is queueable, targets `critical`, and carries only a row id.
+- **NOT TESTED — PostgreSQL.** The suite runs on SQLite. The `provider_events` status CHECK
+  constraint is Postgres-only, and the partial unique settlement index is created with driver-specific
+  SQL whose Postgres form CI executes first.
+- **NOT TESTED — the live SumoPod sandbox.** No sandbox webhook has been exercised; the signature
+  implementation is conformance-tested against the Svix scheme ADR-0033 names, not against a real
+  delivery. Task 8 owns that smoke run.
+
+Three decisions taken inside Task 3 that a reviewer should look at deliberately, all documented at
+their site: the secondary unique guard is a **partial** index scoped to settling event types (a total
+index would make Task 4's required out-of-order `expired`-after-`completed` delivery impossible to
+persist at all); the shared-token verification mechanism ADR-0033 permits is **hard-disabled**,
+ because a caller-supplied timestamp is not an authenticated freshness signal; and an **oversized body is
+ bounded to a `REJECTED_PAYLOAD` `provider_events` row and acknowledged with HTTP 200**, with the
+ full-body digest retained and a bounded marker stored instead of unbounded raw bytes. This keeps
+ the rejection durable without pretending that a truncated body is the provider's signed evidence.
+
+Four failure states were added to `docs/contracts/payment-webhook.md` (`REJECTED_PAYLOAD`,
+`REJECTED_REPLAY`, `REJECTED_CURRENCY`, `REJECTED_SESSION`) because AC6 names five things to validate
+and three of them had no state to be recorded under. The amendment is dated and additive; the original
+nine states are unchanged.
+
+**Carried to Task 4, not fixed here.** The `(provider, provider_transaction_id, invoice_reference)`
+guard prevents the same (transaction, invoice) pair settling twice, but does NOT prevent one provider
+transaction settling two *different* invoices — `payment-webhook.md` §Idempotency's literal
+requirement. That needs a `(provider, provider_transaction_id)` claim at apply time, which is where
+this plan already assigns the secondary-guard re-check.
 
 ---
 

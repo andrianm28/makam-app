@@ -12,6 +12,14 @@ use Illuminate\Http\Request;
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
+        // Added by the platform-payment-adapter lane (Task 3): the application
+        // had no API surface until `POST /api/payments/webhook/{merchant}`.
+        // Registering the group is what keeps that route OUT of the `web`
+        // group — a provider callback must not carry session, cookie, or CSRF
+        // middleware, and adding a CSRF exception for it would have been the
+        // alternative. `withExceptions()` below already anticipated an
+        // `api/*` prefix.
+        api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
@@ -53,6 +61,14 @@ return Application::configure(basePath: dirname(__DIR__))
         // AuthenticateSession's session-recording path sits later in that
         // same array (see AdminPanelProvider's comment).
         $middleware->appendToGroup('web', AssignCorrelationId::class);
+
+        // Same origin point for the `api` group. `platform-audit` design.md
+        // requires a correlation id to originate at the request boundary and
+        // propagate into outbox events and queue jobs; the payment webhook
+        // receiver writes audit rows and dispatches a queued job, so without
+        // this the whole webhook path would be the one request flow in the
+        // application with no correlation id at all.
+        $middleware->appendToGroup('api', AssignCorrelationId::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

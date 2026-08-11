@@ -55,6 +55,16 @@ final class SensitiveActions
         // deliberate, reasoned action in this group.
         'MFA_RESET',
         'DOCUMENT_DELETE',
+
+        // Added by platform-payment-adapter Task 6 (Wave 1d
+        // Append-Correction, `.superpowers/sdd/2026-08-09-platform-payment-
+        // adapter/task-6-brief.md`). `App\Platform\Payment\Actions\
+        // RecordRefund`/`RecordChargeback` are the only writers of
+        // `payment_reversals` rows; both are explicit, human-initiated
+        // financial operations in the same risk category as
+        // `VENDOR_PAYOUT` above, so a recorded justification is mandatory.
+        'PAYMENT_REFUND',
+        'PAYMENT_CHARGEBACK',
     ];
 
     public static function requiresReason(string $action): bool
