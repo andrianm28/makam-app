@@ -68,6 +68,95 @@ final class NotificationDeliveryWriteGuardTest extends TestCase
     }
 
     /**
+     * The guard used to record which connections it had hooked by
+     * `spl_object_id()`. PHP reuses those integers once the original
+     * object is collected, so in a long-lived process (a Horizon worker
+     * builds and discards many connection objects) a replacement
+     * connection could inherit a destroyed one's id, `register()` would
+     * see it as already-registered, return early, and leave that
+     * connection with no `beforeExecuting()` hook at all — writes to
+     * `notification_deliveries` on it would be completely unguarded.
+     *
+     * The recycling is forced here rather than waited for: purge the
+     * connection, collect, and rebuild until PHP hands the replacement
+     * the same id the registered one had. That turns a GC-timing race
+     * that only showed up intermittently under full-suite load into a
+     * deterministic assertion.
+     *
+     * Purging drops the in-memory schema with the connection, which is
+     * why this asserts the exception rather than the absence of a row:
+     * `beforeExecuting()` fires before the statement reaches PDO, so a
+     * hooked connection rejects the write before SQLite can complain
+     * that the table is gone. An unhooked one raises `QueryException`
+     * instead — a different failure, which is exactly what makes this
+     * test able to tell the two apart.
+     */
+    public function test_register_hooks_a_replacement_connection_that_reuses_a_recycled_object_id(): void
+    {
+        // Runs against a throwaway connection, never the suite's own:
+        // this repeatedly destroys the connection it is given, and the
+        // in-memory database dies with it, which would strip the schema
+        // out from under every later test in the process.
+        $defaultConnection = config('database.default');
+
+        config(['database.connections.sqlite_guard_probe' => [
+            'driver' => 'sqlite',
+            'database' => ':memory:',
+            'prefix' => '',
+            'foreign_key_constraints' => false,
+        ]]);
+        config(['database.default' => 'sqlite_guard_probe']);
+
+        try {
+            // Settle into the state where rebuilding the connection
+            // reuses one recycled object id: the first connection holds
+            // an id from before the surrounding allocations, so
+            // registering on that one would compare against an id no
+            // replacement is ever handed.
+            for ($warmUp = 0; $warmUp < 5; $warmUp++) {
+                DB::purge();
+                gc_collect_cycles();
+                DB::connection();
+            }
+
+            NotificationDeliveryWriteGuard::register();
+            $registeredId = spl_object_id(DB::connection());
+
+            DB::purge();
+            gc_collect_cycles();
+
+            $this->assertSame(
+                $registeredId,
+                spl_object_id(DB::connection()),
+                'precondition: expected the replacement connection to reuse the recycled spl_object_id',
+            );
+
+            NotificationDeliveryWriteGuard::register();
+
+            $rejected = false;
+
+            try {
+                DB::table('notification_deliveries')->insert([
+                    'event_id' => 'guard-recycled-id-event',
+                    'recipient_ref' => 'guard-recycled-id-recipient',
+                    'channel' => 'EMAIL',
+                    'state' => 'QUEUED',
+                ]);
+            } catch (NotificationDeliveryWriteNotAllowedException) {
+                $rejected = true;
+            }
+
+            $this->assertTrue(
+                $rejected,
+                'the replacement connection was left unguarded: the write reached the database instead of being rejected',
+            );
+        } finally {
+            DB::purge();
+            config(['database.default' => $defaultConnection]);
+        }
+    }
+
+    /**
      * @return array{0: int, 1: int}
      */
     private function createWriteParents(string $eventId): array

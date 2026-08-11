@@ -6,7 +6,9 @@ namespace App\Platform\Notification;
 
 use App\Platform\Notification\Actions\DispatchNotification;
 use App\Platform\Notification\Exceptions\NotificationDeliveryWriteNotAllowedException;
+use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\DB;
+use WeakMap;
 
 /**
  * Runtime enforcement of AC9 ("`DispatchNotification` is the only class
@@ -58,9 +60,30 @@ final class NotificationDeliveryWriteGuard
     private static bool $unlocked = false;
 
     /**
-     * @var array<int, true>
+     * Keyed by the connection object itself, NOT by `spl_object_id()`.
+     *
+     * PHP reuses an object id once the original object is collected, so
+     * an id-keyed record could not distinguish "this connection is
+     * already hooked" from "a destroyed connection once held this id".
+     * A long-lived process — a Horizon worker builds and discards many
+     * connection objects — could hand a replacement connection a
+     * recycled id, `register()` would return early, and that connection
+     * would carry no `beforeExecuting()` hook at all: every write to
+     * `notification_deliveries` on it silently unguarded. The guard
+     * failed OPEN, intermittently, only under whatever GC timing the
+     * surrounding workload happened to produce.
+     *
+     * A `WeakMap` keys on true object identity, which cannot collide,
+     * and drops its entry when the connection is actually collected —
+     * which is the real question being asked: "has THIS live connection
+     * object been hooked?"
+     *
+     * Not initialised inline: PHP's "new in initializers" does not
+     * extend to property defaults, so it is built on first use.
+     *
+     * @var WeakMap<Connection, true>|null
      */
-    private static array $registeredConnections = [];
+    private static ?WeakMap $registeredConnections = null;
 
     /**
      * Idempotent per connection — safe to call from a service provider's
@@ -69,13 +92,14 @@ final class NotificationDeliveryWriteGuard
     public static function register(): void
     {
         $connection = DB::connection();
-        $connectionId = spl_object_id($connection);
 
-        if (isset(self::$registeredConnections[$connectionId])) {
+        self::$registeredConnections ??= new WeakMap;
+
+        if (isset(self::$registeredConnections[$connection])) {
             return;
         }
 
-        self::$registeredConnections[$connectionId] = true;
+        self::$registeredConnections[$connection] = true;
 
         $connection->beforeExecuting(function (string $sql): void {
             if (self::$unlocked) {
@@ -133,10 +157,15 @@ final class NotificationDeliveryWriteGuard
 
     /**
      * Test-only escape hatch: forces the lock back to its default (locked)
-     * state. `self::$unlocked` and `self::$registeredConnections` are process-global
-     * static state — like `OutboxEvent::flushEventListeners()` elsewhere in
-     * this codebase, a test that deliberately triggers a violation must
-     * not leak `$unlocked = true` into a later, unrelated test.
+     * state. `self::$unlocked` is process-global static state — like
+     * `OutboxEvent::flushEventListeners()` elsewhere in this codebase, a
+     * test that deliberately triggers a violation must not leak
+     * `$unlocked = true` into a later, unrelated test.
+     *
+     * `self::$registeredConnections` deliberately is NOT cleared: it
+     * holds live connection objects weakly and empties itself as they
+     * are collected, so clearing it would only risk hooking a still-live
+     * connection twice.
      */
     public static function resetForTests(): void
     {
