@@ -99,7 +99,22 @@ Unit tests for the authorizer itself mirror `ManualPayoutTest`'s denial/success 
 - `ci/verify-docs.sh` after the change.
 - No `npm run build`, no full `composer install` on this host.
 
-## 6. Out of scope
+## 6. Impact — this fix is live, not dormant
 
-- Wiring an authoritative role source. `ActorContext::$roles` is `[]` under the current local identity adapter, so these endpoints will **fail closed for everyone** until that seam is backed — the same standing condition `ManualPayout`, `ResolveException`, and `BulkFinancialExport` already carry. For a live authorization bypass on money-moving actions, failing closed is the correct interim state.
+The role seam **is already wired**, so this fix protects real traffic from the moment it merges.
+
+`app/Platform/IdentityAccess/Adapters/LocalUsersTableIdentityAccessAdapter.php` resolves `roles` from `actor_role_assignments` via `Roles\ActorRoleReader`. Its doc block records that lane L5 "replaced the permanent `roles: []` / `scopes: []` placeholders this class used to hardcode unconditionally," and that this "flips five previously-inert authorizers ... from unconditionally denying to actually enforcing." That landed in commit `3dbdcde`, which is an ancestor of this branch's fork point `d9fea9f` — verified with `git merge-base --is-ancestor`.
+
+Two consequences worth stating plainly for merge review:
+
+- **The bypass being closed is exploitable today, not theoretical.** Any authenticated, MFA-enrolled user can currently record a reversal or approve a manual payment.
+- **The new check enforces for real.** An actor holding `finance` or `restricted_admin` passes; everyone else is refused. An empty roles list means "this actor holds no grants today," never "no roles required."
+
+**Caution for anyone copying the precedent:** the four `FinancialLedger` authorizer doc blocks still assert that `ActorContext::$roles` "is always `[]`" and that they refuse every real request. Those sentences predate L5 and are now stale. This hotfix does not inherit that claim and deliberately does not edit those files to correct it — that belongs to whichever lane owns them.
+
+Whether any account is presently *granted* `finance` or `restricted_admin` in a given environment is orthogonal to code correctness, but it determines whether the admin path stays usable after merge. Flagged as a deployment check, not a code change.
+
+## 7. Out of scope
+
 - The `actorRole` passthrough in the two write APIs (§D2 residual risk).
+- Correcting the stale doc blocks on the four `FinancialLedger` authorizers (§6).
