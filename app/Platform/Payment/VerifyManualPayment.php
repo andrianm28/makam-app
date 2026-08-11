@@ -51,6 +51,28 @@ use App\Platform\Payment\Models\PaymentVerification;
  * `tests/Feature/Payment/VerifyManualPaymentTest.php` grep-asserts this file
  * contains none of those references and behaviourally asserts
  * `payment_sessions` stays empty across both decisions.
+ *
+ * ---------------------------------------------------------------------------
+ * "Exactly once" is enforced with a row lock, not the caller's in-memory
+ * object — same convention as `ProcessWebhookEvent::lockClaimScope()`
+ * (`ProviderEvent::query()->whereKey(...)->lockForUpdate()->first()`) and
+ * `OutboxPublisher`'s claim query
+ * ---------------------------------------------------------------------------
+ * The controller's `$verification` parameter is loaded unlocked
+ * (`PaymentVerification::query()->findOrFail(...)`). Calling
+ * `Models\PaymentVerification::decide()` directly on that instance would
+ * only check the calling PHP object's in-memory `status` — two concurrent
+ * requests for the same row (a double-click, a retried form submit) could
+ * both read `SUBMITTED` before either commits, and the second would
+ * silently overwrite the first's decision instead of throwing
+ * `PaymentVerificationAlreadyDecidedException`. To close that gap, the
+ * mutation closure below re-fetches the row via
+ * `PaymentVerification::query()->whereKey(...)->lockForUpdate()->firstOrFail()`
+ * from inside `Audit::wrap()`'s transaction and calls `decide()` on THAT
+ * freshly-locked instance, never on the controller's `$verification`
+ * parameter. The row lock blocks a second concurrent transaction until the
+ * first commits, so the second transaction's own re-fetch sees the
+ * already-decided status and correctly throws.
  */
 final readonly class VerifyManualPayment
 {
@@ -64,13 +86,18 @@ final readonly class VerifyManualPayment
     ): PaymentVerification {
         return Audit::wrap(
             mutation: function () use ($verification, $decision, $reason, $actorRef): PaymentVerification {
-                $verification->decide(
+                $locked = PaymentVerification::query()
+                    ->whereKey($verification->getKey())
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                $locked->decide(
                     decision: $decision,
                     decidedByActorRef: $actorRef !== null ? (string) $actorRef : null,
                     reason: $reason,
                 );
 
-                return $verification;
+                return $locked;
             },
             action: PaymentAuditActions::MANUAL_VERIFICATION,
             subject: fn (PaymentVerification $verification): AuditSubject => new AuditSubject('payment_verification', $verification->id),

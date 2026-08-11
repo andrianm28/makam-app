@@ -180,6 +180,65 @@ final class VerifyManualPaymentTest extends TestCase
         );
     }
 
+    /**
+     * The concurrency gap IMPORTANT-1 found: two SEPARATE PHP instances of
+     * the same row (simulating two concurrent requests — a double-click or
+     * a retried form submit on the real route) must not both succeed. The
+     * fix re-fetches the row via `lockForUpdate()` inside `Audit::wrap()`'s
+     * transaction and decides THAT freshly-locked instance rather than the
+     * caller's unlocked instance, so a second `verify()` call sees the
+     * already-decided status and throws — instead of silently overwriting
+     * the first decision, which is what happened before the fix.
+     *
+     * SQLite (this suite's default) compiles `lockForUpdate()` to a no-op,
+     * the same caveat `task-4-report.md` already documents for
+     * `ProcessWebhookEvent`'s own concurrency test. Because the two
+     * `verify()` calls here run sequentially (not from two real concurrent
+     * connections), this test proves the sequential-correctness half of the
+     * fix — the second call's re-fetch sees the first call's already-committed
+     * decision and refuses — not true concurrent-request serialization
+     * under contention, which requires PostgreSQL and is not exercised
+     * locally.
+     */
+    public function test_two_separately_loaded_instances_cannot_both_decide_the_same_row(): void
+    {
+        $verification = $this->submittedVerification();
+
+        $firstInstance = PaymentVerification::find($verification->id);
+        $secondInstance = PaymentVerification::find($verification->id);
+
+        (new VerifyManualPayment)->verify(
+            verification: $firstInstance,
+            decision: PaymentVerificationDecision::Approve,
+            reason: 'First concurrent request wins',
+            actorRef: 9,
+            actorRole: 'admin',
+            source: AuditSource::Panel,
+        );
+
+        try {
+            (new VerifyManualPayment)->verify(
+                verification: $secondInstance,
+                decision: PaymentVerificationDecision::Reject,
+                reason: 'Second concurrent request must be refused, not silently overwrite the first',
+                actorRef: 9,
+                actorRole: 'admin',
+                source: AuditSource::Panel,
+            );
+
+            $this->fail('Expected PaymentVerificationAlreadyDecidedException for the second concurrent decision.');
+        } catch (PaymentVerificationAlreadyDecidedException) {
+            $verification->refresh();
+
+            $this->assertSame(
+                PaymentVerificationStatus::Verified,
+                $verification->status(),
+                'The first decision must stand; the second must not silently overwrite it.'
+            );
+            $this->assertSame('First concurrent request wins', $verification->decided_reason);
+        }
+    }
+
     public function test_it_never_touches_payment_sessions_the_journal_or_the_order_aggregate(): void
     {
         $source = $this->withoutComments((string) file_get_contents(base_path('app/Platform/Payment/VerifyManualPayment.php')));
