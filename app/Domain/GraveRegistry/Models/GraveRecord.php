@@ -8,8 +8,10 @@ use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\GraveRegistry\GraveNameNormalizer;
 use App\Domain\GraveRegistry\GraveRecordAccessMode;
 use App\Domain\GraveRegistry\GraveRecordSource;
+use Database\Factories\GraveRecordFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -55,12 +57,31 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * `/renewals/{renewalId}/payment-session` — the closest neighbour this spec
  * has in that contract. `/grave-records/search` takes no id parameter at
  * all, so nothing in the contract had to be overridden to choose this.
+ *
+ * `HasFactory` added L8 Task 1 (`docs/superpowers/plans/
+ * 2026-08-12-platform-renewal-completion.md`) — `RenewalSchemaTest` needs a
+ * real `grave_records` row with a controllable `due_date` to exercise the
+ * AC11 duplicate-period guard, and `database/factories/GraveRecordFactory`
+ * is the first factory this table has had. No other behaviour on this model
+ * changes.
  */
 final class GraveRecord extends Model
 {
-    use HasUuids;
+    /** @use HasFactory<GraveRecordFactory> */
+    use HasFactory, HasUuids;
 
     protected $table = 'grave_records';
+
+    /**
+     * `HasFactory`'s default resolver strips a leading `App\Models\` and
+     * nothing else, so it cannot find a factory for a model namespaced
+     * under `App\Domain\...\Models` — every domain model in this codebase.
+     * Explicit override, not a convention change.
+     */
+    protected static function newFactory(): GraveRecordFactory
+    {
+        return GraveRecordFactory::new();
+    }
 
     /**
      * Two columns of this table are deliberately absent from this list.
