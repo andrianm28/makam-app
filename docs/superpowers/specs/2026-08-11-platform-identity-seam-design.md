@@ -76,7 +76,7 @@ neither subsumes the other. The already-shipped authorizers demonstrate exactly
 this composition — each checks a role **and** a `scope_assignments` grant, and
 refuses if either is missing.
 
-Therefore `actor_roles` has **no `entity_id` column**. A per-entity role would
+Therefore `actor_role_assignments` has **no `entity_id` column**. A per-entity role would
 duplicate `scope_assignments` and recreate precisely the confusion the Wave 1f
 ruling caught: `ProvisionalScopeEntityRecipientRoleSource` answers *entity
 type → notification recipient role*, a different question from *actor → role*.
@@ -89,15 +89,22 @@ strength; it is not an actor attribute.
 
 ### 3. Table shape mirrors `scope_assignments`
 
-`actor_roles`:
+`actor_role_assignments`, named to parallel `scope_assignments` exactly, with
+model `ActorRoleAssignment` alongside `ScopeAssignment` and closed-list class
+`ActorRole` alongside `ScopeEntityType`:
 
 | Column | Type | Rationale |
 |---|---|---|
 | `actor_identifier` | string | Mirrors `scope_assignments`. **Not** a `users` FK — `ActorContext::$identityReference` is `int|string` precisely so a future K1/K2 adapter can key on an external string id, and design.md states identity is not mastered here. |
 | `role` | string(64) | App-validated against `ActorRole::KNOWN_ROLES` on save, not a Postgres enum — extending the list must not require a migration. Same pattern and same reasoning as `entity_type`. |
 | `revoked_at` | nullable timestamp | Soft-revoke, not delete, so grant history stays queryable. Mirrors `scope_assignments` and `actor_sessions`. |
-| `granted_reason` | string | The human justification captured at grant time. See decision 5. |
 | timestamps | | |
+
+The grant reason and the granting operator are deliberately **not** columns here.
+Both are recorded on the `audit_events` row that decision 5 writes in the same
+transaction, and `audit_events` is the canonical record for who did what and why.
+Copying either onto this table would duplicate canonical data across two
+hand-maintained locations, which `AGENTS.md` §Documentation forbids.
 
 Indexes: `(actor_identifier, revoked_at)` for the resolution path, `(role)` for
 "who holds this role" review queries.
@@ -127,7 +134,8 @@ failure.
 Resolution: the adapter depends only on stateless readers that know nothing
 about `ActorContext`.
 
-- New `ActorRoleReader` — no constructor dependencies, queries `actor_roles`.
+- New `ActorRoleReader` — no constructor dependencies, queries
+  `actor_role_assignments`.
 - New `ScopeAssignmentReader` — the actor-keyed queries extracted out of
   `ScopeAssignmentResolver`, which keeps its present public API and delegates.
   Its three existing consumers (`ScopeAssignmentGlobalScope`,
