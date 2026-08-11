@@ -39,8 +39,9 @@ Upload UI is consumed by other specs, but the **state machine it renders** is ow
   adapter and deterministic mock scanner; staging/production must provide
   `DOCUMENT_VAULT_OBJECT_STORAGE` and `DOCUMENT_VAULT_MALWARE_SCANNER` or the
   provider fails closed.
-- The lane's AC13 evidence covers only the Blade state contract. Consuming
-  Livewire/browser cancellation, retry, and parent-draft preservation are NOT
-  TESTED here and remain deferred to consuming specs.
+- The lane's AC13 evidence covers the Blade state contract and server-side
+  resume enforcement. Consuming Livewire/browser cancellation, retry, and
+  parent-draft preservation are NOT TESTED here and remain deferred to
+  consuming specs.
 - Production role resolution remains external to this spec and fail-closed;
   the K6 identity contract is not available in this repository.
