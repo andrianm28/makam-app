@@ -6,6 +6,7 @@ namespace Tests\Unit\Platform\Notification;
 
 use App\Platform\Notification\Exceptions\NotificationDeliveryWriteNotAllowedException;
 use App\Platform\Notification\NotificationDeliveryWriteGuard;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -70,12 +71,16 @@ final class NotificationDeliveryWriteGuardTest extends TestCase
     /**
      * The guard used to record which connections it had hooked by
      * `spl_object_id()`. PHP reuses those integers once the original
-     * object is collected, so in a long-lived process (a Horizon worker
-     * builds and discards many connection objects) a replacement
-     * connection could inherit a destroyed one's id, `register()` would
-     * see it as already-registered, return early, and leave that
-     * connection with no `beforeExecuting()` hook at all — writes to
+     * object is collected, so a replacement connection could inherit a
+     * destroyed one's id, `register()` would see it as
+     * already-registered, return early, and leave that connection with
+     * no `beforeExecuting()` hook at all — writes to
      * `notification_deliveries` on it would be completely unguarded.
+     *
+     * What actually builds and discards connections while calling
+     * `register()` again is repeated application bootstraps in one
+     * process — this suite boots the providers afresh per test, which is
+     * where the original intermittent failure surfaced.
      *
      * The recycling is forced here rather than waited for: purge the
      * connection, collect, and rebuild until PHP hands the replacement
@@ -109,10 +114,11 @@ final class NotificationDeliveryWriteGuardTest extends TestCase
 
         try {
             // Settle into the state where rebuilding the connection
-            // reuses one recycled object id: the first connection holds
-            // an id from before the surrounding allocations, so
-            // registering on that one would compare against an id no
-            // replacement is ever handed.
+            // reuses one recycled object id. A strong reference to the
+            // purged connection survives the cycle that purges it, so
+            // its handle is still taken when the replacement is
+            // allocated and the very first purge does not recycle; one
+            // further cycle is enough, and 5 is margin.
             for ($warmUp = 0; $warmUp < 5; $warmUp++) {
                 DB::purge();
                 gc_collect_cycles();
@@ -144,6 +150,14 @@ final class NotificationDeliveryWriteGuardTest extends TestCase
                 ]);
             } catch (NotificationDeliveryWriteNotAllowedException) {
                 $rejected = true;
+            } catch (QueryException $e) {
+                // The unguarded write reached PDO. Reported here rather
+                // than left to propagate, because a bare missing-table
+                // error reads as environment breakage rather than as the
+                // security regression it actually is.
+                $this->fail(
+                    'the replacement connection was left unguarded: the write reached the database ('.$e->getMessage().')',
+                );
             }
 
             $this->assertTrue(

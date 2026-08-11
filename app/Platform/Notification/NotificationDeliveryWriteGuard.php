@@ -65,18 +65,35 @@ final class NotificationDeliveryWriteGuard
      * PHP reuses an object id once the original object is collected, so
      * an id-keyed record could not distinguish "this connection is
      * already hooked" from "a destroyed connection once held this id".
-     * A long-lived process — a Horizon worker builds and discards many
-     * connection objects — could hand a replacement connection a
-     * recycled id, `register()` would return early, and that connection
-     * would carry no `beforeExecuting()` hook at all: every write to
-     * `notification_deliveries` on it silently unguarded. The guard
-     * failed OPEN, intermittently, only under whatever GC timing the
-     * surrounding workload happened to produce.
+     * A replacement connection handed a recycled id looked
+     * already-registered, `register()` returned early, and that
+     * connection carried no `beforeExecuting()` hook at all: every write
+     * to `notification_deliveries` on it silently unguarded. The guard
+     * failed OPEN, and only under whatever GC timing the surrounding
+     * workload happened to produce.
+     *
+     * The trigger is repeated application bootstraps inside one process
+     * — the test suite, which boots the providers afresh for every test,
+     * and Octane, which is not installed here. It is specifically NOT a
+     * plain queue worker: `Illuminate\Queue\Worker` never purges the
+     * connection, and `DatabaseManager::reconnect()` swaps the PDO on
+     * the same `Connection` object, so the hook survives ordinary
+     * lost-connection recovery.
      *
      * A `WeakMap` keys on true object identity, which cannot collide,
      * and drops its entry when the connection is actually collected —
      * which is the real question being asked: "has THIS live connection
      * object been hooked?"
+     *
+     * Known gap, unchanged by this keying and tracked separately:
+     * `register()` runs once per bootstrap from
+     * `Providers\NotificationServiceProvider::boot()`, so nothing
+     * re-attaches the hook if something purges the connection mid-process.
+     * This makes re-registration correct whenever it happens; it does not
+     * make it happen. Closing that needs a listener on
+     * `Illuminate\Database\Events\ConnectionEstablished`, for which this
+     * keying is the right substrate — repeated registration is safe and
+     * self-cleaning.
      *
      * Not initialised inline: PHP's "new in initializers" does not
      * extend to property defaults, so it is built on first use.
