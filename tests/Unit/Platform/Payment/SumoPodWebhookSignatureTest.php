@@ -19,15 +19,22 @@ use PHPUnit\Framework\TestCase;
  *
  * Every secret in this file is a locally generated test string. None is, or
  * resembles, a real credential — AC14 forbids a real one appearing in a
- * fixture.
+ * fixture. Deliberately low-entropy (repeated-character) so no
+ * high-entropy-secret scanner mistakes a test fixture for a leaked
+ * credential; the repeated bytes are still valid base64, so `keyFor()`'s real
+ * decode path is exercised, not its raw-string fallback.
  */
 final class SumoPodWebhookSignatureTest extends TestCase
 {
-    private const string SECRET = 'whsec_dGVzdC1zZWNyZXQtbm90LWEtcmVhbC1vbmU=';
+    private const string SECRET = 'whsec_'.self::LOW_ENTROPY_A;
 
-    private const string OTHER_SECRET = 'whsec_YW5vdGhlci10ZXN0LXNlY3JldC12YWx1ZQ==';
+    private const string OTHER_SECRET = 'whsec_'.self::LOW_ENTROPY_B;
 
-    private const string TOKEN = 'whtok_test-token-not-a-real-one';
+    private const string TOKEN = 'whtok_cccccccccccccccccccccccc';
+
+    private const string LOW_ENTROPY_A = 'YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFh';
+
+    private const string LOW_ENTROPY_B = 'YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJi';
 
     private const string BODY = '{"event_type":"payment.completed","data":{"payment_id":"pay_1"}}';
 

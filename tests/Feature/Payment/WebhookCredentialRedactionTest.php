@@ -37,9 +37,12 @@ final class WebhookCredentialRedactionTest extends TestCase
 
     private const string MERCHANT = 'makam-sandbox';
 
-    private const string SECRET = 'whsec_dGVzdC1zZWNyZXQtbm90LWEtcmVhbC1vbmU=';
+    // Deliberately low-entropy (repeated-character) so no high-entropy-secret
+    // scanner mistakes a test fixture for a leaked credential; still valid
+    // base64, so the real decode path in `keyFor()` is exercised.
+    private const string SECRET = 'whsec_YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFh';
 
-    private const string TOKEN = 'whtok_test-shared-token-value';
+    private const string TOKEN = 'whtok_dddddddddddddddddddddddd';
 
     private const string API_KEY = 'test-api-key-value-for-assertions-only';
 

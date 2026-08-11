@@ -47,7 +47,10 @@ final class WebhookReceiverTest extends TestCase
 
     private const string MERCHANT = 'makam-sandbox';
 
-    private const string SECRET = 'whsec_dGVzdC1zZWNyZXQtbm90LWEtcmVhbC1vbmU=';
+    // Deliberately low-entropy (repeated-character) so no high-entropy-secret
+    // scanner mistakes a test fixture for a leaked credential; still valid
+    // base64, so the real decode path in `keyFor()` is exercised.
+    private const string SECRET = 'whsec_YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFh';
 
     private const string ENDPOINT = '/api/payments/webhook/'.self::MERCHANT;
 
