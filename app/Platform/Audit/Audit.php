@@ -142,10 +142,26 @@ final class Audit
      * wholly-blank reason is rejected: prose containing a non-breaking
      * space between words is still accepted.
      *
+     * The check fails closed. Under `/u`, `preg_match()` returns
+     * `false` — not `0` — when the subject is not valid UTF-8, so the
+     * result is compared against `0` rather than `1`: anything that is
+     * not a clean "no match" counts as blank. A `=== 1` test would read
+     * that `false` as "not blank" and let the action through. Bytes
+     * that cannot be decoded cannot be read by a human reviewing the
+     * audit trail either, so they are rejected rather than trusted.
+     *
+     * Known residual: the Hangul fillers U+3164 and U+1160 are category
+     * `Lo` (Letter, other), not `Z`/`C`, so a reason consisting solely
+     * of them is still accepted despite rendering invisible in most
+     * fonts. Enumerating those code points would trade away the
+     * "reject the whole class, don't play whack-a-mole" property this
+     * pattern is chosen for, so it is accepted and recorded here
+     * instead.
+     *
      * Same pattern as `Console\Commands\Concerns\RequiresAuditReason`,
      * which guards the four `identity:*` commands one layer above this
      * one. This is the authoritative check; that one is defence in
-     * depth.
+     * depth. Keep the two in step.
      */
     private static function reasonIsBlank(?string $reason): bool
     {
@@ -153,7 +169,8 @@ final class Audit
             return true;
         }
 
-        return preg_match('/^[\p{Z}\p{C}\s]*$/u', $reason) === 1;
+        // `!== 0`, not `=== 1`: a `false` return must count as blank.
+        return preg_match('/^[\p{Z}\p{C}\s]*$/u', $reason) !== 0;
     }
 
     /**

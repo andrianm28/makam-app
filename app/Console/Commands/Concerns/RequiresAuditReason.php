@@ -28,23 +28,25 @@ namespace App\Console\Commands\Concerns;
  * This is defence in depth, NOT the root fix
  * ---------------------------------------------------------------------------
  * `Audit::record()` performs the authoritative mandatory-reason check for
- * every action on `SensitiveActions::ACTIONS`, and it uses `trim()` — so the
- * same bypass exists there for every already-merged sensitive action across
- * the application (`PAYMENT_REFUND`, `VENDOR_PAYOUT`, `MFA_RESET`,
+ * every action on `SensitiveActions::ACTIONS`. It used to use `trim()`, so
+ * the same bypass existed there for every already-merged sensitive action
+ * across the application (`PAYMENT_REFUND`, `VENDOR_PAYOUT`, `MFA_RESET`,
  * `DOCUMENT_DELETE`, `JOURNAL_REVERSAL`, and others), not only this lane's
- * four. Fixing that shared check is deliberately out of this lane's scope: it
- * is shared infrastructure that already-merged lanes depend on, and changing
- * it needs its own review. Recorded as a cross-cutting finding in this lane's
- * merge sign-off bundle.
+ * four. That shared check now runs this same pattern, so the platform-wide
+ * hole is closed at its root; this trait remains as the command-layer
+ * defence-in-depth layer above it.
  *
- * Consequence worth stating plainly: closing the hole here means the
- * `identity:*` commands are safe, NOT that the platform is.
+ * The two implementations are deliberately identical. Change them together —
+ * see `Audit::reasonIsBlank()` for the full rationale, including why both
+ * failure paths fail closed and which invisible code points remain a known
+ * residual.
  */
 trait RequiresAuditReason
 {
     /**
-     * True when `$reason` is absent, empty, or consists only of whitespace
-     * — including Unicode whitespace that `trim()` would leave in place.
+     * True when `$reason` is absent, empty, consists only of whitespace
+     * — including Unicode whitespace that `trim()` would leave in place —
+     * or is not decodable as UTF-8 at all.
      */
     private function reasonIsBlank(?string $reason): bool
     {
@@ -52,6 +54,7 @@ trait RequiresAuditReason
             return true;
         }
 
-        return preg_match('/^[\p{Z}\p{C}\s]*$/u', $reason) === 1;
+        // `!== 0`, not `=== 1`: a `false` return must count as blank.
+        return preg_match('/^[\p{Z}\p{C}\s]*$/u', $reason) !== 0;
     }
 }

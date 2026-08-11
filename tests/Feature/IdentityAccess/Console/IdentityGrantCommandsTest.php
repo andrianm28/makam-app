@@ -319,10 +319,9 @@ final class IdentityGrantCommandsTest extends TestCase
     // in review, from one nobody authorised.
     //
     // These pin the command-layer guard only. Audit::record()'s own
-    // mandatory-reason check still uses trim(), so the same bypass remains
-    // open for every other sensitive action in the application — recorded
-    // as a cross-cutting finding in this lane's merge sign-off bundle, not
-    // fixed here.
+    // mandatory-reason check now runs the same Unicode-aware pattern, so
+    // the bypass is closed at its root for every sensitive action in the
+    // application; these tests keep the defence-in-depth layer honest.
     // -----------------------------------------------------------------
 
     public function test_grant_role_command_rejects_a_unicode_whitespace_only_reason(): void
@@ -331,6 +330,18 @@ final class IdentityGrantCommandsTest extends TestCase
             'actor' => '42',
             'role' => ActorRole::FINANCE,
             '--reason' => "\u{00A0}",
+        ])->assertFailed();
+
+        $this->assertDatabaseCount('actor_role_assignments', 0);
+        $this->assertDatabaseCount('audit_events', 0);
+    }
+
+    public function test_grant_role_command_rejects_a_reason_that_is_not_valid_utf8(): void
+    {
+        $this->artisan('identity:grant-role', [
+            'actor' => '42',
+            'role' => ActorRole::FINANCE,
+            '--reason' => "\xA0",
         ])->assertFailed();
 
         $this->assertDatabaseCount('actor_role_assignments', 0);
