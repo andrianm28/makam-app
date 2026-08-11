@@ -115,6 +115,23 @@ final class InvalidReconciliationException extends InvalidArgumentException
         );
     }
 
+    /**
+     * Slice-3 Minor M5, closed at this seam and deliberately NOT at
+     * `Journal::post()` — see `ReconciliationCorrection::adjustment()` for why
+     * the shared cross-lane seam was left alone.
+     */
+    public static function forCorrectionSourceTypeMismatch(
+        string $businessKey,
+        string $prefix,
+        string $sourceType,
+    ): self {
+        return new self(
+            "Corrective posting business key [{$businessKey}] is prefixed [{$prefix}] but declares "
+            ."source type [{$sourceType}]. A corrective batch must announce the same kind of event "
+            .'in both places, or the ledger records it as one thing and is keyed as another.'
+        );
+    }
+
     public static function forEmptyCorrectionEntries(string $businessKey): self
     {
         return new self(

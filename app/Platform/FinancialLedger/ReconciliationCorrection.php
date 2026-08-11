@@ -101,8 +101,53 @@ final readonly class ReconciliationCorrection
      * @param  string  $subjectRef  The reconciliation exception subject this
      *                              correction is allowed to resolve.
      *
-     * @throws InvalidReconciliationException on a blank business key or an
-     *                                        empty entry list.
+     * ---------------------------------------------------------------------
+     * The business-key prefix must equal `$sourceType` (slice-3 Minor M5)
+     * ---------------------------------------------------------------------
+     * `journal_batches.source_type` and the business-key prefix are two
+     * declarations of the same fact — what kind of economic event this batch
+     * records. Nothing linked them: `Journal::assertSourcePrefixed()` only
+     * requires a `:` after position 0, and the PostgreSQL
+     * `journal_batches_business_key_prefix_check` is literally
+     * `position(':' in business_key) > 1`. Both `sourceType` and `businessKey`
+     * arrive here CALLER-SUPPLIED from a human resolving a reconciliation
+     * exception, so this factory is the one human-reachable path on which a
+     * batch could be posted claiming to be a payout — `sourceType: 'payout'`
+     * is a legal value in the schema's closed list — with no `payouts` row, no
+     * proof, no approver, no re-authentication and no `VENDOR_PAYOUT` audit
+     * event behind it. `LedgerReport` and the reconciliation would then read it
+     * as a payout.
+     *
+     * Not an AC9 bypass: no money moves, and `vendor_payables` still cannot
+     * reach `paid` without a real `payouts` row (the deferred trigger enforces
+     * that). What it costs is ledger LABELLING integrity.
+     *
+     * ---------------------------------------------------------------------
+     * Why the check is HERE and deliberately NOT in `Journal::post()`
+     * ---------------------------------------------------------------------
+     * `Journal::post()` is the shared cross-lane seam `lane/l3-payment-adapter`
+     * consumes through `Contracts\Journal`. Tightening its accepted inputs
+     * would change documented contract behaviour for another lane mid-flight
+     * AND make L3's `LedgerSeamStub` divergent from the real implementation a
+     * SECOND way — reintroducing exactly the defect class already open as merge
+     * sign-off bundle item 17 (E1). Trading one open cross-lane defect for two
+     * is a bad deal. This class is this module's own value object, so the same
+     * rule costs nothing outside it.
+     *
+     * The seam-level rule remains AVAILABLE BUT DELIBERATELY NOT TAKEN. If it
+     * is ever wanted it must land as a contract term in `Contracts\Journal` AND
+     * in L3's stub together, coordinated across both lanes — never in one of
+     * them alone. That is a merge sign-off item, not a TODO for whoever reads
+     * this next.
+     *
+     * All four production callers already conform (`vendor_payable:`/
+     * `vendor_payable`, `payout:`/`payout`, `reversal:`/`reversal`, `refund:`/
+     * `refund`), so this codifies the convention the module already keeps
+     * rather than inventing one.
+     *
+     * @throws InvalidReconciliationException on a blank business key, an
+     *                                        unprefixed business key, a prefix that disagrees with
+     *                                        `$sourceType`, or an empty entry list.
      */
     public static function adjustment(
         string $businessKey,
@@ -124,6 +169,8 @@ final readonly class ReconciliationCorrection
             throw InvalidReconciliationException::forBlankCorrectionSubjectReference();
         }
 
+        self::assertPrefixDeclaresSourceType(trim($businessKey), $sourceType);
+
         return new self(
             kind: self::KIND_ADJUSTMENT,
             businessKey: trim($businessKey),
@@ -133,6 +180,37 @@ final readonly class ReconciliationCorrection
             entityRef: (string) $entityRef,
             subjectRef: trim($subjectRef),
         );
+    }
+
+    /**
+     * `$sourceType` is compared UNTRIMMED on purpose. A padded value would
+     * otherwise pass here and then fail later against the PostgreSQL
+     * `journal_batches_source_type_check` as a raw constraint violation; this
+     * way it fails at the seam with a message that names both halves. Trimming
+     * it instead would ACCEPT input the database currently rejects, which is a
+     * loosening this change has no business making.
+     */
+    private static function assertPrefixDeclaresSourceType(string $businessKey, string $sourceType): void
+    {
+        $separator = strpos($businessKey, ':');
+
+        if ($separator === false || $separator < 1) {
+            throw InvalidReconciliationException::forCorrectionSourceTypeMismatch(
+                $businessKey,
+                '',
+                $sourceType,
+            );
+        }
+
+        $prefix = substr($businessKey, 0, $separator);
+
+        if ($prefix !== $sourceType) {
+            throw InvalidReconciliationException::forCorrectionSourceTypeMismatch(
+                $businessKey,
+                $prefix,
+                $sourceType,
+            );
+        }
     }
 
     public function isReversal(): bool

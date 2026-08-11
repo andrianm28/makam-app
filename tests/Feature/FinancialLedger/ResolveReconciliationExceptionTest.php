@@ -376,7 +376,7 @@ final class ResolveReconciliationExceptionTest extends TestCase
             $exception,
             ReconciliationDecision::POST_CORRECTION,
             correction: ReconciliationCorrection::adjustment(
-                businessKey: 'manual_verify:recon-adjustment-1',
+                businessKey: 'manual_verification:recon-adjustment-1',
                 entityRef: self::ENTITY,
                 subjectRef: 'payment:evt-1',
                 sourceType: 'manual_verification',
@@ -388,7 +388,7 @@ final class ResolveReconciliationExceptionTest extends TestCase
             ),
         );
 
-        $batch = JournalBatch::query()->where('business_key', 'manual_verify:recon-adjustment-1')->sole();
+        $batch = JournalBatch::query()->where('business_key', 'manual_verification:recon-adjustment-1')->sole();
 
         $this->assertSame('manual_verification', $batch->source_type);
         $this->assertTrue($batch->isBalanced());
@@ -427,7 +427,7 @@ final class ResolveReconciliationExceptionTest extends TestCase
                 $exception,
                 ReconciliationDecision::POST_CORRECTION,
                 correction: ReconciliationCorrection::adjustment(
-                    businessKey: 'manual_verify:wrong-entity',
+                    businessKey: 'manual_verification:wrong-entity',
                     entityRef: 'badan-usaha-2',
                     subjectRef: 'payment:other',
                     sourceType: 'manual_verification',
@@ -453,7 +453,7 @@ final class ResolveReconciliationExceptionTest extends TestCase
                 $exception,
                 ReconciliationDecision::POST_CORRECTION,
                 correction: ReconciliationCorrection::adjustment(
-                    businessKey: 'manual_verify:wrong-subject',
+                    businessKey: 'manual_verification:wrong-subject',
                     entityRef: self::ENTITY,
                     subjectRef: 'payment:other',
                     sourceType: 'manual_verification',
@@ -627,6 +627,179 @@ final class ResolveReconciliationExceptionTest extends TestCase
      * @param  \Closure(): ReconciliationExceptionModel  $attempt
      * @param  class-string<\Throwable>  $expected
      */
+    /**
+     * Slice-3 Minor M5, closed at this seam: a corrective batch may not declare
+     * one kind of event in its `source_type` and another in its business-key
+     * prefix.
+     *
+     * `payout` is the case that matters and is why this is the fixture. It is a
+     * legal member of `journal_batches_source_type_check`, and both arguments
+     * arrive caller-supplied from a human resolving an exception — so before
+     * this guard, resolving an exception could post a batch the ledger and the
+     * reconciliation both read as a payout, with no `payouts` row, no proof, no
+     * approver, no re-authentication and no `VENDOR_PAYOUT` audit behind it.
+     *
+     * MUTATION RESISTANCE: remove `assertPrefixDeclaresSourceType()` from
+     * `adjustment()` and this goes red — but as with the blank-`entityRef`
+     * test, the assertion that carries it is the SECOND one, not the throw. A
+     * guard "fixed" by rewriting the prefix instead of refusing would still
+     * throw nothing and still post the batch; asserting that no journal batch
+     * exists is what pins the refusal to a refusal. Verified by executing the
+     * removal.
+     */
+    public function test_a_correction_may_not_declare_one_source_type_and_key_itself_as_another(): void
+    {
+        $exception = $this->openException();
+        $this->grantReconciliationAuthority();
+
+        $this->assertRefused(
+            fn (): ReconciliationExceptionModel => $this->resolve(
+                $exception,
+                ReconciliationDecision::POST_CORRECTION,
+                correction: ReconciliationCorrection::adjustment(
+                    // A legal source type in the schema's closed list, and a
+                    // business key that says something else entirely.
+                    businessKey: 'manual_verification:recon-mislabelled-1',
+                    entityRef: self::ENTITY,
+                    subjectRef: 'payment:evt-1',
+                    sourceType: 'payout',
+                    sourceId: 'recon-mislabelled-1',
+                    entries: [
+                        ['account' => '7000', 'direction' => 'DR', 'amountMinor' => 1_000],
+                        ['account' => '4000', 'direction' => 'CR', 'amountMinor' => 1_000],
+                    ],
+                ),
+            ),
+            InvalidReconciliationException::class,
+            $exception,
+        );
+
+        $this->assertSame(
+            0,
+            JournalBatch::query()->where('source_type', 'payout')->count(),
+            'A mislabelled corrective batch must not reach the ledger at all.',
+        );
+    }
+
+    /**
+     * An unprefixed business key is refused by the same guard. `Journal`'s own
+     * check would also catch this, but only AFTER the resolution transaction
+     * has opened; refusing at construction keeps the two entry points agreeing.
+     */
+    public function test_a_correction_with_an_unprefixed_business_key_is_refused(): void
+    {
+        $this->expectException(InvalidReconciliationException::class);
+
+        ReconciliationCorrection::adjustment(
+            businessKey: 'no-prefix-here',
+            entityRef: self::ENTITY,
+            subjectRef: 'payment:evt-1',
+            sourceType: 'manual_verification',
+            sourceId: 'recon-unprefixed-1',
+            entries: [
+                ['account' => '7000', 'direction' => 'DR', 'amountMinor' => 1_000],
+                ['account' => '4000', 'direction' => 'CR', 'amountMinor' => 1_000],
+            ],
+        );
+    }
+
+    /**
+     * The counterpart every "X is refused" test needs: the conforming shape
+     * still works. Without this, a guard that refused EVERYTHING would pass
+     * both tests above.
+     *
+     * `test_a_post_correction_can_post_a_new_adjusting_batch` is the fuller
+     * version; this one exists so the refusal tests have an explicit positive
+     * control sitting next to them.
+     */
+    public function test_a_correction_whose_prefix_matches_its_source_type_is_accepted(): void
+    {
+        $correction = ReconciliationCorrection::adjustment(
+            businessKey: 'manual_verification:recon-conforming-1',
+            entityRef: self::ENTITY,
+            subjectRef: 'payment:evt-1',
+            sourceType: 'manual_verification',
+            sourceId: 'recon-conforming-1',
+            entries: [
+                ['account' => '7000', 'direction' => 'DR', 'amountMinor' => 1_000],
+                ['account' => '4000', 'direction' => 'CR', 'amountMinor' => 1_000],
+            ],
+        );
+
+        $this->assertFalse($correction->isReversal());
+    }
+
+    /**
+     * The enumeration-oracle property, pinned.
+     *
+     * ---------------------------------------------------------------------
+     * IMPORTANT — this test documents that the code was ALREADY CORRECT
+     * ---------------------------------------------------------------------
+     * Task 9b's report raised an observation that `ResolveException` carried
+     * the same asymmetry that Minor M6 closed in `ManualPayout`, on the
+     * grounds that `actorReference()` sits outside the `try` that normalises
+     * the authorizer's refusal. **That observation was WRONG**, and this test
+     * is the execution that proves it:
+     * `ResolveException::actorReference()` already throws
+     * `forUnavailableException()` — the SAME opaque refusal as an unknown id —
+     * whereas `ManualPayout::actorReference()` throws
+     * `forActorContext('unknown')`, which is what made the M6 fix necessary
+     * THERE and not here. The two Actions were never the same shape.
+     *
+     * No production code was changed for this. The test lands anyway because
+     * the property was entirely unpinned: anyone "simplifying"
+     * `actorReference()` to raise a distinguishable error, or moving a guard,
+     * would reopen the oracle silently.
+     *
+     * MUTATION RESISTANCE, verified by execution: change `actorReference()` to
+     * throw `forActorContext()` instead and the third comparison fails.
+     */
+    public function test_an_unknown_exception_and_an_unauthorised_one_are_indistinguishable(): void
+    {
+        $exception = $this->openException();
+
+        // (a) A well-formed id that does not exist.
+        $unknown = $this->refusalFor((string) Str::uuid());
+
+        // (b) A real exception, real actor, but no reconciliation grant.
+        $unauthorised = $this->refusalFor((string) $exception->id);
+
+        $this->assertSame(
+            $unknown,
+            $unauthorised,
+            'A caller must not be able to tell a fictitious exception id from one they may not see.',
+        );
+
+        // (c) A real exception, but no identity on the context at all.
+        $this->app->instance(ActorContext::class, ActorContext::guest());
+
+        $this->assertSame(
+            $unknown,
+            $this->refusalFor((string) $exception->id),
+            'An unauthenticated caller must not be able to distinguish them either.',
+        );
+    }
+
+    /**
+     * @return array{class-string, string}
+     */
+    private function refusalFor(string $exceptionId): array
+    {
+        try {
+            new ResolveException(
+                actorContext: $this->app->make(ActorContext::class),
+            )->resolve(
+                exceptionId: $exceptionId,
+                decision: ReconciliationDecision::ACCEPT_VARIANCE,
+                reason: self::REASON,
+            );
+
+            $this->fail("Expected [{$exceptionId}] to be refused.");
+        } catch (\Throwable $thrown) {
+            return [$thrown::class, $thrown->getMessage()];
+        }
+    }
+
     private function assertRefused(
         \Closure $attempt,
         string $expected,
