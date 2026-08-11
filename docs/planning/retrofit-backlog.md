@@ -216,3 +216,41 @@ Reviewed across 3 task-scoped slices (domain, ui, schema-and-deadcode) plus one 
 | Parked Minors P-1…P-9 | **Parked, ledgered verbatim** in `.superpowers/sdd/retrofit-marketplace/task-3-minor-findings.md` (worktree-local, git-ignored). P-2 closed for free inside W-3. | Each has a named park reason in that ledger (defence-in-depth, INFERRED-only, cross-module, or hazard note); none is a live defect in this module. |
 
 Full evidence trail: `.superpowers/sdd/retrofit-marketplace/` (worktree-local, git-ignored — 3 task briefs, 3 task reports, the whole-module review, the Minor-findings park, the Task 4 scoped re-review) and the retrofit's own commit history on branch `retrofit-marketplace`.
+
+### `platform-financial-ledger` (L4), **new build** — not a retrofit — built 09–11 Aug 2026
+
+Recorded here because §2 is where this repository disposes per-module gaps, and this lane has
+many. It is a **Wave 1 new build** under Superpowers SDD, not a retrofit of shipped code, so
+the "retrofitted" framing of every section above does not apply. Full plan and the complete
+**18-item merge sign-off bundle**:
+`docs/superpowers/plans/2026-08-09-platform-financial-ledger.md` §Merge sign-off bundle —
+**that document is the authority; this table is a pointer and is deliberately not a copy of it.**
+
+Review history: 3 task-scoped slices + 1 whole-branch review → 0 Critical, 7 Important; one
+bounded fix wave closed all 7; a scoped re-review found one closure (M5) **overstated**; a
+second round closed it for real; a final scoped re-review returned **APPROVE, 0 Critical /
+0 Important, 4 of 4 closed, 4 mutations applied and 4 detected**. Nothing here opens a gate.
+
+| Gap | Disposition | Reason |
+|---|---|---|
+| **AC14 — release rollback preserving journal + audit history** | **NO EVIDENCE OF ANY KIND. Not deferred quietly — needs a decision at merge.** | Task 8 grepped the suite; every hit is a *transaction* rollback, which is a different property. Build it or accept the risk explicitly; it must not ride through silently. Sign-off bundle item 6. |
+| AC7 partial — refund and chargeback | **Ledgered.** Two of four operation types: refund is journal-shape-only, chargeback is a reserved value with no behaviour behind it. | Bundle item 7. |
+| DB-level financial policy: one-reversal-ever UNIQUE index on `journal_batches.reverses_batch_id`; `payouts.payable_id` UNIQUE | **Built, human sign-off required before merge.** | These make "a batch may be reversed at most once, permanently" a *database* policy rather than a revisable code choice. Reasoning reviewed and judged sound, but the class of decision requires a human (`AGENTS.md` §Infrastructure-agent execution). Bundle items 1–2. |
+| `vendor_payables` DELETE trigger rejects even a consistent delete (T4-M1) | **Known-open, deliberately not fixed.** | `assert_vendor_payable_payout_pair(OLD.id)` raises `NOT FOUND` on any DELETE with a misleading FK-style message. Latent (nothing deletes `vendor_payables`). Closing it is a policy choice. Bundle item 3. |
+| Deferred-constraint trigger's positive path never exercised (T4-M2/M3); `2026_08_10_120300` `down()` is a no-op (T4-M5) | **Ledgered.** | `RefreshDatabase` rolls back before COMMIT, so the positive path is unreachable in this harness; needs a non-transactional PostgreSQL harness. A `REVOKE` cannot close a coverage gap. Bundle items 4–5. |
+| Re-authentication is login-recency, not step-up (I5) | **Ledgered, owned by `fix/reauthentication-satisfy-wiring`, not this lane.** | `last_authenticated_at` is written only at login; `MfaChallenge::submit()` never refreshes it. Both directions fail closed, so this is a usability gap, not a security one — but it is the inverse of the intuitive expectation. **Do not describe the bulk export as "step-up protected" without this qualification.** Bundle item 8. |
+| `EnforceMfaChallenge` attached to the export route but **NOT TESTED** in this lane | **Ledgered.** | No test binds `mfaState`, so every route test passes *through* that middleware without exercising it; it also currently routes MFA-enrolled admins into that middleware's known self-redirect loop. Bundle item 9. |
+| `LedgerReport::summary($period, null)` unscoped-read shape (N3) | **Ledgered deliberately so it survives.** | Reachable by no current caller, but it is the residual hazard class of the Critical authorization finding (C1). Bundle item 10. |
+| Feature has never run against the real identity adapter | **Ledgered — this is why sign-off is doing real work.** | `ActorContext::$roles` is always `[]`, so every authorized-path assertion in the suite goes through a bound fake. Correct fail-closed state, but not equivalent to proof. Bundle item 11. |
+| `sql/revoke-journal-mutations.sql` **has not been run and must not be** | **Blocked, intentionally.** | Finding N-1: the host provisions one PostgreSQL role per environment, so there is no separate app role whose UPDATE/DELETE can be revoked. `ci/verify-docs.sh` GATE 13 keeps the file honest; two bypass tests assert the model-layer gap still exists so they fail loudly at the database once the role split lands. Bundle item 14. |
+| Cross-lane: 5 files conflict with `lane/l3-payment-adapter`, plus 2 planning docs | **Routed to merge-time reconciliation, with per-file resolutions recorded.** | `Money.php`, `MoneyTest.php`, `SensitiveActions.php`, `SensitiveActionsTest.php`, `routes/web.php`, and now `sprint-plan.md` + `retrofit-backlog.md` (this section). **Merge order L2 → L3 → L4 is load-bearing** — `BookingDraftQuery.php:86` still carries `(float) $priceVersion->amount` here and is fixed on L3, so merging L4 first would put a float in the money path. Re-run the `git merge-tree` simulation at merge time rather than trusting the list. Bundle items 15–16. |
+| `LedgerSeamStub` divergence, both halves (E1 + blank `entityRef`) | **Ledgered as ONE item with two halves, deliberately.** | Fixing the exception model and believing the item discharged would leave the `entityRef` divergence in place — the exact failure this wording prevents. Latent, not live: no L3 production code consumes the seam yet. Bundle item 17. |
+| `manual_verify:` business-key format documented but now refused (B6) | **NEEDS A HUMAN DECISION — recorded, not resolved.** | `Contracts\Journal.php:60` and the plan's own §Global Constraints document `manual_verify:{verification_id}`, but corrections now require the prefix to equal `manual_verification`. Nothing is broken today (no caller or test uses it), but the lane declined to pick a resolution unilaterally because it conflicts with the plan's own text and edits a cross-lane file. Bundle item 18. |
+| Sequencing deviations: `JOURNAL_REVERSAL` (Task 4, not 6), `RECONCILIATION_EXCEPTION_RESOLVED` (Task 5) | **Named explicitly rather than carried silently.** | Both are `SensitiveActions` additions beyond what the plan's Global Constraints anticipated for this lane; the second was a user-approved Wave 1c ruling. Bundle items 12–13. |
+| 14 Minor findings across the review rounds | **8 fixed, 6 deferred with reasons, 0 open.** | Deferral reasons are recorded per-finding in the worktree ledger; the three most recent (orphaned doc block, incomplete `@throws`, deferrals recorded only in git-ignored files) were folded in before the PR. |
+
+Full evidence trail: `.superpowers/sdd/2026-08-09-platform-financial-ledger/` (worktree-local,
+**git-ignored** — 8 task briefs/reports, 3 task-scoped review verdicts, the whole-branch review,
+and 2 scoped re-review verdicts) and the lane's commit history on `lane/l4-financial-ledger`.
+Because that directory does not survive the merge, the sign-off bundle was deliberately moved
+into the **git-tracked** plan document.

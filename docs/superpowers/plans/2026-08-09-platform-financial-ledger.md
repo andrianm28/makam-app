@@ -251,22 +251,24 @@ Per the two-tier review convention (Critical + Important fixed in one bounded wa
 
 ## Task 10: Finish the branch
 
-- [ ] Merge to trunk `docs/design-system-and-planning` via PR against the Wave 1 review checkpoint (cross-lane note for the shared `Contracts/Journal` + `SensitiveActions` edits).
-- [ ] Update `sprint-plan.md` S8–9 row — ledger platform complete with PR + CI run; FIN-DEC/`G-PAYOUT-01` still closed note appended.
-- [ ] Update `docs/planning/retrofit-backlog.md` §2 for surfaced findings.
-- [ ] Verify static analysis, tests on PostgreSQL 18, Blade content-survival gate in CI (staggered per Wave 0 capacity baseline).
+- [ ] **Merge** to trunk `docs/design-system-and-planning` — PR opened by this lane; **merging is a human's decision, not this lane's.** Cross-lane note for the shared `Contracts/Journal` + `SensitiveActions` edits is in the PR body and in bundle items 15–17.
+- [x] Update `sprint-plan.md` — the `platform-financial-ledger` NOT TESTED note extended (§Foundations, not §9, to avoid L2/L3's contested hunk); FIN-DEC / `G-PAY-01` / `G-PAYOUT-01` still-closed statement appended. **PR + CI run appended once the PR exists.**
+- [x] Update `docs/planning/retrofit-backlog.md` §2 for surfaced findings.
+- [x] Verify static analysis and tests on PostgreSQL 18 locally. **CI is the authority and runs on push** — Blade content-survival gate is CI-only and is `NOT TESTED` here (composer/npm builds must not run on this host).
 
 ## Verification
 
-- [ ] `vendor/bin/pest` green on PostgreSQL 18, including `tests/Feature/FinancialLedger/`, `tests/Unit/Platform/FinancialLedger/`, and the shared ledger seam contract test.
-- [ ] Unbalanced batch rejected at the DB; duplicate business key posts once; reversal leaves original rows immutable; same-transaction proof; rollback preserves journal + audit history.
-- [ ] Payable/payout: paid ≠ payable ≠ paid-out proven; manual-only payout (no automated-transfer code path); sensitive audit + re-auth enforced.
-- [ ] Reconciliation produces exceptions, never adjustments; exceptions require authorized decision.
-- [ ] Reports reconcile to journal, not order status (test).
-- [ ] No float anywhere (`grep -rn "(float)" app/Platform/FinancialLedger app/Domain/Booking` empty; `Money` end to end).
-- [ ] `PRICE_VERSION_RECORDED` in `SensitiveActions` and requires a reason.
-- [ ] App role cannot UPDATE/DELETE journal tables (revoke test).
-- [ ] Static analysis + lint clean; Blade content-survival gate passes.
+Executed 11 Aug 2026 at branch head. Every box below was run, not reasoned about.
+
+- [x] Full suite green on **real PostgreSQL 18** (disposable container `l4-task10-pg-55571`, removed by exact name; shared `makam-nonprod` stack never touched): **1410 tests / 5618 assertions / 1 skip / 0 failures / 0 errors**, including `tests/Feature/FinancialLedger/`, `tests/Unit/Platform/FinancialLedger/`, and the shared ledger seam contract test. SQLite full: 1410 / 5499 / **2 errors — the two documented pre-existing baselines**, confirmed by name (`EloquentGateRegistrySourceTest`, `HomePageRouteTest`, both SQLite-only `DROP TABLE ... CASCADE`), neither in this lane.
+- [~] **PARTIAL.** Unbalanced batch rejected at the DB, duplicate business key posts once, reversal leaves original rows immutable, same-transaction proof — all covered. **`rollback preserves journal + audit history` is NOT covered: AC14 has no evidence of any kind** (bundle item 6). Every suite hit is a *transaction* rollback, a different property. This box must not be ticked whole.
+- [x] Payable/payout: paid ≠ payable ≠ paid-out proven; manual-only payout (no automated-transfer code path); sensitive audit + re-auth enforced — with the I5 qualification in bundle item 8 (re-auth is login-recency, not step-up) and the untested `EnforceMfaChallenge` in item 9.
+- [x] Reconciliation produces exceptions, never adjustments; exceptions require authorized decision. Since M5, a correction also cannot declare itself a payout — `CORRECTABLE_SOURCE_TYPES` is exactly `['manual_verification']`.
+- [x] Reports reconcile to journal, not order status (test).
+- [ ] **CANNOT PASS ON L4 ALONE — verified, not assumed.** `grep -rn "(float)" app/Platform/FinancialLedger app/Domain/Booking` returns `app/Domain/Booking/BookingDraftQuery.php:86`. That line is fixed on L3 and is the reason **merge order L2 → L3 → L4 is load-bearing** (bundle item 16). `Money` is end-to-end float-free *within* `app/Platform/FinancialLedger`. This box can only be ticked after L3 merges.
+- [x] `PRICE_VERSION_RECORDED` is in `SensitiveActions` (`app/Platform/Audit/SensitiveActions.php:39-40`, both the bare and namespaced values) and `requiresReason()` exists (`:77`).
+- [ ] **BLOCKED, intentionally — must stay this way.** `sql/revoke-journal-mutations.sql` has NOT been run (bundle item 14, finding N-1: the host provisions one PostgreSQL role per environment, so there is no separate app role to revoke from). Two bypass tests assert the model-layer gap still exists, so they fail loudly once the role split lands; `ci/verify-docs.sh` GATE 13 keeps the file honest.
+- [x] Static analysis + lint clean: Pint `passed`, targeted PHPStan `[OK]`, whole-repo PHPStan unchanged at the one pre-existing `GraveRegistryPublicQuery` error, `ci/verify-docs.sh` **13/13**. Blade content-survival gate is **CI-only — NOT TESTED here.**
 
 ---
 
@@ -376,6 +378,18 @@ This lane is all five. Nothing here is a recommendation to merge.
     - `routes/web.php` — adjacent appends (L4 bulk-export vs L3 payment-return),
       no semantic disagreement: **keep both blocks**.
 
+    **Amended 11 Aug 2026 (Task 10) — two PLANNING DOCS now conflict as well,
+    created by this lane's own Task 10 updates. Seven files total, not five:**
+    - `docs/planning/sprint-plan.md` — L4 appends to the `platform-financial-ledger`
+      NOT TESTED note at **§Foundations (~line 191–203)**. L2 and L3 both edit
+      **§9 "Beyond Sprint 5" (~lines 775–783)** and so conflict with *each other*
+      there; L4 deliberately targeted the distant §Foundations region to stay out
+      of that hunk. If a conflict still surfaces, the blocks are independent:
+      **keep all sides.**
+    - `docs/planning/retrofit-backlog.md` — L3 and L4 both **append a new `###`
+      section at end of file**. Pure appends of distinct, non-overlapping
+      sections: **keep both blocks**, same resolution as `routes/web.php`.
+
     L3 is still actively pushing, so **re-run the `git merge-tree` simulation at
     merge time** rather than trusting this list.
 
@@ -387,10 +401,47 @@ This lane is all five. Nothing here is a recommendation to merge.
     app/Domain/Booking` returning empty — **cannot pass on L4 alone**; it passes
     only once L3 has merged.
 
-17. **E1 — L3's `LedgerSeamStub` teaches a false exception model.** It raises
-    `InvalidArgumentException` where the real `Journal` surfaces a
-    `QueryException`, for both the duplicate-business-key and balance
-    properties. The contract's own Terms 2 and 4 make the real implementation the
-    faithful party and the stub the divergent one. **Latent, not live** — no L3
-    production code consumes the seam yet (verified by searching all of L3's
-    `app/`), so the fix window is open and no L3 audit is required.
+17. **E1 — L3's `LedgerSeamStub` diverges from the real `Journal` in TWO ways.**
+    Both must be resolved together; fixing one and believing item 17 is discharged
+    is the specific failure this wording exists to prevent.
+    - **17a — false exception model.** The stub raises `InvalidArgumentException`
+      where the real `Journal` surfaces a `QueryException`, for both the
+      duplicate-business-key and balance properties. The contract's own Terms 2
+      and 4 make the real implementation the faithful party and the stub the
+      divergent one.
+    - **17b — blank `$entityRef` refusal (added 11 Aug 2026, Task 9b/9c).** L4's
+      `Journal::post()` now refuses a blank `$entityRef` via
+      `assertEntityScoped()`, throwing
+      `InvalidJournalBatchException::forBlankEntityRef()`. L3's stub does not
+      refuse it. The refusal is documented in `Contracts\Journal`'s `@throws`
+      and a CONSUMERS-READ-THIS block, but the stub was deliberately left
+      untouched because it is a cross-lane file. No L3 caller passes a blank
+      `$entityRef` today (checked).
+
+    **Latent, not live** for both — no L3 production code consumes the seam yet
+    (verified by searching all of L3's `app/`), so the fix window is open and no
+    L3 audit is required.
+
+18. **B6 — the shared contract documents a business-key format its own consumer
+    now refuses. NEEDS A HUMAN DECISION; do not let this merge as settled.**
+    `Contracts\Journal::post()`'s `@param $businessKey` doc block
+    (`app/Platform/FinancialLedger/Contracts/Journal.php:60`) lists
+    `manual_verify:{verification_id}` as a documented format, and this plan's own
+    §Global Constraints (line 62) says the same. But since M5,
+    `ReconciliationCorrection::adjustment()` requires the key's prefix to equal
+    `$sourceType`, and `CORRECTABLE_SOURCE_TYPES` is exactly
+    `['manual_verification']` — so a correction following the shared contract's
+    documented format is refused. Nothing is broken today: `manual_verify:`
+    appears in no production caller and no test, only in those two documents, and
+    `Journal::post()` itself does not enforce prefix/source-type agreement, so a
+    direct non-correction caller could still use it. The resolution is a choice,
+    not a cleanup, which is why this lane did not make it unilaterally:
+    - **(a)** align both documents to `manual_verification:{verification_id}` and
+      retire `manual_verify:`; or
+    - **(b)** keep `manual_verify:` as the format for direct `Journal::post()`
+      manual verifications and state explicitly that reconciliation corrections
+      require `manual_verification:`.
+
+    Option (a) edits `Contracts\Journal.php`, a file that already conflicts with
+    `lane/l3-payment-adapter` — so it should land in the same coordinated pass as
+    item 17, not before it.

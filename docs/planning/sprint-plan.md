@@ -201,6 +201,28 @@ Added 25 Jul 2026 when the corpus went from 19 to 27 specs. **Every spec is acco
 > replaces this spec's older "gate states are unknown" note with a verified value. Per-AC
 > status with file citations is in `.kiro/specs/platform-financial-ledger/tasks.md`
 > §Implementation status; that document is the authority, this note is a pointer.
+>
+> **Update, 11 Aug 2026 — lane build complete, still gate-blocked.** `lane/l4-financial-ledger`
+> finished its Superpowers SDD run: Tasks 1–8 built, three task-scoped review slices plus a
+> whole-branch review found 0 Critical and 7 Important, a bounded fix wave closed all 7, a
+> scoped re-review found one of those closures (M5) overstated, a second round closed it for
+> real, and a final re-review returned **APPROVE — 0 Critical, 0 Important, 4 of 4 findings
+> closed, all mutation-verified**. Verified at branch head: full suite 1410 tests green on
+> real PostgreSQL 18 (5618 assertions, 1 skip, 0 failures, 0 errors); SQLite full 1410/5499
+> with the 2 documented pre-existing `DROP TABLE ... CASCADE` baselines
+> (`EloquentGateRegistrySourceTest`, `HomePageRouteTest`), neither in this lane; Pint clean,
+> targeted PHPStan `[OK]`, `ci/verify-docs.sh` 13/13.
+>
+> **None of that opens a gate, and this row's status is unchanged.** `FIN-DEC-01`–`07` remain
+> `TBD`, `FIN-DEC-08` remains `GATED`, `docs/testing/release-gates.md:75` is still unchecked,
+> no finance owner has approved the chart of accounts, and `G-PAY-01` / `G-PAYOUT-01` remain
+> seeded **closed**. The lane carries an **18-item merge sign-off bundle** requiring human
+> review before merge — database-level financial policy, known-open defects (including **AC14,
+> which has no evidence of any kind**), authorization and identity gaps, and cross-lane merge
+> state — recorded in full in
+> `docs/superpowers/plans/2026-08-09-platform-financial-ledger.md` §Merge sign-off bundle and
+> restated in the PR body. Merge order is **L2 → L3 → L4**, one at a time. PR and CI run
+> recorded here once opened.
 
 **MVP-required feature specs (8):**
 

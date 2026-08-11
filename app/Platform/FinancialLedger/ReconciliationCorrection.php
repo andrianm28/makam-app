@@ -207,8 +207,10 @@ final readonly class ReconciliationCorrection
      * rather than inventing one.
      *
      * @throws InvalidReconciliationException on a blank business key, an
-     *                                        unprefixed business key, a prefix that disagrees with
-     *                                        `$sourceType`, or an empty entry list.
+     *                                        unprefixed business key, a `$sourceType` outside
+     *                                        `self::CORRECTABLE_SOURCE_TYPES`, a prefix that disagrees
+     *                                        with `$sourceType`, a blank `$subjectRef`, or an empty
+     *                                        entry list.
      */
     public static function adjustment(
         string $businessKey,
@@ -245,14 +247,6 @@ final readonly class ReconciliationCorrection
     }
 
     /**
-     * `$sourceType` is compared UNTRIMMED on purpose. A padded value would
-     * otherwise pass here and then fail later against the PostgreSQL
-     * `journal_batches_source_type_check` as a raw constraint violation; this
-     * way it fails at the seam with a message that names both halves. Trimming
-     * it instead would ACCEPT input the database currently rejects, which is a
-     * loosening this change has no business making.
-     */
-    /**
      * The guard that closes M5. Runs BEFORE the prefix check, so a correction
      * claiming to be a payout is refused for the reason that actually matters
      * — "a reconciliation correction may not declare itself a payout" — rather
@@ -268,6 +262,19 @@ final readonly class ReconciliationCorrection
         }
     }
 
+    /**
+     * `$sourceType` is compared UNTRIMMED on purpose. A padded value would
+     * otherwise pass here and then fail later against the PostgreSQL
+     * `journal_batches_source_type_check` as a raw constraint violation; this
+     * way it fails at the seam with a message that names both halves. Trimming
+     * it instead would ACCEPT input the database currently rejects, which is a
+     * loosening this change has no business making.
+     *
+     * Since M5, `assertCorrectableSourceType()` runs first and refuses a padded
+     * value earlier, naming only the source type. That does not retire the rule:
+     * this guard is the one whose refusal names both halves, and it must keep
+     * comparing untrimmed so it stays correct if the closed list ever widens.
+     */
     private static function assertPrefixDeclaresSourceType(string $businessKey, string $sourceType): void
     {
         $separator = strpos($businessKey, ':');
