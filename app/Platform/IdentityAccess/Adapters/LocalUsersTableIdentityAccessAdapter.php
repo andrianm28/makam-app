@@ -9,6 +9,8 @@ use App\Platform\IdentityAccess\Contracts\IdentityAccessAdapter;
 use App\Platform\IdentityAccess\Mfa\MfaEnrolmentStatus;
 use App\Platform\IdentityAccess\Mfa\Models\MfaEnrolment;
 use App\Platform\IdentityAccess\Models\ActorSession;
+use App\Platform\IdentityAccess\Roles\ActorRoleReader;
+use App\Platform\IdentityAccess\Scopes\ScopeAssignmentReader;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Auth\Authenticatable;
 
@@ -22,11 +24,31 @@ use Illuminate\Contracts\Auth\Authenticatable;
  *   first-party use");
  * - the `actor_sessions` table (this batch's migration) for
  *   `lastAuthenticatedAt`.
+ * - the `actor_role_assignments` table, via `Roles\ActorRoleReader`, for
+ *   `roles`.
+ * - the `scope_assignments` table, via `Scopes\ScopeAssignmentReader`, for
+ *   `scopes`.
  *
- * `roles` and `scopes` are always returned empty — see `ActorContext`'s
- * class-level doc for exactly why (no owning table exists for local roles;
- * scope assignment is Batch 3.2 Agent C's job). This is a real, flagged gap
- * in this batch's output, not a silent omission.
+ * `roles` and `scopes` now resolve to REAL, live grant data — lane L5
+ * (`docs/superpowers/plans/2026-08-11-platform-identity-seam.md`, Task 3)
+ * replaced the permanent `roles: []` / `scopes: []` placeholders this class
+ * used to hardcode unconditionally. This is the change that flips five
+ * previously-inert authorizers (`FinancialLedger`'s four authorizers,
+ * `DocumentVault\Policies\DocumentAccessPolicy`) from unconditionally
+ * denying to actually enforcing — see the design doc's "Blast radius"
+ * section. An empty roles/scopes list is still a fully legitimate result:
+ * it means "this actor holds no grants today," never "no roles required."
+ *
+ * Both readers are constructor-injected with **zero dependencies of their
+ * own**, and neither may ever depend on `ActorContext`. This class's own
+ * dependency graph feeds `ActorContextResolver`, which resolves
+ * `ActorContext` itself — anything in that graph depending back on
+ * `ActorContext` would close a container cycle. That was verified
+ * empirically to recurse unboundedly (~1GB RSS) rather than raise
+ * `CircularDependencyException`; see the design doc, decision 4, and
+ * `Scopes\ScopeAssignmentReader`'s own doc block. `Scopes
+ * \ScopeAssignmentResolver` is NOT usable here for exactly that reason — it
+ * takes an `ActorContext`.
  *
  * `mfaState` (S3-T2 addition, `resolveMfaState()` below) IS now real,
  * queried from `Mfa\Models\MfaEnrolment` — the one field this class no
@@ -41,16 +63,23 @@ use Illuminate\Contracts\Auth\Authenticatable;
  */
 final class LocalUsersTableIdentityAccessAdapter implements IdentityAccessAdapter
 {
+    public function __construct(
+        private readonly ActorRoleReader $roles = new ActorRoleReader,
+        private readonly ScopeAssignmentReader $scopes = new ScopeAssignmentReader,
+    ) {}
+
     public function resolveActorContext(?Authenticatable $identity): ActorContext
     {
         if ($identity === null) {
             return ActorContext::guest();
         }
 
+        $identifier = $this->normalizeIdentifier($identity->getAuthIdentifier());
+
         return new ActorContext(
-            identityReference: $this->normalizeIdentifier($identity->getAuthIdentifier()),
-            roles: [],
-            scopes: [],
+            identityReference: $identifier,
+            roles: $this->roles->rolesForActor($identifier),
+            scopes: $this->scopes->scopeStringsForActor($identifier),
             mfaState: $this->resolveMfaState($identity),
             lastAuthenticatedAt: $this->resolveLastAuthenticatedAt($identity),
         );

@@ -66,16 +66,27 @@ final class ActorContextTest extends TestCase
         $this->assertSame(ActorContext::MFA_STATE_NOT_APPLICABLE, $actor->mfaState);
     }
 
-    public function test_roles_placeholder_never_reports_a_role_that_was_not_explicitly_supplied(): void
+    public function test_has_role_never_reports_a_role_that_was_not_explicitly_supplied(): void
     {
+        // Pure value-object behaviour: given whatever roles the caller
+        // (only ever an IdentityAccessAdapter in practice) passed in,
+        // hasRole() must not report anything beyond that list. This is no
+        // longer a "roles are always empty" placeholder — roles resolve
+        // for real via Adapters\LocalUsersTableIdentityAccessAdapter — but
+        // the constructor's own contract is unchanged and still worth
+        // pinning in isolation from any database.
         $actor = new ActorContext(identityReference: 1, roles: ['admin']);
 
         $this->assertTrue($actor->hasRole('admin'));
         $this->assertFalse($actor->hasRole('finance'));
     }
 
-    public function test_scopes_placeholder_never_reports_a_scope_that_was_not_explicitly_supplied(): void
+    public function test_has_scope_never_reports_a_scope_that_was_not_explicitly_supplied(): void
     {
+        // Same purpose as the roles test above, for scopes — no longer a
+        // placeholder assertion (scopes resolve for real via
+        // Scopes\ScopeAssignmentReader), but the constructor's own
+        // contract is unchanged.
         $actor = new ActorContext(identityReference: 1, scopes: ['cemetery:1']);
 
         $this->assertTrue($actor->hasScope('cemetery:1'));

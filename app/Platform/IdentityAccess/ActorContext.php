@@ -29,27 +29,27 @@ use Carbon\CarbonImmutable;
  * Resource; policies and scopes only."
  *
  * ---------------------------------------------------------------------------
- * What is and is not populated by THIS batch (S3-T1, AC1 + AC8 only)
+ * What each field is backed by today
  * ---------------------------------------------------------------------------
  * - `$identityReference`, `$lastAuthenticatedAt` — populated for real, from
  *   the local `users` table and the `actor_sessions` table respectively.
- * - `$scopes` — always `[]`. Batch 3.2 Agent C builds the scope-assignment
- *   model (requirements.md AC5); this field exists now so nothing consuming
- *   `ActorContext` today has to change shape when that lands.
- * - `$roles` — always `[]` too, for a reason worth flagging explicitly
- *   rather than leaving implicit: design.md's own data list for this spec
- *   names no local "roles" table at all (`overview.md` §5 places roles
- *   inside "K1/K2 identity, actor context, roles, record scopes" — i.e.
- *   role membership is expected to come from the external identity
- *   contract, AC12: "map roles to K1/K2"). K1/K2's real interface has not
- *   been seen (tasks.md's own NOT TESTED note), and this repo has no local
- *   substitute table for roles that any spec has actually authorized this
- *   batch to build. Rather than invent an unspecified `users.role` column
- *   or a parallel roles table with no owning spec, this batch leaves
- *   `$roles` empty and reports the gap. See this repo's Batch 3.1 report
- *   for the explicit callout — any consumer that needs role-based checks
- *   before that gap is closed must not silently treat an empty roles list
- *   as "no roles required."
+ * - `$roles` — populated for real as of lane L5
+ *   (`docs/superpowers/plans/2026-08-11-platform-identity-seam.md`, Task 3):
+ *   `Adapters\LocalUsersTableIdentityAccessAdapter` resolves this actor's
+ *   active (non-revoked) `actor_role_assignments` rows via
+ *   `Roles\ActorRoleReader`, ordered by `Roles\ActorRole::KNOWN_ROLES`
+ *   declaration order (most privileged first) rather than database
+ *   insertion order — see that reader's own doc block for why the order is
+ *   deterministic on purpose. **An empty list is a fully legitimate,
+ *   common result — it means "this actor holds no role grants" and must
+ *   NEVER be read by a caller as "no roles required."** Nothing in this
+ *   module grants a role through any application surface yet; today the
+ *   only way an `actor_role_assignments` row exists is a hand-written
+ *   insert. A later lane task adds an audited console grant path.
+ * - `$scopes` — populated for real, from `scope_assignments` via
+ *   `Scopes\ScopeAssignmentReader::scopeStringsForActor()`, formatted as
+ *   `"entity_type:entity_id"` strings. Same "empty is legitimate, not an
+ *   error" caveat as `$roles` above applies here too.
  * - `$mfaState` — S3-T2 (`app/Platform/IdentityAccess/Mfa/**`) wired this
  *   to a real value read from `Mfa\Models\MfaEnrolment`, replacing the
  *   permanent `MFA_STATE_NOT_IMPLEMENTED` placeholder this doc block used
@@ -112,12 +112,13 @@ final class ActorContext
      *                                              reference identity by an external string id rather than the
      *                                              local autoincrement primary key; widening the type now avoids
      *                                              a breaking change to every consumer later.
-     * @param  list<string>  $roles  See the class-level note: always empty
-     *                               today, not yet backed by any table this batch is authorized
-     *                               to build.
-     * @param  list<string>  $scopes  Always empty today — Batch 3.2 Agent C
-     *                                builds real scope assignment (AC5). The field exists so the
-     *                                shape does not change when that lands.
+     * @param  list<string>  $roles  This actor's active `actor_role_assignments` roles — see the
+     *                               class-level note. An empty array means "no roles granted", not
+     *                               "no roles required."
+     * @param  list<string>  $scopes  This actor's active `scope_assignments` grants, as
+     *                                `"entity_type:entity_id"` strings — see the class-level note.
+     *                                An empty array means "no scopes granted", not "no scope
+     *                                required."
      */
     public function __construct(
         public readonly int|string|null $identityReference,
@@ -143,9 +144,8 @@ final class ActorContext
     }
 
     /**
-     * Always `false` today because `$roles` is always empty — see the
-     * class-level note. Exists so callers can be written against the final
-     * shape now rather than rewritten once role resolution exists.
+     * `true` iff `$role` is present in `$roles` — see the class-level note
+     * on what an empty `$roles` list does and does not mean.
      */
     public function hasRole(string $role): bool
     {
@@ -153,9 +153,8 @@ final class ActorContext
     }
 
     /**
-     * Always `false` today because `$scopes` is always empty until Batch
-     * 3.2 Agent C. Exists for the same forward-compatibility reason as
-     * `hasRole()`.
+     * `true` iff `$scope` is present in `$scopes` — see the class-level
+     * note on what an empty `$scopes` list does and does not mean.
      */
     public function hasScope(string $scope): bool
     {
