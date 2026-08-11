@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\DisableMfaController;
+use App\Http\Controllers\DocumentVault\DownloadDocumentController;
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Livewire\Public\Booking\BookingWizard;
 use App\Livewire\Public\Directory\CemeteryDetail;
@@ -281,3 +282,7 @@ Route::post('/admin/mfa/disable', DisableMfaController::class)
 */
 Route::get('/pembayaran/kembali', PaymentReturnController::class)->name('payments.return');
 Route::get('/pembayaran/batal', PaymentCancelController::class)->name('payments.cancel');
+
+Route::get('/internal/documents/{document}/download/{token}', DownloadDocumentController::class)
+    ->middleware(['web', 'auth', 'throttle:document-download'])
+    ->name('internal.documents.download');
