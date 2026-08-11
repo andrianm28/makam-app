@@ -221,8 +221,13 @@ Added 25 Jul 2026 when the corpus went from 19 to 27 specs. **Every spec is acco
 > which has no evidence of any kind**), authorization and identity gaps, and cross-lane merge
 > state — recorded in full in
 > `docs/superpowers/plans/2026-08-09-platform-financial-ledger.md` §Merge sign-off bundle and
-> restated in the PR body. Merge order is **L2 → L3 → L4**, one at a time. PR and CI run
-> recorded here once opened.
+> restated in the PR body. Merge order is **L2 → L3 → L4**, one at a time.
+> PR [#20](https://github.com/andrianm28/makam-app/pull/20), CI run
+> [`31506868703`](https://github.com/andrianm28/makam-app/actions/runs/31506868703) — all six
+> gate jobs green on PostgreSQL 18 on the first attempt, no fix cycle: PHP
+> (validate/lint/analyse/test), docs and design gates, OpenAPI and YAML validation, pinned
+> runtime versions, dependency audit, frontend build. **The PR is open for human review and
+> must not be merged by an agent.**
 
 **MVP-required feature specs (8):**
 
