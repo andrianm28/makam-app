@@ -659,10 +659,24 @@ final class WebhookReceiverTest extends TestCase
 
     public function test_rejection_status_and_audit_roll_back_together_if_audit_fails(): void
     {
-        DB::statement(
-            'CREATE TRIGGER fail_audit_insert BEFORE INSERT ON audit_events '
-            ."BEGIN SELECT RAISE(ABORT, 'audit insert failed'); END"
-        );
+        if (DB::connection()->getDriverName() === 'pgsql') {
+            DB::unprepared(<<<'SQL'
+                CREATE OR REPLACE FUNCTION fail_audit_insert() RETURNS trigger AS $$
+                BEGIN
+                    RAISE EXCEPTION 'audit insert failed';
+                END;
+                $$ LANGUAGE plpgsql
+                SQL);
+            DB::unprepared(
+                'CREATE TRIGGER fail_audit_insert BEFORE INSERT ON audit_events '
+                .'FOR EACH ROW EXECUTE FUNCTION fail_audit_insert()'
+            );
+        } else {
+            DB::statement(
+                'CREATE TRIGGER fail_audit_insert BEFORE INSERT ON audit_events '
+                ."BEGIN SELECT RAISE(ABORT, 'audit insert failed'); END"
+            );
+        }
         $this->withoutExceptionHandling();
 
         $thrown = false;
