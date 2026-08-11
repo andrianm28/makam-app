@@ -1,6 +1,7 @@
 <?php
 
 use App\Platform\Correlation\Providers\CorrelationServiceProvider;
+use App\Platform\DocumentVault\Providers\DocumentVaultServiceProvider;
 use App\Platform\FeatureGate\Providers\FeatureGateServiceProvider;
 use App\Platform\IdentityAccess\Providers\IdentityAccessServiceProvider;
 use App\Platform\Notification\Providers\NotificationServiceProvider;
@@ -35,6 +36,14 @@ return [
     // in that batch's literal owned-files list either, but the brief
     // explicitly authorizes this one additive line.
     CorrelationServiceProvider::class,
+    // Task 4 (platform-document-vault lane, task-4-brief.md ambiguity
+    // ruling 2) — binds ObjectStorage/MalwareScanner/StoragePathResolver.
+    // Same precedent as IdentityAccessServiceProvider/
+    // CorrelationServiceProvider above: not in Task 4's literal
+    // owned-files list, but explicitly authorized by the coordinator so
+    // UploadDocument's container-resolved dependencies are reachable —
+    // see DocumentVaultServiceProvider's own class-level comment.
+    DocumentVaultServiceProvider::class,
     // Task 3 of the L2 `platform-notifications` lane (task-3-brief.md D7)
     // — binds RecipientRoleSource/NotificationSubjectSource and registers
     // the OutboxEventPublished -> ConsumeOutboxNotificationJob listener.
