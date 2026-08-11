@@ -12,6 +12,8 @@ use App\Platform\IdentityAccess\Mfa\Models\MfaEnrolment;
 use App\Platform\IdentityAccess\Mfa\Totp\Base32;
 use App\Platform\IdentityAccess\Mfa\Totp\Totp;
 use App\Platform\IdentityAccess\Models\ActorSession;
+use App\Platform\IdentityAccess\Reauthentication\Models\ReauthenticationEvent;
+use App\Platform\IdentityAccess\Reauthentication\ReauthenticationOutcome;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -81,5 +83,37 @@ final class DisableMfaControllerTest extends TestCase
             ->assertRedirect(route('filament.admin.pages.mfa-settings'));
 
         $this->assertSame(MfaEnrolmentStatus::REVOKED, $enrolment->fresh()->status);
+    }
+
+    /**
+     * This controller used to call `ReauthenticationService::satisfy()` on
+     * every invocation — minting, unconditionally, the exact proof a
+     * sensitive action is supposed to REQUIRE. `FinancialLedger`'s own
+     * export controller was corrected for the identical anti-pattern.
+     * Re-proof is now recorded by the one surface that actually verifies
+     * anything, `MfaChallenge::submit()`, and this controller records none.
+     */
+    public function test_the_controller_never_mints_its_own_proof_of_reauthentication(): void
+    {
+        $user = User::factory()->create();
+        $enrolment = app(MfaEnrolmentService::class)->startEnrolment($user->id);
+        $this->confirmEnrolment($enrolment, $user);
+
+        ActorSession::query()->create([
+            'user_id' => $user->id,
+            'session_id' => 'test-session-'.$user->id,
+            'guard' => 'web',
+            'last_authenticated_at' => CarbonImmutable::now()->subSeconds(10),
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('admin.mfa.disable'))
+            ->assertRedirect(route('filament.admin.pages.mfa-settings'));
+
+        $this->assertSame(
+            0,
+            ReauthenticationEvent::query()->where('outcome', ReauthenticationOutcome::SATISFIED)->count(),
+            'Passing the gate is not proof of re-authentication; only a completed challenge is.',
+        );
     }
 }
