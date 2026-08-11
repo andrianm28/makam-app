@@ -68,6 +68,39 @@ final class TemplateRendererTest extends TestCase
     }
 
     /**
+     * Proves the reconciled matrix still reads end to end. The 11 Aug 2026
+     * reconciliation annotates the document with a header note ABOVE the
+     * table (Task 6) — `NotificationMatrixSource` scans for a header row
+     * whose first cell is `Event` and then throws on any later line whose
+     * cell count differs, so a note that snuck into the table (or a row
+     * added with the wrong column count) must fail loudly here rather than
+     * silently skewing the seed and every recipient-resolution decision.
+     * The 17-row count and the live `forEvent()` lookup pin the canonical
+     * event set and the header-derived recipient columns without restating
+     * the full event list as a second source of truth.
+     */
+    public function test_the_reconciled_matrix_parses_end_to_end(): void
+    {
+        $source = new NotificationMatrixSource;
+
+        $rows = $source->rows();
+
+        $this->assertCount(17, $rows);
+
+        $headerColumns = array_keys($rows[0]['recipients']);
+        foreach ($rows as $row) {
+            $this->assertSame($headerColumns, array_keys($row['recipients']));
+        }
+
+        $bookingSubmitted = $source->forEvent('Booking submitted');
+        $this->assertNotNull($bookingSubmitted);
+        $this->assertSame('Booking submitted', $bookingSubmitted['event']);
+        $this->assertSame('IN_APP/EMAIL for selected location', $bookingSubmitted['recipients']['Pengelola TPU/TPS']);
+
+        $this->assertNull($source->forEvent('Not a matrix event'));
+    }
+
+    /**
      * @param  list<string>  $allowlist
      * @param  list<string>  $restrictedFields
      */
