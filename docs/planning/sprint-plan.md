@@ -188,6 +188,20 @@ Added 25 Jul 2026 when the corpus went from 19 to 27 specs. **Every spec is acco
 | `platform-payment-adapter` | 8–9 | Blocks Step 8; **gated on OQ-5 / `G-PAY-01`** |
 | `platform-financial-ledger` | 8–9 | **Gated on FIN-DEC approvals** |
 
+> **NOT TESTED, 11 Aug 2026 — `platform-financial-ledger`.** The gating status above is
+> unchanged and must not be read as relaxed. Code for this foundation has been built on
+> `lane/l4-financial-ledger` (journal write API with derived reversal, database-level balance
+> enforcement, business-key idempotency, vendor payable eligibility, manual payout,
+> reconciliation with exceptions, authorized exception resolution, the period report, and the
+> re-authenticated bulk export), but **none of it opens a gate**: `FIN-DEC-01`–`07` are `TBD`
+> and `FIN-DEC-08` is `GATED` in `docs/domain/financial-ledger-and-settlement.md`,
+> `docs/testing/release-gates.md:75` is unchecked, and no finance owner has approved the chart
+> of accounts. `G-PAY-01` and `G-PAYOUT-01` are seeded **closed**
+> (`database/migrations/2026_07_26_120400_seed_feature_gate_registry.php:85-86,103`), which
+> replaces this spec's older "gate states are unknown" note with a verified value. Per-AC
+> status with file citations is in `.kiro/specs/platform-financial-ledger/tasks.md`
+> §Implementation status; that document is the authority, this note is a pointer.
+
 **MVP-required feature specs (8):**
 
 | Spec | Sprint | Depends on foundations |
@@ -786,6 +800,18 @@ Now expressed as **specs**, in the dependency order §3.4 derives, so the sequen
 | **15** | Performance certification Profiles A–D · production environment · managed Postgres + PITR | — | **N-3** provider decision |
 | **16** | Full release-gate pass · UAT · production readiness review | — | everything above |
 | *if gates open* | `pre-need-contracting` · `plot-inventory-and-reservation` · `visitation-booking` · `memorial-and-qr` | — | `G-LEGAL-01` · `G-PLOT-01` · `G-VISIT-01` · `G-MEM-01` — **not MVP acceptance** |
+
+> **NOT TESTED, 11 Aug 2026 — the Sprint 8–9 row's `platform-financial-ledger` half.** Build
+> work for that foundation exists on `lane/l4-financial-ledger` and has passed CI on real
+> PostgreSQL 18, so the row is no longer wholly unstarted. **The "Blocked on" cell is
+> unchanged and none of the gates named in it has opened:** the `FIN-DEC` register is still
+> unapproved, `G-PAY-01` and `G-PAYOUT-01` are seeded closed, and the heavy human gates —
+> financial, authorization, and migration review under `AGENTS.md` §Infrastructure-agent
+> execution — have not been given. "Manual fallback first" is what shipped: the module has no
+> automated transfer path at all, by design, while `G-PAYOUT-01` is closed. The
+> `platform-payment-adapter` half of this row is a separate lane and is not described here.
+> Per-AC status with file citations lives in
+> `.kiro/specs/platform-financial-ledger/tasks.md` §Implementation status.
 
 **Rough total to MVP acceptance: ~16 sprints ≈ 8–9 months with the assumed 1-developer team, or ~4–5 months with 2–3 developers.** Order-of-magnitude planning figure, **not a commitment**. Dominant uncertainties: the payment gate, the production database provider, and whether the vendor portal can be phased.
 

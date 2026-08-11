@@ -96,6 +96,54 @@ Debit  Gateway Receivable
 Credit Customer Funds / Revenue / Payable allocation
 ```
 
+### Reconciliation against the shipped ledger — 11 Aug 2026
+
+Rules 1–7 above are the contract; `.kiro/specs/platform-financial-ledger/` holds the numbered
+acceptance criteria that restate them, and its `tasks.md` §Implementation status carries the
+per-AC evidence with file citations. This subsection records only what reading the two against
+each other **changed or exposed**, so the two documents do not drift into two rival status
+records. Verified on branch `lane/l4-financial-ledger` at `713442f`; a rule not listed below is
+met as written.
+
+- **Rule 2 is met today by a construction that would not survive a second currency.** The
+  balance authority is a PostgreSQL constraint trigger that sums debits minus credits **per
+  batch**, with no `GROUP BY currency`. It is equivalent to "per currency and entity" only
+  because `journal_entries.currency` is CHECK-constrained to `IDR` alone and a batch carries
+  exactly one `entity_ref`. Admitting a second currency without also grouping the trigger's sum
+  would silently let a mixed-currency batch balance to zero across currencies. Recorded as a
+  latent gap, not a defect.
+- **Rule 4 is partly unmet, and cannot be met here.** A batch does reference its source event,
+  entity, amount, currency, occurred time, and a correlation id. It carries **no provider
+  transaction reference and no invoice/order reference**, because neither a provider-transaction
+  table nor an invoice table exists in this repository — those objects belong to
+  `platform-payment-adapter` and `booking-and-order-orchestration`. Rule 4 becomes satisfiable
+  only when they ship; until then the ledger's trace stops at its own `source_type`/`source_id`.
+- **Rule 7 is partly unmet.** Reconciliation compares a provider statement against journal
+  totals per business key, but the statement it accepts is a flat map of opaque reference to
+  integer minor units. There is no decomposition of provider **gross, fee, net settlement, or
+  bank receipt**, and neither refund nor payout is traced through reconciliation. §12's
+  exception vocabulary is likewise larger than what is modelled — five of the ten categories
+  named there exist; merchant mismatch, fee mismatch, late success, duplicate provider
+  reference, refund mismatch, and payout failure do not.
+- **§10's refund model is not implemented.** The ledger can post a refund-shaped reversing batch,
+  but there is no refund object, no line allocation across product/fee/tax/delivery/vendor
+  payable, and no chargeback operation at all. Owner: `platform-payment-adapter`.
+- **§11's payable/payout state names are not the shipped state names.** The lifecycle written
+  above (`PENDING_FULFILLMENT` → `ELIGIBLE` → … → `ADJUSTED`) is a richer model than the closed
+  list the module enforces, which keeps three states — held, payable, paid — coupled to
+  timestamps by database CHECK constraints. The controls listed under §11 hold; the state
+  vocabulary does not match, and the shipped closed list is the operative one. Reconciling the
+  two is a `FIN-DEC-05` question, not a rename.
+- **§15's boxes stay unticked, and one of them deserves an explanation rather than silence.**
+  "Balanced journal contract and duplicate prevention pass" is the one item this lane's work
+  bears on directly, and both properties are enforced in the database and covered by passing
+  tests. It is still left unticked: §15 is an *activation* checklist whose items are approval
+  and end-to-end evidence, and the balanced-journal box is only half-earned while the
+  application role can still bypass append-only and the reconciliation half of the same line —
+  "reconciliation against provider sandbox/sample reports" — has only ever run against an
+  in-test statement object, never a real provider report. Everything else on the list is
+  `platform-payment-adapter` scope, an unapproved `FIN-DEC`, or not verified.
+
 ## 7. Payment invariants
 
 - Checkout amount comes only from an accepted active quote version.
