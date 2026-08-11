@@ -18,6 +18,7 @@ use App\Livewire\Public\Renewal\RenewalStart;
 use App\Livewire\Public\Support\HelpCentre;
 use App\Platform\Payment\Http\Controllers\PaymentCancelController;
 use App\Platform\Payment\Http\Controllers\PaymentReturnController;
+use App\Platform\Payment\Http\Controllers\RecordPaymentReversalController;
 use App\Platform\Payment\Http\Controllers\VerifyManualPaymentController;
 use Illuminate\Support\Facades\Route;
 
@@ -308,6 +309,36 @@ Route::get('/pembayaran/batal', PaymentCancelController::class)->name('payments.
 Route::post('/admin/payments/manual-verifications/{paymentVerification}/verify', VerifyManualPaymentController::class)
     ->middleware(['web', 'auth', RequireRecentAuthentication::class.':payment_manual_verification,filament.admin.pages.mfa-challenge'])
     ->name('admin.payments.manual-verifications.verify');
+
+/*
+|--------------------------------------------------------------------------
+| Admin — payment reversals (Task 6, Wave 1d Append-Correction)
+|--------------------------------------------------------------------------
+| `RequireRecentAuthentication`'s THIRD real attachment anywhere in this
+| repo — after `/admin/mfa/disable` and
+| `/admin/payments/manual-verifications/{id}/verify` above, following their
+| exact precedent: a plain controller route in the standard `web` group,
+| its own explicit `auth` guard, and the same
+| `filament.admin.pages.mfa-challenge` challenge destination.
+|
+| Records a `payment_reversals` row (`REFUND` or `CHARGEBACK`) — a NEW,
+| self-contained table decoupled from `Journal`, `payment_sessions`, any
+| order aggregate, and `payment_verifications` (see the migration's own
+| doc block). Does NOT post a journal reversal batch, call
+| `PaymentProvider::refund()`, or touch any customer-balance concept — see
+| `App\Platform\Payment\Actions\RecordRefund`'s own doc block for why those
+| remain structurally absent.
+|
+| One parameterized route for both reversal types (`{reversalType}`
+| constrained to `refund|chargeback`) rather than two separate routes — a
+| flagged judgement call, see
+| `App\Platform\Payment\Http\Controllers\RecordPaymentReversalController`'s
+| own doc block for why.
+*/
+Route::post('/admin/payments/reversals/{reversalType}', RecordPaymentReversalController::class)
+    ->whereIn('reversalType', ['refund', 'chargeback'])
+    ->middleware(['web', 'auth', RequireRecentAuthentication::class.':payment_reversal,filament.admin.pages.mfa-challenge'])
+    ->name('admin.payments.reversals.record');
 
 Route::get('/internal/documents/{document}/download/{token}', DownloadDocumentController::class)
     ->middleware(['web', 'auth', 'throttle:document-download'])

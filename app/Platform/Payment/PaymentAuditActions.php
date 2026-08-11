@@ -113,4 +113,25 @@ final class PaymentAuditActions
      * reason; `VerifyManualPayment` does not re-implement that check.
      */
     public const string MANUAL_VERIFICATION = 'PAYMENT_MANUAL_VERIFICATION';
+
+    /**
+     * Task 6 (Wave 1d Append-Correction) — written by `Actions\RecordRefund`
+     * with `AuditOutcome::Allowed`, subject = the new `PaymentReversal` row.
+     *
+     * Added to `SensitiveActions::ACTIONS` by this task (the plan's own
+     * text names this as a financial action requiring a mandatory reason —
+     * "add to `SensitiveActions` as `PAYMENT_REFUND` and `PAYMENT_CHARGEBACK`
+     * with mandatory reason"). This string value matches the literal entry
+     * added to `SensitiveActions::ACTIONS`, exactly the same convention
+     * `MANUAL_VERIFICATION`'s value already follows.
+     */
+    public const string REFUND = 'PAYMENT_REFUND';
+
+    /**
+     * Task 6 (Wave 1d Append-Correction) — written by
+     * `Actions\RecordChargeback` with `AuditOutcome::Allowed`, subject = the
+     * new `PaymentReversal` row. Same mandatory-reason convention as
+     * `REFUND` above.
+     */
+    public const string CHARGEBACK = 'PAYMENT_CHARGEBACK';
 }
