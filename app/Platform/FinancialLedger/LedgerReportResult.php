@@ -56,4 +56,21 @@ final readonly class LedgerReportResult
             default => $this->entityRef,
         };
     }
+
+    /**
+     * How many badan usaha the report covers. `0` means an unscoped read —
+     * "no count", not "no entities" — which no authorized caller performs.
+     *
+     * Exists so a caller that must bound `scopeLabel()` can still say
+     * truthfully how many entities were covered, instead of dropping the fact
+     * along with the names.
+     */
+    public function scopeSize(): int
+    {
+        return match (true) {
+            $this->entityRef === null => 0,
+            is_array($this->entityRef) => count($this->entityRef),
+            default => 1,
+        };
+    }
 }

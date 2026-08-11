@@ -210,6 +210,79 @@ final class BulkFinancialExportTest extends TestCase
         );
     }
 
+    /**
+     * `audit_events.subject_id` is `varchar(255)` and PostgreSQL REJECTS an
+     * overflow rather than truncating it. A finance actor with many grants
+     * produces a scope label that is the `|`-joined list of every one of them,
+     * so the audit write — and therefore a legitimate, fully authorized export
+     * — used to fail outright once the list outgrew the column. With
+     * fixture-length references the threshold is ~18 grants; with UUID-shaped
+     * ones it is 7.
+     *
+     * The reference is now bounded: readable verbatim while it fits, and a
+     * counted digest beyond that. The full set is never lost — it goes to
+     * `metadata.note`, which is an unbounded JSON column.
+     */
+    public function test_a_large_grant_set_produces_a_bounded_audit_reference(): void
+    {
+        $this->seedLedger();
+        $this->reauthenticateRecently();
+
+        $entityRefs = [];
+
+        for ($i = 1; $i <= 40; $i++) {
+            $entityRef = sprintf('badan-usaha-%02d', $i);
+            $entityRefs[] = $entityRef;
+            $this->grantLedgerReadAuthority(entityRef: $entityRef);
+        }
+
+        sort($entityRefs);
+        $joined = implode('|', $entityRefs);
+
+        // The guard is only meaningful if the fixture really does overflow.
+        $this->assertGreaterThan(255, strlen("summary:2026-08:{$joined}"));
+
+        $this->export();
+
+        $auditEvent = AuditEvent::query()
+            ->where('action', BulkFinancialExport::AUDIT_ACTION)
+            ->firstOrFail();
+
+        $this->assertLessThanOrEqual(255, strlen((string) $auditEvent->subject_id));
+        $this->assertSame(
+            'summary:2026-08:40-entities:'.substr(hash('sha256', $joined), 0, 16),
+            $auditEvent->subject_id,
+        );
+
+        // Bounded, but not lossy: the full set is still on the row.
+        $this->assertSame(['note' => "summary:2026-08:{$joined}"], $auditEvent->metadata);
+    }
+
+    /**
+     * The digest is a fallback, not the normal shape — a scope that fits stays
+     * readable, so the common case is still greppable in the audit trail.
+     */
+    public function test_a_scope_that_fits_is_recorded_verbatim_not_digested(): void
+    {
+        $this->seedLedger();
+        $this->seedLedger(entityRef: self::OTHER_ENTITY, suffix: '-other', amountMinor: 55_000);
+        $this->grantLedgerReadAuthority();
+        $this->grantLedgerReadAuthority(entityRef: self::OTHER_ENTITY);
+        $this->reauthenticateRecently();
+
+        $this->export();
+
+        $auditEvent = AuditEvent::query()
+            ->where('action', BulkFinancialExport::AUDIT_ACTION)
+            ->firstOrFail();
+
+        $this->assertSame(
+            'summary:2026-08:'.self::ENTITY.'|'.self::OTHER_ENTITY,
+            $auditEvent->subject_id,
+        );
+        $this->assertStringNotContainsString('-entities:', (string) $auditEvent->subject_id);
+    }
+
     public function test_a_narrowing_entity_ref_within_the_grants_is_honoured(): void
     {
         $this->seedLedger();

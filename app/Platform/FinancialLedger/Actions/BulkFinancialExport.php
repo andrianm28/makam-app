@@ -17,6 +17,7 @@ use App\Platform\FinancialLedger\Exceptions\LedgerReadNotAuthorisedException;
 use App\Platform\FinancialLedger\FinanceLedgerReadAuthorizer;
 use App\Platform\FinancialLedger\LedgerReport;
 use App\Platform\FinancialLedger\LedgerReportKind;
+use App\Platform\FinancialLedger\LedgerReportResult;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\Reauthentication\Models\ReauthenticationEvent;
 use App\Platform\IdentityAccess\Reauthentication\ReauthenticationOutcome;
@@ -108,6 +109,13 @@ final class BulkFinancialExport
 
     private const string CURRENCY = 'IDR';
 
+    /**
+     * `audit_events.subject_id` is `$table->string('subject_id')` —
+     * `varchar(255)`. See `subjectReference()` for why this is enforced here
+     * rather than left to the database.
+     */
+    private const int AUDIT_SUBJECT_MAX_LENGTH = 255;
+
     public function __construct(
         private readonly ActorContext $actorContext,
         private readonly LedgerReadAuthorizer $authorizer = new FinanceLedgerReadAuthorizer,
@@ -173,7 +181,7 @@ final class BulkFinancialExport
 
         Audit::record(
             action: self::AUDIT_ACTION,
-            subject: new AuditSubject('financial_ledger_report', $reference),
+            subject: new AuditSubject('financial_ledger_report', $this->subjectReference($reference, $result)),
             outcome: AuditOutcome::Allowed,
             actorRef: $actorRef,
             actorRole: $scope->role,
@@ -248,6 +256,46 @@ final class BulkFinancialExport
         ]);
 
         return implode("\n", $lines)."\n";
+    }
+
+    /**
+     * The audit SUBJECT reference, bounded to fit `audit_events.subject_id`.
+     *
+     * That column is `varchar(255)` and PostgreSQL REJECTS an overflow rather
+     * than truncating it, so an unbounded reference is not a cosmetic problem —
+     * it fails the audit write, which fails the whole export, for a legitimately
+     * authorized actor. Since the scope became a SET, the reference grew with
+     * the actor's grant count: with `badan-usaha-NN`-length references the
+     * ceiling is around 18 grants, and with UUID-shaped ones it is 7. Exactly
+     * the multi-entity finance actor this module exists to serve would have hit
+     * an uncaught 500.
+     *
+     * Bounded, but deliberately not lossy in either direction:
+     *
+     *  - while the full reference fits, it is used VERBATIM, so the ordinary
+     *    one- and two-entity cases stay readable and greppable in the audit
+     *    trail — the digest is a fallback, never the normal shape;
+     *  - beyond that it becomes `{kind}:{period}:{N}-entities:{digest}`, which
+     *    still states how many badan usaha were exported and is stable for a
+     *    given set (the authorizer returns them sorted), so two exports of the
+     *    same scope share a reference and can be correlated;
+     *  - and the FULL list is written to `metadata.note` regardless. That is a
+     *    nullable JSON column with no such limit, so no evidence is lost — only
+     *    the indexed identifier is bounded.
+     *
+     * The length test is on BYTES (`strlen`), which is conservative: PostgreSQL
+     * counts `varchar` in characters, and a string's byte length is always >=
+     * its character length, so passing this check passes the column's.
+     */
+    private function subjectReference(string $reference, LedgerReportResult $result): string
+    {
+        if (strlen($reference) <= self::AUDIT_SUBJECT_MAX_LENGTH) {
+            return $reference;
+        }
+
+        $digest = substr(hash('sha256', $result->scopeLabel()), 0, 16);
+
+        return "{$result->kind}:{$result->period}:{$result->scopeSize()}-entities:{$digest}";
     }
 
     /**
