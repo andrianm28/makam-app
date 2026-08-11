@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Console\Commands\Concerns\RequiresAuditReason;
+
 use App\Platform\Audit\Exceptions\AuditReasonRequiredException;
 use App\Platform\IdentityAccess\Scopes\Actions\RevokeScopeAssignment;
 use Illuminate\Console\Command;
@@ -20,6 +22,8 @@ use InvalidArgumentException;
  */
 final class IdentityRevokeScopeCommand extends Command
 {
+    use RequiresAuditReason;
+
     protected $signature = 'identity:revoke-scope {actor} {entityType} {entityId} {--reason=}';
 
     protected $description = 'Revoke a scope assignment from an actor. Console-only, audited; --reason is mandatory.';
@@ -28,7 +32,7 @@ final class IdentityRevokeScopeCommand extends Command
     {
         $reason = (string) $this->option('reason');
 
-        if (trim($reason) === '') {
+        if ($this->reasonIsBlank($reason)) {
             $this->error('A non-blank --reason is required to revoke a scope.');
 
             return self::FAILURE;

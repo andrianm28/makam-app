@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Console\Commands\Concerns\RequiresAuditReason;
+
 use App\Platform\Audit\Exceptions\AuditReasonRequiredException;
 use App\Platform\IdentityAccess\Scopes\Actions\GrantScopeAssignment;
 use Illuminate\Console\Command;
@@ -24,6 +26,8 @@ use InvalidArgumentException;
  */
 final class IdentityGrantScopeCommand extends Command
 {
+    use RequiresAuditReason;
+
     protected $signature = 'identity:grant-scope {actor} {entityType} {entityId} {--level=} {--reason=}';
 
     protected $description = 'Grant a scope assignment to an actor. Console-only, audited; --reason is mandatory.';
@@ -32,7 +36,7 @@ final class IdentityGrantScopeCommand extends Command
     {
         $reason = (string) $this->option('reason');
 
-        if (trim($reason) === '') {
+        if ($this->reasonIsBlank($reason)) {
             $this->error('A non-blank --reason is required to grant a scope.');
 
             return self::FAILURE;

@@ -697,6 +697,37 @@ git commit -m "docs(identity-seam): point rbac matrix at the real role vocabular
 | No grant without an audited reason | `GrantActorRoleTest`, `IdentityGrantCommandsTest` |
 | Schema works on real PostgreSQL 18 | Task 6, disposable container |
 
+## Cross-cutting finding for the merge sign-off bundle — NOT fixed in this lane
+
+**`Audit::record()`'s mandatory-reason check can be bypassed with Unicode
+whitespace, for every sensitive action in the application.**
+
+`Audit.php:104` guards a mandatory reason with `trim($reason) === ''`. PHP's
+`trim()` strips only the ASCII whitespace set, so a reason consisting solely of
+U+00A0 (non-breaking space) or U+3000 (ideographic space) passes the check. The
+mutation was confirmed live: the grant commits, and the audit row records a
+justification that is invisible to a human reviewing the trail. A grant
+justified by one invisible character is indistinguishable, in review, from one
+nobody authorised.
+
+Scope is **not** limited to this lane. Every action on
+`SensitiveActions::ACTIONS` goes through the same check, so `PAYMENT_REFUND`,
+`PAYMENT_CHARGEBACK`, `VENDOR_PAYOUT`, `JOURNAL_REVERSAL`,
+`RECONCILIATION_EXCEPTION_RESOLVED`, `MFA_RESET`, `DOCUMENT_DELETE`,
+`PLOT_OVERRIDE`, and the rest are all reachable the same way — all of them
+already merged.
+
+This lane closed the hole **only at its own console layer**
+(`app/Console/Commands/Concerns/RequiresAuditReason.php`, a Unicode-aware
+`\p{Z}\p{C}\s` check, with four regression tests). That is defence in depth:
+the `identity:*` commands are safe, the platform is not. Fixing the shared
+`Audit::record()` check was deliberately left alone — it is shared
+infrastructure that already-merged lanes depend on, and a change there needs
+its own review and its own regression pass across every calling module.
+
+Decision needed from the coordinator: whether this becomes its own lane, a
+hotfix against trunk, or a ledgered backlog item.
+
 ## NOT TESTED (this lane)
 
 - **The "validate before the transaction opens" ordering claim in Task 4 is not

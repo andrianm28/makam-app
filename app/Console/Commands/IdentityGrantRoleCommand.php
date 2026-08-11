@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Console\Commands\Concerns\RequiresAuditReason;
+
 use App\Platform\Audit\Exceptions\AuditReasonRequiredException;
 use App\Platform\IdentityAccess\Roles\Actions\GrantActorRole;
 use Illuminate\Console\Command;
@@ -33,6 +35,8 @@ use InvalidArgumentException;
  */
 final class IdentityGrantRoleCommand extends Command
 {
+    use RequiresAuditReason;
+
     protected $signature = 'identity:grant-role {actor} {role} {--reason=}';
 
     protected $description = 'Grant a role to an actor. Console-only, audited; --reason is mandatory.';
@@ -41,7 +45,7 @@ final class IdentityGrantRoleCommand extends Command
     {
         $reason = (string) $this->option('reason');
 
-        if (trim($reason) === '') {
+        if ($this->reasonIsBlank($reason)) {
             $this->error('A non-blank --reason is required to grant a role.');
 
             return self::FAILURE;

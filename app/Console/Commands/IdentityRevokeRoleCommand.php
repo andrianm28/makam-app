@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Console\Commands\Concerns\RequiresAuditReason;
+
 use App\Platform\Audit\Exceptions\AuditReasonRequiredException;
 use App\Platform\IdentityAccess\Roles\Actions\RevokeActorRole;
 use Illuminate\Console\Command;
@@ -23,6 +25,8 @@ use InvalidArgumentException;
  */
 final class IdentityRevokeRoleCommand extends Command
 {
+    use RequiresAuditReason;
+
     protected $signature = 'identity:revoke-role {actor} {role} {--reason=}';
 
     protected $description = 'Revoke a role from an actor. Console-only, audited; --reason is mandatory.';
@@ -31,7 +35,7 @@ final class IdentityRevokeRoleCommand extends Command
     {
         $reason = (string) $this->option('reason');
 
-        if (trim($reason) === '') {
+        if ($this->reasonIsBlank($reason)) {
             $this->error('A non-blank --reason is required to revoke a role.');
 
             return self::FAILURE;

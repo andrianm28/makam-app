@@ -214,4 +214,95 @@ final class IdentityGrantCommandsTest extends TestCase
 
         $this->assertSame(['cemetery:4'], (new ScopeAssignmentReader())->scopeStringsForActor(42));
     }
+
+    public function test_revoke_scope_command_rejects_an_unknown_entity_type(): void
+    {
+        ScopeAssignment::create([
+            'actor_identifier' => '42',
+            'entity_type' => ScopeEntityType::CEMETERY,
+            'entity_id' => '4',
+        ]);
+
+        $this->artisan('identity:revoke-scope', [
+            'actor' => '42',
+            'entityType' => 'galaxy',
+            'entityId' => '4',
+            '--reason' => 'Typo in the entity type',
+        ])->assertFailed();
+
+        // The real grant must survive a rejected revoke of a bogus type.
+        $this->assertSame(['cemetery:4'], (new ScopeAssignmentReader())->scopeStringsForActor(42));
+    }
+
+    // -----------------------------------------------------------------
+    // Unicode-whitespace reason bypass
+    //
+    // PHP's trim() strips only ASCII whitespace, so a --reason of a single
+    // non-breaking space (U+00A0) reads as non-blank to a trim()-based
+    // check while being invisible to a human reviewing the audit trail.
+    // A grant justified by one invisible character is indistinguishable,
+    // in review, from one nobody authorised.
+    //
+    // These pin the command-layer guard only. Audit::record()'s own
+    // mandatory-reason check still uses trim(), so the same bypass remains
+    // open for every other sensitive action in the application — recorded
+    // as a cross-cutting finding in this lane's merge sign-off bundle, not
+    // fixed here.
+    // -----------------------------------------------------------------
+
+    public function test_grant_role_command_rejects_a_unicode_whitespace_only_reason(): void
+    {
+        $this->artisan('identity:grant-role', [
+            'actor' => '42',
+            'role' => ActorRole::FINANCE,
+            '--reason' => "\u{00A0}",
+        ])->assertFailed();
+
+        $this->assertDatabaseCount('actor_role_assignments', 0);
+        $this->assertDatabaseCount('audit_events', 0);
+    }
+
+    public function test_revoke_role_command_rejects_a_unicode_whitespace_only_reason(): void
+    {
+        ActorRoleAssignment::create(['actor_identifier' => '42', 'role' => ActorRole::FINANCE]);
+
+        $this->artisan('identity:revoke-role', [
+            'actor' => '42',
+            'role' => ActorRole::FINANCE,
+            '--reason' => "\u{3000}",
+        ])->assertFailed();
+
+        $this->assertSame([ActorRole::FINANCE], (new ActorRoleReader())->rolesForActor(42));
+    }
+
+    public function test_grant_scope_command_rejects_a_unicode_whitespace_only_reason(): void
+    {
+        $this->artisan('identity:grant-scope', [
+            'actor' => '42',
+            'entityType' => ScopeEntityType::CEMETERY,
+            'entityId' => '4',
+            '--reason' => "\u{00A0}\u{3000}",
+        ])->assertFailed();
+
+        $this->assertDatabaseCount('scope_assignments', 0);
+        $this->assertDatabaseCount('audit_events', 0);
+    }
+
+    public function test_revoke_scope_command_rejects_a_unicode_whitespace_only_reason(): void
+    {
+        ScopeAssignment::create([
+            'actor_identifier' => '42',
+            'entity_type' => ScopeEntityType::CEMETERY,
+            'entity_id' => '4',
+        ]);
+
+        $this->artisan('identity:revoke-scope', [
+            'actor' => '42',
+            'entityType' => ScopeEntityType::CEMETERY,
+            'entityId' => '4',
+            '--reason' => "\u{00A0}",
+        ])->assertFailed();
+
+        $this->assertSame(['cemetery:4'], (new ScopeAssignmentReader())->scopeStringsForActor(42));
+    }
 }
