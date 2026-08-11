@@ -77,8 +77,8 @@ final class Audit
      * @param  string  $actorRole  AC2: required for every event, including
      *                             one with a null `$actorRef`.
      * @param  AuditSource  $source  AC2: panel | api | job.
-     * @param  string|null  $reason  AC3: required (and not entirely
-     *                               whitespace — see `reasonIsBlank()`) when `$action` is on
+     * @param  string|null  $reason  AC3: required, and must carry readable
+     *                               content — see `reasonIsBlank()` — when `$action` is on
      *                               `SensitiveActions::ACTIONS` — throws
      *                               `AuditReasonRequiredException` otherwise. Optional for
      *                               every other action.
@@ -150,10 +150,10 @@ final class Audit
      * that cannot be decoded cannot be read by a human reviewing the
      * audit trail either, so they are rejected rather than trusted.
      *
-     * Known residual: the Hangul fillers U+3164 and U+1160 are category
-     * `Lo` (Letter, other), not `Z`/`C`, so a reason consisting solely
-     * of them is still accepted despite rendering invisible in most
-     * fonts. Enumerating those code points would trade away the
+     * Known residual: the Hangul fillers (U+3164, U+1160, U+FFA0) are
+     * category `Lo` (Letter, other), not `Z`/`C`, so a reason consisting
+     * solely of them is still accepted despite rendering invisible in
+     * most fonts. Enumerating those code points would trade away the
      * "reject the whole class, don't play whack-a-mole" property this
      * pattern is chosen for, so it is accepted and recorded here
      * instead.

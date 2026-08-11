@@ -25,7 +25,7 @@ namespace App\Console\Commands\Concerns;
  * with individual code points.
  *
  * ---------------------------------------------------------------------------
- * This is defence in depth, NOT the root fix
+ * This is defence in depth; the root fix lives in Audit::reasonIsBlank()
  * ---------------------------------------------------------------------------
  * `Audit::record()` performs the authoritative mandatory-reason check for
  * every action on `SensitiveActions::ACTIONS`. It used to use `trim()`, so
@@ -46,7 +46,8 @@ trait RequiresAuditReason
     /**
      * True when `$reason` is absent, empty, consists only of whitespace
      * — including Unicode whitespace that `trim()` would leave in place —
-     * or is not decodable as UTF-8 at all.
+     * or cannot be evaluated at all (malformed UTF-8, or any other PCRE
+     * error).
      */
     private function reasonIsBlank(?string $reason): bool
     {

@@ -318,10 +318,14 @@ final class IdentityGrantCommandsTest extends TestCase
     // A grant justified by one invisible character is indistinguishable,
     // in review, from one nobody authorised.
     //
-    // These pin the command-layer guard only. Audit::record()'s own
-    // mandatory-reason check now runs the same Unicode-aware pattern, so
-    // the bypass is closed at its root for every sensitive action in the
-    // application; these tests keep the defence-in-depth layer honest.
+    // Audit::record() now enforces the same rule at the root, so a test
+    // that only asserts the command failed would pass even with this
+    // trait deleted — the root guard throws, the command catches it and
+    // returns FAILURE, and the row counts stay at zero either way.
+    // Asserting the command's OWN error text is what pins the
+    // command-layer guard: only the trait produces that message. The
+    // trait's blank-detection logic is covered directly by
+    // Tests\Unit\Console\Commands\Concerns\RequiresAuditReasonTest.
     // -----------------------------------------------------------------
 
     public function test_grant_role_command_rejects_a_unicode_whitespace_only_reason(): void
@@ -330,7 +334,9 @@ final class IdentityGrantCommandsTest extends TestCase
             'actor' => '42',
             'role' => ActorRole::FINANCE,
             '--reason' => "\u{00A0}",
-        ])->assertFailed();
+        ])
+            ->expectsOutputToContain('A non-blank --reason is required to grant a role.')
+            ->assertFailed();
 
         $this->assertDatabaseCount('actor_role_assignments', 0);
         $this->assertDatabaseCount('audit_events', 0);
@@ -342,7 +348,9 @@ final class IdentityGrantCommandsTest extends TestCase
             'actor' => '42',
             'role' => ActorRole::FINANCE,
             '--reason' => "\xA0",
-        ])->assertFailed();
+        ])
+            ->expectsOutputToContain('A non-blank --reason is required to grant a role.')
+            ->assertFailed();
 
         $this->assertDatabaseCount('actor_role_assignments', 0);
         $this->assertDatabaseCount('audit_events', 0);
@@ -356,7 +364,9 @@ final class IdentityGrantCommandsTest extends TestCase
             'actor' => '42',
             'role' => ActorRole::FINANCE,
             '--reason' => "\u{3000}",
-        ])->assertFailed();
+        ])
+            ->expectsOutputToContain('A non-blank --reason is required to revoke a role.')
+            ->assertFailed();
 
         $this->assertSame([ActorRole::FINANCE], (new ActorRoleReader)->rolesForActor(42));
     }
@@ -368,7 +378,9 @@ final class IdentityGrantCommandsTest extends TestCase
             'entityType' => ScopeEntityType::CEMETERY,
             'entityId' => '4',
             '--reason' => "\u{00A0}\u{3000}",
-        ])->assertFailed();
+        ])
+            ->expectsOutputToContain('A non-blank --reason is required to grant a scope.')
+            ->assertFailed();
 
         $this->assertDatabaseCount('scope_assignments', 0);
         $this->assertDatabaseCount('audit_events', 0);
@@ -387,7 +399,9 @@ final class IdentityGrantCommandsTest extends TestCase
             'entityType' => ScopeEntityType::CEMETERY,
             'entityId' => '4',
             '--reason' => "\u{00A0}",
-        ])->assertFailed();
+        ])
+            ->expectsOutputToContain('A non-blank --reason is required to revoke a scope.')
+            ->assertFailed();
 
         $this->assertSame(['cemetery:4'], (new ScopeAssignmentReader)->scopeStringsForActor(42));
     }
