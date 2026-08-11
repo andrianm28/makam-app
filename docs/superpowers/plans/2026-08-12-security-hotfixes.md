@@ -125,6 +125,39 @@ application bootstraps in one process: the test suite, and Octane, which is not
 installed here. Commit messages are immutable, so the correction lives in the
 docblock, in the closed finding record, and in the PR body.
 
+## Fix 3 — the two admin HTTP endpoints returned 500 for a reason the audit layer calls blank
+
+`app/Platform/Payment/Http/Controllers/RecordPaymentReversalController.php`,
+`app/Platform/Payment/Http/Controllers/VerifyManualPaymentController.php`,
+`app/Platform/Audit/Rules/NonBlankReason.php` (new)
+
+Surfaced by the second whole-branch review, as a consequence of Fix 1. Both
+controllers validated the operator's reason as `['required', 'string']` and
+neither caught `AuditReasonRequiredException`, which is a plain
+`RuntimeException` with no `render()` — so a reason that Fix 1 rejects rendered
+as an HTTP 500 rather than a 422, losing the operator's input and paging
+whoever watches the error rate.
+
+**The review's stated trigger was wrong, and testing it is what showed that.**
+It reported a non-breaking space as the trigger and marked the finding NOT
+TESTED end to end. Laravel's `TrimStrings` middleware runs `Str::trim()`, which
+strips `Str::INVISIBLE_CHARACTERS` plus Unicode `\s` under `/u` — so NBSP and
+U+3000 arrive as `''` and `required` already rejects them. A test written
+around NBSP passes with or without a fix.
+
+The defect is real with a wider trigger: `Audit::reasonIsBlank()` rejects all of
+`\p{C}`, which is strictly wider than what `TrimStrings` strips. A control
+character (U+0001) or a private-use character (U+E000) survives the middleware
+and produces exactly the described 500.
+
+- [x] **Task 3.1** — Add `NonBlankReason`, delegating to
+      `Audit::reasonIsBlank()` (now public) rather than copying the pattern, so
+      the HTTP boundary cannot drift from the authoritative check. Attach it in
+      both controllers. Mutation-verified: with the rule removed, both `\p{C}`
+      cases fail with `Failed asserting that 500 is not identical to 500` on
+      both routes; the NBSP case passes, and is kept as a data-provider case
+      pinning the `TrimStrings` boundary rather than dropped.
+
 ## Known gap — deliberately out of scope
 
 `register()` runs once per bootstrap from `NotificationServiceProvider::boot()`.
@@ -145,14 +178,20 @@ and regression pass.
 - [x] Fix 2 keying proven immune to id reuse. The original race's exact
       non-determinism is **NOT TESTED** — it cannot be forced deterministically,
       which is the nature of the bug.
-- [x] Full local suite green at baseline across four runs (one default ordering,
-      three random seeds).
-- [x] `ci/verify-docs.sh` clean; Pint and PHPStan clean.
-- [ ] **NOT TESTED on PostgreSQL.** Every local run was on SQLite. The Fix 2
-      test is the repository's only test that names a driver
-      (`sqlite_guard_probe`) rather than inheriting the default, and its
-      precondition — that PHP hands the replacement connection the recycled
-      `spl_object_id` — has only ever been exercised with a SQLite default
-      connection alive in the manager. It fails loudly rather than silently if
-      that does not hold, so the worst case is a red CI run, not a false green.
-      The branch's first CI run is part of the verification, not a formality.
+- [x] Fix 3 mutation-tested: rule removed → both `\p{C}` cases fail with a real
+      500 on both routes; restored → green.
+- [x] Full local suite at baseline (1812 tests / 7015 assertions; the only two
+      failures are the pre-existing SQLite `DROP TABLE ... CASCADE` errors in
+      files this branch never touches).
+- [x] `ci/verify-docs.sh` and Pint clean. PHPStan reports one **pre-existing**
+      error in `app/Domain/GraveRegistry/GraveRegistryPublicQuery.php:166`, a
+      file no commit here touches; CI's `analyse` step passes, so it is a
+      local-environment artifact, not a regression.
+- [x] **PostgreSQL: verified by CI.** Every local run is on SQLite
+      (`phpunit.xml` sets `DB_CONNECTION=sqlite` without `force="true"`, so
+      CI's `DB_CONNECTION: pgsql` wins). The Fix 2 test is the repository's only
+      test that names a driver (`sqlite_guard_probe`), and its precondition —
+      that PHP hands the replacement connection the recycled `spl_object_id` —
+      had only ever been exercised with a SQLite default connection alive in
+      the manager. CI's `PHP (validate, lint, analyse, test)` job passed on this
+      branch, which retires that caveat.
