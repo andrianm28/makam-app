@@ -78,7 +78,13 @@ final class RecordPaymentReversalController extends Controller
         );
 
         $validated = $request->validate([
-            'reference' => ['required', 'string'],
+            // max:191 matches `$table->string('reference', 191)` in
+            // `2026_08_11_100010_create_payment_reversals_table.php` — an
+            // over-length reference is refused with a clean 422 here rather
+            // than ever reaching the database, where a PostgreSQL
+            // "value too long for varchar(191)" error would otherwise be
+            // the raw failure surfaced (fix round 1, MINOR-2).
+            'reference' => ['required', 'string', 'max:191'],
             'amount_minor' => ['nullable', 'integer'],
             'reason' => ['required', 'string'],
         ]);

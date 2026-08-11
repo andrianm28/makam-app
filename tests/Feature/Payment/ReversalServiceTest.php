@@ -8,6 +8,8 @@ use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\Exceptions\AuditReasonRequiredException;
 use App\Platform\Audit\Models\AuditEvent;
+use App\Platform\Payment\Actions\RecordChargeback;
+use App\Platform\Payment\Actions\RecordRefund;
 use App\Platform\Payment\Exceptions\PaymentReversalAlreadyRecordedException;
 use App\Platform\Payment\Models\PaymentReversal;
 use App\Platform\Payment\Models\PaymentSession;
@@ -15,6 +17,7 @@ use App\Platform\Payment\PaymentAuditActions;
 use App\Platform\Payment\PaymentReversalType;
 use App\Platform\Payment\ReversalService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use InvalidArgumentException;
 use Tests\TestCase;
 
 /**
@@ -142,6 +145,49 @@ final class ReversalServiceTest extends TestCase
                 'A missing-reason audit failure must roll back the createRecorded() mutation too (Audit::wrap same-transaction guarantee).'
             );
         }
+    }
+
+    /**
+     * Fix round 1 (task-6 scoped re-review, MINOR-1) — direct Action-layer
+     * coverage of `assertNotBlank()`'s throw path for `RecordRefund`,
+     * matching Task 5's own precedent
+     * (`SubmitManualPaymentTest::test_a_blank_required_field_is_rejected()`)
+     * of testing the Action directly rather than only through HTTP
+     * validation (`RecordPaymentReversalRouteTest`).
+     */
+    public function test_record_refund_rejects_a_blank_reference_directly(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        (new RecordRefund)->handle(
+            reference: '   ',
+            amountMinor: null,
+            reason: 'Attempted with a blank reference',
+            actorRef: 7,
+            actorRole: 'admin',
+            source: AuditSource::Panel,
+        );
+
+        $this->assertSame(0, PaymentReversal::query()->count());
+    }
+
+    /**
+     * Same as above, `RecordChargeback` half — fix round 1, MINOR-1.
+     */
+    public function test_record_chargeback_rejects_a_blank_reference_directly(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        (new RecordChargeback)->handle(
+            reference: '',
+            amountMinor: null,
+            reason: 'Attempted with a blank reference',
+            actorRef: 7,
+            actorRole: 'admin',
+            source: AuditSource::Panel,
+        );
+
+        $this->assertSame(0, PaymentReversal::query()->count());
     }
 
     public function test_a_second_refund_for_the_same_reference_is_refused(): void
