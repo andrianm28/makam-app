@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\Admin\DisableMfaController;
+use App\Http\Controllers\Admin\FinanceExportController;
 use App\Http\Controllers\DocumentVault\DownloadDocumentController;
+use App\Http\Middleware\EnforceMfaChallenge;
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Livewire\Public\Booking\BookingWizard;
 use App\Livewire\Public\Directory\CemeteryDetail;
@@ -250,6 +252,37 @@ Route::get('/bantuan', HelpCentre::class)->name('bantuan.index');
 Route::post('/admin/mfa/disable', DisableMfaController::class)
     ->middleware(['web', 'auth', RequireRecentAuthentication::class.':mfa_disable,filament.admin.pages.mfa-challenge'])
     ->name('admin.mfa.disable');
+
+/*
+|--------------------------------------------------------------------------
+| Admin — bulk financial export (L4 Task 6, AC13)
+|--------------------------------------------------------------------------
+| Registered here rather than as a Filament page because the response is a
+| streamed file download, not a rendered page. That placement is what made
+| the route miss the panel's own middleware stack, so the two protections it
+| would have inherited are attached explicitly:
+|
+|   - `EnforceMfaChallenge` — a no-op for an actor with no confirmed MFA
+|     enrolment, and for an enrolled actor the same per-session challenge the
+|     panel requires (`AdminPanelProvider`).
+|   - `RequireRecentAuthentication` — session-freshness only. It is NOT the
+|     authorization check: `Actions\BulkFinancialExport` owns the finance
+|     policy and the query-level badan-usaha scope, so a non-HTTP caller is
+|     gated identically and no route configuration can widen it.
+|
+| `throttle:financial-export` mirrors `internal.documents.download` below: a
+| bulk export of a period's books deserves at least the rate limit a single
+| document download already carries.
+*/
+Route::get('/admin/finance/exports', FinanceExportController::class)
+    ->middleware([
+        'web',
+        'auth',
+        'throttle:financial-export',
+        EnforceMfaChallenge::class,
+        RequireRecentAuthentication::class.':bulk_financial_export,filament.admin.pages.mfa-challenge',
+    ])
+    ->name('admin.finance.exports');
 
 /*
 |--------------------------------------------------------------------------

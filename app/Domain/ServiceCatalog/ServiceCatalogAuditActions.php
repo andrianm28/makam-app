@@ -12,23 +12,15 @@ namespace App\Domain\ServiceCatalog;
  * mirrors `App\Domain\Faq\FaqAuditActions`'s own doc block and naming shape.
  *
  * ---------------------------------------------------------------------------
- * None of these are added to `App\Platform\Audit\SensitiveActions::ACTIONS`
- * — a deliberate judgement call, made explicitly here, same reasoning
- * `FaqAuditActions`'s own doc block already applies
- * ---------------------------------------------------------------------------
- * `app/Platform/**` is a read-only dependency for this batch (this batch's
- * own scope is `app/Domain/ServiceCatalog/**` plus its migrations/tests
- * only), so `SensitiveActions.php` is not edited here regardless. Even
- * setting that constraint aside: defining a package/version/item, publishing
- * a version, or recording a price version are catalogue-authoring actions —
- * mistakes here are correctable by publishing a new version (AC2's own
- * immutability design already makes every published mistake reversible via
- * a new version, never a silent overwrite), not fraud- or harm-shaped the
- * way `SensitiveActions`'s own list (DITOLAK, plot override, tariff-source
- * change, manual payment verification, certificate revoke, vendor payout,
- * MFA reset) is. Every Action below still calls `Audit::record()`
- * unconditionally, so a complete "who changed what, when" history exists for
- * service-catalogue authoring the same way it does for FAQ content.
+ * The three package-authoring actions are not added to
+ * `App\Platform\Audit\SensitiveActions::ACTIONS`; defining a package/version
+ * or revising a published version is correctable by publishing a new version.
+ * The price-version action is the exception: it is explicitly listed under
+ * its emitted domain-qualified name because it changes a financial value and
+ * requires a mandatory reason. Every Action below still calls
+ * `Audit::record()` unconditionally, so a complete "who changed what, when"
+ * history exists for service-catalogue authoring the same way it does for FAQ
+ * content.
  */
 final class ServiceCatalogAuditActions
 {

@@ -1,0 +1,104 @@
+-- NOT executed automatically by any migration, seeder, artisan
+-- command, or CI job. This file is documentation of the statements to
+-- run manually, once, after finding N-1 is resolved.
+--
+-- platform-financial-ledger design.md / AC2, AC14: `journal_batches` and
+-- `journal_entries` are append-only. The write seam is `Contracts\Journal`
+-- (post / postReversal) and nothing else; corrections are NEW reversing
+-- batches, never edits to existing rows. Append-only must be enforced at the
+-- database level: no UPDATE/DELETE grant on either table for the application
+-- role. Migration role only for schema.
+--
+-- Why this cannot be applied today
+-- ---------------------------------------------------------------------------
+-- Finding N-1 (docs/planning/sprint-plan.md): this project currently
+-- provisions only ONE Postgres role per environment
+-- (makam_dev_user / makam_stg_user — see
+-- docs/operations/examples/postgres-init/01-create-databases.sh),
+-- which OWNS the database (needed to run migrations, including the
+-- ones that create these tables) and ALSO runs the application at
+-- request time. Revoking UPDATE/DELETE from that single role would
+-- also remove its own ability to run a future migration that alters
+-- these tables (e.g. adding a column, or Laravel's own migration
+-- bookkeeping). There is no distinct, lower-privileged "application
+-- role" to revoke from yet — the role split needs two newly
+-- provisioned secrets per environment, which sprint-plan.md already
+-- classifies as a credential change requiring human approval.
+--
+-- docs/planning/sprint-plan.md already sketches the target shape for
+-- that split, in its own N-1 discussion (search that file for
+-- "makam_dev_app"):
+--
+--   CREATE ROLE makam_dev_app      LOGIN PASSWORD :'dev_app_password';
+--   CREATE ROLE makam_dev_migrator LOGIN PASSWORD :'dev_mig_password';
+--   CREATE DATABASE makam_dev OWNER makam_dev_migrator;
+--   -- ...mirrors for makam_stg / makam_stg_app / makam_stg_migrator
+--
+-- Run the statements below ONCE that split actually exists per
+-- environment, replacing <app_role> with the real non-migration
+-- application role (e.g. makam_dev_app in dev, makam_stg_app in
+-- staging). Until then, this file is reference only — see
+-- app/Platform/FinancialLedger/Models/JournalBatch.php for the
+-- application-level guard that stands in for this (explicitly NOT
+-- equivalent — see that class's doc block and
+-- tests/Feature/FinancialLedger/JournalAppendOnlyTest.php for exactly
+-- what it does and does not cover).
+
+-- 1. Remove the mutation privileges the application role would
+--    otherwise inherit from table ownership / a broad default grant.
+REVOKE UPDATE, DELETE ON journal_batches FROM <app_role>;
+REVOKE UPDATE, DELETE ON journal_entries FROM <app_role>;
+
+-- 2. The application role still needs to write new rows and read
+--    existing ones. New rows are written ONLY through `Contracts\Journal`
+--    — nothing in `app/` may call `DB::table('journal_*')->insert()`
+--    directly (`JournalAppendOnlyTest` locks the read/write discipline).
+GRANT SELECT, INSERT ON journal_batches TO <app_role>;
+GRANT SELECT, INSERT ON journal_entries TO <app_role>;
+
+-- 3. reconciliation_exceptions — deliberately NOT revoked here
+--    ---------------------------------------------------------------------------
+--    `reconciliation_exceptions.status` IS mutable pre-resolution
+--    (open -> resolved, the Task 5 ruling): resolving a finding is itself
+--    an UPDATE performed exactly once by `Actions\ResolveException`. A
+--    blanket `REVOKE UPDATE, DELETE ON reconciliation_exceptions` would
+--    break the only legitimate writer instead of closing the gap, so no
+--    such statement is issued.
+--
+--    The post-resolution immutability this task is responsible for is
+--    therefore enforced AFTER resolution and only there:
+--
+--      - at the application level, nothing in this repo edits a resolved
+--        row — `ResolveException` writes status/decision/decided_by/
+--        decided_at once and never again, and its tests assert the
+--        re-run path leaves a resolved row byte-identical; and
+--      - at the database level, once the role split exists, a future
+--        focused change may add a conditional rule/trigger rejecting
+--        UPDATE/DELETE of a row whose `status = 'resolved'`. That is a
+--        deliberate later decision, NOT a schema change in this task and
+--        NOT expressible as a per-row GRANT.
+--
+--    If/when that resolved-row guard is built it belongs in this file
+--    (or a sibling under sql/) — never via `ALTER DEFAULT PRIVILEGES`
+--    (see step 4).
+
+-- 4. Run per-table, deliberately, rather than as a schema-wide
+--    default privilege change. `journal_batches`/`journal_entries` are
+--    meant to be the append-only exceptions to "the application role can
+--    UPDATE its own tables" — every other table in this schema is
+--    expected to allow UPDATE for the app role, so this must never be
+--    applied via
+--    `ALTER DEFAULT PRIVILEGES ... FOR ROLE <migrator> IN SCHEMA
+--    public REVOKE UPDATE, DELETE ON TABLES ...`, which would
+--    silently strip UPDATE from every future table too.
+
+-- 5. Confirm the revoke actually took effect (run as <app_role>, not
+--    as the migrator/owner role — the owner role bypasses ordinary
+--    grants):
+--
+--   SET ROLE <app_role>;
+--   UPDATE journal_batches SET status = 'reversed' WHERE id = 1;
+--   -- expected: ERROR: permission denied for table journal_batches
+--   DELETE FROM journal_entries WHERE batch_id = 1;
+--   -- expected: ERROR: permission denied for table journal_entries
+--   RESET ROLE;

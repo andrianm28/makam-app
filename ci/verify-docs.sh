@@ -275,6 +275,36 @@ hits=$(grep -rIn 'outline:\s*none' --include='*.css' resources/ 2>/dev/null \
 if [ -z "$hits" ]; then pass "no unreplaced focus suppression"
 else fail "outline: none without a focus-visible replacement:"; echo "$hits" | head -10; fi
 
+# ---------------------------------------------------------------------------
+head2 "GATE 13 — sql/revoke-journal-mutations.sql conforms to the canonical revoke shape"
+# ---------------------------------------------------------------------------
+# The append-only DB revoke for the financial ledger must stay a faithful
+# sibling of the audit twin (app/Platform/Audit/sql/revoke-audit-mutations.sql):
+# reference-only (NOT executed), N-1 role-split blocker stated, per-table
+# REVOKE/GRANT, the SET ROLE verification snippet, and NEVER applied via
+# ALTER DEFAULT PRIVILEGES. If N-1 is ever resolved and a real revoke is
+# written, this gate is what keeps the two files from drifting apart.
+rj=sql/revoke-journal-mutations.sql
+rj_fail=0
+check_rj() { if grep -qE "$1" "$rj"; then :; else echo "    missing: $2 ($1)" >&2; rj_fail=1; fi; }
+if [ ! -f "$rj" ]; then
+  fail "sql/revoke-journal-mutations.sql is missing"
+else
+  check_rj '^-- NOT executed' 'reference-only header'
+  check_rj 'Finding N-1' 'N-1 role-split blocker'
+  check_rj '^REVOKE UPDATE, DELETE ON journal_batches FROM <app_role>;' 'REVOKE on journal_batches'
+  check_rj '^REVOKE UPDATE, DELETE ON journal_entries FROM <app_role>;' 'REVOKE on journal_entries'
+  check_rj '^GRANT SELECT, INSERT ON journal_batches TO <app_role>;' 'GRANT on journal_batches'
+  check_rj '^GRANT SELECT, INSERT ON journal_entries TO <app_role>;' 'GRANT on journal_entries'
+  check_rj 'SET ROLE <app_role>;' 'verification snippet (SET ROLE)'
+  check_rj 'expected: ERROR: permission denied' 'verification snippet (permission-denied expectation)'
+  if grep -E 'ALTER DEFAULT PRIVILEGES' "$rj" | grep -vq '^--'; then
+    echo "    ALTER DEFAULT PRIVILEGES used outside a warning comment" >&2; rj_fail=1
+  fi
+  if [ "$rj_fail" -eq 0 ]; then pass "sql/revoke-journal-mutations.sql is a canonical-shaped reference revoke"
+  else fail "sql/revoke-journal-mutations.sql drifted from the canonical shape"; fi
+fi
+
 printf '\n'
 if [ "$FAIL" -eq 0 ]; then
   printf '\033[32mRESULT: ALL DOC GATES PASS\033[0m\n'; exit 0

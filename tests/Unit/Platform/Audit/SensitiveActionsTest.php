@@ -28,6 +28,10 @@ final class SensitiveActionsTest extends TestCase
             'certificate revoke' => ['CERTIFICATE_REVOKE'],
             'vendor payout' => ['VENDOR_PAYOUT'],
             'document delete' => ['DOCUMENT_DELETE'],
+            'journal reversal' => ['JOURNAL_REVERSAL'],
+            'price version recorded' => ['PRICE_VERSION_RECORDED'],
+            'service definition price version recorded' => ['SERVICE_DEFINITION_PRICE_VERSION_RECORDED'],
+            'reconciliation exception resolved' => ['RECONCILIATION_EXCEPTION_RESOLVED'],
             'payment refund' => ['PAYMENT_REFUND'],
             'payment chargeback' => ['PAYMENT_CHARGEBACK'],
         ];
@@ -61,7 +65,16 @@ final class SensitiveActionsTest extends TestCase
      * `MFA_RESET` — a genuine, documented addition (see
      * `SensitiveActions`'s own updated class doc comment for why only
      * that one MFA action, not all four, requires a reason), not a
-     * regression. Renamed and updated rather than left red.
+     * regression. Renamed and updated rather than left red. Wave 0c later
+     * added `PRICE_VERSION_RECORDED` as the financial price-version action.
+     * The ServiceCatalog action uses its domain-qualified emitted name too.
+     *
+     * UPDATED 10 Aug 2026 — Task 5 of the `platform-financial-ledger` lane
+     * appended `RECONCILIATION_EXCEPTION_RESOLVED` under the user-approved
+     * Wave 1c ruling in
+     * `docs/superpowers/plans/2026-08-10-wave1b-financial-decisions.md`. This
+     * assertion is an exact-list check on purpose, so every growth of that
+     * array has to arrive here with a stated authority rather than slipping in.
      *
      * UPDATED 11 Aug 2026 — platform-payment-adapter Task 6 (Wave 1d
      * Append-Correction) added `PAYMENT_REFUND`/`PAYMENT_CHARGEBACK`: the
@@ -71,7 +84,7 @@ final class SensitiveActionsTest extends TestCase
      * category as `VENDOR_PAYOUT` already on this list — another genuine,
      * documented addition, not a regression.
      */
-    public function test_the_list_contains_the_requirements_named_actions_plus_mfa_reset_document_delete_and_payment_reversals(): void
+    public function test_the_list_contains_the_requirements_named_actions_plus_the_documented_additions(): void
     {
         $this->assertSame(
             [
@@ -82,8 +95,12 @@ final class SensitiveActionsTest extends TestCase
                 'PAYMENT_MANUAL_VERIFICATION',
                 'CERTIFICATE_REVOKE',
                 'VENDOR_PAYOUT',
+                'JOURNAL_REVERSAL',
+                'PRICE_VERSION_RECORDED',
+                'SERVICE_DEFINITION_PRICE_VERSION_RECORDED',
                 'MFA_RESET',
                 'DOCUMENT_DELETE',
+                'RECONCILIATION_EXCEPTION_RESOLVED',
                 'PAYMENT_REFUND',
                 'PAYMENT_CHARGEBACK',
             ],
