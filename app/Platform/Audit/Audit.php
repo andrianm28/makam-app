@@ -78,10 +78,10 @@ final class Audit
      *                             one with a null `$actorRef`.
      * @param  AuditSource  $source  AC2: panel | api | job.
      * @param  string|null  $reason  AC3: required, and must carry readable
-     *                               content — see `reasonIsBlank()` — when `$action` is on
-     *                               `SensitiveActions::ACTIONS` — throws
-     *                               `AuditReasonRequiredException` otherwise. Optional for
-     *                               every other action.
+     *                               content — see `reasonIsBlank()` — when
+     *                               `$action` is on `SensitiveActions::ACTIONS`
+     *                               — throws `AuditReasonRequiredException`
+     *                               otherwise. Optional for every other action.
      * @param  string|null  $correlationId  Schema column only — AC10's
      *                                      propagation mechanism is S3-T10, a separate later batch.
      *                                      Pass one through if the caller already has it; leave null

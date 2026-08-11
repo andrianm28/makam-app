@@ -41,13 +41,16 @@ use WeakMap;
  * What this does and does not prove
  * ---------------------------------------------------------------------------
  * The hook fires BEFORE a query executes, so an unauthorised write cannot
- * land and then report its violation. Every real write site in this lane
- * (`Actions\DispatchNotification::recordRecipientsAndDeliveries()`'s
- * `insertOrIgnore()`, `::claimDelivery()`'s claim update, and
- * `::recordChannelOutcome()`'s outcome update)
- * runs inside `withWritesUnlocked()`, and both also run inside a surrounding
- * `DB::transaction()` (the first directly; the second is a single
- * autocommit statement — see that method's own call site). An unauthorised
+ * land and then report its violation. All four real write sites in this
+ * lane run inside `withWritesUnlocked()`, and they are exactly the four
+ * methods the allowlist in `calledFromDispatchNotification()` names:
+ * `Actions\DispatchNotification::recordRecipientsAndDeliveries()`'s
+ * `insertOrIgnore()`, `::claimDelivery()`'s claim update,
+ * `::recordChannelOutcome()`'s outcome update, and
+ * `::requeueFailedDelivery()`'s requeue update. Only the first runs inside
+ * a surrounding `DB::transaction()` (opened by `::consumeOutboxEvent()`);
+ * the other three are single autocommit statements guarded by their own
+ * `where` predicates. An unauthorised
  * write attempted from anywhere else throws before execution and is
  * provable in a test
  * (`tests/Unit/Platform/Notification/NotificationDeliveryWriteGuardTest.php`),
@@ -174,10 +177,17 @@ final class NotificationDeliveryWriteGuard
 
     /**
      * Test-only escape hatch: forces the lock back to its default (locked)
-     * state. `self::$unlocked` is process-global static state — like
-     * `OutboxEvent::flushEventListeners()` elsewhere in this codebase, a
-     * test that deliberately triggers a violation must not leak
-     * `$unlocked = true` into a later, unrelated test.
+     * state.
+     *
+     * Currently has NO callers anywhere in `app/` or `tests/`, and is
+     * retained deliberately rather than wired up. The leak it would guard
+     * against — a test that triggers a violation leaving `$unlocked = true`
+     * behind for a later, unrelated test — cannot presently occur:
+     * `withWritesUnlocked()` saves the previous state and restores it in a
+     * `finally`, so `$unlocked` survives no callback, exception path
+     * included. It is kept as a cheap belt-and-braces hatch in case a
+     * future code path sets the flag outside that method; if none appears,
+     * it can be deleted with no loss.
      *
      * `self::$registeredConnections` deliberately is NOT cleared: it
      * holds live connection objects weakly and empties itself as they

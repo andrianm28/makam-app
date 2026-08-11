@@ -323,7 +323,8 @@ final class IdentityGrantCommandsTest extends TestCase
     // trait deleted — the root guard throws, the command catches it and
     // returns FAILURE, and the row counts stay at zero either way.
     // Asserting the command's OWN error text is what pins the
-    // command-layer guard: only the trait produces that message. The
+    // command-layer guard: the four command classes emit that string, but
+    // only the trait-gated branch reaches it. The
     // trait's blank-detection logic is covered directly by
     // Tests\Unit\Console\Commands\Concerns\RequiresAuditReasonTest.
     // -----------------------------------------------------------------
