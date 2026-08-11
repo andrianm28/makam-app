@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Providers\Filament;
 
+use App\Filament\Admin\Pages\FinanceReports;
 use App\Filament\Admin\Pages\MfaChallenge;
 use App\Filament\Admin\Pages\MfaSettings;
 use App\Http\Middleware\AssignCorrelationId;
@@ -132,6 +133,7 @@ class AdminPanelProvider extends PanelProvider
             )
             ->pages([
                 Pages\Dashboard::class,
+                FinanceReports::class,
                 MfaChallenge::class,
                 MfaSettings::class,
             ])

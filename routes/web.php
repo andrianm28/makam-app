@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\DisableMfaController;
+use App\Http\Controllers\Admin\FinanceExportController;
 use App\Http\Controllers\DocumentVault\DownloadDocumentController;
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Livewire\Public\Booking\BookingWizard;
@@ -246,6 +247,10 @@ Route::get('/bantuan', HelpCentre::class)->name('bantuan.index');
 Route::post('/admin/mfa/disable', DisableMfaController::class)
     ->middleware(['web', 'auth', RequireRecentAuthentication::class.':mfa_disable,filament.admin.pages.mfa-challenge'])
     ->name('admin.mfa.disable');
+
+Route::get('/admin/finance/exports', FinanceExportController::class)
+    ->middleware(['web', 'auth', RequireRecentAuthentication::class.':bulk_financial_export,filament.admin.pages.mfa-challenge'])
+    ->name('admin.finance.exports');
 
 Route::get('/internal/documents/{document}/download/{token}', DownloadDocumentController::class)
     ->middleware(['web', 'auth', 'throttle:document-download'])
