@@ -171,14 +171,37 @@ REST route behind it):
 
 ---
 
-## Two open rulings — read before starting Task 5 or Task 7
+## Two rulings — BOTH RECEIVED 12 Aug 2026, both tasks unblocked
 
-Tasks 1–4 and 6 are unaffected and may proceed immediately. Two decisions are
-with the coordinator; the seam survey
-([`../research/l8-seam-survey.md`](../research/l8-seam-survey.md)) reached both
-conclusions independently of this plan's author.
+The seam survey ([`../research/l8-seam-survey.md`](../research/l8-seam-survey.md))
+reached both conclusions independently of this plan's author.
 
-**Ruling A — the payment platform cannot open a session, for anyone.**
+> **Ruling A — DECIDED (coordinator, 12 Aug 2026): Option A approved.** Build
+> `GuardRenewalPaymentOpening` evaluating conditions 1–5 for real against actual
+> records. On all-pass, render the manual-coordination path per design-system.md
+> §6.9 — do **not** attempt `PaymentSession::create()`. On any fail, deny with the
+> specific renewal reason. AC8 is satisfied through its own "online **or** explicit
+> manual fallback" wording; AC8's online half is ledgered **BLOCKED (upstream
+> deny-only)** and never claimed as `PASS`. Zero modifications to
+> `app/Platform/Payment/**`. Option B (widening ruling 1b-L3-01) is explicitly
+> **not** ruled on and must not be attempted — it needs its own human escalation.
+>
+> **Ruling B — DECIDED (explicit human sign-off, 12 Aug 2026): `admin` only.**
+> `operator` is explicitly denied, and a test must prove the denial. AC10's
+> "admin/operator" requirement text is loose prose superseded by this ruling.
+> Add the missing `rbac-matrix.md` row (admin Authorized/Privileged, operator No).
+> The authorizer requires role **AND** scope grant, scoped by cemetery/grave.
+
+### A platform milestone worth naming in the PR body
+
+Renewal is the **first journey in this codebase where a payment guard's passing
+path is reachable and testable** rather than permanently dead. The order path
+could make only 1 of 6 conditions real; renewal makes 5 of 6 real, because this
+lane builds the missing quote itself. The payment adapter's own plan doc names
+"no pass path has ever been exercised" as its principal weakness. That is a
+platform-maturity result, not just a renewal feature.
+
+**Ruling A's underlying finding — the payment platform cannot open a session, for anyone.**
 `PaymentSession` refuses to insert (`PaymentSession.php:84-87` throws
 `PaymentSessionCreationUnavailableException::becauseGuardIsDenyOnly()`),
 `GuardResult` has only a `denied()` factory and an `isAllowed()` hardwired to
@@ -570,10 +593,9 @@ hardcoded design values. Expected: exit 0.
 
 ---
 
-## Task 5: Step 5 screen and the renewal payment guard (AC8) — BLOCKED ON RULING A
+## Task 5: Step 5 screen and the renewal payment guard (AC8) — UNBLOCKED (Ruling A approved)
 
-Do not start without the coordinator's confirmation. Written for the manual
-coordination path; the online path is denied honestly, never stubbed.
+Manual coordination path; the online path is denied honestly, never stubbed.
 
 **Files:**
 - Create: `app/Domain/Renewal/Actions/GuardRenewalPaymentOpening.php`, `app/Livewire/Public/Renewal/RenewalPayment.php`, `.../payment.blade.php`
@@ -711,10 +733,9 @@ public function test_an_unsettled_renewal_does_not_claim_a_new_due_date(): void
 
 ---
 
-## Task 7: External marking with evidence (AC10) — BLOCKED ON RULING B
+## Task 7: External marking with evidence (AC10) — UNBLOCKED (Ruling B: `admin` only)
 
-Do not start without the coordinator's ruling on which role may mark. Written
-for `admin` only, `operator` denied.
+`admin` only. `operator` is explicitly denied, and Step 1's test proves it.
 
 **Files:**
 - Create: `app/Domain/Renewal/Actions/MarkExternalRenewal.php`, `app/Domain/Renewal/RenewalMarkingPolicy.php`
