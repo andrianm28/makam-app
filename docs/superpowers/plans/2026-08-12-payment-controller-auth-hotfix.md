@@ -112,7 +112,16 @@ Two consequences worth stating plainly for merge review:
 
 **Caution for anyone copying the precedent:** the four `FinancialLedger` authorizer doc blocks still assert that `ActorContext::$roles` "is always `[]`" and that they refuse every real request. Those sentences predate L5 and are now stale. This hotfix does not inherit that claim and deliberately does not edit those files to correct it — that belongs to whichever lane owns them.
 
-Whether any account is presently *granted* `finance` or `restricted_admin` in a given environment is orthogonal to code correctness, but it determines whether the admin path stays usable after merge. Flagged as a deployment check, not a code change.
+### 6.1 Required deployment step — the admin path goes dark until roles are granted
+
+Whether any account is presently *granted* `finance` or `restricted_admin` is orthogonal to code correctness, but it decides whether the admin path still works after merge. It currently does not:
+
+- Roles are only ever granted by `identity:grant-role {actor} {role} --reason=` (`app/Console/Commands/IdentityGrantRoleCommand.php`), which is console-only and audited.
+- **No seeder grants any role.** `database/seeders/DatabaseSeeder.php` contains no role references, and `actor_role_assignments` appears nowhere in `database/` outside its own migration.
+
+So on merge, both endpoints refuse **everyone**, including existing admins, until an operator explicitly grants the roles. That is the correct fail-closed outcome for an authorization fix and must not be softened in code — but it is a real operational change that has to be scheduled alongside the merge, or the manual-verification and reversal flows stop working with no obvious cause.
+
+Whoever signs this off should grant `finance` (or `restricted_admin`) to the operators who legitimately perform these actions, with a reason recorded, as part of the same change window.
 
 ## 7. Out of scope
 
