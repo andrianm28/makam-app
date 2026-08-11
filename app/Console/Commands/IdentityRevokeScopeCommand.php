@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Console\Commands\Concerns\IdentifiesConsoleOperator;
 use App\Console\Commands\Concerns\RequiresAuditReason;
 
 use App\Platform\Audit\Exceptions\AuditReasonRequiredException;
@@ -22,6 +23,7 @@ use InvalidArgumentException;
  */
 final class IdentityRevokeScopeCommand extends Command
 {
+    use IdentifiesConsoleOperator;
     use RequiresAuditReason;
 
     protected $signature = 'identity:revoke-scope {actor} {entityType} {entityId} {--reason=}';
@@ -47,7 +49,7 @@ final class IdentityRevokeScopeCommand extends Command
                 entityType: $entityType,
                 entityId: $entityId,
                 reason: $reason,
-                revokedBy: null,
+                revokedBy: $this->consoleOperatorRef(),
             );
         } catch (InvalidArgumentException|AuditReasonRequiredException $e) {
             $this->error($e->getMessage());

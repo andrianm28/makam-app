@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Console\Commands\Concerns\IdentifiesConsoleOperator;
 use App\Console\Commands\Concerns\RequiresAuditReason;
 
 use App\Platform\Audit\Exceptions\AuditReasonRequiredException;
@@ -26,6 +27,7 @@ use InvalidArgumentException;
  */
 final class IdentityGrantScopeCommand extends Command
 {
+    use IdentifiesConsoleOperator;
     use RequiresAuditReason;
 
     protected $signature = 'identity:grant-scope {actor} {entityType} {entityId} {--level=} {--reason=}';
@@ -52,7 +54,7 @@ final class IdentityGrantScopeCommand extends Command
                 entityId: $this->argument('entityId'),
                 grantLevel: $level,
                 reason: $reason,
-                grantedBy: null,
+                grantedBy: $this->consoleOperatorRef(),
             );
         } catch (InvalidArgumentException|AuditReasonRequiredException $e) {
             $this->error($e->getMessage());

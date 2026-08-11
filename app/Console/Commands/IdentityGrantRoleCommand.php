@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Console\Commands\Concerns\IdentifiesConsoleOperator;
 use App\Console\Commands\Concerns\RequiresAuditReason;
 
 use App\Platform\Audit\Exceptions\AuditReasonRequiredException;
@@ -35,6 +36,7 @@ use InvalidArgumentException;
  */
 final class IdentityGrantRoleCommand extends Command
 {
+    use IdentifiesConsoleOperator;
     use RequiresAuditReason;
 
     protected $signature = 'identity:grant-role {actor} {role} {--reason=}';
@@ -56,12 +58,13 @@ final class IdentityGrantRoleCommand extends Command
                 actorIdentifier: $this->argument('actor'),
                 role: $this->argument('role'),
                 reason: $reason,
-                // No authenticated ActorContext exists in a console
-                // invocation — see `Actions\GrantActorRole`'s own doc
-                // block on why `actorRole` is `ActorRole::SYSTEM`
-                // regardless. `grantedBy` is null for the same reason:
-                // there is no actor identity to reference.
-                grantedBy: null,
+                // The OS account that ran this command. Deliberately NOT
+                // null: the audit_events migration documents a null
+                // actor_ref as the unattended/system case, so null would
+                // record a human-initiated grant as a machine action and
+                // leave it attributable to nobody. See the trait for what
+                // this value does and does not prove.
+                grantedBy: $this->consoleOperatorRef(),
             );
         } catch (InvalidArgumentException|AuditReasonRequiredException $e) {
             $this->error($e->getMessage());

@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace Tests\Feature\IdentityAccess\Console;
 
+use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\IdentityAccess\Roles\ActorRole;
+use App\Platform\IdentityAccess\Roles\RoleAuditActions;
 use App\Platform\IdentityAccess\Roles\ActorRoleReader;
 use App\Platform\IdentityAccess\Roles\Models\ActorRoleAssignment;
 use App\Platform\IdentityAccess\Scopes\Models\ScopeAssignment;
 use App\Platform\IdentityAccess\Scopes\ScopeAssignmentReader;
+use App\Platform\IdentityAccess\Scopes\ScopeAuditActions;
 use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use App\Platform\IdentityAccess\Scopes\ScopeGrantLevel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -232,6 +235,78 @@ final class IdentityGrantCommandsTest extends TestCase
 
         // The real grant must survive a rejected revoke of a bogus type.
         $this->assertSame(['cemetery:4'], (new ScopeAssignmentReader())->scopeStringsForActor(42));
+    }
+
+    // -----------------------------------------------------------------
+    // Operator attribution
+    //
+    // audit_events documents a NULL actor_ref as the unattended/system
+    // case, so recording null for a human-run grant would mislabel it as
+    // a machine action and leave every grant attributable to nobody. The
+    // console records the OS account that ran the command, namespaced so
+    // it cannot collide with a users.id in the same column.
+    // -----------------------------------------------------------------
+
+    public function test_grant_role_command_records_the_console_operator_on_the_audit_row(): void
+    {
+        $this->artisan('identity:grant-role', [
+            'actor' => '42',
+            'role' => ActorRole::FINANCE,
+            '--reason' => 'Finance lead onboarding, ticket OPS-114',
+        ])->assertSuccessful();
+
+        $event = AuditEvent::query()->where('action', RoleAuditActions::GRANT)->firstOrFail();
+
+        $this->assertNotNull($event->actor_ref, 'a human-run grant must not be recorded as an unattended action');
+        $this->assertStringStartsWith('console:', (string) $event->actor_ref);
+        $this->assertNotSame('console:', $event->actor_ref);
+    }
+
+    public function test_revoke_role_command_records_the_console_operator_on_the_audit_row(): void
+    {
+        ActorRoleAssignment::create(['actor_identifier' => '42', 'role' => ActorRole::FINANCE]);
+
+        $this->artisan('identity:revoke-role', [
+            'actor' => '42',
+            'role' => ActorRole::FINANCE,
+            '--reason' => 'Left the team',
+        ])->assertSuccessful();
+
+        $event = AuditEvent::query()->where('action', RoleAuditActions::REVOKE)->firstOrFail();
+
+        $this->assertStringStartsWith('console:', (string) $event->actor_ref);
+    }
+
+    public function test_grant_scope_command_records_the_console_operator_on_the_audit_row(): void
+    {
+        $this->artisan('identity:grant-scope', [
+            'actor' => '42',
+            'entityType' => ScopeEntityType::CEMETERY,
+            'entityId' => '4',
+            '--reason' => 'Cemetery operator onboarding, ticket OPS-115',
+        ])->assertSuccessful();
+
+        $event = AuditEvent::query()->where('action', ScopeAuditActions::GRANT)->firstOrFail();
+
+        $this->assertStringStartsWith('console:', (string) $event->actor_ref);
+    }
+
+    public function test_the_console_operator_ref_cannot_collide_with_a_local_user_id(): void
+    {
+        // The prefix is the whole point: actor_ref also holds users.id
+        // values, so a bare OS account name could be read as a user id.
+        $this->artisan('identity:grant-role', [
+            'actor' => '42',
+            'role' => ActorRole::FINANCE,
+            '--reason' => 'Finance lead onboarding, ticket OPS-114',
+        ])->assertSuccessful();
+
+        $event = AuditEvent::query()->where('action', RoleAuditActions::GRANT)->firstOrFail();
+
+        $this->assertFalse(
+            ctype_digit((string) $event->actor_ref),
+            'a console operator ref must never be a bare number indistinguishable from a users.id',
+        );
     }
 
     // -----------------------------------------------------------------
