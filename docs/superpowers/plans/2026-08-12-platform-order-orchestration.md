@@ -627,7 +627,7 @@ Tests must cover: issuing v2 marks v1 `SUPERSEDED` and leaves v1's stored amount
 
 Composes `UploadDocument::upload()` with `ownerType = 'order'` and `ownerId = $order->id`; **never** reimplements storage, quarantine, or signed URLs. Tests: a quarantined document is never previewable, downloadable, or thumbnailed; a signed URL expires within 300 s; every access writes an audit row; a document bound to order A is not reachable from order B.
 
-- [ ] **Step 1-5:** failing test → verify fail → implement → verify pass → commit (`feat(order-workflow): purpose-scoped order documents via the vault`).
+- [x] **Step 1-5:** failing test → verify fail → implement → verify pass → commit (`feat(order-workflow): purpose-scoped order documents via the vault`).
 
 ---
 
