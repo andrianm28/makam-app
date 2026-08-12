@@ -8,28 +8,30 @@ use App\Domain\Marketplace\Models\VendorOrderEvidence;
 use Filament\Tables;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\BadgeColumn;
-use Filament\Resources\Pages\Page;
+use Filament\Resources\Pages\ListRecords;
 
-class EvidenceList extends Page
+class EvidenceList extends ListRecords
 {
     protected static ?string $title = 'Bukti Pekerjaan';
     protected static ?string $navigationIcon = 'heroicon-o-photo';
     protected static ?string $navigationLabel = 'Bukti';
 
-    protected static string $view = 'filament-vendor::pages.evidence-list';
+    protected static string $model = VendorOrderEvidence::class;
 
-    /**
-     * @return array<int, \Filament\Tables\Columns\Column|\Filament\Tables\Columns\BadgeColumn>
-     */
     protected function getTableColumns(): array
     {
         return [
             TextColumn::make('order.uuid')
                 ->label('ID Pesanan')
                 ->truncate(8),
-            TextColumn::make('evidence_type')
+            BadgeColumn::make('evidence_type')
                 ->label('Jenis Bukti')
-                ->badge(),
+                ->color('info')
+                ->formatStateUsing(fn (string $state): string => match ($state) {
+                    'PHOTO' => 'Foto',
+                    'DOCUMENT' => 'Dokumen',
+                    default => $state,
+                }),
             TextColumn::make('uploaded_at')
                 ->label('Diunggah')
                 ->dateTime(),

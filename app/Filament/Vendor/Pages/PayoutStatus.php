@@ -9,24 +9,22 @@ use App\Platform\FinancialLedger\VendorPayableState;
 use Filament\Tables;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\BadgeColumn;
-use Filament\Resources\Pages\Page;
+use Filament\Resources\Pages\ListRecords;
 
-class PayoutStatus extends Page
+class PayoutStatus extends ListRecords
 {
     protected static ?string $title = 'Status Pencairan';
     protected static ?string $navigationIcon = 'heroicon-o-banknotes';
     protected static ?string $navigationLabel = 'Pencairan';
 
-    protected static string $view = 'filament-vendor::pages.payout-status';
+    protected static string $model = VendorPayable::class;
 
-    /**
-     * @return array<int, \Filament\Tables\Columns\Column|\Filament\Tables\Columns\BadgeColumn>
-     */
     protected function getTableColumns(): array
     {
         return [
-            TextColumn::make('uuid')
-                ->label('ID'),
+            TextColumn::make('id')
+                ->label('ID')
+                ->truncate(8),
             TextColumn::make('amount_minor')
                 ->label('Jumlah')
                 ->money('IDR'),
