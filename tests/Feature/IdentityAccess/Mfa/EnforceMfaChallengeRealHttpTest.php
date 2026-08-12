@@ -12,8 +12,10 @@ use App\Platform\IdentityAccess\Mfa\MfaEnrolmentService;
 use App\Platform\IdentityAccess\Mfa\Models\MfaEnrolment;
 use App\Platform\IdentityAccess\Mfa\Totp\Base32;
 use App\Platform\IdentityAccess\Mfa\Totp\Totp;
+use App\Platform\IdentityAccess\Roles\ActorRole;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
+use Tests\Support\GrantsActorRoles;
 use Tests\TestCase;
 
 /**
@@ -46,9 +48,18 @@ use Tests\TestCase;
  * exemption for it — so the page redirected to itself
  * (`ERR_TOO_MANY_REDIRECTS`, no enrolled actor able to reach the panel at
  * all) and overwrote `url.intended` with its own URL.
+ *
+ * Every fixture carries a real `operator` role grant (via
+ * `Tests\Support\GrantsActorRoles`, through `Roles\Actions\GrantActorRole`):
+ * Task 10 of the L9 `admin-operations` lane restricted the `/admin` panel
+ * to the four back-office roles, so a roleless actor would be refused at
+ * the panel boundary with a 403 and never reach the MFA middleware this
+ * file exists to exercise. `operator` is the least role that makes each
+ * test's "some panel user" intent true.
  */
 final class EnforceMfaChallengeRealHttpTest extends TestCase
 {
+    use GrantsActorRoles;
     use RefreshDatabase;
 
     private const string CHALLENGE_PATH = '/admin/mfa-challenge';
@@ -78,6 +89,7 @@ final class EnforceMfaChallengeRealHttpTest extends TestCase
     private function enrolledUser(): User
     {
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::OPERATOR);
         $this->confirm(app(MfaEnrolmentService::class)->startEnrolment($user->id), $user);
 
         return $user;
@@ -191,6 +203,7 @@ final class EnforceMfaChallengeRealHttpTest extends TestCase
     public function test_an_actor_with_no_enrolment_is_never_challenged(): void
     {
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::OPERATOR);
         $this->actingAs($user);
 
         $this->assertSame(

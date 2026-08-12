@@ -12,9 +12,11 @@ use App\Platform\IdentityAccess\Mfa\Models\MfaEnrolment;
 use App\Platform\IdentityAccess\Mfa\Totp\Base32;
 use App\Platform\IdentityAccess\Mfa\Totp\Totp;
 use App\Platform\IdentityAccess\Models\ActorSession;
+use App\Platform\IdentityAccess\Roles\ActorRole;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
+use Tests\Support\GrantsActorRoles;
 use Tests\TestCase;
 
 /**
@@ -65,9 +67,17 @@ use Tests\TestCase;
  * it the test would assert against step 1's stale, pre-enrolment snapshot.
  * Same primitive, same purpose as `Correlation\CarriesCorrelationIdJobTest`'s
  * own use of it.
+ *
+ * The journey user carries a real `operator` role grant (via
+ * `Tests\Support\GrantsActorRoles`): Task 10 of the L9 `admin-operations`
+ * lane restricted `/admin` panel membership to the four back-office roles,
+ * so a roleless actor would get a 403 on this test's very first `GET
+ * /admin` and the journey could not start. `operator` is the least role
+ * that makes "some panel user" true.
  */
 final class MfaEndToEndFlowTest extends TestCase
 {
+    use GrantsActorRoles;
     use RefreshDatabase;
 
     /**
@@ -88,6 +98,7 @@ final class MfaEndToEndFlowTest extends TestCase
     public function test_full_journey_enroll_login_challenge_disable(): void
     {
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::OPERATOR);
 
         // 1. Not enrolled — visiting the dashboard is untouched.
         $this->actingAs($user)->get('/admin')->assertOk();
