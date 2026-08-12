@@ -18,6 +18,8 @@ Durable events use the transactional outbox and envelope in `outbox-event-contra
 | `quote.accepted.v1` | Quotation | Payment gate | Exact version |
 | `payment.received.v1` | PaymentAdapter | Journal/order/invoice | Valid webhook only |
 | `order.status_changed.v1` | OrderWorkflow | Notification/reporting | Forward-only commercial status |
+| `order.processing.v1` | OrderWorkflow | Customer notification | Emitted when order enters DIPROSES |
+| `order.completed.v1` | OrderWorkflow | Customer notification | Emitted when order enters SELESAI |
 | `agreement.accepted.v1` | Agreement | PreNeed/operations | Exact version and evidence |
 | `certificate.issued.v1` | AgreementCertificate | Customer/audit | Unique issuer number |
 | `certificate.replaced.v1` | AgreementCertificate | Customer/audit | Preserves previous version |

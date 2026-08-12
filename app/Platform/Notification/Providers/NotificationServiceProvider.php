@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Platform\Notification\Providers;
 
+use App\Domain\OrderWorkflow\Listeners\DispatchOrderNotifications;
 use App\Platform\Notification\Channels\LogChannel;
 use App\Platform\Notification\Contracts\Channel;
 use App\Platform\Notification\Contracts\NotificationSubjectSource;
@@ -65,6 +66,7 @@ final class NotificationServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Event::listen(OutboxEventPublished::class, DispatchNotificationConsumerOnOutboxEventPublished::class);
+        Event::listen(OutboxEventPublished::class, DispatchOrderNotifications::class);
 
         // Fix round 1, IMPORTANT 1: runtime enforcement of AC9 — see
         // NotificationDeliveryWriteGuard's own doc block for why a
