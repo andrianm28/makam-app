@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Payment;
 
+use App\Domain\OrderWorkflow\Models\Order;
+use App\Domain\OrderWorkflow\OrderStatus;
+use App\Domain\OrderWorkflow\ProductType;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\FeatureGate\Contracts\GateRegistrySource;
@@ -28,12 +31,17 @@ use ReflectionNamedType;
 use Tests\TestCase;
 
 /**
- * Wave 1b ruling 1b-L3-01 — the deny-only six-condition guard.
+ * Wave 1b ruling 1b-L3-01, as it stands after
+ * `docs/superpowers/plans/2026-08-12-platform-order-orchestration.md` Task 6:
+ * the deny-only six-condition guard.
  *
  * Condition 1 is REAL (`ModeResolver::paymentMode()`, backed by `G-PAY-01`).
- * Conditions 2-6 have no authoritative upstream record in this repository,
- * so each returns an explicit `UnavailableUpstream` DENIAL naming the
- * missing upstream — never a bypass, never a stub that passes.
+ * Conditions 2-5 are REAL as of Task 6 — they read the `Order` aggregate and
+ * the current `Quote`, and deny with a genuine `DomainDenied` when the
+ * specific record they need is missing or unsatisfied (asserted in
+ * `GuardPaymentSessionUpstreamTest`). Condition 6 alone retains the
+ * `UnavailableUpstream` DENIAL, because the merchant/`badan_usaha` binding
+ * cannot exist while financial decision `FIN-DEC-01` is `TBD`.
  */
 final class GuardPaymentSessionTest extends TestCase
 {
@@ -64,11 +72,26 @@ final class GuardPaymentSessionTest extends TestCase
     }
 
     /**
+     * A fresh order that satisfies none of conditions 2-5: it is at `MASUK`
+     * (no confirmation/reservation), has no quote, and no actor is
+     * authorized to open payment on it. Every test here works against this
+     * baseline so that conditions 2-5 are denied by their real evaluations.
+     */
+    private function order(): Order
+    {
+        return Order::query()->create([
+            'reference' => 'MK-TEST-'.strtoupper(substr(bin2hex(random_bytes(4)), 0, 8)),
+            'product_type' => ProductType::AT_NEED_SERVICE_ORDER->value,
+            'status' => OrderStatus::MASUK->value,
+        ]);
+    }
+
+    /**
      * @return array<string, ConditionDenial>
      */
     private function denialsByCondition(bool $gateOpen): array
     {
-        $result = ($this->guardWithPaymentGate($gateOpen))($this->amount());
+        $result = ($this->guardWithPaymentGate($gateOpen))($this->order(), $this->amount());
 
         $byCondition = [];
 
@@ -81,7 +104,7 @@ final class GuardPaymentSessionTest extends TestCase
 
     public function test_a_closed_payment_gate_denies_at_condition_one_as_a_genuine_domain_denial(): void
     {
-        $result = ($this->guardWithPaymentGate(open: false))($this->amount());
+        $result = ($this->guardWithPaymentGate(open: false))($this->order(), $this->amount());
 
         $this->assertFalse($result->isAllowed());
         $this->assertSame(GuardCondition::ProductGateOpen, $result->condition());
@@ -95,12 +118,17 @@ final class GuardPaymentSessionTest extends TestCase
 
     public function test_an_open_payment_gate_passes_condition_one_and_still_denies_at_condition_two(): void
     {
-        $result = ($this->guardWithPaymentGate(open: true))($this->amount());
+        $result = ($this->guardWithPaymentGate(open: true))($this->order(), $this->amount());
 
         $this->assertFalse($result->isAllowed());
         $this->assertSame(GuardCondition::ConfirmationOrReservation, $result->condition());
-        $this->assertSame(GuardDenialReason::UnavailableUpstream, $result->reason());
-        $this->assertSame('Confirmation|PlotReservation', $result->missingUpstream());
+        $this->assertSame(GuardDenialReason::DomainDenied, $result->reason());
+        $this->assertFalse(
+            $result->isUnavailableUpstream(),
+            'An order with no active confirmation/reservation is a real, evaluable domain denial — '
+            .'not a missing upstream, since the Order aggregate is now the upstream.'
+        );
+        $this->assertNull($result->missingUpstream());
 
         $this->assertArrayNotHasKey(
             GuardCondition::ProductGateOpen->value,
@@ -111,7 +139,7 @@ final class GuardPaymentSessionTest extends TestCase
 
     public function test_all_six_conditions_are_evaluated_in_the_fixed_documented_order(): void
     {
-        $result = ($this->guardWithPaymentGate(open: false))($this->amount());
+        $result = ($this->guardWithPaymentGate(open: false))($this->order(), $this->amount());
 
         $this->assertSame(
             GuardCondition::ORDER,
@@ -129,20 +157,8 @@ final class GuardPaymentSessionTest extends TestCase
     public static function unavailableUpstreamConditions(): array
     {
         return [
-            'condition 2 — confirmation or reservation' => [
-                GuardCondition::ConfirmationOrReservation, 'Confirmation|PlotReservation',
-            ],
-            'condition 3 — accepted unexpired quote' => [
-                GuardCondition::QuoteAcceptedAndUnexpired, 'Quote',
-            ],
-            'condition 4 — authorized opening' => [
-                GuardCondition::AuthorizedOpening, 'AuthorizePaymentOpening',
-            ],
-            'condition 5 — amount matches quote total' => [
-                GuardCondition::AmountMatchesQuoteTotal, 'Quote',
-            ],
             'condition 6 — merchant and badan usaha bound' => [
-                GuardCondition::MerchantAndBadanUsahaBound, 'Merchant|BadanUsaha',
+                GuardCondition::MerchantAndBadanUsahaBound, 'Merchant|BadanUsaha (FIN-DEC-01)',
             ],
         ];
     }
@@ -165,7 +181,7 @@ final class GuardPaymentSessionTest extends TestCase
 
     public function test_every_guard_evaluation_writes_exactly_one_payment_intent_decision_record(): void
     {
-        ($this->guardWithPaymentGate(open: false))($this->amount());
+        ($this->guardWithPaymentGate(open: false))($this->order(), $this->amount());
 
         $this->assertSame(1, PaymentIntent::query()->count());
 
@@ -182,14 +198,14 @@ final class GuardPaymentSessionTest extends TestCase
 
     public function test_the_intent_snapshots_the_server_resolved_mode_at_evaluation_time(): void
     {
-        ($this->guardWithPaymentGate(open: true))($this->amount());
+        ($this->guardWithPaymentGate(open: true))($this->order(), $this->amount());
 
         $this->assertSame(PaymentMode::Online->value, PaymentIntent::query()->sole()->payment_mode);
     }
 
     public function test_a_denial_writes_a_payment_guard_denied_audit_event_against_the_intent(): void
     {
-        ($this->guardWithPaymentGate(open: false))($this->amount());
+        ($this->guardWithPaymentGate(open: false))($this->order(), $this->amount());
 
         $intent = PaymentIntent::query()->sole();
 
@@ -210,7 +226,7 @@ final class GuardPaymentSessionTest extends TestCase
 
     public function test_the_intent_and_its_audit_event_commit_together(): void
     {
-        ($this->guardWithPaymentGate(open: true))($this->amount());
+        ($this->guardWithPaymentGate(open: true))($this->order(), $this->amount());
 
         $this->assertSame(1, PaymentIntent::query()->count());
         $this->assertSame(
@@ -240,8 +256,8 @@ final class GuardPaymentSessionTest extends TestCase
 
     public function test_a_guard_evaluation_never_creates_a_payment_session_row(): void
     {
-        ($this->guardWithPaymentGate(open: false))($this->amount());
-        ($this->guardWithPaymentGate(open: true))($this->amount());
+        ($this->guardWithPaymentGate(open: false))($this->order(), $this->amount());
+        ($this->guardWithPaymentGate(open: true))($this->order(), $this->amount());
 
         $this->assertSame(0, PaymentSession::query()->count());
     }

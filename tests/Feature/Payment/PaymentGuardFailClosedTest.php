@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Payment;
 
+use App\Domain\OrderWorkflow\Models\Order;
+use App\Domain\OrderWorkflow\OrderStatus;
+use App\Domain\OrderWorkflow\ProductType;
 use App\Models\User;
 use App\Platform\FeatureGate\Contracts\GateRegistrySource;
 use App\Platform\FeatureGate\FeatureGateResolver;
@@ -86,7 +89,17 @@ final class PaymentGuardFailClosedTest extends TestCase
 
             foreach ([false, true] as $gateOpen) {
                 foreach ($amounts as $amount) {
-                    $result = ($this->guardWithPaymentGate($gateOpen))($amount);
+                    // A fresh `MASUK` order denies conditions 2-5 by its real
+                    // evaluations and 6 by `UnavailableUpstream`; condition 6
+                    // is unconditional, so no input combination here — order,
+                    // amount, actor, gate — can reach PASS.
+                    $order = Order::query()->create([
+                        'reference' => 'MK-FAILCLOSED-'.strtoupper(substr(bin2hex(random_bytes(4)), 0, 8)),
+                        'product_type' => ProductType::AT_NEED_SERVICE_ORDER->value,
+                        'status' => OrderStatus::MASUK->value,
+                    ]);
+
+                    $result = ($this->guardWithPaymentGate($gateOpen))($order, $amount);
                     $evaluations++;
 
                     $this->assertFalse(
