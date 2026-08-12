@@ -270,6 +270,67 @@ final class RecordOrderStatusChangeTest extends TestCase
         self::assertSame(0, OrderStatusEvent::query()->where('order_id', $order->getKey())->count());
     }
 
+    /**
+     * `Order::applyStatus()` is public, so the write guard's one open door
+     * cannot be closed by visibility the way `Document`'s private writers
+     * are. It is closed by a token instead: the persisted
+     * `order_status_events` row that records the move. Three ways of NOT
+     * holding one, all of which would otherwise reach a status with no
+     * event, audit or outbox row.
+     */
+    public function test_a_status_write_requires_the_persisted_event_that_records_it(): void
+    {
+        $order = $this->makeOrder(OrderStatus::MASUK);
+        $otherOrder = $this->makeOrder(OrderStatus::MASUK);
+
+        // 1. An unsaved event is not proof of anything — this is the shape
+        //    the old bare-enum signature made trivially available.
+        try {
+            $order->applyStatus(new OrderStatusEvent([
+                'order_id' => $order->getKey(),
+                'to_status' => OrderStatus::DIBAYAR->value,
+            ]));
+            self::fail('Expected OrderIsGuardedException from applyStatus() with an unsaved event');
+        } catch (OrderIsGuardedException) {
+            // expected
+        }
+
+        // 2. A genuinely persisted event belonging to a DIFFERENT order.
+        $foreignEvent = app(RecordOrderStatusChange::class)(
+            $otherOrder, OrderStatus::DIVERIFIKASI, 'actor:admin-1', 'admin'
+        );
+
+        try {
+            $order->applyStatus($foreignEvent);
+            self::fail('Expected OrderIsGuardedException from applyStatus() with another order\'s event');
+        } catch (OrderIsGuardedException) {
+            // expected
+        }
+
+        // 3. This order's own persisted event, reassigned in memory to name
+        //    a richer target. `OrderStatusEvent` is append-only so this can
+        //    never be saved — but it can be passed here, and only what the
+        //    ROW says may authorize the write.
+        $ownEvent = app(RecordOrderStatusChange::class)(
+            $order, OrderStatus::DIVERIFIKASI, 'actor:admin-1', 'admin'
+        );
+        $ownEvent->to_status = OrderStatus::DIBAYAR->value;
+
+        try {
+            $order->applyStatus($ownEvent);
+            self::fail('Expected OrderIsGuardedException from applyStatus() with an in-memory to_status');
+        } catch (OrderIsGuardedException) {
+            // expected
+        }
+
+        // Only the one legitimate transition in step 3 moved the column.
+        self::assertSame('DIVERIFIKASI', $order->fresh()->status);
+        self::assertSame(0, OrderStatusEvent::query()
+            ->where('order_id', $order->getKey())
+            ->where('to_status', OrderStatus::DIBAYAR->value)
+            ->count());
+    }
+
     public function test_a_recorded_status_event_cannot_be_revised_or_deleted(): void
     {
         $order = $this->makeOrder(OrderStatus::MASUK);

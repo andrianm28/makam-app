@@ -17,9 +17,10 @@ use RuntimeException;
  * not even touch the database guarantee this lane exists to establish.
  *
  * Thrown by `App\Domain\OrderWorkflow\Models\Order`'s
- * `update()`/`performUpdate()`/`delete()` overrides. See that model's class
- * doc block for exactly which write paths those close and which they
- * cannot.
+ * `update()`/`performUpdate()`/`delete()` overrides, and by `applyStatus()`
+ * when the caller cannot produce the persisted `order_status_events` row
+ * that authorizes the move. See that model's class doc block for exactly
+ * which write paths those close and which they cannot.
  */
 final class OrderIsGuardedException extends RuntimeException
 {

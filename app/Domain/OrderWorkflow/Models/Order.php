@@ -45,16 +45,22 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * `writeState()`/`promote()` pair already uses for the same purpose (set
  * the flag, write, clear it in `finally`).
  *
+ * `applyStatus()` is public, so — unlike `Document`, whose authorized
+ * writers are all private — it cannot rely on visibility to keep callers
+ * out. It relies on a token instead: the persisted `OrderStatusEvent` row
+ * itself. See that method's doc block.
+ *
  * These overrides stop `$order->update([...])`, `$order->status = ...;
  * $order->save()` on an already-persisted instance, and `$order->delete()`.
  *
  * They do NOT stop `Order::query()->update([...])`,
- * `DB::table('orders')->update(...)`, raw SQL, or any process with direct
- * database credentials — those never pass through this class. Stated
- * plainly rather than assumed closed, exactly as `PaymentIntent`'s own doc
- * block states it. Closing the bulk-update path would need a PostgreSQL
- * trigger; that is not this task's scope and is recorded here so the gap is
- * a known one rather than an assumed-absent one.
+ * `Order::query()->upsert([...])`, `DB::table('orders')->update(...)`, raw
+ * SQL, or any process with direct database credentials — those never pass
+ * through this class. Stated plainly rather than assumed closed, exactly as
+ * `PaymentIntent`'s own doc block states it. Closing the bulk-update path
+ * would need a PostgreSQL trigger; that is not this task's scope and is
+ * recorded here so the gap is a known one rather than an assumed-absent
+ * one.
  */
 final class Order extends Model
 {
@@ -91,18 +97,48 @@ final class Order extends Model
     }
 
     /**
-     * The ONE door through which `orders.status` moves.
+     * The ONE door through which `orders.status` moves, and it opens only
+     * for a caller holding the already-persisted `order_status_events` row
+     * that records the move.
      *
-     * Called only by
-     * `App\Domain\OrderWorkflow\Actions\RecordOrderStatusChange`, inside the
-     * transaction `Audit::wrap()` opens, and only AFTER
-     * `OrderTransition::assertAllowed()` has passed. This method deliberately
-     * does NOT re-check the transition graph: doing so here would put a
-     * second copy of the rule in a second place, and the Action is the only
-     * caller that can also write the paired event, audit, and outbox rows.
+     * The argument is that row, NOT a bare `OrderStatus`. A bare enum made
+     * this method a second, unvalidated way to reach `DIBAYAR` with no event
+     * row, no audit row and no outbox row — the very thing the write guard
+     * above exists to stop, one method along. Requiring the event makes the
+     * pairing structural: possession of a persisted `OrderStatusEvent` is
+     * proof that
+     * `App\Domain\OrderWorkflow\Actions\RecordOrderStatusChange` ran, and
+     * that Action is what enforces `OrderTransition::assertAllowed()`, the
+     * blank-reason rule, the audit row and the outbox row. The applied
+     * status is READ FROM the event rather than passed alongside it, so
+     * there is no second value that could disagree with the recorded one.
+     *
+     * Authorization is decided against the DATABASE, and nothing about the
+     * instance handed in is taken on trust — not even its own `exists`
+     * flag, which is a public, writable property on every Eloquent model
+     * and so is a claim rather than evidence. The single `exists()` query
+     * requires a row with THAT primary key, THIS order's `order_id`, and
+     * that `to_status`. An unsaved `new OrderStatusEvent([...])` has no key
+     * and fails it; an event belonging to another order fails it; and so
+     * does an in-memory instance whose `to_status` was reassigned after
+     * loading — `OrderStatusEvent` is append-only at the model level, so
+     * such an instance can never be saved, but it could still be passed
+     * here, and its unsaved value must not be what authorizes a
+     * money-bearing write. The Action calls this inside the transaction
+     * that created the event, so the row is visible to that same
+     * connection.
+     *
+     * This method still deliberately does NOT re-check the transition graph:
+     * doing so here would put a second copy of the rule in a second place.
      */
-    public function applyStatus(OrderStatus $to): void
+    public function applyStatus(OrderStatusEvent $event): void
     {
+        $to = OrderStatus::tryFrom((string) $event->to_status);
+
+        if ($to === null || ! $this->isAuthorizedBy($event, $to)) {
+            throw OrderIsGuardedException::forOperation('applyStatus');
+        }
+
         $this->statusWriteAuthorized = true;
 
         try {
@@ -111,6 +147,19 @@ final class Order extends Model
         } finally {
             $this->statusWriteAuthorized = false;
         }
+    }
+
+    /**
+     * Is there a persisted `order_status_events` row, for THIS order, that
+     * records exactly this move? One indexed primary-key lookup.
+     */
+    private function isAuthorizedBy(OrderStatusEvent $event, OrderStatus $to): bool
+    {
+        return OrderStatusEvent::query()
+            ->whereKey($event->getKey())
+            ->where('order_id', $this->getKey())
+            ->where('to_status', $to->value)
+            ->exists();
     }
 
     /**

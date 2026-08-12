@@ -136,9 +136,14 @@ final readonly class RecordOrderStatusChange
 
                 // `Order::applyStatus()` is the single door left open by the
                 // model's write guard — a bare `$current->update([...])` or
-                // `$current->save()` throws `OrderIsGuardedException`. See
-                // `Order`'s class doc block.
-                $current->applyStatus($to);
+                // `$current->save()` throws `OrderIsGuardedException`. The
+                // door opens only for the persisted event row just written
+                // above: that row IS the authorization, and the status
+                // applied is read from it, so `orders.status` cannot move
+                // without its `order_status_events` row existing first. See
+                // `Order`'s class doc block. Order matters — the insert must
+                // precede this call.
+                $current->applyStatus($event);
 
                 // Sync the caller's own instance. `$current` is a SEPARATE
                 // object read under `lockForUpdate()`, so without this the
