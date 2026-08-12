@@ -50,7 +50,22 @@ return new class extends Migration
         Schema::create('order_status_events', function (Blueprint $table) {
             $table->uuid('id')->primary();
 
-            $table->foreignUuid('order_id')->constrained('orders')->cascadeOnDelete();
+            // `restrictOnDelete()`, NOT `cascadeOnDelete()`. This is the
+            // financial and audit history of an order's money movements, and
+            // a cascade would let one `DELETE FROM orders` destroy the
+            // evidence AND release `order_status_events_paid_once` for that
+            // `order_id` — silently making a once-paid order payable again.
+            // The `audit_events` rows have no FK and would survive, leaving a
+            // trail pointing at a subject whose own status history no longer
+            // exists. Every comparable audit-trail table in this repository
+            // chose the same way: `document_access_events`, `document_scans`,
+            // `signed_url_grants`, `notification_deliveries`,
+            // `notification_recipients`, `payment_verifications`. An order
+            // with status history is simply not deletable; a future retention
+            // policy must delete the events explicitly and audibly rather
+            // than as a side effect. `Order::delete()` refuses at the model
+            // layer for the same reason.
+            $table->foreignUuid('order_id')->constrained('orders')->restrictOnDelete();
 
             // Nullable: the initial MASUK event has no predecessor.
             $table->string('from_status', 64)->nullable();

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\OrderWorkflow\Actions;
 
+use App\Domain\OrderWorkflow\Exceptions\OrderAlreadyPaidException;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\Models\OrderStatusEvent;
 use App\Domain\OrderWorkflow\OrderStatus;
@@ -12,8 +13,12 @@ use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\AuditSubject;
+use App\Platform\Audit\MetadataAllowlist;
+use App\Platform\Audit\SensitiveActions;
+use App\Platform\Correlation\CorrelationContext;
 use App\Platform\Outbox\Outbox;
 use App\Platform\Outbox\OutboxClassification;
+use Illuminate\Database\QueryException;
 use InvalidArgumentException;
 
 /**
@@ -67,6 +72,44 @@ final readonly class RecordOrderStatusChange
         ?string $reason = null,
         array $metadata = [],
     ): OrderStatusEvent {
+        // Before the transaction opens, and before anything is written.
+        // `Audit::record()` runs the same check, but only AFTER the mutation
+        // closure has already inserted the event row and moved the status —
+        // so relying on it alone would let a rejected key roll back a write
+        // that should never have been attempted. `order_status_events.metadata`
+        // is a financial table's free-form JSON column, and this Action was
+        // the only writer of caller-supplied metadata in the repo subject to
+        // no allowlist at all. The list is deliberately narrow; extending it
+        // is meant to be a reviewed change — see `MetadataAllowlist`'s own
+        // doc block on keeping a KTP number or bank detail from being
+        // smuggled in through a casually added key.
+        MetadataAllowlist::assertAllowed($metadata);
+
+        try {
+            return $this->record($order, $to, $actorRef, $actorRole, $reason, $metadata);
+        } catch (QueryException $exception) {
+            if (! $this->isDuplicatePaidEvent($exception)) {
+                throw $exception;
+            }
+
+            // Deliberately not chained as `$previous` — see
+            // `OrderAlreadyPaidException`'s doc block: the original message
+            // carries the interpolated `reason`/`metadata` bindings.
+            throw OrderAlreadyPaidException::forOrder((string) $order->getKey());
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $metadata
+     */
+    private function record(
+        Order $order,
+        OrderStatus $to,
+        string $actorRef,
+        string $actorRole,
+        ?string $reason,
+        array $metadata,
+    ): OrderStatusEvent {
         return Audit::wrap(
             mutation: function () use ($order, $to, $actorRef, $actorRole, $reason, $metadata): OrderStatusEvent {
                 $current = Order::query()->lockForUpdate()->findOrFail($order->getKey());
@@ -91,7 +134,25 @@ final readonly class RecordOrderStatusChange
                     'occurred_at' => now(),
                 ]);
 
-                $current->forceFill(['status' => $to->value])->save();
+                // `Order::applyStatus()` is the single door left open by the
+                // model's write guard — a bare `$current->update([...])` or
+                // `$current->save()` throws `OrderIsGuardedException`. See
+                // `Order`'s class doc block.
+                $current->applyStatus($to);
+
+                // Sync the caller's own instance. `$current` is a SEPARATE
+                // object read under `lockForUpdate()`, so without this the
+                // caller's `$order` still reports the pre-transition status
+                // and the obvious next line —
+                // `if ($order->status() === OrderStatus::DIBAYAR)` — silently
+                // reads stale state. Every remaining task in this lane calls
+                // this Action, `ApplyPaidEffects` among them, so a stale read
+                // on the paid path is exactly the failure to prevent here.
+                // `PaymentVerification::decide()` sets the same precedent of
+                // leaving the caller's instance current.
+                if ($order !== $current) {
+                    $order->setRawAttributes($current->getAttributes(), true);
+                }
 
                 // `event-catalog.md:20` — the only catalogued order event.
                 // References only: order id and the two status values, never
@@ -112,13 +173,74 @@ final readonly class RecordOrderStatusChange
 
                 return $event;
             },
-            action: 'ORDER_STATUS_CHANGED',
+            // When the target status is ITSELF a registered sensitive action,
+            // record under that name so `Audit::record()`'s AC3 check
+            // (`SensitiveActions::requiresReason()`) actually evaluates for it.
+            // `DITOLAK` is the only `OrderStatus` value currently on that list,
+            // and this Action is the codebase's only order-rejection path — so
+            // recording every transition under `ORDER_STATUS_CHANGED` left the
+            // platform's own mandatory-reason control with zero producers, and
+            // `audit_events WHERE action = 'DITOLAK'` empty even after orders
+            // had been rejected. Written against the list rather than against
+            // `OrderStatus::DITOLAK` specifically, so that adding a status to
+            // `SensitiveActions::ACTIONS` is enough to make the control fire
+            // here too.
+            action: SensitiveActions::requiresReason($to->value)
+                ? $to->value
+                : 'ORDER_STATUS_CHANGED',
             subject: fn (OrderStatusEvent $event): AuditSubject => new AuditSubject('order', $event->order_id),
             outcome: AuditOutcome::Allowed,
             actorRef: $actorRef,
             actorRole: $actorRole,
             source: AuditSource::Api,
             reason: $reason,
+            // `AGENTS.md` §Observability: "Preserve trace/request IDs across
+            // request, outbox, queue, provider, and notification flows."
+            // `Outbox::record()` reads this context itself, so the outbox row
+            // already carried a `trace_id` while its paired `audit_events`
+            // row carried null — the two could not be joined, which is
+            // precisely the correlation break the requirement exists to
+            // prevent. Read the same way `GateActivationRecorder` reads it.
+            correlationId: app(CorrelationContext::class)->current()?->value,
+            // Forwarded so the audit row and the event row carry the SAME
+            // reviewed keys. Omitting it left the two records describing the
+            // same transition with different content.
+            metadata: $metadata,
         );
+    }
+
+    /**
+     * Same detection style as
+     * `App\Platform\Payment\Actions\Concerns\DetectsDuplicatePaymentReversal`
+     * and `App\Platform\DocumentVault\Actions\UploadDocument::
+     * isDuplicateClientUploadId()`, and deliberately narrow for the reason
+     * that trait documents at length: `QueryException`'s message always
+     * echoes the INSERT's own column list, so matching a BARE column name
+     * would classify a NOT NULL or length violation on this table as a
+     * duplicate payment.
+     *
+     * PostgreSQL names the failing index directly
+     * (`order_status_events_paid_once`) and is matched first. SQLite reports
+     * the QUALIFIED `table.column` form, which appears only in its
+     * constraint description and never in the unqualified INSERT column
+     * list. Verified against this repository's SQLite test driver:
+     *   - genuine duplicate: "UNIQUE constraint failed:
+     *     order_status_events.order_id" — both signals present, matches.
+     *   - NOT NULL violation: "NOT NULL constraint failed:
+     *     order_status_events.actor_role" — neither "unique" nor the
+     *     qualified `order_id` form, so it propagates as the real
+     *     `QueryException` rather than being mistranslated into "already
+     *     paid".
+     */
+    private function isDuplicatePaidEvent(QueryException $exception): bool
+    {
+        $message = strtolower($exception->getMessage());
+
+        if (str_contains($message, 'order_status_events_paid_once')) {
+            return true;
+        }
+
+        return str_contains($message, 'unique')
+            && str_contains($message, 'order_status_events.order_id');
     }
 }
