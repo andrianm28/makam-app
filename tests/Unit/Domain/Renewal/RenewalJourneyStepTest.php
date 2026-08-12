@@ -62,12 +62,13 @@ final class RenewalJourneyStepTest extends TestCase
     }
 
     /**
-     * L8 Task 4 builds step 4 (fee, AC6/AC7) and Task 5 builds step 5
-     * (payment, AC8). Step 6 (confirmation) is next.
+     * L8 Task 4 builds step 4 (fee, AC6/AC7), Task 5 builds step 5
+     * (payment, AC8), and Task 6 builds step 6 (confirmation, AC9).
+     * All six steps are now implemented.
      */
-    public function test_the_first_five_steps_are_implemented(): void
+    public function test_all_six_steps_are_implemented(): void
     {
-        $this->assertSame(RenewalJourneyStep::PAYMENT, RenewalJourneyStep::LAST_IMPLEMENTED);
+        $this->assertSame(RenewalJourneyStep::CONFIRMATION, RenewalJourneyStep::LAST_IMPLEMENTED);
     }
 
     public function test_a_step_outside_the_range_is_rejected(): void

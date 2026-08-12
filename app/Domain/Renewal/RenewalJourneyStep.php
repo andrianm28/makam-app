@@ -81,7 +81,7 @@ final class RenewalJourneyStep
      * The last step with a screen behind it in Sprint 4. Steps after this
      * one are real and visible but not yet reachable.
      */
-    public const int LAST_IMPLEMENTED = self::PAYMENT;
+    public const int LAST_IMPLEMENTED = self::CONFIRMATION;
 
     /**
      * @return array<int, string>
