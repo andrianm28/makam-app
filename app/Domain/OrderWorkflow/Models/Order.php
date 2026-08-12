@@ -83,6 +83,12 @@ final class Order extends Model
         'paid_via',
         'paid_source_ref',
         'correlation_id',
+        // Task 3. Set once, at `create()` — the one write path this model
+        // leaves open — and never updated, because every update path throws.
+        // Its uniqueness is a database constraint
+        // (`orders_idempotency_key_unq`), not a property of this list; see
+        // `Actions\SubmitBookingDraft`.
+        'idempotency_key',
     ];
 
     /**

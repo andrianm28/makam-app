@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\OrderWorkflow\Actions;
 
+use App\Domain\OrderWorkflow\Exceptions\OrderAlreadyOpenedException;
 use App\Domain\OrderWorkflow\Exceptions\OrderAlreadyPaidException;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\Models\OrderStatusEvent;
@@ -27,6 +28,12 @@ use InvalidArgumentException;
  * Every other module that needs to move an order forward calls this
  * Action; nothing else in this codebase writes either the column or the
  * table.
+ *
+ * TWO entry points, both on this class so that sole-writer claim stays
+ * literally true: `__invoke()` for every transition, and `initial()` for the
+ * one event that has no predecessor — an order's arrival at `MASUK`. Added
+ * by Task 3; read `initial()`'s own doc block for why the transition path
+ * cannot serve it and what it substitutes for the graph assertion.
  *
  * ---------------------------------------------------------------------------
  * Sequencing (`task-2-brief.md` Step 3), and why
@@ -100,6 +107,129 @@ final readonly class RecordOrderStatusChange
     }
 
     /**
+     * The INITIAL `MASUK` event — the one status event that has no
+     * predecessor, and therefore the one that cannot go through
+     * `__invoke()`.
+     *
+     * ---------------------------------------------------------------------
+     * Why a second entry point exists at all (Task 3 design decision)
+     * ---------------------------------------------------------------------
+     * `__invoke()` derives `$from` from the order's current status and calls
+     * `OrderTransition::assertAllowed($from, $to)`. A freshly created order
+     * is already AT `MASUK`, so the only shape `__invoke()` could take for
+     * the initial event is `MASUK -> MASUK`, which the graph correctly
+     * refuses (`OrderTransition::ALLOWED['MASUK']` does not contain
+     * `MASUK`, and must not — a self-edge would let any order re-enter its
+     * own state). The alternative, loosening the graph, would create a real
+     * hole for the sake of a bookkeeping row.
+     *
+     * The row itself is not optional. `2026_08_12_100010_create_order_status_
+     * events_table.php` made `from_status` nullable for exactly this event
+     * ("the very first event on an order (its arrival at `MASUK`) has no
+     * predecessor"), and an order whose status has no corresponding event
+     * row is precisely the divergence this whole Action exists to prevent.
+     *
+     * This method is a SECOND DOOR ON THE SAME CORRIDOR, not a second
+     * corridor. It keeps every control `__invoke()` has — the row lock, the
+     * `Audit::wrap()` transaction, the metadata allowlist, the audit row,
+     * the single catalogued outbox event, and `Order::applyStatus()` as the
+     * only way the column is touched — and replaces the transition
+     * assertion with three preconditions that are strictly narrower than
+     * it:
+     *
+     *   1. `to_status` is not a parameter. It is hardcoded `MASUK`, so this
+     *      door cannot reach any other status, let alone `DIBAYAR`.
+     *   2. The order must currently BE at `MASUK`. An order that has moved
+     *      on cannot be handed a fresh no-predecessor event.
+     *   3. The order must have NO status events at all. This is what makes
+     *      the door single-use per order: a second call finds the row it
+     *      wrote the first time and refuses.
+     *
+     * Both preconditions are evaluated against the row re-read under
+     * `lockForUpdate()` inside the transaction, not against the instance the
+     * caller passed in — same reasoning as `__invoke()` step 1.
+     *
+     * @param  array<string, mixed>  $metadata
+     *
+     * @throws OrderAlreadyOpenedException when the order is not a freshly
+     *                                     created `MASUK` order with no history.
+     */
+    public function initial(
+        Order $order,
+        string $actorRef,
+        string $actorRole,
+        array $metadata = [],
+    ): OrderStatusEvent {
+        MetadataAllowlist::assertAllowed($metadata);
+
+        return Audit::wrap(
+            mutation: function () use ($order, $actorRef, $actorRole, $metadata): OrderStatusEvent {
+                $current = Order::query()->lockForUpdate()->findOrFail($order->getKey());
+
+                if ($current->status() !== OrderStatus::MASUK) {
+                    throw OrderAlreadyOpenedException::becauseStatusHasMovedOn(
+                        (string) $current->getKey(),
+                        $current->status(),
+                    );
+                }
+
+                if (OrderStatusEvent::query()->where('order_id', $current->getKey())->exists()) {
+                    throw OrderAlreadyOpenedException::becauseHistoryExists((string) $current->getKey());
+                }
+
+                $event = OrderStatusEvent::query()->create([
+                    'order_id' => $current->getKey(),
+                    // Null ONLY here, in this codebase. Every other writer
+                    // of this table goes through `record()`, which always
+                    // has a predecessor.
+                    'from_status' => null,
+                    'to_status' => OrderStatus::MASUK->value,
+                    'actor_ref' => $actorRef,
+                    'actor_role' => $actorRole,
+                    'reason' => null,
+                    'metadata' => $metadata,
+                    'occurred_at' => now(),
+                ]);
+
+                // Deliberately still routed through the guarded door even
+                // though `create()` already set the column to `MASUK`, which
+                // makes the underlying write a no-op (Eloquent's `save()`
+                // skips `performUpdate()` on a clean model). What is NOT a
+                // no-op is `applyStatus()`'s authorization check: it proves
+                // against the DATABASE that a persisted event for THIS order
+                // records THIS status. Calling it keeps one rule — "the
+                // column's value is always backed by an event row" — true by
+                // construction on every path, instead of true on the
+                // transition path and true-by-inspection on this one.
+                $current->applyStatus($event);
+
+                if ($order !== $current) {
+                    $order->setRawAttributes($current->getAttributes(), true);
+                }
+
+                $this->emitStatusChanged($event, (string) $current->getKey(), null, OrderStatus::MASUK);
+
+                return $event;
+            },
+            // Same expression as `record()`, written against the list rather
+            // than against `MASUK` specifically, so that adding a status to
+            // `SensitiveActions::ACTIONS` makes the platform's mandatory-reason
+            // control fire on this path too. `MASUK` is not on that list today.
+            action: SensitiveActions::requiresReason(OrderStatus::MASUK->value)
+                ? OrderStatus::MASUK->value
+                : 'ORDER_STATUS_CHANGED',
+            subject: fn (OrderStatusEvent $event): AuditSubject => new AuditSubject('order', $event->order_id),
+            outcome: AuditOutcome::Allowed,
+            actorRef: $actorRef,
+            actorRole: $actorRole,
+            source: AuditSource::Api,
+            reason: null,
+            correlationId: app(CorrelationContext::class)->current()?->value,
+            metadata: $metadata,
+        );
+    }
+
+    /**
      * @param  array<string, mixed>  $metadata
      */
     private function record(
@@ -159,22 +289,7 @@ final readonly class RecordOrderStatusChange
                     $order->setRawAttributes($current->getAttributes(), true);
                 }
 
-                // `event-catalog.md:20` — the only catalogued order event.
-                // References only: order id and the two status values, never
-                // order content.
-                Outbox::record(
-                    eventName: 'order.status_changed.v1',
-                    eventVersion: 1,
-                    aggregateType: 'order',
-                    aggregateId: $current->getKey(),
-                    data: [
-                        'order_id' => $current->getKey(),
-                        'from_status' => $from->value,
-                        'to_status' => $to->value,
-                    ],
-                    classification: OutboxClassification::Internal,
-                    idempotencyKey: "order_status_event:{$event->getKey()}",
-                );
+                $this->emitStatusChanged($event, (string) $current->getKey(), $from, $to);
 
                 return $event;
             },
@@ -211,6 +326,38 @@ final readonly class RecordOrderStatusChange
             // reviewed keys. Omitting it left the two records describing the
             // same transition with different content.
             metadata: $metadata,
+        );
+    }
+
+    /**
+     * `event-catalog.md:20` — the only catalogued order event, emitted from
+     * exactly one place so `__invoke()` and `initial()` cannot drift into two
+     * payload shapes or, worse, two event names (Global Constraint / finding
+     * N-12: "Never invent an event name").
+     *
+     * References only: order id and the two status values, never order
+     * content. `$from` is null for the initial event and is carried through
+     * as a JSON null rather than omitted, so a consumer can tell "this order
+     * arrived" from "someone forgot to send the previous status".
+     */
+    private function emitStatusChanged(
+        OrderStatusEvent $event,
+        string $orderId,
+        ?OrderStatus $from,
+        OrderStatus $to,
+    ): void {
+        Outbox::record(
+            eventName: 'order.status_changed.v1',
+            eventVersion: 1,
+            aggregateType: 'order',
+            aggregateId: $orderId,
+            data: [
+                'order_id' => $orderId,
+                'from_status' => $from?->value,
+                'to_status' => $to->value,
+            ],
+            classification: OutboxClassification::Internal,
+            idempotencyKey: "order_status_event:{$event->getKey()}",
         );
     }
 

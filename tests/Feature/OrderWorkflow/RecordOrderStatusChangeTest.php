@@ -12,6 +12,7 @@ use App\Domain\OrderWorkflow\Exceptions\OrderStatusEventIsAppendOnlyException;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\Models\OrderStatusEvent;
 use App\Domain\OrderWorkflow\OrderStatus;
+use App\Domain\OrderWorkflow\ProductType;
 use App\Platform\Audit\Exceptions\AuditMetadataKeyNotAllowedException;
 use App\Platform\Correlation\CorrelationContext;
 use App\Platform\Correlation\CorrelationId;
@@ -537,11 +538,22 @@ final class RecordOrderStatusChangeTest extends TestCase
             ->where('order_id', $order->getKey())->where('to_status', 'DIBAYAR')->count());
     }
 
+    /**
+     * `product_type` was the placeholder literal `'funeral_at_need'` when
+     * this suite was written, because `ProductType` did not exist yet and
+     * the column was an unconstrained string. Task 3 added the enum and,
+     * per the `orders` migration's own instruction, the PostgreSQL
+     * `orders_product_type_check` that pins the column to it — under which
+     * the old literal is not a legal value. Changed to a real
+     * `ProductType` case so this suite keeps passing on the PostgreSQL run
+     * Task 10 owns; on SQLite, where the CHECK is not created, the change
+     * is inert.
+     */
     private function makeOrder(OrderStatus $status): Order
     {
         return Order::query()->create([
             'reference' => 'MK-2026-'.Str::upper(Str::random(8)),
-            'product_type' => 'funeral_at_need',
+            'product_type' => ProductType::AT_NEED_SERVICE_ORDER->value,
             'status' => $status->value,
         ]);
     }
