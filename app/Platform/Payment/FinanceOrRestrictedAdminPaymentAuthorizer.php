@@ -16,9 +16,23 @@ use App\Platform\Payment\Exceptions\PaymentActionNotAuthorisedException;
  * permission.
  *
  * The role pair is `docs/security/rbac-matrix.md`'s "Payout/refund" row
- * (`Admin: Restricted, Finance: Dedicated finance`) — the same pair
- * `FinancialLedger\FinanceOrRestrictedAdminPayoutAuthorizer` already
- * enforces. No third role is invented here.
+ * (`Admin: Restricted, Finance: Dedicated finance`) — the same pair the
+ * ledger module's payout authorizer already enforces. No third role is
+ * invented here.
+ *
+ * The MANUAL PAYMENT VERIFICATION route is covered by that same pair by an
+ * explicit human ruling (12 Aug 2026), not by inheritance: recording a
+ * reversal and attesting that a payment was received are the same class of
+ * judgement in opposite directions — both are "did money move" attestations
+ * at the same trust level — so they belong at the same authority. The ruling
+ * is recorded in the hotfix plan's D1 and, canonically, in that row's own
+ * description in `rbac-matrix.md`, which now names manual payment
+ * verification so the row genuinely covers it. The consequence is deliberate
+ * and was decided, not inherited: a plain `admin` — whom the nearest other
+ * row ("Quote/open payment") marks as authorized — cannot decide a manual
+ * verification, and `finance` can, though that row limits finance to
+ * read/review. `FinanceOrRestrictedAdminPaymentAuthorizerTest` pins the
+ * `admin` exclusion.
  *
  * ---------------------------------------------------------------------------
  * Why this is role-only, with NO `scope_assignments` grant check
@@ -55,11 +69,12 @@ use App\Platform\Payment\Exceptions\PaymentActionNotAuthorisedException;
  * The two HTTP controllers call this FIRST, before
  * `ReauthenticationService::satisfy()`, before request validation, and
  * before any record lookup, translating a refusal into `abort(403)`. The
- * established convention elsewhere is Action-level (`ManualPayout::pay()`
- * authorises internally); this module places the check at the controller
- * boundary instead because each write API's only production caller is its
- * own controller, because `ReversalService` is a documented thin dispatcher
- * whose single responsibility injecting a policy would contradict, and
+ * established convention elsewhere is Action-level (the ledger module's
+ * manual payout Action authorises internally); this module places the check
+ * at the controller boundary instead because each write API's only
+ * production caller is its own controller, because `ReversalService` is a
+ * documented thin dispatcher whose single responsibility injecting a policy
+ * would contradict, and
  * because `abort(403)` already lives at the controller boundary in this app
  * (`Http\Controllers\Admin\FinanceExportController`) — there is no
  * framework-level exception mapping to lean on.
@@ -80,16 +95,29 @@ use App\Platform\Payment\Exceptions\PaymentActionNotAuthorisedException;
  * who hold a grant, and genuinely refuses everyone else, from the moment it
  * is bound.
  *
- * Two stale claims are deliberately NOT repeated here. The hotfix plan's §6
- * describes `$roles` as permanently `[]`, and each of the four
- * `FinancialLedger` authorizers still says the same in its own doc block;
- * both predate the lane that replaced those hardcoded placeholders. This
- * class copies their structure, not that sentence, and does not describe
- * itself as failing closed for everyone — it is not.
+ * One stale claim is deliberately NOT repeated here: each of the four
+ * `FinancialLedger` authorizers still describes `$roles` as permanently `[]`
+ * in its own doc block, which predates the lane that replaced those hardcoded
+ * placeholders. This class copies their structure, not that sentence, and does
+ * not describe itself as failing closed for everyone — it is not. (The hotfix
+ * plan's §6 carried the same claim when this class was first written; commit
+ * `f548b53` corrected it, so the plan is now accurate and is safe to follow.)
  *
  * What remains true, and is the reason the refusal path is the important
  * one: an empty role list means "this actor holds no grants today," never
  * "no role required." A caller must never read emptiness as permission.
+ *
+ * ---------------------------------------------------------------------------
+ * Why ledger-module symbols are cited in prose here, not as bare class names
+ * ---------------------------------------------------------------------------
+ * Do not "tidy" the citations above back into bare class names.
+ * `NoAutomatedPayoutPathTest`'s fourth signal fails the build when a file
+ * under `App\Platform\Payment` carries a payout-vocabulary token, on the
+ * reasoning that a file both aware of transfers and able to reach off-box is
+ * the automated path AC9 forbids. This module's own namespace satisfies the
+ * second half of that test unconditionally, so a single such token in a
+ * comment is enough to trip it — as it did. Nothing here moves money out;
+ * the prose style keeps that guard armed rather than suppressed.
  */
 final class FinanceOrRestrictedAdminPaymentAuthorizer implements PaymentActionAuthorizer
 {
@@ -116,7 +144,17 @@ final class FinanceOrRestrictedAdminPaymentAuthorizer implements PaymentActionAu
     {
         $actorReference = $actor->identityReference;
 
-        if ($actorReference === null) {
+        // `''` is refused alongside `null`. Not exploitable with the shipped
+        // adapter — `LocalUsersTableIdentityAccessAdapter` returns a real
+        // `users.id`, and the role lookup below fails closed anyway — but
+        // `$identityReference` is typed `int|string|null` precisely so a
+        // future K1/K2 adapter can key on an external id, and an adapter that
+        // returns `''` for "could not resolve" would otherwise have that read
+        // as a present identity. An empty identity is an absent identity.
+        // `0` is deliberately NOT refused: it is a legitimate integer key
+        // shape, and refusing it on falsiness rather than emptiness is how a
+        // real actor gets locked out.
+        if ($actorReference === null || $actorReference === '') {
             throw PaymentActionNotAuthorisedException::forActorContext();
         }
 

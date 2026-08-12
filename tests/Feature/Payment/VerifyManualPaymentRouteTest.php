@@ -6,6 +6,7 @@ namespace Tests\Feature\Payment;
 
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Models\User;
+use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\IdentityAccess\Models\ActorSession;
 use App\Platform\IdentityAccess\Reauthentication\Models\ReauthenticationEvent;
@@ -117,6 +118,70 @@ final class VerifyManualPaymentRouteTest extends TestCase
         ]);
     }
 
+    /**
+     * The trace every refusal must leave, asserted in one place so the two
+     * halves of this hotfix cannot drift: exactly `$expected` `Denied` audit
+     * rows naming this endpoint, no `Allowed` row anywhere, and none of the
+     * downstream writes.
+     *
+     * This replaces the older `AuditEvent::query()->count() === 0` shape,
+     * which froze "a refused money-moving action leaves no trace" into the
+     * test suite (review finding SF-6). What keeps it non-vacuous:
+     *
+     * - the count is EXACT, so deleting the audit write and double-writing it
+     *   both fail. A `>= 1` assertion would catch neither.
+     * - the `Allowed` count is asserted separately, so the refusal path
+     *   cannot start minting `satisfied`/`Allowed` rows and still pass by
+     *   virtue of having produced a `Denied` one too.
+     * - each row's own fields are pinned, so a write recording the wrong
+     *   action, the wrong subject, or the caller's payload fails here rather
+     *   than silently counting as "audited". In particular the subject must
+     *   NOT be the caller-supplied `{paymentVerification}` id.
+     */
+    private function assertTheRefusalWasAuditedExactly(int $expected = 1, ?string $unknownId = null): void
+    {
+        $denials = AuditEvent::query()
+            ->where('action', PaymentAuditActions::ADMIN_ACTION_DENIED)
+            ->get();
+
+        $this->assertCount($expected, $denials);
+
+        foreach ($denials as $denial) {
+            $this->assertSame(AuditOutcome::Denied->value, $denial->outcome);
+            $this->assertSame('payment_admin_action', $denial->subject_type);
+            $this->assertSame('payment_manual_verification', $denial->subject_id);
+
+            // A fixed server-side reason, never the caller's text —
+            // authorization runs before validation, so the request body is
+            // unvalidated here.
+            $this->assertNotNull($denial->reason);
+            $this->assertStringNotContainsString('Proof matched', (string) $denial->reason);
+            $this->assertSame([], $denial->metadata);
+
+            if ($unknownId !== null) {
+                // The caller-chosen route segment must appear nowhere in the
+                // row: writing it would put an unbounded attacker-supplied
+                // value in `audit_events.subject_id` and would re-open, in
+                // the audit trail, the existence question the ordering
+                // closes on the response.
+                $this->assertNotSame($unknownId, (string) $denial->subject_id);
+                $this->assertStringNotContainsString($unknownId, (string) $denial->reason);
+            }
+        }
+
+        $this->assertSame(
+            0,
+            AuditEvent::query()->where('outcome', AuditOutcome::Allowed->value)->count(),
+            'A refused actor must not collect a single Allowed audit row.',
+        );
+        $this->assertSame(
+            0,
+            PaymentVerification::query()->whereNotNull('decided_at')->count(),
+            'A refused actor must not have decided any verification.',
+        );
+        $this->assertSame(0, ReauthenticationEvent::query()->count());
+    }
+
     public function test_verification_without_a_fresh_authentication_redirects_to_the_challenge_and_changes_nothing(): void
     {
         $user = User::factory()->create();
@@ -188,7 +253,7 @@ final class VerifyManualPaymentRouteTest extends TestCase
 
         $this->assertSame(PaymentVerificationStatus::Submitted, $verification->fresh()->status());
         $this->assertSame(0, AuditEvent::query()->where('action', PaymentAuditActions::MANUAL_VERIFICATION)->count());
-        $this->assertSame(0, ReauthenticationEvent::query()->count());
+        $this->assertTheRefusalWasAuditedExactly();
     }
 
     public function test_a_real_but_unauthorized_role_is_refused(): void
@@ -207,7 +272,7 @@ final class VerifyManualPaymentRouteTest extends TestCase
             ->assertForbidden();
 
         $this->assertSame(PaymentVerificationStatus::Submitted, $verification->fresh()->status());
-        $this->assertSame(0, ReauthenticationEvent::query()->count());
+        $this->assertTheRefusalWasAuditedExactly();
     }
 
     public function test_a_revoked_role_grant_no_longer_authorizes(): void
@@ -224,6 +289,7 @@ final class VerifyManualPaymentRouteTest extends TestCase
             ->assertForbidden();
 
         $this->assertSame(PaymentVerificationStatus::Submitted, $verification->fresh()->status());
+        $this->assertTheRefusalWasAuditedExactly();
     }
 
     /**
@@ -240,9 +306,11 @@ final class VerifyManualPaymentRouteTest extends TestCase
         $user = $this->freshlyAuthenticatedUser();
         $real = $this->submittedVerification();
 
+        $unknownId = (string) Str::uuid();
+
         $unknownUrl = route(
             'admin.payments.manual-verifications.verify',
-            ['paymentVerification' => (string) Str::uuid()],
+            ['paymentVerification' => $unknownId],
         );
 
         $unknown = $this->actingAs($user)->post($unknownUrl, [
@@ -262,6 +330,44 @@ final class VerifyManualPaymentRouteTest extends TestCase
             $unknown->getStatusCode(),
             'A real and a fabricated verification id must be indistinguishable to an unauthorized actor.',
         );
+
+        // Two refusals, two rows — and neither row carries the fabricated id,
+        // so the audit trail is not an existence oracle either.
+        $this->assertTheRefusalWasAuditedExactly(expected: 2, unknownId: $unknownId);
+    }
+
+    /**
+     * The other half of the reordering, and the one nothing else pinned: an
+     * AUTHORIZED actor posting a fabricated id must still get the ordinary
+     * 404 from `PaymentVerification::findOrFail()`.
+     *
+     * Without this, moving `authorize()` above the lookup could have been
+     * "verified" by a suite in which the legitimate not-found path had
+     * quietly stopped working — every other test either supplies a real id or
+     * is refused before the lookup is reached. The 403-vs-404 asymmetry is
+     * the intended design: it is keyed on the actor's authority, never on
+     * whether the record exists.
+     */
+    public function test_an_unknown_verification_id_is_still_404_for_an_authorized_actor(): void
+    {
+        $user = $this->authorizedUser();
+
+        $unknownUrl = route(
+            'admin.payments.manual-verifications.verify',
+            ['paymentVerification' => (string) Str::uuid()],
+        );
+
+        $this->actingAs($user)
+            ->post($unknownUrl, [
+                'decision' => 'approve',
+                'reason' => 'Proof matched provider statement',
+            ])
+            ->assertNotFound();
+
+        // Authorized, so nothing was refused and no refusal row exists — the
+        // 404 is the lookup's, not the authorizer's wearing a different code.
+        $this->assertSame(0, AuditEvent::query()->where('action', PaymentAuditActions::ADMIN_ACTION_DENIED)->count());
+        $this->assertSame(0, AuditEvent::query()->where('action', PaymentAuditActions::MANUAL_VERIFICATION)->count());
     }
 
     /**
@@ -360,6 +466,10 @@ final class VerifyManualPaymentRouteTest extends TestCase
                 // request would be a 422 here.
             ])
             ->assertForbidden();
+
+        // And the refusal is still audited even though nothing about the
+        // request was ever validated — the refusal row carries no part of it.
+        $this->assertTheRefusalWasAuditedExactly();
     }
 
     // -----------------------------------------------------------------

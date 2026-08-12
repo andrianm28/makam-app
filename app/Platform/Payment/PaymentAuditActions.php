@@ -115,6 +115,35 @@ final class PaymentAuditActions
     public const string MANUAL_VERIFICATION = 'PAYMENT_MANUAL_VERIFICATION';
 
     /**
+     * An admin payment action was refused for lack of authority — written by
+     * `RecordPaymentActionRefusal` with `AuditOutcome::Denied` whenever
+     * `Contracts\PaymentActionAuthorizer` refuses a caller at either admin
+     * route, immediately before the 403.
+     *
+     * ONE dedicated constant rather than reusing `MANUAL_VERIFICATION`,
+     * `REFUND` or `CHARGEBACK`, for two reasons:
+     *
+     * 1. Those three mean "this money movement happened". A refusal is the
+     *    opposite event, and an operator counting refunds must not have to
+     *    filter refusals out of the same action name.
+     * 2. In `Http\Controllers\RecordPaymentReversalController` authorization
+     *    deliberately runs BEFORE the `match` that decides refund vs
+     *    chargeback, so at refusal time there is no correct choice between
+     *    `REFUND` and `CHARGEBACK` to make. That ordering is the one that
+     *    cannot be got wrong by a later edit and must not be changed to suit
+     *    an audit label.
+     *
+     * Deliberately NOT on `SensitiveActions::ACTIONS`. A mandatory reason
+     * there is a prompt for a HUMAN justification, and there is no human on
+     * this path: the refusal is machine-decided and the caller is the party
+     * being refused, so the only text available would be theirs. The writer
+     * supplies a fixed server-side reason string instead, which is why
+     * nothing here reads the request body — authorization runs before
+     * validation, so that body is entirely unvalidated at this point.
+     */
+    public const string ADMIN_ACTION_DENIED = 'PAYMENT_ADMIN_ACTION_DENIED';
+
+    /**
      * Task 6 (Wave 1d Append-Correction) — written by `Actions\RecordRefund`
      * with `AuditOutcome::Allowed`, subject = the new `PaymentReversal` row.
      *

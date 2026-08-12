@@ -6,6 +6,7 @@ namespace Tests\Feature\Payment;
 
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Models\User;
+use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\IdentityAccess\Models\ActorSession;
 use App\Platform\IdentityAccess\Reauthentication\Models\ReauthenticationEvent;
@@ -16,6 +17,7 @@ use App\Platform\Payment\Models\PaymentSession;
 use App\Platform\Payment\PaymentAuditActions;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
@@ -104,6 +106,51 @@ final class RecordPaymentReversalRouteTest extends TestCase
         ]);
     }
 
+    /**
+     * The trace every refusal must leave, asserted in one place so the two
+     * halves cannot drift: exactly ONE `Denied` audit row naming this
+     * endpoint, no `Allowed` row anywhere, and none of the downstream writes.
+     *
+     * This replaces the older `AuditEvent::query()->count() === 0` shape,
+     * which froze "a refused money-moving action leaves no trace" into the
+     * test suite (review finding SF-6). Three properties keep it from going
+     * vacuous:
+     *
+     * - `sole()` fails on ZERO rows and on TWO, so both deleting the audit
+     *   write and double-writing it are caught. A `>= 1` assertion would
+     *   catch neither.
+     * - the `Allowed` count is asserted separately, so the refusal path
+     *   cannot start minting `satisfied`/`Allowed` rows and still pass by
+     *   virtue of having produced a `Denied` one too.
+     * - the row's own fields are pinned, so an audit write that recorded the
+     *   wrong action, the wrong subject, or the caller's payload fails here
+     *   rather than silently counting as "audited".
+     */
+    private function assertTheRefusalWasAuditedExactlyOnce(): void
+    {
+        $denial = AuditEvent::query()
+            ->where('action', PaymentAuditActions::ADMIN_ACTION_DENIED)
+            ->sole();
+
+        $this->assertSame(AuditOutcome::Denied->value, $denial->outcome);
+        $this->assertSame('payment_admin_action', $denial->subject_type);
+        $this->assertSame('payment_reversal', $denial->subject_id);
+
+        // A fixed server-side reason, never the caller's text — authorization
+        // runs before validation, so the request body is unvalidated here.
+        $this->assertNotNull($denial->reason);
+        $this->assertStringNotContainsString('TRX-', (string) $denial->reason);
+        $this->assertSame([], $denial->metadata);
+
+        $this->assertSame(
+            0,
+            AuditEvent::query()->where('outcome', AuditOutcome::Allowed->value)->count(),
+            'A refused actor must not collect a single Allowed audit row.',
+        );
+        $this->assertSame(0, PaymentReversal::query()->count());
+        $this->assertSame(0, ReauthenticationEvent::query()->count());
+    }
+
     public function test_recording_without_a_fresh_authentication_redirects_to_the_challenge_and_changes_nothing(): void
     {
         $user = User::factory()->create();
@@ -188,9 +235,8 @@ final class RecordPaymentReversalRouteTest extends TestCase
             ])
             ->assertForbidden();
 
-        $this->assertSame(0, PaymentReversal::query()->count());
         $this->assertSame(0, AuditEvent::query()->where('action', PaymentAuditActions::REFUND)->count());
-        $this->assertSame(0, ReauthenticationEvent::query()->count());
+        $this->assertTheRefusalWasAuditedExactlyOnce();
     }
 
     public function test_a_real_but_unauthorized_role_is_refused(): void
@@ -207,8 +253,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
             ])
             ->assertForbidden();
 
-        $this->assertSame(0, PaymentReversal::query()->count());
-        $this->assertSame(0, ReauthenticationEvent::query()->count());
+        $this->assertTheRefusalWasAuditedExactlyOnce();
     }
 
     public function test_a_revoked_role_grant_no_longer_authorizes(): void
@@ -223,7 +268,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
             ])
             ->assertForbidden();
 
-        $this->assertSame(0, PaymentReversal::query()->count());
+        $this->assertTheRefusalWasAuditedExactlyOnce();
     }
 
     /**
@@ -318,6 +363,56 @@ final class RecordPaymentReversalRouteTest extends TestCase
                 // request would be a 422 here.
             ])
             ->assertForbidden();
+
+        // And the refusal is still audited even though nothing about the
+        // request was ever validated — the refusal row carries no part of it.
+        $this->assertTheRefusalWasAuditedExactlyOnce();
+    }
+
+    /**
+     * The refusal-audit write is best-effort: it runs before `abort(403)`, so
+     * the row is never lost to a later failure, but a failure of the write
+     * itself must not change the answer the caller gets.
+     *
+     * Two reasons this matters enough to pin, both in
+     * `RecordPaymentActionRefusal`'s doc block: a refusal mutates nothing, so
+     * there is no half-done state for an audit failure to protect; and a
+     * propagating failure would turn every refusal into a 500 during an audit
+     * outage, which is both a worse answer and a change in the flat-403
+     * property the existence-oracle defence depends on. A monitoring
+     * improvement must not become a way to move the authorization surface.
+     *
+     * The table is dropped rather than mocked because `Audit` is a static
+     * write API with no seam — and dropping it is a faithful stand-in for the
+     * real failure mode (the audit write raising a `QueryException`).
+     *
+     * This test deliberately asserts the response and nothing else. On
+     * PostgreSQL the failed audit INSERT aborts the surrounding transaction
+     * (SQLSTATE 25P02, "current transaction is aborted"), so every later query
+     * in this test would fail for that reason rather than reveal anything
+     * about the refusal — the assertions would be reporting the poisoned
+     * transaction, not the behaviour under test. SQLite does not poison the
+     * transaction, which is why an earlier version of this test passed there
+     * and failed only on a real PostgreSQL run.
+     *
+     * That costs nothing: the "a refusal writes no domain row and no
+     * reauthentication event" property is pinned, on a healthy audit table, by
+     * `test_an_authenticated_actor_with_no_role_is_refused_and_writes_nothing`.
+     * The only thing this test can pin that no other test does is that an
+     * audit outage still yields 403 rather than 500, and that is what it does.
+     */
+    public function test_a_failed_refusal_audit_still_returns_403_and_never_500(): void
+    {
+        $user = $this->freshlyAuthenticatedUser();
+
+        Schema::drop('audit_events');
+
+        $this->actingAs($user)
+            ->post($this->url('refund'), [
+                'reference' => 'TRX-route-audit-down',
+                'reason' => 'Customer requested a refund',
+            ])
+            ->assertForbidden();
     }
 
     // -----------------------------------------------------------------
@@ -401,11 +496,11 @@ final class RecordPaymentReversalRouteTest extends TestCase
     public function test_an_invalid_reversal_type_segment_is_rejected_by_the_route_itself(): void
     {
         // No role granted, and none needed: the route's own
-        // `->where('reversalType', ...)` constraint means this URL matches
-        // no route at all, so the request never reaches the controller's
-        // authorization check. Pinning it with an unauthorized actor also
-        // pins that the 404 is genuinely the router's, not a leak from
-        // inside the controller.
+        // `->whereIn('reversalType', ['refund', 'chargeback'])` constraint
+        // means this URL matches no route at all, so the request never
+        // reaches the controller's authorization check. Pinning it with an
+        // unauthorized actor also pins that the 404 is genuinely the
+        // router's, not a leak from inside the controller.
         $user = $this->freshlyAuthenticatedUser();
 
         $this->actingAs($user)
@@ -414,6 +509,10 @@ final class RecordPaymentReversalRouteTest extends TestCase
                 'reason' => 'Some reason',
             ])
             ->assertNotFound();
+
+        // Never reached the controller, so there is no refusal to audit
+        // either — the router's 404 must not mint a payment audit row.
+        $this->assertSame(0, AuditEvent::query()->where('action', PaymentAuditActions::ADMIN_ACTION_DENIED)->count());
     }
 
     public function test_a_second_refund_for_the_same_reference_via_http_fails_and_leaves_one_row(): void

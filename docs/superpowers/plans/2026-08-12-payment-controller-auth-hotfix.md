@@ -16,7 +16,15 @@ Two shipped controllers perform money-moving actions with **no role or permissio
 
 Both routes carry exactly `['web', 'auth', RequireRecentAuthentication::class.':<reason>,filament.admin.pages.mfa-challenge']`.
 
-`config/auth.php` defines exactly **one** guard — `web`, provider `users` — and there is no separate admin guard. So `auth` means only "some row exists in the shared `users` table." Any authenticated user who has enrolled MFA and satisfies the recency window can POST directly to either route and record a reversal or approve a payment.
+`config/auth.php` defines exactly **one** guard — `web`, provider `users` — and there is no separate admin guard. So `auth` means only "some row exists in the shared `users` table." Any authenticated user who satisfies the recency window can POST directly to either route and record a reversal or approve a payment.
+
+**Corrected 12 Aug 2026 (review finding SF-5) — the exposure is worse than first written.** This paragraph originally said "any authenticated user **who has enrolled MFA** and satisfies the recency window". That credited a compensating control these two routes never had, and it understated the severity. Verified directly:
+
+- `EnforceMfaChallenge` is attached in exactly two places: `app/Providers/Filament/AdminPanelProvider.php:162` (the Filament panel's own middleware array) and inline on the standalone `/admin/finance/exports` route (`routes/web.php:282`).
+- Both payment routes are standalone `Route::post` declarations (`routes/web.php:342-344` and `371-374`) whose middleware arrays are only `['web', 'auth', RequireRecentAuthentication::class.':<reason>,...']`. Neither is inside any group carrying `EnforceMfaChallenge`.
+- `RequireRecentAuthentication` reads only `ActorContext::$lastAuthenticatedAt` against `config('reauthentication.freshness_seconds')` (default `900`, `config/reauthentication.php:61`). It never consults MFA state.
+
+So the true pre-fix precondition was **authenticated + logged in within the last 15 minutes. No MFA at all.** The adjacent finance-export route DOES carry `EnforceMfaChallenge`, which makes the omission on the two money-moving routes conspicuous rather than merely uniform.
 
 Both controllers additionally hardcode `actorRole: 'authenticated_actor'` at two call sites each (`RecordPaymentReversalController.php:76,102`; `VerifyManualPaymentController.php:61,81`). Per `App\Platform\IdentityAccess\Roles\ActorRole`'s own doc block, `authenticated_actor` is an **audit sentinel meaning "no role applies"**, which "must NEVER" be a grantable role. So even the audit trail for these actions currently records the absence of a role.
 
@@ -38,6 +46,8 @@ The four existing authorizers in `app/Platform/FinancialLedger/` all check a sco
 - **The existing authorizers scope because their records genuinely are scoped** — payout and vendor-payable to `vendor_id`, reconciliation and ledger-read to a business-entity `entity_ref`. The difference here is a property of the record, not a laxer policy.
 
 **Roles:** `finance` or `restricted_admin`, taken from `docs/security/rbac-matrix.md`'s "Payout/refund" row (`Admin: Restricted, Finance: Dedicated finance`) — the same pair `FinanceOrRestrictedAdminPayoutAuthorizer` already uses. No third role is invented.
+
+**Ruling, 12 Aug 2026 (review finding SF-4) — the same pair governs BOTH routes, and this is now a stated decision rather than an inherited one.** The reviewer was right that the Payout/refund row covers the reversal route exactly and did not, as written, name manual payment verification; the nearest other row ("Quote/open payment") gives a plain `admin` the authority and limits finance to read/review. The human ruling is: **same roles for both routes (`finance` / `restricted_admin`), no code change.** The reasoning of record is that both actions are fundamentally "did money move" attestations at the same trust level — recording a reversal and verifying that a payment was received are the same class of judgement in opposite directions, and splitting them would put the two halves of one attestation at two different authorities. Consequences accepted deliberately, not by default: a plain `admin` cannot decide a manual verification, and `finance` gets a decision (not merely read/review) on that path. `docs/security/rbac-matrix.md`'s row description now names manual payment verification so the row genuinely covers what it is cited for, and the authorizer's class doc block states the ruling rather than merely citing the row.
 
 Because the check is record-independent, the authorizer's signature is `authorize(ActorContext $actor): string` with no `$scopeId` parameter. This divergence from the four existing authorizers is deliberate and documented in the class doc block.
 
@@ -123,7 +133,23 @@ So on merge, both endpoints refuse **everyone**, including existing admins, unti
 
 Whoever signs this off should grant `finance` (or `restricted_admin`) to the operators who legitimately perform these actions, with a reason recorded, as part of the same change window.
 
+**Which roles, for which flow, specifically (added 12 Aug 2026 per SF-4):**
+
+| Flow | Route | Roles that must be granted for it to work |
+| --- | --- | --- |
+| Record a refund or chargeback | `POST /admin/payments/reversals/{reversalType}` | `finance` **or** `restricted_admin` |
+| Decide a manual payment verification (approve/reject) | `POST /admin/payments/manual-verifications/{paymentVerification}/verify` | `finance` **or** `restricted_admin` — the SAME pair, per the D1 ruling above. Whoever performs manual payment verification today most likely holds no role at all and is not an `admin` in the plain sense; **granting plain `admin` will not unblock this flow**, and that is deliberate. |
+
+Both grants go through `identity:grant-role {actor} {role} --reason=`. Granting only one of the two roles is sufficient for both flows; there is no per-flow role.
+
 ## 7. Out of scope
 
 - The `actorRole` passthrough in the two write APIs (§D2 residual risk).
 - Correcting the stale doc blocks on the four `FinancialLedger` authorizers (§6).
+- **Rate limiting either route (review nit N-3).** Neither route carries `throttle` middleware, so probing is unlimited. Explicitly deferred and tracked separately, NOT waived — the fix round below makes probing visible, which is the half that could be done without changing the routes' middleware. Refusal telemetry without a rate limit is a monitoring improvement, not a throttle.
+
+## 8. Fix round, 12 Aug 2026 — refusals are now audited (review finding SF-6)
+
+Added after the task-scoped review: both controllers' `catch (PaymentActionNotAuthorisedException)` was non-capturing, so a refused money-moving attempt wrote no audit row, no log and no metric.
+
+Both now call `RecordPaymentActionRefusal` inside the catch, before `abort(403)`, writing exactly one `AuditOutcome::Denied` row per refusal under a new `PaymentAuditActions::ADMIN_ACTION_DENIED` constant. Design points, all recorded in that class's doc block: one dedicated action rather than reusing `REFUND`/`CHARGEBACK`/`MANUAL_VERIFICATION` (authorization deliberately runs before the `match` that decides refund vs chargeback, and that ordering must not change to suit an audit label); not added to `SensitiveActions`, with a fixed server-side reason string supplied instead; no metadata and no request payload of any kind, since authorization runs before validation; and the write is best-effort — a `Throwable` from it is reported and swallowed so an audit outage can never convert a 403 into a 500 or make refusals distinguishable.

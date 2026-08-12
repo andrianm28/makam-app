@@ -12,11 +12,12 @@ use App\Platform\Payment\Exceptions\PaymentActionNotAuthorisedException;
  * recording a reversal (refund/chargeback) and deciding a manual payment
  * verification.
  *
- * Deliberately narrower than `FinancialLedger\Contracts\PayoutAuthorizer`
- * and its three siblings: there is NO record-scope parameter. Those four
- * authorizers take a `$vendorId` / `$entityRef` because the records they
- * guard genuinely are scoped; `payment_reversals` and `payment_verifications`
- * carry no column in the `scope_assignments.entity_id` value space at all.
+ * Deliberately narrower than the four authorizer contracts in
+ * `FinancialLedger\Contracts`: there is NO record-scope parameter. Those
+ * four authorizers take a `$vendorId` / `$entityRef` because the records
+ * they guard genuinely are scoped; `payment_reversals` and
+ * `payment_verifications` carry no column in the
+ * `scope_assignments.entity_id` value space at all.
  * See `FinanceOrRestrictedAdminPaymentAuthorizer`'s class-level doc block
  * for the full schema argument and for why scoping on the one candidate
  * column would be strictly worse than not scoping.

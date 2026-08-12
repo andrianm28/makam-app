@@ -11,8 +11,11 @@ use RuntimeException;
  * money-moving payment action (recording a reversal, deciding a manual
  * payment verification).
  *
- * `docs/security/rbac-matrix.md` puts "Payout/refund" at `No` for every role
- * except a restricted admin and a dedicated finance role. The check that
+ * `docs/security/rbac-matrix.md` puts "Payout/refund, incl. manual payment
+ * verification" at `No` for every role except a restricted admin and a
+ * dedicated finance role — that row was extended to name manual payment
+ * verification by the 12 Aug 2026 ruling, so it now covers both of the
+ * actions above rather than only the reversal half. The check that
  * raises this is deliberately fail-closed: no role grant means no
  * authorisation, never "unrestricted until someone configures it" — see
  * `App\Platform\Payment\FinanceOrRestrictedAdminPaymentAuthorizer` for the
@@ -40,7 +43,8 @@ use RuntimeException;
  * authorization check is record-independent it can run BEFORE the lookup, so
  * an unauthorised caller gets this refusal for a nonexistent id and a real
  * id alike, and the endpoint is not an existence oracle over verification
- * UUIDs. Same defence `ManualPayout` documents, reached more cheaply here.
+ * UUIDs. Same defence the ledger module's manual payout Action documents,
+ * reached more cheaply here.
  */
 final class PaymentActionNotAuthorisedException extends RuntimeException
 {

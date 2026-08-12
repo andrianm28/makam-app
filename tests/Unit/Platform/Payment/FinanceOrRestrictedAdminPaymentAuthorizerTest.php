@@ -178,18 +178,70 @@ final class FinanceOrRestrictedAdminPaymentAuthorizerTest extends TestCase
     /**
      * The refusal must name nothing beyond the actor reference — no role
      * list, no record id, no amount. See the exception's own doc block.
+     *
+     * Asserted on the message's SHAPE (the whole expected string) rather than
+     * as `assertStringNotContainsString(ActorRole::CUSTOMER, ...)`, which was
+     * the previous form. That form passed only because this data case happens
+     * to be `customer`: the refusal message literally contains the words
+     * `finance` and `restricted-admin`, so parameterising the test over
+     * `unauthorizedRoles()` — or simply swapping the role — would have made
+     * it fail for a reason that is not a leak. An exact match cannot go
+     * wrong that way, and it is strictly stronger: any field added to the
+     * message later fails here, whether or not anyone thought to forbid it.
      */
-    public function test_the_refusal_message_leaks_nothing_beyond_the_actor_reference(): void
+    #[DataProvider('unauthorizedRoles')]
+    public function test_the_refusal_message_leaks_nothing_beyond_the_actor_reference(string $role): void
     {
         try {
             $this->authorizer()->authorize(
-                new ActorContext(identityReference: 77, roles: [ActorRole::CUSTOMER]),
+                new ActorContext(identityReference: 77, roles: [$role]),
             );
 
             $this->fail('An unauthorized role must be refused.');
         } catch (PaymentActionNotAuthorisedException $exception) {
-            $this->assertStringContainsString('77', $exception->getMessage());
-            $this->assertStringNotContainsString(ActorRole::CUSTOMER, $exception->getMessage());
+            $this->assertSame(
+                'Actor [77] holds no explicit finance or restricted-admin authority for this payment action.',
+                $exception->getMessage(),
+            );
         }
+    }
+
+    /**
+     * An EMPTY identity reference is an absent identity, refused alongside
+     * `null` (review nit N-5). Not reachable through the shipped adapter,
+     * which returns a real `users.id` — but `$identityReference` is typed
+     * `int|string|null` precisely so a future K1/K2 adapter can key on an
+     * external id, and one that returns `''` for "could not resolve" must not
+     * have that read as a present identity.
+     *
+     * The roles array is populated deliberately: this must refuse at the
+     * identity check, not fall through to the role lookup that would have
+     * refused it anyway. Without the roles, the test would pass with the
+     * hardening removed.
+     */
+    public function test_an_empty_string_identity_reference_is_refused(): void
+    {
+        $this->expectException(PaymentActionNotAuthorisedException::class);
+
+        $this->authorizer()->authorize(
+            new ActorContext(identityReference: '', roles: [ActorRole::FINANCE]),
+        );
+    }
+
+    /**
+     * `0` is NOT refused: it is a legitimate integer key shape, and an
+     * identity check that refuses on falsiness rather than on emptiness locks
+     * a real actor out. Pinned so nobody "tidies" the check above into
+     * `if (! $actorReference)`.
+     */
+    public function test_a_zero_identity_reference_is_a_present_identity(): void
+    {
+        $this->assertSame(
+            ActorRole::FINANCE,
+            $this->authorizer()->authorize(new ActorContext(
+                identityReference: 0,
+                roles: [ActorRole::FINANCE],
+            )),
+        );
     }
 }

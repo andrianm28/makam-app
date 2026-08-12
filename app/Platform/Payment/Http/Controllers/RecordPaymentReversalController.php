@@ -12,6 +12,7 @@ use App\Platform\IdentityAccess\Reauthentication\ReauthenticationService;
 use App\Platform\Payment\Contracts\PaymentActionAuthorizer;
 use App\Platform\Payment\Exceptions\PaymentActionNotAuthorisedException;
 use App\Platform\Payment\PaymentReversalType;
+use App\Platform\Payment\RecordPaymentActionRefusal;
 use App\Platform\Payment\ReversalService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -34,11 +35,21 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  * and nothing else. `config/auth.php` defines exactly one guard — `web`,
  * provider `users` — and there is no separate admin guard, so `auth` alone
  * asserted only "some row exists in the shared users table." Any
- * authenticated user who had enrolled MFA and satisfied the recency window
- * could POST here and record a refund or a chargeback. `PaymentActionAuthorizer`
- * closes that; a refusal becomes a 403, following
- * `Admin\FinanceExportController`'s convention, since this app has no
- * framework-level exception mapping.
+ * authenticated user whose last login fell inside
+ * `config('reauthentication.freshness_seconds')` (default 900 s) could POST
+ * here and record a refund or a chargeback — that was the WHOLE precondition.
+ * No MFA was involved: `EnforceMfaChallenge` is attached only to the Filament
+ * panel's middleware array (`Providers\Filament\AdminPanelProvider`) and
+ * inline on the standalone `/admin/finance/exports` route, and this is a plain
+ * `Route::post` in neither place, so it carried no MFA gate at all.
+ * `RequireRecentAuthentication` reads only `ActorContext::$lastAuthenticatedAt`
+ * and never consults MFA state. The adjacent finance-export route DOES carry
+ * `EnforceMfaChallenge`, which is what makes the omission on the two
+ * money-moving routes conspicuous rather than merely uniform. Do not credit
+ * this path with a compensating control it does not have.
+ * `PaymentActionAuthorizer` closes the authority gap; a refusal becomes a 403,
+ * following `Admin\FinanceExportController`'s convention, since this app has
+ * no framework-level exception mapping.
  *
  * The check runs before `ReauthenticationService::satisfy()` deliberately.
  * `satisfy()` verifies nothing — it unconditionally writes a `satisfied`
@@ -78,6 +89,10 @@ final class RecordPaymentReversalController extends Controller
      * linked by a shared constant. Distinct from the mandatory audit
      * `reason` the request body supplies below, which explains WHY this
      * specific reversal was recorded.
+     *
+     * Also the subject id of the refusal audit row, so that row names which
+     * of the two admin payment endpoints was refused without carrying any
+     * caller-supplied value — see `RecordPaymentActionRefusal`.
      */
     private const string REASON = 'payment_reversal';
 
@@ -88,13 +103,20 @@ final class RecordPaymentReversalController extends Controller
         try {
             $actorRole = app(PaymentActionAuthorizer::class)->authorize($actorContext);
         } catch (PaymentActionNotAuthorisedException) {
+            // Exactly one `Denied` row per refusal, written before the 403 so
+            // a probe of this endpoint cannot be invisible. Best-effort by
+            // design — see `RecordPaymentActionRefusal` for why an audit
+            // failure must not turn this 403 into a 500.
+            app(RecordPaymentActionRefusal::class)->record($actorContext, self::REASON);
+
             abort(403);
         }
 
         $type = match ($reversalType) {
             'refund' => PaymentReversalType::Refund,
             'chargeback' => PaymentReversalType::Chargeback,
-            // Unreachable via the route's own `->where('reversalType', ...)`
+            // Unreachable via the route's own
+            // `->whereIn('reversalType', ['refund', 'chargeback'])`
             // constraint (see `routes/web.php`) — defensive only, the same
             // "honest failure, not a silent bypass" posture the rest of this
             // lane's controllers already use for out-of-band input.
