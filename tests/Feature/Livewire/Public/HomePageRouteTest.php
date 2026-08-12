@@ -7,7 +7,7 @@ namespace Tests\Feature\Livewire\Public;
 use App\Platform\Analytics\Models\MenuInteractionEvent;
 use App\Platform\FeatureGate\Models\FeatureGate;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 /**
@@ -222,10 +222,18 @@ final class HomePageRouteTest extends TestCase
         // this batch's own construction of that pattern, not a mirror of
         // an existing FAQ test (see this batch's final report).
         //
-        // CASCADE: faq_article_versions and faq_article_related_article
-        // both hold FK constraints against faq_articles. Safe here since
-        // RefreshDatabase rolls the whole test transaction back afterwards.
-        DB::statement('DROP TABLE faq_articles CASCADE');
+        // Children dropped first, in reverse-dependency order, instead of
+        // `DROP TABLE ... CASCADE`: SQLite's DROP TABLE has no CASCADE
+        // clause, and phpunit.xml defaults to SQLite locally while CI runs
+        // PostgreSQL — the CASCADE form passed on CI and failed everywhere
+        // else. If a later batch adds another table with a foreign key to
+        // faq_articles, this test fails with an FK error rather than
+        // passing silently — that is the correct signal (same tripwire
+        // pattern as RenewalStartTest::test_a_failed_cemetery_read_...).
+        // Safe: RefreshDatabase rolls the whole test transaction back.
+        Schema::dropIfExists('faq_article_related_article');
+        Schema::dropIfExists('faq_article_versions');
+        Schema::dropIfExists('faq_articles');
 
         $response = $this->get('/');
 

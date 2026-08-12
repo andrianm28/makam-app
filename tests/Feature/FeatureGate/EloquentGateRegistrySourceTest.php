@@ -8,7 +8,7 @@ use App\Platform\FeatureGate\EloquentGateRegistrySource;
 use App\Platform\FeatureGate\Models\FeatureGate;
 use App\Platform\FeatureGate\Models\GateEnvironmentState;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 /**
@@ -103,13 +103,20 @@ final class EloquentGateRegistrySourceTest extends TestCase
 
     public function test_a_total_registry_load_failure_denies_every_gate_instead_of_throwing(): void
     {
-        // CASCADE: `feature_flags`, `gate_activations`, and
+        // Children dropped first, in reverse-dependency order, instead of
+        // `DROP TABLE ... CASCADE`: SQLite's DROP TABLE has no CASCADE
+        // clause, and phpunit.xml defaults to SQLite locally while CI runs
+        // PostgreSQL — the CASCADE form passed on CI and failed everywhere
+        // else. `feature_flags`, `gate_activations`, and
         // `gate_environment_state` all hold FK constraints against
-        // `feature_gates.gate_id`. CASCADE drops those constraints along
-        // with this table, not the other tables' rows — safe here since
-        // the test ends (and RefreshDatabase rolls the whole transaction
-        // back) immediately after this assertion.
-        DB::statement('DROP TABLE feature_gates CASCADE');
+        // `feature_gates.gate_id`; dropping them first mirrors what CASCADE
+        // did on Postgres. Safe here since the test ends (and
+        // RefreshDatabase rolls the whole transaction back) immediately
+        // after this assertion.
+        Schema::dropIfExists('feature_flags');
+        Schema::dropIfExists('gate_activations');
+        Schema::dropIfExists('gate_environment_state');
+        Schema::dropIfExists('feature_gates');
 
         $snapshot = (new EloquentGateRegistrySource('testing'))->load();
 
