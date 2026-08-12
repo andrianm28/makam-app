@@ -4,14 +4,17 @@ declare(strict_types=1);
 
 namespace App\Platform\Payment\Providers;
 
+use App\Platform\Payment\Contracts\PaymentActionAuthorizer;
+use App\Platform\Payment\FinanceOrRestrictedAdminPaymentAuthorizer;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 /**
- * Wires the payment module's two container-level concerns: the signature
- * verifier's credentials, and the webhook endpoint's rate limit.
+ * Wires the payment module's three container-level concerns: the signature
+ * verifier's credentials, the admin-action authorization policy, and the
+ * webhook endpoint's rate limit.
  *
  * The provider HTTP adapter (`PaymentProvider` / `SumoPodSandboxProvider`) is
  * deliberately NOT bound here — it belongs to a later task, and binding a name
@@ -57,6 +60,27 @@ final class PaymentServiceProvider extends ServiceProvider
         $this->app->bind(
             SumoPodWebhookSignature::class,
             static fn (): SumoPodWebhookSignature => SumoPodWebhookSignature::fromConfig(),
+        );
+
+        // The policy behind `POST /admin/payments/reversals/{reversalType}`
+        // and `POST /admin/payments/manual-verifications/{id}/verify`. Both
+        // routes previously carried only `['web', 'auth', ...]`, and
+        // `config/auth.php` defines a single `web` guard over the shared
+        // `users` table — so `auth` alone meant nothing more than "some user
+        // row exists," on two money-moving endpoints.
+        //
+        // Bound to the interface so a future policy change is a one-line
+        // rebind, and so tests can substitute a double without reaching into
+        // the controllers.
+        //
+        // Transient `bind()`, not `singleton()`: the implementation is
+        // stateless and reads `ActorContext` from its argument, but a
+        // singleton authorization policy is the shape that invites someone
+        // to cache a decision across actors later. Nothing here is expensive
+        // enough to be worth that risk.
+        $this->app->bind(
+            PaymentActionAuthorizer::class,
+            FinanceOrRestrictedAdminPaymentAuthorizer::class,
         );
     }
 
