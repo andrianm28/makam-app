@@ -654,7 +654,20 @@ Tests: each of conditions 2-5 denies for a real, specific domain reason (`Domain
 
 **Ratified design (Q3).** The keystone task. `ProcessWebhookEvent` deliberately only *claims* an event and applies no paid effect; this is the deferred apply step.
 
-> **SEQUENCING CONSTRAINT — do not edit `app/Platform/Payment/Http/Controllers/VerifyManualPaymentController.php` in this task until the coordinator confirms the payment-auth hotfix has landed.** A concurrent lane is actively editing that file (adding an authorization check before the existing `verify()` call, and replacing the hardcoded `actorRole: 'authenticated_actor'` with a real resolved role). `GuardPaymentSession`, `GuardCondition`, and `ProcessWebhookEvent` are confirmed **not** touched by that hotfix and are safe to modify. If this task is reached before the hotfix lands, implement everything except the controller wiring, and report the controller hook as **NOT DONE — BLOCKED on the payment-auth hotfix** rather than editing the file anyway.
+> **SEQUENCING CONSTRAINT for `app/Platform/Payment/Http/Controllers/VerifyManualPaymentController.php`.** The payment-auth hotfix that was editing this file **has committed** (`8be7e49` on branch `fix/payment-controller-authorization`), so there is no longer a concurrent editor. But as of 12 Aug 2026 that commit is **neither in this branch nor merged to trunk**, so editing the file here still produces a merge conflict when both PRs land.
+>
+> **Before starting this task, check:** `git merge-base --is-ancestor 8be7e49 HEAD`. If it succeeds, the hotfix is in your history — edit freely. If it fails, first check whether trunk now contains it and merge trunk in; only if it is still unmerged should you write the edit blind, composing with the known changes below and flagging the expected conflict in the PR description.
+>
+> **What the hotfix changed, so a later edit composes rather than clobbers:**
+> - Two imports added: `PaymentActionAuthorizer` and `PaymentActionNotAuthorisedException`.
+> - A new block at the **top** of `__invoke()`, immediately after `$actorContext = app(ActorContext::class);` and before the `satisfy()` call, resolving `$actorRole` via `PaymentActionAuthorizer::authorize($actorContext)` and `abort(403)` on `PaymentActionNotAuthorisedException`.
+> - Both `actorRole: 'authenticated_actor'` arguments replaced with `actorRole: $actorRole`.
+>
+> **The call ordering is load-bearing and must be preserved:** `authorize()` → `satisfy()` → `validate()` → `findOrFail()` → `verify()`. Authorization must stay **before** `findOrFail()`, or the endpoint becomes an existence oracle over verification ids (403 for a real id, 404 for a fake one). A test named `test_an_unknown_verification_id_is_403_not_404_for_an_unauthorized_actor` fails if this regresses.
+>
+> **This endpoint now fails closed for everyone** until an operator grants `finance` or `restricted_admin`; no seeder grants any role. Any test here that exercises the success path must grant a role first — reuse the `grantRole()` / `authorizedUser()` helpers in `tests/Feature/Payment/VerifyManualPaymentRouteTest.php` rather than writing new ones.
+>
+> `GuardPaymentSession`, `GuardCondition`, and `ProcessWebhookEvent` were never touched by the hotfix and are safe to modify.
 
 **Files:**
 - Create: `app/Domain/OrderWorkflow/Actions/ApplyPaidEffects.php`, `PaidTrigger.php`
