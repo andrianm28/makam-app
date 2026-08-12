@@ -11,8 +11,10 @@ use App\Domain\Faq\Models\FaqCategory;
 use App\Filament\Admin\Resources\FaqArticles\Pages\EditFaqArticle;
 use App\Models\User;
 use App\Platform\Audit\Models\AuditEvent;
+use App\Platform\IdentityAccess\Roles\ActorRole;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
+use Tests\Support\GrantsActorRoles;
 use Tests\TestCase;
 
 /**
@@ -24,9 +26,24 @@ use Tests\TestCase;
  * `related_article_ids` is correctly pre-filled from the pivot on open
  * (`mutateFormDataBeforeFill()`), since that field has no matching
  * `faq_articles` column for Filament's default fill behaviour to find.
+ *
+ * ---------------------------------------------------------------------------
+ * Every actor here is granted `ActorRole::ADMIN` first, and that is not
+ * boilerplate
+ * ---------------------------------------------------------------------------
+ * Task 1 of the L9 `admin-operations` lane closed the Critical authorization
+ * gap ledgered at `docs/planning/retrofit-backlog.md:88`: the FAQ admin
+ * surface now refuses every actor without the `admin` role
+ * (`App\Domain\Faq\Contracts\FaqAuthorizer`). A bare `User::factory()` actor
+ * gets a 403 before this file's subject is reached, so the grant is what makes
+ * these tests exercise their subject at all rather than the authorization
+ * boundary. The refusal side is proved separately and deliberately, in
+ * `FaqArticleAuthorizationCharacterizationTest` — do not add denial cases here
+ * or weaken the boundary to keep these green.
  */
 final class EditFaqArticleTest extends TestCase
 {
+    use GrantsActorRoles;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -44,6 +61,7 @@ final class EditFaqArticleTest extends TestCase
     public function test_submitting_the_edit_form_updates_content_via_the_domain_action(): void
     {
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
         $this->actingAs($user);
 
         $article = (new CreateFaqArticleDraft)(
@@ -84,6 +102,7 @@ final class EditFaqArticleTest extends TestCase
     public function test_the_related_articles_field_is_prefilled_from_the_pivot_on_open(): void
     {
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
         $this->actingAs($user);
 
         $related = (new CreateFaqArticleDraft)(
@@ -113,6 +132,7 @@ final class EditFaqArticleTest extends TestCase
     public function test_editing_preserves_the_sort_order_when_the_field_is_left_untouched(): void
     {
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
         $this->actingAs($user);
 
         $article = (new CreateFaqArticleDraft)(

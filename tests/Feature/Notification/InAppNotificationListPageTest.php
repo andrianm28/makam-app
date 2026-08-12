@@ -8,6 +8,7 @@ use App\Filament\Admin\Pages\InAppNotifications;
 use App\Livewire\Platform\Notification\InAppNotificationList;
 use App\Models\User;
 use App\Platform\Audit\Models\AuditEvent;
+use App\Platform\IdentityAccess\Roles\ActorRole;
 use App\Platform\IdentityAccess\Scopes\Models\ScopeAssignment;
 use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use App\Platform\Notification\DeliveryState;
@@ -15,6 +16,7 @@ use App\Platform\Notification\Models\InAppNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
+use Tests\Support\GrantsActorRoles;
 use Tests\TestCase;
 
 /**
@@ -27,6 +29,13 @@ use Tests\TestCase;
  * the page, the mandatory empty state, honest delivery-state chips
  * (pending/unavailable rendered, never a false "Terkirim"), and the
  * mark-read transition end to end.
+ *
+ * Every HTTP-reached actor holds a real `operator` role grant (via
+ * `Tests\Support\GrantsActorRoles`): Task 10 of the L9 `admin-operations`
+ * lane restricted `/admin` panel membership to the four back-office roles,
+ * so a roleless actor would get a 403 at the panel boundary and never reach
+ * the inbox this file exists to render. `operator` is the least role that
+ * makes each test's "some panel user" intent true.
  *
  * Delivery rows are seeded directly in the chosen states (the brief's own
  * instruction: "seed a notification_deliveries row in each state and assert
@@ -44,6 +53,7 @@ use Tests\TestCase;
  */
 final class InAppNotificationListPageTest extends TestCase
 {
+    use GrantsActorRoles;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -63,6 +73,8 @@ final class InAppNotificationListPageTest extends TestCase
     {
         $actorA = User::factory()->create();
         $actorB = User::factory()->create();
+        $this->grantRoleTo($actorA, ActorRole::OPERATOR);
+        $this->grantRoleTo($actorB, ActorRole::OPERATOR);
         $this->grant($actorA->id, ScopeEntityType::CEMETERY, 'cemetery-a');
         $this->grant($actorB->id, ScopeEntityType::CEMETERY, 'cemetery-b');
 
@@ -79,6 +91,7 @@ final class InAppNotificationListPageTest extends TestCase
     public function test_an_actor_with_no_records_sees_the_empty_state(): void
     {
         $actor = User::factory()->create();
+        $this->grantRoleTo($actor, ActorRole::OPERATOR);
 
         $this->actingAs($actor)
             ->get('/admin/in-app-notifications')

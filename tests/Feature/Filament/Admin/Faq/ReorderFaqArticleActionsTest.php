@@ -11,8 +11,10 @@ use App\Domain\Faq\Models\FaqArticle;
 use App\Domain\Faq\Models\FaqCategory;
 use App\Filament\Admin\Resources\FaqArticles\Pages\ListFaqArticles;
 use App\Models\User;
+use App\Platform\IdentityAccess\Roles\ActorRole;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
+use Tests\Support\GrantsActorRoles;
 use Tests\TestCase;
 
 /**
@@ -30,9 +32,24 @@ use Tests\TestCase;
  * correctly — the sequential 1..N guarantee itself is already proven at the
  * Action level by Batch 4.1's `tests/Feature/Domain/Faq/
  * ReorderFaqArticlesTest.php`.
+ *
+ * ---------------------------------------------------------------------------
+ * Every actor here is granted `ActorRole::ADMIN` first, and that is not
+ * boilerplate
+ * ---------------------------------------------------------------------------
+ * Task 1 of the L9 `admin-operations` lane closed the Critical authorization
+ * gap ledgered at `docs/planning/retrofit-backlog.md:88`: the FAQ admin
+ * surface now refuses every actor without the `admin` role
+ * (`App\Domain\Faq\Contracts\FaqAuthorizer`). A bare `User::factory()` actor
+ * gets a 403 before this file's subject is reached, so the grant is what makes
+ * these tests exercise their subject at all rather than the authorization
+ * boundary. The refusal side is proved separately and deliberately, in
+ * `FaqArticleAuthorizationCharacterizationTest` — do not add denial cases here
+ * or weaken the boundary to keep these green.
  */
 final class ReorderFaqArticleActionsTest extends TestCase
 {
+    use GrantsActorRoles;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -60,6 +77,7 @@ final class ReorderFaqArticleActionsTest extends TestCase
     public function test_move_down_swaps_the_record_with_its_next_sibling_in_the_same_category(): void
     {
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
         $this->actingAs($user);
 
         [$a, $b, $c] = $this->createThreeArticlesInPembayaran();
@@ -85,6 +103,7 @@ final class ReorderFaqArticleActionsTest extends TestCase
     public function test_move_up_swaps_the_record_with_its_previous_sibling(): void
     {
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
         $this->actingAs($user);
 
         [$a, $b, $c] = $this->createThreeArticlesInPembayaran();
@@ -101,6 +120,7 @@ final class ReorderFaqArticleActionsTest extends TestCase
     public function test_move_down_sends_a_success_notification(): void
     {
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
         $this->actingAs($user);
 
         [$a] = $this->createThreeArticlesInPembayaran();
@@ -113,6 +133,7 @@ final class ReorderFaqArticleActionsTest extends TestCase
     public function test_move_up_sends_a_success_notification(): void
     {
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
         $this->actingAs($user);
 
         [, , $c] = $this->createThreeArticlesInPembayaran();
@@ -125,6 +146,7 @@ final class ReorderFaqArticleActionsTest extends TestCase
     public function test_move_up_is_hidden_for_the_first_article_and_move_down_is_hidden_for_the_last(): void
     {
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
         $this->actingAs($user);
 
         $this->createThreeArticlesInPembayaran();
@@ -147,6 +169,7 @@ final class ReorderFaqArticleActionsTest extends TestCase
     public function test_moving_never_leaves_a_duplicate_or_gapped_sort_order_within_the_category(): void
     {
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
         $this->actingAs($user);
 
         [$a, $b, $c] = $this->createThreeArticlesInPembayaran();
@@ -174,6 +197,7 @@ final class ReorderFaqArticleActionsTest extends TestCase
     public function test_a_reorder_action_never_moves_an_article_from_a_different_category(): void
     {
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
         $this->actingAs($user);
 
         [$a, $b] = $this->createThreeArticlesInPembayaran();

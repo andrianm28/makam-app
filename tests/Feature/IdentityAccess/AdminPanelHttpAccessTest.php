@@ -9,7 +9,9 @@ use App\Platform\Audit\AuditSource;
 use App\Platform\IdentityAccess\Mfa\MfaEnrolmentService;
 use App\Platform\IdentityAccess\Mfa\Totp\Base32;
 use App\Platform\IdentityAccess\Mfa\Totp\Totp;
+use App\Platform\IdentityAccess\Roles\ActorRole;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\GrantsActorRoles;
 use Tests\TestCase;
 
 /**
@@ -80,16 +82,23 @@ use Tests\TestCase;
  * `/admin/login` (asserted here via the `filament.admin.auth.login` route
  * name, not a hardcoded string, so it stays correct even if a future change
  * moves the panel path). An authenticated `GET /admin` should render the
- * Dashboard directly (200), because `AdminPanelAccessPolicy::allows()` is
- * `$actor->isAuthenticated()` today (see that class's own doc block — no
- * role check yet, by design, until S3-T2/T3 populate `ActorContext::$roles`)
- * so ANY authenticated user passes. This test proves the CURRENT,
- * intentionally coarse "authenticated = allowed" boundary — it is not
- * proof of role-based authorization, which does not exist in this codebase
- * yet.
+ * Dashboard directly (200) for the four panel roles —
+ * `AdminPanelAccessPolicy` admits `admin`, `restricted_admin`, `operator`,
+ * and `finance` (see that class's doc block). A `customer`-role or roleless
+ * authenticated user is refused at the panel boundary with a 403 by
+ * Filament's `Authenticate` middleware, which calls
+ * `User::canAccessPanel()` → `AdminPanelAccessPolicy::allows()`. This test
+ * proves the CURRENT, role-based boundary end to end over real HTTP.
+ *
+ * Every authenticated fixture below carries a real role grant made through
+ * `Roles\Actions\GrantActorRole` (via the `GrantsActorRoles` helper) —
+ * never a hand-constructed `ActorContext`, because the panel middleware
+ * resolves the actor's context from the `actor_role_assignments` table and
+ * only a real grant exercises that whole chain.
  */
 final class AdminPanelHttpAccessTest extends TestCase
 {
+    use GrantsActorRoles;
     use RefreshDatabase;
 
     /**
@@ -132,36 +141,57 @@ final class AdminPanelHttpAccessTest extends TestCase
         $response->assertRedirect(route('filament.admin.auth.login'));
     }
 
-    public function test_an_authenticated_user_can_enter_the_admin_panel(): void
+    public function test_an_operator_can_enter_the_admin_panel(): void
     {
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::OPERATOR);
 
         $response = $this->actingAs($user)->get('/admin');
 
-        // AdminPanelAccessPolicy::allows() is today just
-        // $actor->isAuthenticated() — no role/scope check. This assertion
-        // is therefore proof of THAT boundary specifically: any
-        // authenticated user reaches the dashboard. Tightening this to a
-        // real role check is S3-T2/T3's job, not this batch's.
+        // AdminPanelAccessPolicy::allows() admits operator — this assertion
+        // proves THAT boundary specifically over real HTTP.
         $response->assertOk();
     }
 
-    public function test_a_different_authenticated_user_can_also_enter_confirming_no_hidden_allowlist(): void
+    public function test_a_customer_role_user_is_denied_at_the_admin_panel(): void
+    {
+        $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::CUSTOMER);
+
+        // Filament's Authenticate middleware calls canAccessPanel() and
+        // aborts 403 for an authenticated-but-denied user (never a redirect
+        // to login — see this class's doc block for the source trail).
+        $this->actingAs($user)->get('/admin')->assertForbidden();
+    }
+
+    public function test_a_roleless_authenticated_user_is_denied_at_the_admin_panel(): void
+    {
+        $user = User::factory()->create();
+
+        // No grant at all — the roleless case the old gate used to admit.
+        // Same 403 as the customer case; the reason differs, the boundary
+        // holds the same way.
+        $this->actingAs($user)->get('/admin')->assertForbidden();
+    }
+
+    public function test_a_different_operator_can_also_enter_confirming_no_hidden_allowlist(): void
     {
         // Two independently-created users both getting in (not just the
         // same fixture twice) rules out an accidental allowlist keyed on a
-        // specific id/email rather than the documented "any authenticated
-        // actor" rule.
+        // specific id/email rather than the documented role rule.
         $first = User::factory()->create();
         $second = User::factory()->create();
+        $this->grantRoleTo($first, ActorRole::OPERATOR);
+        $this->grantRoleTo($second, ActorRole::OPERATOR);
 
         $this->actingAs($first)->get('/admin')->assertOk();
         $this->actingAs($second)->get('/admin')->assertOk();
     }
 
-    public function test_an_enrolled_admin_hitting_the_dashboard_is_redirected_to_the_mfa_challenge(): void
+    public function test_an_enrolled_operator_hitting_the_dashboard_is_redirected_to_the_mfa_challenge(): void
     {
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::OPERATOR);
         $enrolment = app(MfaEnrolmentService::class)->startEnrolment($user->id);
         $this->confirmEnrolment($enrolment, $user);
 
@@ -170,9 +200,10 @@ final class AdminPanelHttpAccessTest extends TestCase
             ->assertRedirect(route('filament.admin.pages.mfa-challenge'));
     }
 
-    public function test_a_non_enrolled_admin_still_reaches_the_dashboard(): void
+    public function test_a_non_enrolled_operator_still_reaches_the_dashboard(): void
     {
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::OPERATOR);
 
         $this->actingAs($user)
             ->get('/admin')

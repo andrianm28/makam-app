@@ -1,5 +1,6 @@
 <?php
 
+use App\Domain\Faq\Providers\FaqServiceProvider;
 use App\Platform\Correlation\Providers\CorrelationServiceProvider;
 use App\Platform\DocumentVault\Providers\DocumentVaultServiceProvider;
 use App\Platform\FeatureGate\Providers\FeatureGateServiceProvider;
@@ -70,4 +71,12 @@ return [
     // this one additive line, and without it the whole outbox-fed
     // dispatch path is dead code no consumer can reach.
     NotificationServiceProvider::class,
+    // Task 1 of the L9 `admin-operations` lane — binds
+    // `App\Domain\Faq\Contracts\FaqAuthorizer`, the seam the FAQ admin
+    // surface's authorization runs through. Same precedent as every provider
+    // above. Without it `FaqArticleResource`/`FaqArticlesTable` raise
+    // `BindingResolutionException` on the first admin request, which is the
+    // correct fail-closed behaviour for a missing authorization seam — see
+    // `FaqServiceProvider`'s own class-level comment.
+    FaqServiceProvider::class,
 ];
