@@ -9,6 +9,7 @@ use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\AuditSubject;
 use App\Platform\IdentityAccess\ActorContext;
+use App\Platform\IdentityAccess\Roles\ActorRole;
 use Throwable;
 
 /**
@@ -58,9 +59,11 @@ use Throwable;
  * The subject is therefore the ACTION that was refused, named by the calling
  * controller's own server-side `REASON` constant (`payment_reversal` /
  * `payment_manual_verification`), so an operator can still tell the two
- * endpoints apart. The actor reference is the only caller-derived value
- * written, it is server-resolved rather than request-supplied, and it is
- * already in the audit trail for the allowed path.
+ * endpoints apart. The actor reference and the actor's real role are the only
+ * actor-derived values written; both are server-resolved rather than
+ * request-supplied, and both are already in the audit trail for the allowed
+ * path. See `auditRoleFor()` for why the role is the real one rather than a
+ * sentinel.
  *
  * ---------------------------------------------------------------------------
  * A failed audit write must never turn a 403 into a 500
@@ -87,8 +90,9 @@ use Throwable;
  * `report()` sends the failure to the application's error handler, so the
  * failure itself is not silent. The exception carries this class's own
  * parameters — an action name, a closed-list source, the fixed reason below,
- * and the server-resolved actor reference — so reporting it puts no restricted
- * data anywhere.
+ * the server-resolved actor reference, and a role drawn from
+ * `Roles\ActorRole::KNOWN_ROLES` or one of the two sentinels — so reporting it
+ * puts no restricted data anywhere.
  */
 final class RecordPaymentActionRefusal
 {
@@ -104,20 +108,21 @@ final class RecordPaymentActionRefusal
     private const string REASON = 'Refused: the actor holds no finance or restricted-admin authority for this payment action.';
 
     /**
-     * `authenticated_actor` is the audit sentinel meaning "no role applies",
-     * which is precisely true of a refused actor: the authorizer just
-     * established that they hold neither authorized role. It is deliberately
-     * NOT declared on `Roles\ActorRole` — that class's doc block records why
-     * (a grantable role the policy layer reads as the absence of a role would
-     * be a privilege-escalation-shaped inconsistency), so this is a literal
-     * here exactly as it is in `Http\Middleware\RequireRecentAuthentication`
-     * and `DocumentVault\Policies\DocumentAccessPolicy`, including that
-     * middleware's `guest` fallback for an actor with no resolved identity.
+     * The sentinel written when — and only when — it is literally true.
      *
-     * This is the ONE place in this module the sentinel is still written, and
-     * it is the one place where it is correct: the allowed paths were changed
-     * by this same hotfix to record the real role the authorizer approved.
+     * `authenticated_actor` is the audit sentinel meaning "no role applies".
+     * It is deliberately NOT declared on `Roles\ActorRole` — that class's doc
+     * block records why (a grantable role the policy layer reads as the
+     * absence of a role would be a privilege-escalation-shaped inconsistency)
+     * — so it is a literal here exactly as it is in
+     * `Http\Middleware\RequireRecentAuthentication` and
+     * `DocumentVault\Policies\DocumentAccessPolicy`, along with that
+     * middleware's `guest` fallback for an actor with no resolved identity.
      */
+    private const string ROLE_AUTHENTICATED_ACTOR = 'authenticated_actor';
+
+    private const string ROLE_GUEST = 'guest';
+
     public function record(ActorContext $actor, string $paymentAction): void
     {
         try {
@@ -126,12 +131,75 @@ final class RecordPaymentActionRefusal
                 subject: new AuditSubject('payment_admin_action', $paymentAction),
                 outcome: AuditOutcome::Denied,
                 actorRef: $actor->identityReference,
-                actorRole: $actor->isAuthenticated() ? 'authenticated_actor' : 'guest',
+                actorRole: self::auditRoleFor($actor),
                 source: AuditSource::Panel,
                 reason: self::REASON,
             );
         } catch (Throwable $failure) {
             report($failure);
         }
+    }
+
+    /**
+     * The refused actor's REAL, most-privileged held role — the sentinel only
+     * when they genuinely hold none.
+     *
+     * This originally wrote `authenticated_actor` for every authenticated
+     * refusal, justified as "the authorizer just established that this actor
+     * holds no authorized role". That premise does not follow (whole-branch
+     * review finding SF-5): the authorizer established that the actor holds
+     * neither AUTHORIZED role, not that they hold no role. A refused `admin`
+     * and a refused `customer` both hold a real, granted, server-resolved
+     * role, and both were written to the trail as the absence of one.
+     *
+     * Two reasons that mattered enough to change:
+     *
+     * 1. It contradicted the principle this hotfix exists to assert. The same
+     *    change replaced four hardcoded `authenticated_actor` sentinels on the
+     *    ALLOWED paths precisely because the trail must record the real role
+     *    — both route tests pin that as
+     *    `test_the_audit_trail_records_the_real_role_never_the_sentinel` — and
+     *    then wrote the sentinel back on the one path where the actor's real
+     *    role is the most operationally interesting datum available.
+     * 2. It hid the distinction most likely to matter after this merge. "A
+     *    `customer` account is POSTing to the reversal endpoint" and "an
+     *    `admin` tried to decide a manual verification and could not" call for
+     *    opposite responses — one is probing, the other is almost certainly
+     *    someone who needs a grant, which is by far the likeliest real refusal
+     *    once these endpoints start failing closed for everyone. The uniform
+     *    sentinel could not tell them apart, and neither could it distinguish
+     *    either from a genuinely unidentifiable actor.
+     *
+     * There is no leak on the other side. `ActorContext::$roles` is
+     * server-resolved through `Roles\ActorRoleReader` from non-revoked
+     * `actor_role_assignments` rows — never caller-supplied — and the same
+     * values already reach `audit_events.actor_role` on every allowed path.
+     *
+     * Precedence and vocabulary are BORROWED, not invented:
+     * `Roles\ActorRole::KNOWN_ROLES`' declaration order IS precedence order,
+     * most privileged first (that class's own doc block says so), and this
+     * walks it exactly the way `DocumentVault\Policies\DocumentAccessPolicy
+     * ::auditRoleFor()` walks its own allow-list. `AGENTS.md` §Documentation
+     * forbids duplicating canonical catalogue data, so no role list is
+     * restated here. The one deliberate difference from `DocumentAccessPolicy`
+     * is the list walked: that policy walks the roles IT recognises, because a
+     * role outside its allow-list is irrelevant to a document decision. Here
+     * the whole point is to record roles the authorizer does NOT accept, so
+     * the full canonical list is the right one — anything narrower would put
+     * some real roles back under the sentinel.
+     */
+    private static function auditRoleFor(ActorContext $actor): string
+    {
+        if (! $actor->isAuthenticated()) {
+            return self::ROLE_GUEST;
+        }
+
+        foreach (ActorRole::KNOWN_ROLES as $role) {
+            if ($actor->hasRole($role)) {
+                return $role;
+            }
+        }
+
+        return self::ROLE_AUTHENTICATED_ACTOR;
     }
 }

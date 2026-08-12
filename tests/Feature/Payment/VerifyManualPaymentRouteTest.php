@@ -137,9 +137,25 @@ final class VerifyManualPaymentRouteTest extends TestCase
      *   action, the wrong subject, or the caller's payload fails here rather
      *   than silently counting as "audited". In particular the subject must
      *   NOT be the caller-supplied `{paymentVerification}` id.
+     *
+     * `$actor` and `$expectedRole` are REQUIRED, not optional, because of
+     * whole-branch review findings SF-4 and SF-5. Nothing pinned `actor_ref`
+     * before, so setting it to null in `RecordPaymentActionRefusal` left the
+     * whole payment suite green — and a refusal row with no actor reference is
+     * a counter, not a monitoring signal: it records that something was
+     * refused and nothing about who. `actor_role` is pinned in the same place
+     * and for the same reason: the row must name the refused actor's REAL
+     * role, so that "a `customer` is probing this endpoint" and "an `admin`
+     * needs a grant" stay distinguishable in the trail. Making both parameters
+     * mandatory is deliberate — an optional assertion is one a future caller
+     * silently skips.
      */
-    private function assertTheRefusalWasAuditedExactly(int $expected = 1, ?string $unknownId = null): void
-    {
+    private function assertTheRefusalWasAuditedExactly(
+        User $actor,
+        string $expectedRole,
+        int $expected = 1,
+        ?string $unknownId = null,
+    ): void {
         $denials = AuditEvent::query()
             ->where('action', PaymentAuditActions::ADMIN_ACTION_DENIED)
             ->get();
@@ -150,6 +166,14 @@ final class VerifyManualPaymentRouteTest extends TestCase
             $this->assertSame(AuditOutcome::Denied->value, $denial->outcome);
             $this->assertSame('payment_admin_action', $denial->subject_type);
             $this->assertSame('payment_manual_verification', $denial->subject_id);
+
+            // SF-4: who was refused. The single field that makes this row a
+            // monitoring signal rather than a counter.
+            $this->assertSame((string) $actor->id, (string) $denial->actor_ref);
+
+            // SF-5: the refused actor's real, most-privileged held role — the
+            // `authenticated_actor` sentinel ONLY when they truly hold none.
+            $this->assertSame($expectedRole, $denial->actor_role);
 
             // A fixed server-side reason, never the caller's text —
             // authorization runs before validation, so the request body is
@@ -253,7 +277,10 @@ final class VerifyManualPaymentRouteTest extends TestCase
 
         $this->assertSame(PaymentVerificationStatus::Submitted, $verification->fresh()->status());
         $this->assertSame(0, AuditEvent::query()->where('action', PaymentAuditActions::MANUAL_VERIFICATION)->count());
-        $this->assertTheRefusalWasAuditedExactly();
+
+        // The sentinel is correct HERE and only here: this actor genuinely
+        // holds no role at all.
+        $this->assertTheRefusalWasAuditedExactly($user, 'authenticated_actor');
     }
 
     public function test_a_real_but_unauthorized_role_is_refused(): void
@@ -272,7 +299,38 @@ final class VerifyManualPaymentRouteTest extends TestCase
             ->assertForbidden();
 
         $this->assertSame(PaymentVerificationStatus::Submitted, $verification->fresh()->status());
-        $this->assertTheRefusalWasAuditedExactly();
+
+        // And the refusal row names the role they DO hold. Recording the
+        // sentinel here would erase the difference between someone probing
+        // this endpoint from a customer account and an operator awaiting a
+        // grant — review finding SF-5.
+        $this->assertTheRefusalWasAuditedExactly($user, ActorRole::CUSTOMER);
+    }
+
+    /**
+     * The refusal the operator will actually see after this merges.
+     *
+     * `admin` is deliberately NOT on the authorized pair (plan D1), so the
+     * first person to hit this 403 in production is very likely an existing
+     * admin who has not been granted `finance` or `restricted_admin` yet.
+     * That case must be distinguishable in the trail from a genuinely
+     * anonymous or role-less actor, which is the entire point of SF-5: one is
+     * "grant this person a role", the other is "investigate".
+     */
+    public function test_a_refused_admin_is_recorded_under_their_real_role_not_the_sentinel(): void
+    {
+        $user = $this->authorizedUser(ActorRole::ADMIN);
+        $verification = $this->submittedVerification();
+
+        $this->actingAs($user)
+            ->post($this->verifyUrl($verification), [
+                'decision' => 'approve',
+                'reason' => 'Proof matched provider statement',
+            ])
+            ->assertForbidden();
+
+        $this->assertSame(PaymentVerificationStatus::Submitted, $verification->fresh()->status());
+        $this->assertTheRefusalWasAuditedExactly($user, ActorRole::ADMIN);
     }
 
     public function test_a_revoked_role_grant_no_longer_authorizes(): void
@@ -289,7 +347,11 @@ final class VerifyManualPaymentRouteTest extends TestCase
             ->assertForbidden();
 
         $this->assertSame(PaymentVerificationStatus::Submitted, $verification->fresh()->status());
-        $this->assertTheRefusalWasAuditedExactly();
+
+        // A revoked grant is not a held role: `ActorRoleReader` filters
+        // `whereNull('revoked_at')`, so this actor holds none and the sentinel
+        // is the honest value.
+        $this->assertTheRefusalWasAuditedExactly($user, 'authenticated_actor');
     }
 
     /**
@@ -333,7 +395,7 @@ final class VerifyManualPaymentRouteTest extends TestCase
 
         // Two refusals, two rows — and neither row carries the fabricated id,
         // so the audit trail is not an existence oracle either.
-        $this->assertTheRefusalWasAuditedExactly(expected: 2, unknownId: $unknownId);
+        $this->assertTheRefusalWasAuditedExactly($user, 'authenticated_actor', expected: 2, unknownId: $unknownId);
     }
 
     /**
@@ -468,8 +530,9 @@ final class VerifyManualPaymentRouteTest extends TestCase
             ->assertForbidden();
 
         // And the refusal is still audited even though nothing about the
-        // request was ever validated — the refusal row carries no part of it.
-        $this->assertTheRefusalWasAuditedExactly();
+        // request was ever validated — the refusal row carries no part of it,
+        // while still naming who was refused.
+        $this->assertTheRefusalWasAuditedExactly($user, 'authenticated_actor');
     }
 
     // -----------------------------------------------------------------
