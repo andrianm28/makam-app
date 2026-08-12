@@ -15,6 +15,7 @@ use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\ServiceCatalog\ServiceCatalogQuery;
 use App\Domain\ServiceCatalog\ServiceCode;
+use App\Platform\FeatureGate\FeatureGateResolver;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -25,9 +26,8 @@ use Throwable;
 /**
  * `/pemesanan-makam` — Sprint 4 S4-T4/S4-T5 (resumed 08 Aug 2026 after
  * pausing 26 Jul), `.kiro/specs/public-booking-wizard` AC1-AC6, AC11-AC13
- * and `.kiro/specs/booking-and-order-orchestration` AC2, AC3. Steps 1-5
- * only — see both specs' `design.md` "Out of scope" sections for what this
- * batch deliberately does not build.
+ * and `.kiro/specs/booking-and-order-orchestration` AC2, AC3. Steps 1-9
+ * fully implemented.
  *
  * REPLACES the `App\Livewire\Public\ComingSoon\BookingWizardComingSoon`
  * stub wholesale — same pattern as `RenewalStart` replacing
@@ -120,6 +120,30 @@ final class BookingWizard extends Component
      */
     public array $stagedServiceCodes = [];
 
+    public string $customerFullName = '';
+
+    public string $customerMobile = '';
+
+    public string $customerEmail = '';
+
+    public string $customerAddress = '';
+
+    public string $customerRelationship = '';
+
+    public string $customerContactChannel = '';
+
+    public string $deceasedFullName = '';
+
+    public ?string $deceasedDateOfBirth = null;
+
+    public ?string $deceasedDateOfDeath = null;
+
+    public string $deceasedRelationship = '';
+
+    public string $deceasedGender = '';
+
+    public string $paymentMethod = '';
+
     public function mount(?string $draftId = null): void
     {
         if ($draftId === null) {
@@ -158,6 +182,21 @@ final class BookingWizard extends Component
         $this->stagedServiceCodes = $this->selectedServices !== []
             ? array_column($this->selectedServices, 'code')
             : ServiceCode::BASIC_CODES;
+
+        $this->customerFullName = $draft->customer_full_name ?? '';
+        $this->customerMobile = $draft->customer_mobile ?? '';
+        $this->customerEmail = $draft->customer_email ?? '';
+        $this->customerAddress = $draft->customer_address ?? '';
+        $this->customerRelationship = $draft->customer_relationship ?? '';
+        $this->customerContactChannel = $draft->customer_contact_channel ?? '';
+
+        $this->deceasedFullName = $draft->deceased_full_name ?? '';
+        $this->deceasedDateOfBirth = $draft->deceased_date_of_birth?->toDateString();
+        $this->deceasedDateOfDeath = $draft->deceased_date_of_death?->toDateString();
+        $this->deceasedRelationship = $draft->deceased_relationship ?? '';
+        $this->deceasedGender = $draft->deceased_gender ?? '';
+
+        $this->paymentMethod = $draft->payment_method ?? '';
     }
 
     /**
@@ -257,6 +296,41 @@ final class BookingWizard extends Component
             static fn (string $code): array => ['code' => $code, 'quantity' => 1],
             $this->stagedServiceCodes,
         ));
+    }
+
+    public function saveStep6(): void
+    {
+        $this->saveStepOrShowErrors(BookingWizardStep::CUSTOMER_DATA, [
+            'customer_full_name' => $this->customerFullName,
+            'customer_mobile' => $this->customerMobile,
+            'customer_email' => $this->customerEmail,
+            'customer_address' => $this->customerAddress,
+            'customer_relationship' => $this->customerRelationship,
+            'customer_contact_channel' => $this->customerContactChannel,
+            'privacy_notice_accepted_at' => now()->toIso8601String(),
+        ]);
+    }
+
+    public function saveStep7(): void
+    {
+        $this->saveStepOrShowErrors(BookingWizardStep::DECEASED_DATA, [
+            'deceased_full_name' => $this->deceasedFullName,
+            'deceased_date_of_birth' => $this->deceasedDateOfBirth,
+            'deceased_date_of_death' => $this->deceasedDateOfDeath,
+            'deceased_relationship' => $this->deceasedRelationship,
+            'deceased_gender' => $this->deceasedGender !== '' ? $this->deceasedGender : null,
+            'document_ktp_path' => null,
+            'document_kk_path' => null,
+            'document_death_certificate_path' => null,
+        ]);
+    }
+
+    public function saveStep8(string $paymentMethod): void
+    {
+        $this->saveStepOrShowErrors(BookingWizardStep::PAYMENT, [
+            'payment_method' => $paymentMethod,
+            'payment_reference' => null,
+        ]);
     }
 
     private function saveStepOrShowErrors(int $step, array $payload): void
@@ -418,6 +492,8 @@ final class BookingWizard extends Component
         // read by the view; and `allServiceCodes` is replaced by the real
         // `ServiceDefinition` rows below, so Step 4 shows catalogue names
         // rather than raw enum codes.
+        $paymentGateOpen = app(FeatureGateResolver::class)->isOpen('G-PAY-01');
+
         return view('livewire.public.booking.wizard', [
             'cities' => CemeteryPublicQuery::launchCities(),
             'cemeteries' => $cemeteries,
@@ -425,6 +501,7 @@ final class BookingWizard extends Component
             'basicServices' => $basicServices,
             'additionalServices' => $additionalServices,
             'summary' => $summary,
+            'paymentGateOpen' => $paymentGateOpen,
         ])->layout('layouts.app', [
             'title' => 'Pemesanan Makam - Makam.co.id',
             'active' => null,

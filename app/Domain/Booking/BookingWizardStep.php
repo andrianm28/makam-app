@@ -14,17 +14,13 @@ use InvalidArgumentException;
  * see that class's own doc block for why.
  *
  * ---------------------------------------------------------------------------
- * Only steps 1-5 are BUILT in this batch
+ * All nine steps are BUILT in this batch
  * ---------------------------------------------------------------------------
- * Steps 6-9 (customer data, deceased data + documents, payment,
- * confirmation) render as `upcoming` stepper dots and have no screen behind
- * them yet — `design-system.md` §6.9's rule that a closed gate (or an
- * unbuilt step) "never removes a required MVP step" applies here exactly as
- * `RenewalJourneyStep::LAST_IMPLEMENTED`'s own doc block explains for the
- * renewal journey. A user must be able to see the whole nine-step journey
- * they are entering, per `public-booking-wizard/design.md`'s "Stepper is a
- * presentation contract" section: "Urgent and Pre-Need may branch
- * internally, but the stepper still reads 1-9."
+ * Steps 1-5 (location, cemetery, service type, services, summary) were
+ * built in the prior batch. This batch completes Steps 6-9 (customer data,
+ * deceased data + documents, payment, confirmation). The stepper renders
+ * all nine labels per `public-booking-wizard/design.md`'s "Stepper is a
+ * presentation contract" section.
  *
  * Label for step 7 is copied verbatim from `booking-wizard-fields.md`'s own
  * heading ("Data Almarhum and Documents") including its mixed
@@ -70,7 +66,7 @@ final class BookingWizardStep
      * The last step with a screen behind it in this batch. Steps after this
      * one are real and visible on the stepper but not yet reachable.
      */
-    public const int LAST_IMPLEMENTED = self::SUMMARY;
+    public const int LAST_IMPLEMENTED = self::CONFIRMATION;
 
     /**
      * @return array<int, string>

@@ -286,6 +286,305 @@
                     Kembali
                 </x-mk.button>
             </section>
+        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::CUSTOMER_DATA)
+            <section aria-labelledby="booking-step-6-heading">
+                <h2 id="booking-step-6-heading" class="mb-3 text-lg font-semibold text-neutral-900">
+                    Langkah 6 &mdash; Data Pemesan
+                </h2>
+
+                <form wire:submit="saveStep6" class="flex flex-col gap-5">
+                    <div>
+                        <label for="customer-full-name" class="mb-1 block text-sm font-medium text-neutral-700">Nama Lengkap</label>
+                        <input
+                            type="text"
+                            id="customer-full-name"
+                            wire:model="customerFullName"
+                            class="w-full rounded-lg border border-neutral-300 px-3 py-2 text-base"
+                            autocomplete="name"
+                        />
+                        @error('customer_full_name')
+                            <p class="mt-1 text-sm text-danger-700" role="alert">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label for="customer-mobile" class="mb-1 block text-sm font-medium text-neutral-700">Nomor HP</label>
+                        <input
+                            type="tel"
+                            id="customer-mobile"
+                            wire:model="customerMobile"
+                            class="w-full rounded-lg border border-neutral-300 px-3 py-2 text-base"
+                            autocomplete="tel"
+                        />
+                        @error('customer_mobile')
+                            <p class="mt-1 text-sm text-danger-700" role="alert">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label for="customer-email" class="mb-1 block text-sm font-medium text-neutral-700">Email</label>
+                        <input
+                            type="email"
+                            id="customer-email"
+                            wire:model="customerEmail"
+                            class="w-full rounded-lg border border-neutral-300 px-3 py-2 text-base"
+                            autocomplete="email"
+                        />
+                        @error('customer_email')
+                            <p class="mt-1 text-sm text-danger-700" role="alert">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label for="customer-address" class="mb-1 block text-sm font-medium text-neutral-700">Alamat Lengkap</label>
+                        <textarea
+                            id="customer-address"
+                            wire:model="customerAddress"
+                            rows="3"
+                            class="w-full rounded-lg border border-neutral-300 px-3 py-2 text-base"
+                            autocomplete="street-address"
+                        ></textarea>
+                        @error('customer_address')
+                            <p class="mt-1 text-sm text-danger-700" role="alert">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label for="customer-relationship" class="mb-1 block text-sm font-medium text-neutral-700">Hubungan dengan Almarhum</label>
+                        <select
+                            id="customer-relationship"
+                            wire:model="customerRelationship"
+                            class="w-full rounded-lg border border-neutral-300 px-3 py-2 text-base"
+                        >
+                            <option value="">Pilih hubungan</option>
+                            @foreach (\App\Domain\Booking\BookingRelationshipCode::KNOWN_CODES as $rel)
+                                <option value="{{ $rel }}">{{ $rel }}</option>
+                            @endforeach
+                        </select>
+                        @error('customer_relationship')
+                            <p class="mt-1 text-sm text-danger-700" role="alert">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label for="customer-contact-channel" class="mb-1 block text-sm font-medium text-neutral-700">Saluran Kontak yang Disukai</label>
+                        <select
+                            id="customer-contact-channel"
+                            wire:model="customerContactChannel"
+                            class="w-full rounded-lg border border-neutral-300 px-3 py-2 text-base"
+                        >
+                            <option value="">Pilih saluran</option>
+                            @foreach (\App\Domain\Booking\BookingContactChannel::KNOWN_CODES as $ch)
+                                <option value="{{ $ch }}">{{ $ch }}</option>
+                            @endforeach
+                        </select>
+                        @error('customer_contact_channel')
+                            <p class="mt-1 text-sm text-danger-700" role="alert">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <p class="text-sm text-neutral-600">
+                        Dengan melanjutkan, Anda menyetujui bahwa data yang diberikan adalah benar dan akurat.
+                    </p>
+                    @error('privacy_notice_accepted_at')
+                        <p class="mt-1 text-sm text-danger-700" role="alert">{{ $message }}</p>
+                    @enderror
+
+                    <div class="flex gap-3">
+                        <x-mk.button variant="tertiary" wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::SUMMARY }})" type="button">
+                            Kembali
+                        </x-mk.button>
+                        <x-mk.button variant="primary" type="submit" wire:loading.attr="disabled">
+                            Lanjutkan
+                        </x-mk.button>
+                    </div>
+                </form>
+            </section>
+        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::DECEASED_DATA)
+            <section aria-labelledby="booking-step-7-heading">
+                <h2 id="booking-step-7-heading" class="mb-3 text-lg font-semibold text-neutral-900">
+                    Langkah 7 &mdash; Data Almarhum
+                </h2>
+
+                <form wire:submit="saveStep7" class="flex flex-col gap-5">
+                    <div>
+                        <label for="deceased-full-name" class="mb-1 block text-sm font-medium text-neutral-700">Nama Lengkap Almarhum</label>
+                        <input
+                            type="text"
+                            id="deceased-full-name"
+                            wire:model="deceasedFullName"
+                            class="w-full rounded-lg border border-neutral-300 px-3 py-2 text-base"
+                        />
+                        @error('deceased_full_name')
+                            <p class="mt-1 text-sm text-danger-700" role="alert">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="deceased-date-of-birth" class="mb-1 block text-sm font-medium text-neutral-700">Tanggal Lahir</label>
+                            <input
+                                type="date"
+                                id="deceased-date-of-birth"
+                                wire:model="deceasedDateOfBirth"
+                                class="w-full rounded-lg border border-neutral-300 px-3 py-2 text-base"
+                            />
+                            @error('deceased_date_of_birth')
+                                <p class="mt-1 text-sm text-danger-700" role="alert">{{ $message }}</p>
+                            @enderror
+                        </div>
+
+                        <div>
+                            <label for="deceased-date-of-death" class="mb-1 block text-sm font-medium text-neutral-700">Tanggal Meninggal</label>
+                            <input
+                                type="date"
+                                id="deceased-date-of-death"
+                                wire:model="deceasedDateOfDeath"
+                                class="w-full rounded-lg border border-neutral-300 px-3 py-2 text-base"
+                            />
+                            @error('deceased_date_of_death')
+                                <p class="mt-1 text-sm text-danger-700" role="alert">{{ $message }}</p>
+                            @enderror
+                        </div>
+                    </div>
+
+                    <div>
+                        <label for="deceased-relationship" class="mb-1 block text-sm font-medium text-neutral-700">Hubungan dengan Pemesan</label>
+                        <select
+                            id="deceased-relationship"
+                            wire:model="deceasedRelationship"
+                            class="w-full rounded-lg border border-neutral-300 px-3 py-2 text-base"
+                        >
+                            <option value="">Pilih hubungan</option>
+                            @foreach (\App\Domain\Booking\BookingRelationshipCode::KNOWN_CODES as $rel)
+                                <option value="{{ $rel }}">{{ $rel }}</option>
+                            @endforeach
+                        </select>
+                        @error('deceased_relationship')
+                            <p class="mt-1 text-sm text-danger-700" role="alert">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label for="deceased-gender" class="mb-1 block text-sm font-medium text-neutral-700">Jenis Kelamin</label>
+                        <select
+                            id="deceased-gender"
+                            wire:model="deceasedGender"
+                            class="w-full rounded-lg border border-neutral-300 px-3 py-2 text-base"
+                        >
+                            <option value="">Pilih (opsional)</option>
+                            @foreach (\App\Domain\Booking\BookingGender::KNOWN_CODES as $g)
+                                <option value="{{ $g }}">{{ $g }}</option>
+                            @endforeach
+                        </select>
+                        @error('deceased_gender')
+                            <p class="mt-1 text-sm text-danger-700" role="alert">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-600">
+                        <p class="font-medium text-neutral-700 mb-2">Dokumen yang diperlukan:</p>
+                        <ul class="list-inside list-disc space-y-1">
+                            <li>KTP almarhum/almarhumah</li>
+                            <li>Kartu Keluarga (KK)</li>
+                            <li>Surat Keterangan Kematian</li>
+                        </ul>
+                        <p class="mt-3">Dokumen akan diunggah pada langkah selanjutnya.</p>
+                    </div>
+
+                    <div class="flex gap-3">
+                        <x-mk.button variant="tertiary" wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::CUSTOMER_DATA }})" type="button">
+                            Kembali
+                        </x-mk.button>
+                        <x-mk.button variant="primary" type="submit" wire:loading.attr="disabled">
+                            Lanjutkan
+                        </x-mk.button>
+                    </div>
+                </form>
+            </section>
+        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::PAYMENT)
+            <section aria-labelledby="booking-step-8-heading">
+                <h2 id="booking-step-8-heading" class="mb-3 text-lg font-semibold text-neutral-900">
+                    Langkah 8 &mdash; Pembayaran
+                </h2>
+
+                @if (!$paymentGateOpen)
+                    <x-mk.gate-closed-banner intent="info" :dismissible="false" title="Pembayaran online belum tersedia">
+                        Pembayaran online belum tersedia untuk saat ini. Silakan gunakan metode manual di bawah ini.
+                    </x-mk.gate-closed-banner>
+                @endif
+
+                <div class="mt-4 flex flex-col gap-4">
+                    @if ($paymentGateOpen)
+                        <div class="rounded-lg border border-primary-300 bg-primary-50 p-4">
+                            <p class="font-medium text-primary-800">Pembayaran Online</p>
+                            <p class="mt-1 text-sm text-primary-700">
+                                Anda akan diarahkan ke halaman pembayaran untuk menyelesaikan transaksi.
+                            </p>
+                            <x-mk.button
+                                variant="primary"
+                                wire:click="saveStep8('{{ \App\Domain\Booking\BookingPaymentMethod::ONLINE }}')"
+                                wire:loading.attr="disabled"
+                                class="mt-3"
+                            >
+                                Bayar Sekarang
+                            </x-mk.button>
+                        </div>
+                    @endif
+
+                    <div class="rounded-lg border border-neutral-200 p-4">
+                        <p class="font-medium text-neutral-800">Pembayaran Manual</p>
+                        <p class="mt-1 text-sm text-neutral-600">
+                            Transfer ke rekening yang akan diinformasikan setelah Anda melanjutkan.
+                            Mohon siapkan bukti transfer untuk verifikasi.
+                        </p>
+                        <x-mk.button
+                            variant="secondary"
+                            wire:click="saveStep8('{{ \App\Domain\Booking\BookingPaymentMethod::MANUAL }}')"
+                            wire:loading.attr="disabled"
+                            class="mt-3"
+                        >
+                            Saya Akan Bayar Manual
+                        </x-mk.button>
+                    </div>
+                </div>
+
+                @error('payment_method')
+                    <p class="mt-3 text-sm text-danger-700" role="alert">{{ $message }}</p>
+                @enderror
+                @error('payment_reference')
+                    <p class="mt-3 text-sm text-danger-700" role="alert">{{ $message }}</p>
+                @enderror
+
+                <x-mk.button variant="tertiary" wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::DECEASED_DATA }})" class="mt-4">
+                    Kembali
+                </x-mk.button>
+            </section>
+        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::CONFIRMATION)
+            <section aria-labelledby="booking-step-9-heading">
+                <h2 id="booking-step-9-heading" class="mb-3 text-lg font-semibold text-neutral-900">
+                    Langkah 9 &mdash; Konfirmasi
+                </h2>
+
+                <div class="rounded-lg border border-success-200 bg-success-50 p-6 text-center">
+                    <p class="text-lg font-semibold text-success-800">Pesanan Anda sedang diproses</p>
+                    <p class="mt-2 text-sm text-success-700">
+                        Terima kasih. Pesanan Anda telah diterima dan sedang dalam proses verifikasi.
+                    </p>
+                    <p class="mt-2 text-sm text-success-600">
+                        Anda akan menerima nomor pesanan dan detail lebih lanjut melalui email atau WhatsApp.
+                    </p>
+                </div>
+
+                <div class="mt-6 rounded-lg border border-neutral-200 p-4 text-sm text-neutral-600">
+                    <p class="font-medium text-neutral-800 mb-2">Apa yang selanjutnya?</p>
+                    <ul class="list-inside list-disc space-y-1">
+                        <li>Pesanan Anda akan diverifikasi dalam 1x24 jam kerja.</li>
+                        <li>Anda akan dihubungi oleh tim kami untuk konfirmasi detail.</li>
+                        <li>Untuk pertanyaan, silakan hubungi <a href="/bantuan" class="underline">Bantuan</a>.</li>
+                    </ul>
+                </div>
+            </section>
         @endif
 
         {{-- Step-independent errors: an expired/unknown draft session, a

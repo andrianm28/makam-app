@@ -70,6 +70,23 @@ final class BookingDraft extends Model
         'cemetery_package_id',
         'service_type',
         'selected_services',
+        'customer_full_name',
+        'customer_mobile',
+        'customer_email',
+        'customer_address',
+        'customer_relationship',
+        'customer_contact_channel',
+        'privacy_notice_accepted_at',
+        'deceased_full_name',
+        'deceased_date_of_birth',
+        'deceased_date_of_death',
+        'deceased_relationship',
+        'deceased_gender',
+        'document_ktp_path',
+        'document_kk_path',
+        'document_death_certificate_path',
+        'payment_method',
+        'payment_reference',
         'version',
         'last_idempotency_key',
     ];
@@ -84,6 +101,9 @@ final class BookingDraft extends Model
             'completed_steps' => 'array',
             'selected_services' => 'array',
             'version' => 'integer',
+            'deceased_date_of_birth' => 'date',
+            'deceased_date_of_death' => 'date',
+            'privacy_notice_accepted_at' => 'datetime',
         ];
     }
 

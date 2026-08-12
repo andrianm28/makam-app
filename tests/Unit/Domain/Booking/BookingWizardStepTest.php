@@ -15,10 +15,10 @@ final class BookingWizardStepTest extends TestCase
         $this->assertSame(9, BookingWizardStep::count());
     }
 
-    public function test_steps_one_through_five_are_the_last_implemented_boundary(): void
+    public function test_all_nine_steps_are_the_last_implemented_boundary(): void
     {
-        $this->assertSame(BookingWizardStep::SUMMARY, BookingWizardStep::LAST_IMPLEMENTED);
-        $this->assertSame(5, BookingWizardStep::LAST_IMPLEMENTED);
+        $this->assertSame(BookingWizardStep::CONFIRMATION, BookingWizardStep::LAST_IMPLEMENTED);
+        $this->assertSame(9, BookingWizardStep::LAST_IMPLEMENTED);
     }
 
     public function test_every_step_one_through_nine_is_known(): void
