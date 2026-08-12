@@ -187,6 +187,12 @@ All three places now say so, and all three state that the adjacent finance-expor
 `EnforceMfaChallenge`, which makes the omission conspicuous rather than merely uniform, plus an
 explicit "do not credit this path with a compensating control it does not have."
 
+**Correction, 12 Aug 2026 (whole-branch review finding SF-1) — original text above kept unedited.**
+"All three places" was wrong: there were **four**. Plan §6 line 120 carried the same
+"MFA-enrolled user" claim in the impact section and was not updated by this round. It was corrected
+in the final fix round; a repo-wide grep now finds no surviving claim that these two routes were
+ever gated by MFA.
+
 ---
 
 ## 5. Remaining findings, briefly
@@ -383,6 +389,18 @@ No mutation artefact remains.
    the only non-test file added is `app/Platform/Payment/RecordPaymentActionRefusal.php`, which is
    referenced from exactly the two controllers in this module, and the only shared file touched
    outside `app/Platform/Payment/` is documentation.
+
+   **RESOLVED 12 Aug 2026 (whole-branch review finding SF-3) — original NOT TESTED text above kept
+   unedited, per this repository's correction convention.** The lane driver has since run the full
+   suite at `51d6a85`'s content: **1859 tests, 7201 assertions, 0 failures.** Two errors were
+   observed and are **not** attributable to this branch — both are pre-existing
+   `DROP TABLE ... CASCADE` SQLite incompatibilities in other lanes' tests
+   (`HomePageRouteTest`, `EloquentGateRegistrySourceTest`), on files this branch does not touch and
+   in code paths it does not reach. This item is closed as a gate; those two errors belong to the
+   lanes that own them.
+
+   Reported second-hand: this entry records the lane driver's observed output, not a run performed
+   by the fix-round agent that wrote §8. The final fix round did not re-run the full suite either.
 2. **PostgreSQL — NOT TESTED for this fix round.** `phpunit.xml` pins
    `DB_CONNECTION=sqlite`/`:memory:`, so every run above was SQLite. The PostgreSQL 18.4 run
    recorded in the implementation report (N-6) predates this round and does not cover the new
@@ -392,6 +410,25 @@ No mutation artefact remains.
    `test_a_failed_refusal_audit_still_returns_403_and_never_500`'s `Schema::drop('audit_events')`
    inside the test transaction behaves the same on PostgreSQL's transactional DDL as it does on
    SQLite.
+
+   **RESOLVED 12 Aug 2026 (whole-branch review finding SF-3) — original NOT TESTED text above kept
+   unedited, per this repository's correction convention.** The lane driver has since run the
+   payment module suite (`tests/Feature/Payment/ tests/Unit/Platform/Payment/`) green on real
+   **PostgreSQL 18.4** in a disposable container on port 55572, at `51d6a85`'s content:
+   **227 tests, 1028 assertions** — the same test and assertion counts as the SQLite run of the
+   same content. Both PostgreSQL-specific risks named above are therefore exercised rather than
+   argued: the new refusal row's `subject_id`/`reason`/`metadata` shapes were accepted by the real
+   column types, and `test_a_failed_refusal_audit_still_returns_403_and_never_500` passed under
+   PostgreSQL's transactional DDL.
+
+   Reported second-hand: this entry records the lane driver's observed output, not a run performed
+   by the fix-round agent that wrote §8.
+
+   **Still NOT TESTED on PostgreSQL:** the tests added by the *final* fix round (12 Aug 2026 —
+   whole-branch findings SF-4 and SF-5, pinning the refusal row's `actor_ref` and its real
+   `actor_role`) postdate the run above and have been exercised on SQLite only. The lane driver
+   owns the PostgreSQL re-run for that content; see
+   `2026-08-12-payment-auth-final-fix-round.md` §Verification.
 3. **No live HTTP exercise.** No login flow exists in this repo, so nothing here was driven through
    a real browser session. Standing gap, unchanged.
 4. **The refusal row is not yet monitored by anything.** This round makes refusals *observable*; no

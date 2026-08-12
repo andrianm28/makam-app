@@ -83,7 +83,7 @@ Fail-closed behaviour of the seam itself is also sound:
 **One thing is worse than the brief describes** (see SF-5): the pre-fix exposure did **not**
 require MFA enrolment. `EnforceMfaChallenge` is attached only in
 `app/Providers/Filament/AdminPanelProvider.php:162`, i.e. to the Filament panel's middleware
-array. Both of these routes are plain `web` routes outside the panel, so the only gates were
+array. **CORRECTION 12 Aug 2026 (whole-branch finding SF-9): "only in" is false — `EnforceMfaChallenge` is attached in exactly TWO places, `AdminPanelProvider.php:162` and inline at `routes/web.php:282` on `/admin/finance/exports`. The conclusion below (no MFA on these two payment routes) is unaffected and correct; the premise understates the finding, because an adjacent standalone route DOES carry the middleware, which makes the omission conspicuous rather than uniform. The implementers shipped the accurate two-place wording in both controller doc blocks; that wording, not this sentence, is the one to cite.** Both of these routes are plain `web` routes outside the panel, so the only gates were
 `auth` plus a `actor_sessions.last_authenticated_at` inside 900 s. Any user who had logged in in
 the last 15 minutes could move money. That widens the pre-fix severity, and it makes the fix more
 urgent, not less.
@@ -237,7 +237,7 @@ Gaps: N-4 and N-5 below.
 | **§3.2** implementation | Present. |
 | **§3.3** exception, `RuntimeException`, no `render()` | Present. |
 | **§3.4** transient `bind()` in `register()` | Present, `PaymentServiceProvider.php:80-83`. |
-| **§3.5** both controllers, all four sentinel occurrences replaced | Verified: zero `actorRole: 'authenticated_actor'` call sites remain in `app/Platform/Payment/`; the only three remaining occurrences of the string are explanatory comments. |
+| **§3.5** both controllers, all four sentinel occurrences replaced | Verified: zero `actorRole: 'authenticated_actor'` call sites remain in `app/Platform/Payment/`; the only three remaining occurrences of the string are explanatory comments. **CORRECTION 12 Aug 2026 (whole-branch finding SF-8) — this cell was true at `8be7e49` and stopped being true afterwards; do not cite it as a current property.** The SF-6 fix round added `RecordPaymentActionRefusal`, which deliberately writes the sentinel on the refusal path, and the count of string occurrences changed too. FINAL state after the 12 Aug final fix round (SF-5): the sentinel is no longer written unconditionally — `RecordPaymentActionRefusal::auditRoleFor()` records the refused actor's real, most-privileged held role from `ActorRole::KNOWN_ROLES`, and falls back to `authenticated_actor` only for an actor who holds none, or `guest` for an actor with no resolved identity. There is no `actorRole: 'authenticated_actor'` literal call site anywhere in the module; the string survives as one private class constant (`RecordPaymentActionRefusal::ROLE_AUTHENTICATED_ACTOR`) plus six explanatory comments. See that class's `auditRoleFor()` doc block. |
 | **§4.1** no-role → 403, no domain row, no `ReauthenticationEvent` | Present in both files. |
 | **§4.2** real-but-unauthorized role (`customer`) → 403 | Present in both files. |
 | **§4.3** `finance` and `restricted_admin` both succeed | Present via `#[DataProvider]` in both files. |
@@ -442,7 +442,7 @@ enrolled MFA** and satisfied the recency window."
 
 That is not what the middleware stack did. `EnforceMfaChallenge` is registered only in
 `app/Providers/Filament/AdminPanelProvider.php:162`, i.e. on the Filament panel's own middleware
-array. Neither of these routes is a panel page — both are plain `web` routes declared in
+array. **CORRECTION 12 Aug 2026 (whole-branch finding SF-9): "only in" is false — two attachment points, `AdminPanelProvider.php:162` and inline at `routes/web.php:282`. See the correction at §2 above; the finding's conclusion stands and is if anything stronger.** Neither of these routes is a panel page — both are plain `web` routes declared in
 `routes/web.php:342` and `routes/web.php:371` with `['web', 'auth', RequireRecentAuthentication…]`.
 `RequireRecentAuthentication` reads only `ActorContext::$lastAuthenticatedAt`
 (`RequireRecentAuthentication.php:172-183`) against
@@ -460,6 +460,14 @@ here, that reasoning is wrong.
 inside `reauthentication.freshness_seconds` (default 900 s) could POST here — `EnforceMfaChallenge`
 is attached to the Filament panel only, so these plain `web` routes carried no MFA gate at all."
 Correct plan §1's sentence the same way (the plan is the artefact of record for the severity claim).
+
+**CORRECTION 12 Aug 2026 (whole-branch finding SF-9): do not copy the dictated text above — its
+"attached to the Filament panel only" clause is factually wrong.** `EnforceMfaChallenge` is
+attached in exactly two places: `AdminPanelProvider.php:162` and inline at `routes/web.php:282` on
+`/admin/finance/exports`. The implementers noticed this and shipped the accurate two-place wording
+instead, in both controller doc blocks and in plan §1; that is the wording of record. Plan §6's
+surviving instance of the same claim was corrected in the 12 Aug final fix round (whole-branch
+finding SF-1).
 
 ---
 
@@ -567,7 +575,7 @@ Recorded so the whole-branch reviewer does not repeat them:
 - `AUTHORISED_ROLES` order matches `ActorRole::KNOWN_ROLES` precedence, so the "most privileged
   wins" audit behaviour is deterministic and matches `DocumentAccessPolicy::auditRoleFor()`'s
   convention.
-- Zero `actorRole: 'authenticated_actor'` call sites remain in `app/Platform/Payment/`.
+- Zero `actorRole: 'authenticated_actor'` call sites remain in `app/Platform/Payment/`. **CORRECTION 12 Aug 2026 (whole-branch finding SF-8):** true at `8be7e49`, superseded twice since. The SF-6 fix round introduced one deliberate sentinel write in `RecordPaymentActionRefusal`; the 12 Aug final fix round (SF-5) then made it conditional, so the module now records the refused actor's real role and reaches the sentinel only when the actor genuinely holds none. No literal `actorRole: 'authenticated_actor'` argument remains, but the claim as phrased is no longer the check a future reader should run — grep for `ROLE_AUTHENTICATED_ACTOR` and read `RecordPaymentActionRefusal::auditRoleFor()` instead.
 - `PaymentServiceProvider` is registered at `bootstrap/providers.php:47`; the binding is transient
   and the binding test pins all three properties.
 - Working tree at `8be7e49` is clean — no mutation-test artefacts left behind.

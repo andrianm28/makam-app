@@ -117,7 +117,7 @@ The role seam **is already wired**, so this fix protects real traffic from the m
 
 Two consequences worth stating plainly for merge review:
 
-- **The bypass being closed is exploitable today, not theoretical.** Any authenticated, MFA-enrolled user can currently record a reversal or approve a manual payment.
+- **The bypass being closed is exploitable today, not theoretical.** Any authenticated user whose last login falls inside the 900 s freshness window can currently record a reversal or approve a manual payment — **no MFA gate existed on these routes**, per the §1 correction above. (Corrected 12 Aug 2026, whole-branch review finding SF-1: this line survived the SF-5 correction round that fixed §1 and both controller doc blocks, and it understated the severity by crediting a compensating control these routes never had.)
 - **The new check enforces for real.** An actor holding `finance` or `restricted_admin` passes; everyone else is refused. An empty roles list means "this actor holds no grants today," never "no roles required."
 
 **Caution for anyone copying the precedent:** the four `FinancialLedger` authorizer doc blocks still assert that `ActorContext::$roles` "is always `[]`" and that they refuse every real request. Those sentences predate L5 and are now stale. This hotfix does not inherit that claim and deliberately does not edit those files to correct it — that belongs to whichever lane owns them.
@@ -147,6 +147,14 @@ Both grants go through `identity:grant-role {actor} {role} --reason=`. Granting 
 - The `actorRole` passthrough in the two write APIs (§D2 residual risk).
 - Correcting the stale doc blocks on the four `FinancialLedger` authorizers (§6).
 - **Rate limiting either route (review nit N-3).** Neither route carries `throttle` middleware, so probing is unlimited. Explicitly deferred and tracked separately, NOT waived — the fix round below makes probing visible, which is the half that could be done without changing the routes' middleware. Refusal telemetry without a rate limit is a monitoring improvement, not a throttle.
+
+- **A TOTP gate (`EnforceMfaChallenge`) on either route (whole-branch review finding SF-6). DEFERRED, explicitly and with reasoning — not waived and not dismissed.** Added 12 Aug 2026. This branch makes both routes privileged-role routes (`finance` / `restricted_admin`) and neither carries `EnforceMfaChallenge`, unlike the adjacent `/admin/finance/exports` (`routes/web.php:282`). `AGENTS.md` §Authentication and uploads asks for "mandatory TOTP MFA for privileged roles", so the gap is real and is recorded here rather than left in a doc block. The reasoning of record, verified by reading the middleware:
+
+  1. **Adding it would close no part of the bypass this hotfix exists to fix.** `EnforceMfaChallenge::handle()` returns `$next($request)` untouched for any actor whose `mfaState !== ActorContext::MFA_STATE_ENROLLED` (`app/Http/Middleware/EnforceMfaChallenge.php:77-79`). It is a no-op for a non-enrolled actor and never blocks anyone who has not opted in to MFA. The role gate this branch adds is what closes the authorization hole; the middleware would add only "an already-MFA-enrolled actor must prove their second factor this session."
+  2. **That is still worth having**, by parity with the sibling finance-export route, which is exactly why this is a tracked follow-up rather than a dismissal. Do not read this entry as "not needed."
+  3. **It is deferred from THIS branch** because it changes session/login behaviour on two routes, needs its own tests and its own human review under `AGENTS.md` §Infrastructure-agent execution, and this branch is an urgent authorization fix whose blast radius should stay minimal.
+
+  Owner: whoever picks up the N-3 rate-limit follow-up above — the two are the same middleware-array change on the same two routes and should travel together.
 
 ## 8. Fix round, 12 Aug 2026 — refusals are now audited (review finding SF-6)
 
