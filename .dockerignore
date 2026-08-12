@@ -12,6 +12,9 @@ node_modules
 .github
 .kiro
 docs
+!docs/contracts
+!docs/contracts/notification-matrix.md
 ci
 tests
 *.md
+!docs/contracts/notification-matrix.md
