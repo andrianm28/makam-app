@@ -23,9 +23,16 @@
                 </h2>
 
                 @if ($cities === [])
-                    <p class="text-base text-neutral-600">
-                        Belum ada kota yang tersedia.
-                    </p>
+                    <div class="flex flex-col items-center gap-3 py-12 text-center">
+                        <x-dynamic-component component="icon.inbox" class="size-12 text-neutral-400" aria-hidden="true" />
+                        <h3 class="text-lg font-semibold text-neutral-800">
+                            Belum ada kota yang tersedia.
+                        </h3>
+                        <p class="max-w-prose text-base text-neutral-600">
+                            Saat ini belum ada kota yang melayani pemesanan. Silakan hubungi
+                            <a href="/bantuan" class="underline">Bantuan</a> untuk informasi lebih lanjut.
+                        </p>
+                    </div>
                 @else
                     <ul class="flex flex-wrap gap-3" aria-label="Kota peluncuran">
                         @foreach ($cities as $cityOption)
@@ -566,24 +573,92 @@
                     Langkah 9 &mdash; Konfirmasi
                 </h2>
 
-                <div class="rounded-lg border border-success-200 bg-success-50 p-6 text-center">
-                    <p class="text-lg font-semibold text-success-800">Pesanan Anda sedang diproses</p>
-                    <p class="mt-2 text-sm text-success-700">
-                        Terima kasih. Pesanan Anda telah diterima dan sedang dalam proses verifikasi.
-                    </p>
-                    <p class="mt-2 text-sm text-success-600">
-                        Anda akan menerima nomor pesanan dan detail lebih lanjut melalui email atau WhatsApp.
-                    </p>
-                </div>
+                @if ($autosaveState === 'saved' && $draftSavedAt)
+                    <x-mk.alert intent="success" title="Draft tersimpan" live="polite">
+                        Data pemesanan Anda telah disimpan.
+                    </x-mk.alert>
+                @endif
 
-                <div class="mt-6 rounded-lg border border-neutral-200 p-4 text-sm text-neutral-600">
-                    <p class="font-medium text-neutral-800 mb-2">Apa yang selanjutnya?</p>
-                    <ul class="list-inside list-disc space-y-1">
-                        <li>Pesanan Anda akan diverifikasi dalam 1x24 jam kerja.</li>
-                        <li>Anda akan dihubungi oleh tim kami untuk konfirmasi detail.</li>
-                        <li>Untuk pertanyaan, silakan hubungi <a href="/bantuan" class="underline">Bantuan</a>.</li>
-                    </ul>
-                </div>
+                @if ($confirmationData !== null)
+                    <div class="rounded-lg border border-success-200 bg-success-50 p-6 text-center">
+                        <p class="text-lg font-semibold text-success-800">Pesanan Anda sedang diproses</p>
+                        <p class="mt-2 text-sm text-success-700">
+                            Terima kasih. Pesanan Anda telah diterima dan sedang dalam proses verifikasi.
+                        </p>
+                        <p class="mt-2 text-sm text-success-600">
+                            Anda akan menerima nomor pesanan dan detail lebih lanjut melalui email atau WhatsApp.
+                        </p>
+                    </div>
+
+                    <div class="mt-6 space-y-4">
+                        @if ($confirmationData['summary'] !== null)
+                            <div class="rounded-lg border border-neutral-200 p-4">
+                                <h3 class="mb-3 text-sm font-semibold text-neutral-800">Ringkasan Pesanan</h3>
+                                <x-mk.table
+                                    caption="Ringkasan layanan yang dipilih"
+                                    :headers="[
+                                        ['key' => 'label', 'label' => 'Layanan'],
+                                        ['key' => 'quantity', 'label' => 'Jumlah', 'numeric' => true],
+                                        ['key' => 'price', 'label' => 'Harga', 'numeric' => true],
+                                    ]"
+                                    :rows="collect($confirmationData['summary']['lines'])->map(fn ($line) => [
+                                        'label' => $line['label'],
+                                        'quantity' => $line['quantity'],
+                                        'price' => $line['line_total'] !== null
+                                            ? (new \App\Platform\FinancialLedger\Money($line['line_total']))->format()
+                                            : 'Harga belum tersedia',
+                                    ])->all()"
+                                />
+                                <p class="mt-3 text-sm font-medium text-neutral-900">
+                                    @if ($confirmationData['summary']['total'] !== null)
+                                        Total: {{ (new \App\Platform\FinancialLedger\Money($confirmationData['summary']['total']))->format() }}
+                                    @else
+                                        Total belum dapat dihitung &mdash; sebagian harga layanan belum tersedia.
+                                    @endif
+                                </p>
+                            </div>
+                        @endif
+
+                        <div class="rounded-lg border border-neutral-200 p-4 text-sm text-neutral-600">
+                            <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2">
+                                <dt class="font-medium text-neutral-700">Pemesan</dt>
+                                <dd>{{ $confirmationData['customer_name'] ?: '—' }}</dd>
+                                <dt class="font-medium text-neutral-700">Almarhum</dt>
+                                <dd>{{ $confirmationData['deceased_name'] ?: '—' }}</dd>
+                                <dt class="font-medium text-neutral-700">Metode Pembayaran</dt>
+                                <dd>{{ $confirmationData['payment_method'] ?: '—' }}</dd>
+                                @if ($confirmationData['payment_reference'])
+                                    <dt class="font-medium text-neutral-700">Referensi</dt>
+                                    <dd>{{ $confirmationData['payment_reference'] }}</dd>
+                                @endif
+                            </dl>
+                        </div>
+
+                        <div class="rounded-lg border border-neutral-200 p-4 text-sm">
+                            <p class="font-medium text-neutral-800 mb-2">Nomor Pesanan</p>
+                            <p class="text-neutral-600">
+                                [Nomor pesanan akan diberikan setelah tim kami memproses pesanan Anda &mdash; ini adalah placeholder hingga L7 membuat pesanan.]
+                            </p>
+                            <p class="mt-1 font-mono text-xs text-neutral-500">{{ $confirmationData['draft_id'] }}</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 rounded-lg border border-neutral-200 p-4 text-sm text-neutral-600">
+                        <p class="font-medium text-neutral-800 mb-2">Apa yang selanjutnya?</p>
+                        <ul class="list-inside list-disc space-y-1">
+                            <li>Pesanan Anda akan diverifikasi dalam 1x24 jam kerja.</li>
+                            <li>Anda akan dihubungi oleh tim kami untuk konfirmasi detail.</li>
+                            <li>Untuk pertanyaan, silakan hubungi <a href="/bantuan" class="underline">Bantuan</a>.</li>
+                        </ul>
+                    </div>
+                @else
+                    <x-mk.alert intent="pending" title="Sesi pemesanan tidak ditemukan" live="polite">
+                        Data pemesanan tidak ditemukan. Silakan mulai pemesanan baru.
+                    </x-mk.alert>
+                    <x-mk.button variant="secondary" href="/pemesanan-makam" class="mt-4">
+                        Mulai Pemesanan Baru
+                    </x-mk.button>
+                @endif
             </section>
         @endif
 
@@ -598,11 +673,15 @@
             <p class="mt-4 text-sm text-danger-700" role="alert">{{ $message }}</p>
         @enderror
 
-        <div aria-live="polite" class="mt-4 text-sm text-neutral-600">
+        <div aria-live="polite" class="mt-4">
             @if ($autosaveState === 'saved')
-                <span>Tersimpan</span>
+                <x-mk.alert intent="success" title="Draft tersimpan" class="mt-0">
+                    Data Anda telah disimpan secara otomatis.
+                </x-mk.alert>
             @elseif ($autosaveState === 'failed')
-                <span class="text-danger-700">Gagal menyimpan &mdash; coba lagi</span>
+                <x-mk.alert intent="danger" title="Gagal menyimpan" live="assertive" class="mt-0">
+                    Data Anda gagal disimpan. Silakan coba lagi.
+                </x-mk.alert>
             @endif
         </div>
     </div>

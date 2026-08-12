@@ -144,6 +144,13 @@ final class BookingWizard extends Component
 
     public string $paymentMethod = '';
 
+    /**
+     * ISO 8601 timestamp of the most recent successful autosave, used to
+     * render the "draft saved" transient flash message in the Blade view.
+     * `null` means no save has succeeded in this component instance.
+     */
+    public ?string $draftSavedAt = null;
+
     public function mount(?string $draftId = null): void
     {
         if ($draftId === null) {
@@ -250,6 +257,7 @@ final class BookingWizard extends Component
 
             $this->hydrateFrom($saved);
             $this->autosaveState = 'saved';
+            $this->draftSavedAt = now()->toIso8601String();
 
             $this->redirect(route('pemesanan-makam.draft', ['draftId' => $saved->id]), navigate: false);
         } catch (BookingStepValidationException $e) {
@@ -367,6 +375,7 @@ final class BookingWizard extends Component
 
             $this->hydrateFrom($saved);
             $this->autosaveState = 'saved';
+            $this->draftSavedAt = now()->toIso8601String();
         } catch (BookingStepValidationException $e) {
             $this->autosaveState = 'failed';
             foreach ($e->getErrors() as $field => $messages) {
@@ -402,7 +411,12 @@ final class BookingWizard extends Component
         // Navigating away from a step must not carry that step's "Tersimpan"
         // (or "Gagal menyimpan") indicator with it — nothing has been saved
         // on the step being opened.
-        $this->autosaveState = 'idle';
+        // EXCEPTION: Step 9 (CONFIRMATION) is the journey's terminus — the
+        // user arrived there after a successful save and should keep seeing
+        // the "draft saved" confirmation until they explicitly leave.
+        if ($step !== BookingWizardStep::CONFIRMATION) {
+            $this->autosaveState = 'idle';
+        }
 
         if (in_array($step, $this->completedSteps, true) || $step === $this->currentStep) {
             $this->currentStep = $step;
@@ -484,6 +498,25 @@ final class BookingWizard extends Component
             }
         }
 
+        $confirmationData = null;
+        if ($this->currentStep === BookingWizardStep::CONFIRMATION && $this->draftId !== null) {
+            $draft = BookingDraftQuery::find($this->draftId);
+            if ($draft !== null) {
+                $confirmationData = [
+                    'draft_id' => $draft->id,
+                    'summary' => BookingDraftQuery::summary($draft),
+                    'customer_name' => $draft->customer_full_name,
+                    'customer_mobile' => $draft->customer_mobile,
+                    'customer_email' => $draft->customer_email,
+                    'deceased_name' => $draft->deceased_full_name,
+                    'payment_method' => $draft->payment_method,
+                    'payment_reference' => $draft->payment_reference,
+                    'city_code' => $draft->city_code,
+                    'cemetery_id' => $draft->cemetery_id,
+                ];
+            }
+        }
+
         // `stepLabels`, `lastImplementedStep` and `allServiceCodes` used to
         // be passed here and are gone deliberately, not by accident:
         // `stepLabels` fed `<x-mk.stepper :labels>`, which that primitive's
@@ -501,6 +534,7 @@ final class BookingWizard extends Component
             'basicServices' => $basicServices,
             'additionalServices' => $additionalServices,
             'summary' => $summary,
+            'confirmationData' => $confirmationData,
             'paymentGateOpen' => $paymentGateOpen,
         ])->layout('layouts.app', [
             'title' => 'Pemesanan Makam - Makam.co.id',
