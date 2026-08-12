@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Domain\Renewal\Models;
 
 use App\Platform\FinancialLedger\Money;
+use Database\Factories\RenewalQuoteFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -30,12 +32,28 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * `grave_records.source` / `source_updated_at`, which record the REGISTRY
  * row's provenance. `App\Domain\GraveRegistry\GraveRecordSource`'s own doc
  * block flags this exact naming collision risk.
+ *
+ * `HasFactory` added L8 Task 5: `RenewalQuote::factory()` is needed by
+ * `GuardRenewalPaymentOpeningTest`.
  */
 final class RenewalQuote extends Model
 {
-    use HasUuids;
+    use HasFactory, HasUuids;
 
     protected $table = 'renewal_quotes';
+
+    /**
+     * `HasFactory`'s default resolver strips a leading `App\Models\` and
+     * nothing else, so it cannot find a factory for a model namespaced
+     * under `App\Domain\...\Models` — every domain model in this codebase.
+     * Explicit override, the same reasoning `App\Domain\GraveRegistry\
+     * Models\GraveRecord` and `App\Domain\Renewal\Models\Renewal` document
+     * for their own.
+     */
+    protected static function newFactory(): RenewalQuoteFactory
+    {
+        return RenewalQuoteFactory::new();
+    }
 
     /**
      * @var list<string>

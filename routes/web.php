@@ -174,6 +174,7 @@ Route::get('/cemeteries/{cemeterySlug}', CemeteryDetail::class)->name('cemeterie
 Route::get('/perpanjangan', RenewalStart::class)->name('perpanjangan.index');
 Route::get('/perpanjangan/cari', GraveSearch::class)->name('perpanjangan.cari');
 Route::get('/perpanjangan/biaya', RenewalFee::class)->name('perpanjangan.biaya');
+Route::get('/perpanjangan/pembayaran', \App\Livewire\Public\Renewal\RenewalPayment::class)->name('perpanjangan.pembayaran');
 
 /*
 |--------------------------------------------------------------------------

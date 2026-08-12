@@ -62,13 +62,12 @@ final class RenewalJourneyStepTest extends TestCase
     }
 
     /**
-     * Sprint 4 builds steps 1-3 only; step 4 (fee) is built in L8 Task 4
-     * (`.kiro/specs/renewal-and-grave-registry/tasks.md` AC6/AC7 render).
-     * Steps 5-6 remain visible but not reachable.
+     * L8 Task 4 builds step 4 (fee, AC6/AC7) and Task 5 builds step 5
+     * (payment, AC8). Step 6 (confirmation) is next.
      */
-    public function test_the_first_four_steps_are_implemented(): void
+    public function test_the_first_five_steps_are_implemented(): void
     {
-        $this->assertSame(RenewalJourneyStep::FEE, RenewalJourneyStep::LAST_IMPLEMENTED);
+        $this->assertSame(RenewalJourneyStep::PAYMENT, RenewalJourneyStep::LAST_IMPLEMENTED);
     }
 
     public function test_a_step_outside_the_range_is_rejected(): void
