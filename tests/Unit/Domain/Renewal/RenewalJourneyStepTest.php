@@ -62,14 +62,13 @@ final class RenewalJourneyStepTest extends TestCase
     }
 
     /**
-     * Sprint 4 builds steps 1-3 only; 4-6 are visible but not reachable
-     * (`docs/planning/sprint-plan.md` §9 puts them in Sprint 13). Asserted
-     * so that a later batch implementing step 4 has to move this line
-     * deliberately.
+     * Sprint 4 builds steps 1-3 only; step 4 (fee) is built in L8 Task 4
+     * (`.kiro/specs/renewal-and-grave-registry/tasks.md` AC6/AC7 render).
+     * Steps 5-6 remain visible but not reachable.
      */
-    public function test_only_the_first_three_steps_are_implemented_in_sprint_4(): void
+    public function test_the_first_four_steps_are_implemented(): void
     {
-        $this->assertSame(RenewalJourneyStep::GRAVE_SEARCH, RenewalJourneyStep::LAST_IMPLEMENTED);
+        $this->assertSame(RenewalJourneyStep::FEE, RenewalJourneyStep::LAST_IMPLEMENTED);
     }
 
     public function test_a_step_outside_the_range_is_rejected(): void

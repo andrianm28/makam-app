@@ -16,6 +16,7 @@ use App\Livewire\Public\Legal\TermsOfService;
 use App\Livewire\Public\Marketplace\MarketplaceIndex;
 use App\Livewire\Public\Marketplace\ProductDetail;
 use App\Livewire\Public\Renewal\GraveSearch;
+use App\Livewire\Public\Renewal\RenewalFee;
 use App\Livewire\Public\Renewal\RenewalStart;
 use App\Livewire\Public\Support\HelpCentre;
 use App\Platform\Payment\Http\Controllers\PaymentCancelController;
@@ -172,6 +173,7 @@ Route::get('/cemeteries/{cemeterySlug}', CemeteryDetail::class)->name('cemeterie
 */
 Route::get('/perpanjangan', RenewalStart::class)->name('perpanjangan.index');
 Route::get('/perpanjangan/cari', GraveSearch::class)->name('perpanjangan.cari');
+Route::get('/perpanjangan/biaya', RenewalFee::class)->name('perpanjangan.biaya');
 
 /*
 |--------------------------------------------------------------------------
