@@ -9,7 +9,10 @@ use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\Rules\NonBlankReason;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\Reauthentication\ReauthenticationService;
+use App\Platform\Payment\Contracts\PaymentActionAuthorizer;
+use App\Platform\Payment\Exceptions\PaymentActionNotAuthorisedException;
 use App\Platform\Payment\PaymentReversalType;
+use App\Platform\Payment\RecordPaymentActionRefusal;
 use App\Platform\Payment\ReversalService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,11 +22,43 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  * `RequireRecentAuthentication`'s THIRD real attachment anywhere in this
  * repo — after `App\Http\Controllers\Admin\DisableMfaController` (first)
  * and `VerifyManualPaymentController` (second). Follows
- * `VerifyManualPaymentController`'s exact shape: `ReauthenticationService::
- * satisfy()` first, validate input, delegate to the write API
- * (`ReversalService` here, `VerifyManualPayment` there), redirect to
- * `filament.admin.pages.dashboard` — no admin UI screen exists for
+ * `VerifyManualPaymentController`'s exact shape: authorize, then
+ * `ReauthenticationService::satisfy()`, validate input, delegate to the
+ * write API (`ReversalService` here, `VerifyManualPayment` there), redirect
+ * to `filament.admin.pages.dashboard` — no admin UI screen exists for
  * reversals either, same honest "nothing to bounce back to yet" posture.
+ *
+ * ---------------------------------------------------------------------------
+ * Authorization, and why it is the FIRST thing this method does
+ * ---------------------------------------------------------------------------
+ * This route ships `['web', 'auth', RequireRecentAuthentication::class...]`
+ * and nothing else. `config/auth.php` defines exactly one guard — `web`,
+ * provider `users` — and there is no separate admin guard, so `auth` alone
+ * asserted only "some row exists in the shared users table." Any
+ * authenticated user whose last login fell inside
+ * `config('reauthentication.freshness_seconds')` (default 900 s) could POST
+ * here and record a refund or a chargeback — that was the WHOLE precondition.
+ * No MFA was involved: `EnforceMfaChallenge` is attached only to the Filament
+ * panel's middleware array (`Providers\Filament\AdminPanelProvider`) and
+ * inline on the standalone `/admin/finance/exports` route, and this is a plain
+ * `Route::post` in neither place, so it carried no MFA gate at all.
+ * `RequireRecentAuthentication` reads only `ActorContext::$lastAuthenticatedAt`
+ * and never consults MFA state. The adjacent finance-export route DOES carry
+ * `EnforceMfaChallenge`, which is what makes the omission on the two
+ * money-moving routes conspicuous rather than merely uniform. Do not credit
+ * this path with a compensating control it does not have.
+ * `PaymentActionAuthorizer` closes the authority gap; a refusal becomes a 403,
+ * following `Admin\FinanceExportController`'s convention, since this app has
+ * no framework-level exception mapping.
+ *
+ * The check runs before `ReauthenticationService::satisfy()` deliberately.
+ * `satisfy()` verifies nothing — it unconditionally writes a `satisfied`
+ * `reauthentication_events` row plus an `Allowed` audit row and clears the
+ * MFA rate limiter. Calling it first, as this controller used to, minted a
+ * "this actor re-proved their identity" trail and reset the limiter for an
+ * actor who was about to be refused. It also runs before validation, so a
+ * refused actor gets no 422 telling them whether their payload was
+ * well-formed.
  *
  * ---------------------------------------------------------------------------
  * One parameterized route, not two separate ones — a judgement call, flagged
@@ -54,26 +89,49 @@ final class RecordPaymentReversalController extends Controller
      * linked by a shared constant. Distinct from the mandatory audit
      * `reason` the request body supplies below, which explains WHY this
      * specific reversal was recorded.
+     *
+     * Also the subject id of the refusal audit row, so that row names which
+     * of the two admin payment endpoints was refused without carrying any
+     * caller-supplied value — see `RecordPaymentActionRefusal`.
      */
     private const string REASON = 'payment_reversal';
 
     public function __invoke(Request $request, string $reversalType): RedirectResponse
     {
+        $actorContext = app(ActorContext::class);
+
+        try {
+            $actorRole = app(PaymentActionAuthorizer::class)->authorize($actorContext);
+        } catch (PaymentActionNotAuthorisedException) {
+            // Exactly one `Denied` row per refusal, written before the 403 so
+            // a probe of this endpoint cannot be invisible. Best-effort by
+            // design — see `RecordPaymentActionRefusal` for why an audit
+            // failure must not turn this 403 into a 500.
+            app(RecordPaymentActionRefusal::class)->record($actorContext, self::REASON);
+
+            abort(403);
+        }
+
         $type = match ($reversalType) {
             'refund' => PaymentReversalType::Refund,
             'chargeback' => PaymentReversalType::Chargeback,
-            // Unreachable via the route's own `->where('reversalType', ...)`
+            // Unreachable via the route's own
+            // `->whereIn('reversalType', ['refund', 'chargeback'])`
             // constraint (see `routes/web.php`) — defensive only, the same
             // "honest failure, not a silent bypass" posture the rest of this
             // lane's controllers already use for out-of-band input.
             default => throw new NotFoundHttpException("Unknown payment reversal type [{$reversalType}]."),
         };
 
-        $actorContext = app(ActorContext::class);
-
         app(ReauthenticationService::class)->satisfy(
             actorRef: $actorContext->identityReference,
-            actorRole: 'authenticated_actor',
+            // The role the authorizer approved, not the `authenticated_actor`
+            // sentinel this used to hardcode. `Roles\ActorRole`'s own doc
+            // block defines that sentinel as meaning "no role applies" and
+            // forbids it ever being grantable — so the audit trail for these
+            // reversals previously recorded the ABSENCE of a role on every
+            // one of them.
+            actorRole: $actorRole,
             reason: self::REASON,
             source: AuditSource::Panel,
         );
@@ -99,7 +157,7 @@ final class RecordPaymentReversalController extends Controller
             amountMinor: array_key_exists('amount_minor', $validated) ? (int) $validated['amount_minor'] : null,
             reason: $validated['reason'],
             actorRef: $actorContext->identityReference,
-            actorRole: 'authenticated_actor',
+            actorRole: $actorRole,
             source: AuditSource::Panel,
         );
 

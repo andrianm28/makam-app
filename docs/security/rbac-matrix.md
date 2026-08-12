@@ -13,7 +13,7 @@
 | Issue/revoke certificate | No | Request | If issuing authority | No | Policy dependent | Dedicated issuer role |
 | Memorial edit/publish | Authorized family | No | Policy-dependent | No | Moderation | Audit/privacy |
 | Vendor work/evidence | View own outcome | Coordinate | View relevant | Own | Yes | Read |
-| Payout/refund | No | No | No | View own | Restricted | Dedicated finance |
+| Payout/refund, incl. manual payment verification | No | No | No | View own | Restricted | Dedicated finance |
 | Feature/capability gate | No | No | No | No | Dedicated privileged | Approval/audit |
 
 The canonical role vocabulary is `App\Platform\IdentityAccess\Roles\ActorRole::KNOWN_ROLES`,
@@ -29,3 +29,15 @@ binding swap rather than a rewrite.
 Query-level scope is mandatory, and is enforced separately from roles via `scope_assignments`
 (`ScopeAssignmentGlobalScope`). A role never by itself grants access to a record: the shipped
 authorizers require a role **and** a scope grant.
+One narrow, deliberate exception: `Payment\FinanceOrRestrictedAdminPaymentAuthorizer` is
+role-only, because `payment_reversals` and `payment_verifications` carry no column in the
+`scope_assignments.entity_id` value space and their one candidate column, `reference`, is
+caller-supplied free text that an attacker could forge to match their own grant — see that
+class's doc block for the full argument. The general rule above is unchanged and still governs
+every record that has a scopeable key.
+
+The "Payout/refund, incl. manual payment verification" row covers BOTH admin money-attestation
+actions by an explicit ruling of 12 Aug 2026: recording a reversal and verifying that a payment
+was received are the same class of "did money move" judgement in opposite directions, so they sit
+at the same authority. It is the row this authorizer's `finance` / `restricted_admin` pair is
+taken from; a plain `admin` is deliberately not on it.
