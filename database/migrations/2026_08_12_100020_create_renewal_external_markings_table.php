@@ -21,17 +21,30 @@ use Illuminate\Support\Facades\Schema;
  * migration's doc block for why the slot is recorded.
  *
  * ---------------------------------------------------------------------------
- * This table does NOT carry the AC11 uniqueness guard
+ * This table does NOT carry the AC11 uniqueness guard — but it DOES carry
+ * a different, narrower one (fix round 1, F3)
  * ---------------------------------------------------------------------------
  * Read `2026_08_12_100000_create_renewals_table.php`'s doc block before
  * changing anything here: `renewals_grave_period_unique` sits on the parent
  * `renewals` table, across BOTH `source` values, precisely so this table
- * does not need a competing uniqueness rule of its own. A row here only
- * exists once its parent `renewals` row (already carrying
+ * does not need to re-derive the GRAVE-PERIOD uniqueness domain. A row here
+ * only exists once its parent `renewals` row (already carrying
  * `source = RenewalSource::EXTERNAL`) has survived that constraint. Adding
- * a second uniqueness check on this table would be redundant at best and
- * a second, out-of-sync source of truth at worst — exactly what
- * `design.md`'s "share the same uniqueness domain" phrase warns against.
+ * a second `(grave_record_id, target_due_period)`-shaped rule on this table
+ * would be redundant at best and a second, out-of-sync source of truth at
+ * worst — exactly what `design.md`'s "share the same uniqueness domain"
+ * phrase warns against.
+ *
+ * That is a DIFFERENT question from "can one `renewals` row have more than
+ * one marking", and the original cut of this migration answered only the
+ * first and let the second go unenforced by mistake — `Renewal::
+ * externalMarking()` is declared `HasOne`, which asserts one marking per
+ * renewal, while nothing on this table backed that up. Two conflicting
+ * `renewal_external_markings` rows for the same renewal would make that
+ * relation return whichever one the database happened to order first,
+ * silently discarding evidence on AC10's own evidence trail. `renewal_id`
+ * is therefore UNIQUE below — a per-renewal rule, unrelated to and no
+ * substitute for `renewals_grave_period_unique`.
  *
  * ---------------------------------------------------------------------------
  * Column shape and the judgement calls behind it
@@ -72,6 +85,14 @@ return new class extends Migration
             $table->string('reason');
             $table->timestamp('marked_at');
             $table->timestamps();
+
+            // One marking per renewal (fix round 1, F3) — narrower and
+            // unrelated to `renewals_grave_period_unique`; see this
+            // migration's own doc block for why the two must not be
+            // conflated. This is what makes `Renewal::externalMarking()`'s
+            // `HasOne` declaration actually true rather than an unenforced
+            // assumption.
+            $table->unique('renewal_id', 'renewal_external_markings_renewal_id_unique');
         });
     }
 

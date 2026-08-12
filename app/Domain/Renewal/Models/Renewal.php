@@ -7,7 +7,9 @@ namespace App\Domain\Renewal\Models;
 use App\Domain\GraveRegistry\Models\GraveRecord;
 use App\Domain\Renewal\RenewalSource;
 use App\Domain\Renewal\RenewalStatus;
+use Database\Factories\RenewalFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -36,12 +38,35 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * record's `due_date` AT THE MOMENT this renewal was opened, so it is
  * comparable and unambiguous ("2027" and "2027-01" cannot both mean the
  * same period). See the migration for the full reasoning.
+ *
+ * `HasFactory` added fix round 1 (ride-along, not a review finding) —
+ * `docs/superpowers/plans/2026-08-12-platform-renewal-completion.md`'s later
+ * tasks (5, 6, 7) call `Renewal::factory()->create(...)` in their own
+ * pre-written test code, so shipping this model without it would leave
+ * every later task blocked on re-opening this file. Same `newFactory()`
+ * override reasoning as `App\Domain\GraveRegistry\Models\GraveRecord`'s own
+ * doc block: the default resolver only strips a leading `App\Models\`, so it
+ * cannot find `Database\Factories\RenewalFactory` for a model namespaced
+ * under `App\Domain\Renewal\Models`.
  */
 final class Renewal extends Model
 {
-    use HasUuids;
+    /** @use HasFactory<RenewalFactory> */
+    use HasFactory, HasUuids;
 
     protected $table = 'renewals';
+
+    /**
+     * `HasFactory`'s default resolver strips a leading `App\Models\` and
+     * nothing else, so it cannot find a factory for a model namespaced
+     * under `App\Domain\...\Models` — every domain model in this codebase.
+     * Explicit override, the same reasoning `App\Domain\GraveRegistry\
+     * Models\GraveRecord` documents for its own.
+     */
+    protected static function newFactory(): RenewalFactory
+    {
+        return RenewalFactory::new();
+    }
 
     /**
      * @var list<string>

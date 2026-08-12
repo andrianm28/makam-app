@@ -82,10 +82,19 @@ final class RenewalQuote extends Model
      * directly — see this class's own doc block. `Money`'s constructor
      * already asserts the value is a genuine `int`, so a corrupted column
      * fails loudly here rather than silently propagating.
+     *
+     * Deliberately NO `(int)` cast on `$this->amount_minor` (fix round 1,
+     * F5) — casting here would be exactly the "weak caller" `Money`'s own
+     * constructor doc block warns about: it truncates a float or coerces a
+     * numeric string BEFORE `Money::__construct()`'s `is_int()` assertion
+     * can see it, which defeats the loud failure this method's own comment
+     * claims to provide. `amount_minor` is cast `'integer'` above, so the
+     * ordinary path is unaffected; this only changes what happens when the
+     * column is corrupted.
      */
     public function amountAsMoney(): Money
     {
-        return new Money((int) $this->amount_minor);
+        return new Money($this->amount_minor);
     }
 
     /**

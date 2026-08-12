@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -37,6 +38,14 @@ use Illuminate\Support\Facades\Schema;
  *   renewal, and a `0` would be indistinguishable from "genuinely no fine
  *   was ever calculated", which matters for `late_fine_basis` (below) to
  *   explain.
+ *
+ *   Corrected — `unsignedBigInteger` maps to a plain `bigint` on
+ *   PostgreSQL, so the "unsigned" half is enforced by neither engine; both
+ *   cited precedents (`create_journal_entries_table`,
+ *   `create_vendor_payables_table`) restate non-negativity as an explicit
+ *   CHECK below rather than assume it from the column type, and the first
+ *   cut of this migration copied the type without copying that CHECK. Fixed
+ *   below, same PostgreSQL-only guard those two migrations use.
  *
  * - `currency` is `string(3)` defaulting to `IDR`, the same shape
  *   `price_versions.currency` already uses in this codebase and
@@ -86,6 +95,25 @@ return new class extends Migration
             $table->timestamp('expires_at')->nullable();
             $table->timestamps();
         });
+
+        // SQLite cannot add table constraints with ALTER TABLE. The focused
+        // tests skip these checks locally and assert them on PostgreSQL 18,
+        // which is the authoritative CI/production path — the same
+        // precedent `create_journal_entries_table` and
+        // `create_vendor_payables_table` already set for this exact
+        // amount_minor CHECK.
+        if (DB::connection()->getDriverName() !== 'pgsql') {
+            return;
+        }
+
+        DB::statement(
+            'ALTER TABLE renewal_quotes ADD CONSTRAINT renewal_quotes_amount_minor_check '.
+            'CHECK (amount_minor >= 0)'
+        );
+        DB::statement(
+            'ALTER TABLE renewal_quotes ADD CONSTRAINT renewal_quotes_late_fine_minor_check '.
+            'CHECK (late_fine_minor IS NULL OR late_fine_minor >= 0)'
+        );
     }
 
     public function down(): void
