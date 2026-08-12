@@ -38,7 +38,7 @@ return new class extends Migration
             return;
         }
 
-        DB::statement('ALTER TABLE vendor_availability ADD CONSTRAINT vendor_availability_capacity_zero_when_blocked CHECK ((is_blocked = false) OR (capacity = 0))');
+        DB::statement("ALTER TABLE vendor_availability ADD CONSTRAINT vendor_availability_capacity_zero_when_blocked CHECK ((is_blocked = false) OR (capacity = 0))");
     }
 
     public function down(): void
