@@ -63,9 +63,11 @@ return new class extends Migration
      */
     public function down(): void
     {
-        // Intentionally non-destructive: production rollback uses the
-        // previous application artifact against this forward-compatible
-        // schema. Attachment registries are durable records and must not be
-        // deleted by migration rollback.
+        // Matches every sibling migration in this lane: a create migration
+        // rolls back by dropping the table it created, so `migrate:rollback`
+        // leaves no orphan table behind and a subsequent `migrate` succeeds.
+        // Production rollback still uses the previous application artifact
+        // against this forward-compatible schema.
+        Schema::dropIfExists('order_documents');
     }
 };
