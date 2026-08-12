@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Admin\Resources\FaqArticles;
 
+use App\Domain\Faq\Contracts\FaqAuthorizer;
 use App\Domain\Faq\Models\FaqArticle;
 use App\Filament\Admin\Resources\FaqArticles\Pages\CreateFaqArticle;
 use App\Filament\Admin\Resources\FaqArticles\Pages\EditFaqArticle;
@@ -12,12 +13,16 @@ use App\Filament\Admin\Resources\FaqArticles\Pages\ViewFaqArticle;
 use App\Filament\Admin\Resources\FaqArticles\Schemas\FaqArticleForm;
 use App\Filament\Admin\Resources\FaqArticles\Schemas\FaqArticleInfolist;
 use App\Filament\Admin\Resources\FaqArticles\Tables\FaqArticlesTable;
+use App\Platform\IdentityAccess\ActorContext;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Auth\Access\Response;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use UnitEnum;
 
 /**
  * The first real Filament Resource in this repository — `app/Filament/
@@ -78,6 +83,60 @@ final class FaqArticleResource extends Resource
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedQuestionMarkCircle;
 
     protected static ?string $recordTitleAttribute = 'title';
+
+    /**
+     * Every authorization question Filament asks about this Resource, answered
+     * in one place by `Domain\Faq\Contracts\FaqAuthorizer`.
+     *
+     * ---------------------------------------------------------------------------
+     * Why this one method and not `canViewAny()`/`canCreate()`/`canEdit()`
+     * ---------------------------------------------------------------------------
+     * Traced against the installed `filament/filament` v5.7.3 source, not
+     * assumed: `Filament\Resources\Resource\Concerns\HasAuthorization` derives
+     * EVERY public predicate from this single method —
+     * `getViewAnyAuthorizationResponse()` … `getReorderAuthorizationResponse()`
+     * each call `getAuthorizationResponse($ability, $record)`, and every
+     * `can*()` / `authorize*()` is a one-line `->allowed()` / `->authorize()`
+     * on top of those. Overriding it here therefore covers `canViewAny()`
+     * (the list page, via `Resource::canAccess()` and
+     * `Pages\Concerns\CanAuthorizeResourceAccess`'s mount AND hydrate hooks),
+     * `canCreate()`, `canEdit()`, `canView()`, and the delete/restore/reorder
+     * abilities this Resource does not expose yet.
+     *
+     * Overriding the four named predicates individually instead would state one
+     * decision in four places and, worse, would silently MISS the table's
+     * built-in `ViewAction`/`EditAction`: `Filament\Resources\Pages\Page
+     * ::getDefaultActionAuthorizationResponse()` routes those to
+     * `get*AuthorizationResponse()` directly, never through `can*()`. A
+     * `canEdit()`-only override would have left the Edit row action open while
+     * looking closed.
+     *
+     * ---------------------------------------------------------------------------
+     * One decision for all abilities, deliberately
+     * ---------------------------------------------------------------------------
+     * `$action` and `$record` are accepted (the parent's signature) and not
+     * branched on. There is no per-ability or per-record distinction to draw:
+     * `docs/security/rbac-matrix.md` has no FAQ row at all, so a
+     * read-vs-write or own-vs-others split here would be invented, not
+     * discovered — and every ability this Resource exposes writes to or reveals
+     * unpublished public-facing content. The default arm being a refusal is the
+     * point: an ability name nobody has considered yet fails closed.
+     *
+     * Note that `parent::getAuthorizationResponse()` is deliberately NOT called
+     * and not fallen back to. It resolves a Laravel model policy through
+     * `Filament\get_authorization_response()`; no `FaqArticlePolicy` exists and
+     * none may be added (see `Domain\Faq\Contracts\FaqAuthorizer`'s doc block on
+     * why this repository has no `app/Policies/`), so any fallback path would be
+     * a second authorization idiom for the same records.
+     */
+    public static function getAuthorizationResponse(string|UnitEnum $action, ?Model $record = null): Response
+    {
+        $mayManage = app(FaqAuthorizer::class)->canManage(app(ActorContext::class));
+
+        return $mayManage
+            ? Response::allow()
+            : Response::deny('Anda tidak berwenang mengelola konten FAQ.');
+    }
 
     public static function form(Schema $schema): Schema
     {

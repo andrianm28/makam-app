@@ -7,9 +7,11 @@ namespace App\Filament\Admin\Resources\FaqArticles\Tables;
 use App\Domain\Faq\Actions\PublishFaqArticle;
 use App\Domain\Faq\Actions\ReorderFaqArticles;
 use App\Domain\Faq\Actions\UnpublishFaqArticle;
+use App\Domain\Faq\Contracts\FaqAuthorizer;
 use App\Domain\Faq\FaqArticlePublishState;
 use App\Domain\Faq\Models\FaqArticle;
 use App\Filament\Admin\Resources\FaqArticles\FaqArticleStatusBadge;
+use App\Platform\IdentityAccess\ActorContext;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
@@ -84,6 +86,50 @@ use Illuminate\Support\Facades\Auth;
  * per click instead of free-form drag-and-drop — an acceptable trade at
  * this catalogue's documented ~23-row MVP scale (`FaqArticle::
  * scopeMatching()`'s own doc block).
+ *
+ * ---------------------------------------------------------------------------
+ * Authorization on the four custom actions: two layers, and neither is
+ * redundant
+ * ---------------------------------------------------------------------------
+ * `publish`, `unpublish`, `moveUp` and `moveDown` are plain `Action`s, and
+ * Filament's own source is explicit that those get NOTHING by default —
+ * `Filament\Actions\Concerns\CanBeAuthorized`'s header comment reads
+ * "Actions do not have automatic policy-based authorization. Authorization
+ * defaults to `null` (allowed for all users)." Until Task 1 of the L9
+ * `admin-operations` lane these four carried only record-state guards, which
+ * is the Critical finding ledgered at `docs/planning/retrofit-backlog.md:88`.
+ * Each now carries both of:
+ *
+ *  1. `->authorize(...)` — the RENDER/MOUNT gate. It decides whether the
+ *     control is drawn and whether `mountAction()` will accept it
+ *     (`InteractsWithActions::mountAction()` unmounts an unauthorized action
+ *     because `CanBeDisabled::isDisabled()` folds `isAuthorized()` in). This
+ *     is presentation-layer safety: it stops the button existing.
+ *  2. `authorizeManage(...)` as the FIRST statement of the `->action()`
+ *     closure — the actual enforcement. A Livewire component method is
+ *     addressable directly over the wire, so "the button was not rendered"
+ *     is not a security property. This throws
+ *     `Domain\Faq\Exceptions\FaqActionNotAuthorisedException`, before the
+ *     Domain Action runs and therefore before any audit row or state change.
+ *
+ * Layer 1 alone is a UI hint; layer 2 alone leaves a control on screen that
+ * errors when clicked. Both, or neither is honest.
+ *
+ * The `->visible()` / `->hidden()` calls are NOT part of this and must not be
+ * confused with it: they answer "is this action MEANINGFUL for this record"
+ * (already published, already first in its category), which is orthogonal to
+ * "may this actor do it at all". Replacing one with the other in either
+ * direction would lose a real guarantee.
+ *
+ * `app(FaqAuthorizer::class)` / `app(ActorContext::class)` are resolved
+ * inline at each call site rather than hoisted into a shared private helper,
+ * on purpose: `ActorContext` is a `scoped()` binding whose value is the
+ * server's answer for THIS request, and a table definition is a static
+ * builder that outlives no request — capturing either in a variable at
+ * configure() time would freeze one request's actor into the definition.
+ * Resolving per evaluation also keeps every authorization call site
+ * individually greppable, which for a security boundary is worth the
+ * repetition.
  */
 final class FaqArticlesTable
 {
@@ -169,8 +215,11 @@ final class FaqArticlesTable
                             ->label('Alasan (opsional)')
                             ->rows(2),
                     ])
+                    ->authorize(fn (): bool => app(FaqAuthorizer::class)->canManage(app(ActorContext::class)))
                     ->visible(fn (FaqArticle $record): bool => ! $record->isPublished())
                     ->action(function (FaqArticle $record, array $data): void {
+                        app(FaqAuthorizer::class)->authorizeManage(app(ActorContext::class));
+
                         (new PublishFaqArticle)(
                             $record,
                             actorReference: Auth::id() ?? 0,
@@ -199,8 +248,11 @@ final class FaqArticlesTable
                             ->label('Alasan (opsional)')
                             ->rows(2),
                     ])
+                    ->authorize(fn (): bool => app(FaqAuthorizer::class)->canManage(app(ActorContext::class)))
                     ->visible(fn (FaqArticle $record): bool => $record->isPublished())
                     ->action(function (FaqArticle $record, array $data): void {
+                        app(FaqAuthorizer::class)->authorizeManage(app(ActorContext::class));
+
                         (new UnpublishFaqArticle)(
                             $record,
                             actorReference: Auth::id() ?? 0,
@@ -217,15 +269,25 @@ final class FaqArticlesTable
                     ->label('Naikkan urutan')
                     ->icon(Heroicon::OutlinedArrowUp)
                     ->color('gray')
+                    ->authorize(fn (): bool => app(FaqAuthorizer::class)->canManage(app(ActorContext::class)))
                     ->hidden(fn (FaqArticle $record): bool => self::isFirstInCategory($record))
-                    ->action(fn (FaqArticle $record) => self::moveWithinCategory($record, -1)),
+                    ->action(function (FaqArticle $record): void {
+                        app(FaqAuthorizer::class)->authorizeManage(app(ActorContext::class));
+
+                        self::moveWithinCategory($record, -1);
+                    }),
 
                 Action::make('moveDown')
                     ->label('Turunkan urutan')
                     ->icon(Heroicon::OutlinedArrowDown)
                     ->color('gray')
+                    ->authorize(fn (): bool => app(FaqAuthorizer::class)->canManage(app(ActorContext::class)))
                     ->hidden(fn (FaqArticle $record): bool => self::isLastInCategory($record))
-                    ->action(fn (FaqArticle $record) => self::moveWithinCategory($record, 1)),
+                    ->action(function (FaqArticle $record): void {
+                        app(FaqAuthorizer::class)->authorizeManage(app(ActorContext::class));
+
+                        self::moveWithinCategory($record, 1);
+                    }),
             ]);
     }
 

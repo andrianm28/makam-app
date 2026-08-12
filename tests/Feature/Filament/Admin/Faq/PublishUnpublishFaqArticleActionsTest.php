@@ -13,9 +13,11 @@ use App\Domain\Faq\Models\FaqArticleVersion;
 use App\Domain\Faq\Models\FaqCategory;
 use App\Filament\Admin\Resources\FaqArticles\Pages\ListFaqArticles;
 use App\Models\User;
+use App\Platform\IdentityAccess\Roles\ActorRole;
 use App\Platform\Audit\Models\AuditEvent;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
+use Tests\Support\GrantsActorRoles;
 use Tests\TestCase;
 
 /**
@@ -29,9 +31,24 @@ use Tests\TestCase;
  * the real Action produces: the `faq_article_versions` snapshot row
  * (`PublishFaqArticle`-only) and the `audit_events` row
  * (`FaqAuditActions::PUBLISHED`/`UNPUBLISHED`).
+ *
+ * ---------------------------------------------------------------------------
+ * Every actor here is granted `ActorRole::ADMIN` first, and that is not
+ * boilerplate
+ * ---------------------------------------------------------------------------
+ * Task 1 of the L9 `admin-operations` lane closed the Critical authorization
+ * gap ledgered at `docs/planning/retrofit-backlog.md:88`: the FAQ admin
+ * surface now refuses every actor without the `admin` role
+ * (`App\Domain\Faq\Contracts\FaqAuthorizer`). A bare `User::factory()` actor
+ * gets a 403 before this file's subject is reached, so the grant is what makes
+ * these tests exercise their subject at all rather than the authorization
+ * boundary. The refusal side is proved separately and deliberately, in
+ * `FaqArticleAuthorizationCharacterizationTest` — do not add denial cases here
+ * or weaken the boundary to keep these green.
  */
 final class PublishUnpublishFaqArticleActionsTest extends TestCase
 {
+    use GrantsActorRoles;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -49,6 +66,7 @@ final class PublishUnpublishFaqArticleActionsTest extends TestCase
     public function test_the_publish_row_action_transitions_state_and_appends_a_version(): void
     {
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
         $this->actingAs($user);
 
         $article = (new CreateFaqArticleDraft)(
@@ -87,6 +105,7 @@ final class PublishUnpublishFaqArticleActionsTest extends TestCase
     public function test_the_publish_row_action_works_with_no_reason_given(): void
     {
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
         $this->actingAs($user);
 
         $article = (new CreateFaqArticleDraft)(
@@ -112,6 +131,7 @@ final class PublishUnpublishFaqArticleActionsTest extends TestCase
     public function test_the_unpublish_row_action_transitions_state_without_touching_the_version_history(): void
     {
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
         $this->actingAs($user);
 
         $draft = (new CreateFaqArticleDraft)(
@@ -150,6 +170,7 @@ final class PublishUnpublishFaqArticleActionsTest extends TestCase
         // retrofit fix wave these two verbs completed with no confirmation
         // at all -- tasks.md §6.8's success state, claimed as implemented.
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
         $this->actingAs($user);
 
         $article = (new CreateFaqArticleDraft)(
@@ -169,6 +190,7 @@ final class PublishUnpublishFaqArticleActionsTest extends TestCase
     public function test_the_unpublish_row_action_sends_a_success_notification(): void
     {
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
         $this->actingAs($user);
 
         $draft = (new CreateFaqArticleDraft)(
@@ -189,6 +211,7 @@ final class PublishUnpublishFaqArticleActionsTest extends TestCase
     public function test_the_publish_action_is_hidden_for_an_already_published_article_and_unpublish_is_hidden_for_a_draft(): void
     {
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
         $this->actingAs($user);
 
         $draft = (new CreateFaqArticleDraft)(

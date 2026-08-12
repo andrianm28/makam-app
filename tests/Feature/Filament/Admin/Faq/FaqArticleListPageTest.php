@@ -11,8 +11,10 @@ use App\Domain\Faq\Models\FaqCategory;
 use App\Filament\Admin\Resources\FaqArticles\FaqArticleResource;
 use App\Filament\Admin\Resources\FaqArticles\Pages\ListFaqArticles;
 use App\Models\User;
+use App\Platform\IdentityAccess\Roles\ActorRole;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
+use Tests\Support\GrantsActorRoles;
 use Tests\TestCase;
 
 /**
@@ -35,9 +37,24 @@ use Tests\TestCase;
  * pluralized model-basename-before-"Resource", so the "collapsed"
  * branch applies), the resolved slug is `kebab('FaqArticles')` =
  * `faq-articles`.
+ *
+ * ---------------------------------------------------------------------------
+ * Every actor here is granted `ActorRole::ADMIN` first, and that is not
+ * boilerplate
+ * ---------------------------------------------------------------------------
+ * Task 1 of the L9 `admin-operations` lane closed the Critical authorization
+ * gap ledgered at `docs/planning/retrofit-backlog.md:88`: the FAQ admin
+ * surface now refuses every actor without the `admin` role
+ * (`App\Domain\Faq\Contracts\FaqAuthorizer`). A bare `User::factory()` actor
+ * gets a 403 before this file's subject is reached, so the grant is what makes
+ * these tests exercise their subject at all rather than the authorization
+ * boundary. The refusal side is proved separately and deliberately, in
+ * `FaqArticleAuthorizationCharacterizationTest` — do not add denial cases here
+ * or weaken the boundary to keep these green.
  */
 final class FaqArticleListPageTest extends TestCase
 {
+    use GrantsActorRoles;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -59,9 +76,19 @@ final class FaqArticleListPageTest extends TestCase
         $response->assertRedirect(route('filament.admin.auth.login'));
     }
 
-    public function test_an_authenticated_user_can_open_the_faq_article_list_page(): void
+    /**
+     * Renamed from `test_an_authenticated_user_can_open_the_faq_article_list_page`
+     * by Task 1 of the L9 `admin-operations` lane. "Authenticated" stopped being
+     * the operative condition when the FAQ resource gained a role check — the
+     * old name would have described a boundary that no longer exists, which is
+     * exactly the kind of stale claim a passing test makes hardest to notice.
+     * A roleless actor's 403 is asserted in
+     * `FaqArticleAuthorizationCharacterizationTest`.
+     */
+    public function test_an_admin_can_open_the_faq_article_list_page(): void
     {
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
 
         $response = $this->actingAs($user)->get('/admin/faq-articles');
 
@@ -71,6 +98,7 @@ final class FaqArticleListPageTest extends TestCase
     public function test_a_draft_articles_badge_reads_differently_from_a_published_ones(): void
     {
         $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
 
         $draft = (new CreateFaqArticleDraft)(
             categoryId: $this->categoryId(),
