@@ -14,6 +14,7 @@
 | Memorial edit/publish | Authorized family | No | Policy-dependent | No | Moderation | Audit/privacy |
 | Vendor work/evidence | View own outcome | Coordinate | View relevant | Own | Yes | Read |
 | Payout/refund, incl. manual payment verification | No | No | No | View own | Restricted | Dedicated finance |
+| Mark renewal paid externally (AC10) | No | No | **No** | No | **Privileged** (role + cemetery scope) | No |
 | Feature/capability gate | No | No | No | No | Dedicated privileged | Approval/audit |
 
 The canonical role vocabulary is `App\Platform\IdentityAccess\Roles\ActorRole::KNOWN_ROLES`,

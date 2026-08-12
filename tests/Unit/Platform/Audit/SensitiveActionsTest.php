@@ -38,6 +38,7 @@ final class SensitiveActionsTest extends TestCase
             'role revoke' => ['ROLE_REVOKE'],
             'scope grant' => ['SCOPE_GRANT'],
             'scope revoke' => ['SCOPE_REVOKE'],
+            'renewal external marking' => ['RENEWAL_EXTERNAL_MARKING'],
         ];
     }
 
@@ -98,6 +99,13 @@ final class SensitiveActionsTest extends TestCase
      * role or record-visibility scope — the same privilege-escalation
      * category as `MFA_RESET`/`CERTIFICATE_REVOKE` already on this list —
      * another genuine, documented addition, not a regression.
+     *
+     * UPDATED 12 Aug 2026 — Task 7 of the `platform-renewal-completion`
+     * lane (AC10) added `RENEWAL_EXTERNAL_MARKING`: the only writer of
+     * `renewal_external_markings` rows (`App\Domain\Renewal\Actions\
+     * MarkExternalRenewal`) marks a renewal as paid externally with
+     * evidence — the same mandatory-reason category as
+     * `PAYMENT_REFUND`/`PAYMENT_CHARGEBACK` already on this list.
      */
     public function test_the_list_contains_the_requirements_named_actions_plus_the_documented_additions(): void
     {
@@ -122,6 +130,7 @@ final class SensitiveActionsTest extends TestCase
                 'ROLE_REVOKE',
                 'SCOPE_GRANT',
                 'SCOPE_REVOKE',
+                'RENEWAL_EXTERNAL_MARKING',
             ],
             SensitiveActions::ACTIONS
         );
