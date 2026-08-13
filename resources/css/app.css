@@ -86,6 +86,20 @@
     color: var(--mk-text-link-hover);
   }
 
+  /* Inverse-surface links (the footer's bg-primary-900). The global `a`
+   * rule above paints links --mk-text-link (primary-600, 1.68:1 against
+   * primary-900 — a WCAG 1.4.3 fail the browser/a11y audit caught). The
+   * footer is an inverse surface, so its links use the inverse text token
+   * (--mk-text-inverse, neutral-0/white, 8.55:1 against primary-900 per
+   * tokens.css). Scoped to the footer, never global. */
+  footer a {
+    color: var(--mk-text-inverse);
+  }
+
+  footer a:hover {
+    color: var(--mk-text-on-brand);
+  }
+
   /* Global focus. NEVER override this to `outline: none` without a replacement
    * ring — design-system.md §7.2 and the ci/verify-docs.sh gate both enforce it. */
   :focus-visible {
