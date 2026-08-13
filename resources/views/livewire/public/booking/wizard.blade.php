@@ -364,9 +364,17 @@
                     </p>
                 @endif
 
-                <x-mk.button variant="tertiary" wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::SERVICES }})" class="mt-4">
-                    Kembali
-                </x-mk.button>
+                <div class="mt-4 flex items-center gap-3">
+                    <x-mk.button variant="tertiary" wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::SERVICES }})">
+                        Kembali
+                    </x-mk.button>
+                    <x-mk.button
+                        variant="primary"
+                        wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::CUSTOMER_DATA }})"
+                    >
+                        Lanjut ke Data Pemesan
+                    </x-mk.button>
+                </div>
             </section>
         @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::CUSTOMER_DATA)
             <section aria-labelledby="booking-step-6-heading">

@@ -463,6 +463,13 @@ final class BookingWizard extends Component
      * is done: the summary once step 4 is saved, the confirmation once step 8
      * is. That is the real precondition — those screens exist to show
      * accumulated state, and the state is there.
+     *
+     * Step 6 (CUSTOMER_DATA) is the same hand-off the summary's forward
+     * control needs: it is reachable once the journey's decisions (Step 4)
+     * are complete, before its own form has been saved. Without this the
+     * summary dead-ended — a user on Step 5 could not enter Step 6 because
+     * `default => false` refused `goToStep(CUSTOMER_DATA)` until customer
+     * data was already saved, which could never happen first.
      */
     private function canReachStep(int $step): bool
     {
@@ -472,6 +479,7 @@ final class BookingWizard extends Component
 
         return match ($step) {
             BookingWizardStep::SUMMARY => in_array(BookingWizardStep::SERVICES, $this->completedSteps, true),
+            BookingWizardStep::CUSTOMER_DATA => in_array(BookingWizardStep::SERVICES, $this->completedSteps, true),
             BookingWizardStep::CONFIRMATION => in_array(BookingWizardStep::PAYMENT, $this->completedSteps, true),
             default => false,
         };
