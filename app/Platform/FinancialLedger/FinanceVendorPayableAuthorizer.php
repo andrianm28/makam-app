@@ -56,13 +56,15 @@ use App\Platform\IdentityAccess\Scopes\ScopeGrantLevel;
  *  3. **It returns a named constant**, not the caller's word for itself.
  *
  * ---------------------------------------------------------------------------
- * The human path fails closed today, and that is not a bug to work around
+ * The human path fails closed, and that is not a bug to work around
  * ---------------------------------------------------------------------------
- * `ActorContext::$roles` is always `[]` (see that class's own doc block), so
- * `authorize()` refuses every real human request until the identity seam is
- * backed by an authoritative role source. Identical to
- * `ManualPayout`/`ResolveException`/`BulkFinancialExport`, and it is in the
- * merge sign-off bundle as a standing item.
+ * `ActorContext::$roles` now resolves real granted roles via
+ * `actor_role_assignments` (merged in commit `3dbdcde`, lane L5), so
+ * `authorize()` is genuinely enforcing: a human holding `finance` plus an
+ * active privileged grant on THIS vendor passes, and one holding neither is
+ * still refused. Identical in shape to
+ * `ManualPayout`/`ResolveException`/`BulkFinancialExport`, which read the
+ * same role seam.
  */
 final class FinanceVendorPayableAuthorizer implements VendorPayableAuthorizer
 {

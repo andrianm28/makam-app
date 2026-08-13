@@ -45,13 +45,15 @@ use App\Platform\IdentityAccess\Scopes\ScopeGrantLevel;
  * this deployment issued — never unvalidated caller text.
  *
  * ---------------------------------------------------------------------------
- * It fails closed today, and that is the correct state
+ * It fails closed, and that is the correct state
  * ---------------------------------------------------------------------------
- * `ActorContext::$roles` is always `[]` under the current local identity
- * adapter (see that class's own doc block), so this policy refuses every real
- * request until that seam is backed by an authoritative role source. For a
- * bulk cross-entity financial read that is the right answer, and it is exactly
- * how `ResolveException` and `ManualPayout` already behave.
+ * `ActorContext::$roles` now resolves real granted roles via
+ * `actor_role_assignments` (merged in commit `3dbdcde`, lane L5), so this
+ * policy is genuinely enforcing rather than statically refusing: an actor
+ * holding `finance` plus at least one active privileged `BUSINESS_ENTITY`
+ * grant is authorised, and one holding neither is still refused. For a bulk
+ * cross-entity financial read that is the right answer, and it is exactly how
+ * `ResolveException` and `ManualPayout` already behave.
  */
 final class FinanceLedgerReadAuthorizer implements LedgerReadAuthorizer
 {
