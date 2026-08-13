@@ -107,8 +107,8 @@ final readonly class GraveSearchOutcome
      * separately for each card is one edit away from disclosing it on one
      * card and not the other. That is not hypothetical — it is what
      * happened: the label was computed from `openResults` alone, so a
-     * search whose every match was restricted (`TPS Jakarta Kemang`)
-     * rendered fictional data with no disclosure at all.
+     * search whose every match was restricted (the all-restricted example
+     * cemetery) rendered fictional data with no disclosure at all.
      *
      * `GraveRecordProjection::$isExampleData` is populated under all three
      * access modes, including `closed`, so this fact survives the field
