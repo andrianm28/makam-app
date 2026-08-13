@@ -26,16 +26,14 @@
     `white`. The Bantuan action reuses <x-mk.button> rather than
     re-implementing button styling here.
 
-    KNOWN GAP — hamburger toggle has no working JS.
-    The mobile hamburger button below has correct, static markup
-    (`aria-expanded="false"`, `aria-controls` pointing at the mobile panel's
-    id) but nothing in this repository currently makes it interactive: no
-    Alpine `x-data` open/close behaviour exists yet, so `aria-expanded` never
-    flips and the panel stays `hidden`. This is the same class of honest gap
-    the modal primitive documents for its focus-trap — the markup is correct
-    and ready for a behaviour layer, but that layer has not been written or
-    verified here, so it is not fabricated. Do not add x-data attributes to
-    "make it work" without verifying them against an installed Alpine build.
+    FIXED 13 Aug 2026 — hamburger toggle now works via vanilla JS in
+    resources/js/app.js (the behaviour layer this markup was prepared for).
+    No Alpine dependency was added (none is installed); the handler toggles
+    the panel's `hidden` class and keeps `aria-expanded` in sync for every
+    `header [aria-controls]` button. The mobile panel's accessible name is
+    "Menu utama (seluler)" — distinct from the desktop nav's "Menu utama"
+    so the two landmarks do not collide on axe `landmark-unique`, while the
+    visible labels stay identical per IA §2.
 --}}
 @props([
     'active' => null,          // 'pemesanan' | 'layanan' | 'perpanjangan' | 'faq' | null
@@ -147,7 +145,7 @@
          behaviour layer toggles it; see the file-header comment. `lg:hidden`
          is defensive: even if that layer removes the `hidden` class, the
          panel must never show once the desktop nav below takes over. --}}
-    <nav id="{{ $mobileMenuId }}" aria-label="Menu utama" class="hidden lg:hidden border-b border-neutral-200 bg-neutral-0 px-4 py-2">
+    <nav id="{{ $mobileMenuId }}" aria-label="Menu utama (seluler)" class="hidden lg:hidden border-b border-neutral-200 bg-neutral-0 px-4 py-2">
         <ul class="flex flex-col">
             @foreach ($navItems as $key => $item)
                 <li>
