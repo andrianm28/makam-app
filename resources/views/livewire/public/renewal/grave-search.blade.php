@@ -450,7 +450,7 @@
                          Rendered HERE, below both result cards, and read off
                          GraveSearchOutcome::hasExampleData() rather than
                          recomputed from $outcome->openResults. Both facts
-                         matter.                          It used to sit inside the open-results
+                         matter. It used to sit inside the open-results
                          branch and be computed from the open rows alone, so
                          a search whose every match was restricted (the
                          all-restricted example fixture —
