@@ -129,7 +129,6 @@ jobs:
 
       - name: Larastan (static analysis)
         run: vendor/bin/phpstan analyse --no-progress
-        continue-on-error: true # TODO: remove once a phpstan.neon baseline exists
 
       - name: Prepare test environment
         run: |
