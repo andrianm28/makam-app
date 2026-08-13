@@ -24,6 +24,8 @@ H-3's blanket downgrade of all 31 rows was correct in July and became wrong in t
 
 **v0.7 — 09 August 2026, S4-T4/S4-T5 (booking wizard Steps 1–5).** The booking wizard was built 08–09 Aug 2026 and reviewed; **four rows move from `Specified` to `Specified (tests written, CI pending)`** — BOOK-01, BOOK-03, BOOK-04, BOOK-05 — each with real test paths now named in its evidence cell, each read against the test file first. **None is raised to `Covered`**: the branch is unmerged and has had no CI run, and this file's own `Covered` legend requires a CI pass. Whoever merges the branch and sees a green run should raise all four and delete the way-station status if nothing else uses it. BOOK-02's scope note is corrected — it said the wizard embed was unbuilt because S4-T4 was paused. Section D carries the method-level trail. The v0.6 note below is kept verbatim.
 
+**v0.8 — 13 August 2026, order-orchestration domain (`booking-and-order-orchestration`).** The order aggregate, forward-only commercial state machine, immutable versioned quotes, payment-guard conditions 2–5, paid effects, Step 9 read model, and order-scoped notification dispatch were built on branch `lane/l7-order-orchestration`. This is the **domain** half of the wizard's Steps 6–9 (the presentation half is L6's). It adds real, named test evidence for BOOK-06…BOOK-09's *domain* claims and keeps the rows at their current statuses — **no row here is raised to `Covered`**: the branch is unmerged with no CI run, and the way-station rule from v0.7 applies. The payments gate (`FIN-DEC-01`) remains closed, so BOOK-08 stays `Specified (gated fallback)` and Step 8's manual-coordination fallback is required, never removed. Section D carries the method-level trail.
+
 **v0.6 — finding T-J, 08 August 2026.** Sprint 4 batches S4-T6 (cemetery directory), S4-T7 (renewal skeleton), and S4-T8 (marketplace browse) landed and this file understated all three, exactly the direction T-B warns about. **7 rows are raised to `Covered`** — BOOK-02, MKT-01…MKT-03, REN-01…REN-03 — each read against its test file first, not raised on the strength of a filename; section D carries the method-level trail and the scope limits. **BOOK-01 was deliberately not raised despite real new evidence**, and section D says why rather than leaving the omission silent. Two gaps are recorded as `NOT TESTED` rather than glossed: the renewal spec's AC4 (< 500 ms at 100k records) and the cemetery spec's directory/map benchmark. The v0.5 revision note above is kept verbatim.
 
 **Addition — finding T-H, 08 August 2026.** Screen PUB-060 (`/bantuan`) shipped the same day as a fix for a real defect — see [`.kiro/specs/help-centre-missing-route/`](../../.kiro/specs/help-centre-missing-route/), this repository's first Bugfix Spec. It does not fit section B's table, which is scoped to RKS-derived Stakeholder Workflow expectations (section A); PUB-060 answers `product-brief.md` §5.10 and `information-architecture.md` §2 instead, a cross-cutting UX principle with no RKS item behind it. Rather than force an ill-fitting RKS mapping, it is recorded in new **section E** below.
@@ -61,10 +63,10 @@ The **Test evidence** column holds repo-relative paths to the tests backing a ro
 | BOOK-03 | Empat jenis layanan | wizard | PUB-012 | E2E-BOOK-03 | `tests/Feature/Livewire/Public/Booking/BookingWizardEndToEndTest.php`<br>`tests/Unit/Domain/Booking/BookingServiceTypeTest.php` | Specified (tests written, CI pending) |
 | BOOK-04 | Basic/add-on services | service catalog + wizard | PUB-013 | E2E-BOOK-04 | `tests/Feature/Livewire/Public/Booking/BookingWizardStepsFourAndFiveTest.php`<br>`tests/Feature/Domain/Booking/Actions/SaveBookingDraftStepServicesTest.php` | Specified (tests written, CI pending) |
 | BOOK-05 | Ringkasan | wizard/quote | PUB-014 | E2E-BOOK-05 | `tests/Feature/Livewire/Public/Booking/BookingWizardStepsFourAndFiveTest.php`<br>`tests/Feature/Domain/Booking/BookingDraftQueryTest.php` | Specified (tests written, CI pending) |
-| BOOK-06 | Data pemesan | wizard | PUB-015 | E2E-BOOK-06 | — | Specified |
-| BOOK-07 | Almarhum + documents | wizard | PUB-016 | E2E-BOOK-07 | — | Specified |
-| BOOK-08 | Payment | wizard/payment contract | PUB-017 | E2E-BOOK-08 | — | Specified (gated fallback) |
-| BOOK-09 | Confirmation/invoice/notification | wizard + notification matrix | PUB-018 | E2E-BOOK-09 | — | Specified |
+| BOOK-06 | Data pemesan | wizard | PUB-015 | E2E-BOOK-06 | `tests/Feature/OrderWorkflow/SubmitBookingDraftTest.php` | Specified (tests written, CI pending) |
+| BOOK-07 | Almarhum + documents | wizard | PUB-016 | E2E-BOOK-07 | `tests/Feature/OrderWorkflow/OrderDocumentTest.php` | Specified (tests written, CI pending) |
+| BOOK-08 | Payment | wizard/payment contract | PUB-017 | E2E-BOOK-08 | `tests/Feature/Payment/GuardPaymentSessionUpstreamTest.php`<br>`tests/Feature/Payment/GuardPaymentSessionTest.php`<br>`tests/Feature/OrderWorkflow/ApplyPaidEffectsTest.php` | Specified (gated fallback) |
+| BOOK-09 | Confirmation/invoice/notification | wizard + notification matrix | PUB-018 | E2E-BOOK-09 | `tests/Feature/OrderWorkflow/OrderReadModelTest.php`<br>`tests/Feature/OrderWorkflow/OrderNotificationTest.php` | Specified (tests written, CI pending) |
 | MKT-01 | Flower categories | marketplace catalog | PUB-020/021 | E2E-MKT | `tests/Feature/Livewire/Public/Marketplace/MarketplaceIndexRouteTest.php`<br>`tests/Feature/Livewire/Public/Marketplace/ProductDetailRouteTest.php`<br>`tests/Feature/Domain/Marketplace/ProductCatalogueSeedTest.php` | Covered |
 | MKT-02 | Gravestone categories | marketplace catalog | PUB-020/021 | E2E-MKT | `tests/Feature/Livewire/Public/Marketplace/MarketplaceIndexRouteTest.php`<br>`tests/Feature/Livewire/Public/Marketplace/ProductDetailRouteTest.php`<br>`tests/Feature/Domain/Marketplace/ProductCatalogueSeedTest.php` | Covered |
 | MKT-03 | Care intervals | marketplace catalog | PUB-020/021 | E2E-MKT | `tests/Feature/Livewire/Public/Marketplace/MarketplaceIndexRouteTest.php`<br>`tests/Feature/Livewire/Public/Marketplace/ProductDetailRouteTest.php`<br>`tests/Feature/Domain/Marketplace/ProductCatalogueSeedTest.php` | Covered |
@@ -141,6 +143,47 @@ Sprint 4 batches S4-T6 (cemetery directory), S4-T7 (renewal skeleton), and S4-T8
 - **REN-01 (City), REN-02 (TPU/TPS).** Both on PUB-030, `/perpanjangan`. `RenewalStartTest::test_all_five_launch_cities_are_offered_in_the_canonical_order` asserts all five *and* their order. The load-bearing assertion for this journey is the negative one — `::test_a_city_with_no_published_cemetery_is_still_offered`, paired with `::test_a_city_with_no_published_cemetery_renders_a_three_part_empty_state` — because silently omitting an MVP city is the spec's named defect. REN-02: `::test_selecting_a_city_lists_its_published_cemeteries` and `::test_a_draft_cemetery_is_never_offered`. Robustness: `::test_an_unknown_city_code_is_discarded_rather_than_404ing`, `::test_select_city_refuses_a_code_outside_the_launch_list`, `::test_a_failed_cemetery_read_degrades_honestly_instead_of_500ing`.
 - **REN-03 (Grave search).** PUB-031, `/perpanjangan/cari`. The claim is that grave search exists and behaves honestly, and the evidence is shaped as denials, which is what makes it real coverage: `GraveSearchStatesTest::test_the_privacy_limited_state_never_says_the_record_was_not_found`, `::test_the_privacy_limited_state_discloses_no_withheld_name`, `::test_the_no_result_state_is_not_confused_with_the_other_two`, `::test_the_gate_closed_state_never_implies_the_record_does_not_exist`, `::test_a_search_backend_failure_is_never_reported_as_not_found`, and `::test_a_blank_submission_is_a_validation_error_not_a_no_result`. Privacy and scoping at the query layer: `GraveRegistryPublicQueryTest::test_a_closed_record_is_still_counted_and_never_reported_as_not_found`, `::test_a_search_never_reaches_a_record_in_another_cemetery`, `::test_a_search_with_no_terms_returns_nothing_and_never_dumps_the_registry`, `::test_no_access_mode_can_project_heir_contact_because_the_projection_has_no_such_property`, `::test_the_query_never_returns_an_eloquent_model`. Fuzzy matching: `::test_a_name_term_matches_regardless_of_case_and_punctuation` and `GraveRecordTrigramSearchTest::test_a_misspelled_name_still_finds_the_record`.
   **Scope of the claim, and one explicit gap.** This row claims grave search exists and returns honest results. It does **not** claim the renewal spec's **AC4 (< 500 ms at 100,000 records)**, which is **NOT TESTED and not passing** — nothing in the repository measures search latency and no 100k-row fixture exists. `GraveRecordTrigramSearchTest`'s only `assertLessThan` bounds a *similarity score*, not a duration; it must not be read as a benchmark.
+
+### BOOK-06…BOOK-09 — `Specified (tests written, CI pending)` / `Specified (gated fallback)` 13 Aug 2026 (order-orchestration domain)
+
+**Scope of this entry — the domain half only.** These rows are stakeholder-workflow
+expectations for the full wizard step. The evidence below covers the **domain**
+half (the server-side behavior `booking-and-order-orchestration` owns); the
+**presentation** half — PUB-015…PUB-018 screens, the stepper, field components —
+is `public-booking-wizard`'s (L6) and is not asserted here. A row's way-station
+status therefore claims the *domain* behavior has tests that pass locally; it
+does not claim the step is rendered. No row is raised to `Covered` (unmerged
+branch, no CI run).
+
+- **BOOK-06 (Data pemesan), domain.** `SubmitBookingDraftTest` walks real order
+  parties through submission and asserts the party is persisted under the order.
+- **BOOK-07 (Almarhum + documents), domain.** `OrderDocumentTest::` proves the
+  purpose-scoped vault composition: a quarantined document is never
+  previewable/downloadable/thumbnailed, signed URLs expire within 300 s, every
+  access writes an audit row, and a document bound to order A is unreachable
+  from order B. It does **not** claim the wizard's Step-7 upload UI.
+- **BOOK-08 (Payment), domain.** `GuardPaymentSessionUpstreamTest` /
+  `GuardPaymentSessionTest` prove conditions 2–5 evaluate against real order,
+  quote, and authorization records (`DomainDenied`, not `UnavailableUpstream`),
+  and that the guard still denies on condition 6 (`FIN-DEC-01`). `ApplyPaidEffectsTest`
+  proves the paid effects path — webhook and manual verification each apply
+  exactly once, the cross-path case (manual then webhook) yields one status
+  event and one outbox row via `order_status_events_paid_once`, and the amount/
+  currency preconditions throw before any write. **The row stays `Specified
+  (gated fallback)`**: Step 8's manual-coordination fallback is required and the
+  online gate stays closed while `FIN-DEC-01` is `TBD`.
+- **BOOK-09 (Confirmation/invoice/notification), domain.** `OrderReadModelTest`
+  proves Step 9 content server-side — order reference, `StatusIntent`-resolved
+  status, invoice state as a read-model state only (`FIN-DEC-02` `TBD`, no
+  invoice produced), channel-delivery state, next action, support reference —
+  and the AC12 fallback-reachability assertion. `OrderNotificationTest` proves
+  dispatch per the matrix (Order processing, Order completed) with no channel
+  state overclaim.
+
+**PostgreSQL 18 note.** The exactly-once mechanism BOOK-08's evidence rests on
+(`order_status_events_paid_once`) and the status CHECK constraints were verified
+on a disposable real PG18 container in the same batch (Task 10), along with the
+two-connection sequential re-read that the hermetic SQLite suite cannot execute.
 
 ### BOOK-01, BOOK-03, BOOK-04, BOOK-05 — `Specified (tests written, CI pending)` 09 Aug 2026 (S4-T4/S4-T5)
 

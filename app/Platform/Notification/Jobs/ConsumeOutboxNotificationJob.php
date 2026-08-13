@@ -24,6 +24,17 @@ use Illuminate\Queue\SerializesModels;
  * `App\Platform\Outbox\Jobs\PublishOutboxEventJob` uses and documents.
  * `Actions\DispatchNotification::consumeOutboxEvent()` does the actual
  * re-read and every write; this job is a thin queue entry point only.
+ *
+ * `$matrixEventName` (nullable, default) is an OPTIONAL explicit template
+ * selection, used when a single outbox event maps ambiguously to more than
+ * one matrix row and the discriminator lives outside the platform. The
+ * order-lifecycle bridge `App\Domain\OrderWorkflow\Listeners\
+ * DispatchOrderNotifications` dispatches this job for the canonical
+ * `order.status_changed.v1` event with the matrix label resolved from the
+ * payload's `to_status` ("Order processing"/"Order completed") — the two
+ * rows keep a NULL `outbox_event_name` (Wave-1a ruling 1 left the
+ * status-discrimination question open; the bridge resolves it). Every
+ * existing caller leaves it null and keeps the `outbox_event_name` lookup.
  */
 final class ConsumeOutboxNotificationJob implements ShouldQueue
 {
@@ -34,10 +45,11 @@ final class ConsumeOutboxNotificationJob implements ShouldQueue
 
     public function __construct(
         public readonly string $outboxEventId,
+        public readonly ?string $matrixEventName = null,
     ) {}
 
     public function handle(DispatchNotification $dispatcher): void
     {
-        $dispatcher->consumeOutboxEvent($this->outboxEventId);
+        $dispatcher->consumeOutboxEvent($this->outboxEventId, $this->matrixEventName);
     }
 }

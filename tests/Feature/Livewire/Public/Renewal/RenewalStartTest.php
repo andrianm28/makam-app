@@ -300,6 +300,20 @@ final class RenewalStartTest extends TestCase
         // PostgreSQL's `DROP TABLE` of the parents is not blocked by the
         // incoming `booking_drafts` FK (2BP01); its `nullOnDelete` only
         // applies to row DELETEs, never to DROP TABLE.
+        //
+        // Order-orchestration tables FK-referencing `booking_drafts` /
+        // `orders` / `quotes` (Task 3/4/5, 12 Aug 2026) are dropped first so
+        // PostgreSQL's `DROP TABLE` of `booking_drafts` is not blocked by the
+        // incoming FKs (2BP01) — the same tripwire this comment documents.
+        Schema::dropIfExists('quote_lines');
+        Schema::dropIfExists('order_documents');
+        Schema::dropIfExists('order_status_events');
+        Schema::dropIfExists('order_parties');
+        Schema::dropIfExists('deceased_profiles');
+        Schema::dropIfExists('quotes');
+        Schema::dropIfExists('funeral_cases');
+        Schema::dropIfExists('pre_need_interests');
+        Schema::dropIfExists('orders');
         Schema::dropIfExists('booking_drafts');
         Schema::dropIfExists('grave_records');
         Schema::dropIfExists('cemetery_packages');
