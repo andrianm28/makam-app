@@ -64,8 +64,11 @@ final class RecordOrderStatusChangeTest extends TestCase
         ]);
 
         // References only — the payload must never carry order content.
+        // Order-insensitive comparison: `payload` is a jsonb column whose key
+        // order PostgreSQL serializes in an implementation-defined order (Task
+        // 10 surfaced the difference; SQLite preserved insertion order).
         $outbox = OutboxEvent::query()->where('aggregate_id', $order->getKey())->sole();
-        self::assertSame([
+        $this->assertEqualsCanonicalizing([
             'order_id' => $order->getKey(),
             'from_status' => 'MASUK',
             'to_status' => 'DIVERIFIKASI',
@@ -426,7 +429,14 @@ final class RecordOrderStatusChangeTest extends TestCase
         );
 
         try {
-            DB::table('orders')->where('id', $order->getKey())->delete();
+            // Nested transaction = a SAVEPOINT. PostgreSQL aborts the WHOLE
+            // transaction on the first failed statement (25P02), so the
+            // `orders` DELETE must fail inside its own savepoint or the
+            // verification queries below can never run (Task 10). SQLite lets
+            // the transaction limp on, which is why this only surfaced on PG.
+            DB::transaction(function () use ($order) {
+                DB::table('orders')->where('id', $order->getKey())->delete();
+            });
             self::fail('Expected the order_status_events FK to refuse the delete');
         } catch (QueryException) {
             // expected
@@ -457,85 +467,20 @@ final class RecordOrderStatusChangeTest extends TestCase
     }
 
     /**
-     * NOT a concurrency test — renamed in fix round 1 because the previous
-     * name and doc block both overclaimed what the body proves.
-     *
-     * What this actually covers: SEQUENTIAL re-read semantics. The two calls
-     * run one after the other in a `foreach`, so the first `Audit::wrap()`
-     * transaction runs `BEGIN`→`COMMIT` to completion before the second call
-     * starts. The row lock is therefore never contended and no interleaving
-     * occurs. What is asserted is that the second call's `lockForUpdate()`
-     * re-read observes the first call's ALREADY-COMMITTED status, so its own
-     * `OrderTransition::assertAllowed()` refuses it and exactly one `DIBAYAR`
-     * event exists. That is a real property and the assertions would go red
-     * if the re-check broke — it is simply not the race it used to claim.
-     *
-     * ---------------------------------------------------------------------
-     * Deferred to Task 10, and one known blocker Task 10 inherits
-     * ---------------------------------------------------------------------
-     * Genuine concurrent-race verification — two sessions both passing
-     * `assertAllowed()` before either commits, with only
-     * `order_status_events_paid_once` between them — needs parallel
-     * connections driven from separate processes. That is out of scope here
-     * and is not exercisable at all on this repository's hermetic
-     * single-connection in-memory SQLite suite, where `lockForUpdate()` is
-     * additionally a no-op (Laravel's `SQLiteGrammar::compileLock()` returns
-     * an empty string). Task 10 owns real PostgreSQL 18 verification and is
-     * the correct home for a genuine race test.
-     *
-     * KNOWN BLOCKER, recorded so Task 10 inherits an accurate description
-     * rather than rediscovering it: the body below has never been executed
-     * on any driver. `RefreshDatabase` wraps the whole test in an
-     * uncommitted transaction on the default connection, so the `makeOrder()`
-     * fixture is invisible to the separate `pgsql_race` backend session and
-     * `findOrFail()` on that connection will raise `ModelNotFoundException`
-     * — which the `catch` below does not cover. Task 10 must take this test
-     * outside the outer transaction (`DatabaseMigrations`, or an empty
-     * `connectionsToTransact()` with explicit cleanup) before the
-     * two-connection body can run at all. The `pgsql`-only skip guard is
-     * left exactly as it was: it skips on the ABSENCE of `pgsql`, so it
-     * cannot silently swallow a run on PostgreSQL — on that driver the body
-     * executes and the blocker above surfaces as a visible error.
+     * MOVED, not deleted — Task 10 fix. This test's body drives a SECOND
+     * independent database session (`pgsql_race`), so its fixture must be
+     * COMMITTED before that session queries it. `RefreshDatabase`'s outer
+     * transaction makes that impossible from inside this class (the second
+     * connection never sees the uncommitted fixture, and the body had never
+     * executed on any driver because of it). The test now lives in
+     * `tests/Feature/OrderWorkflow/RecordOrderStatusChangeTwoConnectionTest.php`,
+     * which owns its own `migrate:fresh` and runs the two sessions against
+     * committed state. The SQLite skip guard lives there too, before the
+     * migration, so this lane's hermetic suite pays nothing for it.
      */
     public function test_a_second_paid_transition_is_refused_after_the_first_has_committed(): void
     {
-        if (DB::connection()->getDriverName() !== 'pgsql') {
-            $this->markTestSkipped('Sequential cross-connection re-read is only meaningful on PostgreSQL; Task 10 owns the real race harness');
-        }
-
-        $order = $this->makeOrder(OrderStatus::MENUNGGU_PEMBAYARAN);
-
-        // A second logical connection against the same PostgreSQL database —
-        // a real, independent backend session, not a clone of the first.
-        config(['database.connections.pgsql_race' => config('database.connections.pgsql')]);
-
-        $originalDefault = config('database.default');
-        $outcomes = [];
-
-        try {
-            foreach (['pgsql', 'pgsql_race'] as $connectionName) {
-                DB::setDefaultConnection($connectionName);
-
-                try {
-                    app(RecordOrderStatusChange::class)(
-                        Order::query()->findOrFail($order->getKey()),
-                        OrderStatus::DIBAYAR,
-                        'actor:system',
-                        'system',
-                    );
-                    $outcomes[] = 'ok';
-                } catch (IllegalOrderTransitionException) {
-                    $outcomes[] = 'blocked';
-                }
-            }
-        } finally {
-            DB::setDefaultConnection($originalDefault);
-            DB::purge('pgsql_race');
-        }
-
-        self::assertSame(1, collect($outcomes)->filter(fn ($o) => $o === 'ok')->count());
-        self::assertSame(1, OrderStatusEvent::query()
-            ->where('order_id', $order->getKey())->where('to_status', 'DIBAYAR')->count());
+        $this->markTestSkipped('Moved to RecordOrderStatusChangeTwoConnectionTest — Task 10');
     }
 
     /**

@@ -73,7 +73,11 @@ final class ApplyPaidEffectsTest extends TestCase
         self::assertSame('order', $outbox->aggregate_type);
         self::assertSame(OutboxClassification::Internal->value, $outbox->classification);
         self::assertSame('paid_effects:payment:evt_webhook_1', $outbox->idempotency_key);
-        self::assertSame([
+        // Order-insensitive: `payload` is a jsonb column and PostgreSQL is free
+        // to serialize key order however it likes (SQLite happened to preserve
+        // insertion order, PostgreSQL does not — Task 10). The contract is the
+        // payload CONTENT, never its storage ordering.
+        $this->assertEqualsCanonicalizing([
             'order_id' => $order->getKey(),
             'trigger_source' => 'webhook',
             'source_id' => 'evt_webhook_1',
