@@ -47,7 +47,7 @@ return new class extends Migration
             return;
         }
 
-        DB::statement("ALTER TABLE vendor_listings ADD CONSTRAINT vendor_listings_price_positive CHECK (price_minor > 0)");
+        DB::statement('ALTER TABLE vendor_listings ADD CONSTRAINT vendor_listings_price_positive CHECK (price_minor > 0)');
         DB::statement("ALTER TABLE vendor_listings ADD CONSTRAINT vendor_listings_availability_mode_known CHECK (availability_mode IN ('STOCKED','MADE_TO_ORDER','SCHEDULED'))");
         DB::statement("ALTER TABLE vendor_listings ADD CONSTRAINT vendor_listings_evidence_known CHECK (evidence_requirement IN ('NONE','PHOTO','DOCUMENT'))");
         // stock_quantity is meaningful only for a STOCKED listing.

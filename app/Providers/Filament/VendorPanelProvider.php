@@ -5,17 +5,14 @@ declare(strict_types=1);
 namespace App\Providers\Filament;
 
 use App\Filament\Vendor\Pages\Dashboard;
+use App\Filament\Vendor\Pages\EvidenceList;
 use App\Filament\Vendor\Pages\PayoutStatus;
 use App\Filament\Vendor\Pages\TransactionHistory;
-use App\Filament\Vendor\Pages\EvidenceList;
-use App\Filament\Vendor\Resources\VendorListingResource;
-use App\Filament\Vendor\Resources\VendorOrderResource;
-use App\Filament\Vendor\Resources\VendorAvailabilityResource;
+use App\Http\Middleware\AssignCorrelationId;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
-use Filament\Pages;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Widgets;
@@ -25,8 +22,26 @@ use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
+use RuntimeException;
 
-class VendorPanelProvider extends PanelProvider
+/**
+ * `/vendor` panel provider — `information-architecture.md` §5.
+ *
+ * Panel entry is decided by
+ * `App\Platform\IdentityAccess\Panel\VendorPanelAccessPolicy`, reached through
+ * `User::canAccessPanel()`'s `'vendor'` arm. Filament's `Authenticate`
+ * middleware below is what calls it. Record visibility is a separate, later
+ * decision made per query by `App\Filament\Vendor\Concerns\ScopesToCurrentVendor`
+ * — see AC4's "SHALL NOT grant record access on panel membership alone".
+ *
+ * `->colors()` loads the same tokens.css-derived palette as
+ * `AdminPanelProvider`, via the same generator output, so the two panels
+ * cannot drift apart on status colour (design-system.md §3.7 requires the
+ * public site and the panels to render the same status colours). The previous
+ * version of this file passed `fn () => []`, which silently fell back to
+ * Filament's own default palette and defeated that requirement.
+ */
+final class VendorPanelProvider extends PanelProvider
 {
     public function panel(Panel $panel): Panel
     {
@@ -34,7 +49,7 @@ class VendorPanelProvider extends PanelProvider
             ->id('vendor')
             ->path('vendor')
             ->login()
-            ->colors(fn () => [])
+            ->colors($this->filamentColors())
             ->discoverResources(
                 in: app_path('Filament/Vendor/Resources'),
                 for: 'App\\Filament\\Vendor\\Resources',
@@ -49,6 +64,12 @@ class VendorPanelProvider extends PanelProvider
                 Widgets\AccountWidget::class,
             ])
             ->middleware([
+                // Same reasoning as AdminPanelProvider's own copy: this panel
+                // declares an explicit middleware array rather than going
+                // through bootstrap/app.php's `web` group, so it needs its own
+                // correlation-id origin point, first, before anything that
+                // might want to reference one.
+                AssignCorrelationId::class,
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,
@@ -62,7 +83,34 @@ class VendorPanelProvider extends PanelProvider
             ->authMiddleware([
                 Authenticate::class,
             ])
+            // Self-hosted only, and the same theme file as /admin — see
+            // AdminPanelProvider's class-level note on why there is no
+            // `provider:` argument here.
             ->font('Inter var')
             ->viteTheme('resources/css/filament/admin/theme.css');
+    }
+
+    /**
+     * The tokens.css-derived palette, shared with `/admin`. Throws rather than
+     * falling back to Filament's defaults if the generator has never run — see
+     * `AdminPanelProvider::filamentColors()`, which this mirrors deliberately.
+     *
+     * @return array<string, array<int, string>|string>
+     */
+    private function filamentColors(): array
+    {
+        $path = app_path('Support/Design/generated/FilamentPalette.php');
+
+        if (! is_file($path)) {
+            throw new RuntimeException(
+                'Filament palette has not been generated. Run `php artisan design:generate-filament-palette` '
+                ."(expected at {$path})."
+            );
+        }
+
+        /** @var array<string, array<int, string>|string> $palette */
+        $palette = require $path;
+
+        return $palette;
     }
 }

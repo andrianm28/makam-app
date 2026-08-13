@@ -6,6 +6,7 @@ namespace App\Models;
 use App\Platform\IdentityAccess\Contracts\IdentityAccessAdapter;
 use App\Platform\IdentityAccess\Models\ActorSession;
 use App\Platform\IdentityAccess\Panel\AdminPanelAccessPolicy;
+use App\Platform\IdentityAccess\Panel\VendorPanelAccessPolicy;
 use Database\Factories\UserFactory;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
@@ -56,9 +57,16 @@ class User extends Authenticatable implements FilamentUser
      * `ActorContextResolver` instance — Filament calls this with an
      * arbitrary candidate `$this`, which the currently-cached request
      * context may or may not correspond to) and delegates the decision to
-     * the named policy for that panel id. Unknown/future panel ids
-     * (`vendor`, operator — neither exists in this codebase yet) resolve
+     * the named policy for that panel id. Unknown/future panel ids (an
+     * operator panel — which does not exist in this codebase yet) resolve
      * closed rather than falling through to an implicit allow.
+     *
+     * The `vendor` arm was added by lane L10. Until then `vendor` fell to
+     * the `default => false` arm, which was correct at the time (no vendor
+     * panel existed) but became a live defect the moment
+     * `VendorPanelProvider` registered one: the panel was reachable by
+     * routing and refused for every user without exception, so nothing in
+     * it had ever been exercised.
      *
      * VERIFICATION STATUS: `Filament\Models\Contracts\FilamentUser` and its
      * `canAccessPanel(Panel $panel): bool` signature are written against
@@ -74,6 +82,7 @@ class User extends Authenticatable implements FilamentUser
 
         return match ($panel->getId()) {
             'admin' => app(AdminPanelAccessPolicy::class)->allows($actorContext),
+            'vendor' => app(VendorPanelAccessPolicy::class)->allows($actorContext),
             default => false,
         };
     }
