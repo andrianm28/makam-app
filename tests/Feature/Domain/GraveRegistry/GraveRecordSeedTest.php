@@ -10,12 +10,15 @@ use App\Domain\GraveRegistry\GraveNameNormalizer;
 use App\Domain\GraveRegistry\GraveRecordAccessMode;
 use App\Domain\GraveRegistry\GraveRecordSource;
 use App\Domain\GraveRegistry\Models\GraveRecord;
+use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use InvalidArgumentException;
 use Tests\TestCase;
 
 /**
  * `2026_08_08_100010_seed_example_grave_records.php` — Sprint 4 S4-T7.
+ * The fourteen rows it materializes are DEFINED in
+ * `App\Support\ExampleData\CemeteryExampleData::graveRecords()`.
  *
  * Two jobs. First, protect the FIXTURE DESIGN the rest of this spec's tests
  * depend on: `makam-testing` forbids domain factories, so every access-mode
@@ -107,9 +110,9 @@ final class GraveRecordSeedTest extends TestCase
      * the one most at risk of being wrongly rendered as "not found". It
      * needs a cemetery where EVERY record is restricted, and this is it.
      */
-    public function test_tps_jakarta_kemang_has_only_restricted_records(): void
+    public function test_the_all_restricted_cemetery_has_only_restricted_records(): void
     {
-        $cemeteryId = Cemetery::query()->where('slug', 'tps-jakarta-kemang')->sole()->id;
+        $cemeteryId = Cemetery::query()->where('slug', CemeteryExampleData::ALL_RESTRICTED_SLUG)->sole()->id;
 
         $records = GraveRecord::query()->where('cemetery_id', $cemeteryId)->get();
 
@@ -118,7 +121,7 @@ final class GraveRecordSeedTest extends TestCase
         foreach ($records as $record) {
             $this->assertTrue(
                 $record->isAccessRestricted(),
-                'TPS Jakarta Kemang must contain no openly-readable record — it is the pure privacy-limited fixture.'
+                'The all-restricted example cemetery must contain no openly-readable record — it is the pure privacy-limited fixture.'
             );
         }
     }
@@ -134,15 +137,14 @@ final class GraveRecordSeedTest extends TestCase
     }
 
     /**
-     * Negative fixture. `TPS Bekasi Harapan Indah` is seeded `draft` by
-     * `2026_07_26_190300_seed_cemeteries_and_capability_profiles.php`, and
-     * this batch deliberately parks one grave record inside it: an
-     * unpublished cemetery must not become searchable just because a record
-     * points at it.
+     * Negative fixture. `CemeteryExampleData::DRAFT_SLUG` is the
+     * deliberately-draft example cemetery, and this batch deliberately
+     * parks one grave record inside it: an unpublished cemetery must not
+     * become searchable just because a record points at it.
      */
     public function test_a_record_exists_in_the_draft_cemetery_but_that_cemetery_is_not_selectable(): void
     {
-        $draft = Cemetery::query()->where('slug', 'tps-bekasi-harapan-indah')->sole();
+        $draft = Cemetery::query()->where('slug', CemeteryExampleData::DRAFT_SLUG)->sole();
 
         $this->assertFalse($draft->isPublished());
         $this->assertSame(
@@ -200,7 +202,7 @@ final class GraveRecordSeedTest extends TestCase
      */
     public function test_the_model_derives_the_normalized_name_and_overrides_a_supplied_one(): void
     {
-        $cemeteryId = Cemetery::query()->where('slug', 'tpu-bogor-bantarjati')->sole()->id;
+        $cemeteryId = Cemetery::query()->where('slug', CemeteryExampleData::OPEN_CEMETERY_SLUG)->sole()->id;
 
         $record = new GraveRecord;
         $record->forceFill([
@@ -244,7 +246,7 @@ final class GraveRecordSeedTest extends TestCase
 
     public function test_an_unknown_access_mode_cannot_be_saved(): void
     {
-        $cemeteryId = Cemetery::query()->where('slug', 'tpu-bogor-bantarjati')->sole()->id;
+        $cemeteryId = Cemetery::query()->where('slug', CemeteryExampleData::OPEN_CEMETERY_SLUG)->sole()->id;
 
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('Unknown grave record access mode [publik]');
@@ -260,7 +262,7 @@ final class GraveRecordSeedTest extends TestCase
 
     public function test_an_unknown_source_cannot_be_saved(): void
     {
-        $cemeteryId = Cemetery::query()->where('slug', 'tpu-bogor-bantarjati')->sole()->id;
+        $cemeteryId = Cemetery::query()->where('slug', CemeteryExampleData::OPEN_CEMETERY_SLUG)->sole()->id;
 
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('Unknown grave record source [scraped]');
