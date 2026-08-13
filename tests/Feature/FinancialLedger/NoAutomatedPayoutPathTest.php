@@ -460,6 +460,77 @@ final class NoAutomatedPayoutPathTest extends TestCase
         )));
     }
 
+    /**
+     * Task #27 (Option D) — the guard must fire on CODE, not on prose.
+     *
+     * Before this test, `signalsIn()` ran the patterns against the raw file
+     * contents, so a doc-block that merely DESCRIBED an automated payout —
+     * "use GuzzleHttp\Client to post to the bank API", "a
+     * VendorSettlementGateway would call Http::post" — tripped the guard even
+     * though no such code exists. That is exactly the false positive that hit
+     * the payment-auth-hotfix lane: its new files' doc blocks named
+     * `ManualPayout`/`PayoutAuthorizer` as words, and the AC9 guard red-flagged
+     * them as a real automated-payout path. The fix strips comments and string
+     * literals before matching, so a guard whose whole purpose is structural
+     * honesty does not cry wolf about a paragraph.
+     */
+    public function test_prose_describing_a_payout_in_a_doc_block_does_not_trip_the_guard(): void
+    {
+        $sample = <<<'PHP'
+            <?php
+
+            /**
+             * An automated payout would reach the bank API here:
+             *
+             *     use GuzzleHttp\Client;
+             *     $response = (new Client())->post($bankUrl, [...]);
+             *
+             * It would route through ManualPayout::pay() after a
+             * VendorSettlementGateway transfer. AC9 forbids that while
+             * G-PAYOUT-01 is closed — but this doc block only says so.
+             */
+            final class NotActuallyAnAutomatedPayout {}
+            PHP;
+
+        $allPatterns = array_merge(
+            self::OUTBOUND_CALL_PATTERNS,
+            self::PROVIDER_REFERENCE_PATTERNS,
+            self::TRANSFER_VERB_PATTERNS,
+            self::AUTOMATED_TRANSFER_ARCHITECTURE_PATTERNS,
+            self::PAYOUT_SURFACE_PATTERNS,
+        );
+
+        $this->assertSame(
+            [],
+            $this->signalsIn($sample, $allPatterns),
+            'Doc-block prose describing a payout must not trip a structural guard: '
+            .'comments are not code, and a guard that flags its own documentation '
+            .'is exactly the crying-wolf failure this test exists to prevent.',
+        );
+    }
+
+    /**
+     * The counterpart to the prose test above: after stripping, the guard must
+     * STILL catch the same patterns in real code. Comment-stripping must not
+     * blind the detector — a genuine `GuzzleHttp\Client` import in an actual
+     * `use` statement stays flagged even though this file's own doc block
+     * (which is full of payout prose) is now invisible to it.
+     */
+    public function test_real_code_patterns_still_trip_the_guard_after_comment_stripping(): void
+    {
+        $sample = <<<'PHP'
+            <?php
+            use GuzzleHttp\Client;
+            final class BankDisbursementClient {}
+            PHP;
+
+        $this->assertContains(
+            'guzzle_import',
+            $this->signalsIn($sample, self::OUTBOUND_CALL_PATTERNS),
+            'Comment-stripping must not hide a real outbound-call import.',
+        );
+    }
+
     public function test_there_is_no_automated_payout_method_or_state_to_record_one_with(): void
     {
         // The textual rules above can be sidestepped by a sufficiently
@@ -520,13 +591,72 @@ final class NoAutomatedPayoutPathTest extends TestCase
     {
         $signals = [];
 
+        $code = self::stripCommentsAndStrings($contents);
+
         foreach ($patterns as $signal => $pattern) {
-            if (preg_match($pattern, $contents) === 1) {
+            if (preg_match($pattern, $code) === 1) {
                 $signals[] = $signal;
             }
         }
 
         return $signals;
+    }
+
+    /**
+     * Tokenize the file and keep only the code tokens, so the patterns match
+     * against what is actually EXECUTED rather than what a doc block or string
+     * literal happens to say.
+     *
+     * This is task #27 (Option D) — the guard's original failure mode. It ran
+     * its regexes over raw file contents, so a doc block that merely DESCRIBED
+     * an automated payout ("use GuzzleHttp\Client to post to the bank API", "a
+     * VendorSettlementGateway transfer") tripped the guard even though no such
+     * code existed. The payment-auth-hotfix lane hit exactly this: its new
+     * files' doc blocks named `ManualPayout`/`PayoutAuthorizer` as words and
+     * the AC9 guard red-flagged them as a real automated-payout path.
+     *
+     * Tokenization keeps every signal honest:
+     *  - A real `use GuzzleHttp\Client;` is a T_USE token — still matched.
+     *  - `Http::post(...)` in code is T_STRING + T_DOUBLE_COLON — still matched.
+     *  - The same words inside a `/** ... *\/` doc block or a `'...'` literal
+     *    are T_DOC_COMMENT / T_COMMENT / T_CONSTANT_ENCAPSED_STRING — dropped.
+     */
+    private static function stripCommentsAndStrings(string $contents): string
+    {
+        $code = '';
+        $tokens = token_get_all($contents);
+
+        foreach ($tokens as $token) {
+            if (! is_array($token)) {
+                $code .= $token;
+
+                continue;
+            }
+
+            [$id, $text] = $token;
+
+            // Drop comments and every kind of string literal. T_OPEN_TAG is
+            // kept so heredocs/nowdocs inside comments cannot smuggle tokens.
+            if (in_array($id, [
+                T_COMMENT,
+                T_DOC_COMMENT,
+                T_OPEN_TAG,
+                T_OPEN_TAG_WITH_ECHO,
+                T_CLOSE_TAG,
+                T_CONSTANT_ENCAPSED_STRING,
+                T_ENCAPSED_AND_WHITESPACE,
+                T_START_HEREDOC,
+                T_END_HEREDOC,
+                T_STRING_VARNAME,
+                T_NUM_STRING,
+            ], true)) {
+                continue;
+            }
+
+            $code .= $text;
+        }
+
+        return $code;
     }
 
     /**
