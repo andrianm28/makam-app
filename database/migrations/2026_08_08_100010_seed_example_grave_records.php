@@ -72,22 +72,31 @@ use Illuminate\Support\Facades\DB;
  * `.kiro/specs/renewal-and-grave-registry/tasks.md`'s required states
  * reachable without any test inventing data:
  *
- *   - `TPU Jakarta Menteng`  — mixed: open rows AND one `limited` row, so a
- *     search can return readable results while still honestly reporting a
- *     match it cannot show.
- *   - `TPS Jakarta Kemang`   — ALL restricted (one `limited`, one
- *     `closed`), so the *pure* privacy-limited state (matches exist, none
- *     readable) is reachable. This is the state most at risk of being
- *     wrongly rendered as "not found", which is the defect this spec names.
- *   - `TPU Bogor Bantarjati`, `TPU Depok Sawangan`, `TPU Tangerang
- *     Cipondoh` — plain open rows.
- *   - `TPU Bekasi Jatiasih`  — one open, one `closed`.
- *   - `TPS Bekasi Harapan Indah` — one open row inside the DRAFT cemetery
- *     the cemetery seed deliberately left unpublished. A negative fixture:
- *     an unpublished cemetery must not become searchable just because a
- *     record points at it. `App\Domain\CemeteryDirectory\
- *     CemeteryPublicQuery::findPublishedById()` is what stops it, and this
- *     row is what lets a test prove that rather than assume it.
+ *   - `TPS Jakarta 2` (index 1, `CemeteryExampleData::ALL_RESTRICTED_SLUG`)
+ *     — ALL restricted (one `limited`, one `closed`), so the *pure*
+ *     privacy-limited state (matches exist, none readable) is reachable.
+ *     This is the state most at risk of being wrongly rendered as "not
+ *     found", which is the defect this spec names.
+ *   - `TPU Jakarta 1` (index 0) — two open rows, the second with a NULL due
+ *     date, so an open search can still honestly surface registry
+ *     incompleteness (AC5's empty-state copy) instead of a fake-perfect
+ *     dataset.
+ *   - the remaining published cemeteries (indices 2-8) — plain open rows,
+ *     one or two per cemetery, from the same deterministic index math;
+ *     `TPU Depok 5` (index 4) also carries a row with a NULL death date,
+ *     the other incompleteness state.
+ *   - `TPS Bekasi 10` (index 9, `CemeteryExampleData::DRAFT_SLUG`) — one
+ *     open row inside the DRAFT cemetery the cemetery seed deliberately
+ *     left unpublished. A negative fixture: an unpublished cemetery must
+ *     not become searchable just because a record points at it.
+ *     `App\Domain\CemeteryDirectory\CemeteryPublicQuery::findPublishedById()`
+ *     is what stops it, and this row is what lets a test prove that rather
+ *     than assume it.
+ *
+ * The exact rows are produced by the generator's pure index math — see
+ * `CemeteryExampleData::graveRecords()`; this migration only materializes
+ * them. `tests/Unit/Support/ExampleData/CemeteryExampleDataTest.php` locks
+ * the role distribution against this design.
  *
  * The no-result state needs no fixture — it is any name that matches
  * nothing.

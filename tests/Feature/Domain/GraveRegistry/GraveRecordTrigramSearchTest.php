@@ -7,6 +7,7 @@ namespace Tests\Feature\Domain\GraveRegistry;
 use App\Domain\GraveRegistry\GraveRecordProjection;
 use App\Domain\GraveRegistry\GraveRegistryPublicQuery;
 use App\Domain\GraveRegistry\GraveSearchCriteria;
+use App\Domain\GraveRegistry\Models\GraveRecord;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\CemeteryFixture;
