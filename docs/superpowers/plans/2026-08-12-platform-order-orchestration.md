@@ -654,43 +654,80 @@ Tests: each of conditions 2-5 denies for a real, specific domain reason (`Domain
 
 **Ratified design (Q3).** The keystone task. `ProcessWebhookEvent` deliberately only *claims* an event and applies no paid effect; this is the deferred apply step.
 
-> **SEQUENCING CONSTRAINT for `app/Platform/Payment/Http/Controllers/VerifyManualPaymentController.php`.** The payment-auth hotfix that was editing this file **has committed** (`8be7e49` on branch `fix/payment-controller-authorization`), so there is no longer a concurrent editor. But as of 12 Aug 2026 that commit is **neither in this branch nor merged to trunk**, so editing the file here still produces a merge conflict when both PRs land.
->
-> **Before starting this task, check:** `git merge-base --is-ancestor 8be7e49 HEAD`. If it succeeds, the hotfix is in your history — edit freely. If it fails, first check whether trunk now contains it and merge trunk in; only if it is still unmerged should you write the edit blind, composing with the known changes below and flagging the expected conflict in the PR description.
->
-> **What the hotfix changed, so a later edit composes rather than clobbers:**
-> - Two imports added: `PaymentActionAuthorizer` and `PaymentActionNotAuthorisedException`.
-> - A new block at the **top** of `__invoke()`, immediately after `$actorContext = app(ActorContext::class);` and before the `satisfy()` call, resolving `$actorRole` via `PaymentActionAuthorizer::authorize($actorContext)` and `abort(403)` on `PaymentActionNotAuthorisedException`.
-> - Both `actorRole: 'authenticated_actor'` arguments replaced with `actorRole: $actorRole`.
->
-> **The call ordering is load-bearing and must be preserved:** `authorize()` → `satisfy()` → `validate()` → `findOrFail()` → `verify()`. Authorization must stay **before** `findOrFail()`, or the endpoint becomes an existence oracle over verification ids (403 for a real id, 404 for a fake one). A test named `test_an_unknown_verification_id_is_403_not_404_for_an_unauthorized_actor` fails if this regresses.
->
-> **This endpoint now fails closed for everyone** until an operator grants `finance` or `restricted_admin`; no seeder grants any role. Any test here that exercises the success path must grant a role first — reuse the `grantRole()` / `authorizedUser()` helpers in `tests/Feature/Payment/VerifyManualPaymentRouteTest.php` rather than writing new ones.
->
-> `GuardPaymentSession`, `GuardCondition`, and `ProcessWebhookEvent` were never touched by the hotfix and are safe to modify.
+> **SEQUENCING NOTE (updated 12 Aug 2026).** The original constraint here said to gate editing
+> `VerifyManualPaymentController.php` on `git merge-base --is-ancestor 8be7e49 HEAD`. That SHA
+> never entered trunk — PR #24 was reworked before merging — so the check fails forever even though
+> the hotfix CONTENT is present (the controller carries `PaymentActionAuthorizer` and the ordering
+> authorize → satisfy → validate → findOrFail → verify; `tests/Feature/Payment/VerifyManualPaymentRouteTest.php`
+> carries the `grantRole()`/`authorizedUser()` helpers). The file is safe to edit. Trust the file, not the SHA.
 
 **Files:**
-- Create: `app/Domain/OrderWorkflow/Actions/ApplyPaidEffects.php`, `PaidTrigger.php`
-- Modify: `app/Platform/Payment/ProcessWebhookEvent.php` (call the apply step on a claimed settling event)
-- Modify (**only after the hotfix lands** — see constraint above): `app/Platform/Payment/Http/Controllers/VerifyManualPaymentController.php`
-- Modify: `app/Platform/Audit/SensitiveActions.php` if a new action is ratified
+- Create: `app/Domain/OrderWorkflow/Actions/ApplyPaidEffects.php`, `PaidTrigger.php`, `PaidTriggerSource.php`
+- Modify: `app/Domain/OrderWorkflow/Models/Order.php` — the second authorized door (`stampPaidSource()`)
 - Test: `tests/Feature/OrderWorkflow/ApplyPaidEffectsTest.php`
 
+**Scope rulings (coordinator, 12 Aug 2026 — the task is SHRUNK, not blocked):**
+1. **Do NOT call `Journal::post()`.** It requires an `entity_ref` badan usaha and no column chain
+   reaches one from an `Order` (same `FIN-DEC-01`-class gap as this lane's guard condition 6).
+   A missing decision closes the gate; it does not authorize a guessed implementation. The plan's
+   "two levels of idempotency" rationale below is therefore MOOT: `order_status_events_paid_once`
+   — the partial unique index on `order_status_events (order_id) WHERE to_status = 'DIBAYAR'` — is
+   the SOLE exactly-once mechanism, and it was always the load-bearing one. A duplicate arrival
+   collides, is swallowed, and returns the **same** order — never a second confirmation, never a
+   second stamp, never a second outbox row.
+2. **Do NOT wire either trigger path.** Neither `ProcessWebhookEvent` nor `VerifyManualPaymentController`
+   can resolve a real `Order` today: no `payment_sessions` row is ever created (every guard
+   condition 1-6 denies), and `payment_verifications` carries no order FK. `ApplyPaidEffects`
+   therefore takes an explicit `Order` and a `PaidTrigger` and is callable/testable standalone;
+   both call sites are recorded in its doc block as NOT TESTED gaps. The lane that establishes
+   either linkage wires it then.
+3. **Do NOT add anything to `SensitiveActions::ACTIONS`.** `PAYMENT_MANUAL_VERIFICATION` and
+   `DITOLAK` already cover order rejection and manual-verification approval; adding `DIBAYAR`
+   would make a reason mandatory for every occurrence and break the machine-driven path that has
+   no human to author one.
+
 **Interfaces:**
-- Produces: `PaidTrigger` (readonly: `source` — `webhook|manual_verification`, `sourceId`, `businessKey`, `Money $amount`, `occurredAt`); `ApplyPaidEffects::__invoke(Order $order, PaidTrigger $trigger): Order`.
+- Produces: `PaidTriggerSource` (closed enum, `webhook|manual_verification`); `PaidTrigger` (final
+  readonly: `source`, `sourceId`, `businessKey`, `Money $amount`, `currency`, `occurredAt`,
+  `actorRef`, `actorRole` — the last two deviate from the plan's field list, carried because
+  `RecordOrderStatusChange::__invoke()` takes them non-nullable and a money path must not invent an
+  actor); `ApplyPaidEffects::__invoke(Order $order, PaidTrigger $trigger): Order`.
 
-**Why two levels of idempotency, stated so a reviewer does not "simplify" one away.** `Journal::post()`'s `$businessKey` is UNIQUE and throws on collision, which protects against replay *within* one path. It does **not** protect across paths: an approved manual verification and a late valid webhook for the same order produce `manual_verify:{id}` and `payment:{id}` — two different keys, neither colliding, both posting. The partial unique index on `order_status_events (order_id) WHERE to_status = 'DIBAYAR'` is what makes the cross-path case impossible, and it is a **database** invariant rather than application logic precisely because the race is concurrent.
+**Why the partial unique index is the load-bearing exactly-once mechanism.** `Journal::post()`'s
+`$businessKey` was never a sufficient cross-path guard anyway: an approved manual verification and
+a late valid webhook for the same order produce `manual_verify:{id}` and `payment:{id}` — two
+different keys, neither colliding, both posting. The partial unique index on
+`order_status_events (order_id) WHERE to_status = 'DIBAYAR'` is what makes the cross-path case
+impossible, and it is a **database** invariant rather than application logic precisely because the
+race is concurrent. It is now also the ONLY mechanism, and that is acceptable.
 
-All effects run in one `DB::transaction()`: transition to `DIBAYAR` via `RecordOrderStatusChange`, `Journal::post()` with the source-prefixed business key, stamp `paid_via` + `paid_source_ref`, dispatch the `payment.received.v1` notification. A duplicate arrival collides, is swallowed, and returns the **same** order — never a second confirmation and never a second journal batch.
+All effects run in one `DB::transaction()`: the amount precondition first (must EXACTLY equal the
+current accepted, unexpired quote total in integer minor units and currency — thrown before any
+write), then the transition to `DIBAYAR` via `RecordOrderStatusChange`, the `paid_via` +
+`paid_source_ref` stamp through the new `Order::stampPaidSource()` door (token = the persisted
+`DIBAYAR` event), then the `payment.received.v1` outbox row INSIDE the transaction and AFTER the
+transition — that position is the reason a duplicate can never double-notify. A duplicate arrival
+collides at the transition, is swallowed, and returns the **same** order.
 
-Tests: a webhook applies effects once; a manual verification applies effects once; **the same webhook delivered twice yields one status event and one journal batch**; **a manual verification followed by a webhook for the same order yields one status event and one journal batch** (the cross-path case — this test is the reason the index exists); two concurrent triggers yield exactly one of everything; a failed journal post rolls back the status change entirely; `paid_via` records which trigger won; the amount must equal the accepted quote total.
+Tests: a webhook applies effects once; a manual verification applies effects once; **the same
+webhook delivered twice yields one status event and one outbox row**; **a manual verification
+followed by a webhook for the same order yields one status event and one outbox row** (the
+cross-path case — this test is the reason the index exists); a paid event committed by a competing
+writer returns the same order; a paid trigger on an order that never reached a payable state still
+throws; the amount one minor unit off the quote total (either direction) throws and writes nothing;
+a differing currency throws and writes nothing; a missing / unaccepted / expired quote throws and
+writes nothing; `stampPaidSource()` refuses a non-`DIBAYAR` token, another order's event, and an
+unsaved event; the general `update()` path stays guarded; `paid_via` records which trigger won.
 
-- [ ] **Step 1: Write the failing tests** — one method per bullet, with the cross-path test written first.
-- [ ] **Step 2: Run to verify they fail.**
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run to verify they pass.**
-- [ ] **Step 5: Mutation-check the cross-path guard** — drop the partial index, re-run the cross-path test, confirm it **fails** with two journal batches. Restore.
-- [ ] **Step 6: Commit** — `feat(order-workflow): exactly-once paid effects across webhook and manual paths`
+- [x] **Step 1: Write the failing tests** — one method per bullet, with the cross-path test written first.
+- [x] **Step 2: Run to verify they fail.**
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run to verify they pass.**
+- [x] **Step 5: Mutation-check** — the five load-bearing mutations, each watched fail and restored
+      (see `task-7-report.md`): remove the stamp, drop the `OrderAlreadyPaidException` catch, move
+      the outbox emission before the transition, replace exact-equality with a loose compare, drop
+      the `DIBAYAR`-only token restriction.
+- [x] **Step 6: Commit** — `feat(order-workflow): exactly-once paid effects across webhook and manual paths`
 
 ---
 
