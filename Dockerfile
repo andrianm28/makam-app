@@ -198,9 +198,14 @@ COPY --from=frontend /build/public/build/ ./public/build/
 COPY . .
 
 # Package discovery needs vendor/ present, so it runs here rather than in the
-# vendor stage.
+# vendor stage. `filament:assets` then publishes Filament's panel CSS/JS/fonts
+# into public/ — without it the /admin and /vendor login pages (and every
+# Filament panel page) reference /js/filament/*, /css/filament/* and
+# /fonts/filament/* that 404 in the built image, leaving the panel unstyled
+# and broken (caught by the browser/a11y audit, 13 Aug 2026).
 RUN composer dump-autoload --optimize --no-dev --no-interaction \
-    && php artisan package:discover --ansi
+    && php artisan package:discover --ansi \
+    && php artisan filament:assets --ansi
 
 # Laravel needs these writable. No secret, no APP_KEY, and no .env is baked in —
 # configuration is injected at runtime from secret management
