@@ -10,6 +10,7 @@ use App\Platform\Notification\Providers\NotificationServiceProvider;
 use App\Platform\Payment\Providers\PaymentServiceProvider;
 use App\Providers\AppServiceProvider;
 use App\Providers\Filament\AdminPanelProvider;
+use App\Providers\Filament\VendorPanelProvider;
 
 return [
     AppServiceProvider::class,
@@ -18,6 +19,7 @@ return [
     // cannot run on this host — CI is the first real boot of this class
     // against the actual pinned filament/filament v5.7.3 package).
     AdminPanelProvider::class,
+    VendorPanelProvider::class,
     // FeatureGateServiceProvider's own class-level comment documented this
     // exact missing line since the batch that wrote it (Sprint 3):
     // GateRegistrySource/FeatureGateResolver/ModeResolver bindings existed
