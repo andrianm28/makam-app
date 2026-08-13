@@ -37,13 +37,14 @@ use App\Platform\IdentityAccess\Scopes\ScopeGrantLevel;
  *    payout — is not a business-entity grant and never satisfies this check.
  *
  * ---------------------------------------------------------------------------
- * It fails closed today, and that is not a bug to work around
+ * It fails closed, and that is not a bug to work around
  * ---------------------------------------------------------------------------
- * The current local identity adapter exposes no real roles at all
- * (`ActorContext::$roles` is always `[]` — see that class's own doc block), so
- * this policy refuses every real request until that seam is backed by an
- * authoritative identity source. An empty role list is not interpreted as
- * permission, and a generic privileged grant alone is not enough either.
+ * `ActorContext::$roles` now resolves real granted roles via
+ * `actor_role_assignments` (merged in commit `3dbdcde`, lane L5), so this
+ * policy is genuinely enforcing: an actor holding `finance` plus an active
+ * privileged grant on THIS badan usaha is authorised, and one without is
+ * still refused. An empty role list is not interpreted as permission, and a
+ * generic privileged grant alone is not enough either.
  */
 final class FinanceReconciliationAuthorizer implements ReconciliationAuthorizer
 {
