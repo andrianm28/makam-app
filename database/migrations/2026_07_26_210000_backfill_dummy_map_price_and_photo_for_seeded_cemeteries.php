@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
@@ -18,15 +19,15 @@ use Illuminate\Support\Facades\DB;
  * WHY THIS EXISTS — read this before adding, copying, or "completing" any
  * row below
  * ---------------------------------------------------------------------------
- * The seed migration's own doc block left these columns `null` for every
- * row because, at S4-T1 time, no real cemetery partnership/operator data
- * existed and inventing coordinates/prices/photos for a fictional address
- * would have been fabricated business data. That reasoning has NOT been
- * reversed — it is still true that none of these ten cemeteries is a real,
- * verified operating TPU/TPS. What changed is the DISPLAY CONTEXT this data
- * is for: the user has explicitly authorized filling these columns with
- * clearly-fictional DUMMY/DEMO data so the public directory has something
- * to render end-to-end on `dev.makam.co.id`.
+ * `App\Support\ExampleData\CemeteryExampleData`'s doc block left these
+ * columns `null` for every row because, at S4-T1 time, no real cemetery
+ * partnership/operator data existed and inventing coordinates/prices/photos
+ * for a fictional address would have been fabricated business data. That
+ * reasoning has NOT been reversed — it is still true that none of these ten
+ * cemeteries is a real, verified operating TPU/TPS. What changed is the
+ * DISPLAY CONTEXT this data is for: the user has explicitly authorized
+ * filling these columns with clearly-fictional DUMMY/DEMO data so the
+ * public directory has something to render end-to-end on `dev.makam.co.id`.
  *
  * `dev.makam.co.id` is a real, public, non-production dev environment by
  * deliberate decision (`docs/operations/dev-staging-environment.md` §4,
@@ -37,7 +38,7 @@ use Illuminate\Support\Facades\DB;
  * data is exactly the correct content type for that host — this migration
  * does not claim any of it is real, and every value below is built to read
  * as an example rather than risk being mistaken for verified content
- * later, the same discipline the seed migration itself applied to names/
+ * later, the same discipline `CemeteryExampleData` applied to names/
  * addresses/operator_name.
  *
  * This migration does NOT touch `price_effective_at`'s sibling honesty
@@ -58,7 +59,7 @@ use Illuminate\Support\Facades\DB;
  * Coordinates — rough, city-area-level only, not a street-level lookup
  * ---------------------------------------------------------------------------
  * Every seeded cemetery's address is a fictional "Jl. Contoh ..." street
- * (see the seed migration), so there is no real address to geocode.
+ * (see `CemeteryExampleData`), so there is no real address to geocode.
  * Latitude/longitude below are deliberately rough points within each
  * launch city's general area (2 decimal places — roughly 1 km precision,
  * not the 6-7 decimal precision a real survey-grade or geocoder-derived
@@ -139,105 +140,18 @@ return new class extends Migration
 {
     public function up(): void
     {
-        $now = now();
-
-        // Shape: [slug, latitude, longitude, google_maps_url, price_min,
-        // price_max, primary_photo_path] — price_source is a single literal
-        // shared by every row (see the update() call below), not part of
-        // this per-row tuple.
-        $backfills = [
-            [
-                'tpu-jakarta-menteng', -6.19, 106.83,
-                $this->mapsSearchUrl('TPU Jakarta Menteng', 'Jakarta'),
-                4_000_000.00, 7_500_000.00,
-                'images/cemeteries/illustration-01-gate.svg',
-            ],
-            [
-                'tps-jakarta-kemang', -6.26, 106.81,
-                $this->mapsSearchUrl('TPS Jakarta Kemang', 'Jakarta'),
-                12_000_000.00, 22_000_000.00,
-                'images/cemeteries/illustration-02-grove.svg',
-            ],
-            [
-                'tpu-bogor-bantarjati', -6.57, 106.81,
-                $this->mapsSearchUrl('TPU Bogor Bantarjati', 'Bogor'),
-                3_000_000.00, 6_000_000.00,
-                'images/cemeteries/illustration-03-path.svg',
-            ],
-            [
-                'tps-bogor-cimanggu', -6.63, 106.79,
-                $this->mapsSearchUrl('TPS Bogor Cimanggu', 'Bogor'),
-                9_000_000.00, 16_000_000.00,
-                'images/cemeteries/illustration-04-garden.svg',
-            ],
-            [
-                'tpu-depok-sawangan', -6.38, 106.76,
-                $this->mapsSearchUrl('TPU Depok Sawangan', 'Depok'),
-                3_500_000.00, 6_500_000.00,
-                'images/cemeteries/illustration-01-gate.svg',
-            ],
-            [
-                'tps-depok-cinere', -6.33, 106.77,
-                $this->mapsSearchUrl('TPS Depok Cinere', 'Depok'),
-                10_000_000.00, 18_000_000.00,
-                'images/cemeteries/illustration-02-grove.svg',
-            ],
-            [
-                'tpu-tangerang-cipondoh', -6.19, 106.69,
-                $this->mapsSearchUrl('TPU Tangerang Cipondoh', 'Tangerang'),
-                3_200_000.00, 6_200_000.00,
-                'images/cemeteries/illustration-03-path.svg',
-            ],
-            [
-                'tps-tangerang-karawaci', -6.23, 106.63,
-                $this->mapsSearchUrl('TPS Tangerang Karawaci', 'Tangerang'),
-                8_500_000.00, 15_000_000.00,
-                'images/cemeteries/illustration-04-garden.svg',
-            ],
-            [
-                'tpu-bekasi-jatiasih', -6.27, 106.98,
-                $this->mapsSearchUrl('TPU Bekasi Jatiasih', 'Bekasi'),
-                3_000_000.00, 5_800_000.00,
-                'images/cemeteries/illustration-01-gate.svg',
-            ],
-            [
-                'tps-bekasi-harapan-indah', -6.15, 107.01,
-                $this->mapsSearchUrl('TPS Bekasi Harapan Indah', 'Bekasi'),
-                9_500_000.00, 17_000_000.00,
-                'images/cemeteries/illustration-02-grove.svg',
-            ],
-        ];
-
-        foreach ($backfills as [$slug, $latitude, $longitude, $googleMapsUrl, $priceMin, $priceMax, $photoPath]) {
-            DB::table('cemeteries')->where('slug', $slug)->update([
-                'latitude' => $latitude,
-                'longitude' => $longitude,
-                'google_maps_url' => $googleMapsUrl,
-                'primary_photo_path' => $photoPath,
-                'price_min' => $priceMin,
-                'price_max' => $priceMax,
-                'price_source' => 'Estimasi internal (data contoh)',
-                'price_effective_at' => $now,
-                'updated_at' => $now,
-            ]);
-        }
+        // Dummy/demo backfill for the ten example cemeteries — values are
+        // defined in App\Support\ExampleData\CemeteryExampleData::backfills().
+        CemeteryExampleData::applyBackfill();
     }
 
     public function down(): void
     {
-        $slugs = [
-            'tpu-jakarta-menteng', 'tps-jakarta-kemang',
-            'tpu-bogor-bantarjati', 'tps-bogor-cimanggu',
-            'tpu-depok-sawangan', 'tps-depok-cinere',
-            'tpu-tangerang-cipondoh', 'tps-tangerang-karawaci',
-            'tpu-bekasi-jatiasih', 'tps-bekasi-harapan-indah',
-        ];
-
-        // Restores the seed migration's original honesty-driven NULL state
-        // for these columns — this migration is purely additive dummy/demo
-        // data on top of that migration's real seed rows, so rolling it
-        // back must not delete the cemeteries themselves.
-        DB::table('cemeteries')->whereIn('slug', $slugs)->update([
+        // Restores the seed's original honesty-driven NULL state for these
+        // columns — this migration is purely additive dummy/demo data on top
+        // of the real seed rows, so rolling it back must not delete the
+        // cemeteries themselves.
+        DB::table('cemeteries')->whereIn('slug', CemeteryExampleData::slugs())->update([
             'latitude' => null,
             'longitude' => null,
             'google_maps_url' => null,
@@ -248,16 +162,5 @@ return new class extends Migration
             'price_effective_at' => null,
             'updated_at' => now(),
         ]);
-    }
-
-    /**
-     * A real, working Google Maps text-search URL for the given fictional
-     * cemetery name/city — see this migration's own class-level doc block
-     * ("`google_maps_url` — a real, honest search link") for why this is
-     * the honest choice over a fabricated precise pin-drop link.
-     */
-    private function mapsSearchUrl(string $name, string $city): string
-    {
-        return 'https://www.google.com/maps/search/?api=1&query='.urlencode("{$name}, {$city}, Indonesia");
     }
 };

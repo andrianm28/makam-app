@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Livewire\Public\Renewal;
 
-use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Livewire\Public\Renewal\GraveSearch;
 use App\Platform\FeatureGate\Models\FeatureGate;
+use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
+use Tests\Support\CemeteryFixture;
 use Tests\TestCase;
 
 /**
@@ -59,11 +60,6 @@ final class GraveSearchStatesTest extends TestCase
 
     private const PRIVACY_LIMITED_MARKER = 'aksesnya dibatasi';
 
-    private function cemeteryId(string $slug): string
-    {
-        return (string) Cemetery::query()->where('slug', $slug)->sole()->id;
-    }
-
     private function openTheDataGate(): void
     {
         FeatureGate::query()->where('gate_id', 'G-DATA-01')->update(['state' => 'open']);
@@ -86,7 +82,7 @@ final class GraveSearchStatesTest extends TestCase
         $this->assertNotNull($gate, 'G-DATA-01 must exist in the seeded feature_gates registry.');
         $this->assertSame('closed', $gate->state, 'This suite assumes the real seeded default (closed); update it if that default ever changes.');
 
-        Livewire::withQueryParams(['tpu' => $this->cemeteryId('tpu-jakarta-menteng')])
+        Livewire::withQueryParams(['tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])])
             ->test(GraveSearch::class)
             ->assertOk()
             ->assertSee(self::GATE_CLOSED_MARKER);
@@ -100,7 +96,7 @@ final class GraveSearchStatesTest extends TestCase
      */
     public function test_the_gate_closed_state_explains_itself_and_offers_the_manual_path(): void
     {
-        Livewire::withQueryParams(['tpu' => $this->cemeteryId('tpu-jakarta-menteng')])
+        Livewire::withQueryParams(['tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])])
             ->test(GraveSearch::class)
             ->assertOk()
             ->assertSee(self::GATE_CLOSED_MARKER)
@@ -116,7 +112,7 @@ final class GraveSearchStatesTest extends TestCase
      */
     public function test_the_gate_closed_state_never_implies_the_record_does_not_exist(): void
     {
-        Livewire::withQueryParams(['tpu' => $this->cemeteryId('tpu-jakarta-menteng')])
+        Livewire::withQueryParams(['tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])])
             ->test(GraveSearch::class)
             ->assertSee('Ini tidak berarti data makam yang Anda cari tidak ada.')
             ->assertDontSee(self::NO_RESULT_MARKER)
@@ -130,7 +126,7 @@ final class GraveSearchStatesTest extends TestCase
     public function test_a_closed_gate_runs_no_search_even_when_the_url_carries_search_terms(): void
     {
         Livewire::withQueryParams([
-            'tpu' => $this->cemeteryId('tpu-jakarta-menteng'),
+            'tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
             'nama' => 'Contoh Budi Santoso',
         ])
             ->test(GraveSearch::class)
@@ -142,7 +138,7 @@ final class GraveSearchStatesTest extends TestCase
     {
         $this->openTheDataGate();
 
-        Livewire::withQueryParams(['tpu' => $this->cemeteryId('tpu-jakarta-menteng')])
+        Livewire::withQueryParams(['tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])])
             ->test(GraveSearch::class)
             ->assertOk()
             ->assertDontSee(self::GATE_CLOSED_MARKER)
@@ -163,7 +159,7 @@ final class GraveSearchStatesTest extends TestCase
         $this->openTheDataGate();
 
         Livewire::withQueryParams([
-            'tpu' => $this->cemeteryId('tps-jakarta-kemang'),
+            'tpu' => CemeteryFixture::id(CemeteryExampleData::ALL_RESTRICTED_SLUG),
             'nama' => 'Contoh',
         ])
             ->test(GraveSearch::class)
@@ -182,7 +178,7 @@ final class GraveSearchStatesTest extends TestCase
         $this->openTheDataGate();
 
         Livewire::withQueryParams([
-            'tpu' => $this->cemeteryId('tps-jakarta-kemang'),
+            'tpu' => CemeteryFixture::id(CemeteryExampleData::ALL_RESTRICTED_SLUG),
             'nama' => 'Contoh',
         ])
             ->test(GraveSearch::class)
@@ -202,7 +198,7 @@ final class GraveSearchStatesTest extends TestCase
         $this->openTheDataGate();
 
         Livewire::withQueryParams([
-            'tpu' => $this->cemeteryId('tps-jakarta-kemang'),
+            'tpu' => CemeteryFixture::id(CemeteryExampleData::ALL_RESTRICTED_SLUG),
             'nama' => 'Contoh',
         ])
             ->test(GraveSearch::class)
@@ -224,7 +220,7 @@ final class GraveSearchStatesTest extends TestCase
         $this->openTheDataGate();
 
         Livewire::withQueryParams([
-            'tpu' => $this->cemeteryId('tpu-jakarta-menteng'),
+            'tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
             'nama' => 'Contoh',
         ])
             ->test(GraveSearch::class)
@@ -250,7 +246,7 @@ final class GraveSearchStatesTest extends TestCase
         $this->openTheDataGate();
 
         Livewire::withQueryParams([
-            'tpu' => $this->cemeteryId('tpu-jakarta-menteng'),
+            'tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
             'blok' => 'ZZ-99',
         ])
             ->test(GraveSearch::class)
@@ -286,7 +282,7 @@ final class GraveSearchStatesTest extends TestCase
         $this->openTheDataGate();
 
         Livewire::withQueryParams([
-            'tpu' => $this->cemeteryId('tpu-jakarta-menteng'),
+            'tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
             'blok' => 'ZZ-99',
         ])
             ->test(GraveSearch::class)
@@ -311,7 +307,7 @@ final class GraveSearchStatesTest extends TestCase
         $this->openTheDataGate();
 
         Livewire::withQueryParams([
-            'tpu' => $this->cemeteryId('tpu-jakarta-menteng'),
+            'tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
             'blok' => 'A-12',
         ])
             ->test(GraveSearch::class)
@@ -324,7 +320,7 @@ final class GraveSearchStatesTest extends TestCase
         $this->openTheDataGate();
 
         Livewire::withQueryParams([
-            'tpu' => $this->cemeteryId('tpu-jakarta-menteng'),
+            'tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
             'blok' => 'ZZ-99',
         ])
             ->test(GraveSearch::class)
@@ -366,7 +362,7 @@ final class GraveSearchStatesTest extends TestCase
     {
         $this->openTheDataGate();
 
-        Livewire::withQueryParams(['tpu' => $this->cemeteryId('tpu-jakarta-menteng')])
+        Livewire::withQueryParams(['tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])])
             ->test(GraveSearch::class)
             ->assertOk()
             // The announcement a screen-reader user gets — §6.1: "Every
@@ -389,7 +385,7 @@ final class GraveSearchStatesTest extends TestCase
         $this->openTheDataGate();
 
         Livewire::withQueryParams([
-            'tpu' => $this->cemeteryId('tpu-jakarta-menteng'),
+            'tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
             'blok' => 'A-12',
         ])
             ->test(GraveSearch::class)
@@ -411,7 +407,7 @@ final class GraveSearchStatesTest extends TestCase
         $this->openTheDataGate();
 
         Livewire::withQueryParams([
-            'tpu' => $this->cemeteryId('tpu-jakarta-menteng'),
+            'tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
             'blok' => 'A-12',
         ])
             ->test(GraveSearch::class)
@@ -435,7 +431,7 @@ final class GraveSearchStatesTest extends TestCase
         $this->openTheDataGate();
 
         Livewire::withQueryParams([
-            'tpu' => $this->cemeteryId('tps-jakarta-kemang'),
+            'tpu' => CemeteryFixture::id(CemeteryExampleData::ALL_RESTRICTED_SLUG),
             'nama' => 'Contoh',
         ])
             ->test(GraveSearch::class)
@@ -459,7 +455,7 @@ final class GraveSearchStatesTest extends TestCase
     {
         $this->openTheDataGate();
 
-        Livewire::withQueryParams(['tpu' => $this->cemeteryId('tpu-jakarta-menteng')])
+        Livewire::withQueryParams(['tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])])
             ->test(GraveSearch::class)
             ->assertDontSee(self::NO_RESULT_MARKER)
             ->assertDontSee(self::PRIVACY_LIMITED_MARKER)
@@ -475,7 +471,7 @@ final class GraveSearchStatesTest extends TestCase
     {
         $this->openTheDataGate();
 
-        Livewire::withQueryParams(['tpu' => $this->cemeteryId('tpu-jakarta-menteng')])
+        Livewire::withQueryParams(['tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])])
             ->test(GraveSearch::class)
             ->call('search')
             ->assertHasErrors('name')
@@ -486,7 +482,7 @@ final class GraveSearchStatesTest extends TestCase
     {
         $this->openTheDataGate();
 
-        Livewire::withQueryParams(['tpu' => $this->cemeteryId('tpu-jakarta-menteng')])
+        Livewire::withQueryParams(['tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])])
             ->test(GraveSearch::class)
             ->set('deathDate', '11-04-2018')
             ->call('search')
@@ -520,7 +516,7 @@ final class GraveSearchStatesTest extends TestCase
         // date, but a lenient parser rolls it forward into one.
         foreach (['garbage', '11-04-2018', '2018-13-45', "' OR 1=1 --"] as $tampered) {
             Livewire::withQueryParams([
-                'tpu' => $this->cemeteryId('tpu-jakarta-menteng'),
+                'tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
                 'tanggal' => $tampered,
             ])
                 ->test(GraveSearch::class)
@@ -543,7 +539,7 @@ final class GraveSearchStatesTest extends TestCase
         $this->openTheDataGate();
 
         Livewire::withQueryParams([
-            'tpu' => $this->cemeteryId('tpu-jakarta-menteng'),
+            'tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
             'tanggal' => '2018-04-11',
         ])
             ->test(GraveSearch::class)
@@ -571,7 +567,7 @@ final class GraveSearchStatesTest extends TestCase
     {
         $this->openTheDataGate();
 
-        $cemeteryId = $this->cemeteryId('tpu-jakarta-menteng');
+        $cemeteryId = CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]);
 
         // Safe: RefreshDatabase rolls the whole test transaction back.
         // Children first, in reverse-dependency order: the renewal tables FK
@@ -639,7 +635,7 @@ final class GraveSearchStatesTest extends TestCase
         $this->openTheDataGate();
 
         Livewire::withQueryParams([
-            'tpu' => $this->cemeteryId('tps-bekasi-harapan-indah'),
+            'tpu' => CemeteryFixture::id(CemeteryExampleData::DRAFT_SLUG),
             'nama' => 'Contoh',
         ])
             ->test(GraveSearch::class)
@@ -657,7 +653,7 @@ final class GraveSearchStatesTest extends TestCase
     {
         $this->openTheDataGate();
 
-        $component = Livewire::withQueryParams(['tpu' => $this->cemeteryId('tpu-jakarta-menteng')])
+        $component = Livewire::withQueryParams(['tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])])
             ->test(GraveSearch::class);
 
         foreach (['Kota', 'TPU/TPS', 'Cari Makam', 'Biaya', 'Pembayaran', 'Konfirmasi'] as $label) {
@@ -677,7 +673,7 @@ final class GraveSearchStatesTest extends TestCase
      */
     public function test_the_support_escape_hatch_is_present_in_every_state(): void
     {
-        $cemeteryId = $this->cemeteryId('tpu-jakarta-menteng');
+        $cemeteryId = CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]);
 
         // Gate closed.
         Livewire::withQueryParams(['tpu' => $cemeteryId])
@@ -692,7 +688,7 @@ final class GraveSearchStatesTest extends TestCase
             ->assertSee('/bantuan');
 
         // Privacy limited.
-        Livewire::withQueryParams(['tpu' => $this->cemeteryId('tps-jakarta-kemang'), 'nama' => 'Contoh'])
+        Livewire::withQueryParams(['tpu' => CemeteryFixture::id(CemeteryExampleData::ALL_RESTRICTED_SLUG), 'nama' => 'Contoh'])
             ->test(GraveSearch::class)
             ->assertSee('/bantuan');
     }

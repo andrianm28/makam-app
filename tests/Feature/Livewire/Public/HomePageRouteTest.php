@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Livewire\Public;
 
+use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Platform\Analytics\Models\MenuInteractionEvent;
 use App\Platform\FeatureGate\Models\FeatureGate;
+use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
@@ -159,8 +161,8 @@ final class HomePageRouteTest extends TestCase
      * names (nine published, one draft) with clearly-fictional dummy
      * price/photo/coordinate data, for full public display on
      * `dev.makam.co.id`. This test is flipped accordingly: it now asserts
-     * the nine PUBLISHED fixture names DO appear, and the one DRAFT fixture
-     * (`tps-bekasi-harapan-indah`, per `CemeterySeedTest`) still does not —
+     * the nine PUBLISHED example names DO appear, and the one deliberately
+     * DRAFT example (`CemeteryExampleData::DRAFT_SLUG`) still does not —
      * `Cemetery::published()` filtering the draft row out is itself real
      * production behaviour worth protecting, not just a fixture detail.
      */
@@ -169,37 +171,31 @@ final class HomePageRouteTest extends TestCase
         $response = $this->get('/');
         $response->assertOk();
 
-        // HomePage::render() orders by (city, name) then ->take(6) — with
-        // nine published rows across five cities, the cap lands mid-way
-        // through Jakarta and excludes Tangerang entirely. This list is the
-        // actual first six under that ordering (verified by hand against
-        // CemeterySeedTest's known city/name data, not assumed), not just
-        // "some six names" — a change to the ordering or cap that shifts
-        // this list is exactly the kind of regression this test exists to
-        // catch.
-        $expectedVisibleNames = [
-            'TPU Bekasi Jatiasih',
-            'TPS Bogor Cimanggu',
-            'TPU Bogor Bantarjati',
-            'TPS Depok Cinere',
-            'TPU Depok Sawangan',
-            'TPS Jakarta Kemang',
-        ];
+        // HomePage::render() orders by (city, name) then ->take(6), over
+        // published rows only. The expected list is DERIVED from the
+        // example-data generator under that same ordering, so a change to
+        // the seed data updates the expectation in one place instead of
+        // leaving a frozen name snapshot that drifts from the seed.
+        $published = collect(CemeteryExampleData::cemeteries())
+            ->reject(fn (array $c): bool => $c[7] !== CemeteryPublicationStatus::PUBLISHED)
+            ->sortBy(fn (array $c): array => [$c[3], $c[1]])
+            ->values();
+
+        $expectedVisibleNames = $published->take(6)->pluck(1)->all();
+        $expectedHiddenByCap = $published->skip(6)->pluck(1)->all();
 
         foreach ($expectedVisibleNames as $name) {
             $response->assertSee($name);
         }
 
-        // Excluded by the draft-publication-status scope (Cemetery::
-        // published()), not by the display cap:
-        $response->assertDontSee('TPS Bekasi Harapan Indah');
+        // Excluded by the draft-publication-status scope (Cemetery::published()):
+        $response->assertDontSee(CemeteryExampleData::bySlug(CemeteryExampleData::DRAFT_SLUG)[1]);
 
-        // Excluded purely by the ->take(6) display cap, even though these
-        // are genuinely published rows — asserted here so a future cap
-        // change is a deliberate, visible test update, not silent drift:
-        $response->assertDontSee('TPU Jakarta Menteng');
-        $response->assertDontSee('TPS Tangerang Karawaci');
-        $response->assertDontSee('TPU Tangerang Cipondoh');
+        // Excluded purely by the ->take(6) display cap — asserted here so a
+        // future cap change is a deliberate, visible test update:
+        foreach ($expectedHiddenByCap as $name) {
+            $response->assertDontSee($name);
+        }
     }
 
     public function test_faq_highlights_link_into_the_real_faq_routes(): void

@@ -9,6 +9,7 @@ use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -36,7 +37,7 @@ final class CemeteryPublicQueryTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const DRAFT_SLUG = 'tps-bekasi-harapan-indah';
+    private const DRAFT_SLUG = CemeteryExampleData::DRAFT_SLUG;
 
     /**
      * @param  list<array{code: string, label: string}>  $options
@@ -230,7 +231,7 @@ final class CemeteryPublicQueryTest extends TestCase
 
     public function test_active_packages_returns_a_published_cemeterys_active_packages(): void
     {
-        $cemetery = Cemetery::query()->where('slug', 'tpu-jakarta-menteng')->firstOrFail();
+        $cemetery = Cemetery::query()->where('slug', CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])->firstOrFail();
 
         $this->assertTrue($cemetery->isPublished());
         $this->assertGreaterThan(0, CemeteryPublicQuery::activePackages($cemetery)->count());
@@ -251,7 +252,7 @@ final class CemeteryPublicQueryTest extends TestCase
      */
     public function test_active_packages_returns_empty_for_an_unpublished_cemetery(): void
     {
-        $cemetery = Cemetery::query()->where('slug', 'tpu-jakarta-menteng')->firstOrFail();
+        $cemetery = Cemetery::query()->where('slug', CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])->firstOrFail();
 
         $this->assertGreaterThan(
             0,

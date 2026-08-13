@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Domain\GraveRegistry;
 
-use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\GraveRegistry\GraveRecordProjection;
 use App\Domain\GraveRegistry\GraveRegistryPublicQuery;
 use App\Domain\GraveRegistry\GraveSearchCriteria;
+use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Tests\Support\CemeteryFixture;
 use Tests\TestCase;
 
 /**
@@ -57,15 +58,9 @@ final class GraveRecordTrigramSearchTest extends TestCase
         }
     }
 
-    private function cemeteryId(string $slug): string
-    {
-        return (string) Cemetery::query()->where('slug', $slug)->sole()->id;
-    }
-
     public function test_the_pg_trgm_extension_is_installed_by_the_migration(): void
     {
         $installed = DB::selectOne("SELECT 1 AS ok FROM pg_extension WHERE extname = 'pg_trgm'");
-
         $this->assertNotNull(
             $installed,
             'pg_trgm must exist; 2026_08_08_100000_create_grave_records_table.php creates it.'
@@ -93,7 +88,7 @@ final class GraveRecordTrigramSearchTest extends TestCase
     public function test_a_misspelled_name_still_finds_the_record(): void
     {
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: $this->cemeteryId('tpu-jakarta-menteng'),
+            cemeteryId: CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
             name: 'Budi Santosa',
         ));
 
@@ -117,7 +112,7 @@ final class GraveRecordTrigramSearchTest extends TestCase
     public function test_an_unrelated_name_does_not_match(): void
     {
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: $this->cemeteryId('tpu-jakarta-menteng'),
+            cemeteryId: CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
             name: 'Qxzvwk Mnbvcx',
         ));
 
@@ -149,7 +144,7 @@ final class GraveRecordTrigramSearchTest extends TestCase
         );
 
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: $this->cemeteryId('tpu-jakarta-menteng'),
+            cemeteryId: CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
             name: 'Budi',
         ));
 

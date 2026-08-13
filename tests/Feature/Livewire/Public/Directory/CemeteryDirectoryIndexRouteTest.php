@@ -10,6 +10,7 @@ use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Livewire\Public\Directory\CemeteryDirectoryIndex;
 use App\Livewire\Public\Directory\Support\CemeteryAvailabilityIntent;
+use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
@@ -217,7 +218,7 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
      */
     public function test_a_card_shows_every_ac3_field(): void
     {
-        $cemetery = Cemetery::query()->published()->where('slug', 'tpu-jakarta-menteng')->firstOrFail();
+        $cemetery = Cemetery::query()->published()->where('slug', CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])->firstOrFail();
 
         $response = $this->get(route('cemeteries.index'));
 

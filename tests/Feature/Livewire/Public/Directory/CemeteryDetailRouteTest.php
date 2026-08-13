@@ -8,6 +8,7 @@ use App\Domain\CemeteryCapability\Models\CemeteryCapabilityProfile;
 use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Livewire\Public\Directory\CemeteryDetail;
+use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
@@ -17,16 +18,16 @@ use Tests\TestCase;
  * `/cemeteries/{cemeterySlug}` (route name `cemeteries.show`) — Sprint 4
  * S4-T6, AC3, AC4, AC5, AC6, AC11, AC12.
  *
- * `tpu-jakarta-menteng` is used as the worked example throughout: it is one
- * of the two seeded cemeteries that carry `cemetery_packages` rows, so it
- * exercises AC6's package/class granularity rather than only the empty
- * state.
+ * `CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]` is used as the worked
+ * example throughout: it is one of the two example cemeteries that carry
+ * `cemetery_packages` rows, so it exercises AC6's package/class granularity
+ * rather than only the empty state.
  */
 final class CemeteryDetailRouteTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const string EXAMPLE_SLUG = 'tpu-jakarta-menteng';
+    private const string EXAMPLE_SLUG = CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0];
 
     protected function setUp(): void
     {

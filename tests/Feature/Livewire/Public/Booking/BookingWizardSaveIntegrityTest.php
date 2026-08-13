@@ -11,6 +11,7 @@ use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Livewire\Public\Booking\BookingWizard;
+use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
 use Livewire\Livewire;
@@ -81,7 +82,7 @@ final class BookingWizardSaveIntegrityTest extends TestCase
         // A different Jakarta cemetery — this one has packages, so the
         // corrected choice also carries a package id, which makes the third
         // call differ from the first two in BOTH arguments.
-        $second = Cemetery::query()->where('slug', 'tpu-jakarta-menteng')->firstOrFail();
+        $second = Cemetery::query()->where('slug', CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])->firstOrFail();
         $package = CemeteryPublicQuery::activePackages($second)->firstOrFail();
 
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])

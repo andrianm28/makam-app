@@ -8,14 +8,16 @@ use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * `2026_07_26_190300_seed_cemeteries_and_capability_profiles.php` seeds ten
- * EXAMPLE cemeteries (fictional — see that migration's own doc block),
- * two per launch city. Backs requirements.md AC1 (all five launch cities
- * represented) and AC2 (published/draft filtering).
+ * `App\Support\ExampleData\CemeteryExampleData` generates ten EXAMPLE
+ * cemeteries (fictional — see that class's own doc block), materialized by
+ * `2026_07_26_190300_seed_cemeteries_and_capability_profiles.php` on
+ * `migrate`. Backs requirements.md AC1 (all five launch cities represented)
+ * and AC2 (published/draft filtering).
  */
 final class CemeterySeedTest extends TestCase
 {
@@ -72,7 +74,7 @@ final class CemeterySeedTest extends TestCase
         );
 
         $draft = Cemetery::query()->where('publication_status', CemeteryPublicationStatus::DRAFT)->first();
-        $this->assertSame('tps-bekasi-harapan-indah', $draft?->slug);
+        $this->assertSame(CemeteryExampleData::DRAFT_SLUG, $draft?->slug);
     }
 
     public function test_scope_published_excludes_the_draft_row(): void
@@ -80,7 +82,7 @@ final class CemeterySeedTest extends TestCase
         $published = Cemetery::published()->pluck('slug');
 
         $this->assertCount(9, $published);
-        $this->assertNotContains('tps-bekasi-harapan-indah', $published);
+        $this->assertNotContains(CemeteryExampleData::DRAFT_SLUG, $published);
     }
 
     public function test_scope_in_city_and_scope_of_type_compose_with_published(): void
@@ -88,7 +90,7 @@ final class CemeterySeedTest extends TestCase
         $jakartaTpu = Cemetery::published()->inCity(LaunchCityCode::JAKARTA)->ofType(CemeteryType::TPU)->get();
 
         $this->assertCount(1, $jakartaTpu);
-        $this->assertSame('tpu-jakarta-menteng', $jakartaTpu->first()->slug);
+        $this->assertSame(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0], $jakartaTpu->first()->slug);
     }
 
     /**

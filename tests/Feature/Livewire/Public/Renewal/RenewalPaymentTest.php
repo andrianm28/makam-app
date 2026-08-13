@@ -10,6 +10,7 @@ use App\Domain\Renewal\Models\Renewal;
 use App\Domain\Renewal\Models\RenewalQuote;
 use App\Livewire\Public\Renewal\RenewalPayment;
 use App\Platform\FeatureGate\Models\FeatureGate;
+use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -30,7 +31,7 @@ final class RenewalPaymentTest extends TestCase
 
     private function cemeteryWithPrice(): Cemetery
     {
-        return Cemetery::query()->where('slug', 'tpu-jakarta-menteng')->sole();
+        return Cemetery::query()->where('slug', CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])->sole();
     }
 
     private function createRenewalWithQuote(): Renewal

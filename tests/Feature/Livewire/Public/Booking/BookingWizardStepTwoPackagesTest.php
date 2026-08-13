@@ -10,8 +10,10 @@ use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Livewire\Public\Booking\BookingWizard;
+use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
+use Tests\Support\CemeteryFixture;
 use Tests\TestCase;
 
 /**
@@ -20,25 +22,25 @@ use Tests\TestCase;
  * `SaveBookingDraftStep::validateCemetery()` requires a `cemetery_package_id`
  * whenever the chosen cemetery has active packages
  * (`booking-wizard-fields.md` §Step 2: "package/class when applicable";
- * `cemetery-directory-and-availability` AC6). The seed migration
- * (`2026_07_26_190300_seed_cemeteries_and_capability_profiles.php`) gives
- * active packages to two REAL, PUBLISHED, PICKABLE cemeteries — TPU Jakarta
- * Menteng and TPU Depok Sawangan — so before the picker existed, a visitor
- * who chose either one hit a validation error the screen offered no way to
- * satisfy: an unescapable dead end on the happy path, not an edge case.
+ * `cemetery-directory-and-availability` AC6). The example-data generator
+ * gives active packages to two published, pickable example cemeteries
+ * (`CemeteryExampleData::PACKAGE_CEMETERY_SLUGS`) — so before the picker
+ * existed, a visitor who chose either one hit a validation error the screen
+ * offered no way to satisfy: an unescapable dead end on the happy path, not
+ * an edge case.
  */
 final class BookingWizardStepTwoPackagesTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function menteng(): Cemetery
+    private function packagesCemetery(): Cemetery
     {
-        $cemetery = Cemetery::query()->where('slug', 'tpu-jakarta-menteng')->firstOrFail();
+        $cemetery = CemeteryFixture::cemetery(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]);
 
         $this->assertSame(LaunchCityCode::JAKARTA, $cemetery->city);
         $this->assertTrue(
             CemeteryPublicQuery::activePackages($cemetery)->isNotEmpty(),
-            'Fixture assumption: TPU Jakarta Menteng has active packages.',
+            'Fixture assumption: the packages example cemetery has active packages.',
         );
 
         return $cemetery;
@@ -57,7 +59,7 @@ final class BookingWizardStepTwoPackagesTest extends TestCase
 
     public function test_a_cemetery_with_packages_renders_each_package_as_its_own_choice(): void
     {
-        $cemetery = $this->menteng();
+        $cemetery = $this->packagesCemetery();
         $component = Livewire::test(BookingWizard::class, ['draftId' => $this->draftAtStep2()]);
 
         $component->assertSee($cemetery->name);
@@ -70,17 +72,17 @@ final class BookingWizardStepTwoPackagesTest extends TestCase
 
     public function test_a_package_class_label_is_shown_so_two_classes_of_one_package_are_distinguishable(): void
     {
-        $cemetery = $this->menteng();
+        $cemetery = $this->packagesCemetery();
 
-        // The seed gives Menteng "Makam Tumpang" three times — package-level,
-        // Kelas A and Kelas B. Without the class label they would render as
-        // three identical buttons.
+        // The packages example cemetery gives "Makam Tumpang" three times —
+        // package-level, Kelas A and Kelas B. Without the class label they
+        // would render as three identical buttons.
         $classLabels = CemeteryPublicQuery::activePackages($cemetery)
             ->pluck('class_label')
             ->filter()
             ->values();
 
-        $this->assertNotEmpty($classLabels, 'Fixture assumption: Menteng has at least one class-level package row.');
+        $this->assertNotEmpty($classLabels, 'Fixture assumption: the packages example cemetery has at least one class-level package row.');
 
         $component = Livewire::test(BookingWizard::class, ['draftId' => $this->draftAtStep2()]);
 
@@ -91,7 +93,7 @@ final class BookingWizardStepTwoPackagesTest extends TestCase
 
     public function test_a_cemetery_with_packages_is_never_offered_as_a_bare_whole_card_choice(): void
     {
-        $cemetery = $this->menteng();
+        $cemetery = $this->packagesCemetery();
 
         // The dead end itself: a whole-card `saveStep2('<id>')` with no
         // package argument can only ever be rejected for this cemetery.
@@ -101,7 +103,7 @@ final class BookingWizardStepTwoPackagesTest extends TestCase
 
     public function test_choosing_a_package_advances_to_step_3(): void
     {
-        $cemetery = $this->menteng();
+        $cemetery = $this->packagesCemetery();
         $package = CemeteryPublicQuery::activePackages($cemetery)->firstOrFail();
 
         Livewire::test(BookingWizard::class, ['draftId' => $this->draftAtStep2()])
@@ -113,7 +115,7 @@ final class BookingWizardStepTwoPackagesTest extends TestCase
 
     public function test_the_chosen_package_is_persisted_on_the_draft(): void
     {
-        $cemetery = $this->menteng();
+        $cemetery = $this->packagesCemetery();
         $package = CemeteryPublicQuery::activePackages($cemetery)->firstOrFail();
         $draftId = $this->draftAtStep2();
 
@@ -132,7 +134,7 @@ final class BookingWizardStepTwoPackagesTest extends TestCase
         // The server-side rule the picker exists to satisfy is unchanged —
         // rendering the choice is not the same as trusting the client.
         Livewire::test(BookingWizard::class, ['draftId' => $this->draftAtStep2()])
-            ->call('saveStep2', $this->menteng()->id)
+            ->call('saveStep2', $this->packagesCemetery()->id)
             ->assertHasErrors(['cemetery_package_id'])
             ->assertSet('currentStep', BookingWizardStep::CEMETERY);
     }
@@ -140,12 +142,12 @@ final class BookingWizardStepTwoPackagesTest extends TestCase
     public function test_a_package_belonging_to_another_cemetery_is_rejected(): void
     {
         $foreignPackage = CemeteryPackage::query()
-            ->where('cemetery_id', '!=', $this->menteng()->id)
+            ->where('cemetery_id', '!=', $this->packagesCemetery()->id)
             ->where('is_active', true)
             ->firstOrFail();
 
         Livewire::test(BookingWizard::class, ['draftId' => $this->draftAtStep2()])
-            ->call('saveStep2', $this->menteng()->id, $foreignPackage->id)
+            ->call('saveStep2', $this->packagesCemetery()->id, $foreignPackage->id)
             ->assertHasErrors(['cemetery_package_id']);
     }
 

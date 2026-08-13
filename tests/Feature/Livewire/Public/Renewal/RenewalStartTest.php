@@ -10,6 +10,7 @@ use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\Renewal\RenewalJourneyStep;
 use App\Livewire\Public\Renewal\RenewalStart;
 use App\Platform\FeatureGate\Models\FeatureGate;
+use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
@@ -83,23 +84,35 @@ final class RenewalStartTest extends TestCase
     {
         Livewire::test(RenewalStart::class)
             ->call('selectCity', LaunchCityCode::JAKARTA)
-            ->assertSee('TPU Jakarta Menteng')
-            ->assertSee('TPS Jakarta Kemang')
+            ->assertSee($this->firstPublishedExampleName(LaunchCityCode::JAKARTA))
             // A different city's cemeteries must not leak into the list.
-            ->assertDontSee('TPU Bogor Bantarjati');
+            ->assertDontSee($this->firstPublishedExampleName(LaunchCityCode::BOGOR));
     }
 
     /**
-     * `TPS Bekasi Harapan Indah` is seeded `draft`. Excluding it is real
-     * production behaviour from `Cemetery::scopePublished()`, which
-     * `CemeteryPublicQuery` composes rather than works around.
+     * `CemeteryExampleData::DRAFT_SLUG` is the deliberately-`draft` example
+     * cemetery. Excluding it is real production behaviour from
+     * `Cemetery::scopePublished()`, which `CemeteryPublicQuery` composes
+     * rather than works around.
      */
     public function test_a_draft_cemetery_is_never_offered(): void
     {
         Livewire::test(RenewalStart::class)
             ->call('selectCity', LaunchCityCode::BEKASI)
-            ->assertSee('TPU Bekasi Jatiasih')
-            ->assertDontSee('TPS Bekasi Harapan Indah');
+            ->assertSee($this->firstPublishedExampleName(LaunchCityCode::BEKASI))
+            ->assertDontSee(CemeteryExampleData::bySlug(CemeteryExampleData::DRAFT_SLUG)[1]);
+    }
+
+    /** @return string the first published example cemetery's name in $city. */
+    private function firstPublishedExampleName(string $city): string
+    {
+        foreach (CemeteryExampleData::cemeteries() as [$type, $name, $slug, $cemeteryCity, $address, $operatorName, $facilities, $publicationStatus]) {
+            if ($cemeteryCity === $city && $publicationStatus === CemeteryPublicationStatus::PUBLISHED) {
+                return $name;
+            }
+        }
+
+        $this->fail("No published example cemetery exists for city [{$city}].");
     }
 
     /**
