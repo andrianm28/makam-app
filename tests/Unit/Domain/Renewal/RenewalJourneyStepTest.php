@@ -62,14 +62,13 @@ final class RenewalJourneyStepTest extends TestCase
     }
 
     /**
-     * Sprint 4 builds steps 1-3 only; 4-6 are visible but not reachable
-     * (`docs/planning/sprint-plan.md` §9 puts them in Sprint 13). Asserted
-     * so that a later batch implementing step 4 has to move this line
-     * deliberately.
+     * L8 Task 4 builds step 4 (fee, AC6/AC7), Task 5 builds step 5
+     * (payment, AC8), and Task 6 builds step 6 (confirmation, AC9).
+     * All six steps are now implemented.
      */
-    public function test_only_the_first_three_steps_are_implemented_in_sprint_4(): void
+    public function test_all_six_steps_are_implemented(): void
     {
-        $this->assertSame(RenewalJourneyStep::GRAVE_SEARCH, RenewalJourneyStep::LAST_IMPLEMENTED);
+        $this->assertSame(RenewalJourneyStep::CONFIRMATION, RenewalJourneyStep::LAST_IMPLEMENTED);
     }
 
     public function test_a_step_outside_the_range_is_rejected(): void

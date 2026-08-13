@@ -102,6 +102,14 @@ final class SensitiveActions
         // the same mandatory-reason reasoning applies.
         'SCOPE_GRANT',
         'SCOPE_REVOKE',
+
+        // Added by lane L8 (platform-renewal-completion) Task 7, AC10.
+        // Written by `App\Domain\Renewal\Actions\MarkExternalRenewal`,
+        // the only write path for `renewal_external_markings`. An external
+        // marking without a recorded reason is indistinguishable from one
+        // nobody authorized, so the same mandatory-reason reasoning that
+        // applies to `PAYMENT_REFUND`/`PAYMENT_CHARGEBACK` above applies here.
+        'RENEWAL_EXTERNAL_MARKING',
     ];
 
     public static function requiresReason(string $action): bool

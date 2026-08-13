@@ -316,6 +316,9 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
         Schema::dropIfExists('pre_need_interests');
         Schema::dropIfExists('orders');
         Schema::dropIfExists('booking_drafts');
+        Schema::dropIfExists('renewal_external_markings');
+        Schema::dropIfExists('renewal_quotes');
+        Schema::dropIfExists('renewals');
         Schema::dropIfExists('grave_records');
         Schema::drop('cemetery_capability_profiles');
         Schema::drop('cemetery_packages');

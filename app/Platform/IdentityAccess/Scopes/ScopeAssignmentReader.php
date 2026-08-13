@@ -85,6 +85,49 @@ final class ScopeAssignmentReader
     }
 
     /**
+     * `true` when the actor holds an active (non-revoked) grant on
+     * `$entityType`/`$entityId` AT `$grantLevel` — the level-aware read
+     * `ScopeGrantLevel`'s doc block anticipates ("carried on the row anyway
+     * ... purely as forward-compatible metadata so a future Policy class can
+     * read it without a schema change").
+     *
+     * This is a POLICY-layer read, deliberately separate from
+     * `ScopeAssignmentGlobalScope`'s binary visibility question. Visibility
+     * asks "is this row reachable at all"; a privileged write asks "may this
+     * actor DO this to a row it can already see", and those are the two
+     * distinct enforcement points `platform-identity-and-access` design.md
+     * lists. Callers that only need reachability must keep using
+     * `scopeStringsForActor()` / `ActorContext::hasScope()`.
+     *
+     * A null `grant_level` never satisfies this check. The column is nullable
+     * and most existing rows leave it unset, so treating "unset" as "any
+     * level" would make the check pass for exactly the grants that never
+     * stated an authority — fail closed instead.
+     *
+     * @throws \InvalidArgumentException when `$entityType` is not one of
+     *                                   `ScopeEntityType::KNOWN_TYPES`, or
+     *                                   `$grantLevel` is not one of
+     *                                   `ScopeGrantLevel::KNOWN_LEVELS`.
+     */
+    public function hasGrantAtLevel(
+        int|string $actorIdentifier,
+        string $entityType,
+        int|string $entityId,
+        string $grantLevel,
+    ): bool {
+        ScopeEntityType::assertKnown($entityType);
+        ScopeGrantLevel::assertKnown($grantLevel);
+
+        return ScopeAssignment::query()
+            ->where('actor_identifier', (string) $actorIdentifier)
+            ->where('entity_type', $entityType)
+            ->where('entity_id', (string) $entityId)
+            ->where('grant_level', $grantLevel)
+            ->whereNull('revoked_at')
+            ->exists();
+    }
+
+    /**
      * All of the given actor's active grants, formatted as
      * `"entity_type:entity_id"` strings — the shape `ActorContext::$scopes`
      * and `ActorContext::hasScope()` expect.

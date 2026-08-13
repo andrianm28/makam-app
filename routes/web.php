@@ -16,6 +16,9 @@ use App\Livewire\Public\Legal\TermsOfService;
 use App\Livewire\Public\Marketplace\MarketplaceIndex;
 use App\Livewire\Public\Marketplace\ProductDetail;
 use App\Livewire\Public\Renewal\GraveSearch;
+use App\Livewire\Public\Renewal\RenewalConfirmation;
+use App\Livewire\Public\Renewal\RenewalFee;
+use App\Livewire\Public\Renewal\RenewalPayment;
 use App\Livewire\Public\Renewal\RenewalStart;
 use App\Livewire\Public\Support\HelpCentre;
 use App\Platform\Payment\Http\Controllers\PaymentCancelController;
@@ -159,19 +162,33 @@ Route::get('/cemeteries/{cemeterySlug}', CemeteryDetail::class)->name('cemeterie
 | Replaces `RenewalComingSoon` wholesale, per that stub's own doc block.
 | Paths from information-architecture.md §1's route tree. `/perpanjangan`
 | is Step 1-2 (city, cemetery); `/perpanjangan/cari` is Step 3 (grave
-| search) — steps 4-6 (fee, payment, confirmation) are Sprint 13 per
-| sprint-plan.md §9 and render as real, visible, not-yet-reachable stepper
-| entries rather than being hidden (§6.9: a closed/future gate never
-| removes a required MVP step).
+| search). Steps 4-6 (fee, payment, confirmation) landed with lane L8
+| (docs/superpowers/plans/2026-08-12-platform-renewal-completion.md) and are
+| now real screens — this block previously described them as Sprint 13
+| stepper entries with nothing behind them.
 |
-| Read-only. Both components resolve exclusively through
+| Every one of these five routes is a GET, and none of them writes. Step 4's
+| screen calculates its quote without persisting; the only write on the whole
+| public journey is Domain\Renewal\Actions\OpenRenewal, reached from the
+| family's explicit acceptance (a Livewire action, i.e. a POST) on step 4.
+|
+| AC14 field projection is enforced in the components, not the templates: the
+| directory and search screens resolve through
 | App\Domain\GraveRegistry\GraveRegistryPublicQuery and
-| App\Domain\CemeteryDirectory\CemeteryPublicQuery — never a GraveRecord or
-| Cemetery model directly. G-DATA-01 is read server-side via ModeResolver,
-| matching every other gated surface in this codebase.
+| App\Domain\CemeteryDirectory\CemeteryPublicQuery, and the fee screen reduces
+| its grave to a GraveRecordProjection before anything renders, so no public
+| surface holds a GraveRecord model. G-DATA-01 is read server-side via
+| ModeResolver, matching every other gated surface in this codebase.
+|
+| Steps 5 and 6 are reached by an unguessable renewal UUID and are readable by
+| whoever holds it — deliberate for an anonymous journey with no accounts, and
+| bounded by the fact that neither screen projects any grave record field.
 */
 Route::get('/perpanjangan', RenewalStart::class)->name('perpanjangan.index');
 Route::get('/perpanjangan/cari', GraveSearch::class)->name('perpanjangan.cari');
+Route::get('/perpanjangan/biaya', RenewalFee::class)->name('perpanjangan.biaya');
+Route::get('/perpanjangan/pembayaran', RenewalPayment::class)->name('perpanjangan.pembayaran');
+Route::get('/perpanjangan/konfirmasi', RenewalConfirmation::class)->name('perpanjangan.konfirmasi');
 
 /*
 |--------------------------------------------------------------------------
