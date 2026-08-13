@@ -312,6 +312,110 @@ jobs:
         run: npm audit --audit-level=high || true # TODO: fail once the baseline is clean
 
   # ---------------------------------------------------------------------------
+  # Browser + accessibility smoke test (Playwright + @axe-core/playwright).
+  # Proves the harness works end to end against the real homepage: a full
+  # dependency install, a migrated database in the postgres service container,
+  # a real asset build (the public layout's `@vite(...)` call throws without a
+  # manifest or a running dev server — see resources/views/layouts/app.blade.php),
+  # and `php artisan serve` in the background on :8080. Standalone: this job
+  # only depends on verify-versions and a failure here fails only itself, never
+  # the jobs build-image needs.
+  # ---------------------------------------------------------------------------
+  browser-test:
+    name: Browser + a11y smoke test (Playwright)
+    runs-on: ubuntu-latest
+    needs: [verify-versions]
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: makam_test
+          POSTGRES_PASSWORD: makam_test
+          POSTGRES_DB: makam_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U makam_test"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:8.2-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s --health-timeout 3s --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          extensions: pdo_pgsql, pgsql, redis, zip, intl, bcmath
+          tools: composer:v2
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install PHP dependencies from lockfile
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Install npm dependencies from lockfile
+        run: npm ci --no-audit --no-fund
+
+      - name: Create the extensions the application depends on
+        env:
+          PGPASSWORD: makam_test
+        run: |
+          psql -h 127.0.0.1 -U makam_test -d makam_test \
+            -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm;' \
+            -c 'CREATE EXTENSION IF NOT EXISTS unaccent;'
+
+      - name: Prepare test environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+        env:
+          DB_CONNECTION: pgsql
+
+      - name: Migrate the application database
+        run: php artisan migrate --force
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: makam_test
+          DB_USERNAME: makam_test
+          DB_PASSWORD: makam_test
+
+      - name: Build assets
+        run: npm run build
+
+      - name: Install Playwright browser binaries
+        run: npx playwright install --with-deps chromium
+
+      - name: Serve the app and run the browser smoke test
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: makam_test
+          DB_USERNAME: makam_test
+          DB_PASSWORD: makam_test
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:8080
+        run: |
+          PHP_CLI_SERVER_WORKERS=4 php artisan serve --host=127.0.0.1 --port=8080 > /tmp/artisan-serve.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8080/ > /dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8080/ > /dev/null \
+            || { echo "app did not come up"; cat /tmp/artisan-serve.log; exit 1; }
+          npm run test:browser
+
+  # ---------------------------------------------------------------------------
   # Build the immutable artifact/image and push it to GHCR (ci-cd-and-release.md
   # §2 "build immutable artifact/image", §10 combined dev/staging profile: "The
   # Ubuntu 22.04 2/4 host receives a prebuilt immutable artifact/image" — the

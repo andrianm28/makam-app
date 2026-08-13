@@ -8,10 +8,13 @@
     "scripts": {
         "build": "vite build",
         "dev": "vite",
+        "test:browser": "playwright test",
         "verify:contrast": "python3 docs/design/verify-contrast.py",
         "verify:docs": "bash ci/verify-docs.sh"
     },
     "devDependencies": {
+        "@axe-core/playwright": "^4.13.0",
+        "@playwright/test": "^1.62.1",
         "@tailwindcss/vite": "^4.1",
         "laravel-vite-plugin": "^2.0",
         "tailwindcss": "^4.1",

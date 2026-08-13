@@ -83,3 +83,9 @@ ekspektasi-user
 # covers the normal case). Does not touch docs/superpowers/plans/, which
 # is intentionally committed.
 /.superpowers/
+
+# Playwright browser/a11y harness outputs
+/test-results/
+/playwright-report/
+/blob-report/
+/public/hot
