@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Booking\Actions;
 
+use App\Domain\Booking\BookingDraftBinding;
 use App\Domain\Booking\Models\BookingDraft;
 use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
@@ -37,14 +38,24 @@ final readonly class StartBookingDraft
                 'user_id' => $userId,
             ]);
 
+            // The draft id travels in the URL and is therefore not a secret.
+            // Bind the draft to this session before anything can be written
+            // onto it, so the PII captured from Step 6 onward is reachable
+            // only by the session that started the booking.
+            BookingDraftBinding::issue($draft);
+
             // `platform-outbox` AC1: the event and the state mutation commit
             // or roll back together. Inside the transaction this Action
             // already opened — deliberately not a second one.
             //
             // Event name: `docs/contracts/event-catalog.md` has no entry for
             // a booking-draft-started event. Its one booking row is
-            // `booking.draft_submitted.v2`, a Step 9 SUBMISSION event, and
-            // Step 9 is unbuilt (`BookingWizardStep::LAST_IMPLEMENTED` is 5).
+            // `booking.draft_submitted.v2`, the SUBMISSION event that Step 9
+            // would emit when a draft is turned into an order — and that
+            // submission Action is still unbuilt, owned by the L7
+            // order-orchestration lane (`BookingWizardStep::LAST_IMPLEMENTED`
+            // reaching 9 means only the confirmation SCREEN exists; it reads
+            // a draft and shows a placeholder, it does not submit).
             // Per AC3 this Action does not invent a catalogue entry; it emits
             // a clearly-provisional name following the catalogue's own
             // `noun.verb_past_tense.vN` convention, and the gap is recorded

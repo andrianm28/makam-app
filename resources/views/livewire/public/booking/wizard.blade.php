@@ -1,4 +1,49 @@
+{{--
+    resources/views/livewire/public/booking/wizard.blade.php
+
+    --- Why the Step 6/7/8 form controls are hand-written, not <x-mk.field> ---
+    Exactly the reason resources/views/livewire/public/renewal/grave-search.blade.php
+    gives for its own inputs, and this file follows that precedent rather
+    than inventing a third pattern: <x-mk.field> merges $attributes onto its
+    OUTER wrapping <div> only; its inner <input>/<select>/<textarea> has a
+    closed attribute list and never spreads $attributes, so a `wire:model`
+    handed to it lands on a <div> that never fires an input/change event and
+    the binding silently does nothing.
+
+    Every class string in $mkControl / $mkControlTextarea / $mkControlIdle /
+    $mkControlError / $mkCheckbox below is copied verbatim from
+    resources/views/components/mk/field.blade.php's own
+    $controlBase / $stateClasses / checkbox composition. No new design value
+    is introduced here, and in particular the idle border is
+    `border-neutral-450` — NOT `neutral-300`, which measures 1.71:1 and fails
+    WCAG 1.4.11 for a control boundary (design-system.md §7.1 finding #2).
+    They live in one block instead of being retyped per field so the whole
+    step 6-8 form cannot drift field by field; they are still literal strings
+    in this file, which is what Tailwind's scanner needs.
+--}}
 <div class="py-8 md:py-12">
+    @php
+        $mkControl = 'h-11 w-full rounded-md border bg-neutral-0 px-4 text-base text-neutral-900
+            placeholder:text-neutral-500
+            transition-[border-color,box-shadow] duration-fast ease-standard
+            focus:outline-none focus:ring-2 focus:ring-offset-1';
+
+        $mkControlTextarea = 'min-h-24 w-full rounded-md border bg-neutral-0 px-4 py-3 text-base text-neutral-900
+            placeholder:text-neutral-500
+            transition-[border-color,box-shadow] duration-fast ease-standard
+            focus:outline-none focus:ring-2 focus:ring-offset-1';
+
+        $mkControlIdle = 'border-neutral-450 hover:border-neutral-600 focus:border-primary-600 focus:ring-primary-600';
+
+        $mkControlError = 'border-danger-600 focus:border-danger-600 focus:ring-danger-600';
+
+        $mkCheckbox = 'size-5 shrink-0 rounded-xs border bg-neutral-0 text-primary-600
+            transition-[border-color,box-shadow] duration-fast ease-standard
+            focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary-600';
+
+        $mkFieldState = static fn (bool $invalid): string => $invalid ? $mkControlError : $mkControlIdle;
+    @endphp
+
     <div class="mx-auto max-w-content px-4">
 
         {{-- NO `:labels` — see stepper.blade.php's own file header: passing
@@ -6,6 +51,36 @@
              design-system.md §9.2 MUST-NOT 9. The primitive's default IS the
              nine canonical booking labels. --}}
         <x-mk.stepper :step="$currentStep" class="mb-8" />
+
+        {{-- Autosave indicator — design-system.md §3.9 ("a quiet inline
+             indicator NEAR THE STEPPER, not a toast") and §7.4 ("Autosave:
+             aria-live='polite' region; never steals focus").
+
+             THE WRAPPER IS ALWAYS PRESENT and always the live region; the
+             conditional alert goes INSIDE it. A region that only appears
+             together with its message is often not announced at all, because
+             the assistive technology never observed it becoming non-empty.
+             BookingWizardAccessibilityTest guards both halves of this: the
+             region exists, and it is never a toast role.
+
+             The alerts inside carry `live="off"` on purpose. <x-mk.alert>
+             would otherwise emit its own role="status" aria-live="polite"
+             (or role="alert" for `assertive`) INSIDE this region, and a live
+             region nested in a live region is announced twice — the exact
+             regression this replaces. One region, one announcement. It also
+             replaces the separate bottom-of-page banner AND the duplicate
+             "Draft tersimpan" alert that step 9 rendered for the same state. --}}
+        <div aria-live="polite" class="mb-6">
+            @if ($autosaveState === 'saved')
+                <x-mk.alert intent="success" title="Tersimpan" icon="check-circle" live="off">
+                    Data pemesanan Anda telah disimpan. Anda dapat kembali ke langkah sebelumnya tanpa kehilangan data.
+                </x-mk.alert>
+            @elseif ($autosaveState === 'failed')
+                <x-mk.alert intent="danger" title="Gagal menyimpan" icon="exclamation-triangle" live="off">
+                    Data Anda belum tersimpan. Silakan periksa isian di bawah, lalu coba lagi.
+                </x-mk.alert>
+            @endif
+        </div>
 
         <div class="mx-auto mb-8 max-w-prose space-y-2 text-center">
             <h1 class="text-3xl font-semibold tracking-tight text-neutral-900">
@@ -23,9 +98,16 @@
                 </h2>
 
                 @if ($cities === [])
-                    <p class="text-base text-neutral-600">
-                        Belum ada kota yang tersedia.
-                    </p>
+                    <div class="flex flex-col items-center gap-3 py-12 text-center">
+                        <x-dynamic-component component="icon.inbox" class="size-12 text-neutral-400" aria-hidden="true" />
+                        <h3 class="text-lg font-semibold text-neutral-800">
+                            Belum ada kota yang tersedia.
+                        </h3>
+                        <p class="max-w-prose text-base text-neutral-600">
+                            Saat ini belum ada kota yang melayani pemesanan. Silakan hubungi
+                            <a href="/bantuan" class="underline">Bantuan</a> untuk informasi lebih lanjut.
+                        </p>
+                    </div>
                 @else
                     <ul class="flex flex-wrap gap-3" aria-label="Kota peluncuran">
                         @foreach ($cities as $cityOption)
@@ -286,6 +368,705 @@
                     Kembali
                 </x-mk.button>
             </section>
+        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::CUSTOMER_DATA)
+            <section aria-labelledby="booking-step-6-heading">
+                <h2 id="booking-step-6-heading" class="mb-3 text-lg font-semibold text-neutral-900">
+                    Langkah 6 &mdash; Data Pemesan
+                </h2>
+
+                <p class="mb-5 max-w-prose text-base text-neutral-600">
+                    Data ini kami gunakan untuk menghubungi Anda dan mengurus pemesanan.
+                    Isian bertanda <span class="text-danger-600" aria-hidden="true">*</span> wajib diisi.
+                </p>
+
+                <form wire:submit="saveStep6" class="flex max-w-form flex-col gap-5">
+                    <div class="flex flex-col gap-1.5">
+                        <label for="customer-full-name" class="text-base font-medium text-neutral-800">
+                            Nama Lengkap
+                            <span class="text-danger-600" aria-hidden="true">*</span>
+                            <span class="sr-only">(wajib diisi)</span>
+                        </label>
+                        <input
+                            type="text"
+                            id="customer-full-name"
+                            wire:model="customerFullName"
+                            autocomplete="name"
+                            @if ($errors->has('customer_full_name')) aria-invalid="true" aria-describedby="customer-full-name-error" @endif
+                            class="{{ $mkControl }} {{ $mkFieldState($errors->has('customer_full_name')) }}"
+                        >
+                        @error('customer_full_name')
+                            <p id="customer-full-name-error" class="flex items-start gap-1.5 text-sm text-danger-700" role="alert">
+                                <x-dynamic-component component="icon.alert-circle" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                                <span>{{ $message }}</span>
+                            </p>
+                        @enderror
+                    </div>
+
+                    <div class="flex flex-col gap-1.5">
+                        <label for="customer-mobile" class="text-base font-medium text-neutral-800">
+                            Nomor HP
+                            <span class="text-danger-600" aria-hidden="true">*</span>
+                            <span class="sr-only">(wajib diisi)</span>
+                        </label>
+                        <p id="customer-mobile-hint" class="text-sm text-neutral-600">
+                            Nomor yang aktif dan dapat kami hubungi, contoh 0812xxxxxxx atau +62812xxxxxxx.
+                        </p>
+                        <input
+                            type="tel"
+                            id="customer-mobile"
+                            wire:model="customerMobile"
+                            autocomplete="tel"
+                            inputmode="tel"
+                            aria-describedby="customer-mobile-hint{{ $errors->has('customer_mobile') ? ' customer-mobile-error' : '' }}"
+                            @if ($errors->has('customer_mobile')) aria-invalid="true" @endif
+                            class="{{ $mkControl }} {{ $mkFieldState($errors->has('customer_mobile')) }}"
+                        >
+                        @error('customer_mobile')
+                            <p id="customer-mobile-error" class="flex items-start gap-1.5 text-sm text-danger-700" role="alert">
+                                <x-dynamic-component component="icon.alert-circle" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                                <span>{{ $message }}</span>
+                            </p>
+                        @enderror
+                    </div>
+
+                    <div class="flex flex-col gap-1.5">
+                        <label for="customer-email" class="text-base font-medium text-neutral-800">
+                            Email
+                            <span class="text-danger-600" aria-hidden="true">*</span>
+                            <span class="sr-only">(wajib diisi)</span>
+                        </label>
+                        <input
+                            type="email"
+                            id="customer-email"
+                            wire:model="customerEmail"
+                            autocomplete="email"
+                            inputmode="email"
+                            @if ($errors->has('customer_email')) aria-invalid="true" aria-describedby="customer-email-error" @endif
+                            class="{{ $mkControl }} {{ $mkFieldState($errors->has('customer_email')) }}"
+                        >
+                        @error('customer_email')
+                            <p id="customer-email-error" class="flex items-start gap-1.5 text-sm text-danger-700" role="alert">
+                                <x-dynamic-component component="icon.alert-circle" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                                <span>{{ $message }}</span>
+                            </p>
+                        @enderror
+                    </div>
+
+                    <div class="flex flex-col gap-1.5">
+                        <label for="customer-address" class="text-base font-medium text-neutral-800">
+                            Alamat Lengkap
+                            <span class="text-danger-600" aria-hidden="true">*</span>
+                            <span class="sr-only">(wajib diisi)</span>
+                        </label>
+                        <textarea
+                            id="customer-address"
+                            wire:model="customerAddress"
+                            rows="3"
+                            autocomplete="street-address"
+                            @if ($errors->has('customer_address')) aria-invalid="true" aria-describedby="customer-address-error" @endif
+                            class="{{ $mkControlTextarea }} {{ $mkFieldState($errors->has('customer_address')) }}"
+                        ></textarea>
+                        @error('customer_address')
+                            <p id="customer-address-error" class="flex items-start gap-1.5 text-sm text-danger-700" role="alert">
+                                <x-dynamic-component component="icon.alert-circle" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                                <span>{{ $message }}</span>
+                            </p>
+                        @enderror
+                    </div>
+
+                    {{-- The stored codes are SCREAMING_SNAKE (`ORANG_TUA`);
+                         `value=` keeps them, the visible text never shows
+                         them. Same rule for every other closed list below. --}}
+                    <div class="flex flex-col gap-1.5">
+                        <label for="customer-relationship" class="text-base font-medium text-neutral-800">
+                            Hubungan dengan Almarhum
+                            <span class="text-danger-600" aria-hidden="true">*</span>
+                            <span class="sr-only">(wajib diisi)</span>
+                        </label>
+                        <select
+                            id="customer-relationship"
+                            wire:model="customerRelationship"
+                            @if ($errors->has('customer_relationship')) aria-invalid="true" aria-describedby="customer-relationship-error" @endif
+                            class="{{ $mkControl }} {{ $mkFieldState($errors->has('customer_relationship')) }}"
+                        >
+                            <option value="">Pilih hubungan</option>
+                            @foreach (\App\Domain\Booking\BookingRelationshipCode::KNOWN_CODES as $rel)
+                                <option value="{{ $rel }}">{{ \App\Domain\Booking\BookingRelationshipCode::label($rel) }}</option>
+                            @endforeach
+                        </select>
+                        @error('customer_relationship')
+                            <p id="customer-relationship-error" class="flex items-start gap-1.5 text-sm text-danger-700" role="alert">
+                                <x-dynamic-component component="icon.alert-circle" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                                <span>{{ $message }}</span>
+                            </p>
+                        @enderror
+                    </div>
+
+                    <div class="flex flex-col gap-1.5">
+                        <label for="customer-contact-channel" class="text-base font-medium text-neutral-800">
+                            Saluran Kontak yang Disukai
+                            <span class="text-danger-600" aria-hidden="true">*</span>
+                            <span class="sr-only">(wajib diisi)</span>
+                        </label>
+                        <p id="customer-contact-channel-hint" class="text-sm text-neutral-600">
+                            Tim kami akan menghubungi Anda lebih dahulu melalui saluran ini.
+                        </p>
+                        <select
+                            id="customer-contact-channel"
+                            wire:model="customerContactChannel"
+                            aria-describedby="customer-contact-channel-hint{{ $errors->has('customer_contact_channel') ? ' customer-contact-channel-error' : '' }}"
+                            @if ($errors->has('customer_contact_channel')) aria-invalid="true" @endif
+                            class="{{ $mkControl }} {{ $mkFieldState($errors->has('customer_contact_channel')) }}"
+                        >
+                            <option value="">Pilih saluran</option>
+                            @foreach (\App\Domain\Booking\BookingContactChannel::KNOWN_CODES as $ch)
+                                <option value="{{ $ch }}">{{ \App\Domain\Booking\BookingContactChannel::label($ch) }}</option>
+                            @endforeach
+                        </select>
+                        @error('customer_contact_channel')
+                            <p id="customer-contact-channel-error" class="flex items-start gap-1.5 text-sm text-danger-700" role="alert">
+                                <x-dynamic-component component="icon.alert-circle" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                                <span>{{ $message }}</span>
+                            </p>
+                        @enderror
+                    </div>
+
+                    {{-- field.blade.php's checkbox rule: a 20px visual box
+                         (`size-5`) inside a 44px clickable row, and the WHOLE
+                         row is the label target, not just the box. --}}
+                    <div class="flex flex-col gap-1.5">
+                        <label for="privacy-notice-accepted" class="flex min-h-11 cursor-pointer items-start gap-3 py-2 select-none">
+                            <input
+                                type="checkbox"
+                                id="privacy-notice-accepted"
+                                wire:model="privacyNoticeAccepted"
+                                aria-describedby="privacy-notice-accepted-hint{{ $errors->has('privacy_notice_accepted') ? ' privacy-notice-accepted-error' : '' }}"
+                                @if ($errors->has('privacy_notice_accepted')) aria-invalid="true" @endif
+                                class="{{ $mkCheckbox }} mt-0.5 {{ $errors->has('privacy_notice_accepted') ? 'border-danger-600' : 'border-neutral-450' }}"
+                            >
+                            <span class="text-base text-neutral-800">
+                                Saya menyetujui
+                                <a href="{{ route('legal.privacy') }}" target="_blank" rel="noopener" class="font-medium text-primary-700 underline underline-offset-2">
+                                    Pemberitahuan Privasi
+                                </a>
+                                dan pemrosesan data pribadi saya serta data almarhum untuk keperluan pemesanan ini.
+                                <span class="text-danger-600" aria-hidden="true">*</span>
+                                <span class="sr-only">(wajib diisi)</span>
+                            </span>
+                        </label>
+                        <p id="privacy-notice-accepted-hint" class="pl-8 text-sm text-neutral-600">
+                            Persetujuan ini dapat Anda tarik kembali dengan menghubungi Bantuan.
+                        </p>
+                        @error('privacy_notice_accepted')
+                            <p id="privacy-notice-accepted-error" class="flex items-start gap-1.5 pl-8 text-sm text-danger-700" role="alert">
+                                <x-dynamic-component component="icon.alert-circle" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                                <span>{{ $message }}</span>
+                            </p>
+                        @enderror
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-3">
+                        <x-mk.button
+                            variant="tertiary"
+                            type="button"
+                            wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::SUMMARY }})"
+                            wire:loading.attr="disabled"
+                            wire:target="saveStep6"
+                        >
+                            Kembali
+                        </x-mk.button>
+                        {{-- `wire:target` names the method this control really
+                             calls. Without it the disable is either too broad
+                             or, worse, silently never applies — and a live
+                             submit button on a grief-adjacent form is a double
+                             submission waiting to happen. --}}
+                        <x-mk.button
+                            variant="primary"
+                            type="submit"
+                            wire:loading.attr="disabled"
+                            wire:target="saveStep6"
+                        >
+                            Lanjutkan
+                        </x-mk.button>
+                        <span wire:loading wire:target="saveStep6" role="status" class="flex items-center gap-2 text-sm text-neutral-600">
+                            <x-mk.spinner class="size-4" aria-hidden="true" />
+                            Menyimpan data pemesan&hellip;
+                        </span>
+                    </div>
+                </form>
+            </section>
+        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::DECEASED_DATA)
+            <section aria-labelledby="booking-step-7-heading">
+                <h2 id="booking-step-7-heading" class="mb-3 text-lg font-semibold text-neutral-900">
+                    Langkah 7 &mdash; Data Almarhum
+                </h2>
+
+                <p class="mb-5 max-w-prose text-base text-neutral-600">
+                    Isi sebisa Anda. Jika ada data yang belum Anda ketahui secara pasti, tim kami akan
+                    membantu melengkapinya saat menghubungi Anda.
+                    Isian bertanda <span class="text-danger-600" aria-hidden="true">*</span> wajib diisi.
+                </p>
+
+                <form wire:submit="saveStep7" class="flex max-w-form flex-col gap-5">
+                    <div class="flex flex-col gap-1.5">
+                        <label for="deceased-full-name" class="text-base font-medium text-neutral-800">
+                            Nama Lengkap Almarhum
+                            <span class="text-danger-600" aria-hidden="true">*</span>
+                            <span class="sr-only">(wajib diisi)</span>
+                        </label>
+                        <input
+                            type="text"
+                            id="deceased-full-name"
+                            wire:model="deceasedFullName"
+                            @if ($errors->has('deceased_full_name')) aria-invalid="true" aria-describedby="deceased-full-name-error" @endif
+                            class="{{ $mkControl }} {{ $mkFieldState($errors->has('deceased_full_name')) }}"
+                        >
+                        @error('deceased_full_name')
+                            <p id="deceased-full-name-error" class="flex items-start gap-1.5 text-sm text-danger-700" role="alert">
+                                <x-dynamic-component component="icon.alert-circle" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                                <span>{{ $message }}</span>
+                            </p>
+                        @enderror
+                    </div>
+
+                    {{-- One column below `sm`: two date inputs side by side at
+                         320px leaves neither usable (§7.6, 320px first). --}}
+                    <div class="grid gap-5 sm:grid-cols-2">
+                        <div class="flex flex-col gap-1.5">
+                            <label for="deceased-date-of-birth" class="text-base font-medium text-neutral-800">
+                                Tanggal Lahir
+                                <span class="text-danger-600" aria-hidden="true">*</span>
+                                <span class="sr-only">(wajib diisi)</span>
+                            </label>
+                            <input
+                                type="date"
+                                id="deceased-date-of-birth"
+                                wire:model="deceasedDateOfBirth"
+                                @if ($errors->has('deceased_date_of_birth')) aria-invalid="true" aria-describedby="deceased-date-of-birth-error" @endif
+                                class="{{ $mkControl }} {{ $mkFieldState($errors->has('deceased_date_of_birth')) }}"
+                            >
+                            @error('deceased_date_of_birth')
+                                <p id="deceased-date-of-birth-error" class="flex items-start gap-1.5 text-sm text-danger-700" role="alert">
+                                    <x-dynamic-component component="icon.alert-circle" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                                    <span>{{ $message }}</span>
+                                </p>
+                            @enderror
+                        </div>
+
+                        <div class="flex flex-col gap-1.5">
+                            <label for="deceased-date-of-death" class="text-base font-medium text-neutral-800">
+                                Tanggal Meninggal
+                                <span class="text-danger-600" aria-hidden="true">*</span>
+                                <span class="sr-only">(wajib diisi)</span>
+                            </label>
+                            <input
+                                type="date"
+                                id="deceased-date-of-death"
+                                wire:model="deceasedDateOfDeath"
+                                @if ($errors->has('deceased_date_of_death')) aria-invalid="true" aria-describedby="deceased-date-of-death-error" @endif
+                                class="{{ $mkControl }} {{ $mkFieldState($errors->has('deceased_date_of_death')) }}"
+                            >
+                            @error('deceased_date_of_death')
+                                <p id="deceased-date-of-death-error" class="flex items-start gap-1.5 text-sm text-danger-700" role="alert">
+                                    <x-dynamic-component component="icon.alert-circle" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                                    <span>{{ $message }}</span>
+                                </p>
+                            @enderror
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col gap-1.5">
+                        <label for="deceased-relationship" class="text-base font-medium text-neutral-800">
+                            Hubungan dengan Pemesan
+                            <span class="text-danger-600" aria-hidden="true">*</span>
+                            <span class="sr-only">(wajib diisi)</span>
+                        </label>
+                        <select
+                            id="deceased-relationship"
+                            wire:model="deceasedRelationship"
+                            @if ($errors->has('deceased_relationship')) aria-invalid="true" aria-describedby="deceased-relationship-error" @endif
+                            class="{{ $mkControl }} {{ $mkFieldState($errors->has('deceased_relationship')) }}"
+                        >
+                            <option value="">Pilih hubungan</option>
+                            @foreach (\App\Domain\Booking\BookingRelationshipCode::KNOWN_CODES as $rel)
+                                <option value="{{ $rel }}">{{ \App\Domain\Booking\BookingRelationshipCode::label($rel) }}</option>
+                            @endforeach
+                        </select>
+                        @error('deceased_relationship')
+                            <p id="deceased-relationship-error" class="flex items-start gap-1.5 text-sm text-danger-700" role="alert">
+                                <x-dynamic-component component="icon.alert-circle" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                                <span>{{ $message }}</span>
+                            </p>
+                        @enderror
+                    </div>
+
+                    <div class="flex flex-col gap-1.5">
+                        <label for="deceased-gender" class="text-base font-medium text-neutral-800">
+                            Jenis Kelamin
+                            <span class="font-normal text-neutral-600">(opsional)</span>
+                        </label>
+                        <select
+                            id="deceased-gender"
+                            wire:model="deceasedGender"
+                            @if ($errors->has('deceased_gender')) aria-invalid="true" aria-describedby="deceased-gender-error" @endif
+                            class="{{ $mkControl }} {{ $mkFieldState($errors->has('deceased_gender')) }}"
+                        >
+                            <option value="">Tidak diisi</option>
+                            @foreach (\App\Domain\Booking\BookingGender::KNOWN_CODES as $g)
+                                <option value="{{ $g }}">{{ \App\Domain\Booking\BookingGender::label($g) }}</option>
+                            @endforeach
+                        </select>
+                        @error('deceased_gender')
+                            <p id="deceased-gender-error" class="flex items-start gap-1.5 text-sm text-danger-700" role="alert">
+                                <x-dynamic-component component="icon.alert-circle" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                                <span>{{ $message }}</span>
+                            </p>
+                        @enderror
+                    </div>
+
+                    {{-- This block used to list a death certificate, a KTP and
+                         a KK, and to say "Dokumen akan diunggah pada langkah
+                         selanjutnya." There is no upload step anywhere in this
+                         wizard, and `saveStep7()` deliberately sends no
+                         document keys at all. Telling a bereaved family to go
+                         and find paperwork for a screen that does not exist is
+                         a real cost paid by someone in the worst week of their
+                         life, so the list and the promised upload step are
+                         both gone. What is left is only what is true today. --}}
+                    <x-mk.alert intent="info" title="Anda belum perlu menyiapkan dokumen" live="off">
+                        Pada tahap ini kami tidak meminta unggahan dokumen apa pun. Bila nanti ada dokumen yang
+                        diperlukan, tim kami akan memberitahukannya langsung kepada Anda saat menghubungi Anda,
+                        beserta cara mengirimkannya.
+                    </x-mk.alert>
+
+                    <div class="flex flex-wrap items-center gap-3">
+                        <x-mk.button
+                            variant="tertiary"
+                            type="button"
+                            wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::CUSTOMER_DATA }})"
+                            wire:loading.attr="disabled"
+                            wire:target="saveStep7"
+                        >
+                            Kembali
+                        </x-mk.button>
+                        <x-mk.button
+                            variant="primary"
+                            type="submit"
+                            wire:loading.attr="disabled"
+                            wire:target="saveStep7"
+                        >
+                            Lanjutkan
+                        </x-mk.button>
+                        <span wire:loading wire:target="saveStep7" role="status" class="flex items-center gap-2 text-sm text-neutral-600">
+                            <x-mk.spinner class="size-4" aria-hidden="true" />
+                            Menyimpan data almarhum&hellip;
+                        </span>
+                    </div>
+                </form>
+            </section>
+        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::PAYMENT)
+            <section aria-labelledby="booking-step-8-heading">
+                <h2 id="booking-step-8-heading" class="mb-3 text-lg font-semibold text-neutral-900">
+                    Langkah 8 &mdash; Pembayaran
+                </h2>
+
+                @if ($paymentMode !== \App\Platform\FeatureGate\Modes\PaymentMode::Online)
+                    <x-mk.gate-closed-banner intent="info" :dismissible="false" title="Pembayaran online belum tersedia">
+                        Pembayaran online belum tersedia untuk saat ini. Silakan gunakan metode manual di bawah ini.
+                    </x-mk.gate-closed-banner>
+                @endif
+
+                {{-- Returning to step 8 after a save must not look like a
+                     blank slate: the method is already stored on the draft.
+                     `pending`, never `success` — choosing a method is not the
+                     same as having paid, and no verification exists yet. --}}
+                @if ($paymentMethod !== '')
+                    <x-mk.alert
+                        intent="pending"
+                        icon="clock"
+                        title="Metode pembayaran tersimpan: {{ \App\Domain\Booking\BookingPaymentMethod::label($paymentMethod) }}"
+                        live="off"
+                        class="mt-4"
+                    >
+                        Pembayaran Anda belum kami terima dan belum diverifikasi. Tim kami akan mengonfirmasi
+                        langkah pembayaran saat menghubungi Anda. Anda masih dapat mengubah pilihan di bawah ini.
+                    </x-mk.alert>
+                @endif
+
+                <div class="mt-4 flex flex-col gap-4">
+                    @if ($paymentMode === \App\Platform\FeatureGate\Modes\PaymentMode::Online)
+                        <x-mk.card>
+                            <div class="flex flex-col gap-2">
+                                <h3 class="text-base font-semibold text-neutral-900">Pembayaran Online</h3>
+                                <p class="text-sm text-neutral-600">
+                                    Anda akan diarahkan ke halaman pembayaran untuk menyelesaikan transaksi.
+                                </p>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-3">
+                                <x-mk.button
+                                    variant="primary"
+                                    wire:click="saveStep8('{{ \App\Domain\Booking\BookingPaymentMethod::ONLINE }}')"
+                                    wire:loading.attr="disabled"
+                                    wire:target="saveStep8"
+                                >
+                                    Bayar Sekarang
+                                </x-mk.button>
+                            </div>
+                        </x-mk.card>
+                    @endif
+
+                    <x-mk.card>
+                        <div class="flex flex-col gap-2">
+                            <h3 class="text-base font-semibold text-neutral-900">Pembayaran Manual</h3>
+                            <p class="text-sm text-neutral-600">
+                                Transfer ke rekening yang akan diinformasikan setelah Anda melanjutkan.
+                                Mohon siapkan bukti transfer untuk verifikasi.
+                            </p>
+                        </div>
+
+                        <div class="flex max-w-form flex-col gap-1.5">
+                            <label for="payment-reference" class="text-base font-medium text-neutral-800">
+                                Referensi Pembayaran
+                                <span class="text-danger-600" aria-hidden="true">*</span>
+                                <span class="sr-only">(wajib diisi untuk pembayaran manual)</span>
+                            </label>
+                            <p id="payment-reference-hint" class="text-sm text-neutral-600">
+                                Nomor referensi transfer atau nama pengirim, agar tim kami dapat mencocokkan pembayaran Anda.
+                                Wajib diisi bila Anda memilih pembayaran manual.
+                            </p>
+                            <input
+                                type="text"
+                                id="payment-reference"
+                                wire:model="paymentReference"
+                                aria-describedby="payment-reference-hint{{ $errors->has('payment_reference') ? ' payment-reference-error' : '' }}"
+                                @if ($errors->has('payment_reference')) aria-invalid="true" @endif
+                                class="{{ $mkControl }} {{ $mkFieldState($errors->has('payment_reference')) }}"
+                            >
+                            @error('payment_reference')
+                                <p id="payment-reference-error" class="flex items-start gap-1.5 text-sm text-danger-700" role="alert">
+                                    <x-dynamic-component component="icon.alert-circle" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                                    <span>{{ $message }}</span>
+                                </p>
+                            @enderror
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-3">
+                            <x-mk.button
+                                variant="secondary"
+                                wire:click="saveStep8('{{ \App\Domain\Booking\BookingPaymentMethod::MANUAL }}')"
+                                wire:loading.attr="disabled"
+                                wire:target="saveStep8"
+                            >
+                                Saya Akan Bayar Manual
+                            </x-mk.button>
+                        </div>
+                    </x-mk.card>
+
+                    {{-- One indicator for both buttons: they call the same
+                         method, and `wire:target="saveStep8"` is what keeps
+                         the disable attached to the request actually in
+                         flight — the double-submission guard that matters
+                         most on the payment step. --}}
+                    <span wire:loading wire:target="saveStep8" role="status" class="flex items-center gap-2 text-sm text-neutral-600">
+                        <x-mk.spinner class="size-4" aria-hidden="true" />
+                        Menyimpan pilihan pembayaran&hellip;
+                    </span>
+                </div>
+
+                @error('payment_method')
+                    <p class="mt-3 flex items-start gap-1.5 text-sm text-danger-700" role="alert">
+                        <x-dynamic-component component="icon.alert-circle" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                        <span>{{ $message }}</span>
+                    </p>
+                @enderror
+
+                <x-mk.button
+                    variant="tertiary"
+                    wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::DECEASED_DATA }})"
+                    wire:loading.attr="disabled"
+                    wire:target="saveStep8"
+                    class="mt-4"
+                >
+                    Kembali
+                </x-mk.button>
+            </section>
+        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::CONFIRMATION)
+            <section aria-labelledby="booking-step-9-heading">
+                <h2 id="booking-step-9-heading" class="mb-3 text-lg font-semibold text-neutral-900">
+                    Langkah 9 &mdash; Konfirmasi
+                </h2>
+
+                {{-- The "Draft tersimpan" alert that used to sit here is gone,
+                     not lost: it said exactly what the always-present autosave
+                     region below the stepper already says, so a screen-reader
+                     user heard the same sentence twice. Saving a draft IS a
+                     genuine success and that alert keeps its `success` intent
+                     up there — but this SCREEN's overall status is pending,
+                     and that is what the status block below states. --}}
+
+                @if ($confirmationData !== null)
+                    {{-- §6.7: "Pending is the most common state in this product
+                         and the easiest to get wrong… Never style a pending
+                         state as success." Nothing here has succeeded: no order
+                         record exists and no payment has been verified (a later
+                         lane owns both), so there is no reference to hand over
+                         and nothing to confirm. `pending` intent, clock icon,
+                         status badge — the §3.7 row for a wait, not the §6.8
+                         success pattern. --}}
+                    <x-mk.card intent="pending">
+                        <div class="flex flex-col gap-3">
+                            <x-mk.badge intent="pending" icon="clock" class="self-start">
+                                Menunggu diproses
+                            </x-mk.badge>
+
+                            <h3 class="text-lg font-semibold text-neutral-900">
+                                Data pemesanan Anda telah tersimpan dan menunggu diproses
+                            </h3>
+
+                            <p class="text-base text-neutral-800">
+                                Terima kasih. Tim kami akan menghubungi Anda melalui
+                                {{ $confirmationData['contact_channel_label'] }}
+                                untuk mengonfirmasi pesanan dan langkah pembayaran.
+                            </p>
+
+                            <p class="text-sm text-neutral-700">
+                                Pesanan Anda belum dibuat secara resmi dan pembayaran belum diverifikasi.
+                                Nomor pesanan resmi akan kami berikan setelah tim kami memproses pemesanan ini.
+                                Anda tidak perlu melakukan apa pun sampai kami menghubungi Anda.
+                            </p>
+                        </div>
+                    </x-mk.card>
+
+                    <div class="mt-6 flex flex-col gap-4">
+                        {{-- §6.8 / AGENTS.md: "Do not claim WhatsApp/email
+                             delivery without delivery state." No delivery
+                             record exists anywhere in this lane, so no channel
+                             may be shown as "Terkirim"; each one is shown as
+                             not yet sent. Whether WhatsApp is a channel we have
+                             at all is G-WA-01's answer, read server-side and
+                             handed here as `$whatsAppMode` — when it is the
+                             fallback mode, WhatsApp is not promised. --}}
+                        <x-mk.card>
+                            <h3 class="text-base font-semibold text-neutral-900">Pemberitahuan</h3>
+
+                            <ul class="flex flex-col gap-3">
+                                <li class="flex flex-wrap items-center justify-between gap-2">
+                                    <span class="text-sm text-neutral-700">Email ke alamat yang Anda isi</span>
+                                    <x-mk.badge intent="pending" icon="clock">Belum dikirim</x-mk.badge>
+                                </li>
+
+                                @if ($whatsAppMode === \App\Platform\FeatureGate\Modes\WhatsAppMode::WhatsApp)
+                                    <li class="flex flex-wrap items-center justify-between gap-2">
+                                        <span class="text-sm text-neutral-700">WhatsApp ke nomor yang Anda isi</span>
+                                        <x-mk.badge intent="pending" icon="clock">Belum dikirim</x-mk.badge>
+                                    </li>
+                                @else
+                                    <li class="flex flex-wrap items-center justify-between gap-2">
+                                        <span class="text-sm text-neutral-700">WhatsApp</span>
+                                        <x-mk.badge intent="neutral" icon="slash">Belum tersedia</x-mk.badge>
+                                    </li>
+                                @endif
+                            </ul>
+
+                            <p class="text-sm text-neutral-600">
+                                @if ($whatsAppMode === \App\Platform\FeatureGate\Modes\WhatsAppMode::WhatsApp)
+                                    Belum ada pesan yang kami kirimkan. Pemberitahuan dikirim setelah tim kami
+                                    memproses pemesanan ini; bila pesan tidak sampai, tim kami tetap menghubungi
+                                    Anda melalui {{ $confirmationData['contact_channel_label'] }}.
+                                @else
+                                    Pemberitahuan melalui WhatsApp belum kami aktifkan, jadi kami tidak menjanjikannya.
+                                    Belum ada pesan yang kami kirimkan. Konfirmasi akan kami sampaikan melalui email
+                                    dan saat tim kami menghubungi Anda melalui
+                                    {{ $confirmationData['contact_channel_label'] }}.
+                                @endif
+                            </p>
+                        </x-mk.card>
+
+                        @if ($confirmationData['summary'] !== null)
+                            <x-mk.card>
+                                <h3 class="text-base font-semibold text-neutral-900">Ringkasan Pesanan</h3>
+                                <x-mk.table
+                                    caption="Ringkasan layanan yang dipilih beserta jumlah dan biayanya"
+                                    :headers="[
+                                        ['key' => 'label', 'label' => 'Layanan'],
+                                        ['key' => 'quantity', 'label' => 'Jumlah', 'numeric' => true],
+                                        ['key' => 'price', 'label' => 'Harga', 'numeric' => true],
+                                    ]"
+                                    :rows="collect($confirmationData['summary']['lines'])->map(fn ($line) => [
+                                        'label' => $line['label'],
+                                        'quantity' => $line['quantity'],
+                                        'price' => $line['line_total'] !== null
+                                            ? (new \App\Platform\FinancialLedger\Money($line['line_total']))->format()
+                                            : 'Harga belum tersedia',
+                                    ])->all()"
+                                />
+                                {{-- <x-mk.table> has no total/footer row, so the
+                                     total is a labelled pair beside it rather
+                                     than an unlabelled number under a column. --}}
+                                <dl class="flex flex-wrap items-baseline justify-between gap-2 border-t border-neutral-200 pt-3">
+                                    <dt class="text-sm font-semibold text-neutral-900">Total</dt>
+                                    <dd class="text-base font-semibold tabular-nums text-neutral-900">
+                                        @if ($confirmationData['summary']['total'] !== null)
+                                            {{ (new \App\Platform\FinancialLedger\Money($confirmationData['summary']['total']))->format() }}
+                                        @else
+                                            Belum dapat dihitung &mdash; sebagian harga layanan belum tersedia.
+                                        @endif
+                                    </dd>
+                                </dl>
+                            </x-mk.card>
+                        @endif
+
+                        <x-mk.card>
+                            <h3 class="text-base font-semibold text-neutral-900">Data yang Anda kirimkan</h3>
+                            <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm text-neutral-600">
+                                <dt class="font-medium text-neutral-700">Pemesan</dt>
+                                <dd>{{ $confirmationData['customer_name'] ?: '—' }}</dd>
+                                <dt class="font-medium text-neutral-700">Almarhum</dt>
+                                <dd>{{ $confirmationData['deceased_name'] ?: '—' }}</dd>
+                                <dt class="font-medium text-neutral-700">Metode Pembayaran</dt>
+                                <dd>{{ \App\Domain\Booking\BookingPaymentMethod::label($confirmationData['payment_method']) }}</dd>
+                                @if ($confirmationData['payment_reference'])
+                                    <dt class="font-medium text-neutral-700">Referensi Pembayaran</dt>
+                                    <dd>{{ $confirmationData['payment_reference'] }}</dd>
+                                @endif
+                            </dl>
+                        </x-mk.card>
+
+                        {{-- The block that printed `draft_id` under the heading
+                             "Nomor Referensi Sementara" is removed entirely.
+                             That value is the draft's RESUME identifier, not an
+                             order number; presenting it as a reference invited
+                             users to pass it around, and no order number exists
+                             to show in its place. The honest statement about
+                             the real order number lives in the status card
+                             above; the id itself is printed nowhere. --}}
+                        <x-mk.card>
+                            <h3 class="text-base font-semibold text-neutral-900">Apa yang selanjutnya?</h3>
+                            <ol class="flex list-inside list-decimal flex-col gap-1 text-sm text-neutral-600">
+                                <li>Tim kami meninjau data pemesanan Anda.</li>
+                                <li>
+                                    Tim kami menghubungi Anda melalui
+                                    {{ $confirmationData['contact_channel_label'] }}
+                                    untuk mengonfirmasi detail dan langkah pembayaran.
+                                </li>
+                                <li>Nomor pesanan resmi diberikan setelah pemesanan Anda diproses.</li>
+                            </ol>
+                            <p class="text-sm text-neutral-600">
+                                Ada yang ingin ditanyakan atau diubah?
+                                <a href="/bantuan" class="font-medium underline underline-offset-2">Hubungi Bantuan</a>
+                                dan sebutkan nama pemesan serta nama almarhum &mdash; tim kami akan menemukan data Anda.
+                            </p>
+                        </x-mk.card>
+                    </div>
+                @else
+                    <x-mk.alert intent="pending" title="Sesi pemesanan tidak ditemukan" live="polite">
+                        Data pemesanan tidak ditemukan. Silakan mulai pemesanan baru.
+                    </x-mk.alert>
+                    <x-mk.button variant="secondary" href="/pemesanan-makam" class="mt-4">
+                        Mulai Pemesanan Baru
+                    </x-mk.button>
+                @endif
+            </section>
         @endif
 
         {{-- Step-independent errors: an expired/unknown draft session, a
@@ -299,12 +1080,14 @@
             <p class="mt-4 text-sm text-danger-700" role="alert">{{ $message }}</p>
         @enderror
 
-        <div aria-live="polite" class="mt-4 text-sm text-neutral-600">
-            @if ($autosaveState === 'saved')
-                <span>Tersimpan</span>
-            @elseif ($autosaveState === 'failed')
-                <span class="text-danger-700">Gagal menyimpan &mdash; coba lagi</span>
-            @endif
-        </div>
+        {{-- Support escape hatch — design-system.md §6.10 requires a
+             contextual support link in the footer of EVERY wizard step, not
+             only on the steps that happen to have an empty state. Rendered
+             outside the per-step sections so no step can ship without it. --}}
+        <p class="mt-8 border-t border-neutral-200 pt-4 text-sm text-neutral-600">
+            Butuh bantuan dengan pemesanan ini?
+            <a href="/bantuan" class="font-medium underline underline-offset-2">Hubungi Bantuan</a>
+            &mdash; tim kami dapat membantu mengisikan data ini untuk Anda.
+        </p>
     </div>
 </div>

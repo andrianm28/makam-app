@@ -187,15 +187,6 @@ final class SaveBookingDraftStepTest extends TestCase
         (new SaveBookingDraftStep)($draft, 99, [], 'idem-11');
     }
 
-    public function test_a_step_beyond_this_batchs_boundary_is_rejected(): void
-    {
-        $draft = BookingDraft::create([]);
-
-        $this->expectException(\InvalidArgumentException::class);
-
-        (new SaveBookingDraftStep)($draft, BookingWizardStep::CUSTOMER_DATA, [], 'idem-12');
-    }
-
     /**
      * Step 5 sits INSIDE the implemented boundary (5 === LAST_IMPLEMENTED)
      * but is a read-only summary with no save action. Before this guard it

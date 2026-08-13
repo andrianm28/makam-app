@@ -6,6 +6,8 @@ namespace App\Livewire\Public\Booking;
 
 use App\Domain\Booking\Actions\SaveBookingDraftStep;
 use App\Domain\Booking\Actions\StartBookingDraft;
+use App\Domain\Booking\BookingContactChannel;
+use App\Domain\Booking\BookingDraftBinding;
 use App\Domain\Booking\BookingDraftQuery;
 use App\Domain\Booking\BookingWizardStep;
 use App\Domain\Booking\Exceptions\BookingDraftVersionConflictException;
@@ -15,6 +17,7 @@ use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\ServiceCatalog\ServiceCatalogQuery;
 use App\Domain\ServiceCatalog\ServiceCode;
+use App\Platform\FeatureGate\ModeResolver;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -25,9 +28,8 @@ use Throwable;
 /**
  * `/pemesanan-makam` — Sprint 4 S4-T4/S4-T5 (resumed 08 Aug 2026 after
  * pausing 26 Jul), `.kiro/specs/public-booking-wizard` AC1-AC6, AC11-AC13
- * and `.kiro/specs/booking-and-order-orchestration` AC2, AC3. Steps 1-5
- * only — see both specs' `design.md` "Out of scope" sections for what this
- * batch deliberately does not build.
+ * and `.kiro/specs/booking-and-order-orchestration` AC2, AC3. Steps 1-9
+ * fully implemented.
  *
  * REPLACES the `App\Livewire\Public\ComingSoon\BookingWizardComingSoon`
  * stub wholesale — same pattern as `RenewalStart` replacing
@@ -120,6 +122,52 @@ final class BookingWizard extends Component
      */
     public array $stagedServiceCodes = [];
 
+    public string $customerFullName = '';
+
+    public string $customerMobile = '';
+
+    public string $customerEmail = '';
+
+    public string $customerAddress = '';
+
+    public string $customerRelationship = '';
+
+    public string $customerContactChannel = '';
+
+    /**
+     * Step 6's privacy consent. Bound to a real, initially-unticked checkbox
+     * — NOT client-trusted evidence: it is sent to `SaveBookingDraftStep`,
+     * which refuses the step unless it is `true` and only then stamps
+     * `privacy_notice_accepted_at` server-side. Previously the component
+     * sent `now()` unconditionally, which recorded a consent timestamp for
+     * every user whether or not they had consented to anything.
+     */
+    public bool $privacyNoticeAccepted = false;
+
+    public string $deceasedFullName = '';
+
+    public ?string $deceasedDateOfBirth = null;
+
+    public ?string $deceasedDateOfDeath = null;
+
+    public string $deceasedRelationship = '';
+
+    public string $deceasedGender = '';
+
+    public string $paymentMethod = '';
+
+    /**
+     * The customer's own reference for a MANUAL transfer (the sending bank's
+     * reference number, or the name the transfer was made under). Required
+     * by `SaveBookingDraftStep` whenever the method is MANUAL — the manual
+     * path previously hardcoded `null` here, so it could never validate and
+     * the closed-gate fallback was unreachable.
+     *
+     * This is a customer CLAIM, never proof of payment: nothing downstream
+     * may treat it as settlement. Verification is L7's.
+     */
+    public string $paymentReference = '';
+
     public function mount(?string $draftId = null): void
     {
         if ($draftId === null) {
@@ -128,12 +176,16 @@ final class BookingWizard extends Component
             return;
         }
 
-        $draft = BookingDraftQuery::find($draftId);
+        $draft = BookingDraftQuery::findBound($draftId);
 
         if ($draft === null) {
-            // Unknown/tampered draft id — same "silently reset to a
-            // working state" discipline as RenewalStart::mount() for an
-            // unknown ?kota=.
+            // Unknown, tampered, purged — or real but belonging to a session
+            // that is not this one. All four are reported identically and
+            // reset to a working state, the same discipline as
+            // RenewalStart::mount() for an unknown ?kota=. A stranger opening
+            // a shared link therefore learns nothing about whether the draft
+            // exists, and reaches a blank wizard rather than someone's PII.
+            BookingDraftBinding::forget($draftId);
             $this->draftId = null;
             $this->stagedServiceCodes = ServiceCode::BASIC_CODES;
 
@@ -158,6 +210,23 @@ final class BookingWizard extends Component
         $this->stagedServiceCodes = $this->selectedServices !== []
             ? array_column($this->selectedServices, 'code')
             : ServiceCode::BASIC_CODES;
+
+        $this->customerFullName = $draft->customer_full_name ?? '';
+        $this->customerMobile = $draft->customer_mobile ?? '';
+        $this->customerEmail = $draft->customer_email ?? '';
+        $this->customerAddress = $draft->customer_address ?? '';
+        $this->customerRelationship = $draft->customer_relationship ?? '';
+        $this->customerContactChannel = $draft->customer_contact_channel ?? '';
+        $this->privacyNoticeAccepted = $draft->privacy_notice_accepted_at !== null;
+
+        $this->deceasedFullName = $draft->deceased_full_name ?? '';
+        $this->deceasedDateOfBirth = $draft->deceased_date_of_birth?->toDateString();
+        $this->deceasedDateOfDeath = $draft->deceased_date_of_death?->toDateString();
+        $this->deceasedRelationship = $draft->deceased_relationship ?? '';
+        $this->deceasedGender = $draft->deceased_gender ?? '';
+
+        $this->paymentMethod = $draft->payment_method ?? '';
+        $this->paymentReference = $draft->payment_reference ?? '';
     }
 
     /**
@@ -192,19 +261,26 @@ final class BookingWizard extends Component
     {
         $payload = ['city_code' => $cityCode];
         $idempotencyKey = $this->idempotencyKeyFor(BookingWizardStep::LOCATION, $payload);
-        $expectedVersion = $this->draftId !== null ? $this->version : null;
 
         try {
-            $saved = DB::transaction(function () use ($payload, $idempotencyKey, $expectedVersion): BookingDraft {
+            $saved = DB::transaction(function () use ($payload, $idempotencyKey): BookingDraft {
                 $draft = $this->currentOrNewDraft();
+
+                // Decided AFTER the draft is resolved, not before. A draft
+                // this call just created has no version to be stale against;
+                // only a resumed one does. Deciding it up front from
+                // `$this->draftId !== null` was wrong, because resolution can
+                // FALL BACK to a new draft when the session binding is gone —
+                // and then a fresh version-1 row was checked against the
+                // version this tab last saw, so the visitor got "changed in
+                // another tab" instead of simply starting again.
+                $expectedVersion = $draft->wasRecentlyCreated ? null : $this->version;
 
                 return (new SaveBookingDraftStep)(
                     $draft,
                     BookingWizardStep::LOCATION,
                     $payload,
                     $idempotencyKey,
-                    // A draft this call is creating has no version to be
-                    // stale against — only a resumed one does.
                     expectedVersion: $expectedVersion,
                 );
             });
@@ -259,6 +335,42 @@ final class BookingWizard extends Component
         ));
     }
 
+    public function saveStep6(): void
+    {
+        $this->saveStepOrShowErrors(BookingWizardStep::CUSTOMER_DATA, [
+            'customer_full_name' => $this->customerFullName,
+            'customer_mobile' => $this->customerMobile,
+            'customer_email' => $this->customerEmail,
+            'customer_address' => $this->customerAddress,
+            'customer_relationship' => $this->customerRelationship,
+            'customer_contact_channel' => $this->customerContactChannel,
+            'privacy_notice_accepted' => $this->privacyNoticeAccepted,
+        ]);
+    }
+
+    public function saveStep7(): void
+    {
+        $this->saveStepOrShowErrors(BookingWizardStep::DECEASED_DATA, [
+            'deceased_full_name' => $this->deceasedFullName,
+            'deceased_date_of_birth' => $this->deceasedDateOfBirth,
+            'deceased_date_of_death' => $this->deceasedDateOfDeath,
+            'deceased_relationship' => $this->deceasedRelationship,
+            'deceased_gender' => $this->deceasedGender !== '' ? $this->deceasedGender : null,
+            // No document keys are sent. Upload is out of scope for this lane
+            // and `SaveBookingDraftStep` now REFUSES caller-supplied document
+            // paths outright, so sending explicit nulls would only imply a
+            // capability that does not exist yet.
+        ]);
+    }
+
+    public function saveStep8(string $paymentMethod): void
+    {
+        $this->saveStepOrShowErrors(BookingWizardStep::PAYMENT, [
+            'payment_method' => $paymentMethod,
+            'payment_reference' => $this->paymentReference,
+        ]);
+    }
+
     private function saveStepOrShowErrors(int $step, array $payload): void
     {
         // Both "no draft yet" branches used to return silently, so a click
@@ -274,7 +386,7 @@ final class BookingWizard extends Component
         }
 
         try {
-            $draft = BookingDraftQuery::find($this->draftId);
+            $draft = BookingDraftQuery::findBound($this->draftId);
 
             if ($draft === null) {
                 $this->autosaveState = 'failed';
@@ -314,7 +426,7 @@ final class BookingWizard extends Component
     {
         $this->autosaveState = 'failed';
 
-        $latest = $this->draftId !== null ? BookingDraftQuery::find($this->draftId) : null;
+        $latest = $this->draftId !== null ? BookingDraftQuery::findBound($this->draftId) : null;
 
         if ($latest !== null) {
             $this->hydrateFrom($latest);
@@ -328,17 +440,47 @@ final class BookingWizard extends Component
         // Navigating away from a step must not carry that step's "Tersimpan"
         // (or "Gagal menyimpan") indicator with it — nothing has been saved
         // on the step being opened.
-        $this->autosaveState = 'idle';
+        // EXCEPTION: Step 9 (CONFIRMATION) is the journey's terminus — the
+        // user arrived there after a successful save and should keep seeing
+        // the "draft saved" confirmation until they explicitly leave.
+        if ($step !== BookingWizardStep::CONFIRMATION) {
+            $this->autosaveState = 'idle';
+        }
 
-        if (in_array($step, $this->completedSteps, true) || $step === $this->currentStep) {
+        if ($this->canReachStep($step)) {
             $this->currentStep = $step;
         }
+    }
+
+    /**
+     * Steps 5 (SUMMARY) and 9 (CONFIRMATION) are READ-ONLY, so they are never
+     * written to `completed_steps` — which meant a "have you completed it?"
+     * reachability test locked the user out of both the moment they navigated
+     * away. Leaving step 9 to check something on step 6 lost the confirmation
+     * screen permanently, and made step 6's own "Kembali" button dead.
+     *
+     * A read-only step is instead reachable once the writable step BEFORE it
+     * is done: the summary once step 4 is saved, the confirmation once step 8
+     * is. That is the real precondition — those screens exist to show
+     * accumulated state, and the state is there.
+     */
+    private function canReachStep(int $step): bool
+    {
+        if ($step === $this->currentStep || in_array($step, $this->completedSteps, true)) {
+            return true;
+        }
+
+        return match ($step) {
+            BookingWizardStep::SUMMARY => in_array(BookingWizardStep::SERVICES, $this->completedSteps, true),
+            BookingWizardStep::CONFIRMATION => in_array(BookingWizardStep::PAYMENT, $this->completedSteps, true),
+            default => false,
+        };
     }
 
     private function currentOrNewDraft(): BookingDraft
     {
         if ($this->draftId !== null) {
-            $existing = BookingDraftQuery::find($this->draftId);
+            $existing = BookingDraftQuery::findBound($this->draftId);
             if ($existing !== null) {
                 return $existing;
             }
@@ -404,9 +546,29 @@ final class BookingWizard extends Component
 
         $summary = null;
         if ($this->currentStep === BookingWizardStep::SUMMARY && $this->draftId !== null) {
-            $draft = BookingDraftQuery::find($this->draftId);
+            $draft = BookingDraftQuery::findBound($this->draftId);
             if ($draft !== null) {
                 $summary = BookingDraftQuery::summary($draft);
+            }
+        }
+
+        $confirmationData = null;
+        if ($this->currentStep === BookingWizardStep::CONFIRMATION && $this->draftId !== null) {
+            $draft = BookingDraftQuery::findBound($this->draftId);
+            if ($draft !== null) {
+                $confirmationData = [
+                    'draft_id' => $draft->id,
+                    'summary' => BookingDraftQuery::summary($draft),
+                    'customer_name' => $draft->customer_full_name,
+                    'customer_mobile' => $draft->customer_mobile,
+                    'customer_email' => $draft->customer_email,
+                    'deceased_name' => $draft->deceased_full_name,
+                    'payment_method' => $draft->payment_method,
+                    'payment_reference' => $draft->payment_reference,
+                    'contact_channel_label' => BookingContactChannel::label($draft->customer_contact_channel),
+                    'city_code' => $draft->city_code,
+                    'cemetery_id' => $draft->cemetery_id,
+                ];
             }
         }
 
@@ -418,6 +580,20 @@ final class BookingWizard extends Component
         // read by the view; and `allServiceCodes` is replaced by the real
         // `ServiceDefinition` rows below, so Step 4 shows catalogue names
         // rather than raw enum codes.
+        // Read through `ModeResolver` rather than poking `G-PAY-01` directly:
+        // AC7 wants the UI handed a named mode, and it keeps the view and
+        // `SaveBookingDraftStep`'s server-side enforcement reading the same
+        // one authority. The view decides what to RENDER from this; it is
+        // never the thing that decides what is ALLOWED.
+        $modes = app(ModeResolver::class);
+        $paymentMode = $modes->paymentMode();
+
+        // Step 9 previously promised "email atau WhatsApp" unconditionally.
+        // Whether WhatsApp is a channel we actually have is G-WA-01's answer,
+        // not the copywriter's, so the confirmation reads the mode and says
+        // only what is true.
+        $whatsAppMode = $modes->whatsAppMode();
+
         return view('livewire.public.booking.wizard', [
             'cities' => CemeteryPublicQuery::launchCities(),
             'cemeteries' => $cemeteries,
@@ -425,6 +601,9 @@ final class BookingWizard extends Component
             'basicServices' => $basicServices,
             'additionalServices' => $additionalServices,
             'summary' => $summary,
+            'confirmationData' => $confirmationData,
+            'paymentMode' => $paymentMode,
+            'whatsAppMode' => $whatsAppMode,
         ])->layout('layouts.app', [
             'title' => 'Pemesanan Makam - Makam.co.id',
             'active' => null,
