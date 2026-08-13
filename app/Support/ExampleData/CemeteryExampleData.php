@@ -24,8 +24,7 @@ use InvalidArgumentException;
  * edit in one file — never three interlocking copies.
  *
  * ---------------------------------------------------------------------------
- * THE HONESTY FRAMING — read this before adding, copying, or "completing"
- * any row below
+ * THE HONESTY FRAMING — read this before changing any rule below
  * ---------------------------------------------------------------------------
  * No real cemetery business data (a verified name, address, price, photo,
  * or coordinate for an actual operating TPU/TPS) exists anywhere in this
@@ -37,55 +36,59 @@ use InvalidArgumentException;
  * deliberately built to read as such rather than risk being mistaken for
  * verified content later:
  *
- *   - Names follow the "TPU/TPS <City> <Generic area>" template this
- *     batch's own brief suggested, using ordinary Indonesian neighbourhood
- *     words (Menteng, Kemang, Cinere, ...) rather than the actual name of
- *     any specific real cemetery in these cities (none of the ten below
- *     is a real TPU/TPS's real name — deliberately checked against
- *     commonly-known Jakarta-area cemetery names before writing this
- *     list).
- *   - Addresses use the literal placeholder street "Jl. Contoh ..."
- *     ("Contoh" = Indonesian for "Example") specifically so nothing here
- *     could be read as a claim about a real, geocodable street address.
- *   - `latitude`/`longitude`/`google_maps_url`/`primary_photo_path` are
- *     ALL left `null` at seed time — inventing precise-looking coordinates
- *     or a photo path for a fictional address would be a false-precision
- *     claim `requirements.md`'s negative criteria do not ask for and this
- *     batch's honesty discipline forbids. AC11 exists precisely so a
- *     missing map/photo does not block the textual address, which every
- *     row DOES have.
- *   - `price_min`/`price_max`/`price_source`/`price_effective_at` are ALL
- *     left `null` at seed time, for the identical reason `App\Domain\
- *     ServiceCatalog\Models\PriceVersion`'s own migration (this same
- *     Sprint 4 wave, a sibling batch) gives for shipping `price_versions`
- *     empty: "Seeding an invented price here would be exactly the
- *     fabricated business data this batch's brief forbids." AC3 requires
- *     an ATTRIBUTED price range when one is shown — showing nothing is
- *     honest; showing a number with an invented `price_source` would not
- *     be.
- *   - `operator_name` uses generic institutional phrasing ("Unit Pengelola
- *     Pemakaman Kota <City>" / "Yayasan Pemakaman Swasta <City>") that
- *     names no real agency or foundation.
- *   - `facilities` lists only generic, plausible amenity words (parking,
- *     prayer room, restroom, waiting area) that are not a specific claim
- *     about a specific real place.
+ *   - Names are GENERATED positionally — "TPU/TPS <City> <n>" where
+ *     `<City>` comes from `LaunchCityCode::KNOWN_CODES` (2 per city,
+ *     TPU then TPS) and `<n>` is the 1-based index. The result reads
+ *     "TPU Jakarta 1", never a real-sounding neighbourhood name; the
+ *     pattern is deliberately recognizable as a fixture.
+ *   - Addresses use the literal placeholder street "Jl. Contoh Kota
+ *     <City> No. <n>" ("Contoh" = Indonesian for "Example")
+ *     specifically so nothing here could be read as a claim about a
+ *     real, geocodable street address.
+ *   - `latitude`/`longitude`/`google_maps_url` are ALWAYS `null` —
+ *     inventing precise-looking coordinates for a fictional address
+ *     would be a false-precision claim `requirements.md`'s negative
+ *     criteria do not ask for and this batch's honesty discipline
+ *     forbids. The dummy photo backfill uses the existing four
+ *     illustration SVGs, which are explicitly illustrations, not
+ *     photographs of real cemeteries.
+ *   - `price_min`/`price_max` are DERIVED placeholders
+ *     (`3_000_000 + index * 500_000` and `price_min * 1.8`) attributed
+ *     by `priceSourceLabel()` as an internal estimate of example data —
+ *     an ATTRIBUTED range (AC3) instead of an invented unattributed
+ *     number; `price_source`/`price_effective_at` are only ever set
+ *     together with the range, by `applyBackfill()`.
+ *   - `operator_name` uses generic institutional phrasing ("Unit
+ *     Pengelola Pemakaman Contoh") that names no real agency.
+ *   - `facilities` lists only generic, plausible amenity words that
+ *     are not a specific claim about a specific real place.
  *
  * ---------------------------------------------------------------------------
  * Nine published, one deliberately seeded `draft` — not accidental
  * ---------------------------------------------------------------------------
- * `TPS Bekasi Harapan Indah` (the last row) is seeded with
+ * The LAST row (index 9, "TPS Bekasi 10") is seeded with
  * `publication_status = draft` on purpose, mirroring
  * `2026_07_26_170400_seed_faq_categories_and_articles.php`'s identical
  * choice for its one draft FAQ article: the suite (and any later batch's
  * AC2 "published only" scoping) needs a real seeded non-published row to
  * prove `Cemetery::scopePublished()` actually excludes something, not just
- * an empty negative test.
+ * an empty negative test. It also carries exactly one grave record so the
+ * negative fixture stays reachable.
+ *
+ * ---------------------------------------------------------------------------
+ * Deterministic generation — same input, same output, every environment
+ * ---------------------------------------------------------------------------
+ * Every rule below is pure index math over the enum vocabularies
+ * (`LaunchCityCode`, `CemeteryType`) plus constant word/photo pools. No
+ * `random()`, no `time()`, no environment-dependent source: ten
+ * cemeteries, their role slugs, the backfill prices, and the grave
+ * records are byte-identical in every environment and every run.
  *
  * ---------------------------------------------------------------------------
  * Capability profiles — every seeded cemetery gets the documented safe
  * defaults, none activate anything stronger
  * ---------------------------------------------------------------------------
- * Every profile below is `version_number = 1`, `superseded_at = null`
+ * Every profile is `version_number = 1`, `superseded_at = null`
  * (current), and every one of the six modes equals `CemeteryCapability
  * Profile::safeDefaults()` — `INDICATIVE` / `REQUEST_CONFIRMATION` /
  * `LOCATION_ONLY` / `NONE` / `NONE` / `NONE`. `source` records these as
@@ -102,12 +105,14 @@ use InvalidArgumentException;
  * AC6 only requires that package/class-level availability be EXPRESSIBLE,
  * not that every seeded cemetery have it populated — most real cemeteries
  * would not have this level of detail on day one either. Seeding it on
- * every row would overstate how much real per-package data exists.
- * `TPU Jakarta Menteng` and `TPU Depok Sawangan` each get a small,
- * plausible set (a package-level "Makam Tumpang" row, two class-level
- * breakdowns of it, and one "Makam Single" package-level row) so tests and
- * a later batch's UI have real fixture data for the package/class
- * granularity AC6 asks for, without claiming universal coverage.
+ * every row would overstate how much real per-package data exists. The
+ * index-0 cemetery (Jakarta TPU) and the index-4 cemetery (Depok TPU) each
+ * get a small, plausible set (a package-level "Makam Tumpang" row, two
+ * class-level breakdowns of it, and one "Makam Single" package-level row)
+ * so tests and a later batch's UI have real fixture data for the
+ * package/class granularity AC6 asks for, without claiming universal
+ * coverage. `PACKAGE_CEMETERY_SLUGS` is the one constant that carries the
+ * two positions, in load-bearing order.
  *
  * ---------------------------------------------------------------------------
  * Why this generator, and why migrations are still the delivery path
@@ -126,27 +131,79 @@ final class CemeteryExampleData
     /**
      * The one seeded cemetery that is deliberately `draft` — the negative
      * fixture that proves `Cemetery::scopePublished()` excludes something.
+     *
+     * Position rule: index 9 — the last row, "TPS Bekasi 10". PHP cannot
+     * compute constants from static calls, so this literal holds exactly
+     * the slug the rule produces; `test_roles_resolve_by_position` locks
+     * it to `roleCemetery('draft')`.
      */
-    public const string DRAFT_SLUG = 'tps-bekasi-harapan-indah';
+    public const string DRAFT_SLUG = 'tps-bekasi-10';
 
     /**
      * The two cemeteries that carry `cemetery_packages` example rows.
      * Order is load-bearing for tests: index 0 is the Jakarta TPU, index 1
      * the Depok TPU.
+     *
+     * Position rule: index 0 ("TPU Jakarta 1") and index 4 ("TPU Depok 5").
+     * Literal values per PHP constant-expression limits; the positional
+     * equality is locked by `test_roles_resolve_by_position`.
      */
-    public const array PACKAGE_CEMETERY_SLUGS = ['tpu-jakarta-menteng', 'tpu-depok-sawangan'];
+    public const array PACKAGE_CEMETERY_SLUGS = ['tpu-jakarta-1', 'tpu-depok-5'];
 
     /**
      * The cemetery whose EVERY grave record is privacy-restricted — the pure
      * privacy-limited fixture the renewal suite depends on.
+     *
+     * Position rule: index 1 — "TPS Jakarta 2". Literal value per PHP
+     * constant-expression limits; locked by `test_roles_resolve_by_position`.
      */
-    public const string ALL_RESTRICTED_SLUG = 'tps-jakarta-kemang';
+    public const string ALL_RESTRICTED_SLUG = 'tps-jakarta-2';
 
     /**
      * A plain published, openly-searchable cemetery used by tests that need
      * an arbitrary cemetery with no special role.
+     *
+     * Position rule: index 2 — "TPU Bogor 3". Literal value per PHP
+     * constant-expression limits; locked by `test_roles_resolve_by_position`.
      */
-    public const string OPEN_CEMETERY_SLUG = 'tpu-bogor-bantarjati';
+    public const string OPEN_CEMETERY_SLUG = 'tpu-bogor-3';
+
+    /**
+     * Generic Indonesian words used to build `Contoh <word> <n>` grave
+     * record names — deliberately ordinary, never a real person's name.
+     *
+     * @var list<string>
+     */
+    private const array EXAMPLE_WORDS = ['Sejahtera', 'Permai', 'Asri', 'Damai', 'Cendana', 'Kenanga', 'Melati', 'Anggrek'];
+
+    /**
+     * The existing four illustration SVGs, cycled by index — illustrations,
+     * not photographs of real cemeteries.
+     *
+     * @var list<string>
+     */
+    private const array EXAMPLE_PHOTOS = [
+        'images/cemeteries/illustration-01-gate.svg',
+        'images/cemeteries/illustration-02-grove.svg',
+        'images/cemeteries/illustration-03-path.svg',
+        'images/cemeteries/illustration-04-garden.svg',
+    ];
+
+    /**
+     * Position rule: index 0-9 → a 2-per-city grid (TPU then TPS) over
+     * `LaunchCityCode::KNOWN_CODES`. The city is Title-cased for the
+     * display name so the row reads "TPU Jakarta 1"; the `cemeteries.city`
+     * column keeps the canonical uppercase enum code.
+     */
+    private static function cemeteryName(int $index): string
+    {
+        $cityIndex = intdiv($index, 2);
+        $isTpu = $index % 2 === 0;
+        $city = array_values(LaunchCityCode::KNOWN_CODES)[$cityIndex] ?? 'Jakarta';
+        $type = $isTpu ? CemeteryType::TPU : CemeteryType::TPS;
+
+        return sprintf('%s %s %d', $type, ucfirst(strtolower($city)), $index + 1);
+    }
 
     /**
      * Shape: [type, name, slug, city, address, operator_name, facilities, publication_status]
@@ -155,54 +212,31 @@ final class CemeteryExampleData
      */
     public static function cemeteries(): array
     {
-        return [
-            [CemeteryType::TPU, 'TPU Jakarta Menteng', self::PACKAGE_CEMETERY_SLUGS[0], LaunchCityCode::JAKARTA,
-                'Jl. Contoh Sejahtera No. 10, Menteng, Jakarta Pusat',
-                'Unit Pengelola Pemakaman Kota Jakarta',
-                ['Area Parkir', 'Mushola', 'Toilet Umum'], CemeteryPublicationStatus::PUBLISHED],
-            [CemeteryType::TPS, 'TPS Jakarta Kemang', self::ALL_RESTRICTED_SLUG, LaunchCityCode::JAKARTA,
-                'Jl. Contoh Kemuning No. 21, Kemang, Jakarta Selatan',
-                'Yayasan Pemakaman Swasta Jakarta',
-                ['Area Parkir', 'Ruang Tunggu'], CemeteryPublicationStatus::PUBLISHED],
-            [CemeteryType::TPU, 'TPU Bogor Bantarjati', self::OPEN_CEMETERY_SLUG, LaunchCityCode::BOGOR,
-                'Jl. Contoh Melati No. 5, Bantarjati, Bogor Utara',
-                'Unit Pengelola Pemakaman Kota Bogor',
-                ['Area Parkir', 'Toilet Umum'], CemeteryPublicationStatus::PUBLISHED],
-            [CemeteryType::TPS, 'TPS Bogor Cimanggu', 'tps-bogor-cimanggu', LaunchCityCode::BOGOR,
-                'Jl. Contoh Anggrek No. 8, Cimanggu, Bogor Tengah',
-                'Yayasan Pemakaman Swasta Bogor',
-                ['Area Parkir', 'Mushola', 'Ruang Tunggu'], CemeteryPublicationStatus::PUBLISHED],
-            [CemeteryType::TPU, 'TPU Depok Sawangan', self::PACKAGE_CEMETERY_SLUGS[1], LaunchCityCode::DEPOK,
-                'Jl. Contoh Cempaka No. 17, Sawangan, Depok',
-                'Unit Pengelola Pemakaman Kota Depok',
-                ['Area Parkir', 'Mushola', 'Toilet Umum', 'Sumber Air'], CemeteryPublicationStatus::PUBLISHED],
-            [CemeteryType::TPS, 'TPS Depok Cinere', 'tps-depok-cinere', LaunchCityCode::DEPOK,
-                'Jl. Contoh Mawar No. 3, Cinere, Depok',
-                'Yayasan Pemakaman Swasta Depok',
-                ['Area Parkir'], CemeteryPublicationStatus::PUBLISHED],
-            [CemeteryType::TPU, 'TPU Tangerang Cipondoh', 'tpu-tangerang-cipondoh', LaunchCityCode::TANGERANG,
-                'Jl. Contoh Dahlia No. 14, Cipondoh, Tangerang',
-                'Unit Pengelola Pemakaman Kota Tangerang',
-                ['Area Parkir', 'Toilet Umum'], CemeteryPublicationStatus::PUBLISHED],
-            [CemeteryType::TPS, 'TPS Tangerang Karawaci', 'tps-tangerang-karawaci', LaunchCityCode::TANGERANG,
-                'Jl. Contoh Kenanga No. 9, Karawaci, Tangerang',
-                'Yayasan Pemakaman Swasta Tangerang',
-                ['Area Parkir', 'Mushola'], CemeteryPublicationStatus::PUBLISHED],
-            [CemeteryType::TPU, 'TPU Bekasi Jatiasih', 'tpu-bekasi-jatiasih', LaunchCityCode::BEKASI,
-                'Jl. Contoh Flamboyan No. 6, Jatiasih, Bekasi',
-                'Unit Pengelola Pemakaman Kota Bekasi',
-                ['Area Parkir', 'Mushola', 'Toilet Umum'], CemeteryPublicationStatus::PUBLISHED],
-            [CemeteryType::TPS, 'TPS Bekasi Harapan Indah', self::DRAFT_SLUG, LaunchCityCode::BEKASI,
-                'Jl. Contoh Teratai No. 11, Harapan Indah, Bekasi',
-                'Yayasan Pemakaman Swasta Bekasi',
-                ['Area Parkir', 'Ruang Tunggu'],
-                // Deliberately seeded as `draft` — see the class doc block.
-                CemeteryPublicationStatus::DRAFT],
-        ];
+        $rows = [];
+        for ($i = 0; $i < 10; $i++) {
+            $name = self::cemeteryName($i);
+            $isDraft = $i === 9;                       // role: last = draft
+            $city = array_values(LaunchCityCode::KNOWN_CODES)[intdiv($i, 2)];
+            $rows[] = [
+                $i % 2 === 0 ? CemeteryType::TPU : CemeteryType::TPS,
+                $name,
+                Str::slug($name),
+                $city,
+                sprintf('Jl. Contoh Kota %s No. %d', $city, $i + 1),
+                'Unit Pengelola Pemakaman Contoh',
+                ['Area Parkir', 'Toilet Umum'],
+                $isDraft ? CemeteryPublicationStatus::DRAFT : CemeteryPublicationStatus::PUBLISHED,
+            ];
+        }
+
+        return $rows;
     }
 
     /**
      * Shape: [slug, name, class_label, availability_status, description, sort_order]
+     * — the fixed example package catalog for the two package cemeteries
+     * (see the class doc block); the cemetery slugs come from the
+     * computed `PACKAGE_CEMETERY_SLUGS` positions.
      *
      * @return list<array{0: string, 1: string, 2: ?string, 3: string, 4: ?string, 5: int}>
      */
@@ -228,86 +262,114 @@ final class CemeteryExampleData
 
     /**
      * Shape: [slug, latitude, longitude, google_maps_url, price_min, price_max, primary_photo_path]
-     * — `price_source` is the single literal `priceSourceLabel()` shared by
-     * every row (see `applyBackfill()`).
+     * — coordinates and the maps URL are ALWAYS `null` (honesty framing,
+     * class doc block); the price range is derived
+     * (`3_000_000 + index * 500_000`, max = min * 1.8 rounded to whole
+     * rupiah) and attributed via `priceSourceLabel()`; the photo cycles
+     * the four existing illustration SVGs by index.
      *
-     * @return list<array{0: string, 1: float, 2: float, 3: string, 4: float, 5: float, 6: string}>
+     * @return list<array{0: string, 1: null, 2: null, 3: null, 4: float, 5: float, 6: string}>
      */
     public static function backfills(): array
     {
-        return [
-            [self::PACKAGE_CEMETERY_SLUGS[0], -6.19, 106.83,
-                self::mapsSearchUrl('TPU Jakarta Menteng', 'Jakarta'), 4_000_000.00, 7_500_000.00,
-                'images/cemeteries/illustration-01-gate.svg'],
-            [self::ALL_RESTRICTED_SLUG, -6.26, 106.81,
-                self::mapsSearchUrl('TPS Jakarta Kemang', 'Jakarta'), 12_000_000.00, 22_000_000.00,
-                'images/cemeteries/illustration-02-grove.svg'],
-            [self::OPEN_CEMETERY_SLUG, -6.57, 106.81,
-                self::mapsSearchUrl('TPU Bogor Bantarjati', 'Bogor'), 3_000_000.00, 6_000_000.00,
-                'images/cemeteries/illustration-03-path.svg'],
-            ['tps-bogor-cimanggu', -6.63, 106.79,
-                self::mapsSearchUrl('TPS Bogor Cimanggu', 'Bogor'), 9_000_000.00, 16_000_000.00,
-                'images/cemeteries/illustration-04-garden.svg'],
-            [self::PACKAGE_CEMETERY_SLUGS[1], -6.38, 106.76,
-                self::mapsSearchUrl('TPU Depok Sawangan', 'Depok'), 3_500_000.00, 6_500_000.00,
-                'images/cemeteries/illustration-01-gate.svg'],
-            ['tps-depok-cinere', -6.33, 106.77,
-                self::mapsSearchUrl('TPS Depok Cinere', 'Depok'), 10_000_000.00, 18_000_000.00,
-                'images/cemeteries/illustration-02-grove.svg'],
-            ['tpu-tangerang-cipondoh', -6.19, 106.69,
-                self::mapsSearchUrl('TPU Tangerang Cipondoh', 'Tangerang'), 3_200_000.00, 6_200_000.00,
-                'images/cemeteries/illustration-03-path.svg'],
-            ['tps-tangerang-karawaci', -6.23, 106.63,
-                self::mapsSearchUrl('TPS Tangerang Karawaci', 'Tangerang'), 8_500_000.00, 15_000_000.00,
-                'images/cemeteries/illustration-04-garden.svg'],
-            ['tpu-bekasi-jatiasih', -6.27, 106.98,
-                self::mapsSearchUrl('TPU Bekasi Jatiasih', 'Bekasi'), 3_000_000.00, 5_800_000.00,
-                'images/cemeteries/illustration-01-gate.svg'],
-            [self::DRAFT_SLUG, -6.15, 107.01,
-                self::mapsSearchUrl('TPS Bekasi Harapan Indah', 'Bekasi'), 9_500_000.00, 17_000_000.00,
-                'images/cemeteries/illustration-02-grove.svg'],
-        ];
+        $rows = [];
+        foreach (self::cemeteries() as $index => $cemetery) {
+            $priceMin = (float) (3_000_000 + $index * 500_000);
+            $rows[] = [
+                $cemetery[2],
+                null, null, null,
+                $priceMin,
+                round($priceMin * 1.8),
+                self::EXAMPLE_PHOTOS[$index % 4],
+            ];
+        }
+
+        return $rows;
     }
 
     /**
      * Shape: [cemetery slug, deceased name, block, death date, due date, access mode]
+     * — deterministic counts by role: the all-restricted cemetery
+     * (index 1) gets 2 records, both privacy-limited; the draft cemetery
+     * (index 9) gets exactly 1 OPEN record; every other cemetery gets
+     * 1-2 records, all OPEN. Names are `Contoh <word> <n>` from
+     * `EXAMPLE_WORDS`; index 4's second record has a NULL death date and
+     * index 0's second record has a NULL due date (the registry
+     * incompleteness AC5's empty-state copy tells the public about must
+     * be real in the data, not only in the copy). All dates are derived
+     * from index math — never `random()`/`time()`.
      *
      * @return list<array{0: string, 1: string, 2: string, 3: ?string, 4: ?string, 5: string}>
      */
     public static function graveRecords(): array
     {
-        return [
-            // --- TPU Jakarta Menteng: mixed open + one limited ---
-            [self::PACKAGE_CEMETERY_SLUGS[0], 'Contoh Budi Santoso', 'A-12', '2018-04-11', '2026-04-11', GraveRecordAccessMode::OPEN],
-            [self::PACKAGE_CEMETERY_SLUGS[0], 'Contoh Siti Rahayu', 'A-15', '2019-09-02', '2027-09-02', GraveRecordAccessMode::OPEN],
-            [self::PACKAGE_CEMETERY_SLUGS[0], 'Contoh Bambang Wijaya', 'B-03', '2020-01-27', '2026-01-27', GraveRecordAccessMode::OPEN],
-            [self::PACKAGE_CEMETERY_SLUGS[0], 'Contoh Sri Handayani', 'B-08', '2021-06-18', '2027-06-18', GraveRecordAccessMode::LIMITED],
+        $rows = [];
+        $counter = 0;
 
-            // --- TPS Jakarta Kemang: every row restricted (see class doc block) ---
-            [self::ALL_RESTRICTED_SLUG, 'Contoh Agus Priyono', 'C-01', '2017-11-30', '2026-11-30', GraveRecordAccessMode::LIMITED],
-            [self::ALL_RESTRICTED_SLUG, 'Contoh Dewi Anggraini', 'C-04', '2022-02-14', '2028-02-14', GraveRecordAccessMode::CLOSED],
+        foreach (self::cemeteries() as $index => $cemetery) {
+            $slug = $cemetery[2];
+            $count = match (true) {
+                $index === 1, $index % 2 === 0 => 2,
+                default => 1, // odd indexes (and the draft, index 9) get one
+            };
 
-            // --- TPU Bogor Bantarjati ---
-            [self::OPEN_CEMETERY_SLUG, 'Contoh Joko Purnomo', 'D-07', '2016-08-05', '2026-08-05', GraveRecordAccessMode::OPEN],
-            [self::OPEN_CEMETERY_SLUG, 'Contoh Rina Marlina', 'D-09', '2020-12-21', '2026-12-21', GraveRecordAccessMode::OPEN],
+            for ($record = 0; $record < $count; $record++) {
+                $isSecond = $record === 1;
+                $accessMode = $index === 1
+                    ? ($record === 0 ? GraveRecordAccessMode::LIMITED : GraveRecordAccessMode::CLOSED)
+                    : GraveRecordAccessMode::OPEN;
 
-            // --- TPU Depok Sawangan ---
-            // Deliberately missing a death date: the registry incompleteness
-            // AC5's empty-state copy tells the public about must be real in
-            // the data, not only in the copy.
-            [self::PACKAGE_CEMETERY_SLUGS[1], 'Contoh Hendra Gunawan', 'E-02', null, '2027-03-15', GraveRecordAccessMode::OPEN],
-            [self::PACKAGE_CEMETERY_SLUGS[1], 'Contoh Lestari Wulandari', 'E-05', '2019-05-09', null, GraveRecordAccessMode::OPEN],
+                // Death year cycles 2016-2024; month/day derive from the
+                // same pure index math so every row is reproducible.
+                $year = 2016 + (($index * 3 + $record * 7 + $counter) % 9);
+                $month = (($index * 5 + $record * 3 + $counter) % 12) + 1;
+                $day = (($index * 2 + $record * 5 + $counter) % 28) + 1;
+                $deathDate = sprintf('%d-%02d-%02d', $year, $month, $day);
+                $dueDate = sprintf('%d-%02d-%02d', $year + 10, $month, $day);
 
-            // --- TPU Tangerang Cipondoh ---
-            ['tpu-tangerang-cipondoh', 'Contoh Andi Kurniawan', 'F-11', '2021-10-03', '2027-10-03', GraveRecordAccessMode::OPEN],
+                $rows[] = [
+                    $slug,
+                    'Contoh '.self::EXAMPLE_WORDS[$counter % 8].' '.($counter + 1),
+                    sprintf('%s-%02d', chr(65 + $index), $record + 1),
+                    $isSecond && $index === 4 ? null : $deathDate,
+                    $isSecond && $index === 0 ? null : $dueDate,
+                    $accessMode,
+                ];
 
-            // --- TPU Bekasi Jatiasih ---
-            ['tpu-bekasi-jatiasih', 'Contoh Yusuf Maulana', 'G-06', '2018-07-22', '2026-07-22', GraveRecordAccessMode::OPEN],
-            ['tpu-bekasi-jatiasih', 'Contoh Nurul Hasanah', 'G-10', '2023-01-08', '2029-01-08', GraveRecordAccessMode::CLOSED],
+                $counter++;
+            }
+        }
 
-            // --- TPS Bekasi Harapan Indah: the DRAFT cemetery (negative fixture) ---
-            [self::DRAFT_SLUG, 'Contoh Rahmat Hidayat', 'H-01', '2020-03-30', '2026-03-30', GraveRecordAccessMode::OPEN],
-        ];
+        return $rows;
+    }
+
+    /**
+     * Resolve a role cemetery by position, without string-matching names.
+     *
+     * Roles:
+     * - `draft` → the deliberately unpublished cemetery (index 9)
+     * - `all-restricted` → the fully privacy-limited cemetery (index 1)
+     * - `package` → the package cemetery at `PACKAGE_CEMETERY_SLUGS[$index]`
+     *   (index defaults to 0 — the Jakarta TPU; 1 is the Depok TPU)
+     *
+     * @return array{0: int, 1: string, 2: string, 3: string, 4: string, 5: string, 6: list<string>, 7: string}
+     *
+     * @throws InvalidArgumentException on an unknown role
+     */
+    public static function roleCemetery(string $role, ?int $index = null): array
+    {
+        $position = match ($role) {
+            'draft' => 9,
+            'all-restricted' => 1,
+            'package' => $index ?? 0,
+            default => throw new InvalidArgumentException("Unknown example cemetery role [{$role}]."),
+        };
+
+        if ($role === 'package') {
+            return self::bySlug(self::PACKAGE_CEMETERY_SLUGS[$position]);
+        }
+
+        return self::cemeteries()[$position];
     }
 
     /** @return list<string> */
@@ -404,15 +466,16 @@ final class CemeteryExampleData
         }
     }
 
+    /**
+     * Price + photo ONLY — coordinates and the maps URL are never set
+     * here (they stay `null` from `seed()`; see the honesty framing).
+     */
     public static function applyBackfill(): void
     {
         $now = now();
 
         foreach (self::backfills() as [$slug, $latitude, $longitude, $googleMapsUrl, $priceMin, $priceMax, $photoPath]) {
             DB::table('cemeteries')->where('slug', $slug)->update([
-                'latitude' => $latitude,
-                'longitude' => $longitude,
-                'google_maps_url' => $googleMapsUrl,
                 'primary_photo_path' => $photoPath,
                 'price_min' => $priceMin,
                 'price_max' => $priceMax,
@@ -465,10 +528,5 @@ final class CemeteryExampleData
                 'updated_at' => $now,
             ]);
         }
-    }
-
-    private static function mapsSearchUrl(string $name, string $city): string
-    {
-        return 'https://www.google.com/maps/search/?api=1&query='.urlencode("{$name}, {$city}, Indonesia");
     }
 }
