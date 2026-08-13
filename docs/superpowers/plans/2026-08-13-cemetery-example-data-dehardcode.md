@@ -1427,18 +1427,18 @@ git commit -m "docs: record cemetery example-data de-hardcoding retrofit"
 
 **Files:** none (verification only).
 
-- [ ] **Step 1: Lint and static analysis**
+- [x] **Step 1: Lint and static analysis**
 
 Run: `composer lint`
 Run: `composer analyse`
 Expected: PASS on both (Pint; PHPStan at the repo's configured level).
 
-- [ ] **Step 2: Full local suite**
+- [x] **Step 2: Full local suite**
 
 Run: `composer test`
 Expected: PASS (SQLite locally; `GraveRecordTrigramSearchTest` self-skips on SQLite — CI is the oracle for PostgreSQL).
 
-- [ ] **Step 3: Grep for residual coupling**
+- [x] **Step 3: Grep for residual coupling**
 
 Run: `grep -rn -iE "tpu-|tps-|menteng|kemang|harapan.indah|sawangan|bantarjati|cimanggu|cinere|cipondoh|karawaci|jatiasih" app/ resources/ routes/ config/ database/ tests/`
 Expected: matches ONLY in:
@@ -1447,12 +1447,12 @@ Expected: matches ONLY in:
 
 Any other match is a missed reference — fix it before merge.
 
-- [ ] **Step 4: Fresh-migrate smoke**
+- [x] **Step 4: Fresh-migrate smoke**
 
 Run: `php artisan migrate:fresh` against the local test database, then `php artisan test --filter=CemeterySeedTest`
 Expected: PASS. This exercises the generator through the real migration path on a brand-new database.
 
-- [ ] **Step 5: Whole-branch review + PR**
+- [x] **Step 5: Whole-branch review + PR**
 
 Per `AGENTS.md` §Development methodology, request a two-tier review (each task was reviewed against its brief as it landed; now review the whole branch once as a unit against this plan). Then open a PR against `docs/design-system-and-planning`. Record the CI run in `docs/planning/retrofit-backlog.md`'s new row.
 
