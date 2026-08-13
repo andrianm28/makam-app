@@ -6,13 +6,14 @@ namespace Tests\Feature\Domain\Marketplace;
 
 use App\Domain\Marketplace\AvailabilityMode;
 use App\Domain\Marketplace\EvidenceRequirement;
+use App\Domain\Marketplace\Models\Product;
 use App\Domain\Marketplace\Models\ServiceArea;
 use App\Domain\Marketplace\Models\Vendor;
 use App\Domain\Marketplace\Models\VendorAvailability;
 use App\Domain\Marketplace\Models\VendorListing;
-use App\Domain\Marketplace\Models\Product;
 use App\Domain\Marketplace\ProductCode;
 use App\Platform\FinancialLedger\Money;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use InvalidArgumentException;
 use Tests\TestCase;
@@ -96,7 +97,7 @@ final class VendorListingTest extends TestCase
 
         VendorListing::create($row);
 
-        $this->expectException(\Illuminate\Database\QueryException::class);
+        $this->expectException(QueryException::class);
         VendorListing::create($row);
     }
 

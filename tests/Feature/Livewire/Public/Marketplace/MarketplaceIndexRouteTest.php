@@ -200,9 +200,19 @@ final class MarketplaceIndexRouteTest extends TestCase
         // variant_read_failure_degrades_the_panel_without_taking_the_page_
         // down — force a REAL read failure by dropping the table inside the
         // test transaction, rather than mocking MarketplaceCatalogQuery.
-        // product_variants is dropped first: on Postgres a bare DROP TABLE
-        // products while product_variants still references it fails with
-        // 2BP01, and DROP TABLE ... CASCADE is unsupported on SQLite.
+        // Dependants are dropped first, deepest first: on Postgres a bare DROP
+        // TABLE products while anything still references it fails with 2BP01,
+        // and DROP TABLE ... CASCADE is unsupported on SQLite, so the order has
+        // to be spelled out.
+        //
+        // The vendor_* tables joined this list with the vendor portal lane
+        // (L10), which added vendor_listings.product_id -> products and a
+        // vendor_orders -> vendor_listings -> products chain on top of it. They
+        // are dropped via dropIfExists rather than drop so this test keeps
+        // working on a database built before those migrations existed.
+        Schema::dropIfExists('vendor_order_evidences');
+        Schema::dropIfExists('vendor_orders');
+        Schema::dropIfExists('vendor_listings');
         Schema::dropIfExists('product_variants');
         Schema::drop('products');
 
