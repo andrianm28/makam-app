@@ -6,11 +6,13 @@ namespace Tests\Feature\Livewire\Public\Booking;
 
 use App\Domain\Booking\Actions\SaveBookingDraftStep;
 use App\Domain\Booking\Actions\StartBookingDraft;
+use App\Domain\Booking\BookingPaymentMethod;
 use App\Domain\Booking\BookingWizardStep;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Livewire\Public\Booking\BookingWizard;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -25,7 +27,7 @@ final class BookingWizardStepsSixToNineEndToEndTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function componentAtSummary(): \Livewire\Features\SupportTesting\Testable
+    private function componentAtSummary(): Testable
     {
         $draft = (new StartBookingDraft)();
         $draft = (new SaveBookingDraftStep)($draft, BookingWizardStep::LOCATION, ['city_code' => LaunchCityCode::JAKARTA], 'idem-a');
@@ -42,7 +44,7 @@ final class BookingWizardStepsSixToNineEndToEndTest extends TestCase
         return Livewire::test(BookingWizard::class, ['draftId' => $draft->id]);
     }
 
-    private function driveToSummary(\Livewire\Features\SupportTesting\Testable $c): \Livewire\Features\SupportTesting\Testable
+    private function driveToSummary(Testable $c): Testable
     {
         return $c
             ->call('saveStep4', [
@@ -117,7 +119,7 @@ final class BookingWizardStepsSixToNineEndToEndTest extends TestCase
             ->set('deceasedGender', 'LAKI_LAKI')
             ->call('saveStep7')
             ->set('paymentReference', 'REF-001')
-            ->call('saveStep8', \App\Domain\Booking\BookingPaymentMethod::MANUAL)
+            ->call('saveStep8', BookingPaymentMethod::MANUAL)
             ->assertSet('currentStep', BookingWizardStep::CONFIRMATION);
     }
 }
