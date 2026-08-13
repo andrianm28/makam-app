@@ -117,11 +117,11 @@ Counts: **4 new files, 6 modified non-test files, 13 modified test files, 2 ligh
 **Files:**
 - Create: `docs/superpowers/plans/2026-08-13-cemetery-example-data-dehardcode.md` (copy of this document)
 
-- [ ] **Step 1: Copy the plan into the repo**
+- [x] **Step 1: Copy the plan into the repo**
 
 Copy `/home/ubuntu/.tmp/opencode/plan-cemetery-dehardcoding.md` to `docs/superpowers/plans/2026-08-13-cemetery-example-data-dehardcode.md` in the implementation worktree.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add docs/superpowers/plans/2026-08-13-cemetery-example-data-dehardcode.md
