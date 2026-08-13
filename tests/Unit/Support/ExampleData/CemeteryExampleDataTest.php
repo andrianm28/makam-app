@@ -99,4 +99,41 @@ final class CemeteryExampleDataTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         CemeteryExampleData::bySlug('no-such-example-cemetery');
     }
+
+    public function test_cemetery_names_are_synthetic_and_positional(): void
+    {
+        $names = array_column(CemeteryExampleData::cemeteries(), 1);
+
+        $this->assertSame(10, count($names));
+        // Generated, not literal: no real-sounding neighbourhood names.
+        foreach ($names as $name) {
+            $this->assertMatchesRegularExpression('/^(TPU|TPS) (Jakarta|Bogor|Depok|Tangerang|Bekasi) \d+$/', $name);
+        }
+    }
+
+    public function test_roles_resolve_by_position(): void
+    {
+        $this->assertSame(CemeteryExampleData::DRAFT_SLUG, CemeteryExampleData::roleCemetery('draft')[2]);
+        $this->assertSame(CemeteryExampleData::ALL_RESTRICTED_SLUG, CemeteryExampleData::roleCemetery('all-restricted')[2]);
+        $this->assertSame(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0], CemeteryExampleData::roleCemetery('package', 0)[2]);
+        $this->assertSame(CemeteryExampleData::OPEN_CEMETERY_SLUG, CemeteryExampleData::roleCemetery('open')[2]);
+    }
+
+    public function test_roles_resolve_uniquely(): void
+    {
+        $draft = CemeteryExampleData::roleCemetery('draft')[2];
+        $restricted = CemeteryExampleData::roleCemetery('all-restricted')[2];
+        $this->assertNotSame($draft, $restricted);
+        $this->assertNotSame($draft, CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]);
+        $this->assertNotSame($restricted, CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]);
+    }
+
+    public function test_coordinates_are_never_fabricated(): void
+    {
+        foreach (CemeteryExampleData::backfills() as $backfill) {
+            // Shape: [slug, latitude, longitude, maps_url, price_min, price_max, photo]
+            $this->assertNull($backfill[1]);
+            $this->assertNull($backfill[2]);
+        }
+    }
 }

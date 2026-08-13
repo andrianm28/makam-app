@@ -9,6 +9,9 @@ use App\Domain\Booking\Actions\StartBookingDraft;
 use App\Domain\Booking\BookingWizardStep;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\ServiceCatalog\Actions\RecordServiceDefinitionPriceVersion;
+use App\Domain\ServiceCatalog\Models\PriceVersion;
+use App\Domain\ServiceCatalog\Models\ServiceDefinition;
 use App\Domain\ServiceCatalog\ServiceCatalogQuery;
 use App\Domain\ServiceCatalog\ServiceCode;
 use App\Livewire\Public\Booking\BookingWizard;
@@ -35,6 +38,33 @@ final class BookingWizardStepsFourAndFiveTest extends TestCase
         $draft = (new SaveBookingDraftStep)($draft, BookingWizardStep::SERVICE_TYPE, ['service_type' => 'NEW_GRAVE'], 'idem-c');
 
         return $draft->id;
+    }
+
+    /**
+     * Makes the summary total assertion independent of whatever dummy
+     * amounts the dev-data seed currently records: removes the seeded
+     * `price_versions` row(s) for `$code` (a builder-level mass delete, so
+     * the append-only guard `PriceVersion::booted()` never fires — the same
+     * isolation mechanism `PriceVersioningTest` uses) and records the
+     * test's OWN price through the real Action. This test owns its prices,
+     * not the seed.
+     */
+    private function setTestOwnedPrice(string $code, string $amount): void
+    {
+        $service = ServiceDefinition::findByCode($code);
+
+        PriceVersion::query()
+            ->where('priceable_type', ServiceDefinition::class)
+            ->where('priceable_id', $service->id)
+            ->delete();
+
+        (new RecordServiceDefinitionPriceVersion)(
+            serviceDefinition: $service,
+            amount: $amount,
+            actorReference: 'booking-wizard-step-5-test',
+            reason: 'Test-owned price for the Step 5 summary total assertion, independent of the dummy seed.',
+            source: 'Test fixture (synthetic — not real catalogue pricing).',
+        );
     }
 
     public function test_step_4_offers_every_basic_and_additional_service(): void
@@ -90,19 +120,27 @@ final class BookingWizardStepsFourAndFiveTest extends TestCase
      * R3 (pre-flight ruling, human-confirmed 08 Aug 2026): the canonical
      * seed migration (`2026_07_26_220000_seed_service_definition_dummy_
      * operational_data.php`) seeds a real `price_versions` row for every
-     * one of the 12 catalogue services, including `DOCUMENT_PROCESSING`
-     * (350000.00) and `GRAVE_DIGGING` (750000.00) — so Step 5 with only
-     * the two mandatory basics selected always has both prices available
-     * in this environment; the honest "Harga belum tersedia" path is
-     * never reachable from this fixture and is NOT what this test should
-     * assert. That degraded state is already covered by Task 4's own
-     * dedicated fixture (`BookingDraftQueryTest::
+     * one of the 12 catalogue services, so Step 5 with only the two
+     * mandatory basics selected always has both prices available in this
+     * environment; the honest "Harga belum tersedia" path is never
+     * reachable from this fixture and is NOT what this test should assert.
+     * That degraded state is already covered by Task 4's own dedicated
+     * fixture (`BookingDraftQueryTest::
      * test_summary_marks_a_missing_price_honestly_instead_of_fabricating_a_total`,
-     * which supersedes the seeded price before asserting) — this test
-     * instead proves the real, seeded happy path renders a correct total.
+     * which supersedes the seeded price before asserting).
+     *
+     * Since the de-hardcoding retrofit, the seeded amounts are PROCEDURAL
+     * dummy data (`ServiceOperationalExampleData::dummyPrices()`), so this
+     * test no longer relies on them: it sets its OWN prices for
+     * `DOCUMENT_PROCESSING` and `GRAVE_DIGGING` first (see
+     * `setTestOwnedPrice()`), then proves the happy path renders the
+     * correct computed total from exactly those amounts.
      */
-    public function test_step_5_shows_the_real_computed_total_from_seeded_prices(): void
+    public function test_step_5_shows_the_real_computed_total_from_test_owned_prices(): void
     {
+        $this->setTestOwnedPrice(ServiceCode::DOCUMENT_PROCESSING, '350000.00');
+        $this->setTestOwnedPrice(ServiceCode::GRAVE_DIGGING, '750000.00');
+
         $draftId = $this->draftAtStep4();
 
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])

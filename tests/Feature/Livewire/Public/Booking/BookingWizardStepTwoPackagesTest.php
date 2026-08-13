@@ -10,7 +10,6 @@ use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Livewire\Public\Booking\BookingWizard;
-use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\Support\CemeteryFixture;
@@ -24,7 +23,7 @@ use Tests\TestCase;
  * (`booking-wizard-fields.md` §Step 2: "package/class when applicable";
  * `cemetery-directory-and-availability` AC6). The example-data generator
  * gives active packages to two published, pickable example cemeteries
- * (`CemeteryExampleData::PACKAGE_CEMETERY_SLUGS`) — so before the picker
+ * (the `package` role, indices 0 and 1) — so before the picker
  * existed, a visitor who chose either one hit a validation error the screen
  * offered no way to satisfy: an unescapable dead end on the happy path, not
  * an edge case.
@@ -35,7 +34,7 @@ final class BookingWizardStepTwoPackagesTest extends TestCase
 
     private function packagesCemetery(): Cemetery
     {
-        $cemetery = CemeteryFixture::cemetery(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]);
+        $cemetery = CemeteryFixture::cemetery('package', 0);
 
         $this->assertSame(LaunchCityCode::JAKARTA, $cemetery->city);
         $this->assertTrue(

@@ -114,7 +114,11 @@ final class CemeteryDetailRouteTest extends TestCase
         $response->assertSee($cemetery->name);
         $response->assertSee($cemetery->address);
         $response->assertSee((string) $cemetery->primary_photo_path);
-        $response->assertSee((string) $cemetery->google_maps_url);
+        // Seeded rows never carry a maps URL (honesty framing), so the
+        // absent map link must be rendered as an absence, not a blank
+        // string assertion that passes vacuously.
+        $this->assertNull($cemetery->google_maps_url);
+        $response->assertDontSee('Buka di Google Maps');
         $response->assertSee((string) $cemetery->price_source);
         // BOTH ends of AC3's "attributed price range".
         // `CemeteryPresenter::priceRange()` renders "{symbol} {min} - {symbol}
@@ -129,10 +133,10 @@ final class CemeteryDetailRouteTest extends TestCase
     }
 
     /**
-     * AC11 — THE test for this criterion. The map link is removed at the
-     * data level (both the operator URL and the coordinates it would
-     * otherwise be derived from), so `Cemetery::googleMapsUrl()` returns
-     * null, and the textual address must still render.
+     * AC11 — THE test for this criterion. The map link is absent at the
+     * data level (seeded rows never carry a maps URL or coordinates, see
+     * `CemeteryExampleData`'s honesty framing), so `Cemetery::googleMapsUrl()`
+     * returns null, and the textual address must still render.
      */
     public function test_the_address_still_renders_when_no_map_link_can_be_produced(): void
     {
@@ -152,11 +156,20 @@ final class CemeteryDetailRouteTest extends TestCase
             ->assertDontSee('Buka di Google Maps');
     }
 
+    /**
+     * The other half of the map-link contract: when a cemetery DOES carry
+     * an explicit maps URL, the page must render the link. No seeded row
+     * carries one (honesty framing — coordinates and maps URLs are always
+     * NULL), so the URL is set explicitly here to exercise the render
+     * branch; it cannot come from the seed.
+     */
     public function test_the_map_link_renders_when_the_cemetery_has_one(): void
     {
         $cemetery = $this->exampleCemetery();
 
-        $this->assertNotNull($cemetery->googleMapsUrl());
+        $cemetery->update(['google_maps_url' => 'https://maps.google.com/?q=contoh']);
+
+        $this->assertNotNull($cemetery->fresh()?->googleMapsUrl());
 
         $this->get(route('cemeteries.show', ['cemeterySlug' => $cemetery->slug]))
             ->assertSee('Buka di Google Maps')

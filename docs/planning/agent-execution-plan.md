@@ -273,10 +273,12 @@ Every slice consumes this. The critical constraint: **enums derive from the cano
 > |---|---|
 > | Owns `database/seeders/**` | `database/seeders/` contains exactly one file, Laravel's **untouched stock `DatabaseSeeder.php`**. Nothing in CI, the Dockerfile, or any deployment script runs `php artisan db:seed` — the seed migrations' own doc blocks say so explicitly (`2026_07_26_170400_seed_faq_categories_and_articles.php`: "no CI pipeline or deployment process ever runs `php artisan db:seed`"). Seeder classes were never the delivery mechanism here |
 >
-> > **Update, 13 Aug 2026:** `App\Support\ExampleData\CemeteryExampleData` now
-> > centralizes the example-cemetery data. Migrations still ship it (unchanged
-> > delivery mechanism); a seeder (`CemeteryExampleDataSeeder`) makes `db:seed`
-> > produce the same data idempotently for anyone who runs it.
+> > **Update, 13 Aug 2026:** `App\Support\ExampleData\*` now centralizes the
+> > example data — `CemeteryExampleData` (cemeteries/backfills/grave records),
+> > `VendorExampleData` (dummy vendor pricing), `ServiceOperationalExampleData`
+> > (dummy service operational data + price_versions). Migrations still ship it
+> > (unchanged delivery mechanism); the seeders make `db:seed` produce the same
+> > data idempotently for anyone who runs it.
 > | Owns `app/Support/Catalog/**` | **`app/Support/Catalog/` does not exist.** `app/Support/` holds `CompanyInfo.php`, `ContactInfo.php`, and `Design/` — nothing catalogue-related |
 >
 > **The real ownership.** Master data ships as **timestamped data migrations** in `database/migrations/`, so it applies through the same `php artisan migrate` that creates the schema and needs no second deployment step: `…_120400_seed_feature_gate_registry.php`, `…_170400_seed_faq_categories_and_articles.php`, `…_180200_seed_marketplace_products_and_variants.php`, `…_180700_seed_service_definitions_from_catalog.php`, `…_190300_seed_cemeteries_and_capability_profiles.php`, plus three later dummy-data backfills (`…_200100`, `…_210000`, `…_220000`). The **closed-list constant classes** live one directory per module under `app/Domain/*/`, not under `app/Support/` — `ServiceCatalog/ServiceCode.php`, `ServiceCatalog/ServiceCategory.php`, `ServiceCatalog/FulfillmentOwner.php`, `Marketplace/ProductCode.php`, `Marketplace/MarketplaceProductCategory.php`, `Faq/FaqCategoryCode.php`, `CemeteryDirectory/LaunchCityCode.php`, `CemeteryCapability/*Mode.php`, and others.

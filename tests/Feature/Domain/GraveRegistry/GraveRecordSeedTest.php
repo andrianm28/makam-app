@@ -17,7 +17,7 @@ use Tests\TestCase;
 
 /**
  * `2026_08_08_100010_seed_example_grave_records.php` — Sprint 4 S4-T7.
- * The fourteen rows it materializes are DEFINED in
+ * The sixteen rows it materializes are DEFINED in
  * `App\Support\ExampleData\CemeteryExampleData::graveRecords()`.
  *
  * Two jobs. First, protect the FIXTURE DESIGN the rest of this spec's tests
@@ -45,7 +45,7 @@ final class GraveRecordSeedTest extends TestCase
     {
         $records = GraveRecord::query()->get();
 
-        $this->assertSame(14, $records->count());
+        $this->assertSame(16, $records->count());
 
         foreach ($records as $record) {
             $this->assertSame(
@@ -55,6 +55,38 @@ final class GraveRecordSeedTest extends TestCase
             );
             $this->assertTrue($record->isExampleData());
         }
+    }
+
+    /**
+     * The generator's counts by role are load-bearing for the rest of the
+     * suite (the all-restricted cemetery is the pure privacy-limited
+     * fixture, the draft cemetery the negative fixture), so they are pinned
+     * as explicit numbers here rather than derived from the generator —
+     * a generator change that silently alters the spread must fail loudly.
+     */
+    public function test_seeded_record_counts_by_role_are_explicit(): void
+    {
+        $allRestrictedId = Cemetery::query()->where('slug', CemeteryExampleData::ALL_RESTRICTED_SLUG)->sole()->id;
+        $draftId = Cemetery::query()->where('slug', CemeteryExampleData::DRAFT_SLUG)->sole()->id;
+
+        // The all-restricted cemetery holds exactly two records — one
+        // `limited`, one `closed` — so both restricted modes are reachable
+        // from seed data alone.
+        $allRestricted = GraveRecord::query()->where('cemetery_id', $allRestrictedId)->get();
+        $this->assertSame(2, $allRestricted->count());
+        $this->assertSame(
+            [GraveRecordAccessMode::CLOSED, GraveRecordAccessMode::LIMITED],
+            $allRestricted->pluck('access_mode')->sort()->values()->all(),
+            'The all-restricted cemetery must carry exactly one LIMITED and one CLOSED record.'
+        );
+
+        // The draft cemetery holds exactly one record — the negative
+        // fixture proving an unpublished cemetery's record is unreachable.
+        $this->assertSame(
+            1,
+            GraveRecord::query()->where('cemetery_id', $draftId)->count(),
+            'The draft cemetery must hold exactly one record.'
+        );
     }
 
     /**
@@ -164,10 +196,9 @@ final class GraveRecordSeedTest extends TestCase
      * The seed migration writes through the query builder (the established
      * shape for every seed migration here), which does not fire model
      * events — so it calls `GraveNameNormalizer` itself. If that call were
-     * ever dropped, the column would hold raw names, `LIKE '%budi
-     * santoso%'` would stop matching `Contoh Budi Santoso`, and the failure
-     * would look like "search is broken" rather than "the seed skipped a
-     * step".
+     * ever dropped, the column would hold raw names, `LIKE '%sejahtera%'`
+     * would stop matching `Contoh Sejahtera 1`, and the failure would look
+     * like "search is broken" rather than "the seed skipped a step".
      */
     public function test_every_seeded_row_has_a_correctly_normalized_name(): void
     {
