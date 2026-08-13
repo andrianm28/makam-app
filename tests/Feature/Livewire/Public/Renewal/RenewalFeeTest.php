@@ -9,6 +9,7 @@ use App\Domain\GraveRegistry\GraveRecordAccessMode;
 use App\Domain\GraveRegistry\Models\GraveRecord;
 use App\Livewire\Public\Renewal\RenewalFee;
 use App\Platform\FeatureGate\Models\FeatureGate;
+use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
@@ -25,7 +26,7 @@ final class RenewalFeeTest extends TestCase
 
     private function cemeteryWithPrice(): Cemetery
     {
-        return Cemetery::query()->where('slug', 'tpu-jakarta-menteng')->sole();
+        return Cemetery::query()->where('slug', CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])->sole();
     }
 
     public function test_the_fee_screen_always_shows_the_tariff_source_and_last_update(): void
@@ -68,7 +69,7 @@ final class RenewalFeeTest extends TestCase
     public function test_a_grave_without_a_tariff_source_renders_a_useful_error(): void
     {
         $this->openTheDataGate();
-        $cemetery = Cemetery::query()->where('slug', 'tpu-jakarta-menteng')->sole();
+        $cemetery = Cemetery::query()->where('slug', CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])->sole();
 
         DB::table('cemeteries')
             ->where('id', $cemetery->id)
