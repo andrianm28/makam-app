@@ -7,6 +7,7 @@ namespace Tests\Feature\Domain\CemeteryCapability;
 use App\Domain\CemeteryCapability\CemeteryPackageAvailabilityStatus;
 use App\Domain\CemeteryCapability\Models\CemeteryPackage;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use InvalidArgumentException;
 use Tests\TestCase;
@@ -25,7 +26,7 @@ final class CemeteryPackageAvailabilityTest extends TestCase
 
     public function test_makam_tumpang_is_expressed_at_both_package_and_class_level(): void
     {
-        $cemetery = Cemetery::query()->where('slug', 'tpu-jakarta-menteng')->firstOrFail();
+        $cemetery = Cemetery::query()->where('slug', CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])->firstOrFail();
 
         $tumpangRows = CemeteryPackage::query()
             ->where('cemetery_id', $cemetery->id)
@@ -47,8 +48,8 @@ final class CemeteryPackageAvailabilityTest extends TestCase
 
     public function test_cemetery_packages_relation_returns_only_this_cemeterys_rows(): void
     {
-        $jakarta = Cemetery::query()->where('slug', 'tpu-jakarta-menteng')->firstOrFail();
-        $depok = Cemetery::query()->where('slug', 'tpu-depok-sawangan')->firstOrFail();
+        $jakarta = Cemetery::query()->where('slug', CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])->firstOrFail();
+        $depok = Cemetery::query()->where('slug', CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[1])->firstOrFail();
 
         $this->assertTrue($jakarta->packages->count() > 0);
         $this->assertTrue($depok->packages->count() > 0);
@@ -87,7 +88,7 @@ final class CemeteryPackageAvailabilityTest extends TestCase
     public function test_most_seeded_cemeteries_have_no_package_data_and_that_is_honest_not_a_bug(): void
     {
         // AC6 only requires package/class availability to be EXPRESSIBLE,
-        // not populated for every cemetery — see the seed migration's own
+        // not populated for every cemetery — see `CemeteryExampleData`'s own
         // doc block. Only two of the ten seeded cemeteries carry example
         // package rows.
         $cemeteriesWithPackages = Cemetery::query()
