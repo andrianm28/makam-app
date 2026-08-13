@@ -271,10 +271,14 @@ final class IssueQuoteTest extends TestCase
         self::assertNull(Quote::currentFor($order));
 
         $v1 = $this->issue($order, [$this->line()]);
-        self::assertSame($v1->getKey(), Quote::currentFor($order)?->getKey());
+        $currentV1 = Quote::currentFor($order);
+        self::assertNotNull($currentV1);
+        self::assertSame($v1->getKey(), $currentV1->getKey());
 
         $v2 = $this->issue($order, [$this->line(['unit_amount' => '1750000.00'])]);
-        self::assertSame($v2->getKey(), Quote::currentFor($order)?->getKey());
+        $currentV2 = Quote::currentFor($order);
+        self::assertNotNull($currentV2);
+        self::assertSame($v2->getKey(), $currentV2->getKey());
     }
 
     public function test_issuing_against_a_draft_package_version_is_rejected(): void
