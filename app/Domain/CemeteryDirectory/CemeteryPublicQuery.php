@@ -17,8 +17,9 @@ use Illuminate\Support\Str;
  * `Cemetery::query()`. That scope is `cemetery-directory-and-availability`
  * AC2's base guarantee, and the model's own doc block says so explicitly:
  * "every public directory read must start here (or a helper composing it)".
- * One seeded cemetery (`tps-bekasi-harapan-indah`) is deliberately `draft`
- * precisely so that exclusion is provable rather than vacuous.
+ * One seeded example cemetery is deliberately `draft` (see
+ * `App\Support\ExampleData\CemeteryExampleData::DRAFT_SLUG`) precisely so
+ * that exclusion is provable rather than vacuous.
  *
  * ---------------------------------------------------------------------------
  * Why this class exists — a merge, not a new abstraction
