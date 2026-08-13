@@ -119,6 +119,15 @@ final class CemeteryExampleDataTest extends TestCase
         $this->assertSame(CemeteryExampleData::OPEN_CEMETERY_SLUG, CemeteryExampleData::roleCemetery('open')[2]);
     }
 
+    public function test_roles_resolve_uniquely(): void
+    {
+        $draft = CemeteryExampleData::roleCemetery('draft')[2];
+        $restricted = CemeteryExampleData::roleCemetery('all-restricted')[2];
+        $this->assertNotSame($draft, $restricted);
+        $this->assertNotSame($draft, CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]);
+        $this->assertNotSame($restricted, CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]);
+    }
+
     public function test_coordinates_are_never_fabricated(): void
     {
         foreach (CemeteryExampleData::backfills() as $backfill) {

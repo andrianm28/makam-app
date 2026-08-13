@@ -36,4 +36,16 @@ final class VendorExampleDataTest extends TestCase
         $this->assertGreaterThan(0, $first);
         $this->assertSame(0, $first % 500_000, 'Prices should be round increments of 500k.');
     }
+
+    public function test_vendors_cover_every_product_code_exactly_once(): void
+    {
+        $codes = array_column(VendorExampleData::vendors(), 0);
+        $this->assertSame(array_values(ProductCode::KNOWN_CODES), $codes);
+    }
+
+    public function test_vendor_names_are_unique(): void
+    {
+        $names = array_column(VendorExampleData::vendors(), 1);
+        $this->assertSame(count($names), count(array_unique($names)), 'Vendor names must not collide between product rows.');
+    }
 }

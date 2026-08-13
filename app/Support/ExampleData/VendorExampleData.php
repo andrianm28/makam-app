@@ -36,7 +36,7 @@ final class VendorExampleData
 {
     private const array PREFIXES = ['UD', 'CV'];
 
-    private const array WORDS = ['Berkah', 'Damai', 'Sentosa', 'Abadi', 'Amanah', 'Prima', 'Nusantara', 'Sejahtera'];
+    private const array WORDS = ['Berkah', 'Damai', 'Sentosa', 'Abadi', 'Amanah', 'Prima', 'Nusantara', 'Sejahtera', 'Makmur'];
 
     /**
      * @return list<array{0: string, 1: string, 2: int, 3: string}>
@@ -49,7 +49,7 @@ final class VendorExampleData
         foreach (array_values(ProductCode::KNOWN_CODES) as $i => $code) {
             $rows[] = [
                 $code,
-                sprintf('%s %s %s', self::PREFIXES[$i % 2], self::WORDS[$i % 8], self::WORDS[($i + 3) % 8]),
+                sprintf('%s %s %s', self::PREFIXES[$i % 2], self::WORDS[$i % 9], self::WORDS[($i + 3) % 9]),
                 self::basePrice($code),
                 self::photoPath($code),
             ];

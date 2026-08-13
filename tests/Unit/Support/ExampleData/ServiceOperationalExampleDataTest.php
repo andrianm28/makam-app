@@ -44,4 +44,12 @@ final class ServiceOperationalExampleDataTest extends TestCase
             $this->assertIsBool($manual);
         }
     }
+
+    public function test_dummy_prices_cover_every_service_code(): void
+    {
+        $this->assertSame(
+            array_values(ServiceCode::KNOWN_CODES),
+            array_keys(ServiceOperationalExampleData::dummyPrices()),
+        );
+    }
 }
