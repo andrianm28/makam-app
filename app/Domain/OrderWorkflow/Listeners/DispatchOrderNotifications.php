@@ -5,23 +5,53 @@ declare(strict_types=1);
 namespace App\Domain\OrderWorkflow\Listeners;
 
 use App\Domain\OrderWorkflow\OrderStatus;
+use App\Platform\Notification\Jobs\ConsumeOutboxNotificationJob;
 use App\Platform\Outbox\Events\OutboxEventPublished;
-use App\Platform\Outbox\Outbox;
-use App\Platform\Outbox\OutboxClassification;
+use App\Platform\Outbox\OutboxQueueName;
 
 /**
- * Bridges the generic `order.status_changed.v1` outbox event to the specific
- * order-lifecycle matrix rows that have no other event producer:
+ * Bridges the ONE canonical order outbox event — `order.status_changed.v1`
+ * (`docs/contracts/event-catalog.md`; the plan's Global Constraint / finding
+ * N-12: "Never invent an event name") — to the order-lifecycle matrix rows
+ * that have no other producer:
  *
- *   - Order transitions to DIPROSES     → emits `order.processing.v1`
- *   - Order transitions to SELESAI      → emits `order.completed.v1`
+ *   - Order transitions to DIPROSES → "Order processing" template
+ *   - Order transitions to SELESAI  → "Order completed" template
  *
- * `quote.issued.v1` and `quote.accepted.v1` are emitted by IssueQuote and
+ * No `order.processing.v1` and no `order.completed.v1` exist. Both matrix
+ * rows keep a NULL `outbox_event_name` (they are deliberately absent from
+ * the Wave-1a seeder's six-row `outboxEventName()` map — the ruling-1
+ * ambiguity: both rows correspond to `order.status_changed.v1`, and the
+ * status-discrimination question that ruling left open is resolved HERE, in
+ * this bridge, not by inventing catalogue entries). This listener is the
+ * status discriminator: it maps `to_status` to the matrix label and hands
+ * the source event to the notification seam with that template explicitly
+ * selected.
+ *
+ * The seam is the existing outbox-fed dispatch:
+ * `ConsumeOutboxNotificationJob` + `Actions\DispatchNotification::
+ * consumeOutboxEvent()` — the same synchronous, in-process
+ * `OutboxEventPublished` path `DispatchNotificationConsumerOnOutboxEventPublished`
+ * uses for the six outbox-mapped matrix rows. The generic consumer listener
+ * does NOT fire for `order.status_changed.v1` (no template maps to it), so
+ * this bridge is the sole notification entry point for order transitions.
+ *
+ * Idempotency (queue delivery is at-least-once): the source
+ * `order.status_changed.v1` row already carries the idempotency key
+ * `order_status_event:{id}` (`RecordOrderStatusChange::emitStatusChanged()`).
+ * A retried `PublishOutboxEventJob` re-fires this listener for the SAME
+ * source event id, which re-dispatches the consumer for that id; the seam
+ * dedups on `notification_events.event_id` (the outbox event id, its primary
+ * key, `insertOrIgnore`) — so a retry can never double-record or double-
+ * notify. No new outbox row is ever written here, so nothing here can
+ * collide with the source event's idempotency key.
+ *
+ * `quote.issued.v1`/`quote.accepted.v1` are emitted by IssueQuote and
  * AcceptQuote respectively and need no bridge here. `payment.received.v1`
  * is emitted by ApplyPaidEffects (Task 7). `payment.opened.v1` is deferred
  * to the payment lane that owns the payment-intent creation act.
  *
- * Registered in OrderWorkflowServiceProvider via Event::listen() on
+ * Registered in NotificationServiceProvider via Event::listen() on
  * OutboxEventPublished — the same synchronous, in-process dispatch that
  * DispatchNotificationConsumerOnOutboxEventPublished uses.
  */
@@ -35,42 +65,23 @@ final class DispatchOrderNotifications
 
         $toStatus = $event->envelope['data']['to_status'] ?? null;
 
-        if ($toStatus === OrderStatus::DIPROSES->value) {
-            $this->emitOrderProcessing($event->envelope);
-        } elseif ($toStatus === OrderStatus::SELESAI->value) {
-            $this->emitOrderCompleted($event->envelope);
+        $matrixEventName = match ($toStatus) {
+            OrderStatus::DIPROSES->value => 'Order processing',
+            OrderStatus::SELESAI->value => 'Order completed',
+            default => null,
+        };
+
+        if ($matrixEventName === null) {
+            return;
         }
-    }
 
-    private function emitOrderProcessing(array $envelope): void
-    {
-        Outbox::record(
-            eventName: 'order.processing.v1',
-            eventVersion: 1,
-            aggregateType: $envelope['aggregate']['type'],
-            aggregateId: $envelope['aggregate']['id'],
-            data: [
-                'order_id' => $envelope['aggregate']['id'],
-                'from_status' => $envelope['data']['from_status'] ?? null,
-                'to_status' => OrderStatus::DIPROSES->value,
-            ],
-            classification: OutboxClassification::Internal,
-        );
-    }
+        $eventId = $event->envelope['event_id'] ?? null;
 
-    private function emitOrderCompleted(array $envelope): void
-    {
-        Outbox::record(
-            eventName: 'order.completed.v1',
-            eventVersion: 1,
-            aggregateType: $envelope['aggregate']['type'],
-            aggregateId: $envelope['aggregate']['id'],
-            data: [
-                'order_id' => $envelope['aggregate']['id'],
-                'from_status' => $envelope['data']['from_status'] ?? null,
-                'to_status' => OrderStatus::SELESAI->value,
-            ],
-            classification: OutboxClassification::Internal,
-        );
+        if (! is_string($eventId)) {
+            return;
+        }
+
+        ConsumeOutboxNotificationJob::dispatch($eventId, $matrixEventName)
+            ->onQueue(OutboxQueueName::Notifications->value);
     }
 }

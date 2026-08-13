@@ -774,6 +774,19 @@ Dispatches on the matrix rows that already exist (`docs/contracts/notification-m
 
 - [ ] **Step 1-5:** failing test → verify fail → implement → verify pass → commit.
 
+> **Fix-wave correction (whole-branch review, Important 1):** the original
+> implementation invented `order.processing.v1` / `order.completed.v1` outbox
+> events and added both to `event-catalog.md` — a finding N-12 deviation from
+> the Global Constraint ("One order event name exists"). Corrected: the bridge
+> routes the canonical `order.status_changed.v1` event through the notification
+> template-mapping seam (`ConsumeOutboxNotificationJob` + `DispatchNotification::consumeOutboxEvent()`
+> with an explicit matrix-label selection) and writes no new outbox events; the
+> two catalogue rows were removed and the templates keep a NULL
+> `outbox_event_name` (Wave-1a ruling 1's status-discrimination question is
+> resolved by the bridge). At-least-once retries dedupe on the source event's
+> id (`notification_events.event_id`, `order_status_event:{id}`), with a
+> regression test — Important 2.
+
 ---
 
 ### Task 10: PostgreSQL 18 verification and documentation

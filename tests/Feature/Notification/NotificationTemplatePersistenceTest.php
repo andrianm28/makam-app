@@ -195,8 +195,6 @@ final class NotificationTemplatePersistenceTest extends TestCase
             'Quote issued' => 'quote.issued.v1',
             'Quote accepted' => 'quote.accepted.v1',
             'Payment received' => 'payment.received.v1',
-            'Order processing' => 'order.processing.v1',
-            'Order completed' => 'order.completed.v1',
         ];
 
         foreach ($mapped as $eventName => $outboxEventName) {
@@ -211,6 +209,8 @@ final class NotificationTemplatePersistenceTest extends TestCase
             'Booking draft created',
             'Payment opened',
             'Payment failed/exception',
+            'Order processing',
+            'Order completed',
             'Marketplace order submitted',
             'Vendor accepted/rejected',
             'Vendor evidence uploaded',
@@ -307,8 +307,6 @@ final class NotificationTemplatePersistenceTest extends TestCase
             'Quote issued' => 'quote.issued.v1',
             'Quote accepted' => 'quote.accepted.v1',
             'Payment received' => 'payment.received.v1',
-            'Order processing' => 'order.processing.v1',
-            'Order completed' => 'order.completed.v1',
             default => null,
         };
     }

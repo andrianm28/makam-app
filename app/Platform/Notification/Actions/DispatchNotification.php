@@ -106,8 +106,19 @@ final class DispatchNotification
      * re-fetch-fresh-state pattern `PublishOutboxEventJob::handle()` uses
      * and documents — rather than trusting a possibly-stale envelope passed
      * in by the caller.
+     *
+     * `$matrixEventName` (nullable, default) is the OPTIONAL explicit
+     * template selection carried by the job. When provided it names the
+     * matrix row directly (`notification_templates.event_name`) and the
+     * `outbox_event_name` lookup is bypassed — this is how a single outbox
+     * event that maps ambiguously to more than one matrix row is
+     * discriminated by a caller that already resolved the mapping (the
+     * order-lifecycle bridge `Listeners\DispatchOrderNotifications`, which
+     * routes the canonical `order.status_changed.v1` event to the "Order
+     * processing"/"Order completed" rows by `to_status`; see its doc block).
+     * When null, the classic `outbox_event_name` lookup applies unchanged.
      */
-    public function consumeOutboxEvent(string $outboxEventId): void
+    public function consumeOutboxEvent(string $outboxEventId, ?string $matrixEventName = null): void
     {
         $outboxRow = OutboxEvent::query()->find($outboxEventId);
 
@@ -118,9 +129,9 @@ final class DispatchNotification
             return;
         }
 
-        $template = DB::table('notification_templates')
-            ->where('outbox_event_name', $outboxRow->event_name)
-            ->first();
+        $template = $matrixEventName !== null
+            ? DB::table('notification_templates')->where('event_name', $matrixEventName)->first()
+            : DB::table('notification_templates')->where('outbox_event_name', $outboxRow->event_name)->first();
 
         if ($template === null) {
             // task-3-brief.md D1: "an outbox event is notification-
@@ -130,7 +141,8 @@ final class DispatchNotification
             // but this job stays correct even if invoked directly (tests,
             // or a stale queued job after the mapping changed underneath
             // it) — no matching row means nothing is sent, silently and
-            // correctly.
+            // correctly. The same holds for an explicit `$matrixEventName`
+            // that names no existing template.
             return;
         }
 
