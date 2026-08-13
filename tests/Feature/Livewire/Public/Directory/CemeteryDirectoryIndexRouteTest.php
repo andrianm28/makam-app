@@ -303,6 +303,9 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
     public function test_the_page_survives_the_cemeteries_table_being_unreadable(): void
     {
         Schema::dropIfExists('booking_drafts');
+        Schema::dropIfExists('renewal_external_markings');
+        Schema::dropIfExists('renewal_quotes');
+        Schema::dropIfExists('renewals');
         Schema::dropIfExists('grave_records');
         Schema::drop('cemetery_capability_profiles');
         Schema::drop('cemetery_packages');

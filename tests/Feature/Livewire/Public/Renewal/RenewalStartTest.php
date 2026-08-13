@@ -301,6 +301,9 @@ final class RenewalStartTest extends TestCase
         // incoming `booking_drafts` FK (2BP01); its `nullOnDelete` only
         // applies to row DELETEs, never to DROP TABLE.
         Schema::dropIfExists('booking_drafts');
+        Schema::dropIfExists('renewal_external_markings');
+        Schema::dropIfExists('renewal_quotes');
+        Schema::dropIfExists('renewals');
         Schema::dropIfExists('grave_records');
         Schema::dropIfExists('cemetery_packages');
         Schema::dropIfExists('cemetery_capability_profiles');

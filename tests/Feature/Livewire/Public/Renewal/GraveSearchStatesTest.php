@@ -574,6 +574,12 @@ final class GraveSearchStatesTest extends TestCase
         $cemeteryId = $this->cemeteryId('tpu-jakarta-menteng');
 
         // Safe: RefreshDatabase rolls the whole test transaction back.
+        // Children first, in reverse-dependency order: the renewal tables FK
+        // into `grave_records`, so they must be dropped before it or
+        // PostgreSQL refuses with 2BP01.
+        DB::statement('DROP TABLE IF EXISTS renewal_external_markings');
+        DB::statement('DROP TABLE IF EXISTS renewal_quotes');
+        DB::statement('DROP TABLE IF EXISTS renewals');
         DB::statement('DROP TABLE grave_records');
 
         Livewire::withQueryParams(['tpu' => $cemeteryId, 'nama' => 'Contoh'])

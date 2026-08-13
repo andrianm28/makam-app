@@ -182,6 +182,9 @@ final class BookingWizardRouteTest extends TestCase
 
         // Same reverse-dependency drop list as RenewalStartTest's
         // degradation test.
+        Schema::dropIfExists('renewal_external_markings');
+        Schema::dropIfExists('renewal_quotes');
+        Schema::dropIfExists('renewals');
         Schema::dropIfExists('grave_records');
         Schema::dropIfExists('cemetery_packages');
         Schema::dropIfExists('cemetery_capability_profiles');
