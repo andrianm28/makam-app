@@ -154,7 +154,7 @@ git commit -m "docs: plan cemetery example-data de-hardcoding retrofit"
   - `public static function applyBackfill(): void`
   - `public static function seedGraveRecords(): void`
 
-- [ ] **Step 1: Write the failing consistency test**
+- [x] **Step 1: Write the failing consistency test**
 
 Create `tests/Unit/Support/ExampleData/CemeteryExampleDataTest.php`:
 
@@ -263,12 +263,12 @@ final class CemeteryExampleDataTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `php artisan test --filter=CemeteryExampleDataTest`
 Expected: FAIL — `Class "App\Support\ExampleData\CemeteryExampleData" not found`.
 
-- [ ] **Step 3: Write the generator**
+- [x] **Step 3: Write the generator**
 
 Create `app/Support/ExampleData/CemeteryExampleData.php`. The class docblock must carry the honesty framing from the current seed migration verbatim (fictional names using ordinary neighbourhood words, `Jl. Contoh` addresses, null coordinates/prices/photo at seed time, generic `operator_name`, generic `facilities`, why `TPS Bekasi Harapan Indah` is seeded `draft`, why only two cemeteries get package rows, the capability-profile safe-defaults paragraph, and the `source`/`evidence`/`rollback_plan` Indonesian literals). The four data methods below reproduce the exact business columns of the current migrations.
 
@@ -646,12 +646,12 @@ final class CemeteryExampleData
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `php artisan test --filter=CemeteryExampleDataTest`
 Expected: PASS (6 tests). This is the generator's internal-consistency lock.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/Support/ExampleData/CemeteryExampleData.php tests/Unit/Support/ExampleData/CemeteryExampleDataTest.php
@@ -669,7 +669,7 @@ git commit -m "feat: centralize cemetery example data in a deterministic generat
 - Consumes: `App\Support\ExampleData\CemeteryExampleData::seed()`, `::slugs()` (Task 1).
 - Produces: unchanged behavior — the same ten cemeteries, ten capability profiles, seven packages on `migrate`.
 
-- [ ] **Step 1: Rewrite the migration as a shim**
+- [x] **Step 1: Rewrite the migration as a shim**
 
 Replace the entire `return new class extends Migration {...}` body (keep the filename). The honesty docblock moves to the generator's class docblock; this file keeps a short docblock that (a) points at the generator, (b) documents **why this in-place edit is the deliberate exception to the repo's "never rewrite an applied migration" rule** (byte-identical business columns; already-applied environments are skipped by `migrate:status`, so no data change; the existing suite is the output lock), and (c) preserves the `down()` FK-order warning.
 
@@ -739,14 +739,14 @@ return new class extends Migration
 };
 ```
 
-- [ ] **Step 2: Run the affected suites**
+- [x] **Step 2: Run the affected suites**
 
 Run: `php artisan test --filter=CemeterySeedTest`
 Run: `php artisan test --filter=CemeteryCapabilityProfileSafeDefaultsTest`
 Run: `php artisan test --filter=CemeteryPackageAvailabilityTest`
 Expected: all PASS. This proves the generator reproduces the exact shape (10 rows, 9 published, 1 draft, correct slug/status/city per test, safe-default profiles, the two package cemeteries).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add database/migrations/2026_07_26_190300_seed_cemeteries_and_capability_profiles.php
@@ -764,7 +764,7 @@ git commit -m "refactor: seed cemeteries from the example-data generator"
 - Consumes: `CemeteryExampleData::applyBackfill()`, `::slugs()`, `::priceSourceLabel()` (Task 1).
 - Produces: unchanged behavior — same map/price/photo backfill on `migrate`.
 
-- [ ] **Step 1: Rewrite the migration as a shim**
+- [x] **Step 1: Rewrite the migration as a shim**
 
 Keep the class-level docblock (the dummy-data authorization rationale, the coordinates explanation, the maps-search URL rationale, the pricing rationale, the SVG-photo rationale — it is all still true and still valuable); change the references to "the seed migration's own doc block" to point at `CemeteryExampleData`. Replace the body:
 
@@ -801,12 +801,12 @@ return new class extends Migration
 
 Add the two `use` lines (`App\Support\ExampleData\CemeteryExampleData`, `Illuminate\Support\Facades\DB`) and drop the now-unused `$backfills` array, the private `mapsSearchUrl()`, and any now-unused imports.
 
-- [ ] **Step 2: Run the affected test**
+- [x] **Step 2: Run the affected test**
 
 Run: `php artisan test --filter=CemeterySeedTest` (specifically `test_every_seeded_row_has_plausible_dummy_price_map_and_photo_data`)
 Expected: PASS. The dummy data (price_min<price_max, `IDR`, `data contoh` source, `images/cemeteries/*.svg`, in-bounds lat/lng, `https://` maps URL) is asserted per row here.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add database/migrations/2026_07_26_210000_backfill_dummy_map_price_and_photo_for_seeded_cemeteries.php
@@ -824,7 +824,7 @@ git commit -m "refactor: backfill cemetery dummy data from the example-data gene
 - Consumes: `CemeteryExampleData::seedGraveRecords()` (Task 1).
 - Produces: unchanged behavior — the same fourteen `Contoh`-prefixed grave records across the documented access-mode spread.
 
-- [ ] **Step 1: Rewrite the migration as a shim**
+- [x] **Step 1: Rewrite the migration as a shim**
 
 Keep the class-level docblock (the dummy-data warning, the "Contoh" marker rationale, the access-mode spread explanation, the negative-fixture explanation, the "why a data migration" paragraph now updated to say "the data is defined in `App\Support\ExampleData\CemeteryExampleData::graveRecords()` and materialized by `seedGraveRecords()`"). Replace the body:
 
@@ -862,13 +862,13 @@ return new class extends Migration
 
 Add `use App\Support\ExampleData\CemeteryExampleData;` and `use App\Domain\GraveRegistry\GraveRecordSource;`; drop the now-unused `GraveNameNormalizer`, `GraveRecordAccessMode`, `Str`, and the inline `$records` array.
 
-- [ ] **Step 2: Run the affected suite**
+- [x] **Step 2: Run the affected suite**
 
 Run: `php artisan test --filter=GraveRecordSeedTest`
 Run: `php artisan test --filter=GraveRegistryPublicQueryTest`
 Expected: PASS. This proves the fourteen rows land on the right cemeteries (slug→id runtime resolution unchanged), with the right normalized names, access modes, and the draft-cemetery negative fixture.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add database/migrations/2026_08_08_100010_seed_example_grave_records.php
@@ -887,7 +887,7 @@ git commit -m "refactor: seed example grave records from the example-data genera
 - Consumes: `CemeteryExampleData::slugs()`, `::seed()`, `::applyBackfill()`, `::seedGraveRecords()` (Task 1).
 - Produces: `php artisan db:seed` produces the same example data as `migrate`, without duplicating rows on an already-migrated database.
 
-- [ ] **Step 1: Write the seeder**
+- [x] **Step 1: Write the seeder**
 
 Create `database/seeders/CemeteryExampleDataSeeder.php`:
 
@@ -931,7 +931,7 @@ final class CemeteryExampleDataSeeder extends Seeder
 }
 ```
 
-- [ ] **Step 2: Register it in `DatabaseSeeder`**
+- [x] **Step 2: Register it in `DatabaseSeeder`**
 
 Modify `database/seeders/DatabaseSeeder.php` `run()` to add the call **before** the existing `User::factory()` line:
 
@@ -949,13 +949,13 @@ Modify `database/seeders/DatabaseSeeder.php` `run()` to add the call **before** 
     }
 ```
 
-- [ ] **Step 3: Verify idempotency and materialization**
+- [x] **Step 3: Verify idempotency and materialization**
 
 Run: `php artisan migrate:fresh --seed --env=testing` (or, if that env differs, run `php artisan migrate:fresh --seed` in the CI-style test database)
 Run: `php artisan test --filter=CemeterySeedTest`
 Expected: PASS, and the seeder must not throw a unique-constraint violation on the already-migrated database. Run `php artisan db:seed` a second time — still PASS, no violation, row count of `cemeteries` unchanged (verify with `php artisan tinker --execute="dump(\App\Domain\CemeteryDirectory\Models\Cemetery::count());"` before/after the second run).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add database/seeders/CemeteryExampleDataSeeder.php database/seeders/DatabaseSeeder.php
@@ -970,7 +970,7 @@ git commit -m "feat: idempotent db:seed path for cemetery example data"
 - Modify: `app/Domain/CemeteryDirectory/CemeteryPublicQuery.php:20`
 - Modify: `resources/views/livewire/public/renewal/grave-search.blade.php:456`
 
-- [ ] **Step 1: Drop the slug literal from `CemeteryPublicQuery`'s doc comment**
+- [x] **Step 1: Drop the slug literal from `CemeteryPublicQuery`'s doc comment**
 
 Current line 20-21: "One seeded cemetery (`tps-bekasi-harapan-indah`) is deliberately `draft` precisely so that exclusion is provable rather than vacuous."
 
@@ -982,7 +982,7 @@ Replace with:
  * that exclusion is provable rather than vacuous.
 ```
 
-- [ ] **Step 2: Drop the "TPS Jakarta Kemang" prose from the grave-search blade**
+- [x] **Step 2: Drop the "TPS Jakarta Kemang" prose from the grave-search blade**
 
 Current comment (line 452-458): "It used to sit inside the open-results branch and be computed from the open rows alone, so a search whose every match was restricted (TPS Jakarta Kemang, both of whose seeded rows are withheld) showed fictional data with no disclosure at all."
 
@@ -997,17 +997,17 @@ Replace with:
                          fictional data with no disclosure at all.
 ```
 
-- [ ] **Step 3: Verify nothing else in runtime code names a seeded cemetery**
+- [x] **Step 3: Verify nothing else in runtime code names a seeded cemetery**
 
 Run: `grep -rn -iE "menteng|kemang|harapan.indah|sawangan|bantarjati|cimanggu|cinere|cipondoh|karawaci|jatiasih" app/ resources/ routes/ config/`
 Expected: no matches. (Any residual hit is a missed runtime-coupling reference — fix it in this task.)
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run: `composer lint`
 Expected: PASS (Pint, no style violations).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/Domain/CemeteryDirectory/CemeteryPublicQuery.php resources/views/livewire/public/renewal/grave-search.blade.php
@@ -1028,7 +1028,7 @@ git commit -m "refactor: drop seeded cemetery names from runtime prose"
 - Consumes: `CemeteryExampleData::PACKAGE_CEMETERY_SLUGS`, `::ALL_RESTRICTED_SLUG`, `::DRAFT_SLUG` (Task 1).
 - Produces: `CemeteryFixture::id(string $slug): string` and `CemeteryFixture::cemetery(string $slug): Cemetery`, used by Tasks 8–12.
 
-- [ ] **Step 1: Write the helper**
+- [x] **Step 1: Write the helper**
 
 Create `tests/Support/CemeteryFixture.php`:
 
@@ -1066,7 +1066,7 @@ final class CemeteryFixture
 }
 ```
 
-- [ ] **Step 2: Update `GraveRegistryPublicQueryTest.php`**
+- [x] **Step 2: Update `GraveRegistryPublicQueryTest.php`**
 
 - Delete the private `cemeteryId()` helper (lines 49-52).
 - Add `use Tests\Support\CemeteryFixture;` and `use App\Support\ExampleData\CemeteryExampleData;`.
@@ -1076,13 +1076,13 @@ final class CemeteryFixture
   - `$this->cemeteryId('tps-bekasi-harapan-indah')` → `CemeteryFixture::id(CemeteryExampleData::DRAFT_SLUG)`
   - `$cemeteryId = $this->cemeteryId('tpu-jakarta-menteng');` → `$cemeteryId = CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]);`
 
-- [ ] **Step 3: Update `GraveRecordTrigramSearchTest.php`**
+- [x] **Step 3: Update `GraveRecordTrigramSearchTest.php`**
 
 - Delete the private `cemeteryId()` helper (lines 60-63).
 - Add the two `use` statements (Step 2).
 - Replace `$this->cemeteryId('tpu-jakarta-menteng')` → `CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])` (3 sites).
 
-- [ ] **Step 4: Update `GraveSearchStatesTest.php`**
+- [x] **Step 4: Update `GraveSearchStatesTest.php`**
 
 - Delete the private `cemeteryId()` helper (lines 62-65).
 - Add the two `use` statements.
@@ -1093,14 +1093,14 @@ final class CemeteryFixture
   - `'tps-jakarta-kemang'`/`'tpu-jakarta-menteng'` variables already in `$cemeteryId = CemeteryFixture::id(...)` form (lines 574, 674) follow the same mapping.
   - Do **not** touch `'Contoh'`, `G-DATA-01`, `ZZ-99`, or the `blok`/`nama` query params — those are not cemetery names.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run: `php artisan test --filter=GraveRegistryPublicQueryTest`
 Run: `php artisan test --filter=GraveSearchStatesTest`
 Run: `php artisan test --filter=GraveRecordTrigramSearchTest`
 Expected: PASS (TrigramSearchTest passes on PostgreSQL/CI; it self-skips on the local SQLite default).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tests/Support/CemeteryFixture.php tests/Feature/Domain/GraveRegistry/GraveRegistryPublicQueryTest.php tests/Feature/Domain/GraveRegistry/GraveRecordTrigramSearchTest.php tests/Feature/Livewire/Public/Renewal/GraveSearchStatesTest.php
@@ -1115,7 +1115,7 @@ git commit -m "test: replace duplicated cemeteryId helpers with shared CemeteryF
 - Modify: `tests/Feature/Domain/CemeteryDirectory/CemeterySeedTest.php`
 - Modify: `tests/Feature/Domain/CemeteryDirectory/CemeteryPublicQueryTest.php`
 
-- [ ] **Step 1: Update `CemeterySeedTest.php`**
+- [x] **Step 1: Update `CemeterySeedTest.php`**
 
 - Add `use App\Support\ExampleData\CemeteryExampleData;`.
 - Line 75: `$this->assertSame('tps-bekasi-harapan-indah', $draft?->slug)` → `$this->assertSame(CemeteryExampleData::DRAFT_SLUG, $draft?->slug)`.
@@ -1125,20 +1125,20 @@ git commit -m "test: replace duplicated cemeteryId helpers with shared CemeteryF
 - Line 175 `'tpu-contoh-tanpa-peta'`: leave as-is — it is a test-local, in-memory model slug, not a seeded name.
 - Class docblock (lines 14-19): reword "`2026_07_26_190300_seed_cemeteries_and_capability_profiles.php` seeds ten EXAMPLE cemeteries" → "`App\Support\ExampleData\CemeteryExampleData` generates ten EXAMPLE cemeteries (materialized by `2026_07_26_190300_seed_cemeteries_and_capability_profiles.php` on `migrate`)". Keep the AC1/AC2 reference.
 
-- [ ] **Step 2: Update `CemeteryPublicQueryTest.php`**
+- [x] **Step 2: Update `CemeteryPublicQueryTest.php`**
 
 - Add `use App\Support\ExampleData\CemeteryExampleData;`.
 - Line 39: `private const DRAFT_SLUG = 'tps-bekasi-harapan-indah';` → `private const DRAFT_SLUG = CemeteryExampleData::DRAFT_SLUG;`.
 - Line 233: `where('slug', 'tpu-jakarta-menteng')` → `where('slug', CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])`.
 - Line 254: same replacement (this cemetery is the one that has package rows, which the test's own message requires).
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `php artisan test --filter=CemeterySeedTest`
 Run: `php artisan test --filter=CemeteryPublicQueryTest`
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/Feature/Domain/CemeteryDirectory/CemeterySeedTest.php tests/Feature/Domain/CemeteryDirectory/CemeteryPublicQueryTest.php
@@ -1154,7 +1154,7 @@ git commit -m "test: de-hardcode seeded cemetery slugs in CemeteryDirectory test
 
 `CemeteryCapabilityProfileSafeDefaultsTest.php` has **no** slug literals (it counts 10 and iterates) — no change, verified in Task 8's run.
 
-- [ ] **Step 1: Update `CemeteryPackageAvailabilityTest.php`**
+- [x] **Step 1: Update `CemeteryPackageAvailabilityTest.php`**
 
 - Add `use App\Support\ExampleData\CemeteryExampleData;`.
 - Line 28: `where('slug', 'tpu-jakarta-menteng')` → `where('slug', CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])`.
@@ -1162,13 +1162,13 @@ git commit -m "test: de-hardcode seeded cemetery slugs in CemeteryDirectory test
 - Line 51: `where('slug', 'tpu-depok-sawangan')` → `where('slug', CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[1])`.
 - Line 97 `assertSame(2, $cemeteriesWithPackages)`: keep explicit (fixture contract).
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Run: `php artisan test --filter=CemeteryPackageAvailabilityTest`
 Run: `php artisan test --filter=CemeteryCapabilityProfileSafeDefaultsTest`
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/Feature/Domain/CemeteryCapability/CemeteryPackageAvailabilityTest.php
@@ -1182,7 +1182,7 @@ git commit -m "test: de-hardcode seeded cemetery slugs in CemeteryCapability tes
 **Files:**
 - Modify: `tests/Feature/Domain/GraveRegistry/GraveRecordSeedTest.php`
 
-- [ ] **Step 1: Update slug literals and doc comments**
+- [x] **Step 1: Update slug literals and doc comments**
 
 - Add `use App\Support\ExampleData\CemeteryExampleData;`.
 - Line 112: `Cemetery::query()->where('slug', 'tps-jakarta-kemang')->sole()->id` → `Cemetery::query()->where('slug', CemeteryExampleData::ALL_RESTRICTED_SLUG)->sole()->id`.
@@ -1191,12 +1191,12 @@ git commit -m "test: de-hardcode seeded cemetery slugs in CemeteryCapability tes
 - Doc comments: reword the named references to role references, keeping the fixture-design narrative — e.g. "TPS Jakarta Kemang has only restricted records" → "the all-restricted cemetery (`CemeteryExampleData::ALL_RESTRICTED_SLUG`) has only restricted records"; "`TPS Bekasi Harapan Indah` is seeded `draft` by `2026_07_26_190300_seed_cemeteries_and_capability_profiles.php`" → "`CemeteryExampleData::DRAFT_SLUG` is the deliberately-draft example cemetery"; the method name `test_tps_jakarta_kemang_has_only_restricted_records` may keep its historical name or be renamed to `test_the_all_restricted_cemetery_has_only_restricted_records` (rename — the test asserts the role, not the name).
 - Counts (14, spread assertions) stay explicit.
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Run: `php artisan test --filter=GraveRecordSeedTest`
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/Feature/Domain/GraveRegistry/GraveRecordSeedTest.php
@@ -1211,7 +1211,7 @@ git commit -m "test: de-hardcode seeded cemetery slugs in GraveRecordSeedTest"
 - Modify: `tests/Feature/Livewire/Public/Booking/BookingWizardStepTwoPackagesTest.php`
 - Modify: `tests/Feature/Livewire/Public/Booking/BookingWizardSaveIntegrityTest.php`
 
-- [ ] **Step 1: Update `BookingWizardStepTwoPackagesTest.php`**
+- [x] **Step 1: Update `BookingWizardStepTwoPackagesTest.php`**
 
 - Add `use App\Support\ExampleData\CemeteryExampleData;` and `use Tests\Support\CemeteryFixture;`.
 - `menteng()` helper (lines 34-45) — rename to `packagesCemetery()` and source from the role constant:
@@ -1235,19 +1235,19 @@ git commit -m "test: de-hardcode seeded cemetery slugs in GraveRecordSeedTest"
 - Inline comment at line 75-77 ("The seed gives Menteng 'Makam Tumpang' three times...") → "The packages example cemetery gives 'Makam Tumpang' three times..." and line 83's fixture-assumption message similarly.
 - Class docblock (lines 17-29): reword "the seed migration (`2026_07_26_190300_...`) gives active packages to two REAL, PUBLISHED, PICKABLE cemeteries — TPU Jakarta Menteng and TPU Depok Sawangan" → "...two published, pickable example cemeteries (`CemeteryExampleData::PACKAGE_CEMETERY_SLUGS`)".
 
-- [ ] **Step 2: Update `BookingWizardSaveIntegrityTest.php`**
+- [x] **Step 2: Update `BookingWizardSaveIntegrityTest.php`**
 
 - Add `use App\Support\ExampleData\CemeteryExampleData;`.
 - Line 84: `Cemetery::query()->where('slug', 'tpu-jakarta-menteng')->firstOrFail()` → `Cemetery::query()->where('slug', CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])->firstOrFail()`.
 - Line 81-83 comment: "A different Jakarta cemetery — this one has packages" stays accurate; no name to remove.
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `php artisan test --filter=BookingWizardStepTwoPackagesTest`
 Run: `php artisan test --filter=BookingWizardSaveIntegrityTest`
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/Feature/Livewire/Public/Booking/BookingWizardStepTwoPackagesTest.php tests/Feature/Livewire/Public/Booking/BookingWizardSaveIntegrityTest.php
@@ -1262,7 +1262,7 @@ git commit -m "test: de-hardcode seeded cemetery references in Booking tests"
 - Modify: `tests/Feature/Livewire/Public/Renewal/RenewalStartTest.php`
 - Modify: `tests/Feature/Livewire/Public/HomePageRouteTest.php`
 
-- [ ] **Step 1: Update `RenewalStartTest.php`**
+- [x] **Step 1: Update `RenewalStartTest.php`**
 
 - Add `use App\Support\ExampleData\CemeteryExampleData;` and `use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;` (already imported).
 - Add one private helper deriving role cemeteries from the generator:
@@ -1285,7 +1285,7 @@ git commit -m "test: de-hardcode seeded cemetery references in Booking tests"
 - `test_a_draft_cemetery_is_never_offered` (lines 97-103): `assertSee('TPU Bekasi Jatiasih')` → `$this->firstPublishedExampleName(LaunchCityCode::BEKASI)`; `assertDontSee('TPS Bekasi Harapan Indah')` → `assertDontSee(CemeteryExampleData::bySlug(CemeteryExampleData::DRAFT_SLUG)[1])` (index 1 of the row is `name`).
 - Doc comment (lines 92-96): "`TPS Bekasi Harapan Indah` is seeded `draft`" → "`CemeteryExampleData::DRAFT_SLUG` is the deliberately-`draft` example cemetery".
 
-- [ ] **Step 2: Update `HomePageRouteTest.php`**
+- [x] **Step 2: Update `HomePageRouteTest.php`**
 
 - Add `use App\Support\ExampleData\CemeteryExampleData;` and `use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;`.
 - Rewrite `test_section_5_shows_published_dummy_cemeteries_and_excludes_the_draft_one` (lines 167-203) to **derive** the expected visible/hidden names from the generator using the exact ordering `HomePage::render()` applies (`orderBy('city')` then `orderBy('name')`, `take(6)`, published only):
@@ -1330,13 +1330,13 @@ git commit -m "test: de-hardcode seeded cemetery references in Booking tests"
 - Doc comments (lines 147-166, 172-179): reword the named references ("the nine PUBLISHED fixture names", "(`tps-bekasi-harapan-indah`, per `CemeterySeedTest`)") to generator-constant references and drop the literal `tps-bekasi-harapan-indah` and the hand-enumerated six-name list (that enumeration now lives in the derivation).
 - Line 195's `assertDontSee('TPS Bekasi Harapan Indah')` and lines 200-202's three `assertDontSee` cap names are superseded by the derivation above — remove them.
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `php artisan test --filter=RenewalStartTest`
 Run: `php artisan test --filter=HomePageRouteTest`
 Expected: PASS. Confirm the derived six-name list still equals the current literal list (`TPU Bekasi Jatiasih`, `TPS Bogor Cimanggu`, `TPU Bogor Bantarjati`, `TPS Depok Cinere`, `TPU Depok Sawangan`, `TPS Jakarta Kemang`) and the hidden-by-cap set equals the three prior `assertDontSee` names — the derivation must reproduce the current behavior, not change it.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/Feature/Livewire/Public/Renewal/RenewalStartTest.php tests/Feature/Livewire/Public/HomePageRouteTest.php
@@ -1351,31 +1351,31 @@ git commit -m "test: derive renewal/homepage expectations from the example-data 
 - Modify: `tests/Feature/Livewire/Public/Directory/CemeteryDetailRouteTest.php`
 - Modify: `tests/Feature/Livewire/Public/Directory/CemeteryDirectoryIndexRouteTest.php`
 
-- [ ] **Step 1: Update `CemeteryDetailRouteTest.php`**
+- [x] **Step 1: Update `CemeteryDetailRouteTest.php`**
 
 - Add `use App\Support\ExampleData\CemeteryExampleData;`.
 - Line 29: `private const string EXAMPLE_SLUG = 'tpu-jakarta-menteng';` → `private const string EXAMPLE_SLUG = CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0];`
 - Class docblock (lines 20-23): "`tpu-jakarta-menteng` is used as the worked example throughout: it is one of the two seeded cemeteries that carry `cemetery_packages` rows..." → "`CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]` is used as the worked example throughout: it is one of the two example cemeteries that carry `cemetery_packages` rows...".
 - `exampleCemetery()` (line 325-328) needs no change (it uses the constant).
 
-- [ ] **Step 2: Update `CemeteryDirectoryIndexRouteTest.php`**
+- [x] **Step 2: Update `CemeteryDirectoryIndexRouteTest.php`**
 
 - Add `use App\Support\ExampleData\CemeteryExampleData;`.
 - Line 220: `where('slug', 'tpu-jakarta-menteng')` → `where('slug', CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])`.
 - Lines 148-149 (`$tps->count()`, `$tpu->count()`): dynamic, no change.
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `php artisan test --filter=CemeteryDetailRouteTest`
 Run: `php artisan test --filter=CemeteryDirectoryIndexRouteTest`
 Expected: PASS.
 
-- [ ] **Step 4: Confirm no test file still names a seeded cemetery**
+- [x] **Step 4: Confirm no test file still names a seeded cemetery**
 
 Run: `grep -rn -iE "tpu-|tps-|menteng|kemang|harapan.indah|sawangan|bantarjati|cimanggu|cinere|cipondoh|karawaci|jatiasih" tests/`
 Expected: no matches (the only acceptable residual is `tests/Support/CemeteryFixture.php` and the generator constant definitions themselves, which contain none of these literal names — the generator's constants live in `app/`, not `tests/`).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/Feature/Livewire/Public/Directory/CemeteryDetailRouteTest.php tests/Feature/Livewire/Public/Directory/CemeteryDirectoryIndexRouteTest.php
@@ -1390,7 +1390,7 @@ git commit -m "test: de-hardcode seeded cemetery slugs in Directory route tests"
 - Modify: `docs/planning/retrofit-backlog.md`
 - Modify: `docs/planning/agent-execution-plan.md`
 
-- [ ] **Step 1: Add a retrofit-backlog completion row**
+- [x] **Step 1: Add a retrofit-backlog completion row**
 
 Append a row to `docs/planning/retrofit-backlog.md` §1 (the item table), following the established disposition format:
 
@@ -1398,7 +1398,7 @@ Append a row to `docs/planning/retrofit-backlog.md` §1 (the item table), follow
 | 8 | `CemeteryDirectory` example data de-hardcoding | ✅ **Done** — 13 Aug 2026 | The ten example cemeteries, seven package rows, ten dummy backfills, and fourteen grave records moved out of `database/migrations/` into `App\Support\ExampleData\CemeteryExampleData` (deterministic, per-environment generation called by both the data migrations and a new idempotent `db:seed` path). No new migration, no data change — the generator reproduces the applied rows byte-for-byte; the existing suites (CemeterySeedTest, GraveRecordSeedTest, CemeteryPackageAvailabilityTest) are the output lock. Runtime prose and 13 test files stop naming seeded cemeteries; tests use `CemeteryExampleData` role constants + `tests/Support/CemeteryFixture`. |
 ```
 
-- [ ] **Step 2: Add a one-line pointer in `agent-execution-plan.md`**
+- [x] **Step 2: Add a one-line pointer in `agent-execution-plan.md`**
 
 Near line 274's "Seeder classes were never the delivery mechanism here" block, add:
 
@@ -1409,12 +1409,12 @@ Near line 274's "Seeder classes were never the delivery mechanism here" block, a
 > produce the same data idempotently for anyone who runs it.
 ```
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `composer lint`
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/planning/retrofit-backlog.md docs/planning/agent-execution-plan.md
