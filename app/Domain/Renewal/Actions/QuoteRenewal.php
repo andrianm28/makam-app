@@ -66,6 +66,12 @@ final readonly class QuoteRenewal
             );
         }
 
+        if ($grave->due_date === null) {
+            throw new \InvalidArgumentException(
+                'Cannot produce a renewal quote: the grave has no due date, so there is no period to renew.'
+            );
+        }
+
         if ($cemetery->price_min === null) {
             throw new \InvalidArgumentException(
                 'Cannot produce a renewal quote: no attributable tariff source exists for this grave.'

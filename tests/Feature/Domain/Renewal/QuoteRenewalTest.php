@@ -174,6 +174,31 @@ final class QuoteRenewalTest extends TestCase
     }
 
     /**
+     * `grave_records.due_date` is nullable and the public search does not
+     * filter on it, so a published grave with no due date is reachable from
+     * step 3. A renewal is a settlement of a specific period — `target_due_period`
+     * is the grave's due date — so a grave with none has no period to quote.
+     * Accepting one previously crashed with a fatal `Error` when the NOT NULL
+     * insert violated and the catch handler dereferenced the null date.
+     */
+    public function test_a_grave_without_a_due_date_throws(): void
+    {
+        $grave = GraveRecord::factory()->create([
+            'cemetery_id' => $this->cemeteryWith([
+                'price_min' => '1500000.00',
+                'price_source' => 'Perda TPU 2026',
+                'price_effective_at' => now(),
+            ])->id,
+            'due_date' => null,
+        ]);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('no due date');
+
+        app(QuoteRenewal::class)($grave);
+    }
+
+    /**
      * @param  array<string, mixed>  $attributes
      */
     private function cemeteryWith(array $attributes): Cemetery

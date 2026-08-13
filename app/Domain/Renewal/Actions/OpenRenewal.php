@@ -71,11 +71,17 @@ final readonly class OpenRenewal
     {
         $draft = app(QuoteRenewal::class)($grave);
 
+        // `QuoteRenewal` guarantees `due_date` is non-null, but the exception
+        // translation below must never itself dereference null on the failure
+        // path — capture the period up front so a constraint violation can
+        // never turn into a fatal `Error` inside its own handler.
+        $targetPeriod = $grave->due_date->toDateString();
+
         try {
-            return DB::transaction(function () use ($grave, $draft): Renewal {
+            return DB::transaction(function () use ($grave, $draft, $targetPeriod): Renewal {
                 $renewal = Renewal::create([
                     'grave_record_id' => $grave->id,
-                    'target_due_period' => $grave->due_date,
+                    'target_due_period' => $targetPeriod,
                     'reference' => 'PPJ-'.Str::uuid()->toString(),
                     'status' => RenewalStatus::MENUNGGU_PEMBAYARAN,
                     'source' => RenewalSource::ONLINE,
@@ -100,7 +106,7 @@ final readonly class OpenRenewal
             if ($e->getCode() === '23000' || $e->getCode() === '23505') {
                 throw DuplicateRenewalPeriodException::forGravePeriod(
                     $grave->id,
-                    $grave->due_date->toDateString()
+                    $targetPeriod
                 );
             }
 

@@ -220,4 +220,33 @@ final class RenewalFeeTest extends TestCase
             ->assertSee('tidak ditemukan')
             ->assertDontSee('Sumber tarif');
     }
+
+    /**
+     * `grave_records.due_date` is nullable, so a published grave with no due
+     * date reaches this screen. There is no period to renew and no quote to
+     * accept — the screen must show the quote-unavailable state and acceptance
+     * must write nothing. Previously acceptance crashed with a fatal `Error`
+     * (the NOT NULL insert failed, and the duplicate-handler then dereferenced
+     * the null date).
+     */
+    public function test_a_grave_without_a_due_date_shows_quote_unavailable_and_acceptance_writes_nothing(): void
+    {
+        $this->openTheDataGate();
+        $grave = GraveRecord::factory()->create([
+            'cemetery_id' => $this->cemeteryWithPrice()->id,
+            'due_date' => null,
+        ]);
+
+        Livewire::test(RenewalFee::class, ['makam' => $grave->id])
+            ->assertOk()
+            ->assertSee('Tarif tidak tersedia')
+            ->assertDontSee('Lanjutkan ke Pembayaran');
+
+        Livewire::test(RenewalFee::class, ['makam' => $grave->id])
+            ->call('terimaDanLanjutkan')
+            ->assertNoRedirect();
+
+        $this->assertDatabaseCount('renewals', 0);
+        $this->assertDatabaseCount('renewal_quotes', 0);
+    }
 }
