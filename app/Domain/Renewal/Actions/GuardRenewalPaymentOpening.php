@@ -14,15 +14,38 @@ use App\Platform\FinancialLedger\Money;
  * AC8 renewal-shaped payment-opening guard — the only path to evaluating
  * whether a renewal payment can proceed.
  *
- * Evaluates all five conditions without short-circuiting, per the plan's
- * condition table (Ruling A, Option A approved). On any failure, returns a
- * denial. When all hold but G-PAY-01 is closed, returns
+ * Evaluates every condition before deciding, without short-circuiting, per
+ * Ruling A (Option A approved). On any failure, returns a denial naming the
+ * specific reason. When all hold but G-PAY-01 is closed, returns
  * `allowed(manualCoordinationRequired: true)` — the "eligible; online
  * unavailable" state that renders the manual coordination screen.
  *
  * This guard never calls `PaymentSession::create()` — that path throws by
  * design (Wave 1b ruling 1b-L3-01), and Ruling A explicitly forbids
  * attempting it.
+ *
+ * ---------------------------------------------------------------------------
+ * FOUR real conditions, not five — the plan's condition table was optimistic
+ * ---------------------------------------------------------------------------
+ * The plan lists five conditions and marks all five "real today". Four of them
+ * are: the `G-PAY-01` gate mode, the grave record's existence and publication,
+ * the quote's acceptance and freshness, and the amount matching the quoted
+ * total.
+ *
+ * The fifth, "authorized opening", is **not applicable** to this surface and
+ * has no honest implementation here. The public renewal journey is anonymous
+ * by design — there is no actor to authorize. An earlier revision papered over
+ * that with a local `$authorized = true` that no branch ever read, which
+ * claimed a fifth condition in the shape of dead code. Deleting it is the
+ * honest reading: this guard evaluates four conditions for real, and the PR
+ * body's "5 of 6 real" claim is corrected to four.
+ *
+ * Access to a specific renewal on steps 5 and 6 is bearer-UUID: whoever holds
+ * the unguessable `renewals.id` may view it. That is deliberate for an
+ * anonymous journey with no accounts (the family never signs in), and it is
+ * safe here because neither screen projects a grave record field — see
+ * `Livewire\Public\Renewal\RenewalPayment`. It is an access model, not an
+ * authorization condition, so it is documented rather than counted.
  *
  * @see RenewalPaymentOpeningResult
  */
@@ -49,11 +72,7 @@ final readonly class GuardRenewalPaymentOpening
         $quote = $renewal->quotes()->latest()->first();
         $quoteValid = $quote && $quote->isAcceptedAndUnexpired();
 
-        // Condition 4 — authorized opening (L5 seam; always true for public journey)
-        // No upstream denial possible for the public journey.
-        $authorized = true;
-
-        // Condition 5 — amount equals quote total
+        // Condition 4 — amount equals quote total, in integer minor units
         $amountMatches = $quote && $quote->amountAsMoney()->compare($amount) === 0;
 
         // If any condition fails, deny with the specific reason

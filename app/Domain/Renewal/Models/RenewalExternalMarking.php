@@ -42,7 +42,6 @@ final class RenewalExternalMarking extends Model
      * @var list<string>
      */
     protected $fillable = [
-        'id',
         'renewal_id',
         'marked_by_actor_ref',
         'evidence_reference',

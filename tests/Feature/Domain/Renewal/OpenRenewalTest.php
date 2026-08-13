@@ -6,6 +6,7 @@ namespace Tests\Feature\Domain\Renewal;
 
 use App\Domain\GraveRegistry\Models\GraveRecord;
 use App\Domain\Renewal\Actions\OpenRenewal;
+use App\Domain\Renewal\Actions\QuoteRenewal;
 use App\Domain\Renewal\Exceptions\DuplicateRenewalPeriodException;
 use App\Domain\Renewal\Models\Renewal;
 use App\Domain\Renewal\Models\RenewalQuote;
@@ -52,5 +53,38 @@ final class OpenRenewalTest extends TestCase
 
         $this->assertSame(1, Renewal::query()->count());
         $this->assertSame(1, RenewalQuote::query()->count());
+    }
+
+    /**
+     * `AGENTS.md` §Domain and financial invariants: "Never create payment
+     * before an accepted quote." Step 5's guard enforces that by requiring
+     * `isAcceptedAndUnexpired()`, so the quote this Action persists on the
+     * family's acceptance must actually carry the acceptance — otherwise the
+     * guard denies every real journey and the passing path is dead again.
+     */
+    public function test_the_persisted_quote_is_accepted_so_the_payment_guard_can_pass(): void
+    {
+        $grave = GraveRecord::factory()->create(['due_date' => '2027-03-01']);
+
+        $renewal = app(OpenRenewal::class)($grave);
+        $quote = $renewal->quotes()->sole();
+
+        $this->assertNotNull($quote->accepted_at);
+        $this->assertTrue($quote->isAcceptedAndUnexpired());
+    }
+
+    /**
+     * The quote is persisted from the same draft the fee screen rendered, so
+     * the amount the family accepted is the amount that reaches the database.
+     */
+    public function test_the_persisted_amount_matches_the_calculated_quote(): void
+    {
+        $grave = GraveRecord::factory()->create(['due_date' => '2027-03-01']);
+
+        $draft = app(QuoteRenewal::class)($grave);
+        $renewal = app(OpenRenewal::class)($grave);
+
+        $this->assertSame($draft->amountMinor, $renewal->quotes()->sole()->amount_minor);
+        $this->assertSame($draft->tariffSource, $renewal->quotes()->sole()->tariff_source);
     }
 }

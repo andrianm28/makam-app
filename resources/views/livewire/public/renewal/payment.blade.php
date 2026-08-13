@@ -37,14 +37,22 @@
                     Hubungi Bantuan
                 </x-mk.button>
             </div>
-        @elseif ($guardResult && $guardResult->state === 'denied')
+        @elseif ($paymentState === 'denied')
+            {{--
+                One fixed refusal for every denial reason. The guard's specific
+                reason is deliberately NOT printed here — see the component's
+                doc block: on an anonymous page it would distinguish "no such
+                renewal" from "restricted grave" from "stale quote" for anyone
+                iterating UUIDs.
+            --}}
             <div class="flex flex-col items-center gap-3 py-12 text-center">
                 <x-dynamic-component component="icon.inbox" class="size-12 text-neutral-400" aria-hidden="true" />
                 <h1 class="text-lg font-semibold text-neutral-800">
                     Pembayaran tidak dapat diproses
                 </h1>
                 <p class="max-w-prose text-base text-neutral-600">
-                    {{ $guardResult->reason ?? 'Terjadi kesalahan. Silakan hubungi petugas kami.' }}
+                    Perpanjangan ini belum dapat dilanjutkan ke pembayaran.
+                    Silakan hubungi petugas kami untuk memeriksa statusnya.
                 </p>
                 <x-mk.button variant="primary" href="/bantuan" class="mt-2">
                     Hubungi Bantuan

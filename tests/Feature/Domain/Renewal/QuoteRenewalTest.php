@@ -10,10 +10,7 @@ use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\GraveRegistry\Models\GraveRecord;
 use App\Domain\Renewal\Actions\QuoteRenewal;
-use App\Domain\Renewal\Models\Renewal;
-use App\Domain\Renewal\Models\RenewalQuote;
-use App\Domain\Renewal\RenewalSource;
-use App\Domain\Renewal\RenewalStatus;
+use App\Platform\FinancialLedger\Money;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -21,27 +18,23 @@ use Tests\TestCase;
  * `QuoteRenewal` — AC6 (tariff amount + source + effective time) and
  * AC7 (no invented late fine).
  *
- * The two tests from the plan (Step 1 and Step 2) plus the throw case.
- * `RefreshDatabase` is required because the Action creates both a `Renewal`
- * and a `RenewalQuote` in a transaction.
- *
  * ---------------------------------------------------------------------------
  * Coordinator's ruling (2026-08-12 handoff, applied here verbatim)
  * ---------------------------------------------------------------------------
- * `cemetery.price_min` → `amount_minor` (as integer minor units, IDR);
- * `cemetery.price_source` → `tariff_source`;
- * `cemetery.price_effective_at` → `tariff_effective_at`.
- * Throw if `price_min` is null. No renewal-tariff table/service exists;
- * this is the documented fallback per AGENTS.md §1.
+ * `cemetery.price_min` → the quoted amount; `cemetery.price_source` → the
+ * tariff source; `cemetery.price_effective_at` → the effective time. Throw if
+ * `price_min` is null. No renewal-tariff table/service exists; this is the
+ * documented fallback per AGENTS.md §1.
  *
  * ---------------------------------------------------------------------------
- * AC7 late-fine refusal (G-RATE-01 gate read)
+ * Two properties this file exists to pin
  * ---------------------------------------------------------------------------
- * `late_fine_minor` and `late_fine_basis` are always null in this
- * implementation. `G-RATE-01`'s documented closed behavior is literally "No
- * invented fine" — without a written operator basis, there is no fine to
- * record, and a zero would read as "we checked and it is nothing" rather
- * than "no basis was presented."
+ * 1. The Action WRITES NOTHING. Step 4 is an anonymous GET and calls this
+ *    Action on every render; a persisting quote let any visitor create rows
+ *    and squat the AC11 business key.
+ * 2. The amount is a MINOR-unit conversion of a MAJOR-unit decimal column, via
+ *    `Money::fromDecimal()`. The regression this guards against quoted
+ *    Rp 40.000 for a Rp 4.000.000 tariff.
  */
 final class QuoteRenewalTest extends TestCase
 {
@@ -51,69 +44,148 @@ final class QuoteRenewalTest extends TestCase
     {
         $grave = GraveRecord::factory()->create(['due_date' => '2027-03-01']);
 
-        $quote = app(QuoteRenewal::class)($grave);
+        $draft = app(QuoteRenewal::class)($grave);
 
-        $this->assertNull($quote->late_fine_minor);
-        $this->assertNull($quote->late_fine_basis);
+        $this->assertNull($draft->lateFineMinor);
+        $this->assertNull($draft->lateFineBasis);
+        $this->assertFalse($draft->hasLateFine());
+        $this->assertNull($draft->lateFineAsMoney());
     }
 
-    public function test_a_quote_always_carries_its_tariff_source_and_update_time(): void
+    public function test_a_quote_always_carries_its_tariff_source_and_effective_time(): void
     {
-        $quote = app(QuoteRenewal::class)(GraveRecord::factory()->create());
+        $draft = app(QuoteRenewal::class)(GraveRecord::factory()->create());
 
-        $this->assertNotNull($quote->tariff_source);
-        $this->assertNotSame('', $quote->tariff_source);
-        $this->assertNotNull($quote->tariff_source_updated_at);
+        $this->assertNotSame('', $draft->tariffSource);
+        $this->assertNotNull($draft->tariffEffectiveAt);
     }
 
-    public function test_a_quote_derives_amount_and_attribution_from_the_cemetery_price_data(): void
+    /**
+     * The hundredfold-understatement regression, pinned against the real
+     * seeded price data rather than a hand-built fixture.
+     *
+     * `cemeteries.price_min` is `decimal:2` in MAJOR units — the string
+     * `'4000000.00'` means four million rupiah. `amount_minor` is in MINOR
+     * units. A `(int)` cast of that string yields `4000000`, which read as
+     * minor units is Rp 40.000: the fee screen would quote the family one
+     * hundredth of the real tariff. `Money::fromDecimal()` is the conversion
+     * seam; this test fails if anyone reintroduces the cast.
+     */
+    public function test_the_quoted_amount_is_the_cemetery_price_converted_to_minor_units(): void
     {
         $grave = GraveRecord::factory()->create();
         $cemetery = $grave->cemetery;
 
-        $quote = app(QuoteRenewal::class)($grave);
+        $draft = app(QuoteRenewal::class)($grave);
 
-        $this->assertSame((int) $cemetery->price_min, $quote->amount_minor);
-        $this->assertSame($cemetery->price_source, $quote->tariff_source);
-        $this->assertEquals($cemetery->price_effective_at, $quote->tariff_effective_at);
-        $this->assertSame('IDR', $quote->currency);
+        $expectedMinor = Money::fromDecimal((string) $cemetery->price_min);
+
+        $this->assertSame($expectedMinor, $draft->amountMinor);
+        $this->assertNotSame(
+            (int) $cemetery->price_min,
+            $draft->amountMinor,
+            'A decimal major-unit price must not be read as minor units.'
+        );
+        $this->assertSame(
+            (int) round(((float) $cemetery->price_min) * 100),
+            $draft->amountMinor
+        );
     }
 
-    public function test_a_quote_is_created_alongside_a_renewal_in_one_transaction(): void
+    public function test_a_quote_derives_its_attribution_from_the_cemetery_price_data(): void
+    {
+        $grave = GraveRecord::factory()->create();
+        $cemetery = $grave->cemetery;
+
+        $draft = app(QuoteRenewal::class)($grave);
+
+        $this->assertSame($cemetery->price_source, $draft->tariffSource);
+        $this->assertEquals($cemetery->price_effective_at, $draft->tariffEffectiveAt);
+        $this->assertSame('IDR', $draft->currency);
+    }
+
+    /**
+     * Step 4 renders through this Action on every GET. If it persists, a
+     * crawler creates renewals.
+     */
+    public function test_quoting_persists_nothing(): void
     {
         $grave = GraveRecord::factory()->create(['due_date' => '2027-03-01']);
 
-        $quote = app(QuoteRenewal::class)($grave);
+        app(QuoteRenewal::class)($grave);
+        app(QuoteRenewal::class)($grave);
+        app(QuoteRenewal::class)($grave);
 
-        $this->assertNotNull($quote->renewal_id);
-        $this->assertDatabaseHas('renewals', [
-            'id' => $quote->renewal_id,
-            'grave_record_id' => $grave->id,
-            'status' => RenewalStatus::MENUNGGU_PEMBAYARAN,
-            'source' => RenewalSource::ONLINE,
-        ]);
-        $this->assertDatabaseHas('renewal_quotes', [
-            'id' => $quote->id,
-            'renewal_id' => $quote->renewal_id,
-        ]);
+        $this->assertDatabaseCount('renewals', 0);
+        $this->assertDatabaseCount('renewal_quotes', 0);
     }
 
-    public function test_a_quote_without_a_tariff_source_throws(): void
+    public function test_a_quote_without_a_tariff_amount_throws(): void
     {
-        $cemetery = Cemetery::create([
-            'type' => CemeteryType::TPU,
-            'publication_status' => CemeteryPublicationStatus::PUBLISHED,
-            'name' => 'TPU Test Null Price',
-            'slug' => 'tpu-test-null-price-'.uniqid(),
-            'city' => LaunchCityCode::JAKARTA,
-            'address' => 'Jl. Contoh No. 1',
-            'price_min' => null,
+        $grave = GraveRecord::factory()->create([
+            'cemetery_id' => $this->cemeteryWith(['price_min' => null])->id,
         ]);
-        $grave = GraveRecord::factory()->create(['cemetery_id' => $cemetery->id]);
 
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('no attributable tariff source');
 
         app(QuoteRenewal::class)($grave);
+    }
+
+    /**
+     * `renewal_quotes.tariff_source` is NOT NULL, and the plan's own rule is
+     * that a quote with no attributable source is not a quote. A price with no
+     * `price_source` must therefore refuse, not quote anonymously.
+     */
+    public function test_a_price_without_a_source_attribution_throws(): void
+    {
+        $grave = GraveRecord::factory()->create([
+            'cemetery_id' => $this->cemeteryWith([
+                'price_min' => '1500000.00',
+                'price_source' => null,
+            ])->id,
+        ]);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('no source attribution');
+
+        app(QuoteRenewal::class)($grave);
+    }
+
+    /**
+     * `renewal_quotes.tariff_effective_at` is NOT NULL on PostgreSQL 18. A
+     * priced-but-undated cemetery must refuse here, not reach the insert and
+     * fail as an unhandled integrity error the screen cannot render.
+     */
+    public function test_a_price_without_an_effective_time_throws(): void
+    {
+        $grave = GraveRecord::factory()->create([
+            'cemetery_id' => $this->cemeteryWith([
+                'price_min' => '1500000.00',
+                'price_source' => 'Perda TPU 2026',
+                'price_effective_at' => null,
+            ])->id,
+        ]);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('no effective time');
+
+        app(QuoteRenewal::class)($grave);
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function cemeteryWith(array $attributes): Cemetery
+    {
+        return Cemetery::create([
+            'type' => CemeteryType::TPU,
+            'publication_status' => CemeteryPublicationStatus::PUBLISHED,
+            'name' => 'TPU Test Price',
+            'slug' => 'tpu-test-price-'.uniqid(),
+            'city' => LaunchCityCode::JAKARTA,
+            'address' => 'Jl. Contoh No. 1',
+            ...$attributes,
+        ]);
     }
 }

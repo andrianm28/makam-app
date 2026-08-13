@@ -96,4 +96,58 @@ final class RenewalPaymentTest extends TestCase
             ->assertOk()
             ->assertSee('/bantuan');
     }
+
+    /**
+     * With no query parameter at all the screen used to fall straight through
+     * to the success branch and render a complete manual-coordination card,
+     * plus a "continue to confirmation" link carrying an empty renewal id.
+     */
+    public function test_a_missing_renewal_parameter_reports_not_found_rather_than_a_payable_card(): void
+    {
+        Livewire::test(RenewalPayment::class)
+            ->assertOk()
+            ->assertSee('tidak ditemukan')
+            ->assertDontSee('koordinasi manual')
+            ->assertDontSee('Lanjutkan ke Konfirmasi');
+    }
+
+    /**
+     * The guard's `denialReason()` names the specific condition that failed.
+     * On an anonymous page that is an oracle: it distinguishes "no such
+     * renewal" from "restricted grave" from "stale quote" for anyone
+     * iterating UUIDs. The refusal copy must be one fixed message.
+     */
+    public function test_a_denial_never_prints_the_guards_specific_reason(): void
+    {
+        $this->openThePaymentGate();
+
+        $renewal = $this->createRenewalWithQuote();
+        $renewal->quotes()->update(['accepted_at' => null]);
+
+        Livewire::test(RenewalPayment::class, ['perpanjangan' => $renewal->id])
+            ->assertOk()
+            ->assertSee('tidak dapat diproses')
+            ->assertDontSee('quote')
+            ->assertDontSee('Grave record')
+            ->assertDontSee('unexpired')
+            ->assertDontSee('does not match');
+    }
+
+    /**
+     * A renewal carrying no quote at all must refuse with the same fixed copy
+     * — not a different message that would tell the caller which case it hit.
+     */
+    public function test_a_renewal_with_no_quote_refuses_with_the_same_fixed_copy(): void
+    {
+        $this->openThePaymentGate();
+
+        $grave = GraveRecord::factory()->create(['cemetery_id' => $this->cemeteryWithPrice()->id]);
+        $renewal = Renewal::factory()->create(['grave_record_id' => $grave->id]);
+
+        Livewire::test(RenewalPayment::class, ['perpanjangan' => $renewal->id])
+            ->assertOk()
+            ->assertSee('tidak dapat diproses')
+            ->assertDontSee('devis')
+            ->assertDontSee('quirote');
+    }
 }

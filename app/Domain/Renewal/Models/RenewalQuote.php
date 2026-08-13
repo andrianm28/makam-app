@@ -59,7 +59,6 @@ final class RenewalQuote extends Model
      * @var list<string>
      */
     protected $fillable = [
-        'id',
         'renewal_id',
         'amount_minor',
         'currency',

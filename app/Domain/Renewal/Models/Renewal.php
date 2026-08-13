@@ -72,7 +72,6 @@ final class Renewal extends Model
      * @var list<string>
      */
     protected $fillable = [
-        'id',
         'grave_record_id',
         'target_due_period',
         'reference',
