@@ -4,15 +4,16 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Domain\GraveRegistry;
 
-use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\GraveRegistry\GraveRecordAccessMode;
 use App\Domain\GraveRegistry\GraveRecordProjection;
 use App\Domain\GraveRegistry\GraveRegistryPublicQuery;
 use App\Domain\GraveRegistry\GraveSearchCriteria;
 use App\Domain\GraveRegistry\Models\GraveRecord;
+use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use ReflectionClass;
 use ReflectionProperty;
+use Tests\Support\CemeteryFixture;
 use Tests\TestCase;
 
 /**
@@ -46,11 +47,6 @@ final class GraveRegistryPublicQueryTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function cemeteryId(string $slug): string
-    {
-        return (string) Cemetery::query()->where('slug', $slug)->sole()->id;
-    }
-
     // =====================================================================
     // AC14 — the three access modes and their field projections
     // =====================================================================
@@ -58,7 +54,7 @@ final class GraveRegistryPublicQueryTest extends TestCase
     public function test_an_open_record_projects_every_publicly_allowed_field(): void
     {
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: $this->cemeteryId('tpu-jakarta-menteng'),
+            cemeteryId: CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
             block: 'A-12',
         ));
 
@@ -70,7 +66,7 @@ final class GraveRegistryPublicQueryTest extends TestCase
         $this->assertSame(GraveRecordAccessMode::OPEN, $row->accessMode);
         $this->assertFalse($row->isRestricted());
         $this->assertSame('Contoh Budi Santoso', $row->deceasedName);
-        $this->assertSame('TPU Jakarta Menteng', $row->cemeteryName);
+        $this->assertSame(CemeteryExampleData::bySlug(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])[1], $row->cemeteryName);
         $this->assertSame('A-12', $row->block);
         $this->assertSame('2018-04-11', $row->deathDate);
         $this->assertSame('2026-04-11', $row->dueDate);
@@ -85,7 +81,7 @@ final class GraveRegistryPublicQueryTest extends TestCase
     public function test_a_limited_record_projects_only_its_location(): void
     {
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: $this->cemeteryId('tpu-jakarta-menteng'),
+            cemeteryId: CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
             block: 'B-08',
         ));
 
@@ -96,7 +92,7 @@ final class GraveRegistryPublicQueryTest extends TestCase
 
         $this->assertSame(GraveRecordAccessMode::LIMITED, $row->accessMode);
         $this->assertTrue($row->isRestricted());
-        $this->assertSame('TPU Jakarta Menteng', $row->cemeteryName);
+        $this->assertSame(CemeteryExampleData::bySlug(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])[1], $row->cemeteryName);
         $this->assertSame('B-08', $row->block);
 
         // Withheld — and genuinely absent from the value object, not merely
@@ -109,7 +105,7 @@ final class GraveRegistryPublicQueryTest extends TestCase
     public function test_a_closed_record_projects_no_fields_at_all(): void
     {
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: $this->cemeteryId('tps-jakarta-kemang'),
+            cemeteryId: CemeteryFixture::id(CemeteryExampleData::ALL_RESTRICTED_SLUG),
             block: 'C-04',
         ));
 
@@ -137,7 +133,7 @@ final class GraveRegistryPublicQueryTest extends TestCase
     public function test_a_closed_record_is_still_counted_and_never_reported_as_not_found(): void
     {
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: $this->cemeteryId('tps-jakarta-kemang'),
+            cemeteryId: CemeteryFixture::id(CemeteryExampleData::ALL_RESTRICTED_SLUG),
             block: 'C-04',
         ));
 
@@ -154,7 +150,7 @@ final class GraveRegistryPublicQueryTest extends TestCase
     public function test_a_search_matching_nothing_is_no_result_and_not_privacy_limited(): void
     {
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: $this->cemeteryId('tpu-jakarta-menteng'),
+            cemeteryId: CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
             block: 'ZZ-99',
         ));
 
@@ -165,14 +161,15 @@ final class GraveRegistryPublicQueryTest extends TestCase
     }
 
     /**
-     * `TPS Jakarta Kemang` is seeded with every one of its records
+     * The all-restricted example cemetery (`CemeteryExampleData::
+     * ALL_RESTRICTED_SLUG`) is seeded with every one of its records
      * restricted, precisely so this state is reachable from seed data alone
-     * — see the seed migration's fixture-design note.
+     * — see the generator's fixture-design note.
      */
     public function test_a_cemetery_whose_matches_are_all_restricted_is_privacy_limited_not_no_result(): void
     {
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: $this->cemeteryId('tps-jakarta-kemang'),
+            cemeteryId: CemeteryFixture::id(CemeteryExampleData::ALL_RESTRICTED_SLUG),
             name: 'Contoh',
         ));
 
@@ -193,7 +190,7 @@ final class GraveRegistryPublicQueryTest extends TestCase
     public function test_a_mixed_search_reports_readable_rows_and_the_restricted_match_together(): void
     {
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: $this->cemeteryId('tpu-jakarta-menteng'),
+            cemeteryId: CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
             name: 'Contoh',
         ));
 
@@ -212,7 +209,7 @@ final class GraveRegistryPublicQueryTest extends TestCase
 
     public function test_a_name_term_matches_regardless_of_case_and_punctuation(): void
     {
-        $cemeteryId = $this->cemeteryId('tpu-jakarta-menteng');
+        $cemeteryId = CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]);
 
         foreach (['budi santoso', 'BUDI SANTOSO', 'Budi  Santoso'] as $term) {
             $outcome = GraveRegistryPublicQuery::search(
@@ -231,7 +228,7 @@ final class GraveRegistryPublicQueryTest extends TestCase
     public function test_a_death_date_filter_narrows_to_the_matching_record(): void
     {
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: $this->cemeteryId('tpu-jakarta-menteng'),
+            cemeteryId: CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
             deathDate: '2018-04-11',
         ));
 
@@ -251,7 +248,7 @@ final class GraveRegistryPublicQueryTest extends TestCase
         // here would be asserting pg_trgm's scoring rather than this
         // query's AND/OR structure — see this class's own doc block.
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: $this->cemeteryId('tpu-jakarta-menteng'),
+            cemeteryId: CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
             name: 'Budi Santoso',
             block: 'B-03',
         ));
@@ -271,13 +268,14 @@ final class GraveRegistryPublicQueryTest extends TestCase
     /**
      * Cross-scope denial, the genre `ScopeAssignmentGlobalScopeTest`
      * establishes: same query, only the cemetery identifier changes. Block
-     * `A-12` exists in TPU Jakarta Menteng and must not be reachable by
-     * asking a different cemetery for it.
+     * `A-12` exists in the packages example cemetery
+     * (`CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]`) and must not be
+     * reachable by asking a different cemetery for it.
      */
     public function test_a_search_never_reaches_a_record_in_another_cemetery(): void
     {
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: $this->cemeteryId('tps-jakarta-kemang'),
+            cemeteryId: CemeteryFixture::id(CemeteryExampleData::ALL_RESTRICTED_SLUG),
             block: 'A-12',
         ));
 
@@ -288,8 +286,9 @@ final class GraveRegistryPublicQueryTest extends TestCase
      * A DRAFT cemetery's records are not public data, and the query itself
      * must say so — not the screen that happens to call it today.
      *
-     * `TPS Bekasi Harapan Indah` is seeded `draft` and holds exactly one
-     * grave record (`Contoh Rahmat Hidayat`, block `H-01`), seeded `open`
+     * The deliberately-draft example cemetery (`CemeteryExampleData::
+     * DRAFT_SLUG`) holds exactly one grave record
+     * (`Contoh Rahmat Hidayat`, block `H-01`), seeded `open`
      * mode on purpose so this is provable rather than vacuous: without the
      * publication-status filter this same search returns that row as a
      * fully-populated `open` projection — deceased name, block, death date,
@@ -306,7 +305,7 @@ final class GraveRegistryPublicQueryTest extends TestCase
      */
     public function test_a_search_never_reaches_a_record_in_an_unpublished_cemetery(): void
     {
-        $draftCemeteryId = $this->cemeteryId('tps-bekasi-harapan-indah');
+        $draftCemeteryId = CemeteryFixture::id(CemeteryExampleData::DRAFT_SLUG);
 
         // The fixture must really be there, or the assertions below pass for
         // the wrong reason.
@@ -336,7 +335,7 @@ final class GraveRegistryPublicQueryTest extends TestCase
     public function test_a_search_with_no_terms_returns_nothing_and_never_dumps_the_registry(): void
     {
         $outcome = GraveRegistryPublicQuery::search(
-            GraveSearchCriteria::make(cemeteryId: $this->cemeteryId('tpu-jakarta-menteng'))
+            GraveSearchCriteria::make(cemeteryId: CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]))
         );
 
         $this->assertSame(0, $outcome->matchCount());
@@ -420,13 +419,14 @@ final class GraveRegistryPublicQueryTest extends TestCase
      *
      * Four is the same figure `test_a_mixed_search_reports_readable_rows_
      * and_the_restricted_match_together` pins for this identical search —
-     * TPU Jakarta Menteng's three `open` rows plus its one `limited` row —
-     * so the two tests fail together rather than one of them going quiet.
+     * the packages example cemetery's three `open` rows plus its one
+     * `limited` row — so the two tests fail together rather than one of
+     * them going quiet.
      */
     public function test_the_query_never_returns_an_eloquent_model(): void
     {
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: $this->cemeteryId('tpu-jakarta-menteng'),
+            cemeteryId: CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
             name: 'Contoh',
         ));
 
