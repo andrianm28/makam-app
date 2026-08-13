@@ -351,6 +351,9 @@ final class CemeteryExampleData
      * - `all-restricted` → the fully privacy-limited cemetery (index 1)
      * - `package` → the package cemetery at `PACKAGE_CEMETERY_SLUGS[$index]`
      *   (index defaults to 0 — the Jakarta TPU; 1 is the Depok TPU)
+     * - `open` → the plain published, openly-searchable cemetery (index 2 —
+     *   `OPEN_CEMETERY_SLUG`) used by tests needing an arbitrary cemetery
+     *   with no special role
      *
      * @return array{0: int, 1: string, 2: string, 3: string, 4: string, 5: string, 6: list<string>, 7: string}
      *
@@ -362,6 +365,7 @@ final class CemeteryExampleData
             'draft' => 9,
             'all-restricted' => 1,
             'package' => $index ?? 0,
+            'open' => 2,
             default => throw new InvalidArgumentException("Unknown example cemetery role [{$role}]."),
         };
 

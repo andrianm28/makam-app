@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Livewire\Public\Renewal;
 
+use App\Domain\GraveRegistry\GraveRecordAccessMode;
+use App\Domain\GraveRegistry\Models\GraveRecord;
 use App\Livewire\Public\Renewal\GraveSearch;
 use App\Platform\FeatureGate\Models\FeatureGate;
 use App\Support\ExampleData\CemeteryExampleData;
@@ -82,7 +84,7 @@ final class GraveSearchStatesTest extends TestCase
         $this->assertNotNull($gate, 'G-DATA-01 must exist in the seeded feature_gates registry.');
         $this->assertSame('closed', $gate->state, 'This suite assumes the real seeded default (closed); update it if that default ever changes.');
 
-        Livewire::withQueryParams(['tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])])
+        Livewire::withQueryParams(['tpu' => CemeteryFixture::id('package', 0)])
             ->test(GraveSearch::class)
             ->assertOk()
             ->assertSee(self::GATE_CLOSED_MARKER);
@@ -96,7 +98,7 @@ final class GraveSearchStatesTest extends TestCase
      */
     public function test_the_gate_closed_state_explains_itself_and_offers_the_manual_path(): void
     {
-        Livewire::withQueryParams(['tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])])
+        Livewire::withQueryParams(['tpu' => CemeteryFixture::id('package', 0)])
             ->test(GraveSearch::class)
             ->assertOk()
             ->assertSee(self::GATE_CLOSED_MARKER)
@@ -112,7 +114,7 @@ final class GraveSearchStatesTest extends TestCase
      */
     public function test_the_gate_closed_state_never_implies_the_record_does_not_exist(): void
     {
-        Livewire::withQueryParams(['tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])])
+        Livewire::withQueryParams(['tpu' => CemeteryFixture::id('package', 0)])
             ->test(GraveSearch::class)
             ->assertSee('Ini tidak berarti data makam yang Anda cari tidak ada.')
             ->assertDontSee(self::NO_RESULT_MARKER)
@@ -125,20 +127,22 @@ final class GraveSearchStatesTest extends TestCase
      */
     public function test_a_closed_gate_runs_no_search_even_when_the_url_carries_search_terms(): void
     {
+        $seededName = (string) $this->firstPackageRecord()->deceased_name;
+
         Livewire::withQueryParams([
-            'tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
-            'nama' => 'Contoh Budi Santoso',
+            'tpu' => CemeteryFixture::id('package', 0),
+            'nama' => $seededName,
         ])
             ->test(GraveSearch::class)
             ->assertSee(self::GATE_CLOSED_MARKER)
-            ->assertDontSee('Contoh Budi Santoso');
+            ->assertDontSee($seededName);
     }
 
     public function test_opening_the_gate_replaces_the_explanatory_page_with_the_search_form(): void
     {
         $this->openTheDataGate();
 
-        Livewire::withQueryParams(['tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])])
+        Livewire::withQueryParams(['tpu' => CemeteryFixture::id('package', 0)])
             ->test(GraveSearch::class)
             ->assertOk()
             ->assertDontSee(self::GATE_CLOSED_MARKER)
@@ -151,7 +155,8 @@ final class GraveSearchStatesTest extends TestCase
     // =====================================================================
 
     /**
-     * `TPS Jakarta Kemang` is seeded with every record restricted, so this
+     * The all-restricted example cemetery (`CemeteryExampleData::
+     * ALL_RESTRICTED_SLUG`) is seeded with every record restricted, so this
      * search matches two records and can show neither.
      */
     public function test_a_fully_restricted_match_renders_the_privacy_limited_state(): void
@@ -159,7 +164,7 @@ final class GraveSearchStatesTest extends TestCase
         $this->openTheDataGate();
 
         Livewire::withQueryParams([
-            'tpu' => CemeteryFixture::id(CemeteryExampleData::ALL_RESTRICTED_SLUG),
+            'tpu' => CemeteryFixture::id('all-restricted'),
             'nama' => 'Contoh',
         ])
             ->test(GraveSearch::class)
@@ -178,7 +183,7 @@ final class GraveSearchStatesTest extends TestCase
         $this->openTheDataGate();
 
         Livewire::withQueryParams([
-            'tpu' => CemeteryFixture::id(CemeteryExampleData::ALL_RESTRICTED_SLUG),
+            'tpu' => CemeteryFixture::id('all-restricted'),
             'nama' => 'Contoh',
         ])
             ->test(GraveSearch::class)
@@ -190,46 +195,58 @@ final class GraveSearchStatesTest extends TestCase
 
     /**
      * The state says a record exists; it must not then disclose the
-     * identity the access mode withholds. Both seeded Kemang records are
-     * restricted, so neither name may appear.
+     * identity the access mode withholds. Both of the all-restricted
+     * cemetery's seeded records are restricted, so neither generated name
+     * may appear. Resolved from the seed rather than named: the first
+     * record (by block) is `limited`, whose location IS permitted; the
+     * second is `closed`, and not even its block may be shown.
      */
     public function test_the_privacy_limited_state_discloses_no_withheld_name(): void
     {
         $this->openTheDataGate();
 
+        [$limited, $closed] = $this->roleRecords('all-restricted');
+
         Livewire::withQueryParams([
-            'tpu' => CemeteryFixture::id(CemeteryExampleData::ALL_RESTRICTED_SLUG),
+            'tpu' => CemeteryFixture::id('all-restricted'),
             'nama' => 'Contoh',
         ])
             ->test(GraveSearch::class)
-            ->assertDontSee('Contoh Agus Priyono')
-            ->assertDontSee('Contoh Dewi Anggraini')
-            // C-01 is the `limited` row, whose location IS permitted.
-            ->assertSee('C-01')
-            // C-04 is the `closed` row: not even its block may be shown.
-            ->assertDontSee('C-04');
+            ->assertDontSee((string) $limited->deceased_name)
+            ->assertDontSee((string) $closed->deceased_name)
+            // The `limited` row's location IS permitted.
+            ->assertSee((string) $limited->block)
+            // The `closed` row: not even its block may be shown.
+            ->assertDontSee((string) $closed->block);
     }
 
     /**
-     * A mixed search reports both facts. Showing three rows and staying
-     * silent about the fourth would be a quieter version of the same
-     * defect.
+     * A mixed search reports both facts. Showing one row and staying silent
+     * about the second would be a quieter version of the same defect.
+     *
+     * The generator seeds no "mixed" cemetery (the package cemetery is all
+     * OPEN, the all-restricted one is all restricted), so this test makes
+     * the state locally: the package cemetery's second record is demoted
+     * to `limited`, then the screen must show the readable row, report the
+     * restricted match, and still withhold the demoted row's identity.
      */
     public function test_a_mixed_result_shows_readable_rows_and_still_reports_the_restricted_match(): void
     {
         $this->openTheDataGate();
 
+        [$open, $restricted] = $this->makeThePackageCemeteryMixed();
+
         Livewire::withQueryParams([
-            'tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
+            'tpu' => CemeteryFixture::id('package', 0),
             'nama' => 'Contoh',
         ])
             ->test(GraveSearch::class)
-            ->assertSee('Contoh Budi Santoso')
+            ->assertSee((string) $open->deceased_name)
             ->assertSee(self::PRIVACY_LIMITED_MARKER)
             ->assertDontSee(self::NO_RESULT_MARKER)
             // The withheld row's name, still withheld even alongside
             // readable results.
-            ->assertDontSee('Contoh Sri Handayani');
+            ->assertDontSee((string) $restricted->deceased_name);
     }
 
     // =====================================================================
@@ -246,7 +263,7 @@ final class GraveSearchStatesTest extends TestCase
         $this->openTheDataGate();
 
         Livewire::withQueryParams([
-            'tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
+            'tpu' => CemeteryFixture::id('package', 0),
             'blok' => 'ZZ-99',
         ])
             ->test(GraveSearch::class)
@@ -282,15 +299,16 @@ final class GraveSearchStatesTest extends TestCase
         $this->openTheDataGate();
 
         Livewire::withQueryParams([
-            'tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
+            'tpu' => CemeteryFixture::id('package', 0),
             'blok' => 'ZZ-99',
         ])
             ->test(GraveSearch::class)
             ->assertOk()
             // The bare count, gone.
             ->assertDontSee('0 data makam cocok dengan pencarian Anda')
-            // 1. What is empty, and where.
-            ->assertSee('Data makam tidak ditemukan di TPU Jakarta Menteng.')
+            // 1. What is empty, and where — named from the generated
+            //    cemetery, never a literal.
+            ->assertSee('Data makam tidak ditemukan di '.CemeteryExampleData::bySlug(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])[1].'.')
             // 2. Why — and explicitly not "the grave does not exist".
             ->assertSee('Registri makam kami belum tentu lengkap, jadi hasil ini belum tentu berarti makam yang Anda cari tidak ada.')
             // 3. What to do next.
@@ -306,9 +324,11 @@ final class GraveSearchStatesTest extends TestCase
     {
         $this->openTheDataGate();
 
+        $record = $this->firstPackageRecord();
+
         Livewire::withQueryParams([
-            'tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
-            'blok' => 'A-12',
+            'tpu' => CemeteryFixture::id('package', 0),
+            'blok' => (string) $record->block,
         ])
             ->test(GraveSearch::class)
             ->assertSee('1 data makam cocok dengan pencarian Anda.')
@@ -320,7 +340,7 @@ final class GraveSearchStatesTest extends TestCase
         $this->openTheDataGate();
 
         Livewire::withQueryParams([
-            'tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
+            'tpu' => CemeteryFixture::id('package', 0),
             'blok' => 'ZZ-99',
         ])
             ->test(GraveSearch::class)
@@ -362,7 +382,7 @@ final class GraveSearchStatesTest extends TestCase
     {
         $this->openTheDataGate();
 
-        Livewire::withQueryParams(['tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])])
+        Livewire::withQueryParams(['tpu' => CemeteryFixture::id('package', 0)])
             ->test(GraveSearch::class)
             ->assertOk()
             // The announcement a screen-reader user gets — §6.1: "Every
@@ -384,15 +404,17 @@ final class GraveSearchStatesTest extends TestCase
     {
         $this->openTheDataGate();
 
+        $record = $this->firstPackageRecord();
+
         Livewire::withQueryParams([
-            'tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
-            'blok' => 'A-12',
+            'tpu' => CemeteryFixture::id('package', 0),
+            'blok' => (string) $record->block,
         ])
             ->test(GraveSearch::class)
-            ->assertSee('Contoh Budi Santoso')
-            ->assertSee('A-12')
-            ->assertSee('2018-04-11')
-            ->assertSee('2026-04-11')
+            ->assertSee((string) $record->deceased_name)
+            ->assertSee((string) $record->block)
+            ->assertSee($record->death_date->format('Y-m-d'))
+            ->assertSee($record->due_date->format('Y-m-d'))
             ->assertDontSee(self::NO_RESULT_MARKER)
             ->assertDontSee(self::PRIVACY_LIMITED_MARKER);
     }
@@ -407,8 +429,8 @@ final class GraveSearchStatesTest extends TestCase
         $this->openTheDataGate();
 
         Livewire::withQueryParams([
-            'tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
-            'blok' => 'A-12',
+            'tpu' => CemeteryFixture::id('package', 0),
+            'blok' => (string) $this->firstPackageRecord()->block,
         ])
             ->test(GraveSearch::class)
             ->assertSee('data contoh');
@@ -416,10 +438,11 @@ final class GraveSearchStatesTest extends TestCase
 
     /**
      * The disclosure must not depend on there being a readable row to hang
-     * it off. `TPS Jakarta Kemang`'s only two seeded records are both
-     * restricted — `C-01` limited, `C-04` closed — so this search produces
-     * zero open results and renders the privacy-limited card alone. The
-     * matches are still fabricated, so the page must still say so.
+     * it off. The all-restricted cemetery's two seeded records are both
+     * restricted — first `limited`, second `closed` — so this search
+     * produces zero open results and renders the privacy-limited card
+     * alone. The matches are still fabricated, so the page must still say
+     * so.
      *
      * Before this was fixed the label was computed from `openResults` alone
      * and rendered only inside the open-results branch, so this exact
@@ -430,8 +453,10 @@ final class GraveSearchStatesTest extends TestCase
     {
         $this->openTheDataGate();
 
+        [$limited, $closed] = $this->roleRecords('all-restricted');
+
         Livewire::withQueryParams([
-            'tpu' => CemeteryFixture::id(CemeteryExampleData::ALL_RESTRICTED_SLUG),
+            'tpu' => CemeteryFixture::id('all-restricted'),
             'nama' => 'Contoh',
         ])
             ->test(GraveSearch::class)
@@ -441,8 +466,8 @@ final class GraveSearchStatesTest extends TestCase
             ->assertDontSee(self::NO_RESULT_MARKER)
             // Neither withheld name appears, so no open row is being
             // rendered that the label could be hanging off.
-            ->assertDontSee('Contoh Agus Priyono')
-            ->assertDontSee('Contoh Dewi Anggraini')
+            ->assertDontSee((string) $limited->deceased_name)
+            ->assertDontSee((string) $closed->deceased_name)
             ->assertSee('data contoh');
     }
 
@@ -455,7 +480,7 @@ final class GraveSearchStatesTest extends TestCase
     {
         $this->openTheDataGate();
 
-        Livewire::withQueryParams(['tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])])
+        Livewire::withQueryParams(['tpu' => CemeteryFixture::id('package', 0)])
             ->test(GraveSearch::class)
             ->assertDontSee(self::NO_RESULT_MARKER)
             ->assertDontSee(self::PRIVACY_LIMITED_MARKER)
@@ -471,7 +496,7 @@ final class GraveSearchStatesTest extends TestCase
     {
         $this->openTheDataGate();
 
-        Livewire::withQueryParams(['tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])])
+        Livewire::withQueryParams(['tpu' => CemeteryFixture::id('package', 0)])
             ->test(GraveSearch::class)
             ->call('search')
             ->assertHasErrors('name')
@@ -482,7 +507,7 @@ final class GraveSearchStatesTest extends TestCase
     {
         $this->openTheDataGate();
 
-        Livewire::withQueryParams(['tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])])
+        Livewire::withQueryParams(['tpu' => CemeteryFixture::id('package', 0)])
             ->test(GraveSearch::class)
             ->set('deathDate', '11-04-2018')
             ->call('search')
@@ -516,7 +541,7 @@ final class GraveSearchStatesTest extends TestCase
         // date, but a lenient parser rolls it forward into one.
         foreach (['garbage', '11-04-2018', '2018-13-45', "' OR 1=1 --"] as $tampered) {
             Livewire::withQueryParams([
-                'tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
+                'tpu' => CemeteryFixture::id('package', 0),
                 'tanggal' => $tampered,
             ])
                 ->test(GraveSearch::class)
@@ -538,14 +563,16 @@ final class GraveSearchStatesTest extends TestCase
     {
         $this->openTheDataGate();
 
+        $record = $this->firstPackageRecord();
+
         Livewire::withQueryParams([
-            'tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
-            'tanggal' => '2018-04-11',
+            'tpu' => CemeteryFixture::id('package', 0),
+            'tanggal' => $record->death_date->format('Y-m-d'),
         ])
             ->test(GraveSearch::class)
             ->assertOk()
             ->assertHasNoErrors()
-            ->assertSee('Contoh Budi Santoso');
+            ->assertSee((string) $record->deceased_name);
     }
 
     // =====================================================================
@@ -567,7 +594,7 @@ final class GraveSearchStatesTest extends TestCase
     {
         $this->openTheDataGate();
 
-        $cemeteryId = CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]);
+        $cemeteryId = CemeteryFixture::id('package', 0);
 
         // Safe: RefreshDatabase rolls the whole test transaction back.
         // Children first, in reverse-dependency order: the renewal tables FK
@@ -616,31 +643,38 @@ final class GraveSearchStatesTest extends TestCase
     {
         $this->openTheDataGate();
 
+        $seededName = (string) $this->firstPackageRecord()->deceased_name;
+
         foreach (['garbage', "' OR 1=1 --", '../../etc/passwd'] as $tampered) {
             Livewire::withQueryParams(['tpu' => $tampered, 'nama' => 'Contoh'])
                 ->test(GraveSearch::class)
                 ->assertOk()
                 ->assertSee('Pilih TPU/TPS terlebih dahulu.')
-                ->assertDontSee('Contoh Budi Santoso');
+                ->assertDontSee($seededName);
         }
     }
 
     /**
      * A draft cemetery must not become searchable by holding on to its id
-     * in a URL. `TPS Bekasi Harapan Indah` is seeded `draft` and has one
-     * grave record parked in it precisely so this is provable.
+     * in a URL. The deliberately-draft example cemetery
+     * (`CemeteryExampleData::DRAFT_SLUG`) has one grave record parked in it
+     * precisely so this is provable.
      */
     public function test_a_draft_cemetery_cannot_be_searched_through_a_held_url(): void
     {
         $this->openTheDataGate();
 
+        $draftRecordName = (string) GraveRecord::query()
+            ->where('cemetery_id', CemeteryFixture::id('draft'))
+            ->firstOrFail()->deceased_name;
+
         Livewire::withQueryParams([
-            'tpu' => CemeteryFixture::id(CemeteryExampleData::DRAFT_SLUG),
+            'tpu' => CemeteryFixture::id('draft'),
             'nama' => 'Contoh',
         ])
             ->test(GraveSearch::class)
             ->assertSee('Pilih TPU/TPS terlebih dahulu.')
-            ->assertDontSee('Contoh Rahmat Hidayat');
+            ->assertDontSee($draftRecordName);
     }
 
     /**
@@ -653,7 +687,7 @@ final class GraveSearchStatesTest extends TestCase
     {
         $this->openTheDataGate();
 
-        $component = Livewire::withQueryParams(['tpu' => CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])])
+        $component = Livewire::withQueryParams(['tpu' => CemeteryFixture::id('package', 0)])
             ->test(GraveSearch::class);
 
         foreach (['Kota', 'TPU/TPS', 'Cari Makam', 'Biaya', 'Pembayaran', 'Konfirmasi'] as $label) {
@@ -673,7 +707,7 @@ final class GraveSearchStatesTest extends TestCase
      */
     public function test_the_support_escape_hatch_is_present_in_every_state(): void
     {
-        $cemeteryId = CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]);
+        $cemeteryId = CemeteryFixture::id('package', 0);
 
         // Gate closed.
         Livewire::withQueryParams(['tpu' => $cemeteryId])
@@ -688,8 +722,61 @@ final class GraveSearchStatesTest extends TestCase
             ->assertSee('/bantuan');
 
         // Privacy limited.
-        Livewire::withQueryParams(['tpu' => CemeteryFixture::id(CemeteryExampleData::ALL_RESTRICTED_SLUG), 'nama' => 'Contoh'])
+        Livewire::withQueryParams(['tpu' => CemeteryFixture::id('all-restricted'), 'nama' => 'Contoh'])
             ->test(GraveSearch::class)
             ->assertSee('/bantuan');
+    }
+
+    // =====================================================================
+    // Role-resolved fixtures
+    // =====================================================================
+
+    /**
+     * The first seeded record (by block) of the package example cemetery —
+     * OPEN by the generator's role rules. Resolved rather than named so a
+     * generator change cannot orphan the assertion.
+     */
+    private function firstPackageRecord(): GraveRecord
+    {
+        return GraveRecord::query()
+            ->where('cemetery_id', CemeteryFixture::id('package', 0))
+            ->orderBy('block')
+            ->firstOrFail();
+    }
+
+    /**
+     * Both records of a role cemetery, ordered by block. For the
+     * all-restricted cemetery: first `limited` (location disclosed), second
+     * `closed` (nothing disclosed) — locked by
+     * `GraveRecordSeedTest::test_seeded_record_counts_by_role_are_explicit`.
+     * For the package cemetery the two records are both OPEN as seeded.
+     *
+     * @return list{GraveRecord, GraveRecord}
+     */
+    private function roleRecords(string $role, ?int $index = null): array
+    {
+        $records = GraveRecord::query()
+            ->where('cemetery_id', CemeteryFixture::id($role, $index))
+            ->orderBy('block')
+            ->get();
+
+        return [$records[0], $records[1]];
+    }
+
+    /**
+     * The generator seeds no "mixed" cemetery, so this makes one locally:
+     * the package cemetery's second record is demoted to `limited`. The
+     * screen must then show the first (OPEN) record's row and still report
+     * — and withhold — the second.
+     *
+     * @return list{GraveRecord, GraveRecord} the open row, then the demoted row
+     */
+    private function makeThePackageCemeteryMixed(): array
+    {
+        [$open, $restricted] = $this->roleRecords('package', 0);
+
+        $restricted->update(['access_mode' => GraveRecordAccessMode::LIMITED]);
+
+        return [$open, $restricted];
     }
 }

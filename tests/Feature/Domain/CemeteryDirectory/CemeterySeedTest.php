@@ -94,27 +94,17 @@ final class CemeterySeedTest extends TestCase
     }
 
     /**
-     * RENAMED from `test_no_seeded_row_fabricates_price_photo_or_
-     * coordinates`, which asserted these six columns were `null` for every
-     * seeded row. That was correct honesty discipline at S4-T1 time (no
-     * real cemetery partnership/price/photo/coordinate data existed, and
-     * inventing any would have been fabricated business data — see the
-     * original seed migration's own doc block,
-     * `2026_07_26_190300_seed_cemeteries_and_capability_profiles.php`).
-     *
-     * The premise changed by explicit user authorization: `dev.makam.co.id`
-     * is a real, public, non-production host by deliberate decision
-     * (`docs/operations/dev-staging-environment.md` §4/§5, ADR-0031) where
-     * clearly-fictional DUMMY/DEMO data is the correct content type, not a
-     * fabrication risk. `2026_07_26_210000_backfill_dummy_map_price_and_
-     * photo_for_seeded_cemeteries.php` (its own doc block carries the same
-     * reasoning, kept in sync with this one) backfills these columns with
-     * placeholder-but-plausible values so the public directory has
-     * something to render end-to-end on that host. This test now asserts
-     * the NEW dummy values are present and internally plausible, not that
-     * they are absent.
+     * RENAMED from `test_every_seeded_row_has_plausible_dummy_price_map_and_
+     * photo_data`, which asserted the OLD literal per-cemetery coordinates
+     * and maps URLs from the original seed. Both are now `null` by
+     * approved design: `CemeteryExampleData`'s honesty framing refuses to
+     * invent precise-looking coordinates for a fictional address, so the
+     * backfill sets price/photo/price_source only. This test now asserts
+     * the NEW dummy values are present and internally plausible, and that
+     * the coordinate/map columns stay NULL — the honest-empty state, not a
+     * fabrication gap.
      */
-    public function test_every_seeded_row_has_plausible_dummy_price_map_and_photo_data(): void
+    public function test_every_seeded_row_has_plausible_dummy_price_and_photo_but_never_fabricated_coordinates(): void
     {
         $cemeteries = Cemetery::query()->get();
 
@@ -140,18 +130,14 @@ final class CemeterySeedTest extends TestCase
             $this->assertStringStartsWith('images/cemeteries/', (string) $cemetery->primary_photo_path);
             $this->assertStringEndsWith('.svg', (string) $cemetery->primary_photo_path);
 
-            // Rough Indonesia bounding box — generous, not a precise
-            // per-city check, since these coordinates are deliberately
-            // rough/generic (see the backfill migration's own doc block).
-            $this->assertNotNull($cemetery->latitude);
-            $this->assertNotNull($cemetery->longitude);
-            $this->assertGreaterThanOrEqual(-11.0, (float) $cemetery->latitude);
-            $this->assertLessThanOrEqual(6.0, (float) $cemetery->latitude);
-            $this->assertGreaterThanOrEqual(95.0, (float) $cemetery->longitude);
-            $this->assertLessThanOrEqual(141.0, (float) $cemetery->longitude);
-
-            $this->assertNotNull($cemetery->google_maps_url);
-            $this->assertStringStartsWith('https://', (string) $cemetery->google_maps_url);
+            // Coordinates and the maps URL are ALWAYS null by design (see
+            // `CemeteryExampleData`'s honesty framing) — inventing
+            // precise-looking coordinates for a fictional address would be
+            // a false-precision claim, so the honest state is an explicit
+            // absence, not a placeholder.
+            $this->assertNull($cemetery->latitude, "slug [{$cemetery->slug}] must not fabricate a latitude");
+            $this->assertNull($cemetery->longitude, "slug [{$cemetery->slug}] must not fabricate a longitude");
+            $this->assertNull($cemetery->google_maps_url, "slug [{$cemetery->slug}] must not fabricate a maps URL");
         }
     }
 
@@ -184,12 +170,18 @@ final class CemeterySeedTest extends TestCase
         $this->assertNotEmpty($cemetery->address);
     }
 
-    public function test_google_maps_url_is_set_from_the_dummy_backfill_for_every_seeded_row(): void
+    /**
+     * RENAMED from `test_google_maps_url_is_set_from_the_dummy_backfill_
+     * for_every_seeded_row`: the backfill no longer sets a maps URL —
+     * coordinates and `google_maps_url` are NULL on every seeded row by
+     * design (honesty framing, `CemeteryExampleData`). The behaviour worth
+     * pinning survives: `googleMapsUrl()` must surface exactly what is
+     * stored and must NOT invent a coordinate-derived URL where the
+     * coordinates are absent — the honest-empty case stays honest at the
+     * model seam, complementing the fallback test above.
+     */
+    public function test_google_maps_url_never_fabricates_a_link_for_a_seeded_row(): void
     {
-        // Complements the fallback test above: every PERSISTED seeded row
-        // has an explicit google_maps_url now, so googleMapsUrl() should
-        // return that explicit value rather than fall back to null or a
-        // coordinate-derived URL.
         foreach (Cemetery::query()->get() as $cemetery) {
             $this->assertSame($cemetery->google_maps_url, $cemetery->googleMapsUrl());
         }

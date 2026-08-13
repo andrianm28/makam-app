@@ -7,7 +7,6 @@ namespace Tests\Feature\Domain\GraveRegistry;
 use App\Domain\GraveRegistry\GraveRecordProjection;
 use App\Domain\GraveRegistry\GraveRegistryPublicQuery;
 use App\Domain\GraveRegistry\GraveSearchCriteria;
-use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\CemeteryFixture;
@@ -37,7 +36,7 @@ use Tests\TestCase;
  * ---------------------------------------------------------------------------
  * AC4 ("return search results in under 500 ms at 100,000 records") is
  * **NOT TESTED** here or anywhere in this batch. Nothing below measures
- * time and nothing below loads more than the fourteen seeded fixture rows.
+ * time and nothing below loads more than the sixteen seeded fixture rows.
  * `docs/planning/sprint-plan.md` §9 defers this spec's performance
  * certification to Sprint 13, and `docs/operations/release-gates.md` §I
  * forbids citing this 2 vCPU host as performance evidence in any case.
@@ -84,11 +83,21 @@ final class GraveRecordTrigramSearchTest extends TestCase
      * AC3 says "fuzzy": a misspelling still finds the record. "Santosa"
      * for "Santoso" is the single most ordinary way an Indonesian family
      * name gets mistyped.
+     *
+     * The searched record is created IN this test rather than taken from
+     * the seed: the seeded names are generator-derived ("Contoh Sejahtera
+     * 1"-style), and a similarity test needs a fixed name pair it owns, not
+     * a generated value it would otherwise be pinning.
      */
     public function test_a_misspelled_name_still_finds_the_record(): void
     {
+        GraveRecord::factory()->create([
+            'cemetery_id' => CemeteryFixture::id('package', 0),
+            'deceased_name' => 'Contoh Budi Santoso',
+        ]);
+
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
+            cemeteryId: CemeteryFixture::id('package', 0),
             name: 'Budi Santosa',
         ));
 
@@ -112,7 +121,7 @@ final class GraveRecordTrigramSearchTest extends TestCase
     public function test_an_unrelated_name_does_not_match(): void
     {
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
+            cemeteryId: CemeteryFixture::id('package', 0),
             name: 'Qxzvwk Mnbvcx',
         ));
 
@@ -129,6 +138,11 @@ final class GraveRecordTrigramSearchTest extends TestCase
      */
     public function test_a_short_exact_substring_still_matches_despite_a_low_similarity_score(): void
     {
+        GraveRecord::factory()->create([
+            'cemetery_id' => CemeteryFixture::id('package', 0),
+            'deceased_name' => 'Contoh Budi Santoso',
+        ]);
+
         $normalized = 'budi';
 
         $score = DB::selectOne(
@@ -144,7 +158,7 @@ final class GraveRecordTrigramSearchTest extends TestCase
         );
 
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
+            cemeteryId: CemeteryFixture::id('package', 0),
             name: 'Budi',
         ));
 

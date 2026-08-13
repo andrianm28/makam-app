@@ -53,9 +53,19 @@ final class GraveRegistryPublicQueryTest extends TestCase
 
     public function test_an_open_record_projects_every_publicly_allowed_field(): void
     {
+        $cemeteryId = CemeteryFixture::id('package', 0);
+
+        // The first seeded record of the package cemetery is OPEN. Asserted
+        // against the stored row rather than a literal name/date so the
+        // projection is pinned to the DATA, not to a generated value.
+        $record = GraveRecord::query()
+            ->where('cemetery_id', $cemeteryId)
+            ->orderBy('block')
+            ->firstOrFail();
+
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
-            block: 'A-12',
+            cemeteryId: $cemeteryId,
+            block: (string) $record->block,
         ));
 
         $this->assertCount(1, $outcome->openResults);
@@ -65,11 +75,11 @@ final class GraveRegistryPublicQueryTest extends TestCase
 
         $this->assertSame(GraveRecordAccessMode::OPEN, $row->accessMode);
         $this->assertFalse($row->isRestricted());
-        $this->assertSame('Contoh Budi Santoso', $row->deceasedName);
+        $this->assertSame($record->deceased_name, $row->deceasedName);
         $this->assertSame(CemeteryExampleData::bySlug(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])[1], $row->cemeteryName);
-        $this->assertSame('A-12', $row->block);
-        $this->assertSame('2018-04-11', $row->deathDate);
-        $this->assertSame('2026-04-11', $row->dueDate);
+        $this->assertSame((string) $record->block, $row->block);
+        $this->assertSame($record->death_date?->format('Y-m-d'), $row->deathDate);
+        $this->assertSame($record->due_date?->format('Y-m-d'), $row->dueDate);
     }
 
     /**
@@ -77,12 +87,26 @@ final class GraveRegistryPublicQueryTest extends TestCase
      * dates — enough for a family to recognise the record and quote
      * something concrete to a customer-service agent, without disclosing
      * the deceased's name to whoever typed a search term.
+     *
+     * The `limited` fixture lives in the all-restricted example cemetery
+     * (`CemeteryExampleData::ALL_RESTRICTED_SLUG`): its first seeded record
+     * is `limited`, its second `closed` (locked by
+     * `GraveRecordSeedTest::test_seeded_record_counts_by_role_are_explicit`).
      */
     public function test_a_limited_record_projects_only_its_location(): void
     {
+        $cemeteryId = CemeteryFixture::id('all-restricted');
+
+        $record = GraveRecord::query()
+            ->where('cemetery_id', $cemeteryId)
+            ->orderBy('block')
+            ->firstOrFail();
+
+        $this->assertSame(GraveRecordAccessMode::LIMITED, $record->access_mode);
+
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
-            block: 'B-08',
+            cemeteryId: $cemeteryId,
+            block: (string) $record->block,
         ));
 
         $this->assertSame([], $outcome->openResults);
@@ -92,8 +116,8 @@ final class GraveRegistryPublicQueryTest extends TestCase
 
         $this->assertSame(GraveRecordAccessMode::LIMITED, $row->accessMode);
         $this->assertTrue($row->isRestricted());
-        $this->assertSame(CemeteryExampleData::bySlug(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])[1], $row->cemeteryName);
-        $this->assertSame('B-08', $row->block);
+        $this->assertSame(CemeteryExampleData::bySlug(CemeteryExampleData::ALL_RESTRICTED_SLUG)[1], $row->cemeteryName);
+        $this->assertSame((string) $record->block, $row->block);
 
         // Withheld — and genuinely absent from the value object, not merely
         // unrendered by a template.
@@ -104,9 +128,19 @@ final class GraveRegistryPublicQueryTest extends TestCase
 
     public function test_a_closed_record_projects_no_fields_at_all(): void
     {
+        $cemeteryId = CemeteryFixture::id('all-restricted');
+
+        $record = GraveRecord::query()
+            ->where('cemetery_id', $cemeteryId)
+            ->orderBy('block')
+            ->skip(1)
+            ->firstOrFail();
+
+        $this->assertSame(GraveRecordAccessMode::CLOSED, $record->access_mode);
+
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: CemeteryFixture::id(CemeteryExampleData::ALL_RESTRICTED_SLUG),
-            block: 'C-04',
+            cemeteryId: $cemeteryId,
+            block: (string) $record->block,
         ));
 
         $this->assertSame([], $outcome->openResults);
@@ -132,9 +166,19 @@ final class GraveRegistryPublicQueryTest extends TestCase
      */
     public function test_a_closed_record_is_still_counted_and_never_reported_as_not_found(): void
     {
+        $cemeteryId = CemeteryFixture::id('all-restricted');
+
+        $record = GraveRecord::query()
+            ->where('cemetery_id', $cemeteryId)
+            ->orderBy('block')
+            ->skip(1)
+            ->firstOrFail();
+
+        $this->assertSame(GraveRecordAccessMode::CLOSED, $record->access_mode);
+
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: CemeteryFixture::id(CemeteryExampleData::ALL_RESTRICTED_SLUG),
-            block: 'C-04',
+            cemeteryId: $cemeteryId,
+            block: (string) $record->block,
         ));
 
         $this->assertSame(1, $outcome->matchCount());
@@ -150,7 +194,7 @@ final class GraveRegistryPublicQueryTest extends TestCase
     public function test_a_search_matching_nothing_is_no_result_and_not_privacy_limited(): void
     {
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
+            cemeteryId: CemeteryFixture::id('package', 0),
             block: 'ZZ-99',
         ));
 
@@ -169,7 +213,7 @@ final class GraveRegistryPublicQueryTest extends TestCase
     public function test_a_cemetery_whose_matches_are_all_restricted_is_privacy_limited_not_no_result(): void
     {
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: CemeteryFixture::id(CemeteryExampleData::ALL_RESTRICTED_SLUG),
+            cemeteryId: CemeteryFixture::id('all-restricted'),
             name: 'Contoh',
         ));
 
@@ -184,18 +228,26 @@ final class GraveRegistryPublicQueryTest extends TestCase
 
     /**
      * A mixed search reports BOTH facts. Under-reporting the restricted
-     * match — showing three rows and staying silent about the fourth —
-     * would be a quieter version of the same defect.
+     * match — showing one row and staying silent about the second — would
+     * be a quieter version of the same defect.
+     *
+     * The generator seeds the package cemetery with only OPEN records (the
+     * all-restricted cemetery is deliberately the pure restricted fixture),
+     * so the mixed state is made locally: the second seeded record is
+     * demoted to `limited`, then the search must report one readable row
+     * and the restricted match together.
      */
     public function test_a_mixed_search_reports_readable_rows_and_the_restricted_match_together(): void
     {
+        $cemeteryId = $this->makeThePackageCemeteryMixed();
+
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
+            cemeteryId: $cemeteryId,
             name: 'Contoh',
         ));
 
-        $this->assertSame(4, $outcome->matchCount());
-        $this->assertCount(3, $outcome->openResults);
+        $this->assertSame(2, $outcome->matchCount());
+        $this->assertCount(1, $outcome->openResults);
         $this->assertSame(1, $outcome->restrictedCount());
 
         $this->assertTrue($outcome->hasOpenResults());
@@ -209,9 +261,14 @@ final class GraveRegistryPublicQueryTest extends TestCase
 
     public function test_a_name_term_matches_regardless_of_case_and_punctuation(): void
     {
-        $cemeteryId = CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]);
+        $cemeteryId = CemeteryFixture::id('package', 0);
 
-        foreach (['budi santoso', 'BUDI SANTOSO', 'Budi  Santoso'] as $term) {
+        $name = (string) GraveRecord::query()
+            ->where('cemetery_id', $cemeteryId)
+            ->orderBy('block')
+            ->firstOrFail()->deceased_name;
+
+        foreach ([strtolower($name), strtoupper($name), str_replace(' ', '  ', $name)] as $term) {
             $outcome = GraveRegistryPublicQuery::search(
                 GraveSearchCriteria::make(cemeteryId: $cemeteryId, name: $term)
             );
@@ -221,25 +278,33 @@ final class GraveRegistryPublicQueryTest extends TestCase
                 $outcome->openResults
             );
 
-            $this->assertContains('Contoh Budi Santoso', $names, "Term [{$term}] should match the seeded record.");
+            $this->assertContains($name, $names, "Term [{$term}] should match the seeded record.");
         }
     }
 
     public function test_a_death_date_filter_narrows_to_the_matching_record(): void
     {
+        $cemeteryId = CemeteryFixture::id('package', 0);
+
+        $record = GraveRecord::query()
+            ->where('cemetery_id', $cemeteryId)
+            ->orderBy('block')
+            ->firstOrFail();
+
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
-            deathDate: '2018-04-11',
+            cemeteryId: $cemeteryId,
+            deathDate: $record->death_date->format('Y-m-d'),
         ));
 
         $this->assertSame(1, $outcome->matchCount());
-        $this->assertSame('Contoh Budi Santoso', $outcome->openResults[0]->deceasedName);
+        $this->assertSame($record->deceased_name, $outcome->openResults[0]->deceasedName);
     }
 
     public function test_name_and_block_are_combined_not_alternated(): void
     {
-        // "Contoh Budi Santoso" lives in block A-12. Asking for that name
-        // in block B-03 must not return it: an OR between the two filters
+        // The package cemetery's first record ("Contoh Sejahtera 1"-style
+        // generated name) lives in its first block. Asking for that name in
+        // another block must not return it: an OR between the two filters
         // would, an AND does not.
         //
         // Asserted as "this record is absent" rather than "the result set
@@ -247,10 +312,17 @@ final class GraveRegistryPublicQueryTest extends TestCase
         // also runs a similarity() comparison, and asserting an exact count
         // here would be asserting pg_trgm's scoring rather than this
         // query's AND/OR structure — see this class's own doc block.
+        $cemeteryId = CemeteryFixture::id('package', 0);
+
+        $record = GraveRecord::query()
+            ->where('cemetery_id', $cemeteryId)
+            ->orderBy('block')
+            ->firstOrFail();
+
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
-            name: 'Budi Santoso',
-            block: 'B-03',
+            cemeteryId: $cemeteryId,
+            name: (string) $record->deceased_name,
+            block: 'ZZ-01',
         ));
 
         $names = array_map(
@@ -258,7 +330,7 @@ final class GraveRegistryPublicQueryTest extends TestCase
             $outcome->openResults
         );
 
-        $this->assertNotContains('Contoh Budi Santoso', $names);
+        $this->assertNotContains((string) $record->deceased_name, $names);
     }
 
     // =====================================================================
@@ -267,16 +339,21 @@ final class GraveRegistryPublicQueryTest extends TestCase
 
     /**
      * Cross-scope denial, the genre `ScopeAssignmentGlobalScopeTest`
-     * establishes: same query, only the cemetery identifier changes. Block
-     * `A-12` exists in the packages example cemetery
-     * (`CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]`) and must not be
-     * reachable by asking a different cemetery for it.
+     * establishes: same query, only the cemetery identifier changes. The
+     * package cemetery's first block (`CemeteryExampleData::
+     * PACKAGE_CEMETERY_SLUGS[0]`) must not be reachable by asking a
+     * different cemetery for it.
      */
     public function test_a_search_never_reaches_a_record_in_another_cemetery(): void
     {
+        $packageBlock = (string) GraveRecord::query()
+            ->where('cemetery_id', CemeteryFixture::id('package', 0))
+            ->orderBy('block')
+            ->firstOrFail()->block;
+
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: CemeteryFixture::id(CemeteryExampleData::ALL_RESTRICTED_SLUG),
-            block: 'A-12',
+            cemeteryId: CemeteryFixture::id('all-restricted'),
+            block: $packageBlock,
         ));
 
         $this->assertSame(0, $outcome->matchCount());
@@ -287,8 +364,7 @@ final class GraveRegistryPublicQueryTest extends TestCase
      * must say so — not the screen that happens to call it today.
      *
      * The deliberately-draft example cemetery (`CemeteryExampleData::
-     * DRAFT_SLUG`) holds exactly one grave record
-     * (`Contoh Rahmat Hidayat`, block `H-01`), seeded `open`
+     * DRAFT_SLUG`) holds exactly one grave record, seeded `open`
      * mode on purpose so this is provable rather than vacuous: without the
      * publication-status filter this same search returns that row as a
      * fully-populated `open` projection — deceased name, block, death date,
@@ -305,7 +381,7 @@ final class GraveRegistryPublicQueryTest extends TestCase
      */
     public function test_a_search_never_reaches_a_record_in_an_unpublished_cemetery(): void
     {
-        $draftCemeteryId = CemeteryFixture::id(CemeteryExampleData::DRAFT_SLUG);
+        $draftCemeteryId = CemeteryFixture::id('draft');
 
         // The fixture must really be there, or the assertions below pass for
         // the wrong reason.
@@ -315,9 +391,14 @@ final class GraveRegistryPublicQueryTest extends TestCase
             'The draft cemetery must still hold its one seeded grave record for this test to mean anything.'
         );
 
+        $draftBlock = (string) GraveRecord::query()
+            ->where('cemetery_id', $draftCemeteryId)
+            ->orderBy('block')
+            ->firstOrFail()->block;
+
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
             cemeteryId: $draftCemeteryId,
-            block: 'H-01',
+            block: $draftBlock,
         ));
 
         // Not merely "no readable rows": no rows at all. A restricted-shaped
@@ -335,7 +416,7 @@ final class GraveRegistryPublicQueryTest extends TestCase
     public function test_a_search_with_no_terms_returns_nothing_and_never_dumps_the_registry(): void
     {
         $outcome = GraveRegistryPublicQuery::search(
-            GraveSearchCriteria::make(cemeteryId: CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]))
+            GraveSearchCriteria::make(cemeteryId: CemeteryFixture::id('package', 0))
         );
 
         $this->assertSame(0, $outcome->matchCount());
@@ -417,25 +498,48 @@ final class GraveRegistryPublicQueryTest extends TestCase
      * this test would keep passing while testing nothing. A test that can
      * assert zero times is not test evidence under `AGENTS.md` §Testing.
      *
-     * Four is the same figure `test_a_mixed_search_reports_readable_rows_
+     * Two is the same figure `test_a_mixed_search_reports_readable_rows_
      * and_the_restricted_match_together` pins for this identical search —
-     * the packages example cemetery's three `open` rows plus its one
-     * `limited` row — so the two tests fail together rather than one of
-     * them going quiet.
+     * the package example cemetery's one `open` row plus its one locally
+     * demoted `limited` row — so the two tests fail together rather than
+     * one of them going quiet.
      */
     public function test_the_query_never_returns_an_eloquent_model(): void
     {
         $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
-            cemeteryId: CemeteryFixture::id(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]),
+            cemeteryId: $this->makeThePackageCemeteryMixed(),
             name: 'Contoh',
         ));
 
         $rows = [...$outcome->openResults, ...$outcome->restrictedResults];
 
-        $this->assertCount(4, $rows, 'Fixture anchor: without matched rows the loop below would assert nothing.');
+        $this->assertCount(2, $rows, 'Fixture anchor: without matched rows the loop below would assert nothing.');
 
         foreach ($rows as $row) {
             $this->assertInstanceOf(GraveRecordProjection::class, $row);
         }
+    }
+
+    /**
+     * The generator seeds the package cemetery with only OPEN records, and
+     * the all-restricted cemetery with only restricted ones — there is no
+     * seeded "mixed" cemetery. Tests that need both facts in one outcome
+     * demote the package cemetery's second record to `limited` locally, so
+     * the mixed state is explicit and does not depend on the seed shape.
+     *
+     * @return string the package cemetery id, in its mixed state
+     */
+    private function makeThePackageCemeteryMixed(): string
+    {
+        $cemeteryId = CemeteryFixture::id('package', 0);
+
+        GraveRecord::query()
+            ->where('cemetery_id', $cemeteryId)
+            ->orderBy('block')
+            ->skip(1)
+            ->firstOrFail()
+            ->update(['access_mode' => GraveRecordAccessMode::LIMITED]);
+
+        return $cemeteryId;
     }
 }
