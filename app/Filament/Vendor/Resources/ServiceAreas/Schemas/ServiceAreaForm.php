@@ -23,10 +23,11 @@ use Filament\Schemas\Schema;
  * `vendor_id` is NOT a plain input. It comes from `VendorPicker`, which renders
  * only for multi-grant actors, and the value is decided server-side by
  * `Concerns\StampsCurrentVendor` on create. On edit the field still renders
- * for a multi-grant actor but its options stay limited to granted vendors, and
- * Filament's Select derives an `in:` validation rule from those options — so a
- * forged `vendor_id` for a vendor the actor does NOT hold fails validation and
- * no write occurs; see `Pages\EditServiceArea`'s doc block.
+ * for a multi-grant actor with options limited to granted vendors — the
+ * options list is what Filament's Select validates the submitted value against
+ * (see `Pages\EditServiceArea`'s doc block), and the save is additionally
+ * gated by `Concerns\GuardsCurrentVendorOnEdit`, which re-reads the grant
+ * table.
  */
 final class ServiceAreaForm
 {
