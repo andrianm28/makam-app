@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\GraveRegistry;
 
+use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\GraveRegistry\Models\GraveRecord;
 use DateTimeImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -163,6 +164,10 @@ final class GraveRegistryPublicQuery
             ->with('cemetery')
             ->inCemetery($criteria->cemeteryId)
             ->whereHas('cemetery', static function (Builder $cemetery): void {
+                // Typed as Builder<Cemetery> via the phpdoc below so phpstan
+                // can resolve the `published()` scope (scopePublished) on the
+                // relation's builder — a bare Eloquent Builder hides it.
+                /** @var Builder<Cemetery> $cemetery */
                 $cemetery->published();
             });
 
