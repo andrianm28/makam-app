@@ -31,13 +31,20 @@ return new class extends Migration
 
             $table->string('payment_method', 32)->nullable();
             $table->string('payment_reference', 191)->nullable();
+
+            // The draft id alone must NOT grant access to the PII above. This
+            // holds the SHA-256 of a high-entropy secret handed to the
+            // originating session only; a resume proves possession of that
+            // secret, not merely knowledge of the id. Null means unbound, and
+            // an unbound draft is unreadable — see BookingDraftBinding.
+            $table->string('resume_secret_hash', 64)->nullable();
         });
     }
 
     public function down(): void
     {
         Schema::table('booking_drafts', function (Blueprint $table): void {
-            $table->dropColumns([
+            $table->dropColumn([
                 'customer_full_name',
                 'customer_mobile',
                 'customer_email',
@@ -55,6 +62,7 @@ return new class extends Migration
                 'document_death_certificate_path',
                 'payment_method',
                 'payment_reference',
+                'resume_secret_hash',
             ]);
         });
     }

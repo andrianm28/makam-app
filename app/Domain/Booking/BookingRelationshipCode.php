@@ -40,6 +40,23 @@ final class BookingRelationshipCode
         return in_array($code, self::KNOWN_CODES, true);
     }
 
+    /**
+     * Customer-facing Indonesian label. The stored codes are SCREAMING_SNAKE
+     * identifiers; rendering them raw in a `<select>` shows a bereaved user
+     * "ORANG_TUA" where the form means "Orang Tua".
+     */
+    public static function label(string $code): string
+    {
+        return match ($code) {
+            self::PASANGAN => 'Pasangan',
+            self::ANAK => 'Anak',
+            self::ORANG_TUA => 'Orang Tua',
+            self::SAUDARA => 'Saudara',
+            self::LAINNYA => 'Lainnya',
+            default => $code,
+        };
+    }
+
     public static function assertKnown(string $code): void
     {
         if (! self::isKnown($code)) {

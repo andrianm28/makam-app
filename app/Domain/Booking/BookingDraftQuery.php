@@ -16,10 +16,17 @@ use Illuminate\Support\Str;
  * reasoning.
  *
  * No `Projection` value object here, unlike `App\Domain\GraveRegistry\
- * GraveRecordProjection`: a draft's own owner reading their own draft is
- * not the access-policy problem that class exists to solve (nothing on a
- * `BookingDraft` is restricted from the person who holds its id). Returning
- * the Eloquent model directly is a deliberate YAGNI choice for this batch.
+ * GraveRecordProjection`: a draft's owner reading their own draft is not
+ * the field-level access-policy problem that class exists to solve.
+ * Returning the Eloquent model directly is a deliberate YAGNI choice.
+ *
+ * ACCESS: from Step 6 a draft carries customer and deceased PII, so holding
+ * the id is NOT sufficient to read it — an earlier version of this doc block
+ * claimed the opposite and that claim was wrong. `find()` resolves by id
+ * ALONE and performs no access check; it exists for callers that have
+ * already established the caller's right to the draft. Every request-facing
+ * caller must use `findBound()`, which additionally requires the session to
+ * hold the draft's issued secret. See `BookingDraftBinding`.
  */
 final class BookingDraftQuery
 {
@@ -38,6 +45,27 @@ final class BookingDraftQuery
 
         /** @var BookingDraft|null $draft */
         $draft = BookingDraft::query()->whereKey($draftId)->first();
+
+        return $draft;
+    }
+
+    /**
+     * One draft by id, but ONLY when the current session holds the secret it
+     * was issued with. This is the entry point every request-facing caller
+     * must use — `find()` alone answers "does this id exist", which is not
+     * the same question as "may this caller see it".
+     *
+     * A draft that exists but is not bound to this session is reported as
+     * `null`, exactly like one that does not exist: a caller probing ids
+     * learns nothing from the difference.
+     */
+    public static function findBound(string $draftId): ?BookingDraft
+    {
+        $draft = self::find($draftId);
+
+        if ($draft === null || ! BookingDraftBinding::isBound($draft)) {
+            return null;
+        }
 
         return $draft;
     }

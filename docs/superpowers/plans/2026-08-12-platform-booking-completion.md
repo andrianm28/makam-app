@@ -6,7 +6,13 @@
 
 **Architecture:** Extends the existing `App\Domain\Booking` module — `BookingDraft` model gains fields for Steps 6-8; `SaveBookingDraftStep` gains `match` arms for Steps 6-8; `BookingWizard` Livewire component gains new `$persistableProperties` and step-action methods; the Blade view gains `{{-- Steps 6-9 --}}` branches.
 
-**Privacy ruling: PENDING COORDINATOR** — the draft token (`booking_drafts.id` UUID) is exposed to unauthenticated users in URL/cookies for draft autosave/resume. The coordinator will specify the exact ruling. Do NOT implement any PII-handling in drafts until ruling is confirmed.
+**Privacy ruling: RESOLVED 12 Aug 2026 by the coordinator.** The question was how the draft token (`booking_drafts.id` UUID), exposed to unauthenticated users in the URL for autosave/resume, may guard the PII a draft accumulates from Step 6.
+
+Ruling, as implemented:
+
+1. **Session-only binding.** Cross-device resume is NOT a requirement. On `StartBookingDraft` a high-entropy secret is issued into the session and its SHA-256 stored on the row (`booking_drafts.resume_secret_hash`); `mount()` and every `saveStep*` resolve through `BookingDraftQuery::findBound()`, which fails closed when the secret is absent, empty or mismatched. The id alone grants nothing. See `App\Domain\Booking\BookingDraftBinding`.
+2. **Real, minimal consent.** `privacy_notice_accepted_at` is stamped SERVER-SIDE only after validation observes a genuine `true` from an initially-unticked checkbox linked to `/privasi`. A caller-supplied timestamp is never honoured. The earlier implementation stamped `now()` unconditionally, recording consent nobody gave.
+3. **Retention is bounded.** Abandoned drafts are deleted past a configured window by `booking:purge-stale-drafts` (`config/booking.php`, scheduled daily). PII does not persist indefinitely behind an abandoned booking.
 
 ---
 
@@ -27,6 +33,7 @@
 
 | Column | Type | Nullable | Notes |
 |--------|------|----------|-------|
+| `resume_secret_hash` | string(64) | yes | Access control — SHA-256 of the session-issued resume secret (privacy ruling 1) |
 | `customer_full_name` | string(191) | yes | Step 6 |
 | `customer_mobile` | string(20) | yes | Step 6 |
 | `customer_email` | string(191) | yes | Step 6 |
@@ -104,18 +111,17 @@ Validation rules:
 - `customer_address`: string, min 10 chars
 - `customer_relationship`: one of `PASANGAN`, `ANAK`, `ORANG_TUA`, `SAUDARA`, `LAINNYA`
 - `customer_contact_channel`: one of `WHATSAPP`, `TELEPON`, `EMAIL`
-- `privacy_notice_accepted_at`: must be a valid ISO 8601 timestamp
+- `privacy_notice_accepted`: a BOOLEAN that must be strictly `true` (privacy ruling 2). The caller asserts only that the box was ticked; a caller-supplied `privacy_notice_accepted_at` is ignored.
 
-Attributes set: all above fields.
+Attributes set: all above fields, plus `privacy_notice_accepted_at` stamped from the SERVER clock once consent is observed.
 
 ### Step 7 — DECEASED_DATA validation
 
-Required: `deceased_full_name`, `deceased_date_of_birth`, `deceased_date_of_death`, `deceased_relationship`, `deceased_gender`
+Required: `deceased_full_name`, `deceased_date_of_birth`, `deceased_date_of_death`, `deceased_relationship`
 
-Optional document paths (can be null but if present must be valid quarantine paths):
-- `document_ktp_path`
-- `document_kk_path`
-- `document_death_certificate_path`
+**Deviation (deliberate, 12 Aug 2026):** `deceased_gender` is OPTIONAL, not required as this plan originally listed. A family may not wish to state it, and a funeral booking must not be blocked on it. The Blade label reads "(opsional)" to match. Recorded here rather than left as a silent divergence between plan and code.
+
+Document paths are REFUSED, not stored. Upload belongs to `App\Platform\DocumentVault` and is out of scope here, so there is no legitimate caller with a path to supply; accepting free text would let a caller point a draft at an arbitrary storage location, including another customer's quarantined identity document. A non-null `document_ktp_path`, `document_kk_path` or `document_death_certificate_path` is a validation error. The columns remain for the lane that wires DocumentVault in properly.
 
 Validation rules:
 - `deceased_full_name`: string, min 3, max 191
@@ -133,6 +139,7 @@ Required: `payment_method`
 Validation rules:
 - `payment_method`: one of `ONLINE`, `MANUAL`
 - `payment_reference`: required when `payment_method === MANUAL`, max 191 chars
+- **G-PAY-01 is enforced HERE, server-side**, via `app(ModeResolver::class)->paymentMode()`: `ONLINE` is rejected whenever the gate is closed. The Blade view decides what to RENDER; it never decides what is ALLOWED. Hiding the online button while the Action still accepted `ONLINE` left the closed gate bypassable by any caller invoking `saveStep8('ONLINE')`, which Livewire exposes as a plain client-callable method.
 
 Attributes set: `payment_method`, `payment_reference`.
 
@@ -268,6 +275,17 @@ Update as each step completes.
 | 5 | wizard.blade.php: add Steps 6-9 sections | Pending |
 | 6 | SDD ledger | Pending |
 | 7 | Verification | Pending |
+
+---
+
+## Step 8: Navigation and sequencing corrections (added 12 Aug 2026)
+
+Two defects found by the correctness review lens, both fixed in this lane:
+
+- **Steps 6 and 7 were individually skippable.** `validateStepSequencing()` required only steps 1-4 for every step from 6 onward, so a caller could save step 8 directly and land on Confirmation with an em dash for every customer and deceased field — `public-booking-wizard` AC13's "unskippable" rule broken for precisely the steps carrying PII. Now each writable step requires every writable step below it (step 5 excluded, being read-only and never recorded in `completed_steps`).
+- **Steps 5 and 9 became permanently unreachable once left.** `goToStep()` admitted only steps present in `completed_steps`, and the two read-only steps are never added to it. Leaving step 9 for step 6 lost the confirmation screen for good and made step 6's own "Kembali" button dead. `BookingWizard::canReachStep()` now treats a read-only step as reachable once the writable step before it is complete — the summary after step 4, the confirmation after step 8.
+
+Also removed: the `$step > LAST_IMPLEMENTED` "not implemented yet" branch in `SaveBookingDraftStep`. With `LAST_IMPLEMENTED` now 9 and `assertKnown()` already rejecting anything outside 1-9, it was unreachable — a guard that cannot fire reads as protection that does not exist.
 
 ---
 

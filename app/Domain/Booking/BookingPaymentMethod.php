@@ -30,6 +30,19 @@ final class BookingPaymentMethod
         return in_array($code, self::KNOWN_CODES, true);
     }
 
+    /**
+     * Customer-facing Indonesian label. A confirmation screen showing
+     * "MANUAL" tells the reader nothing; "Transfer Manual" does.
+     */
+    public static function label(?string $code): string
+    {
+        return match ($code) {
+            self::ONLINE => 'Pembayaran Online',
+            self::MANUAL => 'Transfer Manual',
+            default => '—',
+        };
+    }
+
     public static function assertKnown(string $code): void
     {
         if (! self::isKnown($code)) {

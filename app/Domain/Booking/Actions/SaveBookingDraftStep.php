@@ -20,6 +20,8 @@ use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\AuditSubject;
+use App\Platform\FeatureGate\ModeResolver;
+use App\Platform\FeatureGate\Modes\PaymentMode;
 use App\Platform\Outbox\Outbox;
 use App\Platform\Outbox\OutboxClassification;
 use Carbon\Carbon;
@@ -44,13 +46,14 @@ final readonly class SaveBookingDraftStep
 {
     public function __invoke(BookingDraft $draft, int $step, array $payload, string $idempotencyKey, ?int $expectedVersion = null): BookingDraft
     {
+        // `assertKnown` already rejects anything outside 1-9, and
+        // `LAST_IMPLEMENTED` is now 9 (CONFIRMATION), so the old
+        // "not implemented yet" branch that sat here became unreachable the
+        // moment this lane completed the wizard. It was removed rather than
+        // left in place: a guard that cannot fire reads as protection that
+        // does not exist, and its test was deleted for the same reason.
+        // Out-of-range steps are rejected by `assertKnown` alone.
         BookingWizardStep::assertKnown($step);
-
-        if ($step > BookingWizardStep::LAST_IMPLEMENTED) {
-            throw new InvalidArgumentException(
-                "Step [{$step}] is not implemented yet. Last implemented step: ".BookingWizardStep::LAST_IMPLEMENTED.'.'
-            );
-        }
 
         // Step 5 (SUMMARY) and Step 9 (CONFIRMATION) are READ-ONLY — no write
         // action and no payload. Without this guard, either falls through both
@@ -96,7 +99,7 @@ final readonly class SaveBookingDraftStep
             BookingWizardStep::SERVICES => self::validateServices($payload),
             BookingWizardStep::CUSTOMER_DATA => self::validateCustomerData($payload),
             BookingWizardStep::DECEASED_DATA => self::validateDeceasedData($payload),
-            BookingWizardStep::PAYMENT => self::validatePayment($payload),
+            BookingWizardStep::PAYMENT => self::validatePayment($payload, app(ModeResolver::class)->paymentMode()),
             default => [],
         };
 
@@ -119,30 +122,39 @@ final readonly class SaveBookingDraftStep
                 ],
                 BookingWizardStep::SERVICE_TYPE => ['service_type' => $payload['service_type']],
                 BookingWizardStep::SERVICES => ['selected_services' => $payload['selected_services']],
+                // Persist the TRIMMED value, because that is the value that
+                // was validated. Storing the raw payload while length-checking
+                // `trim()`'d text let padding slip past the bound and reach a
+                // varchar(191) column as an over-long string — a driver error
+                // on a public form instead of a clean validation message.
                 BookingWizardStep::CUSTOMER_DATA => [
-                    'customer_full_name' => $payload['customer_full_name'],
-                    'customer_mobile' => $payload['customer_mobile'],
-                    'customer_email' => $payload['customer_email'],
-                    'customer_address' => $payload['customer_address'],
+                    'customer_full_name' => self::trimmed($payload['customer_full_name']),
+                    'customer_mobile' => self::trimmed($payload['customer_mobile']),
+                    'customer_email' => self::trimmed($payload['customer_email']),
+                    'customer_address' => self::trimmed($payload['customer_address']),
                     'customer_relationship' => $payload['customer_relationship'],
                     'customer_contact_channel' => $payload['customer_contact_channel'],
-                    'privacy_notice_accepted_at' => isset($payload['privacy_notice_accepted_at'])
-                        ? Carbon::parse($payload['privacy_notice_accepted_at'])->toDateTimeString()
-                        : null,
+                    // Stamped from the server clock, reached only because
+                    // validation above observed a genuine `true`. This is the
+                    // record that consent happened, so its time must come
+                    // from us, not from whoever sent the request.
+                    'privacy_notice_accepted_at' => Carbon::now()->toDateTimeString(),
                 ],
                 BookingWizardStep::DECEASED_DATA => [
-                    'deceased_full_name' => $payload['deceased_full_name'],
+                    'deceased_full_name' => self::trimmed($payload['deceased_full_name']),
                     'deceased_date_of_birth' => $payload['deceased_date_of_birth'],
                     'deceased_date_of_death' => $payload['deceased_date_of_death'],
                     'deceased_relationship' => $payload['deceased_relationship'],
-                    'deceased_gender' => $payload['deceased_gender'] ?? null,
-                    'document_ktp_path' => $payload['document_ktp_path'] ?? null,
-                    'document_kk_path' => $payload['document_kk_path'] ?? null,
-                    'document_death_certificate_path' => $payload['document_death_certificate_path'] ?? null,
+                    // One representation of "not stated", not two: an empty
+                    // string and null both mean unknown, and a column holding
+                    // both forces every reader to test for each.
+                    'deceased_gender' => self::nullIfBlank($payload['deceased_gender'] ?? null),
+                    // Document paths are deliberately NOT written from the
+                    // payload — see `validateDeceasedData()`.
                 ],
                 BookingWizardStep::PAYMENT => [
                     'payment_method' => $payload['payment_method'],
-                    'payment_reference' => $payload['payment_reference'] ?? null,
+                    'payment_reference' => self::nullIfBlank($payload['payment_reference'] ?? null),
                 ],
                 default => [],
             };
@@ -231,7 +243,27 @@ final readonly class SaveBookingDraftStep
         }
 
         if ($step >= BookingWizardStep::CUSTOMER_DATA) {
-            $required = [BookingWizardStep::LOCATION, BookingWizardStep::CEMETERY, BookingWizardStep::SERVICE_TYPE, BookingWizardStep::SERVICES];
+            // Every writable step BELOW this one must already be done, not
+            // merely steps 1-4. An earlier version required only 1-4 for all
+            // of 6, 7 and 8, which let a caller jump straight to step 8 and
+            // land on Confirmation with an em dash for every customer and
+            // deceased field — `public-booking-wizard` AC13's "unskippable"
+            // rule broken for exactly the steps that carry the PII.
+            //
+            // Step 5 (SUMMARY) is excluded because it is read-only and
+            // therefore never appears in `completed_steps`.
+            $required = array_values(array_filter(
+                [
+                    BookingWizardStep::LOCATION,
+                    BookingWizardStep::CEMETERY,
+                    BookingWizardStep::SERVICE_TYPE,
+                    BookingWizardStep::SERVICES,
+                    BookingWizardStep::CUSTOMER_DATA,
+                    BookingWizardStep::DECEASED_DATA,
+                ],
+                static fn (int $candidate): bool => $candidate < $step,
+            ));
+
             $missing = array_diff($required, $draft->completed_steps);
             if ($missing !== []) {
                 return ['step' => ['Selesaikan semua langkah sebelumnya terlebih dahulu.']];
@@ -375,6 +407,31 @@ final readonly class SaveBookingDraftStep
     }
 
     /**
+     * The trimmed form of an already-validated string field. Non-strings are
+     * returned untouched — validation has already rejected them, so this
+     * never has to guess what a caller meant.
+     */
+    private static function trimmed(mixed $value): mixed
+    {
+        return is_string($value) ? trim($value) : $value;
+    }
+
+    /**
+     * `null` for a value that is absent or only whitespace, so an optional
+     * field has exactly one "not provided" representation in the column.
+     */
+    private static function nullIfBlank(mixed $value): mixed
+    {
+        if (! is_string($value)) {
+            return $value;
+        }
+
+        $trimmed = trim($value);
+
+        return $trimmed === '' ? null : $trimmed;
+    }
+
+    /**
      * @param  array<string, mixed>  $payload
      * @return array<string, list<string>>
      */
@@ -401,6 +458,11 @@ final readonly class SaveBookingDraftStep
             $errors['customer_email'] = ['Email harus diisi.'];
         } elseif (! filter_var(trim($email), FILTER_VALIDATE_EMAIL)) {
             $errors['customer_email'] = ['Format email tidak valid.'];
+        } elseif (mb_strlen(trim($email)) > 191) {
+            // `customer_email` is varchar(191). Without this bound a longer
+            // (still syntactically valid) address reaches Postgres and raises
+            // a driver error on a public form instead of a field-keyed message.
+            $errors['customer_email'] = ['Email terlalu panjang.'];
         }
 
         $address = $payload['customer_address'] ?? null;
@@ -422,15 +484,15 @@ final readonly class SaveBookingDraftStep
             $errors['customer_contact_channel'] = ['Saluran kontak tidak valid.'];
         }
 
-        $privacyAccepted = $payload['privacy_notice_accepted_at'] ?? null;
-        if ($privacyAccepted === null || $privacyAccepted === '' || (is_string($privacyAccepted) && trim($privacyAccepted) === '')) {
-            $errors['privacy_notice_accepted_at'] = ['Persetujuan privasi harus diberikan.'];
-        } else {
-            try {
-                Carbon::parse($privacyAccepted);
-            } catch (\Exception) {
-                $errors['privacy_notice_accepted_at'] = ['Timestamp persetujuan privasi tidak valid.'];
-            }
+        // Consent is a BOOLEAN act by the user, never a timestamp supplied by
+        // the caller. The caller asserts only "the box was ticked"; the
+        // timestamp is stamped server-side, below, and only once that
+        // assertion is true. Accepting a caller-supplied
+        // `privacy_notice_accepted_at` would let any client backdate consent,
+        // and — as this component previously did — record consent that the
+        // user never actually gave.
+        if (($payload['privacy_notice_accepted'] ?? null) !== true) {
+            $errors['privacy_notice_accepted'] = ['Anda harus menyetujui pemberitahuan privasi untuk melanjutkan.'];
         }
 
         return $errors;
@@ -454,13 +516,27 @@ final readonly class SaveBookingDraftStep
         $dob = $payload['deceased_date_of_birth'] ?? null;
         $dod = $payload['deceased_date_of_death'] ?? null;
 
+        // `is_string` FIRST, and `\Throwable` rather than `\Exception`:
+        // `Carbon::parse()` given an array raises a TypeError, which is an
+        // Error and not an Exception, so it escaped the old `catch` and
+        // surfaced as a 500 on an unauthenticated public form. A malformed
+        // value is a validation error, never a crash.
+        //
+        // These two are deliberately REDUNDANT: either alone handles the
+        // array case, so the tests pin the outcome rather than the type
+        // check. Both stay. The `is_string` check states the intent at the
+        // point of use, and `catch (\Throwable)` is the backstop for every
+        // input shape nobody thought to enumerate — including whatever a
+        // future narrowing of this check would let through.
         $parsedDob = null;
         if ($dob === null || $dob === '') {
             $errors['deceased_date_of_birth'] = ['Tanggal lahir almarhum harus diisi.'];
+        } elseif (! is_string($dob)) {
+            $errors['deceased_date_of_birth'] = ['Format tanggal lahir tidak valid.'];
         } else {
             try {
                 $parsedDob = Carbon::parse($dob);
-            } catch (\Exception) {
+            } catch (\Throwable) {
                 $errors['deceased_date_of_birth'] = ['Format tanggal lahir tidak valid.'];
             }
         }
@@ -468,10 +544,12 @@ final readonly class SaveBookingDraftStep
         $parsedDod = null;
         if ($dod === null || $dod === '') {
             $errors['deceased_date_of_death'] = ['Tanggal meninggal harus diisi.'];
+        } elseif (! is_string($dod)) {
+            $errors['deceased_date_of_death'] = ['Format tanggal meninggal tidak valid.'];
         } else {
             try {
                 $parsedDod = Carbon::parse($dod);
-            } catch (\Exception) {
+            } catch (\Throwable) {
                 $errors['deceased_date_of_death'] = ['Format tanggal meninggal tidak valid.'];
             }
         }
@@ -493,9 +571,37 @@ final readonly class SaveBookingDraftStep
             $errors['deceased_relationship'] = ['Hubungan tidak valid.'];
         }
 
+        // Gender is OPTIONAL — a deliberate, documented deviation from this
+        // lane's plan, which listed it as required. The family may simply not
+        // want to state it, and a funeral booking must not be blocked on it.
+        // `is_string` guards the same TypeError route as the dates above.
+        // Blankness is measured AFTER trimming, as it is for every other
+        // field here. Testing the raw value made "   " neither blank (so
+        // validation demanded a known code) nor a code (so it failed) —
+        // while persistence would have normalised the same input to null.
+        // Validation and persistence must agree on what "not stated" means.
         $gender = $payload['deceased_gender'] ?? null;
-        if ($gender !== null && $gender !== '' && ! BookingGender::isKnown($gender)) {
-            $errors['deceased_gender'] = ['Jenis kelamin tidak valid.'];
+        if ($gender !== null) {
+            if (! is_string($gender)) {
+                $errors['deceased_gender'] = ['Jenis kelamin tidak valid.'];
+            } elseif (trim($gender) !== '' && ! BookingGender::isKnown(trim($gender))) {
+                $errors['deceased_gender'] = ['Jenis kelamin tidak valid.'];
+            }
+        }
+
+        // Identity documents (KTP, KK, death certificate) belong to
+        // `App\Platform\DocumentVault`, which owns upload, malware
+        // quarantine, scan verdicts and signed-URL access. Upload is out of
+        // scope for this lane, so there is no legitimate caller with a path
+        // to supply — and an unvalidated free-text path would let a caller
+        // point a draft at an arbitrary storage location, including another
+        // customer's quarantined identity document. Refused outright rather
+        // than stored unchecked; the column stays for the lane that wires
+        // DocumentVault in properly.
+        foreach (['document_ktp_path', 'document_kk_path', 'document_death_certificate_path'] as $documentField) {
+            if (($payload[$documentField] ?? null) !== null) {
+                $errors[$documentField] = ['Unggahan dokumen belum tersedia pada langkah ini.'];
+            }
         }
 
         return $errors;
@@ -505,7 +611,7 @@ final readonly class SaveBookingDraftStep
      * @param  array<string, mixed>  $payload
      * @return array<string, list<string>>
      */
-    private static function validatePayment(array $payload): array
+    private static function validatePayment(array $payload, PaymentMode $mode): array
     {
         $errors = [];
 
@@ -514,6 +620,14 @@ final readonly class SaveBookingDraftStep
             $errors['payment_method'] = ['Metode pembayaran harus dipilih.'];
         } elseif (! BookingPaymentMethod::isKnown($method)) {
             $errors['payment_method'] = ['Metode pembayaran tidak valid.'];
+        } elseif ($method === BookingPaymentMethod::ONLINE && $mode !== PaymentMode::Online) {
+            // G-PAY-01 enforced HERE, server-side, on the authoritative gate
+            // state — not merely by which control the Blade view chose to
+            // render. Hiding the online button while this Action still
+            // accepted `ONLINE` left the closed gate bypassable by anyone
+            // calling `saveStep8('ONLINE')` directly, which Livewire exposes
+            // as a plain client-callable method.
+            $errors['payment_method'] = ['Pembayaran online belum tersedia. Gunakan koordinasi pembayaran manual.'];
         }
 
         $reference = $payload['payment_reference'] ?? null;

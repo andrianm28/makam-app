@@ -33,6 +33,21 @@ final class BookingContactChannel
         return in_array($code, self::KNOWN_CODES, true);
     }
 
+    /**
+     * Customer-facing Indonesian label. Falls back to a neutral phrase for a
+     * null or unrecognised code so a confirmation screen never has to print
+     * a raw enum token at a bereaved reader.
+     */
+    public static function label(?string $code): string
+    {
+        return match ($code) {
+            self::WHATSAPP => 'WhatsApp',
+            self::TELEPON => 'telepon',
+            self::EMAIL => 'email',
+            default => 'kontak yang Anda pilih',
+        };
+    }
+
     public static function assertKnown(string $code): void
     {
         if (! self::isKnown($code)) {

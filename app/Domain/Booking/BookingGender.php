@@ -31,6 +31,19 @@ final class BookingGender
         return in_array($code, self::KNOWN_CODES, true);
     }
 
+    /**
+     * Customer-facing Indonesian label — the stored code is a
+     * SCREAMING_SNAKE identifier and must never reach a user as one.
+     */
+    public static function label(string $code): string
+    {
+        return match ($code) {
+            self::LAKI_LAKI => 'Laki-laki',
+            self::PEREMPUAN => 'Perempuan',
+            default => $code,
+        };
+    }
+
     public static function assertKnown(string $code): void
     {
         if (! self::isKnown($code)) {
