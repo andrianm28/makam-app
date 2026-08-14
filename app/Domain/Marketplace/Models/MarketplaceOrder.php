@@ -36,6 +36,7 @@ final class MarketplaceOrder extends Model
         'vendor_id',
         'subtotal_minor',
         'delivery_fee_minor',
+        'scheduled_for',
         'total_minor',
         'payment_state',
         'idempotency_key',
@@ -48,6 +49,7 @@ final class MarketplaceOrder extends Model
         return [
             'subtotal_minor' => 'integer',
             'delivery_fee_minor' => 'integer',
+            'scheduled_for' => 'immutable_date',
             'total_minor' => 'integer',
             'placed_at' => 'immutable_datetime',
         ];

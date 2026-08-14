@@ -70,6 +70,7 @@ final class PlaceMarketplaceOrder
         string $recipientName,
         string $recipientPhone,
         string $recipientEmail,
+        ?string $scheduledFor = null,
         ?CarbonImmutable $now = null,
     ): MarketplaceOrder {
         $existing = MarketplaceOrder::where('idempotency_key', $idempotencyKey)->first();
@@ -115,6 +116,7 @@ final class PlaceMarketplaceOrder
             $recipientName,
             $recipientPhone,
             $recipientEmail,
+            $scheduledFor,
             $now,
         ): MarketplaceOrder {
             $order = MarketplaceOrder::create([
@@ -126,6 +128,7 @@ final class PlaceMarketplaceOrder
                 'delivery_fee_minor' => $deliveryFee,
                 'total_minor' => $subtotal + $deliveryFee,
                 'payment_state' => PaymentState::BELUM_DIBAYAR,
+                'scheduled_for' => $scheduledFor,
                 'idempotency_key' => $idempotencyKey,
                 'placed_at' => $now,
             ]);

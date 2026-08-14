@@ -86,9 +86,17 @@
                     <span class="font-bold tabular-nums text-neutral-900">{{ $cart->subtotal()->format() }}</span>
                 </p>
 
-                {{-- The checkout CTA lands with the checkout route in Task 8
-                     (PUB-023); the cart screen is fully usable without it. --}}
-                @if ($hasStalePricing)
+                @if (! $hasStalePricing)
+                    <x-mk.button
+                        variant="primary"
+                        size="lg"
+                        full
+                        href="{{ route('marketplace.checkout') }}"
+                        class="md:w-auto"
+                    >
+                        Lanjut ke pembayaran
+                    </x-mk.button>
+                @else
                     <p class="text-base text-neutral-600">Konfirmasi harga baru untuk melanjutkan.</p>
                 @endif
             </div>
