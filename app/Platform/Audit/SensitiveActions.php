@@ -110,6 +110,20 @@ final class SensitiveActions
         // nobody authorized, so the same mandatory-reason reasoning that
         // applies to `PAYMENT_REFUND`/`PAYMENT_CHARGEBACK` above applies here.
         'RENEWAL_EXTERNAL_MARKING',
+
+        // Added by Task 5 of the admin-master-data lane (`docs/superpowers/
+        // plans/2026-08-13-admin-master-data.md`, approved design spec
+        // §Authorization & audit). Written by `App\Filament\Admin\Resources\
+        // ProductResource\Pages\EditProduct` via `Audit::record()` — the only
+        // admin write path for products. Editing an existing product's
+        // definition — including its base price, which bumps `price_version`
+        // to a new cut of that definition — is the same money-write category
+        // as `PRICE_VERSION_RECORDED` above, so a recorded justification is
+        // mandatory. Creation (`PRODUCT_CREATED`, `App\Domain\Marketplace\
+        // ProductAuditActions`) is deliberately NOT listed: a brand-new row
+        // is the first cut of a definition (price_version 1), the same
+        // non-sensitive category as FAQ article creation.
+        'PRODUCT_UPDATED',
     ];
 
     public static function requiresReason(string $action): bool

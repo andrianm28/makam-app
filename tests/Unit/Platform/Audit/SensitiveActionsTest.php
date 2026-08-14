@@ -39,6 +39,7 @@ final class SensitiveActionsTest extends TestCase
             'scope grant' => ['SCOPE_GRANT'],
             'scope revoke' => ['SCOPE_REVOKE'],
             'renewal external marking' => ['RENEWAL_EXTERNAL_MARKING'],
+            'product update' => ['PRODUCT_UPDATED'],
         ];
     }
 
@@ -106,6 +107,19 @@ final class SensitiveActionsTest extends TestCase
      * MarkExternalRenewal`) marks a renewal as paid externally with
      * evidence — the same mandatory-reason category as
      * `PAYMENT_REFUND`/`PAYMENT_CHARGEBACK` already on this list.
+     *
+     * UPDATED 14 Aug 2026 — Task 5 of the `admin-master-data` lane
+     * (`docs/superpowers/plans/2026-08-13-admin-master-data.md`, approved
+     * design spec §Authorization & audit) added `PRODUCT_UPDATED`: written
+     * by `App\Filament\Admin\Resources\ProductResource\Pages\EditProduct`
+     * via `Audit::record()` — the only admin write path for products.
+     * Editing an existing product's definition — including its base price,
+     * which bumps `price_version` to a new cut — is the same money-write
+     * category as `PRICE_VERSION_RECORDED` already on this list, so a
+     * recorded justification is mandatory. Creation (`PRODUCT_CREATED`) is
+     * deliberately NOT listed: a brand-new row is the first cut of a
+     * definition (`price_version` 1), the same non-sensitive category as
+     * FAQ article creation.
      */
     public function test_the_list_contains_the_requirements_named_actions_plus_the_documented_additions(): void
     {
@@ -131,6 +145,7 @@ final class SensitiveActionsTest extends TestCase
                 'SCOPE_GRANT',
                 'SCOPE_REVOKE',
                 'RENEWAL_EXTERNAL_MARKING',
+                'PRODUCT_UPDATED',
             ],
             SensitiveActions::ACTIONS
         );
