@@ -49,6 +49,21 @@
     $isTextarea = $type === 'textarea';
     $isSelect = $type === 'select';
 
+    // Livewire attributes (`wire:model`, `wire:model.live`, `wire:key`, ...)
+    // must land on the inner control, not the wrapper div. The wrapper merges
+    // the caller's attributes onto the root for class composition, but
+    // `wire:*` on a div does nothing — Livewire reads bindings from the
+    // control element itself. Extract them so a caller can pass
+    // `wire:model="..."` to <x-mk.field> exactly as it would to a raw input.
+    $wireAttributes = collect($attributes->getAttributes())
+        ->filter(fn (mixed $value, string $key): bool => str_starts_with($key, 'wire'))
+        ->map(function (mixed $value, string $key): string {
+            $name = str_replace('_', ':', $key);
+
+            return $value === '' ? $name : $name.'="'.e((string) $value).'"';
+        })
+        ->implode(' ');
+
     // Only needs to match the label's `for` and the hint/error ids within
     // this single render — doesn't need to be stable across requests.
     $id = $id ?? $name ?? uniqid('mk-field-');
@@ -116,6 +131,7 @@
                 @if ($required) required @endif
                 @if ($error) aria-invalid="true" @endif
                 @if ($describedBy !== '') aria-describedby="{{ $describedBy }}" @endif
+                {!! $wireAttributes !!}
                 class="{{ $controlClasses }}"
             >
             <span class="text-base text-neutral-800">
@@ -176,6 +192,7 @@
                     @if ($required) required @endif
                     @if ($error) aria-invalid="true" @endif
                     @if ($describedBy !== '') aria-describedby="{{ $describedBy }}" @endif
+                    {!! $wireAttributes !!}
                     class="{{ $controlClasses }}"
                 >{{ $value }}</textarea>
             @elseif ($isSelect)
@@ -187,6 +204,7 @@
                     @if ($required) required @endif
                     @if ($error) aria-invalid="true" @endif
                     @if ($describedBy !== '') aria-describedby="{{ $describedBy }}" @endif
+                    {!! $wireAttributes !!}
                     class="{{ $controlClasses }}"
                 >{{ $slot }}</select>
             @else
@@ -202,6 +220,7 @@
                     @if ($required) required @endif
                     @if ($error) aria-invalid="true" @endif
                     @if ($describedBy !== '') aria-describedby="{{ $describedBy }}" @endif
+                    {!! $wireAttributes !!}
                     class="{{ $controlClasses }}"
                 >
             @endif
