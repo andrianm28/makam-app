@@ -51,6 +51,11 @@ final class VendorIdentityTest extends TestCase
         Vendor::create(['name' => 'Aktif', 'is_active' => true]);
         Vendor::create(['name' => 'Nonaktif', 'is_active' => false]);
 
-        $this->assertSame(['Aktif'], Vendor::active()->pluck('name')->all());
+        // The bootstrap seed migration ships five ACTIVE example vendors,
+        // so the active set is no longer exactly the test's own rows —
+        // assert membership, not an exhaustive list.
+        $active = Vendor::active()->pluck('name')->all();
+        $this->assertContains('Aktif', $active);
+        $this->assertNotContains('Nonaktif', $active);
     }
 }

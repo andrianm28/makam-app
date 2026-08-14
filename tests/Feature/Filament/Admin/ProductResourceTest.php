@@ -6,6 +6,7 @@ namespace Tests\Feature\Filament\Admin;
 
 use App\Domain\Marketplace\MarketplaceProductCategory;
 use App\Domain\Marketplace\Models\Product;
+use App\Domain\Marketplace\Models\VendorListing;
 use App\Domain\Marketplace\ProductAuditActions;
 use App\Domain\Marketplace\ProductCode;
 use App\Filament\Admin\Resources\ProductResource\Pages\CreateProduct;
@@ -218,11 +219,15 @@ final class ProductResourceTest extends TestCase
         $this->grantRoleTo($user, ActorRole::ADMIN);
         $this->actingAs($user);
 
-        // All nine canonical codes exist after the seed migrations, so the
-        // only way to exercise a real create is to first remove the row the
-        // form then re-creates.
+        // All nine canonical codes exist after the seed migrations — and,
+        // since the vendor-listing bootstrap, each is referenced by a
+        // `vendor_listings` row whose FK restricts deletion. The only way
+        // to exercise a real create is to first remove the seeded offer
+        // (and the row referencing it), then re-create the code through
+        // the form.
         $seeded = Product::findByCode(ProductCode::FLOWER_BOARD);
         assert($seeded instanceof Product);
+        VendorListing::query()->forProduct($seeded->id)->delete();
         $seeded->delete();
 
         Livewire::test(CreateProduct::class)

@@ -40,12 +40,13 @@
     — the listing's price (not the catalogue's dummy `base_price_idr`) and
     the listing's vendor name — with the "Tambah ke Keranjang" primary
     button, and the ordering section becomes a neutral note that schedule,
-    area, and delivery fee are confirmed with the vendor. The dummy price's
-    attribution line and the dummy `products.vendor_name` are suppressed in
-    this state because they are fabricated values that would contradict the
-    real offer standing right next to them; they remain, with their markers,
-    when there is no listing to be truthful about. The one-vendor constraint
-    sentence is stated in BOTH states (AC4).
+    area, and delivery fee are confirmed with the vendor, carrying the same
+    §6.10 customer-service escape hatch as the pending state. The dummy
+    price's attribution line and the dummy `products.vendor_name` are
+    suppressed in this state because they are fabricated values that would
+    contradict the real offer standing right next to them; they remain, with
+    their markers, when there is no listing to be truthful about. The
+    one-vendor constraint sentence is stated in BOTH states (AC4).
 
     --- `preview_image_path` is deliberately not rendered ---
     The six seeded `product_variants` rows carry
@@ -279,6 +280,14 @@
                     <p>
                         Jadwal pengiriman atau pengerjaan, area layanan, dan biaya pengiriman dikonfirmasi bersama vendor setelah pesanan dibuat dan belum ditampilkan di halaman ini.
                     </p>
+                    {{-- §6.10 support escape hatch — same affordance as the
+                         pending state below; online ordering being AVAILABLE
+                         does not remove the support path. --}}
+                    <x-slot:action>
+                        <x-mk.button variant="secondary" href="/bantuan">
+                            Hubungi Customer Service
+                        </x-mk.button>
+                    </x-slot:action>
                 </x-mk.alert>
             @else
                 <x-mk.alert intent="pending" title="Pemesanan online belum tersedia" icon="clock" live="off">
