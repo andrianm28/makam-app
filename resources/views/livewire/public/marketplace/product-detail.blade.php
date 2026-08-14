@@ -18,10 +18,11 @@
     `2026_07_26_180000_create_products_table.php`'s own doc block calls the
     absence of stock/schedule/service-area columns deliberate and still open
     ("future vendor-listing-table concerns"). The `vendor_listings` table now
-    EXISTS (L10) and carries most of them, but nothing is seeded into it, so
-    a fresh install still has no vendor offer behind any of these products.
-    This page therefore cannot render a schedule, a delivery fee, or a real
-    §6.2 "area unavailable" state — there is no data behind any of them.
+    EXISTS (L10) and carries most of them; the bootstrap seed ships one
+    example listing per product, so a fresh install has an offer behind every
+    product. This page therefore cannot render a schedule, a delivery fee, or
+    a real §6.2 "area unavailable" state — there is no data behind any of
+    them.
     Rendering a plausible-looking one would fabricate a commercial fact the
     repository does not hold, which is the exact failure
     `2026_07_26_200200_seed_marketplace_products_and_variants.php` avoided by
@@ -31,9 +32,9 @@
     batch; it is reported as such, not ticked.
 
     --- The two ordering states ---
-    When the product has NO active `vendor_listings` row (the seeded state),
-    the §6.7 pending alert below is exactly what the page shows: online
-    ordering is genuinely unavailable for that product, with the
+    When the product has NO active `vendor_listings` row (deactivated or
+    removed), the §6.7 pending alert below is exactly what the page shows:
+    online ordering is genuinely unavailable for that product, with the
     customer-service escape hatch and the one-vendor-per-checkout note.
 
     When an active listing exists, the summary column renders the REAL offer

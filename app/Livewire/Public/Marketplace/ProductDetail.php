@@ -61,10 +61,11 @@ use Throwable;
  * ---------------------------------------------------------------------------
  * `vendor_listings` holds the per-vendor offers this page adds to the cart
  * (`AddToCart` requires a `VendorListing`, never a catalogue row). The
- * catalogue is seeded with nine products and ZERO listings, so "no active
- * listing" is the seeded state and must render honestly — the §6.7 pending
- * alert with the customer-service escape hatch. When one or more active
- * listings exist, the page adds the FIRST by creation order (`orderBy('id')`),
+ * catalogue is seeded with nine products, one example listing each, so "no
+ * active listing" is the deactivated/admin-removed state and must render
+ * honestly — the §6.7 pending alert with the customer-service escape hatch.
+ * When one or more active listings exist, the page adds the FIRST by
+ * creation order (`orderBy('id')`),
  * deterministically, and names that listing's vendor beside the button so
  * "which offer am I adding?" is never a secret. Multiple listings of the
  * same product by different vendors are rare in the MVP and a per-vendor
@@ -259,9 +260,9 @@ final class ProductDetail extends Component
 
     /**
      * The first active listing of this product, or `null` when there is
-     * none (the seeded state) or when the read fails (§6.5). Deterministic:
-     * creation order, so a product with several offers always adds the same
-     * one until a real vendor selector is built.
+     * none (deactivated or removed) or when the read fails (§6.5).
+     * Deterministic: creation order, so a product with several offers
+     * always adds the same one until a real vendor selector is built.
      */
     private function firstActiveListing(): ?VendorListing
     {

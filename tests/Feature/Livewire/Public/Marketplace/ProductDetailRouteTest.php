@@ -242,6 +242,11 @@ final class ProductDetailRouteTest extends TestCase
         $response->assertDontSee('Tambah ke Keranjang');
         $response->assertSee('Pemesanan online belum tersedia');
         $response->assertSee('Hubungi Customer Service');
+        // AC4 is stated in BOTH ordering states: the listing-state copy is
+        // asserted in test_the_detail_page_states_the_single_vendor_per_
+        // checkout_constraint_as_a_note, this pending-state copy belongs to
+        // the deactivated-listing rendering here.
+        $response->assertSee('Catatan: satu checkout hanya dapat memuat produk dari satu vendor');
     }
 
     public function test_adding_from_the_detail_page_puts_the_item_in_the_cart_and_redirects_to_it(): void
