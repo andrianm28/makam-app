@@ -4,7 +4,7 @@
 
 - [ ] Define minimum intake fields and validation. _Requirements: 1_
 - [ ] Build area/hours/capacity gate. _Requirements: 2_
-- [ ] Connect intake to FuneralCase and task templates. _Requirements: 3_
+- [ ] Connect intake to FuneralCase and task templates. _Requirements: 3_ — **partial**: the FuneralCase half shipped with lane L6 (13 Aug 2026) — `App\Domain\FuneralCase\Actions\OpenFuneralCase` opens a `FuneralCase` from the At-Need submission, linked via `orders.funeral_case_id` (`SubmitBookingDraftTest::test_an_at_need_submission_opens_a_funeral_case_and_links_it_to_the_order`). The **task-template instantiation half is unbuilt**: no case-task template engine exists (`app/Domain/FuneralCase/` holds only `OpenFuneralCase`, `FuneralCase`, and the status/urgency enums).
 - [ ] Implement progressive document collection. _Requirements: 4_
 - [ ] Implement availability/plot decision via manual confirmation or authoritative reservation. _Requirements: 5_
 - [ ] Build quote breakdown: land/package, funeral service, add-ons, delivery/transport, exclusions. _Requirements: 6_

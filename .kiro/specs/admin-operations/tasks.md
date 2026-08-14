@@ -2,7 +2,7 @@
 
 `_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
 
-- [ ] Build admin resources for directory/catalog/vendor/FAQ. _Requirements: 1, 2, 3, 6_
+- [x] Build admin resources for directory/catalog/vendor/FAQ. _Requirements: 1, 2, 3, 6_ — shipped in the master-data batches (lanes `cemetery-admin-resource`, `nav-wiring`, `admin-fixwave`; merged as PRs #41/#43/#44, 13 Aug 2026): `app/Filament/Admin/Resources/CemeteryResource.php`, `ProductResource` (`app/Filament/Admin/Resources/ProductResource/ProductResource.php`), `ServiceDefinitionResource.php`, and `FaqArticles/FaqArticleResource.php`, all wired into the admin navigation via `AdminPanelProvider`'s `discoverResources()`. The vendor-facing resources live in the separate `/vendor` panel (`app/Filament/Vendor/Resources/`) per the vendor-portal split; "vendor" here means the admin's catalogue/vendor-master-data surface, which is covered by the Product/ServiceDefinition resources.
 - [ ] Implement PIC and communication log. _Requirements: 4_
 - [ ] Implement guarded quote/payment actions. _Requirements: 9_
 - [ ] Implement transaction reference views. _Requirements: 5_

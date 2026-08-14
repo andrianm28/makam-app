@@ -50,11 +50,7 @@ surface:
 - The K7 contract is external and its actual interface has not been seen.
   `Channel` keeps the module provider-neutral so a later K7 integration swaps
   implementations, not the platform layer.
-- No producer exists for any of the six outbox-mapped events yet (booking
-  wizard Step 9, availability, quote, and payment domains are unbuilt): the
-  consumer is proven against outbox rows recorded directly and is
-  correct-but-dormant in production (D3, `ConsumeOutboxNotificationJob` doc
-  block).
+- Of the six outbox-mapped events, producers now exist for **three** (verified 13 Aug 2026): `quote.issued.v1`/`quote.accepted.v1` (`App\Domain\Quotation\Actions\IssueQuote`/`AcceptQuote`) and `payment.received.v1` (`App\Domain\OrderWorkflow\Actions\ApplyPaidEffects`). Two further events have producers but **no mapped template**: `booking.draft_started.v1`/`booking.draft_step_saved.v1` (draft lifecycle, via the outbox retrofit) — the notification templates map the *submission* event `booking.draft_submitted.v2`, whose producer is still unwired (`SubmitBookingDraft` does not emit it yet). The two `availability.*` events still have no producer (availability/plot domains unbuilt). The consumer is therefore **no longer dormant across the board**: quote and payment notifications are live against real producers, while the booking-submission and availability rows remain proven against directly-recorded outbox rows (D3, `ConsumeOutboxNotificationJob` doc block).
 - `notification-matrix.md` has been reconciled against AC1/AC6 and the
   design-system delivery-state contract (header note, 11 Aug 2026) — including
   the `optional` cell-value ruling and two delivery-rule readings. AC10's
