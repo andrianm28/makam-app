@@ -36,18 +36,24 @@ use Illuminate\Support\Facades\Route;
 | docs/planning/sprint-plan.md §2.4 for which sprint owns which spec.
 |
 | The four MVP entry points (mvp-scope.md §1) — current status:
-|   /pemesanan-makam   Sprint 4  public-booking-wizard              implemented (S4-T4/S4-T5,
-|                                08 Aug 2026) — steps 1-5 only; steps 6-9 are real stepper
-|                                entries with no screen behind them yet, per
+|   /pemesanan-makam   Sprint 4  public-booking-wizard              implemented — S4-T4/S4-T5
+|                                (08 Aug 2026) built steps 1-5; steps 6-9 landed with
+|                                lane/l6-booking-completion (presentation) and
+|                                lane/l7-order-orchestration (domain), both merged
+|                                13 Aug 2026, so all nine steps are real screens — see
 |                                BookingWizard's own doc block
 |   /marketplace       Sprint 4  funeral-marketplace-and-vendor-portal implemented (S4-T8,
-|                                08 Aug 2026) — browse only; see MarketplaceIndex's own
-|                                doc block for what is deliberately still missing (cart,
-|                                checkout, vendor portal — Sprint 11-12)
-|   /perpanjangan      Sprint 4  renewal-and-grave-registry          implemented (S4-T7,
-|                                08 Aug 2026) — AC1-AC5, AC14 only; steps 4-6 (fee,
-|                                payment, confirmation) are real stepper entries with no
-|                                screen behind them yet, per RenewalStart's own doc block
+|                                08 Aug 2026) — browse only; the vendor portal shipped
+|                                separately with lane/l10-vendor-portal (merged 13 Aug
+|                                2026, Filament panel at /vendor); see MarketplaceIndex's
+|                                own doc block for what is still deliberately missing
+|                                (cart, checkout — lane/l11-marketplace-checkout, unmerged)
+|   /perpanjangan      Sprint 4  renewal-and-grave-registry          implemented — S4-T7
+|                                (08 Aug 2026) covered AC1-AC5 + AC14; steps 4-6 (fee,
+|                                payment, confirmation, AC6-AC9) landed with
+|                                lane/l8-renewal-completion (merged 13 Aug 2026), so all
+|                                six steps are real screens — see RenewalStart's own
+|                                doc block
 |   /faq               Sprint 4  public-faq                          implemented (S4-T2)
 |   /                  Sprint 4  public-home-and-navigation          implemented (S4-T3,
 |                                this batch) — homepage now serves real content; see
@@ -81,10 +87,14 @@ Route::get('/', HomePage::class)->name('home');
 | Booking wizard — public-booking-wizard AC1-AC6, AC11-AC13 (S4-T4/S4-T5,
 | resumed 08 Aug 2026) + booking-and-order-orchestration AC2, AC3
 |--------------------------------------------------------------------------
-| Steps 1-5 only. REPLACES the BookingWizardComingSoon stub — see that
-| class's own doc block and this file's top-of-file note on stub
-| replacement. Steps 6-9 remain unbuilt; the stepper still shows all nine
-| (BookingWizardStep::LAST_IMPLEMENTED = 5).
+| All nine steps implemented. Steps 1-5 landed S4-T4/S4-T5 (resumed
+| 08 Aug 2026); steps 6-9 followed with lane/l6-booking-completion
+| (presentation) and lane/l7-order-orchestration (domain), both merged
+| 13 Aug 2026 — BookingWizardStep::LAST_IMPLEMENTED = CONFIRMATION,
+| saveStep6()/saveStep7()/saveStep8() are real Livewire actions over
+| SaveBookingDraftStep, and Step 9 renders the order read model.
+| REPLACES the BookingWizardComingSoon stub — see that class's own doc
+| block and this file's top-of-file note on stub replacement.
 */
 Route::get('/pemesanan-makam', BookingWizard::class)->name('pemesanan-makam.index');
 Route::redirect('/pemesanan-makam/baru', '/pemesanan-makam')->name('pemesanan-makam.new');
