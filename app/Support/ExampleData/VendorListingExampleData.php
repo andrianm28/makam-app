@@ -131,6 +131,35 @@ final class VendorListingExampleData
      * left untouched — migrations run once, but the guard makes re-runs
      * (fresh installs, partial rollbacks, manual invocation) safe.
      */
+    /**
+     * Delivery areas per example vendor — the `service_areas` rows the
+     * checkout's area selector requires (verified live on dev: with zero
+     * rows, the select renders empty and checkout can never validate).
+     * Deterministic: each vendor serves 3 Jakarta-region example areas with
+     * a delivery fee derived from the vendor index, so the checkout can
+     * always complete in a fresh environment.
+     *
+     * Shape: [vendor_index, area_code, area_label, delivery_fee_minor].
+     *
+     * @return list<array{0: int, 1: string, 2: string, 3: int}>
+     */
+    public static function serviceAreas(): array
+    {
+        $areas = [];
+
+        foreach (range(0, self::VENDOR_COUNT - 1) as $vendorIndex) {
+            foreach ([
+                ['EX-JKT-01', 'Jakarta Pusat', 0],
+                ['EX-JKT-02', 'Jakarta Selatan', 150_000],
+                ['EX-JKT-03', 'Jakarta Timur', 200_000],
+            ] as [$code, $label, $fee]) {
+                $areas[] = [$vendorIndex, $code, $label, $fee + ($vendorIndex * 25_000)];
+            }
+        }
+
+        return $areas;
+    }
+
     public static function seed(): void
     {
         $vendors = self::vendors();
@@ -183,6 +212,72 @@ final class VendorListingExampleData
                 'production_lead_time_days' => $leadTime,
                 'cancellation_policy' => $policy,
                 'evidence_requirement' => $evidence,
+                'is_active' => true,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
+
+        foreach (self::serviceAreas() as [$vendorIndex, $areaCode, $areaLabel, $deliveryFeeMinor]) {
+            $vendorName = $vendors[$vendorIndex][0];
+
+            DB::table('service_areas')->insert([
+                'vendor_id' => $vendorIds[$vendorName],
+                'area_code' => $areaCode,
+                'area_label' => $areaLabel,
+                'delivery_fee_minor' => $deliveryFeeMinor,
+                'is_active' => true,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
+    }
+
+    /**
+     * Seeds ONLY the example service areas for the example vendors.
+     *
+     * Separate from `seed()` (which guards on vendor existence and therefore
+     * returns early on environments where the vendor/listing migration already
+     * ran): the service-areas migration runs AFTER the vendor seed on fresh
+     * environments, so it must be able to add areas without re-running the
+     * vendor-creation half. Guarded on "areas already exist for the first
+     * vendor" so a re-run cannot hit the unique (vendor_id, area_code)
+     * constraint.
+     */
+    public static function seedServiceAreas(): void
+    {
+        $vendors = self::vendors();
+        $firstVendorName = $vendors[0][0];
+
+        $firstVendorId = DB::table('vendors')->where('name', $firstVendorName)->value('id');
+
+        if ($firstVendorId === null) {
+            // The vendor seed has not run; nothing to attach areas to.
+            return;
+        }
+
+        if (DB::table('service_areas')->where('vendor_id', $firstVendorId)->exists()) {
+            return;
+        }
+
+        $now = now();
+        $vendorIds = DB::table('vendors')
+            ->whereIn('name', array_column($vendors, 0))
+            ->pluck('id', 'name');
+
+        foreach (self::serviceAreas() as [$vendorIndex, $areaCode, $areaLabel, $deliveryFeeMinor]) {
+            $vendorName = $vendors[$vendorIndex][0];
+            $vendorId = $vendorIds[$vendorName] ?? null;
+
+            if ($vendorId === null) {
+                continue;
+            }
+
+            DB::table('service_areas')->insert([
+                'vendor_id' => $vendorId,
+                'area_code' => $areaCode,
+                'area_label' => $areaLabel,
+                'delivery_fee_minor' => $deliveryFeeMinor,
                 'is_active' => true,
                 'created_at' => $now,
                 'updated_at' => $now,

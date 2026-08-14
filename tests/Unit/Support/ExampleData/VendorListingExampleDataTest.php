@@ -101,4 +101,20 @@ final class VendorListingExampleDataTest extends TestCase
     {
         $this->assertSame(VendorListingExampleData::listings(), VendorListingExampleData::listings());
     }
+
+    public function test_service_areas_are_deterministic_and_cover_every_vendor(): void
+    {
+        $areas = VendorListingExampleData::serviceAreas();
+
+        $this->assertSame(15, count($areas));
+        $this->assertSame($areas, VendorListingExampleData::serviceAreas());
+
+        foreach (range(0, 4) as $vendorIndex) {
+            $vendorAreas = array_filter(
+                $areas,
+                static fn (array $a): bool => $a[0] === $vendorIndex,
+            );
+            $this->assertCount(3, $vendorAreas, "Vendor [{$vendorIndex}] must have 3 service areas.");
+        }
+    }
 }
