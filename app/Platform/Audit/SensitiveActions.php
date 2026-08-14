@@ -39,6 +39,20 @@ final class SensitiveActions
         'PRICE_VERSION_RECORDED',
         'SERVICE_DEFINITION_PRICE_VERSION_RECORDED',
 
+        // Added by the admin-managed master-data batch Task 6
+        // (`app/Filament/Admin/Resources/ServiceDefinitionResource/`), written
+        // by that resource's Create/Edit pages via `Audit::record()` — the
+        // only write paths for `service_definitions` rows. Editing a service
+        // definition changes operational behaviour with public-catalog
+        // consequences (fulfillment owner, manual-confirmation requirement,
+        // active/inactive), so the change must carry a recorded
+        // justification — the same reasoning `GATE_CHANGE` and
+        // `TARIFF_SOURCE_CHANGE` embody on this list. See
+        // `ServiceCatalogAuditActions`'s own doc block for the full
+        // judgement call.
+        'SERVICE_DEFINITION_CREATED',
+        'SERVICE_DEFINITION_UPDATED',
+
         // Added by S3-T2 (platform-identity-and-access MFA batch). Only
         // the explicit, human-initiated revoke
         // (`Mfa\MfaEnrolmentService::revoke()`, `Mfa\MfaAuditActions::RESET`)

@@ -21,6 +21,23 @@ namespace App\Domain\ServiceCatalog;
  * `Audit::record()` unconditionally, so a complete "who changed what, when"
  * history exists for service-catalogue authoring the same way it does for FAQ
  * content.
+ *
+ * ---------------------------------------------------------------------------
+ * `SERVICE_DEFINITION_CREATED`/`SERVICE_DEFINITION_UPDATED` ARE on
+ * `SensitiveActions::ACTIONS` (added 13 Aug 2026 by the admin-managed
+ * master-data batch, Task 6) — deliberate, and different from the three
+ * package-authoring actions above
+ * ---------------------------------------------------------------------------
+ * Editing a `service_definitions` row is not package authoring. The fields
+ * an admin changes here — `fulfillment_owner`, `requires_manual_confirmation`,
+ * `is_active` — alter how real orders are fulfilled and what the public
+ * booking flow offers; silently deactivating a service or switching its
+ * fulfillment owner has the same operational-harm shape `GATE_CHANGE` and
+ * `TARIFF_SOURCE_CHANGE` protect on this list, so the change must carry a
+ * recorded justification. The resource's create/edit forms therefore collect
+ * a mandatory `reason` (see `Filament\Admin\Resources\
+ * ServiceDefinitionResource\Schemas\ServiceDefinitionForm`), and the two
+ * page classes pass it through to `Audit::record()`.
  */
 final class ServiceCatalogAuditActions
 {
@@ -31,4 +48,8 @@ final class ServiceCatalogAuditActions
     public const string PACKAGE_VERSION_REVISED = 'SERVICE_PACKAGE_VERSION_REVISED';
 
     public const string PRICE_VERSION_RECORDED = 'SERVICE_DEFINITION_PRICE_VERSION_RECORDED';
+
+    public const string SERVICE_DEFINITION_CREATED = 'SERVICE_DEFINITION_CREATED';
+
+    public const string SERVICE_DEFINITION_UPDATED = 'SERVICE_DEFINITION_UPDATED';
 }
