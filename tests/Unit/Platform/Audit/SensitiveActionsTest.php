@@ -120,6 +120,17 @@ final class SensitiveActionsTest extends TestCase
      * deliberately NOT listed: a brand-new row is the first cut of a
      * definition (`price_version` 1), the same non-sensitive category as
      * FAQ article creation.
+     *
+     * UPDATED 13 Aug 2026 — Task 6 of the `admin-master-data` lane added
+     * `SERVICE_DEFINITION_CREATED`/`SERVICE_DEFINITION_UPDATED`: the only
+     * writers of `service_definitions` rows
+     * (`App\Filament\Admin\Resources\ServiceDefinitionResource`'s Create/
+     * Edit pages). Editing a service definition changes operational
+     * behaviour with public-catalog consequences (fulfillment owner,
+     * manual-confirmation requirement, active/inactive) — the same
+     * mandatory-reason category as `GATE_CHANGE`/`TARIFF_SOURCE_CHANGE`
+     * already on this list. See `ServiceCatalogAuditActions`'s doc block
+     * for the full judgement call.
      */
     public function test_the_list_contains_the_requirements_named_actions_plus_the_documented_additions(): void
     {
@@ -135,6 +146,8 @@ final class SensitiveActionsTest extends TestCase
                 'JOURNAL_REVERSAL',
                 'PRICE_VERSION_RECORDED',
                 'SERVICE_DEFINITION_PRICE_VERSION_RECORDED',
+                'SERVICE_DEFINITION_CREATED',
+                'SERVICE_DEFINITION_UPDATED',
                 'MFA_RESET',
                 'DOCUMENT_DELETE',
                 'RECONCILIATION_EXCEPTION_RESOLVED',
