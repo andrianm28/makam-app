@@ -16,21 +16,25 @@ S4-T4/S4-T5 resumed 08 Aug 2026 and Steps 1–5 are now **built and reviewed on 
 
 **PUB-011's two entry points are still two.** The wizard's Step 2 is its own list-plus-package-picker inside `/pemesanan-makam`, sharing `CemeteryPublicQuery` with the standalone `/cemeteries` page but not its Blade views. AC3's full field list (photo, address, Maps URL, facilities, attributed price range) is rendered on the **standalone** entry point only; the wizard embed currently shows name, type, and — where the cemetery has them — its package/class choices. That remains a real gap in the embed, recorded here rather than implied away by the row now reading as built.
 
+## Revision note — 14 August 2026, post-merge reconciliation
+
+The batches whose rows below said "implemented, pending merge/CI" (or were bare) all merged into `docs/design-system-and-planning` on 13 Aug 2026: L6 (`lane/l6-booking-completion`, PR #27), L7 (`lane/l7-order-orchestration`, PR #28), L8 (`lane/l8-renewal-completion`, PR #29), and L10 (`lane/l10-vendor-portal`, PR #30), together with the admin master-data resources (PRs #39–#44). The merged trunk ran green — GitHub Actions run [`31680266045`](https://github.com/andrianm28/makam-app/actions/runs/31680266045), commit `60aa130` — and has stayed green since. Rows below are corrected: PUB-010…PUB-014 and PUB-019 say "shipped" (PUB-019's "pending merge/CI" clause was already false since 11 Aug, PR #19 — corrected in place, its content otherwise untouched), PUB-015…PUB-018 get shipped markers with their honest state lists, PUB-080's "the stub is still what is deployed" sentence is withdrawn, and §B/§C rows for the shipped admin master-data resources and vendor portal are marked. The 09 Aug note above is left verbatim per this file's convention of annotating superseded reasoning rather than silently rewriting it.
+
 ## A. Public
 
 | Screen ID | Screen | Key states |
 |---|---|---|
 | PUB-001 | Homepage | normal, urgent unavailable, degraded notification |
-| PUB-010 | Booking Step 1 — Kota — `/pemesanan-makam` | loading, populated, no city — **implemented, pending merge/CI** (09 Aug 2026, S4-T4). All five launch cities are offered here in canonical order, so this screen no longer borrows PUB-011's filters as evidence |
-| PUB-011 | **Cemetery directory — list + detail.** Two entry points: standalone `/cemeteries` and `/cemeteries/{cemeterySlug}` (**shipped** 08 Aug 2026, S4-T6) · booking Step 2 embed (**implemented, pending merge/CI** 09 Aug 2026, S4-T4 — name/type plus a package/class picker where the cemetery has active packages; AC3's fuller field list is on the standalone entry point only) | list, city/type filter, detail, no result — all shipped. Also shipped: validation error on an unknown filter (list still renders), authorization failure (draft slug 404s indistinguishably from an unknown one; "plot layout is not public for this cemetery" instead of a blank), provider unavailable, pending, support. **Absent:** duplicate/retry-safe, success, gated fallback banner — no mutation, no gate, no success outcome on a read-only browse surface |
-| PUB-012 | Booking Step 3 — Jenis layanan | available — **implemented, pending merge/CI** (09 Aug 2026, S4-T4); all four service types are offered under their `mvp-scope.md` labels. **conditional and gated are absent**: no per-cemetery Makam Tumpang precondition and no Urgent/Pre-Need gate wiring exists yet — recorded, not implied |
-| PUB-013 | Booking Step 4 — Layanan | package, add-on — **implemented, pending merge/CI** (09 Aug 2026, S4-T4); the 12 catalogue services render under their real names, basics mandatory. **unavailable item is absent** — no per-service availability signal exists in the catalogue yet |
-| PUB-014 | Booking Step 5 — Ringkasan | valid quote — **implemented, pending merge/CI** (09 Aug 2026, S4-T4), as a computed presentation over current price versions with an honest "harga belum tersedia" when any price is missing. **changed price and expired quote are absent** — there is no persisted Quote row (AC8, out of scope for this batch), so there is nothing to expire or re-confirm against |
-| PUB-015 | Booking Step 6 — Data pemesan | validation, authenticated prefill |
-| PUB-016 | Booking Step 7 — Almarhum/dokumen | upload, scan pending, rejected file |
-| PUB-017 | Booking Step 8 — Pembayaran | online, manual fallback, pending, failed |
-| PUB-018 | Booking Step 9 — Konfirmasi | paid, manual verification pending, next action |
-| PUB-019 | **Payment provider browser return — `/pembayaran/kembali` and `/pembayaran/batal`** (**implemented, pending merge/CI** 10 Aug 2026, `platform-payment-adapter` Task 4) | pending, support — the only two states this screen can honestly have. A NEW id was minted rather than folded into PUB-017: these are ADR-0033's `success_return_url`/`cancel_return_url` browser landings, reachable by anyone with the URL and by any journey that pays (booking, marketplace, renewal), not a step inside the booking wizard. **The absent states are the requirement, not a gap:** no success, no failure, no paid, no "duplicate/retry-safe" — AC4 and `AGENTS.md` §Domain and financial invariants forbid a browser return from asserting or changing a payment outcome, so both pages describe the process and state that nothing was changed. Two separate routes and two separate view-only controllers (no Livewire component, hence no callable action exposed to the browser); `tests/Feature/Payment/PaymentReturnRouteTest.php` fails if either controller references a write or if hitting either route moves a row. Neither page reads or echoes a query parameter |
+| PUB-010 | Booking Step 1 — Kota — `/pemesanan-makam` | loading, populated, no city — **shipped** 13 Aug 2026 (PR #27, `lane/l6-booking-completion`). All five launch cities are offered here in canonical order, so this screen no longer borrows PUB-011's filters as evidence |
+| PUB-011 | **Cemetery directory — list + detail.** Two entry points: standalone `/cemeteries` and `/cemeteries/{cemeterySlug}` (**shipped** 08 Aug 2026, S4-T6) · booking Step 2 embed (**shipped** 13 Aug 2026, PR #27 — name/type plus a package/class picker where the cemetery has active packages; AC3's fuller field list is on the standalone entry point only) | list, city/type filter, detail, no result — all shipped. Also shipped: validation error on an unknown filter (list still renders), authorization failure (draft slug 404s indistinguishably from an unknown one; "plot layout is not public for this cemetery" instead of a blank), provider unavailable, pending, support. **Absent:** duplicate/retry-safe, success, gated fallback banner — no mutation, no gate, no success outcome on a read-only browse surface |
+| PUB-012 | Booking Step 3 — Jenis layanan | available — **shipped** 13 Aug 2026 (PR #27); all four service types are offered under their `mvp-scope.md` labels. **conditional and gated are absent**: no per-cemetery Makam Tumpang precondition and no Urgent/Pre-Need gate wiring exists yet — recorded, not implied |
+| PUB-013 | Booking Step 4 — Layanan | package, add-on — **shipped** 13 Aug 2026 (PR #27); the 12 catalogue services render under their real names, basics mandatory. **unavailable item is absent** — no per-service availability signal exists in the catalogue yet |
+| PUB-014 | Booking Step 5 — Ringkasan | valid quote — **shipped** 13 Aug 2026 (PR #27), as a computed presentation over current price versions with an honest "harga belum tersedia" when any price is missing. **changed price and expired quote are absent** — `BookingDraftQuery::summary()` deliberately presents over current price versions and never a persisted Quote row (AC8 is out of scope for the booking journey; the Quote model itself shipped with the order-orchestration domain, PR #28, but Step 5 does not read it), so there is nothing to expire or re-confirm against |
+| PUB-015 | Booking Step 6 — Data pemesan | validation — **shipped** 13 Aug 2026 (PR #27 presentation, PR #28 domain). `saveStep6()` persists customer data (name, mobile, email, address, relationship, contact channel, privacy-notice acceptance) through `SaveBookingDraftStep`. **authenticated prefill is absent** — this is an anonymous journey with no accounts, so there is nothing to prefill from (recorded, not implied) |
+| PUB-016 | Booking Step 7 — Almarhum/dokumen | deceased-data entry, validation — **shipped** 13 Aug 2026 (PR #27 presentation, PR #28 domain). `saveStep7()` persists deceased name, birth/death dates, relationship, and gender. **The upload half is not built**: `saveStep7()` sends no document keys and `SaveBookingDraftStep` refuses caller-supplied document paths, so the planned upload/scan-pending/rejected-file states remain absent from the wizard — recorded, not implied. L7's document vault (`tests/Feature/OrderWorkflow/OrderDocumentTest.php`) guards the domain side (quarantine, signed URLs, audit) |
+| PUB-017 | Booking Step 8 — Pembayaran | manual path, pending, failed — **shipped** 13 Aug 2026 (PR #27 presentation, PR #28 domain). `saveStep8()` records `payment_method` and `payment_reference`. **The online branch stays blocked** while the online-payment gate (`FIN-DEC-01`) is closed — `AGENTS.md`'s closed-gate manual fallback applies, so "online" is absent by requirement, not by oversight |
+| PUB-018 | Booking Step 9 — Konfirmasi | order read model: reference, status, invoice state, next action, support — **shipped** 13 Aug 2026 (PR #27 presentation, PR #28 domain). Renders from the order read model (`tests/Feature/OrderWorkflow/OrderReadModelTest.php`); invoice state is read-model-only while `FIN-DEC-02` is `TBD`, and a "paid" presentation can only reflect a verified payment, never a browser return |
+| PUB-019 | **Payment provider browser return — `/pembayaran/kembali` and `/pembayaran/batal`** (**shipped** 11 Aug 2026, PR #19, `lane/l3-payment-adapter` — Task 4 of `platform-payment-adapter`; the row's earlier "pending merge/CI" clause was already false on 11 Aug and is corrected here in place) | pending, support — the only two states this screen can honestly have. A NEW id was minted rather than folded into PUB-017: these are ADR-0033's `success_return_url`/`cancel_return_url` browser landings, reachable by anyone with the URL and by any journey that pays (booking, marketplace, renewal), not a step inside the booking wizard. **The absent states are the requirement, not a gap:** no success, no failure, no paid, no "duplicate/retry-safe" — AC4 and `AGENTS.md` §Domain and financial invariants forbid a browser return from asserting or changing a payment outcome, so both pages describe the process and state that nothing was changed. Two separate routes and two separate view-only controllers (no Livewire component, hence no callable action exposed to the browser); `tests/Feature/Payment/PaymentReturnRouteTest.php` fails if either controller references a write or if hitting either route moves a row. Neither page reads or echoes a query parameter |
 | PUB-020 | Marketplace landing — `/marketplace` (**shipped** 08 Aug 2026, S4-T8; browse only) | categories, empty category — both shipped, plus validation error (an unknown `?kategori=` explains itself and falls back to the full catalogue without leaking the domain exception message), provider unavailable, support. **Browse-only is test-enforced:** no cart or checkout affordance, and the component exposes no Livewire action to call. Category filtering is the query parameter `?kategori=<KEY>` (an internal key, not a public slug); `/marketplace/kategori/{categorySlug}` stays deliberately **unregistered** — `marketplace-catalog.md` defines 9 product codes and 0 category codes, and no slug was invented |
 | PUB-021 | Product detail — `/marketplace/produk/{productCode}` (**shipped** 08 Aug 2026, S4-T8; read-only) | variant — shipped as a **read-only** panel (a product family with no variant axes says so rather than showing an empty state; placeholder preview image paths are suppressed rather than rendered broken); a deactivated code 404s indistinguishably from one that never existed. **`schedule` and `area unavailable` remain genuinely unimplementable**, not merely unbuilt: verified 08 Aug 2026 that `products` and `product_variants` carry **no schedule, service-area, delivery-fee, stock/availability, or evidence-requirement column**, so five of the marketplace spec's AC2 fields have nowhere to live. A disclosed schema gap — needs a migration before this row can be completed |
 | PUB-022 | Cart | normal, vendor conflict, changed price |
@@ -47,21 +51,21 @@ S4-T4/S4-T5 resumed 08 Aug 2026 and Steps 1–5 are now **built and reviewed on 
 | PUB-060 | Help/contact — `/bantuan` | channels, hours, emergency disclaimer (`.kiro/specs/help-centre-missing-route` — bugfix spec; no owning feature spec yet, see traceability §E) |
 | PUB-070 | Kebijakan Privasi — `/privasi` | static policy sections, draft-pending-legal-review notice, customer-service CTA |
 | PUB-071 | Syarat & Ketentuan — `/syarat-ketentuan` | static terms sections, draft-pending-legal-review notice, customer-service CTA |
-| PUB-080 | Coming-soon stub — **no route left** as of 09 Aug 2026 (verified against `routes/web.php`: `/pemesanan-makam` now resolves to `BookingWizard`; `BookingWizardComingSoon` survives as deliberately-retained dead code, as `MarketplaceComingSoon` and `RenewalComingSoon` already do). S4-T4's branch replaces `/pemesanan-makam`'s `BookingWizardComingSoon` stub with the real wizard (PUB-010), the same way `RenewalStart` replaced `RenewalComingSoon`; the row is retained, not deleted, because the stub pattern is still the documented answer for a route whose screen is not built. **Pending merge/CI** — the stub is still what is deployed | not-yet-built explanation, contact channels, back-to-homepage and help CTAs |
+| PUB-080 | Coming-soon stub — **no route left** as of 09 Aug 2026 (verified against `routes/web.php`: `/pemesanan-makam` now resolves to `BookingWizard`; `BookingWizardComingSoon` survives as deliberately-retained dead code, as `MarketplaceComingSoon` and `RenewalComingSoon` already do). S4-T4's branch replaced `/pemesanan-makam`'s `BookingWizardComingSoon` stub with the real wizard (PUB-010), the same way `RenewalStart` replaced `RenewalComingSoon`; the row is retained, not deleted, because the stub pattern is still the documented answer for a route whose screen is not built. **Shipped** 13 Aug 2026 (PR #27): the wizard now serves `/pemesanan-makam` end to end, and the stub's only remaining role is as dead code alongside its two siblings | not-yet-built explanation, contact channels, back-to-homepage and help CTAs |
 
 ## B. Admin
 
 | Screen ID | Screen |
 |---|---|
 | ADM-001 | Dashboard summary |
-| ADM-010 | TPU/TPS list/detail |
-| ADM-020 | Package/class/service/tariff |
+| ADM-010 | TPU/TPS list/detail — **shipped** 13 Aug 2026 (`CemeteryResource` + packages relation manager, PRs #41/#44; admin navigation PR #43) |
+| ADM-020 | Package/class/service/tariff — **shipped** 13 Aug 2026 (master-data resources: `ProductResource` PR #40, `ServiceDefinitionResource` with append-only price versions PR #42, cemetery packages relation manager PR #41) |
 | ADM-030 | Vendor and product management |
 | ADM-040 | Booking orders and case detail |
 | ADM-050 | Marketplace orders |
 | ADM-060 | Renewal and grave record |
 | ADM-070 | Payment/transaction/manual verification |
-| ADM-080 | FAQ CMS |
+| ADM-080 | FAQ CMS — **shipped** (resource 26 Jul 2026, S4-T2 `admin-operations` AC6; role authorizer 12 Aug 2026, PR #25 `lane/l9-admin-operations`) |
 | ADM-090 | Reports |
 | ADM-100 | Audit and sensitive-action review |
 
@@ -69,15 +73,15 @@ S4-T4/S4-T5 resumed 08 Aug 2026 and Steps 1–5 are now **built and reviewed on 
 
 | Screen ID | Screen |
 |---|---|
-| VND-001 | Vendor dashboard |
-| VND-010 | Product/variant/price |
-| VND-020 | Service area |
-| VND-030 | Calendar/availability |
-| VND-040 | Incoming order |
-| VND-050 | Order detail/status/evidence |
-| VND-060 | Transaction history |
-| VND-070 | Payout status |
-| VND-080 | Profile/account |
+| VND-001 | Vendor dashboard — **shipped** 13 Aug 2026 (PR #30, `lane/l10-vendor-portal`; Filament panel at `/vendor`) |
+| VND-010 | Product/variant/price — **shipped** 13 Aug 2026 (PR #30 — `VendorListingResource`) |
+| VND-020 | Service area — **shipped** 13 Aug 2026 (PR #30 — `ServiceAreaResource`) |
+| VND-030 | Calendar/availability — **shipped** 13 Aug 2026 (PR #30 — `VendorAvailabilityResource`) |
+| VND-040 | Incoming order — **shipped** 13 Aug 2026 (PR #30 — `VendorOrderResource` list) |
+| VND-050 | Order detail/status/evidence — **shipped** 13 Aug 2026 (PR #30 — `EditVendorOrder` + `EvidenceList` page) |
+| VND-060 | Transaction history — **shipped** 13 Aug 2026 (PR #30 — `TransactionHistory` page) |
+| VND-070 | Payout status — **shipped** 13 Aug 2026 (PR #30 — `PayoutStatus` page) |
+| VND-080 | Profile/account — not built (no profile screen in the vendor panel) |
 
 ## D. Required UI states for every transactional screen
 
