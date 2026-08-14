@@ -116,6 +116,31 @@ final class ProductResourceTest extends TestCase
         $this->get('/admin/products')->assertOk();
     }
 
+    public function test_get_authorization_response_refuses_a_customer_and_allows_a_back_office_role(): void
+    {
+        // `getAuthorizationResponse()` is the resource's row-ability gate
+        // (every `getEditAuthorizationResponse()`/... predicate routes
+        // through it). Without the override, Filament's no-policy path
+        // would FAIL OPEN here; the override must refuse a bare customer
+        // exactly like `canAccess()` does.
+        $product = Product::findByCode(ProductCode::FLOWER_BOARD);
+        assert($product instanceof Product);
+
+        $customer = User::factory()->create();
+        $this->actingAs($customer);
+        $this->forgetResolvedActorContext();
+
+        $denied = ProductResource::getAuthorizationResponse('update', $product);
+        $this->assertTrue($denied->denied());
+
+        $admin = User::factory()->create();
+        $this->grantRoleTo($admin, ActorRole::ADMIN);
+        $this->actingAs($admin);
+
+        $allowed = ProductResource::getAuthorizationResponse('update', $product);
+        $this->assertTrue($allowed->allowed());
+    }
+
     // -----------------------------------------------------------------------
     // Canonical fields are read-only
     // -----------------------------------------------------------------------

@@ -4,9 +4,19 @@ declare(strict_types=1);
 
 namespace App\Filament\Admin\Resources\CemeteryResource\RelationManagers;
 
+use App\Domain\CemeteryCapability\CemeteryPackageAuditActions;
 use App\Domain\CemeteryCapability\CemeteryPackageAvailabilityStatus;
+use App\Domain\CemeteryCapability\Models\CemeteryPackage;
+use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Filament\Admin\Resources\CemeteryResource;
+use App\Platform\Audit\Audit;
+use App\Platform\Audit\AuditOutcome;
+use App\Platform\Audit\AuditSource;
+use App\Platform\Audit\AuditSubject;
+use App\Platform\IdentityAccess\ActorContext;
+use App\Platform\IdentityAccess\MasterData\Contracts\MasterDataAdminAuthorizerContract;
+use App\Platform\IdentityAccess\MasterData\Exceptions\MasterDataNotAuthorisedException;
 use Filament\Actions\CreateAction;
-use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -17,12 +27,14 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * Inline package/class availability rows for `CemeteryResource` — the
  * `cemetery_packages` rows backing requirements.md AC6 ("present Makam
  * Tumpang availability explicitly at the location/package/class level").
- * Bounded scope per the plan: list + inline create/edit only.
+ * Bounded scope per the plan: list + inline create/edit only — there is
+ * deliberately NO DeleteAction, because deletion was never in that scope.
  *
  * The package `name` is deliberately a free-text operator string, NOT a
  * closed list — `CemeteryPackage`'s own doc block explains why this module
@@ -38,19 +50,46 @@ use Filament\Tables\Table;
  * `protected function makeTable()` — both called on the mounted component.
  *
  * ---------------------------------------------------------------------------
- * Write path: the model, not a Domain Action
+ * Write path: the model, wrapped in `Audit::wrap()` — not a Domain Action
  * ---------------------------------------------------------------------------
  * No `CemeteryPackage` write Action exists in `CemeteryCapability` — the
  * design doc's "route through domain Actions WHERE THEY EXIST" rule has
  * nothing to route to here, so Filament's relationship-save path is used.
  * `CemeteryPackage::booted()`'s `saving` hook (availability-status closed
  * list assertion) still fires on every write.
+ *
+ * Both the CreateAction and the EditAction carry `->using()` closures that
+ * wrap the model write in `Audit::wrap()` (`CemeteryPackageAuditActions
+ * ::CREATED` / `::UPDATED`), so the row change and its `audit_events`
+ * entry commit in the same transaction (AC4) — a package create/edit is a
+ * master-data write, so it must leave the same "who changed what, when"
+ * record as the `cemetery` rows themselves.
+ *
+ * ---------------------------------------------------------------------------
+ * Authorization
+ * ---------------------------------------------------------------------------
+ * The embedding Edit page already enforces the resource gate
+ * (`CemeteryResource::getAuthorizationResponse()`), but this relation
+ * manager is itself a Livewire component addressable over the wire, so it
+ * carries its own two layers — the same hardening `PriceVersionsRelation
+ * Manager` documents:
+ *  - `canViewForRecord()` is overridden (the base implementation resolves a
+ *    policy that does not exist and fails OPEN — verified against the
+ *    installed Filament 5.7.3 source) to run the master-data authorizer's
+ *    try/catch -> bool instead.
+ *  - both actions carry `->authorize(...)` so mounting the create/edit
+ *    modal refuses an unauthorized actor at the action boundary too.
  */
 final class PackagesRelationManager extends RelationManager
 {
     protected static string $relationship = 'packages';
 
     protected static ?string $title = 'Paket Makam';
+
+    public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
+    {
+        return self::actorMayManage();
+    }
 
     public function form(Schema $schema): Schema
     {
@@ -131,12 +170,59 @@ final class PackagesRelationManager extends RelationManager
                     ->sortable(),
             ])
             ->headerActions([
-                CreateAction::make(),
+                CreateAction::make()
+                    ->authorize(fn (): bool => self::actorMayManage())
+                    ->using(function (array $data): Model {
+                        $actor = app(ActorContext::class);
+
+                        /** @var Cemetery $owner */
+                        $owner = $this->getOwnerRecord();
+
+                        return Audit::wrap(
+                            fn (): CemeteryPackage => $owner->packages()->create($data),
+                            action: CemeteryPackageAuditActions::CREATED,
+                            subject: fn (CemeteryPackage $saved): AuditSubject => new AuditSubject(
+                                type: 'cemetery_package',
+                                id: (string) $saved->getKey(),
+                            ),
+                            outcome: AuditOutcome::Allowed,
+                            actorRef: $actor->identityReference,
+                            actorRole: CemeteryResource::auditRoleFor($actor),
+                            source: AuditSource::Panel,
+                        );
+                    }),
             ])
             ->recordActions([
-                EditAction::make(),
-                DeleteAction::make(),
+                EditAction::make()
+                    ->authorize(fn (): bool => self::actorMayManage())
+                    ->using(function (Model $record, array $data): Model {
+                        $actor = app(ActorContext::class);
+
+                        return Audit::wrap(
+                            fn (): Model => tap($record)->update($data),
+                            action: CemeteryPackageAuditActions::UPDATED,
+                            subject: new AuditSubject(
+                                type: 'cemetery_package',
+                                id: (string) $record->getKey(),
+                            ),
+                            outcome: AuditOutcome::Allowed,
+                            actorRef: $actor->identityReference,
+                            actorRole: CemeteryResource::auditRoleFor($actor),
+                            source: AuditSource::Panel,
+                        );
+                    }),
             ]);
+    }
+
+    private static function actorMayManage(): bool
+    {
+        try {
+            app(MasterDataAdminAuthorizerContract::class)->authorize(app(ActorContext::class));
+        } catch (MasterDataNotAuthorisedException) {
+            return false;
+        }
+
+        return true;
     }
 
     public static function availabilityColor(string $state): string

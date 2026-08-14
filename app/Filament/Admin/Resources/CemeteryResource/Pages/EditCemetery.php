@@ -46,6 +46,13 @@ use Illuminate\Database\QueryException;
  * notification and leaves the record in place. The `QueryException` catch is
  * the race-condition backstop (a grave record inserted between the check
  * and the DELETE), so even that pathological path stays honest.
+ *
+ * A SUCCESSFUL delete is a write like any other, so it is wrapped in
+ * `Audit::wrap()` recording `CemeteryAuditActions::DELETED` — the row
+ * change and its `audit_events` entry commit in the same transaction (AC4),
+ * and the same `QueryException` catch still covers the race between the
+ * `hasGraveRecords()` check and the wrapped DELETE (the transaction rolls
+ * back, nothing is deleted, nothing is audited).
  */
 final class EditCemetery extends EditRecord
 {
@@ -75,7 +82,20 @@ final class EditCemetery extends EditRecord
                     }
 
                     try {
-                        $record->delete();
+                        $actor = app(ActorContext::class);
+
+                        Audit::wrap(
+                            fn (): bool => $record->delete(),
+                            action: CemeteryAuditActions::DELETED,
+                            subject: new AuditSubject(
+                                type: 'cemetery',
+                                id: (string) $record->getKey(),
+                            ),
+                            outcome: AuditOutcome::Allowed,
+                            actorRef: $actor->identityReference,
+                            actorRole: CemeteryResource::auditRoleFor($actor),
+                            source: AuditSource::Panel,
+                        );
                     } catch (QueryException) {
                         Notification::make()
                             ->title('Makam tidak dapat dihapus.')
