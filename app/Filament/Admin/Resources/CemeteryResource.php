@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace App\Filament\Admin\Resources;
 
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Filament\Admin\Resources\CemeteryResource\Pages\CreateCemetery;
+use App\Filament\Admin\Resources\CemeteryResource\Pages\EditCemetery;
 use App\Filament\Admin\Resources\CemeteryResource\Pages\ListCemeteries;
+use App\Filament\Admin\Resources\CemeteryResource\Schemas\CemeteryForm;
 use App\Filament\Admin\Resources\CemeteryResource\Tables\CemeteriesTable;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\MasterData\Contracts\MasterDataAdminAuthorizerContract;
@@ -13,6 +16,7 @@ use App\Platform\IdentityAccess\MasterData\Exceptions\MasterDataNotAuthorisedExc
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use BackedEnum;
 use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Auth\Access\Response;
@@ -86,6 +90,11 @@ final class CemeteryResource extends Resource
         return Response::allow();
     }
 
+    public static function form(Schema $schema): Schema
+    {
+        return CemeteryForm::configure($schema);
+    }
+
     public static function table(Table $table): Table
     {
         return CemeteriesTable::configure($table);
@@ -95,6 +104,8 @@ final class CemeteryResource extends Resource
     {
         return [
             'index' => ListCemeteries::route('/'),
+            'create' => CreateCemetery::route('/create'),
+            'edit' => EditCemetery::route('/{record}/edit'),
         ];
     }
 
