@@ -77,5 +77,10 @@ per `tasks.md`'s own primitives table.
 ## Testing strategy
 
 `ServicePackageLifecycleTest`, `ServicePackageVersionImmutabilityTest` (existing) prove
-AC1/AC2/AC8. A substitution/evidence test covers AC5/AC6's Action-layer enforcement. AC3/AC4
-end-to-end is not yet testable — quote expansion itself is unbuilt.
+AC1/AC2/AC8. A substitution/evidence test covers AC5/AC6's Action-layer enforcement. AC3/AC4's
+**quote-issuance** half is shipped and tested since 13 Aug 2026 (lane L6):
+`App\Domain\Quotation\Actions\IssueQuote` writes `unit_amount_minor` + `price_version_number`
+into immutable `quote_lines` (`tests/Feature/Quotation/IssueQuoteTest.php`,
+`QuoteImmutabilityTest.php`) — the price-snapshot behaviour AC3 needs. What remains unbuilt is
+quote **expansion** (turning `service_package_items` into quote lines); until it lands, AC3/AC4's
+package-driven end-to-end is not yet testable.
