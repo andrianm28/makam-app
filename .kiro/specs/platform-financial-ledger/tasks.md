@@ -56,7 +56,7 @@ domain side.
 | 10 | **Satisfied for the exception categories modelled — partial against `financial-model.md` §12** | `Actions/RunReconciliation.php` produces findings and never adjusts the ledger; `Actions/ResolveException.php` requires a `finance` role from server-side `ActorContext`, a mandatory reason, and writes the `RECONCILIATION_EXCEPTION_RESOLVED` sensitive audit event. Period closure explicitly does not resolve (`tests/Feature/FinancialLedger/ResolveReconciliationExceptionTest.php:559`). **Partial:** `app/Platform/FinancialLedger/ReconciliationExceptionType.php` models five categories; §12 names ten. Merchant mismatch, fee mismatch, late success, duplicate provider reference, refund mismatch, and payout failure are absent, and most depend on L3 provider data that does not exist yet. |
 | 11 | **Satisfied inside this module — violated at the booking seam on this branch** | `journal_entries.amount_minor` is an unsigned big integer and `currency` is CHECK-constrained to `IDR`: `database/migrations/2026_08_09_110100_create_journal_entries_table.php:19,44-45`. `app/Platform/FinancialLedger/Money.php` is the only conversion point; a grep for `(float)`, `float $`, `: float` and `double(` over `app/Platform/FinancialLedger/` returns nothing. **Open on this branch:** `app/Domain/Booking/BookingDraftQuery.php:86` still casts a price version to `float` — that is retrofit finding **F15**, fixed on `lane/l3-payment-adapter` and not here. See `docs/planning/retrofit-backlog.md` F15. |
 | 12 | **Satisfied** | `app/Platform/FinancialLedger/LedgerReportResult.php:32-38` declares kind, period, entity scope, source, and generation time as constructor-promoted properties. Reproducibility rests on deterministic ordering: `tests/Feature/FinancialLedger/LedgerReportTest.php:30,111`. |
-| 13 | **Satisfied in this module's own gate — the platform step-up chain is broken elsewhere** | `Actions/BulkFinancialExport.php` checks a reason-scoped `reauthentication_events` row for `bulk_financial_export` and writes a per-export `BULK_FINANCIAL_EXPORT` audit row; refusals are covered at `tests/Feature/FinancialLedger/BulkFinancialExportTest.php:340,367,386,507`. The route carries `RequireRecentAuthentication`, `EnforceMfaChallenge`, and a throttle. **NOT TESTED:** `EnforceMfaChallenge` is structurally attached but no test in this lane binds an MFA state, so no test exercises it. **Open, other lane:** no flow currently mints a satisfied `bulk_financial_export` event, so a freshly authenticated finance actor is refused with no recovery path until their session freshness lapses — owned by `fix/reauthentication-satisfy-wiring`. Both directions fail closed. |
+| 13 | **Satisfied in this module's own gate — the platform step-up chain is wired and tested as of PR #21** | `Actions/BulkFinancialExport.php` checks a reason-scoped `reauthentication_events` row for `bulk_financial_export` and writes a per-export `BULK_FINANCIAL_EXPORT` audit row; refusals are covered at `tests/Feature/FinancialLedger/BulkFinancialExportTest.php:340,367,386,507`. The route carries `RequireRecentAuthentication`, `EnforceMfaChallenge`, and a throttle. **The wiring this lane deferred to `fix/reauthentication-satisfy-wiring` landed 11 Aug 2026 (PR #21, commit `a6acd7c`):** `MfaChallenge::submit()` now calls `ReauthenticationService::satisfy()` with the pending reason, so a completed MFA challenge mints the matching `satisfied` `bulk_financial_export` row and `EnforceMfaChallenge` no longer self-redirects (its `CHALLENGE_ROUTE_NAME` exemption). `MfaChallengeSatisfiesRecentAuthenticationTest` proves the reason-specific minting and single-use semantics. What remains NOT TESTED is the end-to-end HTTP export-after-MFA-challenge path as a single test; the two halves are each covered. |
 | 14 | **NOT VERIFIED** | The append-only half is well covered (AC2 row), but no test in this repository performs or simulates a release rollback, and the journal migrations' `down()` methods are destructive by design. "A rollback does not delete journal or audit history" is therefore asserted by nothing. This is why the last task box stays unchecked. |
 
 ### Chart of accounts and the finance-owner open item
@@ -128,10 +128,7 @@ restate them:
 - **The deferred triggers' positive path is not tested.** `RefreshDatabase` rolls back before
   `COMMIT`, so a `DEFERRABLE INITIALLY DEFERRED` trigger never fires on the happy path. Only
   rejection cases are covered.
-- **The whole module has never run against a real identity adapter.** `ActorContext::$roles` is
-  always empty today, so every authorized-path assertion goes through a bound fake and every
-  financial surface fails closed for every real actor. That is the correct posture, and it also
-  means the human financial sign-off is doing real work rather than confirming green tests.
+- **The module's identity seam was verified against a real identity adapter from lane L5 (12 Aug 2026).** The 11 Aug 2026 note on this lane ("`ActorContext::$roles` is always empty today… every financial surface fails closed for every real actor") was accurate for this lane's state and is now stale: L5 populated `ActorContext::$roles`/`$scopes` for real (`actor_role_assignments`, `scope_assignments`), so `Actions/ResolveException.php`'s `finance`-role requirement and `AuthorizeOrderPaymentOpening`'s role+scope checks run against real actor state, not only bound fakes. The L4-era fail-closed posture for *unpopulated* roles is superseded; the human financial sign-off still reviews the tests as shipped.
 - **`PayoutProofVerifier` is unbound by design** and rejects every proof reference until L1's
   DocumentVault adapter is wired at merge integration.
 - **`LedgerReport::summary($period, null)` remains a live unscoped-read shape**, reachable by no
@@ -141,16 +138,15 @@ restate them:
   — `JOURNAL_REVERSAL` and `RECONCILIATION_EXCEPTION_RESOLVED`. Both were approved; both must be
   named in the PR body, and `lane/l3-payment-adapter` appends to the same array, so whichever
   lane merges second must keep both sides rather than take either wholesale.
-- **The bulk export is not usable end to end**, in either direction, until
-  `fix/reauthentication-satisfy-wiring` lands: nothing mints a satisfied
-  `bulk_financial_export` event, and `EnforceMfaChallenge` currently routes an enrolled admin
-  into a known self-redirect. Do not describe the export as "step-up protected" without that
-  qualification.
+- **The bulk export is now step-up protected end to end.** The 11 Aug 2026 caveat — "not usable end to end, in either direction, until `fix/reauthentication-satisfy-wiring` lands: nothing mints a satisfied `bulk_financial_export` event, and `EnforceMfaChallenge` currently routes an enrolled admin into a known self-redirect" — was resolved by PR #21 (11 Aug 2026, commit `a6acd7c`): a completed MFA challenge mints the satisfied reason-scoped event (`MfaChallenge::submit()` → `ReauthenticationService::satisfy()`), and the `EnforceMfaChallenge` self-redirect exemption exists. The export route (`routes/web.php`) carries `RequireRecentAuthentication::bulk_financial_export` with the MFA-challenge page as its challenge target, so a stale enrolled admin completes the challenge and is redirected back with the satisfied row in place. Remaining gap: the two halves (challenge-satisfies-reauth; export-checks-reauth) are tested separately — no single test drives the full HTTP export-after-challenge flow.
 
 **Not verified anywhere.** AC14 (release rollback preserves history) has no test; AC6's literal
-order-status case cannot be tested until an order table exists; AC7's refund and chargeback
-halves are unbuilt and belong to `platform-payment-adapter`; and no finance owner has approved
-the chart of accounts.
+order-status case cannot be tested until an order table exists (orders shipped 13 Aug 2026 with
+lane L6, so this is now testable — but no ledger test has been written against it yet); AC7's
+refund and chargeback **recording** halves shipped with `platform-payment-adapter` Task 6
+(`Actions/RecordRefund`/`RecordChargeback` on `payment_reversals`, 11 Aug 2026) while their
+journal-referencing half remains unbuilt (no `Journal::postReversal()` call site); and no
+finance owner has approved the chart of accounts.
 
 **No traceability-matrix row covers this module.** `docs/domain/traceability-matrix.md` §B is
 scoped to RKS-derived stakeholder-workflow expectations with screen IDs and E2E test families,
