@@ -1043,7 +1043,7 @@ git commit -m "feat(marketplace): enforce query-level vendor scope, fail closed"
 
 `cart_items.unit_price_minor` and `price_version` are captured at add time so PUB-022 can detect a changed price and demand explicit reconfirmation.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```php
 <?php
@@ -1174,12 +1174,12 @@ final class CartTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `php artisan test --filter=CartTest`
 Expected: FAIL — `Class "App\Domain\Marketplace\Models\Cart" not found`.
 
-- [ ] **Step 3: Write the migrations**
+- [x] **Step 3: Write the migrations**
 
 `2026_08_12_100050_create_carts_table.php` — `uuid('id')->primary()`, `string('customer_ref')->nullable()`, `string('session_ref')->nullable()`, `uuid('vendor_id')->nullable()`, `timestamps()`; FK `vendor_id` to `vendors` `nullOnDelete()`; index on `customer_ref` and on `session_ref`.
 
@@ -1207,7 +1207,7 @@ Schema::create('cart_items', function (Blueprint $table): void {
 
 Under a `pgsql` guard: `CHECK (quantity > 0)` and `CHECK (unit_price_minor > 0)`.
 
-- [ ] **Step 4: Write `CartConflict`**
+- [x] **Step 4: Write `CartConflict`**
 
 ```php
 <?php
@@ -1235,7 +1235,7 @@ final readonly class CartConflict
 }
 ```
 
-- [ ] **Step 5: Write the models**
+- [x] **Step 5: Write the models**
 
 `Cart` — `HasUuids`, `$keyType = 'string'`, `$incrementing = false`, `$fillable = ['customer_ref', 'session_ref', 'vendor_id']`; `items(): HasMany` to `CartItem`; `vendor(): BelongsTo`; and:
 
@@ -1273,7 +1273,7 @@ public function releaseVendorLockIfEmpty(): void
 
 `CartItem` — `$fillable` for all columns, integer casts, `listing(): BelongsTo` to `VendorListing`, `variant(): BelongsTo` to `ProductVariant`, and `lineTotal(): Money { return new Money((int) $this->unit_price_minor * (int) $this->quantity); }`.
 
-- [ ] **Step 6: Write the Actions**
+- [x] **Step 6: Write the Actions**
 
 ```php
 <?php
@@ -1346,16 +1346,16 @@ final class AddToCart
 
 `UpdateCartItem::handle(CartItem $item, int $quantity): void` — quantity `< 1` deletes the row and calls `releaseVendorLockIfEmpty()`; otherwise updates. `RemoveCartItem::handle(CartItem $item): void` — deletes, then `releaseVendorLockIfEmpty()`.
 
-- [ ] **Step 7: Run the test to verify it passes**
+- [x] **Step 7: Run the test to verify it passes**
 
 Run: `php artisan test --filter=CartTest`
 Expected: PASS (6 tests).
 
-- [ ] **Step 8: Mutation-check the no-loss guarantee**
+- [x] **Step 8: Mutation-check the no-loss guarantee**
 
 Temporarily make `AddToCart` clear the cart before adding when vendors differ (the naive "just replace" behaviour). `test_a_second_vendor_returns_a_conflict_and_changes_nothing` **must** fail. Restore. This is the AC4 guarantee; if the test passes either way it is not testing anything.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add database/migrations/2026_08_12_10005*.php database/migrations/2026_08_12_10006*.php \
@@ -1383,7 +1383,7 @@ git commit -m "feat(marketplace): add cart with non-destructive single-vendor co
 
 **The allocation is written as a loop over one vendor**, per `design.md`: "The data model preserves `vendor_orders` and allocation so multi-vendor can be added later." The loop body must not assume its own single-ness; only the DB constraint and the cart lock enforce that.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```php
 <?php
@@ -1494,16 +1494,16 @@ final class MarketplaceOrderSchemaTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `php artisan test --filter=MarketplaceOrderSchemaTest`
 Expected: FAIL — `Class "App\Domain\Marketplace\PaymentState" not found`. The last test reports SKIPPED on SQLite; that is expected and is **not** a pass.
 
-- [ ] **Step 3: Write `PaymentState`**
+- [x] **Step 3: Write `PaymentState`**
 
 Same plain-string-class shape as `EvidenceRequirement`, constants `BELUM_DIBAYAR`, `MENUNGGU_VERIFIKASI`, `DIBAYAR`, `GAGAL`, `DIKEMBALIKAN`, plus `KNOWN`, `isKnown()`, `assertKnown()`. Doc block must state that this list is deliberately disjoint from `VendorProcessingStatus` because requirement 12 forbids conflating payment with fulfilment, and that the two render as two separate indicators, never one merged "done" badge.
 
-- [ ] **Step 4: Write the five table migrations**
+- [x] **Step 4: Write the five table migrations**
 
 `marketplace_orders` — `uuid('id')->primary()`, `string('order_number')->unique()`, `string('customer_ref')`, `string('entity_ref')` (the `badan_usaha`, frozen at placement — requirement 10), `uuid('vendor_id')` FK `restrictOnDelete`, `unsignedBigInteger('subtotal_minor')`, `unsignedBigInteger('delivery_fee_minor')->default(0)`, `unsignedBigInteger('total_minor')`, `string('payment_state', 32)`, `string('idempotency_key')->unique()`, `timestamp('placed_at')`, `timestamps()`. Indexes on `customer_ref`, `vendor_id`, `payment_state`. Under `pgsql`: `CHECK (total_minor = subtotal_minor + delivery_fee_minor)`, `CHECK (total_minor > 0)`, `CHECK (entity_ref <> '')`, and a `payment_state IN (...)` check listing the five values.
 
@@ -1515,7 +1515,7 @@ Same plain-string-class shape as `EvidenceRequirement`, constants `BELUM_DIBAYAR
 
 `fulfilment_evidence` — `bigIncrements`, `uuid('vendor_order_id')` FK `cascadeOnDelete`, `string('document_id')` (a DocumentVault reference, never file content), `string('document_kind', 64)`, `string('uploaded_by_actor')`, `timestamp('uploaded_at')`, `timestamps()`. Under `pgsql`: `CHECK (document_kind = 'VENDOR_EVIDENCE')` — `DocumentKind::VendorEvidence` already exists, so no new closed list. Doc block: **evidence files are private**; this table stores only a reference, and no preview may be rendered for an unscanned upload.
 
-- [ ] **Step 5: Write the single-vendor constraint trigger**
+- [x] **Step 5: Write the single-vendor constraint trigger**
 
 `2026_08_12_100120_enforce_single_vendor_per_order.php`, modelled on `2026_08_10_120300_enforce_vendor_payable_payout_consistency.php` (nowdoc `DB::unprepared`, `pgsql` early return, deferred constraint trigger, no-op `down()` with written justification):
 
@@ -1548,20 +1548,20 @@ wired as `CREATE CONSTRAINT TRIGGER vendor_orders_single_vendor AFTER INSERT OR 
 
 The doc block must say: **this constraint is the enforcement of requirement 14.** Relaxing it requires order splitting, partial cancellation/refund, fee/tax allocation, dispute handling, and reconciliation to exist first.
 
-- [ ] **Step 6: Write the models**
+- [x] **Step 6: Write the models**
 
 All five, following the established shape. `MarketplaceOrder` — `HasUuids`, `booted()` calling `PaymentState::assertKnown()` on saving, `total(): Money`, `items()`, `vendorOrders()`, `scopeForCustomer(Builder $q, string $customerRef)`. `VendorOrder` — `HasUuids`, `use VendorScoped;`, `booted()` calling `VendorProcessingStatus::assertKnown()`, `order()`, `items()`, `evidence()`. `MarketplaceOrderItem`, `VendorOrderItem`, `FulfilmentEvidence` — fillables, integer casts, relations.
 
-- [ ] **Step 7: Run the test to verify it passes**
+- [x] **Step 7: Run the test to verify it passes**
 
 Run: `php artisan test --filter=MarketplaceOrderSchemaTest`
 Expected: PASS (5 tests) + 1 SKIPPED on SQLite.
 
-- [ ] **Step 8: Verify the PostgreSQL-only invariants on a disposable container**
+- [x] **Step 8: Verify the PostgreSQL-only invariants on a disposable container**
 
 `PGNAME="l11-task5-pg-$RANDOM"`, per the Current state recipe. The skipped test **must** run and pass here — this is the only place the single-vendor DB guarantee and the `total = subtotal + delivery_fee` CHECK are actually proven. Remove the container by exact name. Record the result; if it did not run, report `NOT TESTED`, never `PASS`.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add database/migrations/2026_08_12_1000[789]0_*.php database/migrations/2026_08_12_1001[012]0_*.php \
@@ -1592,7 +1592,7 @@ git commit -m "feat(marketplace): add order, allocation, evidence schema with si
 
 **Allocation is a loop over one vendor** — `foreach` over the cart's distinct vendors, so multi-vendor later becomes a constraint change rather than a rewrite (per `design.md`). The cart's vendor lock and Task 5's constraint trigger hold it to exactly one today. The loop shape does **not** mean multi-vendor is supported; requirement 14 forbids it.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```php
 <?php
@@ -1747,12 +1747,12 @@ final class PlaceMarketplaceOrderTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `php artisan test --filter=PlaceMarketplaceOrderTest`
 Expected: FAIL — `Class "App\Domain\Marketplace\Actions\PlaceMarketplaceOrder" not found`.
 
-- [ ] **Step 3: Add the config file and env placeholder**
+- [x] **Step 3: Add the config file and env placeholder**
 
 `config/marketplace.php`:
 
@@ -1781,17 +1781,17 @@ Append to `.env.example`:
 MARKETPLACE_BADAN_USAHA_REF=
 ```
 
-- [ ] **Step 4: Write the two exceptions**
+- [x] **Step 4: Write the two exceptions**
 
 Both `final class ... extends RuntimeException` in `app/Domain/Marketplace/Exceptions/`, no added behaviour:
 - `BadanUsahaNotConfiguredException` — doc block cites requirement 10 and says checkout refuses rather than defaulting.
 - `CartPricingChangedException` — doc block cites PUB-022's changed-price state and says the customer must explicitly reconfirm.
 
-- [ ] **Step 5: Read the real ledger signature before writing the Action**
+- [x] **Step 5: Read the real ledger signature before writing the Action**
 
 Open `app/Platform/FinancialLedger/Actions/VendorPayable.php` and read `__construct()` and `assess()`. The call below shows the intended shape; **the real signature governs**, including the authorizer/`ActorContext` wiring and the exact eligibility constant. A payable created at checkout is **held**, not immediately payable — the vendor has fulfilled nothing yet (requirement 12).
 
-- [ ] **Step 6: Write the Action**
+- [x] **Step 6: Write the Action**
 
 ```php
 <?php
@@ -1930,12 +1930,12 @@ final class PlaceMarketplaceOrder
 
 Add a private `assessPayable(string $vendorId, string $entityRef, string $orderId, int $amountMinor): void` that wraps the real `VendorPayable::assess()` call using the signature read in Step 5, passing `new Money($amountMinor)` and the held-eligibility constant. Keeping it in one private method means the ledger call site appears exactly once.
 
-- [ ] **Step 7: Run the test to verify it passes**
+- [x] **Step 7: Run the test to verify it passes**
 
 Run: `php artisan test --filter=PlaceMarketplaceOrderTest`
 Expected: PASS (7 tests).
 
-- [ ] **Step 8: Mutation-check all three guards**
+- [x] **Step 8: Mutation-check all three guards**
 
 Each change made, re-run, then reverted:
 1. Delete the blank-`entity_ref` guard — `test_a_blank_badan_usaha_fails_closed_and_writes_nothing` **must** fail.
@@ -1944,11 +1944,11 @@ Each change made, re-run, then reverted:
 
 Any test that still passes is vacuous and must be fixed before proceeding.
 
-- [ ] **Step 9: Verify on a disposable PostgreSQL 18 container**
+- [x] **Step 9: Verify on a disposable PostgreSQL 18 container**
 
 `PGNAME="l11-task6-pg-$RANDOM"`, per the Current state recipe. This run proves the payable UNIQUE constraint and the `total_minor = subtotal_minor + delivery_fee_minor` CHECK hold under the real engine. Remove the container by exact name. Report anything unexecuted as `NOT TESTED`.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add config/marketplace.php .env.example app/Domain/Marketplace/Actions/PlaceMarketplaceOrder.php \
@@ -1973,7 +1973,7 @@ git commit -m "feat(marketplace): place order with vendor allocation and badan u
 
 **The conflict modal is the AC4 surface.** It must offer separate checkout **or** an explicit split, and must never silently drop items. Below `--breakpoint-md` it is a bottom sheet with `flex-col-reverse` footer so the primary action sits in thumb reach. Use only `x-mk.*` primitives and tokens — `ci/verify-docs.sh` fails the build on a hardcoded hex/px/ms/shadow or a Tailwind arbitrary value.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```php
 <?php
@@ -2093,12 +2093,12 @@ final class CartScreenTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `php artisan test --filter=CartScreenTest`
 Expected: FAIL — `Class "App\Livewire\Public\Marketplace\Cart" not found`.
 
-- [ ] **Step 3: Write the Livewire component**
+- [x] **Step 3: Write the Livewire component**
 
 `app/Livewire/Public/Marketplace/Cart.php` — a `Livewire\Component` with public `?bool $conflictOpen = false`, public `?array $conflict = null` (the `CartConflict` flattened for the view), and a `pendingListingId`/`pendingQuantity`/`pendingVariantId` triple remembering what the user tried to add.
 
@@ -2106,7 +2106,7 @@ Expected: FAIL — `Class "App\Livewire\Public\Marketplace\Cart" not found`.
 
 Cart identity: resolve by authenticated customer reference when present, otherwise by `session()->getId()` stored in `carts.session_ref`. Never trust a cart id from the request.
 
-- [ ] **Step 4: Write the Blade view**
+- [x] **Step 4: Write the Blade view**
 
 `resources/views/livewire/public/marketplace/cart.blade.php` using only `x-mk.*` primitives and tokens:
 - Empty state (§6.2): `x-mk.card` with "Keranjang Anda masih kosong" and a `Lihat katalog` link to `/marketplace`.
@@ -2115,21 +2115,21 @@ Cart identity: resolve by authenticated customer reference when present, otherwi
 - Conflict modal (§3.4): `x-mk.modal` bound to `conflictOpen`, stating the one-vendor-per-checkout constraint in plain Indonesian, naming both vendors, and offering two actions — `Ganti keranjang` (calls `resolveConflictByReplacing`) and `Selesaikan pesanan ini dulu` (calls `dismissConflict`). Footer `flex-col-reverse` below `--breakpoint-md`.
 - Support (§6.10): a "Butuh bantuan" link.
 
-- [ ] **Step 5: Register the route**
+- [x] **Step 5: Register the route**
 
 Add `/marketplace/keranjang` to `routes/web.php` next to the existing marketplace routes, following their exact registration style.
 
-- [ ] **Step 6: Run the test to verify it passes**
+- [x] **Step 6: Run the test to verify it passes**
 
 Run: `php artisan test --filter=CartScreenTest`
 Expected: PASS (6 tests).
 
-- [ ] **Step 7: Run the design gate**
+- [x] **Step 7: Run the design gate**
 
 Run: `./ci/verify-docs.sh`
 Expected: PASS. It scans `resources/` and `app/` for hardcoded design values and Tailwind arbitrary values. A failure here is a real violation, not a false positive — fix the token usage rather than suppressing it.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add app/Livewire/Public/Marketplace/Cart.php resources/views/livewire/public/marketplace/cart.blade.php \
@@ -2154,7 +2154,7 @@ git commit -m "feat(marketplace): add cart screen with single-vendor conflict mo
 
 **Validation errors never clear entered data** (§6.3): inline `aria-invalid` plus a summary alert. **Duplicate submit is safe** (§6.6): `idempotencyKey` is generated once at mount and reused, so a double click returns the same order.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```php
 <?php
@@ -2284,12 +2284,12 @@ final class CheckoutScreenTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `php artisan test --filter=CheckoutScreenTest`
 Expected: FAIL — `Class "App\Livewire\Public\Marketplace\Checkout" not found`.
 
-- [ ] **Step 3: Write the component**
+- [x] **Step 3: Write the component**
 
 `mount()` generates `$this->idempotencyKey = (string) Str::uuid()` once and loads the session cart with its vendor's active `ServiceArea`s. `placeOrder()` validates `recipientName`, `recipientPhone`, `selectedAreaCode`, and the schedule date, then calls `PlaceMarketplaceOrder::handle()`.
 
@@ -2299,22 +2299,22 @@ Exception handling — the key correctness detail:
 
 Online payment: call `GuardPaymentSession` and render its denial as a §6.9 gated banner. Because it always denies today, the manual path is the only enabled submit. Do not branch on a hardcoded "gate closed" boolean — read the guard, so the screen starts working the day the gate opens.
 
-- [ ] **Step 4: Write the Blade view**
+- [x] **Step 4: Write the Blade view**
 
 Sections: order summary (`x-mk.table`, `tabular-nums`, `--font-mono`), recipient + schedule + service-area fields (`x-mk.field`, 44px targets, `aria-invalid` on error), a validation summary `x-mk.alert` on submit, the §6.9 gated-fallback banner (`intent=info`) for online payment, the manual-transfer instructions block, an explicit statement of the one-vendor-per-checkout constraint, and support (§6.10). Tokens only.
 
-- [ ] **Step 5: Register the route, run tests, run the design gate**
+- [x] **Step 5: Register the route, run tests, run the design gate**
 
 Add `/marketplace/checkout`. Run `php artisan test --filter=CheckoutScreenTest` (expect PASS, 6 tests) and `./ci/verify-docs.sh` (expect PASS).
 
-- [ ] **Step 6: Mutation-check the gate and the leak guard**
+- [x] **Step 6: Mutation-check the gate and the leak guard**
 
 1. Hardcode `GuardResult::isAllowed()` handling to `true` in the component — `test_the_online_payment_option_is_shown_as_gate_closed_not_hidden` must fail.
 2. Change the `BadanUsahaNotConfiguredException` handler to echo `$e->getMessage()` — `test_an_unconfigured_badan_usaha_degrades_without_leaking_internals` must fail on `assertDontSee('badan_usaha_ref')`.
 
 Revert both.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add app/Livewire/Public/Marketplace/Checkout.php \
@@ -2342,7 +2342,7 @@ git commit -m "feat(marketplace): add checkout with manual fallback and gated on
 
 **Enumeration safety:** an order number belonging to another customer returns the same not-found result as one that never existed.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```php
 <?php
@@ -2447,31 +2447,31 @@ final class OrderTrackingScreenTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `php artisan test --filter=OrderTrackingScreenTest`
 Expected: FAIL — `Class "App\Domain\Marketplace\MarketplaceOrderQuery" not found`.
 
-- [ ] **Step 3: Write the query class**
+- [x] **Step 3: Write the query class**
 
 `MarketplaceOrderQuery::findForCustomer()` returns `null` for both an unknown order number and one owned by a different customer — a single `where('order_number', ...)->where('customer_ref', ...)->first()`. The doc block must state that the two cases are deliberately indistinguishable (design-system §6.4 enumeration safety) and that no "belongs to another customer" message may ever be produced.
 
-- [ ] **Step 4: Write the component and view**
+- [x] **Step 4: Write the component and view**
 
 Component takes `orderNumber` and `customerRef`, resolves through the query class, and exposes `?MarketplaceOrder $order`. The view renders:
 - Not-found state: "Pesanan tidak ditemukan" and nothing else about the order.
 - **Two labelled indicator rows** — "Pembayaran" using `PaymentState`, and "Proses vendor" using `x-mk.badge` with `StatusIntent::intent()`/`icon()`/`label()` under `FAMILY_VENDOR_PROCESSING`. They must be visually and structurally distinct; never a single merged badge.
 - Order summary and support (§6.10). Tokens only; no `match` on status in Blade.
 
-- [ ] **Step 5: Register the route, run tests, run the design gate**
+- [x] **Step 5: Register the route, run tests, run the design gate**
 
 Add `/marketplace/pesanan/{orderNumber}`. Run `php artisan test --filter=OrderTrackingScreenTest` (expect PASS, 5 tests) and `./ci/verify-docs.sh`.
 
-- [ ] **Step 6: Mutation-check the AC12 separation**
+- [x] **Step 6: Mutation-check the AC12 separation**
 
 Merge the two indicators into one badge that shows "selesai" whenever `payment_state === PaymentState::DIBAYAR`. `test_a_paid_order_is_never_shown_as_fulfilment_complete` **must** fail. Revert.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add app/Livewire/Public/Marketplace/OrderTracking.php app/Domain/Marketplace/MarketplaceOrderQuery.php \
