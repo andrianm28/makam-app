@@ -19,6 +19,9 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Auth\Access\Response;
+use Illuminate\Database\Eloquent\Model;
+use UnitEnum;
 
 /**
  * The admin resource for `products` — the marketplace catalogue's master
@@ -27,27 +30,35 @@ use Filament\Tables\Table;
  * `Pages/` split.
  *
  * ---------------------------------------------------------------------------
- * Authorization — `canAccess()` only, and why that is a complete gate here
+ * Authorization — `canAccess()` AND `getAuthorizationResponse()`, both
+ * delegating to the one shared authorizer
  * ---------------------------------------------------------------------------
- * Every `Filament\Resources\Pages\Page` mounts and hydrates through
- * `CanAuthorizeResourceAccess`, which aborts with 403 unless
- * `Resource::canAccess()` passes — so the list, create, and edit pages are
- * each re-checked on every Livewire request, not just at first load. That
- * single method is the whole gate: the `MasterDataAdminAuthorizer` refuses
- * every actor without one of the four back-office roles (admin,
- * restricted_admin, operator, finance), fail-closed, so a bare customer or
- * guest never reaches any page or action this resource exposes.
+ * `canAccess()` is overridden per the spec's "same pattern as
+ * `FinanceReports::canAccess()`" instruction — authorizer try/catch -> bool,
+ * fail-closed for any actor without one of the four back-office roles
+ * (admin, restricted_admin, operator, finance). It is the predicate the
+ * panel's page-mount guard (`CanAuthorizeResourceAccess`) and the
+ * navigation renderer consult, and `Filament\Resources\Pages\Page` mounts
+ * and hydrates through it on every Livewire request — so the list, create,
+ * and edit pages are hard-gated by that one method, never just at first
+ * load.
  *
- * The table's row `EditAction` is checked by Filament through the resource's
- * per-ability `getAuthorizationResponse()`, whose default policy path allows
- * (no `ProductPolicy` exists, and none may be added — the same reasoning as
- * `FaqArticleResource`'s doc block). That is not a hole here: the row action
- * is only reachable from the list page, and the list page 403s before the
- * table renders for any actor `canAccess()` refuses. The FaqArticles
- * resource overrides `getAuthorizationResponse()` instead of `canAccess()`
- * because its resource also gates on per-ability distinctions; this one has
- * a single all-or-nothing decision, so `canAccess()` is the honest single
- * place to state it.
+ * `getAuthorizationResponse()` is ALSO overridden, exactly as
+ * `CemeteryResource` and `ServiceDefinitionResource` do, because in Filament
+ * 5 (`Resources\Resource\Concerns\HasAuthorization`, verified against the
+ * installed v5.7.3) every row-action predicate (`getEditAuthorization
+ * Response()`, `getDeleteAuthorizationResponse()`, ...) routes through it
+ * and — without the override — would fall through to Filament's no-policy
+ * allow for every panel user, bypassing the master-data gate at the row
+ * level. Both methods answer the same question from the same authorizer, so
+ * they cannot disagree.
+ *
+ * Relation managers are the one component type that mounts WITHOUT the page
+ * gate (`CanAuthorizeResourceAccess` only guards `Pages\Page` subclasses),
+ * so those carry their own hardening — see `PriceVersionsRelationManager`
+ * and `PackagesRelationManager`, which override `canViewForRecord()` and
+ * put `->authorize(...)` on their actions. `ProductResource` has no
+ * relation manager today; if one is ever added it must do the same.
  *
  * ---------------------------------------------------------------------------
  * Writes stay on the Eloquent path — no raw bypass
@@ -82,6 +93,17 @@ final class ProductResource extends Resource
         } catch (MasterDataNotAuthorisedException) {
             return false;
         }
+    }
+
+    public static function getAuthorizationResponse(string|UnitEnum $action, ?Model $record = null): Response
+    {
+        try {
+            app(MasterDataAdminAuthorizerContract::class)->authorize(app(ActorContext::class));
+        } catch (MasterDataNotAuthorisedException) {
+            return Response::deny('Anda tidak berwenang mengelola produk layanan.');
+        }
+
+        return Response::allow();
     }
 
     /**

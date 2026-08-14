@@ -73,7 +73,11 @@ use UnitEnum;
  * leaving `create`/`edit`/`view` open to any panel user who addresses the
  * routes directly. Overriding `getAuthorizationResponse()` here routes EVERY
  * ability through the same authorizer, so an unknown ability fails closed
- * too.
+ * too. (Pages themselves are hard-gated by `CanAuthorizeResourceAccess`
+ * consulting `canAccess()`; relation managers are the one component type
+ * that mounts without that page gate, so `PriceVersionsRelationManager`
+ * carries its own hardening — `canViewForRecord()` override plus
+ * `->authorize(...)` on its action.)
  */
 final class ServiceDefinitionResource extends Resource
 {
