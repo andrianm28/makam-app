@@ -14,13 +14,15 @@
 
 **In scope:** requirements 1-4, 9, 10, 12, 13, 14, 15.
 
-**Explicitly out of scope, deferred to a future L10 "vendor portal" lane that is not yet dispatched:**
+**Explicitly out of scope, deferred to the L10 "vendor portal" lane — SHIPPED 12 Aug 2026 via PR #30 (`60aa130`), superseding the deferral note that follows:**
 - Requirement 5 — the dedicated authenticated Filament vendor panel (`/vendor`). **No Filament panel, resource, or page is created by this plan.**
 - Requirement 6 — vendor self-service management of its own products, variants, prices, stock, service areas, and calendar.
 - Requirement 7 — the vendor's own receive/accept/reject/status-update/evidence-upload screens.
 - Requirement 8 — the vendor-facing transaction history and payout status view.
 - Requirement 11 — the manual payout proof workflow.
 - Every `VND-*` screen in `docs/product/screen-inventory.md`.
+
+> **Reconciliation note (14 Aug 2026):** the deferral paragraph below ("a future L10 vendor portal lane that is not yet dispatched") is historical. L10 shipped all of the above except requirement 11 and the evidence-UPLOAD half of requirement 7 (see `.kiro/.../tasks.md`); the plan's Tasks 1–3 and the vendor-side half of Task 5 are correspondingly superseded — see **Reconciliation with trunk (14 Aug 2026)** above. The "built to be consumed by that future lane" sentence below is still the right posture, but the consumer now exists and its schema is canonical.
 
 A future reader should not read the absence of a vendor panel as an oversight. **The schema in this plan is built to be consumed by that future lane** — `vendor_users` is queryable, `vendor_orders` carries vendor-scoped fields, and the vendor scope seam is enforced at query level — even though none of its UI exists yet.
 
@@ -126,6 +128,66 @@ CI also runs `postgres:18` and remains the final gate. Never report `PASS` for a
 
 ---
 
+## Reconciliation with trunk (14 Aug 2026)
+
+**Read this before Task 1.** This plan was written when the vendor portal (L10) had not shipped. It has: L10 merged via PR #30 (`60aa130`, 12 Aug 2026) and the L12 scoping refactor (`dc066ac`); this branch was rebased onto trunk `c32f5a9`; and the branch's ONLY remaining unique code diff against trunk is cosmetic (quote style in two pgsql CHECK statements and an import order in `VendorListingTest`). Everything else this plan's Tasks 1–3 and parts of Task 5 proposed already exists on trunk. Every claim below was verified against trunk `c32f5a9` code and migrations, not inferred.
+
+### 1. What L10 already shipped — SUPERSEDED sub-steps
+
+| Plan step | Status | Superseded by (trunk) |
+| --- | --- | --- |
+| Task 1 — `vendors` + `vendor_users` migrations, `Vendor`, `VendorUser`, `VendorIdentityTest` | **SUPERSEDED in full** | `database/migrations/2026_08_12_100000_create_vendors_table.php`, `2026_08_12_100010_create_vendor_users_table.php`, `app/Domain/Marketplace/Models/{Vendor,VendorUser}.php`, `tests/Feature/Domain/Marketplace/VendorIdentityTest.php`. L10 literally cherry-picked this plan's own migrations (`daaa12b` "plan + cherry-pick L11 migrations") — UUID-string `vendors.id`, membership-not-authorization `vendor_users`, `Vendor::scopeActive()` all landed as designed. |
+| Task 2 — `vendor_listings` + `service_areas` + `vendor_availability` migrations, `EvidenceRequirement`, `AvailabilityMode`, the three models, `VendorListingTest` | **SUPERSEDED in full** | `2026_08_12_100020_create_vendor_listings_table.php`, `100030_create_service_areas_table.php`, `100040_create_vendor_availability_table.php` (including the pgsql CHECKs and the `vendor_listings_offer_unique`), `app/Domain/Marketplace/{EvidenceRequirement,AvailabilityMode}.php`, `Models/{VendorListing,ServiceArea,VendorAvailability}.php` (with `priceMoney()`, `deliveryFeeMoney()`, `scopeActive()`, `scopeForProduct()`), `tests/Feature/Domain/Marketplace/VendorListingTest.php`. The plan's Task 2 test differs from the trunk version only cosmetically; the trunk version is canonical. |
+| Task 3 — `Scopes/VendorScoped.php` trait, `scopeForActorVendorScope()`, applying the trait to the three vendor-owned models, `VendorScopeIsolationTest` | **SUPERSEDED in full** | `app/Domain/Marketplace/Access/CurrentVendorScope.php`, `app/Filament/Vendor/Concerns/{ScopesToCurrentVendor,StampsCurrentVendor,GuardsCurrentVendorOnEdit,VendorScopedTablePage}.php`, `tests/Feature/Filament/Vendor/{VendorPanelScopingTest,VendorCreateStampingTest,VendorEditStampingTest}.php` (+ `VendorIdentityTest`). Requirement 9's query-level isolation is enforced at the `/vendor` panel boundary: every Resource scopes through `CurrentVendorScope::grantedVendorIds()` and `VendorPanelScopingTest` walks `app/Filament/Vendor/**` and fails CI on an unscoped surface. **Do not resurrect the model trait.** `CurrentVendorScope`'s own doc block explains why: `vendor_listings`/`service_areas` are browsed by the PUBLIC marketplace (this lane) where a guest holds no vendor grant, so a deny-by-default **global** scope would return zero listings to every visitor; the panel-boundary mechanism is the deliberate enforcement point. This plan's per-query trait would not have broken the public side, but no L11 surface reads vendor-scoped data at all — the trait is dead weight. See §3 for the one honest residual. |
+| Task 5, vendor-side half — `vendor_orders`, `vendor_order_items`, `fulfilment_evidence` tables; `VendorOrder`, `VendorOrderItem`, `FulfilmentEvidence` models | **SUPERSEDED (shape differs — consume, do not rebuild)** | `2026_08_12_110000_create_vendor_orders_table.php`, `110010_create_vendor_order_evidences_table.php`, `Models/{VendorOrder,VendorOrderEvidence}.php`, `Actions/UpdateVendorOrderStatus.php`, `MarketplaceAuditActions.php`. Trunk's `vendor_orders` is NOT the plan's shape: `id` bigint + separate `uuid` column (not a UUID PK), **singular `listing_id`** (one row per listing, not per vendor), `customer_name`/`customer_phone`/`customer_email` all NOT NULL, `status` defaulting to `MENUNGGU_VENDOR`, `notes`; **no `marketplace_order_id`, no `scheduled_for`, no `service_area_id`, no `accepted_at`/`rejected_at`/`rejection_reason`, no `vendor_order_items` table, no `VendorScoped` trait** (the model has `scopeForVendor()`; panel scoping comes from `VendorOrderResource::getEloquentQuery()`). `vendor_order_evidences` is also NOT the plan's `fulfilment_evidence`: it stores `file_path` (500 chars) + free-string `evidence_type` + `uploaded_at`, no `document_id`/`document_kind` CHECK. `UpdateVendorOrderStatus` already exists and is the sole writer of `status`/`notes` — do not create it, and do not add a second status write path. |
+| Task 6 assumption — "read the real `VendorPayable::assess()` signature" | **Signature changed since the plan was written** | `app/Platform/FinancialLedger/Actions/VendorPayable.php` now takes `ActorContext` in its constructor and `assess(vendorId, entityRef, sourceType, sourceId, Money, VendorPayableEligibility, trigger = HumanDecision, correlationId, now)`, and `FinanceVendorPayableAuthorizer` requires a `finance` role plus an active privileged `vendor` scope grant on the human path, while `UnattendedAssessment` refuses any authenticated actor. A customer at checkout holds neither — see §6 concern 1. |
+
+### 2. What is GENUINELY still L11's (verified absent on trunk `c32f5a9`)
+
+- **Task 4 in full** — no `carts`/`cart_items` migration, no `Cart`/`CartItem`/`CartConflict`, no `AddToCart`/`UpdateCartItem`/`RemoveCartItem`/`ReplaceCartWithVendor`. Grep across `app/`, `database/`, `resources/` finds nothing. The browse screens deliberately offer no cart affordance (`MarketplaceIndexRouteTest::test_the_landing_page_offers_no_cart_or_checkout_affordance` pins it).
+- **Task 5 customer-side half** — no `marketplace_orders`/`marketplace_order_items` migration, no `MarketplaceOrder`/`MarketplaceOrderItem`, no `PaymentState` (payment vocabulary on trunk is `PaymentVerificationStatus` on the platform side and `VendorPayableState` on the ledger side; the plan's marketplace-level closed list is still unbuilt). No single-vendor-per-order DB enforcement exists anywhere.
+- **Task 6 in full** — no `PlaceMarketplaceOrder`, no `config/marketplace.php`, no `MARKETPLACE_BADAN_USAHA_REF` in `.env.example`, no `app/Domain/Marketplace/Exceptions/`.
+- **Tasks 7–9 in full** — `app/Livewire/Public/Marketplace/` holds only `MarketplaceIndex` and `ProductDetail`; `routes/web.php` registers only `/marketplace` and `/marketplace/produk/{productCode}` (its route comment already reserves "(cart, checkout — lane/l11-marketplace-checkout, unmerged)"); no PUB-022/023/024 screens, no `MarketplaceOrderQuery`.
+- **Doc debt (Task 10)** — `docs/product/screen-inventory.md` PUB-021 still claims the five AC2 fields "have nowhere to live" (false since L10; the screen-inventory vendor rows were marked shipped by L10, the PUB-021 claim was not corrected), and `.kiro/.../tasks.md` "Implement schedule and region delivery pricing" still says "currently unimplementable" (also false since L10). Neither fix belongs to L10; both land in this plan's Task 10.
+
+### 3. Task-by-task redefinition
+
+| Task | New scope |
+| --- | --- |
+| **Task 1** | **DELETED — fully superseded.** Nothing to build; consume `Vendor`/`VendorUser` as-is. |
+| **Task 2** | **DELETED — fully superseded.** Consume `VendorListing` (incl. `priceMoney()`, `price_version`, `scopeForProduct()`) and `ServiceArea` (incl. `deliveryFeeMoney()`) as-is. |
+| **Task 3** | **DELETED — fully superseded.** The real remaining L11 need is **none**: requirement 9's vendor-side is enforced by L10 at the panel boundary with a structural CI test. The customer-facing analogue L11 actually owes is enumeration-safety on CUSTOMER-scoped reads (`MarketplaceOrderQuery::findForCustomer`, Task 9) — that is `customer_ref` scoping, unrelated to `VendorScoped`. If a future surface ever needs an actor's vendor ids, use `CurrentVendorScope::grantedVendorIds()`; never attach a scope to the shared browse models. |
+| **Task 4** | **Unchanged.** Cart, conflict, actions — all still L11's, exactly as written. It consumes trunk's `VendorListing` unchanged. |
+| **Task 5** | **Redefined.** Create ONLY `marketplace_orders` + `marketplace_order_items` + `PaymentState` + `MarketplaceOrder`/`MarketplaceOrderItem` + the single-vendor enforcement. Do NOT create `vendor_orders`/`vendor_order_items`/`fulfilment_evidence` (L10's, and `vendor_order_items`/`fulfilment_evidence` must never exist). `MarketplaceOrder` keeps `total(): Money` and `scopeForCustomer()`; the `vendorOrders()` relation now depends on the linkage decision in §5. The single-vendor DB guarantee survives, but as §5's trigger over linked rows, not over a `marketplace_order_id` column this plan invented. The plan's schema test must be rewritten for trunk's `VendorOrder` shape (NOT NULL `customer_name`/`customer_phone`/`customer_email`, `listing_id` in place of items). |
+| **Task 6** | **Redefined.** `PlaceMarketplaceOrder` writes `marketplace_orders` → `marketplace_order_items` → **one `vendor_orders` row per listing line** (`listing_id` singular, `customer_name`/`customer_phone`/`customer_email` copied from checkout input, `status = MENUNGGU_VENDOR`, `notes` null) — `VendorOrderResource`'s doc block states exactly this: "a `vendor_orders` row is produced by customer checkout, and its `vendor_id`, `listing_id`, and customer identity are all decided there." `scheduled_for`/`service_area_id` are not expressible on trunk's `vendor_orders`; carry the schedule and delivery fee on `marketplace_orders` (L11's own table) instead. `config/marketplace.php`, `MARKETPLACE_BADAN_USAHA_REF`, the two exceptions, and the double idempotency (order `idempotency_key` UNIQUE + `vendor_payables` UNIQUE) are unchanged. The payable call must resolve the authorizer question — §6 concern 1. |
+| **Task 7** | **Unchanged** (PUB-022 cart screen; `/marketplace/keranjang`). |
+| **Task 8** | **Unchanged, plus one requirement:** the checkout form must collect `recipientName`, `recipientPhone`, **and `recipientEmail`**, because trunk `vendor_orders.customer_email` is NOT NULL — the plan's `seedCart`/test fixtures must populate all three. Everything else (gate-closed online branch, manual fallback, idempotency, no-leak degradation) stands. |
+| **Task 9** | **Redefined, lightly.** `MarketplaceOrderQuery` and the two-indicator screen stand. `MarketplaceOrder::vendorOrders()` needs §5's linkage; test fixtures must populate trunk's NOT NULL `customer_*` columns. |
+| **Task 10** | **Redefined.** The PUB-021 screen-inventory correction and the "schedule/delivery pricing" tasks.md correction now credit **L10** with closing the schema gap (and L11 only with rendering-schedule honesty, which remains unbuilt — PUB-021 still does not render schedule/area states). The cart/checkout/tracking rows stay L11's. Record that `VendorOrderStatusPresenter` (L10) resolves statuses through its own badge mapping, NOT `StatusIntent` — the "single resolver" item stays open for the vendor surface, and PUB-024 must still resolve through `StatusIntent` only. |
+
+### 4. Schema reality — consume, never rebuild
+
+L11 **consumes** trunk's `vendor_listings`, `service_areas`, `vendor_availability`, `vendor_orders`, `vendor_order_evidences` as-is, with their models, closed lists, and pgsql CHECKs. L11 may only EXTEND `vendor_orders` via additive expand/contract migrations (one nullable column at most — §5) and may never drop, recreate, or add a sibling `vendor_order_items` table. The plan's file map (§File Structure) is corrected below to match.
+
+### 5. Cross-lane ownership and the linkage decision (OPEN)
+
+`vendor_orders` is **L10's**; L11's `marketplace_orders` is the **customer-side root** and must reference vendor orders, not rebuild them. Because trunk `vendor_orders` has no `marketplace_order_id`, a singular `listing_id`, and no items table, L11 must choose a linkage at implementation time (recorded here so a resuming implementer knows it is a decision, not an oversight):
+
+- **Option A (recommended shape):** an additive nullable `marketplace_order_id` on `vendor_orders` (expand/contract; L10 columns untouched). One `vendor_order` per listing line; N lines from one vendor → N `vendor_order` rows all sharing the order's `vendor_id`. The deferred single-vendor trigger (Task 5) then asserts every linked `vendor_orders` row carries the order's single `vendor_id` at COMMIT. `MarketplaceOrder::vendorOrders()` is a plain `hasMany`.
+- **Option B:** link `marketplace_order_items` → `vendor_orders` instead, leaving `vendor_orders` byte-identical to L10.
+
+Either keeps L10's schema byte-for-byte; the choice is this lane's, and it gates Task 5's trigger and Task 9's relation. Note also that L10's `vendor_order_evidences.file_path` holds a quarantine path with downloads deliberately not offered (`EvidenceList` doc block) — evidence handling stays L10's unbuilt half and is out of L11's scope.
+
+### 6. Concerns for the resuming implementer
+
+1. **Payable authorization at checkout (open design question).** `VendorPayable::assess()` on trunk requires `ActorContext` and passes through `FinanceVendorPayableAuthorizer`: the human path needs a `finance` role plus an active privileged `vendor` grant (a customer never holds these), and `UnattendedAssessment` refuses any authenticated actor. A guest checkout could name the unattended trigger; an authenticated customer cannot. L11 must decide the seam (new authorizer contract, or checkout only from an unattended context, or deferring the payable to an operator step) before Task 6 — the plan's original "call `assess()`, payable starts held" assumption no longer compiles.
+2. **L10 test fixture debt.** Every L11 test that creates a `VendorOrder` (Tasks 5, 6, 9) must now supply `listing_id`, `customer_name`, `customer_phone`, `customer_email` — the plan's fixtures predate the NOT NULL columns.
+3. **No model-level scoping on shared tables.** Any L11 attempt to re-add scoping to `VendorListing`/`ServiceArea`/`VendorAvailability` breaks the public catalogue (guests see zero listings) — `CurrentVendorScope`'s doc block and `VendorPanelScopingTest` both guard this.
+4. **`PaymentState` stays separate.** Nothing on trunk conflates payment with `VendorProcessingStatus`; L11's closed list and the two-indicator rendering (Task 9) are unchanged obligations, and `DIBAYAR` remains absent from `VendorProcessingStatus` (`VendorProcessingStatus.php` doc block still asserts this).
+5. **Evidence table name.** The plan's `fulfilment_evidence` (design.md's spelling) is void — the canonical table is `vendor_order_evidences` (`VendorOrderEvidence`). Do not create a second evidence table or migrate data between them.
+
+---
+
 ## Global Constraints
 
 - **Design tokens only.** `resources/css/tokens.css` is the single source of truth. Never hardcode a hex, px, ms, or shadow; never use a Tailwind arbitrary value such as `text-[#12545E]` or `p-[13px]`. `ci/verify-docs.sh` scans `resources/` and `app/` and fails the build on violations.
@@ -147,30 +209,35 @@ CI also runs `postgres:18` and remains the final gate. Never report `PASS` for a
 
 **Domain — `app/Domain/Marketplace/`** (extends the existing module; do not touch `ProductCode`, `MarketplaceProductCategory`, `VendorProcessingStatus`, `MarketplaceCatalogQuery`, `Product`, `ProductVariant`)
 
+**Reconciled 14 Aug 2026:** rows marked **(shipped)** already exist on trunk (L10, PR #30) and are consumed, not created. Rows marked **(void)** must never be created. `PaymentState.php`, the `Models/Cart*`/`Models/MarketplaceOrder*` rows, the four cart Actions, `PlaceMarketplaceOrder`, `CartConflict`, and `MarketplaceOrderQuery` are this lane's remaining creates.
+
 | File | Responsibility |
 | --- | --- |
-| `EvidenceRequirement.php` | Closed list for `vendor_listings.evidence_requirement` |
-| `AvailabilityMode.php` | Closed list for `vendor_listings.availability_mode` |
+| `EvidenceRequirement.php` | Closed list for `vendor_listings.evidence_requirement` **(shipped — L10)** |
+| `AvailabilityMode.php` | Closed list for `vendor_listings.availability_mode` **(shipped — L10)** |
 | `PaymentState.php` | Closed list for `marketplace_orders.payment_state` — deliberately separate from `VendorProcessingStatus` (requirement 12) |
-| `Models/Vendor.php`, `Models/VendorUser.php` | Vendor identity and membership |
-| `Models/VendorListing.php`, `Models/ServiceArea.php`, `Models/VendorAvailability.php` | Per-vendor offer, coverage, calendar |
+| `Models/Vendor.php`, `Models/VendorUser.php` | Vendor identity and membership **(shipped — L10; `vendors.id` is the UUID string `scope_assignments.entity_id` already is)** |
+| `Models/VendorListing.php`, `Models/ServiceArea.php`, `Models/VendorAvailability.php` | Per-vendor offer, coverage, calendar **(shipped — L10)** |
 | `Models/Cart.php`, `Models/CartItem.php` | Cart aggregate |
-| `Models/MarketplaceOrder.php`, `Models/MarketplaceOrderItem.php` | Order root |
-| `Models/VendorOrder.php`, `Models/VendorOrderItem.php`, `Models/FulfilmentEvidence.php` | Vendor allocation and evidence |
-| `Scopes/VendorScoped.php` | Query-level vendor scope trait (requirement 9) |
+| `Models/MarketplaceOrder.php`, `Models/MarketplaceOrderItem.php` | Customer-side order root |
+| `Models/VendorOrder.php` | Vendor allocation — **(shipped — L10, different shape: flat per-`listing_id` row, `customer_*` NOT NULL, no `marketplace_order_id`; consume as-is, link per §Reconciliation 5)** |
+| `Models/VendorOrderItem.php`, `Models/FulfilmentEvidence.php` | **(void — no `vendor_order_items` table exists and none may be created; evidence is `Models/VendorOrderEvidence.php` on `vendor_order_evidences`, shipped — L10)** |
+| `Scopes/VendorScoped.php` | **(void — superseded by `Access/CurrentVendorScope.php` + `app/Filament/Vendor/Concerns/` (shipped — L10); do not create a model-level vendor scope)** |
 | `Actions/AddToCart.php`, `Actions/UpdateCartItem.php`, `Actions/RemoveCartItem.php`, `Actions/ReplaceCartWithVendor.php` | Cart mutations and single-vendor conflict handling |
-| `Actions/PlaceMarketplaceOrder.php` | Checkout: order + allocation + payable (requirements 3, 4, 10) |
+| `Actions/PlaceMarketplaceOrder.php` | Checkout: customer order + allocation + payable (requirements 3, 4, 10) |
 | `CartConflict.php` | Value object describing a single-vendor conflict for the UI |
 | `MarketplaceOrderQuery.php` | Customer-facing order reads (requirement 13) |
+| `Actions/UpdateVendorOrderStatus.php` | **(shipped — L10; sole writer of `vendor_orders.status`/`notes` — do not create, do not bypass)** |
+| `Access/CurrentVendorScope.php`, `MarketplaceAuditActions.php` | **(shipped — L10; consumed read-only)** |
 
-**Livewire — `app/Livewire/Public/Marketplace/`**: `Cart.php` (PUB-022), `Checkout.php` (PUB-023), `OrderTracking.php` (PUB-024).
-**Views — `resources/views/livewire/public/marketplace/`**: `cart.blade.php`, `checkout.blade.php`, `order-tracking.blade.php`.
-**Migrations — `database/migrations/`**: one per table group, dated `2026_08_12_*`.
-**Tests — `tests/Feature/Domain/Marketplace/` and `tests/Feature/Livewire/Public/Marketplace/`**.
+**Livewire — `app/Livewire/Public/Marketplace/`**: `Cart.php` (PUB-022), `Checkout.php` (PUB-023), `OrderTracking.php` (PUB-024) — all three unbuilt; only `MarketplaceIndex` and `ProductDetail` exist (browse, shipped S4-T8).
+**Views — `resources/views/livewire/public/marketplace/`**: `cart.blade.php`, `checkout.blade.php`, `order-tracking.blade.php` (all unbuilt; `index.blade.php` and `product-detail.blade.php` exist).
+**Migrations — `database/migrations/`**: this lane creates `carts`, `cart_items`, `marketplace_orders`, `marketplace_order_items` (+ the single-vendor trigger), dated `2026_08_12_1000[5-8]*`. `vendors`, `vendor_users`, `vendor_listings`, `service_areas`, `vendor_availability` already exist on trunk at `2026_08_12_100000`–`100040`; `vendor_orders`/`vendor_order_evidences` at `110000`/`110010` — none of these are created by this plan.
+**Tests — `tests/Feature/Domain/Marketplace/` and `tests/Feature/Livewire/Public/Marketplace/`**: existing trunk tests (`VendorIdentityTest`, `VendorListingTest`, `VendorProcessingStatusTest`, `UpdateVendorOrderStatusTest`, `MarketplaceIndexRouteTest`, `ProductDetailRouteTest`, `tests/Feature/Filament/Vendor/*`) are consumed, not recreated.
 
 ---
 
-## Task 1: Vendor identity, membership, and the scoping boundary
+## Task 1: Vendor identity, membership, and the scoping boundary — **SUPERSEDED (shipped by L10; do not build — see Reconciliation with trunk §1)**
 
 **Files:**
 - Create: `database/migrations/2026_08_12_100000_create_vendors_table.php`
@@ -447,7 +514,7 @@ git commit -m "feat(marketplace): add vendors and vendor_users, membership separ
 
 ---
 
-## Task 2: Vendor listings, service areas, availability — closing requirement 2's five-column gap
+## Task 2: Vendor listings, service areas, availability — closing requirement 2's five-column gap — **SUPERSEDED (shipped by L10; do not build — see Reconciliation with trunk §1)**
 
 **Files:**
 - Create: `database/migrations/2026_08_12_100020_create_vendor_listings_table.php`, `2026_08_12_100030_create_service_areas_table.php`, `2026_08_12_100040_create_vendor_availability_table.php`
@@ -758,7 +825,7 @@ git commit -m "feat(marketplace): add vendor listings, service areas, availabili
 
 ---
 
-## Task 3: Query-level vendor scope (requirement 9)
+## Task 3: Query-level vendor scope (requirement 9) — **SUPERSEDED (shipped by L10; do not build — see Reconciliation with trunk §3: the real remaining L11 need is none; customer-scope enumeration safety is Task 9's `MarketplaceOrderQuery`)**
 
 **Files:**
 - Create: `app/Domain/Marketplace/Scopes/VendorScoped.php`
@@ -1299,7 +1366,7 @@ git commit -m "feat(marketplace): add cart with non-destructive single-vendor co
 
 ---
 
-## Task 5: Order, vendor allocation, and evidence schema
+## Task 5: Order, vendor allocation, and evidence schema — **REDEFINED (see Reconciliation with trunk §3: create `marketplace_orders`/`marketplace_order_items`/`PaymentState` only; `vendor_orders`, `vendor_order_items`, `fulfilment_evidence` are L10's / void)**
 
 **Files:**
 - Create: `database/migrations/2026_08_12_100070_create_marketplace_orders_table.php`, `2026_08_12_100080_create_marketplace_order_items_table.php`, `2026_08_12_100090_create_vendor_orders_table.php`, `2026_08_12_100100_create_vendor_order_items_table.php`, `2026_08_12_100110_create_fulfilment_evidence_table.php`, `2026_08_12_100120_enforce_single_vendor_per_order.php`
@@ -1505,7 +1572,7 @@ git commit -m "feat(marketplace): add order, allocation, evidence schema with si
 
 ---
 
-## Task 6: Place the order — allocation, `badan_usaha`, and the vendor payable (requirements 3, 4, 10)
+## Task 6: Place the order — allocation, `badan_usaha`, and the vendor payable (requirements 3, 4, 10) — **REDEFINED (see Reconciliation with trunk §3: one `vendor_orders` row per listing line on L10's flat schema; payable authorization seam is an open decision — §6 concern 1)**
 
 **Files:**
 - Create: `config/marketplace.php`, `app/Domain/Marketplace/Actions/PlaceMarketplaceOrder.php`
@@ -2072,7 +2139,7 @@ git commit -m "feat(marketplace): add cart screen with single-vendor conflict mo
 
 ---
 
-## Task 8: PUB-023 checkout screen — manual fallback live, online branch gate-closed
+## Task 8: PUB-023 checkout screen — manual fallback live, online branch gate-closed — **REDEFINED (see Reconciliation with trunk §3: checkout must also collect `recipientEmail` — L10's `vendor_orders.customer_email` is NOT NULL)**
 
 **Files:**
 - Create: `app/Livewire/Public/Marketplace/Checkout.php`, `resources/views/livewire/public/marketplace/checkout.blade.php`
@@ -2258,7 +2325,7 @@ git commit -m "feat(marketplace): add checkout with manual fallback and gated on
 
 ---
 
-## Task 9: PUB-024 order tracking — payment and fulfilment as two separate indicators
+## Task 9: PUB-024 order tracking — payment and fulfilment as two separate indicators — **REDEFINED (see Reconciliation with trunk §3: `vendorOrders()` relation depends on the linkage decision — §5; fixtures must populate L10's NOT NULL `customer_*` columns)**
 
 **Files:**
 - Create: `app/Livewire/Public/Marketplace/OrderTracking.php`, `resources/views/livewire/public/marketplace/order-tracking.blade.php`, `app/Domain/Marketplace/MarketplaceOrderQuery.php`
@@ -2415,7 +2482,7 @@ git commit -m "feat(marketplace): add order tracking with separate payment and f
 
 ---
 
-## Task 10: Whole-branch verification and documentation reconciliation
+## Task 10: Whole-branch verification and documentation reconciliation — **REDEFINED (see Reconciliation with trunk §3: the PUB-021 and schedule/delivery-pricing corrections now credit L10; `VendorOrderStatusPresenter`'s non-`StatusIntent` mapping stays open for the vendor surface)**
 
 **Files:**
 - Modify: `.kiro/specs/funeral-marketplace-and-vendor-portal/tasks.md`
