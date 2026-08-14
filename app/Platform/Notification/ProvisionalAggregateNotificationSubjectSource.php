@@ -31,22 +31,26 @@ use Illuminate\Support\Facades\DB;
  * accepts a domain model directly); this class does not regress it.
  *
  * ---------------------------------------------------------------------------
- * Correct-but-dormant in production — read before assuming live coverage
+ * Partially live — read before assuming full end-to-end coverage
  * ---------------------------------------------------------------------------
- * Every one of the 6 outbox-mapped matrix events
+ * Of the 6 outbox-mapped matrix events
  * (`2026_08_09_100020_seed_notification_templates_from_matrix.php`'s
- * `outboxEventName()`) currently has NO producer in this codebase:
- * `booking.draft_submitted.v2` needs wizard Step 9, and
- * `App\Domain\Booking\BookingWizardStep::LAST_IMPLEMENTED` is 5;
- * `availability.*`/`quote.*`/`payment.received.v1` have no domain module at
- * all (`app/Domain/OrderWorkflow` and `app/Domain/FuneralCase` are empty
- * scaffolding). This class — and the whole dispatch pipeline it feeds — is
- * therefore correct but dormant in production today: it is proven only by
- * tests that record a mapped event onto the outbox directly
+ * `outboxEventName()`), ONE has a real producer + consumer pair today:
+ * `order.status_changed.v1` is emitted by
+ * `App\Domain\OrderWorkflow\Actions\RecordOrderStatusChange` and bridged by
+ * `App\Domain\OrderWorkflow\Listeners\DispatchOrderNotifications`
+ * (DIPROSES → "Order processing", SELESAI → "Order completed"). The other
+ * five have no producer yet: `booking.draft_submitted.v2` needs the wizard's
+ * Step 9 submission flow (the step screens exist since 13 Aug 2026, but the
+ * submission action that emits the event is not wired),
+ * `availability.*`/`quote.*`/`payment.received.v1` have no emitting module.
+ * This class is therefore proven end-to-end only for the order-status path;
+ * the other five events are exercised by tests that record the mapped event
+ * onto the outbox directly
  * (`Outbox::record(eventName: 'booking.draft_submitted.v2', ...)`), not by
- * any real caller in this codebase reaching it yet. Stated here plainly,
- * per task-3-brief.md D3, rather than implying end-to-end production
- * coverage that does not exist.
+ * a real caller reaching them yet. Stated here plainly, per
+ * task-3-brief.md D3, rather than implying end-to-end production coverage
+ * that does not exist.
  *
  * ---------------------------------------------------------------------------
  * Failure mode

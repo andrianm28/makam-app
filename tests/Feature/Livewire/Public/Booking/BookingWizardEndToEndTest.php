@@ -121,15 +121,17 @@ final class BookingWizardEndToEndTest extends TestCase
      * §3.9), not `BookingWizardStep::LABELS` — see
      * `BookingWizardRouteTest::test_the_nine_step_stepper_is_always_shown`
      * for why that swap is a corrected expectation rather than a weakened
-     * one. What this test is really about is unchanged: steps 6-9 are
-     * unbuilt and must still be visible.
+     * one. What this test is really about is unchanged: the full nine-step
+     * journey is always visible, including Steps 6-9 (which have real
+     * screens behind them since 13 Aug 2026 — L6's `saveStep6/7/8` and the
+     * confirmation read model).
      */
-    public function test_the_stepper_never_removes_steps_6_through_9_even_though_they_are_unbuilt(): void
+    public function test_the_stepper_never_removes_steps_6_through_9(): void
     {
         $component = Livewire::test(BookingWizard::class);
 
-        foreach (['Data Pemesan', 'Data Almarhum + Dokumen', 'Pembayaran', 'Konfirmasi'] as $unbuiltStepLabel) {
-            $component->assertSee($unbuiltStepLabel);
+        foreach (['Data Pemesan', 'Data Almarhum + Dokumen', 'Pembayaran', 'Konfirmasi'] as $stepLabel) {
+            $component->assertSee($stepLabel);
         }
     }
 }
