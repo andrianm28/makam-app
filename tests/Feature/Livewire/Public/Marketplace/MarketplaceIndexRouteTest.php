@@ -364,15 +364,16 @@ final class MarketplaceIndexRouteTest extends TestCase
         $response->assertDontSee('Tambah ke Keranjang');
     }
 
-    public function test_no_cart_or_checkout_route_is_registered(): void
+    public function test_cart_and_checkout_routes_are_registered(): void
     {
-        // Same genre as test_the_category_slug_route_is_still_blocked_and_
-        // deliberately_unregistered: asserts a deliberate design decision
-        // (browse-only marketplace) rather than an accident. When Sprint
-        // 11-12 lands the real routes, these SHOULD fail — that failure is
-        // the signal to delete THIS test, not a regression.
-        $this->get('/marketplace/keranjang')->assertNotFound();
-        $this->get('/marketplace/checkout')->assertNotFound();
+        // Formerly "no cart or checkout route is registered" — the
+        // browse-only marker test. Its own doc comment said the failure was
+        // the signal to delete THIS test, not a regression, when the real
+        // routes landed; the marketplace-checkout lane (L11) lands them, so
+        // the assertions flip from 404 to 200 rather than deleting the test
+        // outright.
+        $this->get('/marketplace/keranjang')->assertOk();
+        $this->get('/marketplace/checkout')->assertOk();
     }
 
     public function test_browsing_is_read_only_and_repeated_renders_never_mutate_the_catalogue(): void
