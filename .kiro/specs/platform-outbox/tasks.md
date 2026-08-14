@@ -17,7 +17,7 @@
 - [ ] Add tests: duplicate delivery produces exactly one effect in each consumer. _Requirements: 4_
 - [ ] Add tests: 10k-row import does not push critical queue wait past 10s. _Requirements: 9_
 - [ ] Add tests: Horizon graceful termination does not lose or double-run a job. _Requirements: 6, 10_
-- [ ] Reconcile with `event-catalog.md` so every catalogued event has a producer and at least one consumer. **Partial** — `booking.draft_submitted.v2` (and `booking.draft_started.v1`/`booking.draft_step_saved.v1`) are uncatalogued; see finding N-17. _Requirements: 3_
+- [ ] Reconcile with `event-catalog.md` so every catalogued event has a producer and at least one consumer. **Partial, and improved since 13 Aug 2026** — `booking.draft_submitted.v2` is now catalogued (`docs/contracts/event-catalog.md:7`, added with the L6 booking/orchestration work) and mapped in the notification templates (consumer side), but its **producer is still unwired**: `SubmitBookingDraft` creates the order without emitting it (only `StartBookingDraft`/`SaveBookingDraftStep` emit the two draft-lifecycle names, which are themselves **still uncatalogued** — `booking.draft_started.v1`, `booking.draft_step_saved.v1`; see finding N-17 for the open "catalogue them or rule them out" question). _Requirements: 3_
 
 ## Design system
 

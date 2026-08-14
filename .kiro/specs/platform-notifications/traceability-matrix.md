@@ -35,13 +35,7 @@ reconciled field by field on the same date (header note).
   `none` and `TBD` as no-recipient values (its `EMPTY_VALUES`), so no recipient
   policy is silently invented. Customer, admin, cemetery operator, and vendor
   resolution are proven against real scope-assignment state.
-- **AC9 — the consumer is proven against outbox rows recorded directly.** None
-  of the six outbox-mapped events has a producer in this codebase yet (booking
-  wizard Step 9, availability, quote, and payment domains are unbuilt — D3 in
-  the lane ledger), so the consumer is correct-but-dormant in production. The
-  "never inline" half is by construction: `DispatchNotification` is the only
-  writer of `notification_deliveries` (`NotificationDeliveryWriteGuard`) and no
-  inline send API exists.
+- **AC9 — the consumer is proven against outbox rows, and three of the six mapped events now have real producers (13 Aug 2026).** `quote.issued.v1`/`quote.accepted.v1` (Quotation) and `payment.received.v1` (ApplyPaidEffects) are emitted by real domain Actions; the draft-lifecycle events (`booking.draft_started.v1`/`booking.draft_step_saved.v1`, outbox retrofit) have producers but no mapped template; `booking.draft_submitted.v2`'s producer is still unwired and both `availability.*` events have no producer (domains unbuilt — D3 in the lane ledger), so those rows are still proven by directly-recorded outbox rows. The "never inline" half is by construction: `DispatchNotification` is the only writer of `notification_deliveries` (`NotificationDeliveryWriteGuard`) and no inline send API exists.
 - **AC14 — the escalation queue is `default`.** `docs/architecture/queue-and-outbox.md`
   defines no `operations` queue name; the plan's fallback rule lands the
   permanent-failure escalation as an ops-tagged `RetryFailedDeliveryJob` on the
