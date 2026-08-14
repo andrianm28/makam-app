@@ -10,6 +10,8 @@ use App\Platform\IdentityAccess\Adapters\LocalUsersTableIdentityAccessAdapter;
 use App\Platform\IdentityAccess\Contracts\IdentityAccessAdapter;
 use App\Platform\IdentityAccess\Listeners\RecordActorSessionOnLogin;
 use App\Platform\IdentityAccess\Listeners\RecordActorSessionOnLogout;
+use App\Platform\IdentityAccess\MasterData\Contracts\MasterDataAdminAuthorizerContract;
+use App\Platform\IdentityAccess\MasterData\MasterDataAdminAuthorizer;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 use Illuminate\Contracts\Auth\Factory as AuthFactory;
@@ -31,6 +33,11 @@ final class IdentityAccessServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(IdentityAccessAdapter::class, LocalUsersTableIdentityAccessAdapter::class);
+
+        // Shared master-data administration gate — one binding gates every
+        // master-data Filament resource (same shape as the FinancialLedger
+        // provider's `bind(Contract::class, Implementation::class)` pattern).
+        $this->app->bind(MasterDataAdminAuthorizerContract::class, MasterDataAdminAuthorizer::class);
 
         // scoped(), not singleton() — see ActorContextResolver's class-level
         // doc block for the exact reasoning (Horizon queue workers are a
