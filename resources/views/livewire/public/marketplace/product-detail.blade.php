@@ -4,8 +4,8 @@
     App\Livewire\Public\Marketplace\ProductDetail's view —
     `/marketplace/produk/{productCode}`, PUB-021. Read that class's doc block
     first: it carries the "routed by code, not by an invented slug"
-    reasoning, the 404 discipline, and why variants are displayed rather than
-    selected.
+    reasoning, the 404 discipline, why variants are displayed rather than
+    selected, and how the add-to-cart affordance picks its listing.
 
     --- What PUB-021 asks for that this page does NOT render, and why ---
     screen-inventory.md lists PUB-021's key states as "variant, schedule,
@@ -17,16 +17,35 @@
     NONE of those are columns on `products` or `product_variants`.
     `2026_07_26_180000_create_products_table.php`'s own doc block calls the
     absence of stock/schedule/service-area columns deliberate and still open
-    ("future vendor-listing-table concerns"), and no later migration adds
-    them. So this page cannot render a schedule, a delivery fee, or a real
+    ("future vendor-listing-table concerns"). The `vendor_listings` table now
+    EXISTS (L10) and carries most of them, but nothing is seeded into it, so
+    a fresh install still has no vendor offer behind any of these products.
+    This page therefore cannot render a schedule, a delivery fee, or a real
     §6.2 "area unavailable" state — there is no data behind any of them.
     Rendering a plausible-looking one would fabricate a commercial fact the
     repository does not hold, which is the exact failure
-    `2026_07_26_180200_seed_marketplace_products_and_variants.php` avoided by
+    `2026_07_26_200200_seed_marketplace_products_and_variants.php` avoided by
     seeding `base_price_idr` NULL rather than guessing. The page instead says
     plainly, once, that schedule and service area are confirmed with the
     vendor and are not shown here. AC2 therefore remains PARTIAL after this
     batch; it is reported as such, not ticked.
+
+    --- The two ordering states ---
+    When the product has NO active `vendor_listings` row (the seeded state),
+    the §6.7 pending alert below is exactly what the page shows: online
+    ordering is genuinely unavailable for that product, with the
+    customer-service escape hatch and the one-vendor-per-checkout note.
+
+    When an active listing exists, the summary column renders the REAL offer
+    — the listing's price (not the catalogue's dummy `base_price_idr`) and
+    the listing's vendor name — with the "Tambah ke Keranjang" primary
+    button, and the ordering section becomes a neutral note that schedule,
+    area, and delivery fee are confirmed with the vendor. The dummy price's
+    attribution line and the dummy `products.vendor_name` are suppressed in
+    this state because they are fabricated values that would contradict the
+    real offer standing right next to them; they remain, with their markers,
+    when there is no listing to be truthful about. The one-vendor constraint
+    sentence is stated in BOTH states (AC4).
 
     --- `preview_image_path` is deliberately not rendered ---
     The six seeded `product_variants` rows carry
@@ -77,28 +96,73 @@
 
                 <h1 class="text-3xl font-semibold tracking-tight text-neutral-900">{{ $product->name }}</h1>
 
-                @if ($product->vendor_name)
+                {{-- The fabricated `products.vendor_name` is only shown when
+                     there is no real offer to tell the truth about — a real
+                     listing renders its own vendor beside its own price
+                     below, and a dummy name next to a real one would read as
+                     two different sellers of the same product. The marker
+                     stays on the dummy name whenever it IS shown. --}}
+                @if ($listing === null && $product->vendor_name)
                     <p class="text-base text-neutral-600">
                         Vendor: <span class="text-neutral-800">{{ MarketplacePresenter::vendorLabel($product) }}</span>
                     </p>
                 @endif
 
-                @php
-                    $price = MarketplacePresenter::priceAttribution($product);
-                @endphp
-                <p class="text-2xl font-semibold text-neutral-900">
-                    @if ($price !== null)
-                        Mulai {{ $price['amount'] }}
-                    @else
-                        Harga belum tersedia
-                    @endif
-                </p>
+                @if ($listing !== null)
+                    {{-- The REAL offer: the listing the add button below
+                         adds, priced from `vendor_listings`, not the dummy
+                         catalogue estimate. No attribution line is needed —
+                         this figure is not "data contoh". --}}
+                    <p class="text-2xl font-semibold tabular-nums text-neutral-900">
+                        {{ $listing->priceMoney()->format() }}
+                    </p>
+                    <p class="text-sm text-neutral-500">
+                        Ditawarkan oleh {{ $listing->vendor->name }}
+                    </p>
+                @else
+                    @php
+                        $price = MarketplacePresenter::priceAttribution($product);
+                    @endphp
+                    <p class="text-2xl font-semibold text-neutral-900">
+                        @if ($price !== null)
+                            Mulai {{ $price['amount'] }}
+                        @else
+                            Harga belum tersedia
+                        @endif
+                    </p>
 
-                @if ($price !== null)
-                    <p class="text-sm text-neutral-500">{{ $price['source'] }}</p>
+                    @if ($price !== null)
+                        <p class="text-sm text-neutral-500">{{ $price['source'] }}</p>
+                    @endif
                 @endif
 
                 <p class="max-w-prose text-base text-neutral-700">{{ $product->description }}</p>
+
+                {{-- The add affordance — only when there is an offer to add.
+                     Primary CTA, full-width on mobile (thumb reach), loading
+                     disabled via wire:loading (the button primitive's own
+                     disabled state, §3.1). The note under it names the
+                     vendor whose offer is being added and states AC4's
+                     one-vendor constraint at the exact point of adding. --}}
+                @if ($listing !== null)
+                    <div class="flex flex-col gap-2 pt-2">
+                        <x-mk.button
+                            variant="primary"
+                            size="lg"
+                            type="button"
+                            wire:click="addToCart"
+                            wire:loading.attr="disabled"
+                            full
+                            class="md:w-auto"
+                        >
+                            Tambah ke Keranjang
+                        </x-mk.button>
+                        <p class="text-sm text-neutral-500">
+                            Item ditambahkan sebagai penawaran dari {{ $listing->vendor->name }}.
+                            Satu checkout hanya dapat memuat produk dari satu vendor.
+                        </p>
+                    </div>
+                @endif
             </div>
         </div>
 
@@ -193,35 +257,73 @@
             @endif
         </section>
 
-        {{-- §6.7 pending — what is being waited on, who acts next, and the
-             channel. Styled `pending`, never `success`. This is where AC4's
-             one-vendor-per-checkout constraint is stated as the NOTE this
-             batch's brief asked for: no cart, no vendor grouping, and no
-             enforcement mechanism exists to build it into.
+        {{-- Ordering status — two honest states, never one that implies the
+             other. With an active listing the add button above is live and
+             this section only states what is confirmed later; without one,
+             the §6.7 pending alert says online ordering is not available
+             for THIS product and points at customer service. Both carry the
+             one-vendor-per-checkout note (AC4) — the pending one inside the
+             alert, the live one directly under the add button above.
 
              Deliberately NOT <x-mk.gate-closed-banner>: design-system.md
              §6.9 gate banners describe a real closed FEATURE GATE read
              through `ModeResolver`, and no `G-*` gate governs whether
-             checkout exists. Checkout is simply not built yet — the same
-             distinction `coming-soon.blade.php`'s own doc block draws. --}}
+             checkout exists. Checkout is a real route since this lane; what
+             a listing-less product shows is an honest "no offer yet" state,
+             not a gate. --}}
         <section aria-labelledby="ordering-status-heading" class="mt-10">
             <h2 id="ordering-status-heading" class="sr-only">Status pemesanan produk</h2>
-            <x-mk.alert intent="pending" title="Pemesanan online belum tersedia" icon="clock" live="off">
-                <p>
-                    Halaman ini menampilkan katalog produk saja. Keranjang, checkout, dan pembayaran untuk produk marketplace sedang kami siapkan dan belum dapat digunakan. Untuk memesan produk ini sekarang, hubungi customer service kami dan tim kami akan membantu prosesnya.
-                </p>
-                <p class="mt-2">
-                    Jadwal pengiriman atau pengerjaan, area layanan, dan biaya pengiriman dikonfirmasi bersama vendor dan belum ditampilkan di halaman ini.
-                </p>
-                <p class="mt-2">
-                    Catatan: satu checkout hanya dapat memuat produk dari satu vendor. Bila nanti Anda memesan produk dari vendor berbeda, pesanannya diselesaikan secara terpisah.
-                </p>
-                <x-slot:action>
-                    <x-mk.button variant="primary" href="/bantuan">
-                        Hubungi Customer Service
-                    </x-mk.button>
-                </x-slot:action>
-            </x-mk.alert>
+
+            @if ($listing !== null)
+                <x-mk.alert intent="neutral" title="Detail pesanan dikonfirmasi bersama vendor" live="off">
+                    <p>
+                        Jadwal pengiriman atau pengerjaan, area layanan, dan biaya pengiriman dikonfirmasi bersama vendor setelah pesanan dibuat dan belum ditampilkan di halaman ini.
+                    </p>
+                </x-mk.alert>
+            @else
+                <x-mk.alert intent="pending" title="Pemesanan online belum tersedia" icon="clock" live="off">
+                    <p>
+                        Halaman ini menampilkan katalog produk saja. Penawaran dari vendor untuk produk ini belum tersedia, sehingga belum dapat ditambahkan ke keranjang. Untuk memesan produk ini sekarang, hubungi customer service kami dan tim kami akan membantu prosesnya.
+                    </p>
+                    <p class="mt-2">
+                        Jadwal pengiriman atau pengerjaan, area layanan, dan biaya pengiriman dikonfirmasi bersama vendor dan belum ditampilkan di halaman ini.
+                    </p>
+                    <p class="mt-2">
+                        Catatan: satu checkout hanya dapat memuat produk dari satu vendor. Bila nanti Anda memesan produk dari vendor berbeda, pesanannya diselesaikan secara terpisah.
+                    </p>
+                    <x-slot:action>
+                        <x-mk.button variant="primary" href="/bantuan">
+                            Hubungi Customer Service
+                        </x-mk.button>
+                    </x-slot:action>
+                </x-mk.alert>
+            @endif
         </section>
+
+        {{-- §3.4 single-vendor conflict modal — same copy, same actions, same
+             state shape as the cart screen's (PUB-022), so the two surfaces
+             state AC4 identically. Only "Ganti keranjang" clears anything. --}}
+        @if ($conflictOpen && $conflict !== null)
+            <x-mk.modal title="Hanya satu vendor per pesanan" size="md" :dismissible="true">
+                <p class="text-base text-neutral-700">
+                    Keranjang Anda saat ini berisi pesanan dari <strong>{{ $conflict['existingVendorName'] }}</strong>
+                    ({{ $conflict['existingItemCount'] }} item). Keranjang hanya dapat menampung satu vendor
+                    per pesanan.
+                </p>
+                <p class="mt-3 text-base text-neutral-700">
+                    Anda mencoba menambahkan produk dari <strong>{{ $conflict['incomingVendorName'] }}</strong>.
+                    Pilih salah satu:
+                </p>
+
+                <x-slot name="footer">
+                    <x-mk.button variant="secondary" size="lg" wire:click="dismissConflict" type="button">
+                        Selesaikan pesanan ini dulu
+                    </x-mk.button>
+                    <x-mk.button variant="primary" size="lg" wire:click="resolveConflictByReplacing" type="button">
+                        Ganti keranjang
+                    </x-mk.button>
+                </x-slot>
+            </x-mk.modal>
+        @endif
     </div>
 </div>

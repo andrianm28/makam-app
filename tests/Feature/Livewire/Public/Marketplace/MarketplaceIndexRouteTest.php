@@ -210,6 +210,12 @@ final class MarketplaceIndexRouteTest extends TestCase
         // vendor_orders -> vendor_listings -> products chain on top of it. They
         // are dropped via dropIfExists rather than drop so this test keeps
         // working on a database built before those migrations existed.
+        // The marketplace checkout lane (L11) added cart_items ->
+        // vendor_listings and marketplace_order_items -> vendor_listings ->
+        // products on top of that chain, so the two L11 tables are dropped
+        // first, deepest first, with the same dropIfExists idiom.
+        Schema::dropIfExists('marketplace_order_items');
+        Schema::dropIfExists('cart_items');
         Schema::dropIfExists('vendor_order_evidences');
         Schema::dropIfExists('vendor_orders');
         Schema::dropIfExists('vendor_listings');
@@ -358,15 +364,16 @@ final class MarketplaceIndexRouteTest extends TestCase
         $response->assertDontSee('Tambah ke Keranjang');
     }
 
-    public function test_no_cart_or_checkout_route_is_registered(): void
+    public function test_cart_and_checkout_routes_are_registered(): void
     {
-        // Same genre as test_the_category_slug_route_is_still_blocked_and_
-        // deliberately_unregistered: asserts a deliberate design decision
-        // (browse-only marketplace) rather than an accident. When Sprint
-        // 11-12 lands the real routes, these SHOULD fail — that failure is
-        // the signal to delete THIS test, not a regression.
-        $this->get('/marketplace/keranjang')->assertNotFound();
-        $this->get('/marketplace/checkout')->assertNotFound();
+        // Formerly "no cart or checkout route is registered" — the
+        // browse-only marker test. Its own doc comment said the failure was
+        // the signal to delete THIS test, not a regression, when the real
+        // routes landed; the marketplace-checkout lane (L11) lands them, so
+        // the assertions flip from 404 to 200 rather than deleting the test
+        // outright.
+        $this->get('/marketplace/keranjang')->assertOk();
+        $this->get('/marketplace/checkout')->assertOk();
     }
 
     public function test_browsing_is_read_only_and_repeated_renders_never_mutate_the_catalogue(): void

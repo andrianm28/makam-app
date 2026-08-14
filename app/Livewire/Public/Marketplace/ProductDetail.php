@@ -4,8 +4,13 @@ declare(strict_types=1);
 
 namespace App\Livewire\Public\Marketplace;
 
+use App\Domain\Marketplace\Actions\AddToCart;
+use App\Domain\Marketplace\Actions\ReplaceCartWithVendor;
+use App\Domain\Marketplace\CartConflict;
 use App\Domain\Marketplace\MarketplaceCatalogQuery;
+use App\Domain\Marketplace\Models\Cart as CartModel;
 use App\Domain\Marketplace\Models\Product;
+use App\Domain\Marketplace\Models\VendorListing;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
 use Livewire\Component;
@@ -52,18 +57,58 @@ use Throwable;
  * applies to unpublished articles and `FaqArticleDetail` implements.
  *
  * ---------------------------------------------------------------------------
+ * Add to cart: the first ACTIVE listing is what the button adds
+ * ---------------------------------------------------------------------------
+ * `vendor_listings` holds the per-vendor offers this page adds to the cart
+ * (`AddToCart` requires a `VendorListing`, never a catalogue row). The
+ * catalogue is seeded with nine products and ZERO listings, so "no active
+ * listing" is the seeded state and must render honestly — the §6.7 pending
+ * alert with the customer-service escape hatch. When one or more active
+ * listings exist, the page adds the FIRST by creation order (`orderBy('id')`),
+ * deterministically, and names that listing's vendor beside the button so
+ * "which offer am I adding?" is never a secret. Multiple listings of the
+ * same product by different vendors are rare in the MVP and a per-vendor
+ * chooser is deliberately NOT built (YAGNI — the cart screen's own
+ * one-vendor rule would force a replacement modal the moment a second
+ * vendor enters anyway); the deterministic pick is recorded here as the
+ * honest MVP reading, to be replaced by a real selector when the catalogue
+ * actually carries competing offers.
+ *
+ * The add always takes the listing-level offer, quantity 1, and NO variant:
+ * variants remain DISPLAYED, not SELECTED (see below). The cart line is
+ * created with `product_variant_id = null`, which the cart screen already
+ * supports; wiring variant choice into the add is future work.
+ *
+ * The listing read follows §6.5 like the variants panel below it: a failure
+ * degrades to the same "no offer yet" rendering as zero listings (the
+ * pending alert + support path), because both mean "cannot add to cart
+ * right now", rather than taking the whole page down.
+ *
+ * ---------------------------------------------------------------------------
+ * Single-vendor conflict, handled exactly like the cart screen's
+ * ---------------------------------------------------------------------------
+ * Adding from here goes through the same `AddToCart` (returns
+ * `CartConflict`, never throws, never mutates) and the same explicit
+ * `ReplaceCartWithVendor` resolution the cart screen uses — the state
+ * shape, the modal copy, and the three actions (`addToCart`,
+ * `resolveConflictByReplacing`, `dismissConflict`) mirror `Cart`'s by
+ * design, so the two surfaces cannot drift. A conflict-free add redirects
+ * to `/marketplace/keranjang` (the item is visible there); a conflict
+ * opens the modal inline and only an explicit "Ganti keranjang" clears the
+ * existing items, exactly as requirement 4 demands.
+ *
+ * ---------------------------------------------------------------------------
  * Variants are DISPLAYED, not SELECTED
  * ---------------------------------------------------------------------------
  * The spec's design.md maps "Variant selector" to `<x-mk.field>`, and
  * "Gravestone configurator" to `<x-mk.field>` plus a preview card. Neither
- * is built here, deliberately: a selector exists to feed a cart, and there
- * is no cart (`tasks.md` "Implement cart and multi-vendor order
- * decomposition ... needs a payment decision not yet made"). A control that
- * accepts a choice and then has nowhere to send it is worse than no
- * control. `tasks.md` likewise still lists "Implement gravestone
- * configurator schema and preview" as **partial** — schema done, "the
- * interactive configurator UI and real preview rendering are not built".
- * That remains true after this batch.
+ * is built here, deliberately: a selector exists to feed a cart line, and
+ * the cart line this page creates is listing-level with no variant — a
+ * control that accepts a variant choice and then has nowhere to send it is
+ * worse than no control. `tasks.md` likewise still lists "Implement
+ * gravestone configurator schema and preview" as **partial** — schema done,
+ * "the interactive configurator UI and real preview rendering are not
+ * built". That remains true after this batch.
  *
  * Only `GRAVESTONE_*` products carry `product_variants` rows
  * (`ProductCode::GRAVESTONE_CODES`, enforced on every write by
@@ -76,6 +121,23 @@ final class ProductDetail extends Component
 {
     public Product $product;
 
+    /** True while the single-vendor conflict modal is open. Mirrors `Cart`. */
+    public ?bool $conflictOpen = false;
+
+    /**
+     * The flattened `CartConflict` for the view. Same shape as `Cart`'s.
+     *
+     * @var array{existingVendorId: string, existingVendorName: string, incomingVendorId: string, incomingVendorName: string, existingItemCount: int}|null
+     */
+    public ?array $conflict = null;
+
+    /**
+     * The listing behind an open conflict, so `resolveConflictByReplacing`
+     * can re-resolve it after the customer decides. Quantity is always 1
+     * and the variant always `null` from this page.
+     */
+    public ?int $pendingListingId = null;
+
     public function mount(string $productCode): void
     {
         $product = MarketplaceCatalogQuery::findActiveByCode($productCode);
@@ -85,6 +147,78 @@ final class ProductDetail extends Component
         }
 
         $this->product = $product;
+    }
+
+    /**
+     * Adds the product's first active listing, quantity 1, to the session
+     * cart. A clean add redirects to the cart screen; a single-vendor
+     * conflict opens the §3.4 modal inline and changes nothing until the
+     * customer explicitly resolves it.
+     */
+    public function addToCart(): void
+    {
+        $listing = $this->firstActiveListing();
+
+        if (! $listing instanceof VendorListing) {
+            return;
+        }
+
+        $result = (new AddToCart)->handle($this->cart(), $listing, 1);
+
+        if ($result instanceof CartConflict) {
+            $this->conflict = [
+                'existingVendorId' => $result->existingVendorId,
+                'existingVendorName' => $result->existingVendorName,
+                'incomingVendorId' => $result->incomingVendorId,
+                'incomingVendorName' => $result->incomingVendorName,
+                'existingItemCount' => $result->existingItemCount,
+            ];
+            $this->conflictOpen = true;
+            $this->pendingListingId = $listing->id;
+
+            return;
+        }
+
+        $this->conflict = null;
+        $this->conflictOpen = false;
+        $this->pendingListingId = null;
+
+        $this->redirectRoute('marketplace.cart');
+    }
+
+    /**
+     * The explicit resolution the customer chose in the conflict modal:
+     * clears the current cart and re-locks it to the incoming listing's
+     * vendor, then sends the customer to the cart screen where the
+     * replaced cart is visible. The only action that may clear a cart.
+     */
+    public function resolveConflictByReplacing(): void
+    {
+        if ($this->pendingListingId === null) {
+            return;
+        }
+
+        $listing = VendorListing::query()->find($this->pendingListingId);
+
+        if (! $listing instanceof VendorListing) {
+            return;
+        }
+
+        (new ReplaceCartWithVendor)->handle($this->cart(), $listing, 1, null);
+
+        $this->conflict = null;
+        $this->conflictOpen = false;
+        $this->pendingListingId = null;
+
+        $this->redirectRoute('marketplace.cart');
+    }
+
+    /** Closes the modal WITHOUT touching the cart — the existing items stay. */
+    public function dismissConflict(): void
+    {
+        $this->conflict = null;
+        $this->conflictOpen = false;
+        $this->pendingListingId = null;
     }
 
     public function render(): View
@@ -105,12 +239,53 @@ final class ProductDetail extends Component
             $variantsUnavailable = true;
         }
 
+        // The offer the add-to-cart button adds: the first active listing
+        // for this product, deterministically. §6.5, same discipline as the
+        // variants panel: a read failure degrades to the "no offer yet"
+        // state (null) instead of taking the page down — the view renders
+        // both identically, which is honest because both mean "cannot add
+        // to cart right now".
+        $listing = $this->firstActiveListing();
+
         return view('livewire.public.marketplace.product-detail', [
             'variants' => $variants,
             'variantsUnavailable' => $variantsUnavailable,
+            'listing' => $listing,
         ])->layout('layouts.app', [
             'title' => $this->product->name.' - Layanan Pemakaman - Makam.co.id',
             'active' => 'layanan',
+        ]);
+    }
+
+    /**
+     * The first active listing of this product, or `null` when there is
+     * none (the seeded state) or when the read fails (§6.5). Deterministic:
+     * creation order, so a product with several offers always adds the same
+     * one until a real vendor selector is built.
+     */
+    private function firstActiveListing(): ?VendorListing
+    {
+        try {
+            return VendorListing::query()
+                ->active()
+                ->forProduct($this->product->id)
+                ->orderBy('id')
+                ->first();
+        } catch (Throwable $e) {
+            report($e);
+
+            return null;
+        }
+    }
+
+    /** The session's cart, resolved exactly as `Cart`'s own — never from client input. */
+    private function cart(): CartModel
+    {
+        $authenticated = auth()->check();
+
+        return CartModel::query()->firstOrCreate([
+            'customer_ref' => $authenticated ? (string) auth()->id() : null,
+            'session_ref' => $authenticated ? null : session()->getId(),
         ]);
     }
 }

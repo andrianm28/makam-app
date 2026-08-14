@@ -4,12 +4,19 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Livewire\Public\Marketplace;
 
+use App\Domain\Marketplace\Actions\AddToCart;
+use App\Domain\Marketplace\AvailabilityMode;
+use App\Domain\Marketplace\EvidenceRequirement;
+use App\Domain\Marketplace\Models\Cart as CartModel;
 use App\Domain\Marketplace\Models\Product;
 use App\Domain\Marketplace\Models\ProductVariant;
+use App\Domain\Marketplace\Models\Vendor;
+use App\Domain\Marketplace\Models\VendorListing;
 use App\Domain\Marketplace\ProductCode;
 use App\Livewire\Public\Marketplace\ProductDetail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
+use Livewire\Livewire;
 use ReflectionClass;
 use ReflectionMethod;
 use Tests\TestCase;
@@ -33,6 +40,27 @@ final class ProductDetailRouteTest extends TestCase
         parent::setUp();
 
         $this->withoutVite();
+    }
+
+    /**
+     * A real active offer, as the L10 vendor panel would create one. The
+     * catalogue seed ships zero listings, so every test that exercises the
+     * add affordance creates its own.
+     */
+    private function listing(string $vendorName, string $code, int $price = 150_000): VendorListing
+    {
+        $vendor = Vendor::create(['name' => $vendorName, 'is_active' => true]);
+
+        return VendorListing::create([
+            'vendor_id' => $vendor->id,
+            'product_id' => Product::findByCode($code)->id,
+            'price_minor' => $price,
+            'price_version' => 1,
+            'availability_mode' => AvailabilityMode::STOCKED,
+            'stock_quantity' => 10,
+            'evidence_requirement' => EvidenceRequirement::NONE,
+            'is_active' => true,
+        ]);
     }
 
     public function test_every_seeded_product_code_has_a_reachable_detail_page(): void
@@ -109,13 +137,15 @@ final class ProductDetailRouteTest extends TestCase
         // design-system.md §6.5 — proven by dropping the real table inside
         // the test transaction, the idiom EloquentGateRegistrySourceTest
         // established, rather than by mocking MarketplaceCatalogQuery.
-        // No CASCADE is needed here (unlike that test): product_variants
-        // holds a foreign key TO products, and no table holds one against
-        // product_variants, so a plain drop succeeds on both SQLite and
-        // Postgres.
+        // The checkout lane (L11) added cart_items.product_variant_id and
+        // marketplace_order_items.product_variant_id -> product_variants, so
+        // those two are dropped first — a bare DROP TABLE product_variants
+        // now fails on Postgres with 2BP01 while anything references it.
         $product = Product::findByCode(ProductCode::GRAVESTONE_GRANITE);
         $this->assertNotNull($product);
 
+        Schema::dropIfExists('marketplace_order_items');
+        Schema::dropIfExists('cart_items');
         Schema::drop('product_variants');
 
         $response = $this->get('/marketplace/produk/'.ProductCode::GRAVESTONE_GRANITE);
@@ -151,24 +181,112 @@ final class ProductDetailRouteTest extends TestCase
         $deactivated->assertDontSee($product->name);
     }
 
-    public function test_the_detail_page_offers_no_cart_or_checkout_affordance(): void
+    public function test_the_detail_page_offers_add_to_cart_when_a_vendor_listing_exists(): void
     {
-        // Browse only — cart/checkout are Sprint 11-12 and need a Tier-3
-        // payment decision. AC3's later steps must not be implied.
-        // Strengthened in W-2 (same rationale as the index page's twin):
-        // structural assertions catch a real affordance whatever its label,
-        // with the string checks kept as belt-and-braces.
+        // The browse-only pin W-2 placed here is retired: the cart and
+        // checkout lanes have shipped, so the detail page now offers the
+        // add affordance whenever a real vendor offer exists (AC3's
+        // browse -> select -> cart chain). The structural assertions catch
+        // the affordance whatever its label, with the string checks kept as
+        // belt-and-braces.
+        $listing = $this->listing('Vendor Nyata', ProductCode::GRAVESTONE_GRANITE);
+
         $response = $this->get('/marketplace/produk/'.ProductCode::GRAVESTONE_GRANITE);
 
         $response->assertOk();
-        $response->assertDontSee('<form', escape: false);
-        $response->assertDontSee('wire:click', escape: false);
-        $response->assertDontSee('type="submit"', escape: false);
+        $response->assertSee('wire:click="addToCart"', escape: false);
+        $response->assertSee('Tambah ke Keranjang');
+        // The REAL offer replaces the dummy estimate at the point of
+        // adding: the listing's own price and vendor, no fabricated marker.
+        $response->assertSee('Vendor Nyata');
+        $response->assertSee($listing->priceMoney()->format());
+        $response->assertDontSee('Estimasi internal (data contoh)');
+        $response->assertDontSee('(vendor contoh)');
+        // The "not available" state is gone for a product that IS available.
+        $response->assertDontSee('Pemesanan online belum tersedia');
+        // AC4 is stated right where the item is added.
+        $response->assertSee('checkout hanya dapat memuat produk dari satu vendor');
+    }
+
+    public function test_a_product_with_no_vendor_listing_offers_no_add_to_cart_and_states_so(): void
+    {
+        // The catalogue is seeded with zero listings — the honest state is
+        // "no offer yet", not a fabricated add button that would have
+        // nothing to add.
+        $response = $this->get('/marketplace/produk/'.ProductCode::FLOWER_BOARD);
+
+        $response->assertOk();
+        $response->assertDontSee('wire:click="addToCart"', escape: false);
         $response->assertDontSee('Tambah ke Keranjang');
-        $response->assertDontSee('/marketplace/keranjang');
-        $response->assertDontSee('/marketplace/checkout');
-        // §6.7 — the absence is stated as a pending state, not left silent.
         $response->assertSee('Pemesanan online belum tersedia');
+        $response->assertSee('Hubungi Customer Service');
+    }
+
+    public function test_adding_from_the_detail_page_puts_the_item_in_the_cart_and_redirects_to_it(): void
+    {
+        $listing = $this->listing('Vendor Nyata', ProductCode::GRAVESTONE_GRANITE);
+
+        Livewire::test(ProductDetail::class, ['productCode' => ProductCode::GRAVESTONE_GRANITE])
+            ->call('addToCart')
+            ->assertRedirect(route('marketplace.cart'));
+
+        $cart = CartModel::where('session_ref', session()->getId())->firstOrFail();
+        $this->assertSame(1, $cart->items()->count());
+        $this->assertSame($listing->id, $cart->items()->first()->vendor_listing_id);
+        $this->assertSame($listing->vendor_id, $cart->vendor_id);
+    }
+
+    public function test_adding_from_the_detail_page_respects_the_single_vendor_conflict(): void
+    {
+        // The cart is already locked to vendor A (via the same AddToCart the
+        // cart screen calls); the detail page adds vendor B's listing. The
+        // conflict must surface with both vendors named and change nothing
+        // until the customer explicitly resolves it.
+        $a = $this->listing('Vendor A', ProductCode::FLOWER_BOARD);
+        $b = $this->listing('Vendor B', ProductCode::GRAVESTONE_GRANITE);
+        $cart = CartModel::create(['customer_ref' => null, 'session_ref' => session()->getId()]);
+        (new AddToCart)->handle($cart, $a, 1);
+
+        $component = Livewire::test(ProductDetail::class, ['productCode' => ProductCode::GRAVESTONE_GRANITE])
+            ->call('addToCart')
+            ->assertSet('conflictOpen', true)
+            ->assertSee('Vendor A')
+            ->assertSee('Vendor B')
+            // AC4: the constraint is stated, and both resolutions are offered.
+            ->assertSee('Ganti keranjang')
+            ->assertSee('Selesaikan pesanan ini dulu');
+
+        // The conflict never mutates the cart.
+        $this->assertSame(1, $cart->fresh()->items()->count());
+        $this->assertSame($a->id, $cart->fresh()->items()->first()->vendor_listing_id);
+
+        // Dismissing keeps the existing items and sends no one anywhere.
+        $component->call('dismissConflict')->assertSet('conflictOpen', false);
+        $this->assertSame(1, $cart->fresh()->items()->count());
+        $this->assertSame($a->vendor_id, $cart->fresh()->vendor_id);
+    }
+
+    public function test_resolving_the_conflict_from_the_detail_page_replaces_the_cart_explicitly(): void
+    {
+        $a = $this->listing('Vendor A', ProductCode::FLOWER_BOARD);
+        $b = $this->listing('Vendor B', ProductCode::GRAVESTONE_GRANITE);
+        $cart = CartModel::create(['customer_ref' => null, 'session_ref' => session()->getId()]);
+        (new AddToCart)->handle($cart, $a, 2);
+
+        $component = Livewire::test(ProductDetail::class, ['productCode' => ProductCode::GRAVESTONE_GRANITE])
+            ->call('addToCart')
+            ->assertSet('conflictOpen', true);
+
+        // Only the explicit replace clears anything — the old line is gone,
+        // the incoming vendor's offer takes its place, and the customer
+        // lands on the cart screen where the replaced cart is visible.
+        $component->call('resolveConflictByReplacing');
+        $component->assertRedirect(route('marketplace.cart'));
+
+        $cart = $cart->fresh();
+        $this->assertSame(1, $cart->items()->count());
+        $this->assertSame($b->id, $cart->items()->first()->vendor_listing_id);
+        $this->assertSame($b->vendor_id, $cart->vendor_id);
     }
 
     public function test_the_component_exposes_no_livewire_actions_to_call(): void
@@ -177,9 +295,11 @@ final class ProductDetailRouteTest extends TestCase
         // no_livewire_actions_to_call. ProductDetail is the exact page a
         // per-product "Tambah ke Keranjang" button would live on, so its
         // action surface must be pinned structurally too. mount() is public
-        // by Livewire contract but is not callable from the browser; if a
-        // future batch adds a real action, this SHOULD fail — that is the
-        // prompt to restore a loading state with it.
+        // by Livewire contract but is not callable from the browser; the
+        // add-to-cart surface (this lane's fix wave) adds addToCart and the
+        // two conflict resolutions — if a future batch adds a real action,
+        // this SHOULD fail — that is the prompt to restore a loading state
+        // with it.
         $declaredHere = array_map(
             static fn (ReflectionMethod $method): string => $method->getName(),
             array_filter(
@@ -188,7 +308,10 @@ final class ProductDetailRouteTest extends TestCase
             )
         );
 
-        $this->assertSame(['mount', 'render'], array_values($declaredHere));
+        $this->assertSame(
+            ['mount', 'addToCart', 'resolveConflictByReplacing', 'dismissConflict', 'render'],
+            array_values($declaredHere)
+        );
     }
 
     public function test_the_detail_page_states_the_single_vendor_per_checkout_constraint_as_a_note(): void
