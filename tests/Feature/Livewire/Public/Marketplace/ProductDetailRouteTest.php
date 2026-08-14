@@ -109,13 +109,15 @@ final class ProductDetailRouteTest extends TestCase
         // design-system.md §6.5 — proven by dropping the real table inside
         // the test transaction, the idiom EloquentGateRegistrySourceTest
         // established, rather than by mocking MarketplaceCatalogQuery.
-        // No CASCADE is needed here (unlike that test): product_variants
-        // holds a foreign key TO products, and no table holds one against
-        // product_variants, so a plain drop succeeds on both SQLite and
-        // Postgres.
+        // The checkout lane (L11) added cart_items.product_variant_id and
+        // marketplace_order_items.product_variant_id -> product_variants, so
+        // those two are dropped first — a bare DROP TABLE product_variants
+        // now fails on Postgres with 2BP01 while anything references it.
         $product = Product::findByCode(ProductCode::GRAVESTONE_GRANITE);
         $this->assertNotNull($product);
 
+        Schema::dropIfExists('marketplace_order_items');
+        Schema::dropIfExists('cart_items');
         Schema::drop('product_variants');
 
         $response = $this->get('/marketplace/produk/'.ProductCode::GRAVESTONE_GRANITE);

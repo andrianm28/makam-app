@@ -210,6 +210,12 @@ final class MarketplaceIndexRouteTest extends TestCase
         // vendor_orders -> vendor_listings -> products chain on top of it. They
         // are dropped via dropIfExists rather than drop so this test keeps
         // working on a database built before those migrations existed.
+        // The marketplace checkout lane (L11) added cart_items ->
+        // vendor_listings and marketplace_order_items -> vendor_listings ->
+        // products on top of that chain, so the two L11 tables are dropped
+        // first, deepest first, with the same dropIfExists idiom.
+        Schema::dropIfExists('marketplace_order_items');
+        Schema::dropIfExists('cart_items');
         Schema::dropIfExists('vendor_order_evidences');
         Schema::dropIfExists('vendor_orders');
         Schema::dropIfExists('vendor_listings');

@@ -16,6 +16,7 @@ final class VendorOrder extends Model
 
     protected $fillable = [
         'uuid',
+        'marketplace_order_id',
         'vendor_id',
         'listing_id',
         'customer_name',
