@@ -6,6 +6,7 @@ namespace Tests\Feature\Domain\Marketplace;
 
 use App\Domain\Marketplace\Models\Cart as CartModel;
 use App\Domain\Marketplace\Models\Product;
+use App\Domain\Marketplace\Models\ServiceArea;
 use App\Domain\Marketplace\Models\Vendor;
 use App\Domain\Marketplace\Models\VendorListing;
 use App\Domain\Marketplace\ProductCode;
@@ -127,5 +128,30 @@ final class VendorListingBootstrapTest extends TestCase
 
         $this->assertSame(5, Vendor::query()->count());
         $this->assertSame(9, VendorListing::query()->count());
+    }
+
+    public function test_service_areas_are_seeded_per_vendor_and_the_checkout_area_lookup_finds_them(): void
+    {
+        $vendors = Vendor::query()->get();
+
+        $this->assertCount(5, $vendors);
+
+        foreach ($vendors as $vendor) {
+            $this->assertGreaterThan(
+                0,
+                ServiceArea::query()->where('vendor_id', $vendor->id)->count(),
+                "Vendor [{$vendor->name}] must have seeded service areas.",
+            );
+        }
+
+        // The checkout resolves areas per vendor via
+        // ServiceArea::where('vendor_id', $vendorId)->active():
+        $firstVendor = $vendors->first();
+        $area = ServiceArea::query()
+            ->where('vendor_id', $firstVendor->id)
+            ->active()
+            ->first();
+
+        $this->assertNotNull($area, 'Checkout area lookup must find a seeded area for the first vendor.');
     }
 }
