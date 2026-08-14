@@ -8,6 +8,7 @@ use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Filament\Admin\Resources\CemeteryResource\Pages\CreateCemetery;
 use App\Filament\Admin\Resources\CemeteryResource\Pages\EditCemetery;
 use App\Filament\Admin\Resources\CemeteryResource\Pages\ListCemeteries;
+use App\Filament\Admin\Resources\CemeteryResource\RelationManagers\PackagesRelationManager;
 use App\Filament\Admin\Resources\CemeteryResource\Schemas\CemeteryForm;
 use App\Filament\Admin\Resources\CemeteryResource\Tables\CemeteriesTable;
 use App\Platform\IdentityAccess\ActorContext;
@@ -106,6 +107,13 @@ final class CemeteryResource extends Resource
             'index' => ListCemeteries::route('/'),
             'create' => CreateCemetery::route('/create'),
             'edit' => EditCemetery::route('/{record}/edit'),
+        ];
+    }
+
+    public static function getRelations(): array
+    {
+        return [
+            PackagesRelationManager::class,
         ];
     }
 
