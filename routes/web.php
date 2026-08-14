@@ -16,6 +16,7 @@ use App\Livewire\Public\Legal\TermsOfService;
 use App\Livewire\Public\Marketplace\Cart;
 use App\Livewire\Public\Marketplace\Checkout;
 use App\Livewire\Public\Marketplace\MarketplaceIndex;
+use App\Livewire\Public\Marketplace\OrderTracking;
 use App\Livewire\Public\Marketplace\ProductDetail;
 use App\Livewire\Public\Renewal\GraveSearch;
 use App\Livewire\Public\Renewal\RenewalConfirmation;
@@ -129,6 +130,7 @@ Route::get('/marketplace', MarketplaceIndex::class)->name('marketplace.index');
 Route::get('/marketplace/produk/{productCode}', ProductDetail::class)->name('marketplace.product');
 Route::get('/marketplace/keranjang', Cart::class)->name('marketplace.cart');
 Route::get('/marketplace/checkout', Checkout::class)->name('marketplace.checkout');
+Route::get('/marketplace/pesanan/{orderNumber}', OrderTracking::class)->name('marketplace.order.tracking');
 
 /*
 |--------------------------------------------------------------------------

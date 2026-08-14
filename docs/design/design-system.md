@@ -486,6 +486,18 @@ Components must **not** switch on enum strings. Resolve status → intent in one
 | `KOMPLAIN` | `danger` | exclamation-triangle |
 | `DIBATALKAN` | `neutral` | slash |
 
+**Marketplace payment** (`PaymentState`, added 14 Aug 2026 with the marketplace-checkout lane)
+
+| Status | Intent | Icon |
+|---|---|---|
+| `BELUM_DIBAYAR` | `pending` | clock |
+| `MENUNGGU_VERIFIKASI` | `pending` | clock |
+| `DIBAYAR` | `success` | banknote |
+| `GAGAL` | `danger` | x-circle |
+| `DIKEMBALIKAN` | `neutral` | clock-x |
+
+> `PaymentState` and `VendorProcessingStatus` are deliberately separate vocabularies. A paid order is never a completed one, and the two always render as two distinct indicators (PUB-024), never one merged "done" badge.
+
 > **`DIBAYAR` ≠ `SELESAI`.** `marketplace-catalog.md` and `AGENTS.md` both require this: "Paid does not mean completed." Payment and fulfilment are separate states and must be shown as two distinct indicators, never merged into one "done" badge.
 
 ### 3.8 Alert / Banner — `<x-mk.alert>`

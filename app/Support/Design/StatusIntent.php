@@ -49,9 +49,11 @@ use Illuminate\Support\Facades\Log;
  * ---------------------------------------------------------------------------
  * Extending to another domain
  * ---------------------------------------------------------------------------
- * Only two families are populated below: order lifecycle and vendor
- * processing — the two tables design-system.md §3.7 normatively defines.
- * Grepping the other ~6 specs this class is meant to serve
+ * Three families are populated below: order lifecycle, vendor processing,
+ * and marketplace payment — the tables design-system.md §3.7 normatively
+ * defines (`PaymentState`'s table was added 14 Aug 2026 with the
+ * marketplace-checkout lane). Grepping the other ~6 specs this class is
+ * meant to serve
  * (booking-and-order-orchestration, funeral-marketplace-and-vendor-portal,
  * admin-operations, funeral-case-management, recurring-care-subscriptions,
  * pre-need-contracting, plot-inventory-and-reservation) turned up additional
@@ -95,6 +97,8 @@ final class StatusIntent
     public const FAMILY_ORDER_LIFECYCLE = 'order_lifecycle';
 
     public const FAMILY_VENDOR_PROCESSING = 'vendor_processing';
+
+    public const FAMILY_MARKETPLACE_PAYMENT = 'marketplace_payment';
 
     public const INTENT_NEUTRAL = 'neutral';
 
@@ -178,6 +182,18 @@ final class StatusIntent
             'SELESAI' => ['intent' => self::INTENT_SUCCESS, 'icon' => 'check-badge'],
             'KOMPLAIN' => ['intent' => self::INTENT_DANGER, 'icon' => 'exclamation-triangle'],
             'DIBATALKAN' => ['intent' => self::INTENT_NEUTRAL, 'icon' => 'slash'],
+        ],
+        // `PaymentState` (marketplace checkout lane) — design-system.md §3.7
+        // "Marketplace payment" table (added 14 Aug 2026 with the lane).
+        // Deliberately a SEPARATE family from vendor processing: a paid
+        // order is never fulfilment-complete (AC12), and the two render as
+        // two distinct indicators on PUB-024.
+        self::FAMILY_MARKETPLACE_PAYMENT => [
+            'BELUM_DIBAYAR' => ['intent' => self::INTENT_PENDING, 'icon' => 'clock'],
+            'MENUNGGU_VERIFIKASI' => ['intent' => self::INTENT_PENDING, 'icon' => 'clock'],
+            'DIBAYAR' => ['intent' => self::INTENT_SUCCESS, 'icon' => 'banknote'],
+            'GAGAL' => ['intent' => self::INTENT_DANGER, 'icon' => 'x-circle'],
+            'DIKEMBALIKAN' => ['intent' => self::INTENT_NEUTRAL, 'icon' => 'clock-x'],
         ],
     ];
 

@@ -24,6 +24,15 @@
                     Pesanan <strong class="tabular-nums">{{ $placedOrderNumber }}</strong> berhasil dibuat dan
                     menunggu konfirmasi vendor. Ikuti langkah transfer manual di bawah untuk melanjutkan pembayaran.
                 </p>
+                <x-slot name="action">
+                    <x-mk.button
+                        variant="secondary"
+                        size="sm"
+                        href="{{ route('marketplace.order.tracking', ['orderNumber' => $placedOrderNumber]) }}"
+                    >
+                        Lacak pesanan
+                    </x-mk.button>
+                </x-slot>
             </x-mk.alert>
         @endif
 
