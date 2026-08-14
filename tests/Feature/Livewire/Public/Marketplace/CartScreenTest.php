@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Livewire\Public\Marketplace;
 
+use App\Domain\Marketplace\Actions\AddToCart;
 use App\Domain\Marketplace\AvailabilityMode;
 use App\Domain\Marketplace\EvidenceRequirement;
 use App\Domain\Marketplace\Models\Cart as CartModel;
@@ -110,5 +111,86 @@ final class CartScreenTest extends TestCase
     public function test_the_screen_offers_a_support_affordance(): void
     {
         Livewire::test(Cart::class)->assertSee('Butuh bantuan');
+    }
+
+    public function test_update_quantity_cannot_touch_an_item_from_another_cart(): void
+    {
+        $listing = $this->listing('Vendor A', ProductCode::FLOWER_BOARD);
+
+        $foreignCart = CartModel::create(['customer_ref' => null, 'session_ref' => 'another-session']);
+        $foreignItem = (new AddToCart)->handle($foreignCart, $listing, 1);
+
+        Livewire::test(Cart::class)
+            ->call('updateQuantity', $foreignItem->id, 7)
+            ->assertOk();
+
+        // Fail closed: the foreign line is untouched and the acting cart
+        // neither gained a line nor had one stolen from it.
+        $this->assertSame(1, $foreignItem->fresh()->quantity);
+        $this->assertSame(1, $foreignCart->fresh()->items()->count());
+        $this->assertDatabaseCount('cart_items', 1);
+    }
+
+    public function test_remove_item_cannot_delete_an_item_from_another_cart(): void
+    {
+        $listing = $this->listing('Vendor A', ProductCode::FLOWER_BOARD);
+
+        $foreignCart = CartModel::create(['customer_ref' => null, 'session_ref' => 'another-session']);
+        $foreignItem = (new AddToCart)->handle($foreignCart, $listing, 1);
+
+        Livewire::test(Cart::class)
+            ->call('removeItem', $foreignItem->id)
+            ->assertOk();
+
+        $this->assertSame(1, $foreignItem->fresh()->quantity);
+        $this->assertDatabaseHas('cart_items', ['id' => $foreignItem->id]);
+    }
+
+    public function test_update_quantity_changes_the_quantity_of_an_item_in_own_cart(): void
+    {
+        $listing = $this->listing('Vendor A', ProductCode::FLOWER_BOARD);
+
+        $component = Livewire::test(Cart::class)->call('addListing', $listing->id, 1, null);
+
+        $item = CartModel::where('session_ref', session()->getId())->firstOrFail()->items()->firstOrFail();
+
+        $component->call('updateQuantity', $item->id, 4)->assertOk();
+
+        $this->assertSame(4, $item->fresh()->quantity);
+    }
+
+    public function test_remove_item_deletes_an_item_from_own_cart(): void
+    {
+        $listing = $this->listing('Vendor A', ProductCode::FLOWER_BOARD);
+
+        $component = Livewire::test(Cart::class)->call('addListing', $listing->id, 1, null);
+
+        $item = CartModel::where('session_ref', session()->getId())->firstOrFail()->items()->firstOrFail();
+
+        $component->call('removeItem', $item->id)->assertOk();
+
+        $this->assertDatabaseMissing('cart_items', ['id' => $item->id]);
+    }
+
+    public function test_replacing_the_cart_leaves_another_sessions_cart_untouched(): void
+    {
+        $a = $this->listing('Vendor A', ProductCode::FLOWER_BOARD);
+        $b = $this->listing('Vendor B', ProductCode::GRAVESTONE_GRANITE);
+
+        $foreignCart = CartModel::create(['customer_ref' => null, 'session_ref' => 'another-session']);
+        $foreignItem = (new AddToCart)->handle($foreignCart, $a, 2);
+
+        Livewire::test(Cart::class)
+            ->call('addListing', $a->id, 1, null)
+            ->call('addListing', $b->id, 1, null)
+            ->call('resolveConflictByReplacing')
+            ->assertSet('conflictOpen', false);
+
+        // The acting cart swapped to vendor B; the other session's cart is untouched.
+        $actingCart = CartModel::where('session_ref', session()->getId())->firstOrFail();
+        $this->assertSame($b->vendor_id, $actingCart->fresh()->vendor_id);
+        $this->assertSame(1, $actingCart->fresh()->items()->count());
+        $this->assertSame(2, $foreignItem->fresh()->quantity);
+        $this->assertSame($a->vendor_id, $foreignCart->fresh()->vendor_id);
     }
 }

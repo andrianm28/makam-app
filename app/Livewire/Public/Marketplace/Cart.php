@@ -129,7 +129,7 @@ final class Cart extends Component
 
     public function updateQuantity(int $itemId, int $quantity): void
     {
-        $item = CartItem::query()->find($itemId);
+        $item = $this->cart()->items()->whereKey($itemId)->first();
 
         if ($item instanceof CartItem) {
             (new UpdateCartItem)->handle($item, $quantity);
@@ -138,7 +138,7 @@ final class Cart extends Component
 
     public function removeItem(int $itemId): void
     {
-        $item = CartItem::query()->find($itemId);
+        $item = $this->cart()->items()->whereKey($itemId)->first();
 
         if ($item instanceof CartItem) {
             (new RemoveCartItem)->handle($item);
