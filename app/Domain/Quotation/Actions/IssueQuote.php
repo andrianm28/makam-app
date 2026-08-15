@@ -9,6 +9,8 @@ use App\Domain\Quotation\Models\Quote;
 use App\Domain\Quotation\Models\QuoteLine;
 use App\Domain\Quotation\QuoteStatus;
 use App\Domain\ServiceCatalog\FulfillmentOwner;
+use App\Domain\ServiceCatalog\Models\PriceVersion;
+use App\Domain\ServiceCatalog\Models\ServiceDefinition;
 use App\Domain\ServiceCatalog\Models\ServicePackageVersion;
 use App\Platform\FinancialLedger\Money;
 use App\Platform\Outbox\Outbox;
@@ -54,6 +56,45 @@ use OverflowException;
  * brief names. `price_version_id` is enforced by the `quote_lines` restrict
  * FK, not re-checked here: it is a reference into an append-only table.
  *
+ * ---------------------------------------------------------------------------
+ * DUAL LINE TYPES — the P0 ruling (14 Aug 2026)
+ * ---------------------------------------------------------------------------
+ * `IssueQuote` accepts exactly ONE of two line families per quote:
+ *
+ * - A PACKAGE line (`service_package_version_id` present): the Task 4
+ *   shape above, unchanged — marketplace/operator quotes keep working.
+ * - A SERVICE line (`service_definition_id` present): the booking wizard
+ *   quotes individual SERVICES, not packages, so a line may reference a
+ *   `ServiceDefinition` directly with the shape
+ *   `list<array{service_definition_id: int, price_version_id: int,
+ *   price_version_number: int, quantity: int, unit_amount: string,
+ *   currency: string, fulfillment_owner: string}>`.
+ *
+ * A line must carry EXACTLY ONE of the two family keys (both or neither is
+ * rejected), and a single quote must not mix families — one line family
+ * per quote, mirroring the single-currency rule's reasoning (a quote
+ * snapshots ONE kind of pricing universe).
+ *
+ * For a service line the referenced `PriceVersion` must EXIST and BE THE
+ * CURRENT (non-superseded) version OF THAT SERVICE — the frozen-snapshot
+ * invariant, checked here with real queries because the append-only
+ * price_versions table holds rows for both `ServiceDefinition` and
+ * `ServicePackageVersion` priceables and a caller could name either. The
+ * line's `unit_amount`/`currency`/`price_version_number` are caller-supplied
+ * but CROSS-CHECKED against the version's OWN stored values — an anchor
+ * that contradicts its frozen version is refused — then validated and
+ * converted exactly once (same as the package branch); `description` is
+ * NOT accepted on a service line — it is derived from the service
+ * definition's canonical name, so no line-level description can drift
+ * from the catalogue.
+ *
+ * An unpriced service is refused here with `InvalidArgumentException`
+ * (the referenced version is missing or not current) — consistent with
+ * the package branch's own `InvalidArgumentException`. Composition-time
+ * detection of "no current price exists at all" is the mapper's
+ * `UnpricedBookingServiceException`; by the time a line reaches this
+ * Action a concrete `price_version_id` is mandatory.
+ *
  * The whole mutation and its `quote.issued.v1` outbox row commit together
  * (`Outbox::record()` inside this transaction — `AGENTS.md` §Queue and event
  * reliability).
@@ -65,6 +106,10 @@ use OverflowException;
  */
 final readonly class IssueQuote
 {
+    private const string SERVICE_LINE = 'service';
+
+    private const string PACKAGE_LINE = 'package';
+
     /**
      * @param  list<array<string, mixed>>  $lines  See the test suite's class
      *                                             doc block and `task-4-report.md`
@@ -122,6 +167,7 @@ final readonly class IssueQuote
             foreach ($normalized as $line) {
                 QuoteLine::query()->create([
                     'quote_id' => $quote->getKey(),
+                    'service_definition_id' => $line['service_definition_id'],
                     'service_package_version_id' => $line['service_package_version_id'],
                     'price_version_id' => $line['price_version_id'],
                     'price_version_number' => $line['price_version_number'],
@@ -170,6 +216,7 @@ final readonly class IssueQuote
         }
 
         $currency = null;
+        $family = null;
         $normalized = [];
 
         foreach ($lines as $index => $line) {
@@ -177,13 +224,14 @@ final readonly class IssueQuote
                 throw new InvalidArgumentException("Quote line [{$index}] must be an array.");
             }
 
-            $servicePackageVersionId = (int) $this->requiredInt($line, 'service_package_version_id', $index);
-            $version = ServicePackageVersion::query()->find($servicePackageVersionId);
+            $lineFamily = $this->lineFamilyOf($line, $index);
 
-            if (! $version instanceof ServicePackageVersion || ! $version->isPublished()) {
+            if ($family === null) {
+                $family = $lineFamily;
+            } elseif ($lineFamily !== $family) {
                 throw new InvalidArgumentException(
-                    "Quote line [{$index}] references service package version [{$servicePackageVersionId}], ".
-                    'which is not a frozen published version.'
+                    "Quote line [{$index}] is a [{$lineFamily}] line in a set whose ".
+                    "first line is a [{$family}] line — a quote must carry one line family."
                 );
             }
 
@@ -210,7 +258,24 @@ final readonly class IssueQuote
             $fulfillmentOwner = $this->requiredString($line, 'fulfillment_owner', $index);
             FulfillmentOwner::assertKnown($fulfillmentOwner);
 
+            if ($lineFamily === self::SERVICE_LINE) {
+                $normalized[] = $this->normalizeServiceLine($line, $index, $quantity, $unitAmountMinor, $lineCurrency, $fulfillmentOwner);
+
+                continue;
+            }
+
+            $servicePackageVersionId = (int) $this->requiredInt($line, 'service_package_version_id', $index);
+            $version = ServicePackageVersion::query()->find($servicePackageVersionId);
+
+            if (! $version instanceof ServicePackageVersion || ! $version->isPublished()) {
+                throw new InvalidArgumentException(
+                    "Quote line [{$index}] references service package version [{$servicePackageVersionId}], ".
+                    'which is not a frozen published version.'
+                );
+            }
+
             $normalized[] = [
+                'service_definition_id' => null,
                 'service_package_version_id' => $servicePackageVersionId,
                 'price_version_id' => $this->requiredInt($line, 'price_version_id', $index),
                 'price_version_number' => $this->requiredInt($line, 'price_version_number', $index),
@@ -224,6 +289,98 @@ final readonly class IssueQuote
         }
 
         return $normalized;
+    }
+
+    /**
+     * Exactly one of the two family keys must be present. A line that names
+     * both (or neither) is ambiguous and refused outright.
+     *
+     * @param  array<string, mixed>  $line
+     */
+    private function lineFamilyOf(array $line, int $index): string
+    {
+        $isService = array_key_exists('service_definition_id', $line);
+        $isPackage = array_key_exists('service_package_version_id', $line);
+
+        if ($isService === $isPackage) {
+            throw new InvalidArgumentException(
+                "Quote line [{$index}] must carry exactly one of ".
+                '[service_definition_id] (service line) or [service_package_version_id] (package line).'
+            );
+        }
+
+        return $isService ? self::SERVICE_LINE : self::PACKAGE_LINE;
+    }
+
+    /**
+     * A service line's frozen-snapshot branch: the named `PriceVersion` must
+     * exist and be the CURRENT (non-superseded) version of the named
+     * `ServiceDefinition` — never a stale or foreign version — and the line's
+     * caller-supplied `unit_amount`/`currency`/`price_version_number` must
+     * match that version's OWN stored anchor values (a contradicting anchor
+     * is refused). `description` is derived from the definition's canonical
+     * name; a caller-supplied value is neither accepted nor required.
+     *
+     * @param  array<string, mixed>  $line
+     * @return array<string, mixed>
+     */
+    private function normalizeServiceLine(
+        array $line,
+        int $index,
+        int $quantity,
+        int $unitAmountMinor,
+        string $lineCurrency,
+        string $fulfillmentOwner,
+    ): array {
+        $serviceDefinitionId = (int) $this->requiredInt($line, 'service_definition_id', $index);
+
+        $definition = ServiceDefinition::query()->find($serviceDefinitionId);
+
+        if (! $definition instanceof ServiceDefinition) {
+            throw new InvalidArgumentException(
+                "Quote line [{$index}] references unknown service definition [{$serviceDefinitionId}]."
+            );
+        }
+
+        $priceVersionId = (int) $this->requiredInt($line, 'price_version_id', $index);
+        $priceVersion = PriceVersion::query()->find($priceVersionId);
+
+        if (! $priceVersion instanceof PriceVersion
+            || ! $priceVersion->isCurrent()
+            || $priceVersion->priceable_type !== ServiceDefinition::class
+            || (int) $priceVersion->priceable_id !== $serviceDefinitionId) {
+            throw new InvalidArgumentException(
+                "Quote line [{$index}] references price version [{$priceVersionId}], ".
+                "which is not the current price version of service definition [{$serviceDefinitionId}]."
+            );
+        }
+
+        // The line's own anchor fields must not contradict the frozen
+        // version it names: the stored amount/currency/version_number are
+        // authoritative, so a caller-supplied mismatch is refused outright.
+        $priceVersionNumber = $this->requiredInt($line, 'price_version_number', $index);
+
+        if (Money::fromDecimal((string) $priceVersion->amount) !== $unitAmountMinor
+            || $lineCurrency !== (string) $priceVersion->currency
+            || $priceVersionNumber !== (int) $priceVersion->version_number) {
+            throw new InvalidArgumentException(
+                "Quote line [{$index}] unit amount, currency, or version number contradicts ".
+                "price version [{$priceVersionId}]'s frozen anchor."
+            );
+        }
+
+        return [
+            'service_definition_id' => $serviceDefinitionId,
+            'service_package_version_id' => null,
+            'price_version_id' => $priceVersionId,
+            'price_version_number' => $priceVersionNumber,
+            'description' => $definition->name,
+            'quantity' => $quantity,
+            'unit_amount_minor' => $unitAmountMinor,
+            'line_total_minor' => $this->lineTotalMinor($unitAmountMinor, $quantity),
+            'currency' => $lineCurrency,
+            'fulfillment_owner' => $fulfillmentOwner,
+        ];
     }
 
     /**
