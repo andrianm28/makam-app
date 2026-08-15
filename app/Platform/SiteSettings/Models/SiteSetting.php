@@ -9,11 +9,17 @@ use Illuminate\Database\Eloquent\Model;
 final class SiteSetting extends Model
 {
     public const string KEY_SERVICE_HOURS = 'service_hours';
+
     public const string KEY_SUPPORT_PHONE = 'support_phone';
+
     public const string KEY_SUPPORT_WHATSAPP = 'support_whatsapp';
+
     public const string KEY_SUPPORT_EMAIL = 'support_email';
+
     public const string KEY_MARKETPLACE_BADAN_USAHA_REF = 'marketplace_badan_usaha_ref';
+
     public const string KEY_PAYMENT_MERCHANT_REF = 'payment_merchant_ref';
+
     public const string KEY_PAYMENT_BADAN_USAHA_REF = 'payment_badan_usaha_ref';
 
     public const array KNOWN_KEYS = [

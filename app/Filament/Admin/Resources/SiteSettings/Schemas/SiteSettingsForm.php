@@ -1,0 +1,39 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Filament\Admin\Resources\SiteSettings\Schemas;
+
+use Filament\Forms\Components\TextInput;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Schema;
+
+/**
+ * The single-record settings form: one field per `SiteSetting::KNOWN_KEYS`
+ * row, with per-key validation. Fields bind `data.*` state paths (the Page's
+ * `$data` property) — see `Pages\EditSiteSettings` for why.
+ */
+final class SiteSettingsForm
+{
+    public static function configure(Schema $schema): Schema
+    {
+        return $schema->components([
+            Section::make('Jam layanan')->schema([
+                TextInput::make('data.service_hours')
+                    ->label('Jam layanan')
+                    ->placeholder('Senin–Jumat 08.00–17.00 WIB')
+                    ->maxLength(120),
+            ]),
+            Section::make('Kontak dukungan')->schema([
+                TextInput::make('data.support_phone')->label('Telepon')->maxLength(40),
+                TextInput::make('data.support_whatsapp')->label('WhatsApp')->maxLength(40),
+                TextInput::make('data.support_email')->label('Email')->email()->maxLength(120),
+            ]),
+            Section::make('Entitas & pemrosesan pembayaran')->schema([
+                TextInput::make('data.marketplace_badan_usaha_ref')->label('Ref badan usaha marketplace')->maxLength(120),
+                TextInput::make('data.payment_merchant_ref')->label('Ref merchant pembayaran')->maxLength(120),
+                TextInput::make('data.payment_badan_usaha_ref')->label('Ref badan usaha pembayaran')->maxLength(120),
+            ])->description('Identitas non-rahasia (FIN-DEC). Kredensial tetap di lingkungan (env).'),
+        ]);
+    }
+}

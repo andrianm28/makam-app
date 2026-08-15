@@ -19,6 +19,8 @@ use App\Platform\FinancialLedger\Money;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\ActorContextResolver;
 use App\Platform\Payment\Models\PaymentIntent;
+use App\Platform\SiteSettings\Models\SiteSetting;
+use App\Platform\SiteSettings\SettingsService;
 use Carbon\CarbonImmutable;
 
 /**
@@ -220,14 +222,24 @@ final readonly class GuardPaymentSession
             // `UnavailableUpstream` shape (`FIN-DEC-01` pending). Production
             // never reaches this condition's pass side anyway — condition 1
             // denies while `G-PAY-01` is closed.
+            //
+            // The refs resolve through `SettingsService`'s config → env →
+            // `site_settings` → default precedence (the P2
+            // `admin-data-management` lane): an operator-managed
+            // `payment_merchant_ref`/`payment_badan_usaha_ref` row now
+            // participates without any environment change, and the config
+            // default keeps the pre-existing env behaviour byte-identical
+            // while no DB row exists.
             GuardCondition::MerchantAndBadanUsahaBound => $this->conditionSix($condition),
         };
     }
 
     private function conditionSix(GuardCondition $condition): ?ConditionDenial
     {
-        $merchantRef = trim((string) config('payment.merchant_ref', ''));
-        $badanUsahaRef = trim((string) config('payment.badan_usaha_ref', ''));
+        $merchantRef = trim((string) app(SettingsService::class)
+            ->setting(SiteSetting::KEY_PAYMENT_MERCHANT_REF, (string) config('payment.merchant_ref', '')));
+        $badanUsahaRef = trim((string) app(SettingsService::class)
+            ->setting(SiteSetting::KEY_PAYMENT_BADAN_USAHA_REF, (string) config('payment.badan_usaha_ref', '')));
 
         if ($merchantRef !== '' && $badanUsahaRef !== '') {
             return null;

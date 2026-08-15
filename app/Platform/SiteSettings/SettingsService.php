@@ -22,6 +22,18 @@ use Illuminate\Support\Str;
  * files already establish, so an operator can override a setting without a
  * config file change.
  *
+ * The `env()` call below is the deliberate exception to
+ * `config/payment.php`'s "only the config directory may read env" rule, and
+ * larastan's `noEnvCallsOutsideOfConfig` is ignored there for the reasons
+ * this precedence demands: the env layer is the dev/staging override the P2
+ * plan pins in tests (`SettingsServiceTest`), and under production
+ * `config:cache` `env()` returns null, which falls through to the
+ * `site_settings` row — the production-managed value — exactly as intended.
+ * A setting's env fallback can never leak a credential: none of the
+ * `SiteSetting::KNOWN_KEYS` values are secret material (the resource's
+ * payment section documents the same distinction, "Identitas non-rahasia
+ * (FIN-DEC). Kredensial tetap di lingkungan (env)").
+ *
  * Registered as a singleton (`SiteSettingsServiceProvider`) so the
  * `site_settings` read happens at most once per request — `$values` caches
  * the full key/value map after the first miss.
@@ -40,6 +52,7 @@ final class SettingsService
         }
 
         $envKey = Str::upper(Str::snake($key));
+        // @phpstan-ignore larastan.noEnvCallsOutsideOfConfig
         $envValue = env($envKey);
 
         if ($envValue !== null && $envValue !== '') {
