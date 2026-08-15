@@ -4,13 +4,15 @@ declare(strict_types=1);
 
 namespace App\Platform\Payment\Http\Controllers;
 
+use App\Platform\Payment\ReturnPageState;
 use Illuminate\Contracts\View\View;
 
 /**
  * `GET /pembayaran/kembali` — ADR-0033's `success_return_url`.
  *
  * ---------------------------------------------------------------------------
- * This class renders a view. That is the entire feature, and it is deliberate
+ * This controller renders a view and reads two display-only lookup keys.
+ * That is the entire feature, and the write-safety is structural
  * ---------------------------------------------------------------------------
  * `AGENTS.md` §Domain and financial invariants: "Never mark paid from browser
  * return URL." Requirements AC4: "THE SYSTEM SHALL set paid state only via a
@@ -23,34 +25,33 @@ use Illuminate\Contracts\View\View;
  * the URL and every query parameter on it, may arrive having paid nothing, and
  * may never arrive at all after a genuine payment. Nothing it presents is
  * evidence. The only admissible evidence is a signature-verified provider
- * webhook (`App\Platform\Payment\ReceiveWebhook`) or an approved manual
- * verification.
+ * webhook or an approved manual verification.
  *
- * So the safety property here is an ABSENCE, and it is enforced structurally
- * rather than by discipline: this controller has no constructor dependency, no
- * model, no query, no action, no event. There is no object in scope through
- * which a state transition, a journal post, an outbox emission, or a "paid"
- * claim could be reached, and `Tests\Feature\Payment\PaymentReturnRouteTest`
- * fails if any of those names so much as appears in this file's code.
- *
- * The request is not even read: no query parameter is inspected, none is passed
- * to the view, and none is echoed back. A reflected `?status=paid` would dress
- * an attacker-supplied string up as something this system had confirmed.
- *
- * ---------------------------------------------------------------------------
- * Why the page cannot yet say anything about a specific payment
- * ---------------------------------------------------------------------------
- * Even the honest version of this screen — "we are checking session X" — needs
- * a `payment_sessions` row to look up, and under Wave 1b ruling 1b-L3-01 no such
- * row can exist. The view therefore explains the process without claiming
- * anything about an individual transaction. That is a truthful screen today and
- * stays truthful later: whoever adds a session lookup must add it as a READ, and
- * must not weaken the invariant this file exists to hold.
+ * The two query keys read below (`session`, `payment_id`) are passed to
+ * `ReturnPageState::fromRequest()`, whose doc block records the trust model:
+ * they are display-only SELECTORS — which session the page describes — while
+ * the copy itself is always decided by the session row's own
+ * webhook-written state. No parameter ever decides, or can decide, what the
+ * page claims about a payment. And nothing here writes: no constructor
+ * dependency, no action, no event, no transition — the same absence the
+ * structural test in `Tests\Feature\Payment\PaymentReturnRouteTest` pins.
  */
 final class PaymentReturnController
 {
     public function __invoke(): View
     {
-        return view('payment.return');
+        $sessionKey = self::stringQuery('session');
+        $providerPaymentId = self::stringQuery('payment_id');
+
+        $state = ReturnPageState::fromRequest($sessionKey, $providerPaymentId);
+
+        return view('payment.return', ['returnState' => $state]);
+    }
+
+    private static function stringQuery(string $key): ?string
+    {
+        $value = request()->query($key);
+
+        return is_string($value) ? $value : null;
     }
 }

@@ -336,8 +336,10 @@ Route::get('/admin/finance/exports', FinanceExportController::class)
 | plain view-rendering controllers rather than Livewire components: a
 | Livewire component exposes callable actions to the browser, which is
 | exactly the surface AC4 wants absent. Neither controller takes a
-| dependency, reads the request, or touches a model — see their doc blocks,
-| and tests/Feature/Payment/PaymentReturnRouteTest.php, which fails if a
+| dependency on any model or action; the only thing they read is two
+| display-only lookup keys (`session`, `payment_id`) delegated to
+| `ReturnPageState::fromRequest()` — read its doc block and
+| tests/Feature/Payment/PaymentReturnRouteTest.php, which fails if a
 | write-shaped name appears in either file or if hitting either route moves
 | any row.
 |

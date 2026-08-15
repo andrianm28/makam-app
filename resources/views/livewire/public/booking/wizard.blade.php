@@ -803,24 +803,121 @@
 
                 <div class="mt-4 flex flex-col gap-4">
                     @if ($paymentMode === \App\Platform\FeatureGate\Modes\PaymentMode::Online)
-                        <x-mk.card>
-                            <div class="flex flex-col gap-2">
-                                <h3 class="text-base font-semibold text-neutral-900">Pembayaran Online</h3>
-                                <p class="text-sm text-neutral-600">
-                                    Anda akan diarahkan ke halaman pembayaran untuk menyelesaikan transaksi.
-                                </p>
-                            </div>
-                            <div class="flex flex-wrap items-center gap-3">
-                                <x-mk.button
-                                    variant="primary"
-                                    wire:click="saveStep8('{{ \App\Domain\Booking\BookingPaymentMethod::ONLINE }}')"
-                                    wire:loading.attr="disabled"
-                                    wire:target="saveStep8"
+                        @if ($onlineSessionState === \App\Platform\Payment\SessionState::Paid)
+                            <x-mk.card>
+                                <x-mk.alert
+                                    intent="success"
+                                    icon="check-circle"
+                                    title="Pembayaran Anda telah kami terima"
+                                    live="polite"
                                 >
-                                    Bayar Sekarang
-                                </x-mk.button>
-                            </div>
-                        </x-mk.card>
+                                    <p class="text-sm">
+                                        Konfirmasi resmi dari penyedia pembayaran sudah kami terima.
+                                        Lanjutkan ke Langkah 9 untuk melihat ringkasan pemesanan Anda.
+                                    </p>
+                                </x-mk.alert>
+                            </x-mk.card>
+                        @elseif ($onlineSessionState === \App\Platform\Payment\SessionState::Failed)
+                            <x-mk.card>
+                                <x-mk.alert
+                                    intent="danger"
+                                    icon="alert-circle"
+                                    title="Transaksi pembayaran tidak berhasil"
+                                    live="assertive"
+                                >
+                                    <p class="text-sm">
+                                        Tidak ada pembayaran yang kami catat untuk transaksi ini.
+                                        Anda dapat mencoba pembayaran online lagi dari awal, atau
+                                        gunakan pembayaran manual di bawah ini.
+                                    </p>
+                                </x-mk.alert>
+                            </x-mk.card>
+                        @elseif ($onlineSessionState === \App\Platform\Payment\SessionState::Expired)
+                            <x-mk.card>
+                                <x-mk.alert
+                                    intent="neutral"
+                                    icon="clock"
+                                    title="Sesi pembayaran telah kedaluwarsa"
+                                    live="polite"
+                                >
+                                    <p class="text-sm">
+                                        Sesi pembayaran Anda telah kedaluwarsa tanpa pembayaran yang kami
+                                        terima. Gunakan pembayaran manual di bawah ini, atau hubungi tim kami.
+                                    </p>
+                                </x-mk.alert>
+                            </x-mk.card>
+                        @else
+                            <x-mk.card>
+                                <div class="flex flex-col gap-2">
+                                    <h3 class="text-base font-semibold text-neutral-900">Pembayaran Online</h3>
+                                    <p class="text-sm text-neutral-600">
+                                        Anda akan diarahkan ke halaman pembayaran untuk menyelesaikan transaksi.
+                                    </p>
+                                </div>
+
+                                @if ($onlinePaymentError !== null)
+                                    <x-mk.alert
+                                        intent="danger"
+                                        title="Pembayaran online belum dapat diproses"
+                                        live="assertive"
+                                        class="mt-3"
+                                    >
+                                        <p class="text-sm">{{ $onlinePaymentError }}</p>
+                                        <x-slot name="action">
+                                            <x-mk.button
+                                                variant="secondary"
+                                                size="sm"
+                                                href="{{ route('bantuan.index') }}"
+                                            >
+                                                Butuh bantuan?
+                                            </x-mk.button>
+                                        </x-slot>
+                                    </x-mk.alert>
+                                @endif
+
+                                <div class="mt-3 flex flex-wrap items-center gap-3">
+                                    <x-mk.button
+                                        variant="primary"
+                                        wire:click="openOnlinePayment"
+                                        wire:loading.attr="disabled"
+                                        wire:target="openOnlinePayment"
+                                    >
+                                        Bayar Sekarang
+                                    </x-mk.button>
+                                    <span wire:loading wire:target="openOnlinePayment" role="status" class="flex items-center gap-2 text-sm text-neutral-600">
+                                        <x-mk.spinner class="size-4" aria-hidden="true" />
+                                        Membuka halaman pembayaran&hellip;
+                                    </span>
+                                </div>
+                            </x-mk.card>
+
+                            @if ($onlineSessionState !== null && $onlinePaymentLinkUrl !== null)
+                                {{-- AwaitingPayment/Created — a session was opened
+                                     earlier in this journey and checkout has not
+                                     completed. Re-point at the SAME hosted
+                                     checkout rather than opening a second one. --}}
+                                <x-mk.alert
+                                    intent="pending"
+                                    icon="clock"
+                                    title="Menunggu pembayaran Anda"
+                                    live="off"
+                                >
+                                    <p class="text-sm">
+                                        Sesi pembayaran telah kami buka namun belum selesai. Lanjutkan
+                                        dari halaman pembayaran yang sama untuk menyelesaikan transaksi.
+                                    </p>
+                                    <x-slot name="action">
+                                        <x-mk.button
+                                            variant="secondary"
+                                            size="sm"
+                                            href="{{ $onlinePaymentLinkUrl }}"
+                                        >
+                                            Lanjutkan pembayaran
+                                        </x-mk.button>
+                                    </x-slot>
+                                </x-mk.alert>
+                            @endif
+                        @endif
                     @endif
 
                     <x-mk.card>
@@ -913,6 +1010,67 @@
                      and that is what the status block below states. --}}
 
                 @if ($confirmationData !== null)
+                    {{-- The webhook-driven online session state, when this
+                         journey opened one — read from the session row, never
+                         from any URL. Without it the confirmation card below
+                         would say "pembayaran belum diverifikasi" even after
+                         the webhook settled it. --}}
+                    @if ($onlineSessionState === \App\Platform\Payment\SessionState::Paid)
+                        <x-mk.alert
+                            intent="success"
+                            icon="check-circle"
+                            title="Pembayaran Anda telah kami terima"
+                            live="polite"
+                            class="mb-4"
+                        >
+                            <p class="text-base">
+                                Konfirmasi resmi dari penyedia pembayaran sudah kami terima untuk
+                                pemesanan ini. Tim kami akan memproses pesanan Anda.
+                            </p>
+                        </x-mk.alert>
+                    @elseif ($onlineSessionState === \App\Platform\Payment\SessionState::Failed)
+                        <x-mk.alert
+                            intent="danger"
+                            icon="alert-circle"
+                            title="Transaksi pembayaran tidak berhasil"
+                            live="assertive"
+                            class="mb-4"
+                        >
+                            <p class="text-base">
+                                Tidak ada pembayaran yang kami catat untuk transaksi ini. Anda dapat
+                                mencoba pembayaran online lagi dari Langkah 8, atau gunakan pembayaran
+                                manual.
+                            </p>
+                        </x-mk.alert>
+                    @elseif ($onlineSessionState === \App\Platform\Payment\SessionState::Expired)
+                        <x-mk.alert
+                            intent="neutral"
+                            icon="clock"
+                            title="Sesi pembayaran telah kedaluwarsa"
+                            live="polite"
+                            class="mb-4"
+                        >
+                            <p class="text-base">
+                                Sesi pembayaran Anda telah kedaluwarsa tanpa pembayaran yang kami
+                                terima. Gunakan pembayaran manual di Langkah 8, atau hubungi tim kami.
+                            </p>
+                        </x-mk.alert>
+                    @elseif ($onlineSessionState !== null)
+                        <x-mk.alert
+                            intent="pending"
+                            icon="clock"
+                            title="Menunggu pembayaran online Anda"
+                            live="off"
+                            class="mb-4"
+                        >
+                            <p class="text-base">
+                                Sesi pembayaran online belum selesai. Status pembayaran hanya
+                                diperbarui setelah kami menerima konfirmasi resmi dari penyedia
+                                pembayaran.
+                            </p>
+                        </x-mk.alert>
+                    @endif
+
                     {{-- §6.7: "Pending is the most common state in this product
                          and the easiest to get wrong… Never style a pending
                          state as success." Nothing here has succeeded: no order

@@ -8,10 +8,15 @@ use App\Domain\Marketplace\Actions\PlaceMarketplaceOrder;
 use App\Domain\Marketplace\Exceptions\BadanUsahaNotConfiguredException;
 use App\Domain\Marketplace\Exceptions\CartPricingChangedException;
 use App\Domain\Marketplace\Models\Cart;
+use App\Domain\Marketplace\Models\MarketplaceOrder;
 use App\Domain\Marketplace\Models\ServiceArea;
 use App\Platform\Audit\AuditSource;
 use App\Platform\FeatureGate\ModeResolver;
 use App\Platform\FeatureGate\Modes\PaymentMode;
+use App\Platform\Payment\Actions\OpenPaymentSession;
+use App\Platform\Payment\Actions\OpenPaymentSessionCommand;
+use App\Platform\Payment\Exceptions\PaymentSessionOrderTypeNotSupportedException;
+use App\Platform\Payment\OrderType;
 use App\Platform\Payment\SubmitManualPayment;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Validator;
@@ -85,6 +90,19 @@ final class Checkout extends Component
     public ?string $placedOrderNumber = null;
 
     public ?string $manualSubmissionError = null;
+
+    /**
+     * The marketplace ONLINE deferral, surfaced honestly: `OpenPaymentSession`
+     * refuses a Marketplace `OrderType` until the marketplace precondition
+     * lane lands (see `OrderType`'s doc block). `true` means the online
+     * submit attempted the real path and the service refused it — the screen
+     * then explains that online payment for marketplace orders is not yet
+     * available and keeps the manual path live. Never a 500, never a
+     * fabricated session.
+     */
+    public bool $onlinePaymentUnavailable = false;
+
+    public ?string $onlinePaymentError = null;
 
     public function mount(): void
     {
@@ -208,6 +226,75 @@ final class Checkout extends Component
             report($e);
             $this->manualSubmissionError = 'Bukti transfer tidak dapat dikirim. Silakan coba lagi atau hubungi dukungan.';
         }
+    }
+
+    /**
+     * The online branch (only rendered when `G-PAY-01` is open): attempt the
+     * REAL session-opening path for the placed marketplace order.
+     *
+     * The marketplace session path is DEFERRED — `OpenPaymentSession` refuses
+     * a Marketplace `OrderType` with `PaymentSessionOrderTypeNotSupported
+     * Exception` before any guard or provider step — so this submit surfaces
+     * that refusal as an honest fail-closed state ("belum tersedia" + support
+     * escape + the manual path), never as a 500. The day the deferred service
+     * lands, this method starts redirecting to the hosted checkout with no
+     * code change here.
+     */
+    public function payOnline(): void
+    {
+        if (! $this->onlinePaymentAllowed) {
+            return;
+        }
+
+        if (! $this->orderPlaced || $this->placedOrderNumber === null) {
+            return;
+        }
+
+        if ($this->onlinePaymentUnavailable) {
+            return;
+        }
+
+        $this->onlinePaymentError = null;
+
+        $order = MarketplaceOrder::query()->where('order_number', $this->placedOrderNumber)->first();
+
+        if (! $order instanceof MarketplaceOrder) {
+            $this->onlinePaymentError = 'Pembayaran online belum dapat diproses. Silakan gunakan transfer manual atau hubungi dukungan.';
+
+            return;
+        }
+
+        try {
+            $session = app(OpenPaymentSession::class)(new OpenPaymentSessionCommand(
+                orderType: OrderType::Marketplace,
+                orderRef: $order->order_number,
+                amountMinor: $order->total()->toMinorInt(),
+                merchantRef: (string) config('payment.merchant_ref', ''),
+                successReturnUrl: route('payments.return'),
+                cancelReturnUrl: route('payments.cancel'),
+            ));
+        } catch (PaymentSessionOrderTypeNotSupportedException) {
+            // The documented marketplace-online deferral. Fail closed
+            // honestly; do not fabricate a session or a provider call.
+            $this->onlinePaymentUnavailable = true;
+
+            return;
+        } catch (Throwable $e) {
+            report($e);
+            $this->onlinePaymentError = 'Pembayaran online belum dapat diproses. Silakan gunakan transfer manual atau hubungi dukungan.';
+
+            return;
+        }
+
+        // Unreachable until the deferred marketplace session path lands.
+        session([
+            'marketplace_online_payment.'.$order->order_number => [
+                'session_id' => $session->id,
+                'link_url' => $session->payment_link_url,
+            ],
+        ]);
+
+        $this->redirect($session->payment_link_url);
     }
 
     public function render(): View
