@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Platform\Payment\Providers;
 
+use App\Platform\Payment\Checkout\Contracts\PaymentCheckoutClient;
+use App\Platform\Payment\Checkout\SumoPodPaymentClient;
 use App\Platform\Payment\Contracts\PaymentActionAuthorizer;
 use App\Platform\Payment\FinanceOrRestrictedAdminPaymentAuthorizer;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -12,14 +14,16 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 /**
- * Wires the payment module's three container-level concerns: the signature
- * verifier's credentials, the admin-action authorization policy, and the
- * webhook endpoint's rate limit.
+ * Wires the payment module's four container-level concerns: the signature
+ * verifier's credentials, the outbound checkout client, the admin-action
+ * authorization policy, and the webhook endpoint's rate limit.
  *
- * The provider HTTP adapter (`PaymentProvider` / `SumoPodSandboxProvider`) is
- * deliberately NOT bound here — it belongs to a later task, and binding a name
- * for something unbuilt would make a `BindingResolutionException` the way a
- * caller discovers it is missing.
+ * The outbound provider adapter (`SumoPodPaymentClient`, ADR-0033's
+ * `POST /api/v1/payments`) is bound to the `PaymentCheckoutClient` seam as a
+ * transient `fromConfig()` resolver — the same shape as the signature
+ * verifier, so a rotated key or a provider switch takes effect without a
+ * process restart. See the binding comment below for why the credential is
+ * read at resolution time rather than cached.
  *
  * ---------------------------------------------------------------------------
  * The rate limit is a requirement, not a precaution
@@ -60,6 +64,18 @@ final class PaymentServiceProvider extends ServiceProvider
         $this->app->bind(
             SumoPodWebhookSignature::class,
             static fn (): SumoPodWebhookSignature => SumoPodWebhookSignature::fromConfig(),
+        );
+
+        // Transient `bind()`, not `singleton()` — `fromConfig()` re-reads
+        // `config/payment.php` each resolution, so a rotated
+        // `SUMODOP_SANDBOX_API_KEY` takes effect without a process restart
+        // (the same reason the signature verifier above is bound this way).
+        // The client is stateless and holds no connection; nothing is gained
+        // by caching it, and a singleton would silently freeze the credential
+        // for the process lifetime.
+        $this->app->bind(
+            PaymentCheckoutClient::class,
+            static fn (): SumoPodPaymentClient => SumoPodPaymentClient::fromConfig(),
         );
 
         // The policy behind `POST /admin/payments/reversals/{reversalType}`

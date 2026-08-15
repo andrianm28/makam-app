@@ -56,10 +56,10 @@ return [
 
             /*
              | ADR-0033: `POST /api/v1/payments` with an `X-Api-Key` header.
-             | Read by the session-creation path (Task 2/Task 8), never by the
-             | webhook receiver — an inbound webhook is authenticated by the
-             | signing secret or the shared token below, and this key must
-             | never appear on the inbound path at all.
+             | Read by the outbound checkout client (`SumoPodPaymentClient`),
+             | never by the webhook receiver — an inbound webhook is
+             | authenticated by the signing secret or the shared token below,
+             | and this key must never appear on the inbound path at all.
              */
             'api_key' => env('SUMODOP_SANDBOX_API_KEY', ''),
 
