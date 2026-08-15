@@ -7,7 +7,7 @@ namespace App\Domain\Quotation\Exceptions;
 use RuntimeException;
 
 /**
- * Thrown by `Actions\ComposeQuoteLinesFromBookingDraft` — Task 1 of
+ * Thrown by `Actions\ComposeQuoteLinesFromBookingDraft` — Task 2 of
  * `docs/superpowers/plans/2026-08-14-p0-booking-submission-chain.md` —
  * when a selected service cannot be priced from the current catalogue
  * state: either the code resolves to no `ServiceDefinition` at all

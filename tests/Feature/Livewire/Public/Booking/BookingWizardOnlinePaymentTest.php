@@ -19,13 +19,8 @@ use App\Domain\OrderWorkflow\ProductType;
 use App\Domain\Quotation\Actions\AcceptQuote;
 use App\Domain\Quotation\Models\Quote;
 use App\Domain\Quotation\QuoteStatus;
-use App\Domain\ServiceCatalog\Actions\DefineServicePackage;
-use App\Domain\ServiceCatalog\Actions\PublishServicePackageVersion;
-use App\Domain\ServiceCatalog\FulfillmentOwner;
 use App\Domain\ServiceCatalog\Models\ServiceDefinition;
-use App\Domain\ServiceCatalog\Models\ServicePackageVersion;
 use App\Domain\ServiceCatalog\ServiceCode;
-use App\Domain\ServiceCatalog\ServicePackageItemType;
 use App\Livewire\Public\Booking\BookingWizard;
 use App\Models\User;
 use App\Platform\FeatureGate\Contracts\GateRegistrySource;
@@ -51,7 +46,6 @@ use App\Platform\Payment\SessionState;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Str;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -60,9 +54,11 @@ use Tests\TestCase;
  * Task 6's booking Step 8 online branch, on the P0 submission chain: when
  * `G-PAY-01` is open (dev), the Step 8 online option submits the draft as an
  * idempotent Order (`SubmitBookingDraft`), issues a current Quote when the
- * order has none (`ComposeQuoteLinesFromBookingDraft` -> `IssueQuote`), then
- * calls `OpenPaymentSession` with the quote total and redirects the customer
- * to the hosted checkout. The gate-closed behaviour is untouched (the
+ * order has none (`ComposeQuoteLinesFromBookingDraft` -> `IssueQuote` — the
+ * chain's quote lines are SERVICE-VERSION lines resolved from each selected
+ * service's current price version, per the P0 ruling), then calls
+ * `OpenPaymentSession` with the quote total and redirects the customer to
+ * the hosted checkout. The gate-closed behaviour is untouched (the
  * manual fallback is covered by the existing suites, which must stay
  * green).
  *
@@ -139,44 +135,6 @@ final class BookingWizardOnlinePaymentTest extends TestCase
             ->set('deceasedGender', 'LAKI_LAKI')
             ->call('saveStep7')
             ->assertSet('currentStep', BookingWizardStep::PAYMENT);
-    }
-
-    /**
-     * The wizard's chain resolves quote lines against a PUBLISHED package
-     * version (`IssueQuote` refuses anything that is not frozen), so every
-     * flow test publishes one package whose items carry the selected
-     * services — the same `DefineServicePackage` + `PublishServicePackageVersion`
-     * path `IssueQuoteTest` uses.
-     *
-     * @param  list<string>  $codes
-     */
-    private function publishedPackageForServices(array $codes): ServicePackageVersion
-    {
-        $package = (new DefineServicePackage)(
-            code: 'PKG-'.Str::upper(Str::random(6)),
-            name: 'Paket Uji Pembayaran Online',
-            items: array_map(
-                fn (string $code): array => [
-                    'service_definition_id' => $this->serviceDefinitionId($code),
-                    'item_type' => ServicePackageItemType::INCLUDED,
-                    'quantity' => 1,
-                    'unit' => 'paket',
-                    'fulfillment_owner' => FulfillmentOwner::PLATFORM,
-                ],
-                $codes,
-            ),
-            actorReference: 7,
-        );
-
-        return (new PublishServicePackageVersion)($package->draftVersion(), actorReference: 7);
-    }
-
-    private function serviceDefinitionId(string $code): int
-    {
-        $definition = ServiceDefinition::findByCode($code);
-        $this->assertNotNull($definition);
-
-        return (int) $definition->getKey();
     }
 
     /**
@@ -388,7 +346,6 @@ final class BookingWizardOnlinePaymentTest extends TestCase
     {
         $this->withPaymentGate(open: true);
         $this->fakeProviderSuccess();
-        $this->publishedPackageForServices(['DOCUMENT_PROCESSING', 'GRAVE_DIGGING']);
 
         $draftId = $this->journeyToStepEight()->get('draftId');
 
@@ -442,7 +399,6 @@ final class BookingWizardOnlinePaymentTest extends TestCase
     {
         $this->withPaymentGate(open: true);
         Http::fake();
-        $this->publishedPackageForServices(['DOCUMENT_PROCESSING', 'GRAVE_DIGGING']);
 
         $draftId = $this->journeyToStepEight()->get('draftId');
 
@@ -480,7 +436,6 @@ final class BookingWizardOnlinePaymentTest extends TestCase
     {
         $this->withPaymentGate(open: true);
         Http::fake();
-        $this->publishedPackageForServices(['DOCUMENT_PROCESSING', 'GRAVE_DIGGING']);
 
         $draftId = $this->journeyToStepEight()->get('draftId');
 
@@ -512,7 +467,6 @@ final class BookingWizardOnlinePaymentTest extends TestCase
     {
         $this->withPaymentGate(open: true);
         Http::fake();
-        $this->publishedPackageForServices(['DOCUMENT_PROCESSING', 'GRAVE_DIGGING']);
 
         $draftId = $this->journeyToStepEight()->get('draftId');
 
@@ -546,7 +500,6 @@ final class BookingWizardOnlinePaymentTest extends TestCase
     {
         $this->withPaymentGate(open: true);
         $this->fakeProviderSuccess();
-        $this->publishedPackageForServices(['DOCUMENT_PROCESSING', 'GRAVE_DIGGING']);
 
         $draftId = $this->journeyToStepEight()->get('draftId');
 
@@ -575,7 +528,6 @@ final class BookingWizardOnlinePaymentTest extends TestCase
     {
         $this->withPaymentGate(open: true);
         $this->fakeProviderSuccess();
-        $this->publishedPackageForServices(['DOCUMENT_PROCESSING', 'GRAVE_DIGGING']);
 
         $draftId = $this->journeyToStepEight()->get('draftId');
 
@@ -618,7 +570,6 @@ final class BookingWizardOnlinePaymentTest extends TestCase
     {
         $this->withPaymentGate(open: true);
         Http::fake();
-        $this->publishedPackageForServices(['DOCUMENT_PROCESSING', 'GRAVE_DIGGING']);
 
         // FLOWERS' seeded price is superseded — the one legal price-version
         // mutation — so the service now has no current price to quote.
@@ -655,7 +606,6 @@ final class BookingWizardOnlinePaymentTest extends TestCase
     public function test_a_provider_failure_fails_closed_and_keeps_the_manual_path(): void
     {
         $this->withPaymentGate(open: true);
-        $this->publishedPackageForServices(['DOCUMENT_PROCESSING', 'GRAVE_DIGGING']);
 
         $draftId = $this->journeyToStepEight()->get('draftId');
 

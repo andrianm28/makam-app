@@ -21,9 +21,11 @@ use Tests\Support\CemeteryFixture;
 use Tests\TestCase;
 
 /**
- * Task 1 of `docs/superpowers/plans/2026-08-14-p0-booking-submission-chain.md`
+ * Task 2 of `docs/superpowers/plans/2026-08-14-p0-booking-submission-chain.md`
  * — the quote-line mapper that turns a booking draft's `selected_services`
- * into the lines shape `Actions\IssueQuote` consumes.
+ * into the SERVICE-VERSION lines shape `Actions\IssueQuote` consumes (the
+ * 14 Aug ruling: service lines carrying `service_definition_id` +
+ * `price_version_id`, never a synthesized package version).
  *
  * Drafts are built through the wizard's own write path
  * (`StartBookingDraft` + `SaveBookingDraftStep`, steps 1-4 — no
@@ -34,7 +36,8 @@ use Tests\TestCase;
  * both carry a v1 dummy price version
  * (`2026_07_26_220000_seed_service_definition_dummy_operational_data.php`),
  * with deterministic amounts: 350000.00 and 550000.00 respectively
- * (`App\Support\ExampleData\ServiceOperationalExampleData::dummyPrices()`).
+ * (`App\Support\ExampleData\ServiceOperationalExampleData::dummyPrices()`),
+ * and catalogue fulfilment owners (platform / cemetery_operator).
  */
 final class ComposeQuoteLinesFromBookingDraftTest extends TestCase
 {
@@ -58,7 +61,7 @@ final class ComposeQuoteLinesFromBookingDraftTest extends TestCase
         return (new SaveBookingDraftStep)($draft, BookingWizardStep::SERVICES, ['selected_services' => $services], 'idem-s4');
     }
 
-    public function test_it_maps_selected_services_to_quote_lines_with_current_prices(): void
+    public function test_it_maps_selected_services_to_service_version_quote_lines_with_current_prices(): void
     {
         $draft = $this->draftWithSelectedServices([
             ['code' => ServiceCode::DOCUMENT_PROCESSING, 'quantity' => 1],
@@ -69,18 +72,46 @@ final class ComposeQuoteLinesFromBookingDraftTest extends TestCase
 
         $this->assertCount(2, $lines);
         foreach ($lines as $line) {
-            $this->assertArrayHasKey('code', $line);
+            $this->assertArrayHasKey('service_definition_id', $line);
+            $this->assertArrayHasKey('price_version_id', $line);
+            $this->assertArrayHasKey('price_version_number', $line);
             $this->assertArrayHasKey('quantity', $line);
             $this->assertMatchesRegularExpression('/^\d+\.\d{2}$/', $line['unit_amount']);
-            $this->assertIsInt($line['line_total_minor']);
+            $this->assertMatchesRegularExpression('/^[A-Z]{3}$/', $line['currency']);
+            $this->assertIsString($line['fulfillment_owner']);
+            $this->assertArrayNotHasKey('code', $line);
+            $this->assertArrayNotHasKey('service_package_version_id', $line);
+            $this->assertArrayNotHasKey('line_total_minor', $line);
         }
 
-        // Exact values are pinned to the deterministic dummy-price seed
-        // (flat base 350_000 + catalogue-position step 200_000, in Rupiah):
-        // 350000.00 -> 35_000_000 minor; 550000.00 x2 -> 110_000_000 minor.
+        // Exact values are pinned to the deterministic dummy-price seed and
+        // the catalogue fulfilment-owner rules: DOCUMENT_PROCESSING is
+        // platform-fulfilled at 350000.00; GRAVE_DIGGING is
+        // cemetery-operator-fulfilled at 550000.00.
+        $documents = ServiceDefinition::findByCode(ServiceCode::DOCUMENT_PROCESSING);
+        $documentsPrice = $documents->currentPriceVersion();
+        $digging = ServiceDefinition::findByCode(ServiceCode::GRAVE_DIGGING);
+        $diggingPrice = $digging->currentPriceVersion();
+
         $this->assertSame([
-            ['code' => ServiceCode::DOCUMENT_PROCESSING, 'quantity' => 1, 'unit_amount' => '350000.00', 'line_total_minor' => 35_000_000],
-            ['code' => ServiceCode::GRAVE_DIGGING, 'quantity' => 2, 'unit_amount' => '550000.00', 'line_total_minor' => 110_000_000],
+            [
+                'service_definition_id' => (int) $documents->getKey(),
+                'price_version_id' => (int) $documentsPrice->getKey(),
+                'price_version_number' => 1,
+                'quantity' => 1,
+                'unit_amount' => '350000.00',
+                'currency' => 'IDR',
+                'fulfillment_owner' => 'platform',
+            ],
+            [
+                'service_definition_id' => (int) $digging->getKey(),
+                'price_version_id' => (int) $diggingPrice->getKey(),
+                'price_version_number' => 1,
+                'quantity' => 2,
+                'unit_amount' => '550000.00',
+                'currency' => 'IDR',
+                'fulfillment_owner' => 'cemetery_operator',
+            ],
         ], $lines);
     }
 

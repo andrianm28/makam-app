@@ -10,30 +10,31 @@ use App\Domain\ServiceCatalog\Models\PriceVersion;
 use App\Domain\ServiceCatalog\Models\ServiceDefinition;
 use App\Platform\FinancialLedger\Money;
 use InvalidArgumentException;
-use OverflowException;
 
 /**
- * Task 1 of `docs/superpowers/plans/2026-08-14-p0-booking-submission-chain.md`:
- * maps a `BookingDraft`'s `selected_services` (code + quantity) onto the
- * `lines` shape `Actions\IssueQuote` consumes. The plan's "small quote-line
- * mapper" — one service per line, `line_total_minor = unit_amount_minor *
- * quantity`, using the same `ServiceDefinition::findByCode()`
- * `->currentPriceVersion()` seam Step 5's summary already uses.
+ * P0 submission chain — maps a `BookingDraft`'s `selected_services`
+ * (code + quantity) onto the SERVICE-VERSION `lines` shape `Actions\
+ * IssueQuote` consumes (Task 2 of
+ * `docs/superpowers/plans/2026-08-14-p0-booking-submission-chain.md`,
+ * reshaped per the 14 Aug ruling: the booking wizard quotes individual
+ * SERVICES, so each line names a `ServiceDefinition` and its frozen
+ * `PriceVersion` — never a synthesized package version).
  *
  * ---------------------------------------------------------------------------
- * The `unit_amount` boundary — the shape `IssueQuote` pins
+ * The line shape — the ruling's service-version contract
  * ---------------------------------------------------------------------------
- * Each line's `unit_amount` is the price version's `amount` column as the
- * model's `decimal:2` cast returns it (a plain numeric string with exactly
- * two fraction digits, e.g. `"350000.00"` — no thousands separators, no
- * currency symbol). The same value is converted to integer minor units HERE
- * via `Money::fromDecimal()`, so a malformed stored amount is rejected at
- * this seam rather than surfacing deeper in `IssueQuote`. `IssueQuote`
- * converts the decimal string to minor units again at issuance — that is its
- * documented "conversion happens exactly once" boundary — and re-computes
- * `line_total_minor` itself; this mapper's `line_total_minor` (also integer
- * arithmetic, overflow-guarded) is the honest same-value figure the chain
- * asserts against.
+ * Each returned line is exactly
+ * `array{service_definition_id: int, price_version_id: int,
+ * price_version_number: int, quantity: int, unit_amount: string,
+ * currency: string, fulfillment_owner: string}` — the keys `IssueQuote`'s
+ * service-line branch requires. `service_definition_id` is resolved from
+ * the selected code via `ServiceDefinition::findByCode()`, and
+ * `price_version_id`/`price_version_number`/`unit_amount`/`currency` are
+ * taken from `ServiceDefinition::currentPriceVersion()` — the same seam
+ * Step 5's summary prices with, so the amount snapshot is exactly what
+ * the customer saw. `fulfillment_owner` is the definition's own catalogue
+ * declaration. `IssueQuote` re-computes `line_total_minor` at issuance;
+ * this mapper ships no totals.
  *
  * ---------------------------------------------------------------------------
  * No fabricated price — fail loud, because this feeds a write
@@ -43,13 +44,14 @@ use OverflowException;
  * financial WRITE: silently dropping a selected service would underquote an
  * order, so any selection that cannot be priced — an unknown code, a
  * definition with no current price version, or a malformed JSON entry —
- * throws instead. The wizard's own step-4 validation guarantees the well-
- * formed cases; these branches defend the hand-edited-JSON-column case.
+ * throws instead (`UnpricedBookingServiceException`). The wizard's own
+ * step-4 validation guarantees the well-formed cases; these branches
+ * defend the hand-edited-JSON-column case.
  */
 final readonly class ComposeQuoteLinesFromBookingDraft
 {
     /**
-     * @return list<array{code: string, quantity: int, unit_amount: string, line_total_minor: int}>
+     * @return list<array{service_definition_id: int, price_version_id: int, price_version_number: int, quantity: int, unit_amount: string, currency: string, fulfillment_owner: string}>
      */
     public function __invoke(BookingDraft $draft): array
     {
@@ -71,13 +73,28 @@ final readonly class ComposeQuoteLinesFromBookingDraft
                 throw UnpricedBookingServiceException::forCode($code);
             }
 
-            $unitAmountMinor = Money::fromDecimal((string) $priceVersion->amount);
+            $fulfillmentOwner = $definition->fulfillment_owner;
+
+            if (! is_string($fulfillmentOwner) || $fulfillmentOwner === '') {
+                throw new InvalidArgumentException(
+                    "Selected service [{$code}] carries no fulfilment owner in the service catalog; ".
+                    'refusing to compose a quote line without one.'
+                );
+            }
+
+            // `unit_amount` is validated as an exact decimal-2 string right
+            // here so a malformed stored amount is rejected at this seam
+            // rather than surfacing deeper in `IssueQuote`.
+            Money::fromDecimal((string) $priceVersion->amount);
 
             $lines[] = [
-                'code' => $code,
+                'service_definition_id' => (int) $definition->getKey(),
+                'price_version_id' => (int) $priceVersion->getKey(),
+                'price_version_number' => (int) $priceVersion->version_number,
                 'quantity' => $quantity,
                 'unit_amount' => (string) $priceVersion->amount,
-                'line_total_minor' => $this->lineTotalMinor($unitAmountMinor, $quantity),
+                'currency' => (string) $priceVersion->currency,
+                'fulfillment_owner' => $fulfillmentOwner,
             ];
         }
 
@@ -110,20 +127,5 @@ final readonly class ComposeQuoteLinesFromBookingDraft
         }
 
         return $selection['quantity'];
-    }
-
-    /**
-     * `unit_amount_minor * quantity`, with the same explicit overflow guard
-     * `IssueQuote::lineTotalMinor()` uses — a maliciously large quantity
-     * must not silently wrap into a float.
-     */
-    private function lineTotalMinor(int $unitAmountMinor, int $quantity): int
-    {
-        if ($unitAmountMinor > intdiv(PHP_INT_MAX, $quantity)
-            || $unitAmountMinor < intdiv(PHP_INT_MIN, $quantity)) {
-            throw new OverflowException('Quote line total exceeds the integer range.');
-        }
-
-        return $unitAmountMinor * $quantity;
     }
 }
