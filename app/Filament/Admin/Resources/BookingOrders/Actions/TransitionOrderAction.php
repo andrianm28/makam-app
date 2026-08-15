@@ -129,6 +129,13 @@ final class TransitionOrderAction
 
         if ($to->requiresReason()) {
             $action->schema([Textarea::make('reason')->label('Alasan')->required()]);
+        } elseif ($to === OrderStatus::MENUNGGU_VERIFIKASI_PEMBAYARAN) {
+            $action->schema([
+                Textarea::make('reason')
+                    ->label('Catatan pembayaran')
+                    ->hint('Catatan ini dicatat di audit sebagai alasan transisi.')
+                    ->required(),
+            ]);
         }
 
         if (in_array($transition, self::MONEY_TRANSITIONS, true)) {
