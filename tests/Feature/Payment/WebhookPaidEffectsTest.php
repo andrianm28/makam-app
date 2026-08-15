@@ -29,6 +29,7 @@ use App\Platform\Outbox\Models\OutboxEvent;
 use App\Platform\Payment\Models\PaymentIntent;
 use App\Platform\Payment\Models\PaymentSession;
 use App\Platform\Payment\Models\ProviderEvent;
+use App\Platform\Payment\PaymentAuditActions;
 use App\Platform\Payment\PaymentIntentDecision;
 use App\Platform\Payment\PaymentProviders;
 use App\Platform\Payment\ProcessWebhookEvent;
@@ -213,6 +214,78 @@ final class WebhookPaidEffectsTest extends TestCase
 
         $session = PaymentSession::query()->where('provider_payment_id', 'pay_redeliver_1')->sole();
         $this->assertSame(SessionState::Paid->value, $session->state);
+    }
+
+    /**
+     * Whole-branch review finding I-1 regression: a SECOND, independent
+     * provider transaction arriving for an already-paid order must not be
+     * silently swallowed by `ApplyPaidEffects::alreadyPaid()` — it is a
+     * double charge, and it must surface at reconciliation as an explicitly
+     * audited duplicate-arrival record carrying the second transaction's
+     * provider event row. The exactly-once effects of the first payment are
+     * unchanged: one `DIBAYAR` event, one `payment.received.v1` outbox row.
+     */
+    public function test_a_second_payment_for_an_already_paid_order_is_an_audited_duplicate_arrival(): void
+    {
+        $order = $this->bookingOrder('MK-2026-DUP-0001');
+        $this->acceptedQuote($order, self::TOTAL_MINOR);
+        $this->paymentSession('pay_first_1', self::TOTAL_MINOR);
+
+        $this->deliver(dataOverrides: [
+            'payment_id' => 'pay_first_1',
+            'order_id' => 'MK-2026-DUP-0001',
+            'amount' => self::TOTAL_DECIMAL,
+        ])->assertOk();
+
+        $this->assertSame(1, $this->paidEventCount($order));
+        $this->assertSame(1, $this->paymentReceivedCount($order));
+
+        // A second, DIFFERENT provider transaction for the same order, under
+        // a new message id: neither the primary (`provider_event_id`) nor the
+        // secondary ((provider, transaction, invoice) settling pair) guard
+        // absorbs it, so it claims and reaches the settlement.
+        $this->paymentSession('pay_second_1', self::TOTAL_MINOR);
+
+        $this->deliver(
+            id: 'msg_duplicate_second',
+            dataOverrides: [
+                'payment_id' => 'pay_second_1',
+                'order_id' => 'MK-2026-DUP-0001',
+                'amount' => self::TOTAL_DECIMAL,
+            ],
+        )->assertOk();
+
+        // Exactly-once paid effects: still one DIBAYAR event and one outbox
+        // row, and the order still names the FIRST transaction as its source.
+        $fresh = $order->fresh();
+        $this->assertSame(OrderStatus::DIBAYAR->value, $fresh->status);
+        $this->assertSame('pay_first_1', $fresh->paid_source_ref);
+        $this->assertSame(1, $this->paidEventCount($order));
+        $this->assertSame(1, $this->paymentReceivedCount($order));
+
+        // Money DID arrive for the second transaction, so its own session is
+        // PAID — the record of what was collected — and the duplicate
+        // arrival is explicitly audited with the internal provider event row
+        // as its subject (that row carries the provider transaction id; the
+        // id itself is a provider payload value and stays out of the audit
+        // row, AC14).
+        $secondSession = PaymentSession::query()->where('provider_payment_id', 'pay_second_1')->sole();
+        $this->assertSame(SessionState::Paid->value, $secondSession->state);
+
+        $secondEvent = ProviderEvent::query()
+            ->where('provider_transaction_id', 'pay_second_1')
+            ->sole();
+
+        $audit = AuditEvent::query()
+            ->where('action', PaymentAuditActions::DUPLICATE_ARRIVAL)
+            ->sole();
+        $this->assertSame('provider_event', $audit->subject_type);
+        $this->assertSame($secondEvent->getKey(), $audit->subject_id);
+        $this->assertSame('denied', $audit->outcome);
+
+        $serialized = (string) json_encode($audit->toArray());
+        $this->assertStringNotContainsString('pay_second_1', $serialized);
+        $this->assertStringNotContainsString('pay_first_1', $serialized);
     }
 
     // -----------------------------------------------------------------

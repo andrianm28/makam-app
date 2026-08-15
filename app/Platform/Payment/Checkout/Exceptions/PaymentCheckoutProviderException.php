@@ -33,6 +33,18 @@ final class PaymentCheckoutProviderException extends RuntimeException
         return new self('The payment provider returned a malformed response for the create-payment request.');
     }
 
+    /**
+     * The requested amount is not expressible in the provider's wire unit
+     * (whole rupiah) — a minor-unit value with a nonzero sen component. The
+     * value itself is deliberately absent from the message: it is payment
+     * data (AC14). Refusing rather than rounding is the point: sending a
+     * rounded amount would silently change what is collected.
+     */
+    public static function becauseRequestAmountIsNotWholeRupiah(): self
+    {
+        return new self('The requested amount cannot be expressed in whole rupiah and was not sent to the provider.');
+    }
+
     public static function becauseProviderUnreachable(Throwable $previous): self
     {
         return new self('The payment provider could not be reached for the create-payment request.', 0, $previous);

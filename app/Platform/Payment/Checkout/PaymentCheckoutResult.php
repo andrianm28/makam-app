@@ -11,16 +11,20 @@ use Carbon\CarbonImmutable;
  * payment id, the echoed order reference, the amount breakdown, and the
  * hosted-checkout link the customer is sent to.
  *
- * Amounts mirror the provider payload exactly (integer minor units), so
- * reconciliation (`platform-financial-ledger` AC10) can compare
- * `amountMinor`/`feeMinor`/`netAmountMinor` against provider settlement
- * records without any conversion.
+ * Amounts are in the module's INTERNAL unit — integer minor units (sen),
+ * Wave 0 ruling 0c — after conversion at the client boundary: the provider's
+ * wire values are whole rupiah (`SumoPodPaymentClient`'s class doc block
+ * records the convention and the exact conversion in both directions).
+ * Reconciliation (`platform-financial-ledger` AC10) therefore compares these
+ * minor-unit values against the provider's settlement records via the same
+ * conversion `WebhookEnvelope` applies on the inbound side; no float ever
+ * enters this class.
  *
  * @param  string  $paymentId  provider-side `payment_id` (uuid)
  * @param  string  $orderId  echoed `order_id`
- * @param  int  $amountMinor  requested amount in minor units
- * @param  int  $feeMinor  provider fee in minor units
- * @param  int  $netAmountMinor  amount minus fee, in minor units
+ * @param  int  $amountMinor  the provider's whole-rupiah amount, in minor units
+ * @param  int  $feeMinor  the provider's whole-rupiah fee, in minor units
+ * @param  int  $netAmountMinor  the provider's whole-rupiah net amount, in minor units
  * @param  string  $paymentLinkUrl  the hosted checkout URL to redirect to
  * @param  string  $status  provider payment status (sandbox answers `pending`)
  * @param  CarbonImmutable|null  $expiresAt  when the payment link expires, if the provider sent one

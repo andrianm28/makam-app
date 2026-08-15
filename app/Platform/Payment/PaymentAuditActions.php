@@ -181,4 +181,39 @@ final class PaymentAuditActions
      * closed-list `note` carry the explanation.
      */
     public const string SESSION_OPENED = 'PAYMENT_SESSION_OPENED';
+
+    /**
+     * Whole-branch review fix wave (15 Aug 2026) — written by
+     * `Actions\OpenPaymentSession` with `AuditOutcome::Denied`, subject = the
+     * `Order`, when a session opening is refused because the order is already
+     * paid (`DIBAYAR`). A DIBAYAR order satisfies all six guard conditions,
+     * so the refusal is a session-level precondition, not a guard denial;
+     * this row is what lets an operator see that a second payment was
+     * attempted for an already-paid order.
+     *
+     * Not on `SensitiveActions::ACTIONS`, for the same reason as
+     * `GUARD_DENIED`: machine-decided, structured subject, closed-list
+     * `note`, no free-text reason for a careless caller to fill with
+     * restricted data.
+     */
+    public const string SESSION_OPENING_REFUSED = 'PAYMENT_SESSION_OPENING_REFUSED';
+
+    /**
+     * Whole-branch review fix wave (15 Aug 2026) — written by
+     * `Actions\ApplyPaymentSettlement` with `AuditOutcome::Denied`, subject =
+     * the `provider_events` row, when a claimed `payment.completed` settles an
+     * order that an earlier, DIFFERENT provider transaction already paid. The
+     * claim guarantees the (provider, transaction) pair is new, so an
+     * already-DIBAYAR order with a different `paid_source_ref` is a second,
+     * independent payment arrival — a double charge that surfaces here at
+     * reconciliation. The subject row carries the provider transaction id;
+     * the transaction id itself is a provider payload value and stays out of
+     * the audit row (AC14), exactly like `WEBHOOK_SETTLEMENT_CONFLICT`'s
+     * `note`.
+     *
+     * Not on `SensitiveActions::ACTIONS`, for the same reason as
+     * `GUARD_DENIED`: machine-decided, structured subject, closed-list
+     * `note`, no free-text reason.
+     */
+    public const string DUPLICATE_ARRIVAL = 'PAYMENT_DUPLICATE_ARRIVAL';
 }

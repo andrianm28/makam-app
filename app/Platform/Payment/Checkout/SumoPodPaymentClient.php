@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Platform\Payment\Checkout;
 
+use App\Platform\FinancialLedger\Money;
 use App\Platform\Payment\Checkout\Contracts\PaymentCheckoutClient;
 use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutProviderException;
 use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutUnavailableException;
@@ -47,6 +48,27 @@ use Throwable;
  * key is config-only, and `config:cache`-safe (the credential is read from
  * config here; this module's only raw environment read lives in
  * `config/payment.php`).
+ *
+ * ---------------------------------------------------------------------------
+ * Wire units: the provider speaks whole rupiah, the module speaks minor units
+ * ---------------------------------------------------------------------------
+ * The provider's `amount`/`fee`/`net_amount` — in BOTH directions, the
+ * outbound `POST /api/v1/payments` request and the webhook envelope it later
+ * sends — are whole rupiah (major units): the webhook side proves it, because
+ * `WebhookEnvelope` runs `data.amount` through `Money::fromDecimal()` and
+ * compares the result against the session's `amount_minor` snapshot, and
+ * ADR-0033's fee arithmetic (0.7% + Rp 300) is rupiah-based. This module's
+ * internal money values are integer minor units (sen) per Wave 0 ruling 0c.
+ *
+ * This class is therefore the OUTBOUND half of the one boundary between the
+ * two units: `payloadFor()` converts minor -> whole rupiah before the request
+ * leaves, and `resultFrom()` converts whole rupiah -> minor after the response
+ * arrives. The conversions are exact (integer division / `Money::fromDecimal`,
+ * never a float), and a value that does not convert exactly — an outbound
+ * amount that is not whole rupiah, an inbound amount with a real fractional
+ * content — is refused, never rounded. `WebhookEnvelope` is the inbound twin
+ * of this contract; `SumoPodPaymentClientTest` pins the two halves against
+ * each other so a unit change on either side fails loudly.
  *
  * @param  array{provider_url: string, api_key: string}  $config
  */
@@ -121,13 +143,18 @@ final readonly class SumoPodPaymentClient implements PaymentCheckoutClient
      * `success_return_url`/`cancel_return_url`. Optional fields are omitted
      * rather than nulled, so the provider's own defaults apply.
      *
+     * `amount` is sent in the provider's wire unit — WHOLE RUPIAH, never the
+     * module's integer minor units (see the class doc block). Converting here,
+     * at the boundary, keeps the two unit systems from being confused
+     * anywhere else in the module.
+     *
      * @return array<string, string|int>
      */
     private function payloadFor(CreatePaymentRequest $request): array
     {
         $payload = [
             'order_id' => $request->orderId,
-            'amount' => $request->amountMinor,
+            'amount' => $this->toMajorRupiah($request->amountMinor),
             'currency' => $request->currency,
         ];
 
@@ -147,6 +174,14 @@ final readonly class SumoPodPaymentClient implements PaymentCheckoutClient
     }
 
     /**
+     * The provider answers with whole-rupiah values (`amount`, `fee`,
+     * `net_amount` — the same unit its webhook envelope later carries, see the
+     * class doc block). Each is converted to the module's integer minor units
+     * through the financial-ledger lane's `Money::fromDecimal()` read seam,
+     * exactly as `WebhookEnvelope` converts the inbound `data.amount`. A value
+     * that is not exactly convertible (a real fractional content, an
+     * out-of-range magnitude) is a malformed response, never a rounded one.
+     *
      * @param  mixed  $body  the decoded response body, whatever the provider sent
      */
     private function resultFrom(mixed $body): PaymentCheckoutResult
@@ -178,12 +213,74 @@ final readonly class SumoPodPaymentClient implements PaymentCheckoutClient
         return new PaymentCheckoutResult(
             paymentId: (string) $body['payment_id'],
             orderId: (string) $body['order_id'],
-            amountMinor: (int) $body['amount'],
-            feeMinor: (int) $body['fee'],
-            netAmountMinor: (int) $body['net_amount'],
+            amountMinor: $this->toMinorUnits($body['amount']),
+            feeMinor: $this->toMinorUnits($body['fee']),
+            netAmountMinor: $this->toMinorUnits($body['net_amount']),
             paymentLinkUrl: (string) $body['payment_link_url'],
             status: (string) $body['status'],
             expiresAt: $expiresAt,
         );
+    }
+
+    /**
+     * Minor units -> whole rupiah, the provider's wire unit. Integer division
+     * only — a float never appears. The factor is `10 ^ minor_units` from the
+     * financial-ledger config, the same factor `Money::fromDecimal()` applies
+     * in reverse, so the outbound and inbound halves of the boundary can
+     * never disagree about the conversion.
+     */
+    private function toMajorRupiah(int $amountMinor): int
+    {
+        $factor = 10 ** (int) config('money.minor_units');
+
+        if ($amountMinor % $factor !== 0) {
+            throw PaymentCheckoutProviderException::becauseRequestAmountIsNotWholeRupiah();
+        }
+
+        return intdiv($amountMinor, $factor);
+    }
+
+    /**
+     * Whole rupiah -> minor units, via `Money::fromDecimal()`. The exact
+     * decimal extraction mirrors `WebhookEnvelope::exactDecimalString()` —
+     * the inbound twin of this boundary — so both sides refuse the same
+     * shapes: an exactly integral JSON float is accepted (`1500000.00`
+     * decodes to the exact double 1500000.0), anything with real fractional
+     * content is refused rather than rounded.
+     */
+    private function toMinorUnits(mixed $amount): int
+    {
+        $decimal = self::exactDecimalString($amount);
+
+        if ($decimal === null) {
+            throw PaymentCheckoutProviderException::becauseMalformedResponse();
+        }
+
+        try {
+            return Money::fromDecimal($decimal);
+        } catch (Throwable) {
+            throw PaymentCheckoutProviderException::becauseMalformedResponse();
+        }
+    }
+
+    private static function exactDecimalString(mixed $amount): ?string
+    {
+        if (is_int($amount)) {
+            return (string) $amount;
+        }
+
+        if (is_float($amount)) {
+            if (! is_finite($amount) || floor($amount) !== $amount || abs($amount) > 9.007199254740992e15) {
+                return null;
+            }
+
+            return number_format($amount, 0, '.', '');
+        }
+
+        if (is_string($amount) && preg_match('/\A-?\d+(\.\d+)?\z/D', trim($amount)) === 1) {
+            return trim($amount);
+        }
+
+        return null;
     }
 }

@@ -146,9 +146,11 @@ final class BookingWizardOnlinePaymentTest extends TestCase
             'api-pay-sandbox.sumopod.com/api/v1/payments' => Http::response([
                 'payment_id' => 'uuid-1',
                 'order_id' => 'MK-ORD-1',
-                'amount' => self::QUOTE_TOTAL_MINOR,
-                'fee' => 38800,
-                'net_amount' => self::QUOTE_TOTAL_MINOR - 38800,
+                // The provider's wire unit is whole rupiah — the same
+                // Rp 1.500.000 the webhook envelope will later carry.
+                'amount' => 1_500_000,
+                'fee' => 38_800,
+                'net_amount' => 1_461_200,
                 'payment_link_url' => 'https://checkout.sumopod.com/x',
                 'status' => 'pending',
             ], 201),
@@ -160,12 +162,12 @@ final class BookingWizardOnlinePaymentTest extends TestCase
      * accepted unexpired quote and an authorized opener — the six-condition
      * guard's preconditions, mirroring `OpenPaymentSessionTest`'s fixture.
      */
-    private function satisfiedOrderFor(string $draftId): Order
+    private function satisfiedOrderFor(string $draftId, OrderStatus $status = OrderStatus::PENAWARAN_TERKIRIM): Order
     {
         $order = Order::query()->create([
             'reference' => 'MK-ORD-1',
             'product_type' => ProductType::AT_NEED_SERVICE_ORDER->value,
-            'status' => OrderStatus::PENAWARAN_TERKIRIM->value,
+            'status' => $status->value,
             'booking_draft_id' => $draftId,
         ]);
 
@@ -261,6 +263,28 @@ final class BookingWizardOnlinePaymentTest extends TestCase
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->call('openOnlinePayment')
             ->assertSet('onlinePaymentError', 'Pesanan belum dapat dibayar secara online. Tim kami akan membuat pesanan resmi dan mengirimkan penawaran harga sebelum pembayaran dapat dibuka. Gunakan pembayaran manual atau hubungi dukungan.')
+            ->assertSet('currentStep', BookingWizardStep::PAYMENT);
+
+        $this->assertSame(0, PaymentSession::query()->count());
+        Http::assertNothingSent();
+    }
+
+    /**
+     * Whole-branch review finding I-1 regression at the wizard seam: a
+     * resumed wizard on an already-paid order must NOT open a second session
+     * — the customer gets honest copy instead, and no provider call happens.
+     */
+    public function test_online_submit_on_an_already_paid_order_is_refused_without_opening_a_second_session(): void
+    {
+        $this->withPaymentGate(open: true);
+        Http::fake();
+
+        $draftId = $this->journeyToStepEight()->get('draftId');
+        $this->satisfiedOrderFor($draftId, OrderStatus::DIBAYAR);
+
+        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->call('openOnlinePayment')
+            ->assertSet('onlinePaymentError', 'Pesanan ini telah dibayar dan tidak perlu dibayar lagi.')
             ->assertSet('currentStep', BookingWizardStep::PAYMENT);
 
         $this->assertSame(0, PaymentSession::query()->count());

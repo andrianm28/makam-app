@@ -8,6 +8,7 @@ use App\Platform\Payment\Checkout\CreatePaymentRequest;
 use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutProviderException;
 use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutUnavailableException;
 use App\Platform\Payment\Checkout\SumoPodPaymentClient;
+use App\Platform\Payment\WebhookEnvelope;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
@@ -43,9 +44,12 @@ final class SumoPodPaymentClientTest extends TestCase
             'api-pay-sandbox.sumopod.com/api/v1/payments' => Http::response([
                 'payment_id' => 'uuid-1',
                 'order_id' => 'ord-1',
-                'amount' => 5500000,
-                'fee' => 38800,
-                'net_amount' => 5461200,
+                // Whole rupiah — the provider's wire unit. The fixture keeps
+                // ADR-0033's fee arithmetic honest: 0.7% x 5,500,000 + Rp 300
+                // = 38,800, and net = 5,500,000 - 38,800 = 5,461,200.
+                'amount' => 5_500_000,
+                'fee' => 38_800,
+                'net_amount' => 5_461_200,
                 'payment_link_url' => 'https://checkout.sumopod.com/x',
                 'status' => 'pending',
                 'expires_at' => '2026-08-16T12:00:00+07:00',
@@ -53,14 +57,14 @@ final class SumoPodPaymentClientTest extends TestCase
         ]);
 
         $result = $this->client()->createPayment(
-            new CreatePaymentRequest(orderId: 'ord-1', amountMinor: 5500000)
+            new CreatePaymentRequest(orderId: 'ord-1', amountMinor: 550_000_000)
         );
 
         $this->assertSame('uuid-1', $result->paymentId);
         $this->assertSame('ord-1', $result->orderId);
-        $this->assertSame(5500000, $result->amountMinor);
-        $this->assertSame(38800, $result->feeMinor);
-        $this->assertSame(5461200, $result->netAmountMinor);
+        $this->assertSame(550_000_000, $result->amountMinor);
+        $this->assertSame(3_880_000, $result->feeMinor);
+        $this->assertSame(546_120_000, $result->netAmountMinor);
         $this->assertSame('https://checkout.sumopod.com/x', $result->paymentLinkUrl);
         $this->assertSame('pending', $result->status);
         $this->assertInstanceOf(CarbonImmutable::class, $result->expiresAt);
@@ -70,9 +74,65 @@ final class SumoPodPaymentClientTest extends TestCase
             return $request->url() === self::PROVIDER_URL.'/api/v1/payments'
                 && $request->header('X-Api-Key') === ['test-key']
                 && $request['order_id'] === 'ord-1'
-                && $request['amount'] === 5500000
+                // The outbound amount is WHOLE RUPIAH (5,500,000), never the
+                // 550,000,000 minor units the module collects internally.
+                && $request['amount'] === 5_500_000
                 && $request['currency'] === 'IDR';
         });
+    }
+
+    /**
+     * The cross-check the whole-branch review demanded: the OUTBOUND wire
+     * convention (minor units -> whole rupiah on the request) and the INBOUND
+     * webhook convention (`WebhookEnvelope` -> `Money::fromDecimal()` ->
+     * minor units) must pin each other. The same Rp 1.500.000 that leaves as
+     * the request `amount` 1500000 must arrive in the webhook as
+     * `data.amount` 1500000 and convert back to the very same 150_000_000
+     * minor units the session snapshot holds. If either half's unit drifts,
+     * this test fails.
+     */
+    public function test_the_outbound_wire_units_pin_against_the_inbound_webhook_convention(): void
+    {
+        $amountMinor = 150_000_000;
+
+        Http::fake([
+            'api-pay-sandbox.sumopod.com/api/v1/payments' => Http::response([
+                'payment_id' => 'uuid-roundtrip',
+                'order_id' => 'ord-roundtrip',
+                'amount' => 1_500_000,
+                'fee' => 10_800,
+                'net_amount' => 1_489_200,
+                'payment_link_url' => 'https://checkout.sumopod.com/x',
+                'status' => 'pending',
+            ], 201),
+        ]);
+
+        $result = $this->client()->createPayment(
+            new CreatePaymentRequest(orderId: 'ord-roundtrip', amountMinor: $amountMinor)
+        );
+
+        Http::assertSent(fn (Request $request): bool => $request['amount'] === 1_500_000);
+
+        $this->assertSame($amountMinor, $result->amountMinor);
+
+        // The inbound twin: the provider's webhook carries the SAME whole
+        // rupiah value as decimal rupiah, and `WebhookEnvelope` converts it
+        // back to the minor units a payment session snapshot holds.
+        $envelope = WebhookEnvelope::parse(json_encode([
+            'event_type' => 'payment.completed',
+            'data' => [
+                'payment_id' => 'uuid-roundtrip',
+                'order_id' => 'ord-roundtrip',
+                'amount' => 1_500_000,
+                'fee' => 10_800,
+                'net_amount' => 1_489_200,
+                'status' => 'completed',
+                'completed_at' => '2026-08-14T09:59:00+00:00',
+            ],
+        ], JSON_THROW_ON_ERROR));
+
+        $this->assertTrue($envelope->isWellFormed());
+        $this->assertSame($amountMinor, $envelope->amountMinor);
     }
 
     public function test_create_payment_sends_the_optional_fields_only_when_given(): void
@@ -175,6 +235,72 @@ final class SumoPodPaymentClientTest extends TestCase
         ]);
 
         $this->expectException(PaymentCheckoutProviderException::class);
-        $this->client()->createPayment(new CreatePaymentRequest(orderId: 'ord-1', amountMinor: 5500000));
+        $this->client()->createPayment(new CreatePaymentRequest(orderId: 'ord-1', amountMinor: 550000000));
+    }
+
+    /**
+     * The provider's response amounts are whole rupiah; a value with real
+     * fractional content is refused exactly like `WebhookEnvelope` refuses it
+     * inbound — never rounded into a value the session comparison would trust.
+     */
+    public function test_create_payment_rejects_a_response_amount_with_real_fractional_content(): void
+    {
+        Http::fake([
+            'api-pay-sandbox.sumopod.com/api/v1/payments' => Http::response([
+                'payment_id' => 'uuid-1',
+                'order_id' => 'ord-1',
+                'amount' => 1_500_000.125,
+                'fee' => 10_800,
+                'net_amount' => 1_489_200,
+                'payment_link_url' => 'https://checkout.sumopod.com/x',
+                'status' => 'pending',
+            ], 201),
+        ]);
+
+        $this->expectException(PaymentCheckoutProviderException::class);
+        $this->client()->createPayment(new CreatePaymentRequest(orderId: 'ord-1', amountMinor: 150_000_000));
+    }
+
+    /**
+     * A JSON `1500000.00` decodes to the exact double 1500000.0, which is a
+     * lossless whole-rupiah value — the same shape `WebhookEnvelope` accepts
+     * inbound. Both halves of the boundary must agree on what is convertible.
+     */
+    public function test_create_payment_accepts_an_exactly_integral_float_response_amount(): void
+    {
+        Http::fake([
+            'api-pay-sandbox.sumopod.com/api/v1/payments' => Http::response([
+                'payment_id' => 'uuid-1',
+                'order_id' => 'ord-1',
+                'amount' => 1_500_000.00,
+                'fee' => 0.0,
+                'net_amount' => 1_500_000.0,
+                'payment_link_url' => 'https://checkout.sumopod.com/x',
+                'status' => 'pending',
+            ], 201),
+        ]);
+
+        $result = $this->client()->createPayment(
+            new CreatePaymentRequest(orderId: 'ord-1', amountMinor: 150_000_000)
+        );
+
+        $this->assertSame(150_000_000, $result->amountMinor);
+        $this->assertSame(0, $result->feeMinor);
+        $this->assertSame(150_000_000, $result->netAmountMinor);
+    }
+
+    /**
+     * A minor-unit amount with a nonzero sen component cannot be expressed in
+     * the provider's whole-rupiah wire unit. Refused before any HTTP request,
+     * never rounded: a rounded amount would silently change what is collected.
+     */
+    public function test_create_payment_refuses_a_request_amount_that_is_not_whole_rupiah(): void
+    {
+        Http::fake();
+
+        $this->expectException(PaymentCheckoutProviderException::class);
+        $this->client()->createPayment(new CreatePaymentRequest(orderId: 'ord-1', amountMinor: 123_45));
+
+        Http::assertNothingSent();
     }
 }
