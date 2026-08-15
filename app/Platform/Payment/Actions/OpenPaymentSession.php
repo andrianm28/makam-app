@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Platform\Payment\Actions;
 
 use App\Domain\OrderWorkflow\Models\Order;
+use App\Domain\OrderWorkflow\OrderStatus;
 use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
@@ -17,6 +18,7 @@ use App\Platform\Payment\Checkout\Contracts\PaymentCheckoutClient;
 use App\Platform\Payment\Checkout\CreatePaymentRequest;
 use App\Platform\Payment\Exceptions\PaymentSessionMerchantMismatchException;
 use App\Platform\Payment\Exceptions\PaymentSessionOpeningDeniedException;
+use App\Platform\Payment\Exceptions\PaymentSessionOrderAlreadyPaidException;
 use App\Platform\Payment\Exceptions\PaymentSessionOrderNotFoundException;
 use App\Platform\Payment\Exceptions\PaymentSessionOrderTypeNotSupportedException;
 use App\Platform\Payment\GuardPaymentSession;
@@ -75,6 +77,31 @@ use Carbon\CarbonImmutable;
  * would then be committed in two transactions.
  *
  * ---------------------------------------------------------------------------
+ * An already-paid order is refused BEFORE the guard (whole-branch review,
+ * fix wave)
+ * ---------------------------------------------------------------------------
+ * A DIBAYAR order satisfies all six guard conditions (its confirmation is
+ * valid, its quote accepted), so the guard alone cannot stop a resumed
+ * wizard from opening a SECOND session and collecting a second payment that
+ * `ApplyPaidEffects` would silently swallow. This action therefore refuses
+ * the opening before the guard evaluation: an order whose status is DIBAYAR
+ * is already paid, and there is nothing left to authorize payment for. The
+ * refusal is recorded as a `PAYMENT_SESSION_OPENING_REFUSED` audit event
+ * (`AuditOutcome::Denied`) before the exception is thrown.
+ *
+ * This is the PAID half of the review's "no second session for an
+ * already-paid order" protection. The OPEN half — an order still
+ * `MENUNGGU_PEMBAYARAN` whose earlier checkout was never settled — is not
+ * expressible here: `payment_sessions` deliberately carries no order
+ * reference (see `SessionState`'s doc block; the order reference travels the
+ * provider round trip), so an "open sessions for this order" query does not
+ * exist before the provider echo. That race is caught at settlement time
+ * instead, by `ApplyPaymentSettlement`'s audited duplicate-arrival record.
+ * The provider-side duplicate record is also what protects the DIBAYAR case
+ * against the race where a second payment was already created before this
+ * refusal could land.
+ *
+ * ---------------------------------------------------------------------------
  * Actor role label — deliberately the guard's derivation, not a role lookup
  * ---------------------------------------------------------------------------
  * The audit's `actor_role` uses the same `customer`/`guest` derivation
@@ -101,6 +128,8 @@ final readonly class OpenPaymentSession
         }
 
         $order = $this->resolveOrder($command->orderRef);
+
+        $this->assertOrderNotAlreadyPaid($order);
 
         $result = ($this->guard)($order, new Money($command->amountMinor));
 
@@ -183,6 +212,46 @@ final readonly class OpenPaymentSession
         }
 
         return $order;
+    }
+
+    /**
+     * The "no second session for an already-paid order" refusal — see the
+     * class doc block. A DIBAYAR order is already paid; opening a session for
+     * it would let the customer be charged a second time, and the second
+     * payment would be silently swallowed by `ApplyPaidEffects`. The refusal
+     * is audited (`PAYMENT_SESSION_OPENING_REFUSED`, `AuditOutcome::Denied`)
+     * before the exception is thrown, so an operator can see the attempt.
+     *
+     * Deliberately an order-status check, not a `payment_sessions` query:
+     * sessions carry no order reference (class doc block), so the order's own
+     * DIBAYAR status is the only pre-provider authority that a payment was
+     * collected for this order.
+     */
+    private function assertOrderNotAlreadyPaid(Order $order): void
+    {
+        if ($order->status !== OrderStatus::DIBAYAR->value) {
+            return;
+        }
+
+        $actor = $this->actors->resolve();
+        $actorRole = $actor->isAuthenticated() ? 'customer' : 'guest';
+        $correlationId = $this->correlation->current();
+
+        Audit::record(
+            action: PaymentAuditActions::SESSION_OPENING_REFUSED,
+            subject: new AuditSubject('order', (string) $order->getKey()),
+            outcome: AuditOutcome::Denied,
+            actorRef: $actor->identityReference,
+            actorRole: $actorRole,
+            source: AuditSource::Api,
+            correlationId: $correlationId === null ? null : (string) $correlationId,
+            // `note` is an EXISTING `MetadataAllowlist::ALLOWED_KEYS` key —
+            // this lane adds none. A closed-list value only; the subject
+            // carries the order. No amount, no identifier, nothing restricted.
+            metadata: ['note' => 'session opening refused; order already paid'],
+        );
+
+        throw PaymentSessionOrderAlreadyPaidException::forReference($order->reference);
     }
 
     /**

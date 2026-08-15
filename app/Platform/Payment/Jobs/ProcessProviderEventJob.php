@@ -90,8 +90,16 @@ final class ProcessProviderEventJob implements ShouldQueue
     public int $tries = 3;
 
     /**
-     * The retry window: fifteen minutes from the first attempt. After it, a
-     * still-failing job is failed permanently by the worker.
+     * The retry window, re-measured from EACH attempt: `now() + 15 minutes`
+     * is recomputed every time the worker asks, so a still-failing job is
+     * failed permanently fifteen minutes after its CURRENT attempt, not
+     * fifteen minutes after its first. That is a sliding window — each retry
+     * pushes the deadline forward — and the class doc block's "caps the whole
+     * retry window at fifteen minutes" is the attempt-level reading of the
+     * same code, not a promise about the first attempt. This is deliberate:
+     * the cap is what keeps a failing event from spinning on the critical
+     * queue indefinitely, and `$tries = 3` is the hard attempt cap that
+     * bounds the window in practice.
      */
     public function retryUntil(): CarbonImmutable
     {

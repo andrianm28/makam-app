@@ -26,6 +26,7 @@ use App\Platform\Payment\Actions\OpenPaymentSessionCommand;
 use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutProviderException;
 use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutUnavailableException;
 use App\Platform\Payment\Exceptions\PaymentSessionOpeningDeniedException;
+use App\Platform\Payment\Exceptions\PaymentSessionOrderAlreadyPaidException;
 use App\Platform\Payment\Models\PaymentSession;
 use App\Platform\Payment\OrderType;
 use App\Platform\Payment\SessionState;
@@ -548,6 +549,14 @@ final class BookingWizard extends Component
             return;
         } catch (PaymentCheckoutProviderException|PaymentCheckoutUnavailableException) {
             $this->onlinePaymentError = 'Layanan pembayaran online sedang tidak tersedia. Silakan coba lagi atau gunakan pembayaran manual.';
+            $this->currentStep = BookingWizardStep::PAYMENT;
+
+            return;
+        } catch (PaymentSessionOrderAlreadyPaidException) {
+            // The order is already paid; a second session would only allow a
+            // second charge. Honest copy instead of the generic denial — and
+            // no `report()`: this is a normal customer action, not an error.
+            $this->onlinePaymentError = 'Pesanan ini telah dibayar dan tidak perlu dibayar lagi.';
             $this->currentStep = BookingWizardStep::PAYMENT;
 
             return;

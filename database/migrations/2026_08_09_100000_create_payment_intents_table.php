@@ -11,9 +11,15 @@ use Illuminate\Support\Facades\Schema;
 /**
  * `payment_intents` — `.kiro/specs/platform-payment-adapter/design.md` §Data:
  * "payment_intents -- guard evaluation + decision record". One row per
- * `App\Platform\Payment\GuardPaymentSession` evaluation, written whether the
- * guard passes or denies (Wave 1b ruling 1b-L3-01 Step 3); under that ruling
- * every row is a denial, because the guard has no reachable pass outcome.
+ * payment-opening decision, in one of two shapes: a DENIED
+ * `App\Platform\Payment\GuardPaymentSession` evaluation writes its row here
+ * with the failing condition(s) (Wave 1b ruling 1b-L3-01 Step 3), and an
+ * ALLOWED evaluation's row is written by `Actions\OpenPaymentSession`
+ * atomically with the session it authorizes (same transaction, so an opening
+ * can never exist without its Allowed intent and vice versa). Under the
+ * ruling, every row was a denial because the guard had no reachable pass
+ * outcome; the online-payment gateway task (15 Aug 2026) opened the real
+ * pass path, so `allowed` rows now exist whenever `G-PAY-01` is open.
  *
  * Timestamp slot: this lane's assigned `2026_08_09_*` slot (the plan's
  * §File Structure, "Migrations (all additive, `2026_08_09_*`)"). Additive
@@ -24,18 +30,20 @@ use Illuminate\Support\Facades\Schema;
  * What this table deliberately does NOT reference
  * ---------------------------------------------------------------------------
  * There is no `order_id`, `case_id`, `quote_id`, `confirmation_id`,
- * `reservation_id`, `merchant_ref`, or `badan_usaha_ref` column here. Not an
- * oversight: none of those records exists anywhere in this repository (the
- * finding recorded in the plan's §Task 2 ruling, verified 10 Aug 2026), and
- * ruling 1b-L3-01 forbids inventing a parallel stand-in so a column can be
- * filled. A nullable column named after a record that does not exist would
- * be an invitation to fill it with something that is not that record. The
- * task that lands the orchestration seam adds the real references in its own
- * additive migration.
- *
- * What IS recorded is only what is truthfully known at evaluation time: the
- * amount the caller asked to charge, the server-resolved payment mode, the
- * decision, and which condition(s) produced it.
+ * `reservation_id`, `merchant_ref`, or `badan_usaha_ref` column here. This
+ * was originally written because none of those records existed in the
+ * repository (the finding recorded in the plan's §Task 2 ruling, verified
+ * 10 Aug 2026); since then the orchestration lane landed real `Order`/
+ * `Quote`/authorization records, and the reason stands for the design rather
+ * than the absence: the intent's job is the DECISION record, and the order
+ * reference it could carry travels the provider round trip instead —
+ * `payment_sessions` deliberately carries no order reference either (see
+ * `SessionState`'s doc block), and the settlement maps the provider's echoed
+ * `order_id` back to the order. Adding a column here would duplicate that
+ * routing and invite a second, contradictory linkage. What IS recorded is
+ * only what is truthfully known at evaluation time: the amount the caller
+ * asked to charge, the server-resolved payment mode, the decision, and which
+ * condition(s) produced it.
  *
  * ---------------------------------------------------------------------------
  * Append-only
@@ -78,8 +86,11 @@ return new class extends Migration
             // mode actually was when the decision was taken.
             $table->string('payment_mode', 32);
 
-            // `PaymentIntentDecision` — CHECK-constrained below to 'denied'
-            // only. See that enum's doc block for why 'allowed' is absent.
+            // `PaymentIntentDecision` — CHECK-constrained below to the enum's
+            // full `::values()` set: `denied` for guard denials, `allowed`
+            // for the session-opening rows `Actions\OpenPaymentSession`
+            // writes since the online-payment gateway task (see that enum's
+            // doc block for the widening's history).
             $table->string('decision', 16);
 
             // The FIRST failing condition in design.md's fixed order, its
@@ -92,8 +103,9 @@ return new class extends Migration
 
             // EVERY failing condition, in evaluation order — a JSON list of
             // `GuardCondition` values. design.md §Observability wants "guard
-            // denial reasons" plural; with five conditions unconditionally
-            // denied today, reporting only the first would hide the rest.
+            // denial reasons" plural; the guard evaluates all six conditions
+            // rather than short-circuiting at the first failure, so
+            // reporting only the first would hide the rest.
             $table->json('denied_conditions')->nullable();
 
             // The public-safe explanation returned to the caller. Names a

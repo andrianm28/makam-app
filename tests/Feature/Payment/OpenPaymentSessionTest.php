@@ -27,6 +27,7 @@ use App\Platform\Payment\Actions\OpenPaymentSessionCommand;
 use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutProviderException;
 use App\Platform\Payment\Exceptions\PaymentSessionMerchantMismatchException;
 use App\Platform\Payment\Exceptions\PaymentSessionOpeningDeniedException;
+use App\Platform\Payment\Exceptions\PaymentSessionOrderAlreadyPaidException;
 use App\Platform\Payment\Exceptions\PaymentSessionOrderNotFoundException;
 use App\Platform\Payment\Exceptions\PaymentSessionOrderTypeNotSupportedException;
 use App\Platform\Payment\Models\PaymentIntent;
@@ -89,9 +90,11 @@ final class OpenPaymentSessionTest extends TestCase
         $this->fakeProviderResponse([
             'payment_id' => 'uuid-1',
             'order_id' => 'MK-ORD-1',
-            'amount' => 1_500_000_00,
-            'fee' => 38800,
-            'net_amount' => 1_499_612_00,
+            // Whole rupiah — the provider's wire unit (Rp 1.500.000), never
+            // the 150_000_000 minor units the session snapshot holds.
+            'amount' => 1_500_000,
+            'fee' => 38_800,
+            'net_amount' => 1_461_200,
             'payment_link_url' => 'https://checkout.sumopod.com/x',
             'status' => 'pending',
         ]);
@@ -347,6 +350,45 @@ final class OpenPaymentSessionTest extends TestCase
         $this->assertSame(0, PaymentSession::query()->count());
         $this->assertSame(0, PaymentIntent::query()->count());
         Http::assertNothingSent();
+    }
+
+    /**
+     * Whole-branch review finding I-1 regression: a DIBAYAR order satisfies
+     * all six guard conditions, so without this precondition a resumed
+     * wizard could open a SECOND session and collect a second payment that
+     * `ApplyPaidEffects` would silently swallow. The opening must be refused
+     * before the guard, before any provider call, and the refusal must be
+     * audited so an operator can see the attempt.
+     */
+    public function test_an_already_paid_order_cannot_open_a_new_session(): void
+    {
+        $this->guardWithPaymentGate(open: true);
+        $order = $this->makeOrder(OrderStatus::DIBAYAR);
+        $this->acceptedQuote($order);
+        $user = $this->adminActor();
+        $this->grantOrderScope((string) $user->id, $order);
+        Http::fake();
+
+        try {
+            app(OpenPaymentSession::class)($this->command());
+            $this->fail('Expected PaymentSessionOrderAlreadyPaidException to be thrown.');
+        } catch (PaymentSessionOrderAlreadyPaidException $exception) {
+            $this->assertStringContainsString('MK-ORD-1', $exception->getMessage());
+        }
+
+        // No session, no intent (the refusal precedes the guard, so it is
+        // not a guard evaluation), and no provider call.
+        $this->assertSame(0, PaymentSession::query()->count());
+        $this->assertSame(0, PaymentIntent::query()->count());
+        Http::assertNothingSent();
+
+        // The refusal is audited: subject = the order, outcome denied.
+        $audit = AuditEvent::query()
+            ->where('action', PaymentAuditActions::SESSION_OPENING_REFUSED)
+            ->sole();
+        $this->assertSame('order', $audit->subject_type);
+        $this->assertSame((string) $order->getKey(), $audit->subject_id);
+        $this->assertSame('denied', $audit->outcome);
     }
 
     public function test_a_provider_failure_leaves_no_intent_and_no_session(): void

@@ -8,12 +8,18 @@ use App\Domain\Marketplace\Actions\MarkMarketplaceOrderPaid;
 use App\Domain\Marketplace\Models\MarketplaceOrder;
 use App\Domain\OrderWorkflow\Actions\ApplyPaidEffects;
 use App\Domain\OrderWorkflow\Models\Order;
+use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\OrderWorkflow\PaidTrigger;
 use App\Domain\OrderWorkflow\PaidTriggerSource;
+use App\Platform\Audit\Audit;
+use App\Platform\Audit\AuditOutcome;
+use App\Platform\Audit\AuditSource;
+use App\Platform\Audit\AuditSubject;
 use App\Platform\FinancialLedger\Money;
 use App\Platform\Payment\Exceptions\SettlementTargetUnresolvableException;
 use App\Platform\Payment\Models\PaymentSession;
 use App\Platform\Payment\Models\ProviderEvent;
+use App\Platform\Payment\PaymentAuditActions;
 use App\Platform\Payment\ProviderEventType;
 use App\Platform\Payment\SessionState;
 use Carbon\CarbonImmutable;
@@ -229,7 +235,46 @@ final readonly class ApplyPaymentSettlement
             actorRole: 'provider',
         );
 
-        app(ApplyPaidEffects::class)($order, $trigger);
+        $order = app(ApplyPaidEffects::class)($order, $trigger);
+
+        // Duplicate-arrival detection (whole-branch review fix wave): the
+        // claim guarantees this (provider, transaction) pair is new, so an
+        // order that is DIBAYAR with a paid source OTHER than this event's
+        // transaction was paid by an earlier, independent payment — a second
+        // charge that must surface at reconciliation, never silently
+        // swallowed by `ApplyPaidEffects::alreadyPaid()`.
+        if ($order->status === OrderStatus::DIBAYAR->value
+            && (string) $order->paid_source_ref !== (string) $event->provider_transaction_id) {
+            $this->recordDuplicateArrival($event);
+        }
+    }
+
+    /**
+     * A duplicate payment arrival is a financial-integrity event: a second,
+     * independent provider transaction paid an order an earlier transaction
+     * already paid. The trail an operator reads, in the same shape
+     * `ProcessWebhookEvent::auditSettlementConflict()` established: subject =
+     * the `provider_events` row (which carries the provider transaction id —
+     * the id itself is a provider payload value and stays out of the audit
+     * row, AC14), `note` closed-list only, no authenticated actor (a provider
+     * holds no credential of ours).
+     *
+     * Runs inside the caller's claim transaction, so this record commits
+     * atomically with the claim — a duplicate arrival can never be
+     * acknowledged without its record.
+     */
+    private function recordDuplicateArrival(ProviderEvent $event): void
+    {
+        Audit::record(
+            action: PaymentAuditActions::DUPLICATE_ARRIVAL,
+            subject: new AuditSubject('provider_event', (string) $event->getKey()),
+            outcome: AuditOutcome::Denied,
+            actorRef: null,
+            actorRole: 'provider',
+            source: AuditSource::Api,
+            correlationId: $event->correlation_id,
+            metadata: ['note' => 'duplicate payment arrival; order already paid by an earlier transaction'],
+        );
     }
 
     private function settleMarketplace(MarketplaceOrder $order, ProviderEvent $event, PaymentSession $session): void
