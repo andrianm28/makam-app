@@ -16,11 +16,16 @@ use App\Domain\Booking\Exceptions\BookingStepValidationException;
 use App\Domain\Booking\Models\BookingDraft;
 use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
-use App\Domain\OrderWorkflow\Models\Order;
+use App\Domain\OrderWorkflow\Actions\SubmitBookingDraft;
+use App\Domain\OrderWorkflow\Exceptions\UnroutableProductTypeException;
+use App\Domain\Quotation\Actions\ComposeQuoteLinesFromBookingDraft;
+use App\Domain\Quotation\Actions\IssueQuote;
+use App\Domain\Quotation\Exceptions\UnpricedBookingServiceException;
 use App\Domain\Quotation\Models\Quote;
 use App\Domain\ServiceCatalog\ServiceCatalogQuery;
 use App\Domain\ServiceCatalog\ServiceCode;
 use App\Platform\FeatureGate\ModeResolver;
+use App\Platform\IdentityAccess\ActorContextResolver;
 use App\Platform\Payment\Actions\OpenPaymentSession;
 use App\Platform\Payment\Actions\OpenPaymentSessionCommand;
 use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutProviderException;
@@ -33,6 +38,7 @@ use App\Platform\Payment\SessionState;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
 use Throwable;
@@ -407,23 +413,35 @@ final class BookingWizard extends Component
 
     /**
      * Step 8's ONLINE branch (only rendered when `G-PAY-01` is open): persist
-     * the online method choice, then open the hosted-checkout session for
-     * the draft's ORDER and the accepted-quote total, and redirect the
-     * customer to the provider's checkout link.
+     * the online method choice, run the submission chain — submit the draft
+     * as an Order, ensure a current Quote exists, then open the hosted
+     * checkout for the quote total — and redirect the customer to the
+     * provider's checkout link.
      *
      * ---------------------------------------------------------------------------
-     * Order resolution — the wizard never fabricates an order
+     * Order/quote resolution — the P0 submission chain
      * ---------------------------------------------------------------------------
-     * The wizard resolves the order from the draft via `orders.
-     * booking_draft_id` and REFUSES to create one: Step 9's own copy states
-     * "Pesanan Anda belum dibuat secara resmi" — order creation is the
-     * operator-side journey's act (confirmation, quote, authorization), and
-     * `AGENTS.md` §Domain and financial invariants forbids a payment before
-     * valid confirmation/reservation, an accepted quote, and an authorized
-     * opening. A draft with no order yet (the common case at Step 8 today)
-     * fails closed with the manual path as the live alternative; the guard
-     * evaluates the rest (`OpenPaymentSession` is the only creation path,
-     * and all six conditions must hold).
+     * `SubmitBookingDraft` turns the draft into a commercial order,
+     * idempotently on the draft-scoped key `booking:{draft}:submit` (a
+     * re-click returns the SAME order; the database unique index is the
+     * backstop), and routes it by product type (At-Need opens a
+     * `FuneralCase`, Pre-Need registers interest). The quote is issued by
+     * the wizard ONLY when the order has none yet — an operator-issued
+     * quote from the off-screen confirmation journey always wins via
+     * `Quote::currentFor()`. Quote lines are composed from the draft's
+     * selected services through `ComposeQuoteLinesFromBookingDraft` (the
+     * same `currentPriceVersion()` seam Step 5's summary prices with), so
+     * the amount snapshot is exactly what the customer saw; a service with
+     * no current price fails closed honestly rather than quoting a
+     * fabricated amount.
+     *
+     * The six-condition guard then evaluates the REAL created state
+     * (`OpenPaymentSession` is still the only path to a session). For a
+     * freshly submitted order — confirmation, quote acceptance and opening
+     * authorization are operator-side acts — it denies, which lands the
+     * honest fail-closed copy with the manual path still live. The
+     * redirect happens once those upstream conditions exist and the guard
+     * passes.
      *
      * Exactly-once per journey: the opened session is remembered in the PHP
      * session under the draft id, so a double click or a resume re-points at
@@ -510,19 +528,49 @@ final class BookingWizard extends Component
             return;
         }
 
-        $order = Order::query()->where('booking_draft_id', $saved->id)->first();
+        // The submission chain: submit the draft as an idempotent order,
+        // then ensure a current quote exists before the opening attempt.
+        // Every failure lands the same honest fail-closed copy with the
+        // manual path (and the support escape) still on screen — never a 500.
+        try {
+            $order = app(SubmitBookingDraft::class)($saved, 'booking:'.$saved->id.':submit');
 
-        if (! $order instanceof Order) {
-            $this->onlinePaymentError = 'Pesanan belum dapat dibayar secara online. Tim kami akan membuat pesanan resmi dan mengirimkan penawaran harga sebelum pembayaran dapat dibuka. Gunakan pembayaran manual atau hubungi dukungan.';
+            $quote = Quote::currentFor($order);
+
+            if (! $quote instanceof Quote) {
+                // The quote's actor context comes from the same seam
+                // `OpenPaymentSession` reads (`ActorContextResolver`); an
+                // anonymous submission names the draft, mirroring
+                // `SubmitBookingDraft`'s own initial-event reference — the
+                // only stable, non-identifying reference that exists here.
+                $actor = app(ActorContextResolver::class)->resolve();
+
+                $quote = (new IssueQuote)(
+                    $order,
+                    (new ComposeQuoteLinesFromBookingDraft)($saved),
+                    now()->addDays(7),
+                    $actor->identityReference !== null
+                        ? (string) $actor->identityReference
+                        : 'booking_draft:'.$saved->id,
+                    $actor->isAuthenticated() ? 'customer' : 'guest',
+                );
+            }
+        } catch (UnpricedBookingServiceException) {
+            $this->onlinePaymentError = 'Pembayaran online belum dapat dibuka karena harga layanan belum tersedia. Gunakan pembayaran manual atau hubungi dukungan.';
             $this->currentStep = BookingWizardStep::PAYMENT;
 
             return;
-        }
+        } catch (UnroutableProductTypeException) {
+            $this->onlinePaymentError = 'Pesanan jenis ini belum dapat dibayar secara online. Gunakan pembayaran manual atau hubungi dukungan.';
+            $this->currentStep = BookingWizardStep::PAYMENT;
 
-        $quote = Quote::currentFor($order);
-
-        if (! $quote instanceof Quote) {
-            $this->onlinePaymentError = 'Pembayaran online belum dapat dibuka saat ini karena konfirmasi pesanan, penawaran harga, atau otorisasi pembayaran belum lengkap. Gunakan pembayaran manual atau hubungi dukungan.';
+            return;
+        } catch (InvalidArgumentException) {
+            // A submission or quote-composition failure: the draft cannot be
+            // turned into a payable quote right now (no published package
+            // version to quote against, a malformed stored selection, ...).
+            // Same honest fail-closed shape as the guard's denials.
+            $this->onlinePaymentError = 'Pesanan belum dapat diproses untuk pembayaran online saat ini. Gunakan pembayaran manual atau hubungi dukungan.';
             $this->currentStep = BookingWizardStep::PAYMENT;
 
             return;

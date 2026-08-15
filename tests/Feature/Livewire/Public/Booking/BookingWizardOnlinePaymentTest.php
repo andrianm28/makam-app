@@ -9,11 +9,23 @@ use App\Domain\Booking\BookingPaymentMethod;
 use App\Domain\Booking\BookingWizardStep;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\OrderWorkflow\Actions\ApplyPaidEffects;
+use App\Domain\OrderWorkflow\Actions\RecordOrderStatusChange;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\OrderStatus;
+use App\Domain\OrderWorkflow\PaidTrigger;
+use App\Domain\OrderWorkflow\PaidTriggerSource;
 use App\Domain\OrderWorkflow\ProductType;
+use App\Domain\Quotation\Actions\AcceptQuote;
 use App\Domain\Quotation\Models\Quote;
 use App\Domain\Quotation\QuoteStatus;
+use App\Domain\ServiceCatalog\Actions\DefineServicePackage;
+use App\Domain\ServiceCatalog\Actions\PublishServicePackageVersion;
+use App\Domain\ServiceCatalog\FulfillmentOwner;
+use App\Domain\ServiceCatalog\Models\ServiceDefinition;
+use App\Domain\ServiceCatalog\Models\ServicePackageVersion;
+use App\Domain\ServiceCatalog\ServiceCode;
+use App\Domain\ServiceCatalog\ServicePackageItemType;
 use App\Livewire\Public\Booking\BookingWizard;
 use App\Models\User;
 use App\Platform\FeatureGate\Contracts\GateRegistrySource;
@@ -22,6 +34,7 @@ use App\Platform\FeatureGate\GateRegistrySnapshot;
 use App\Platform\FeatureGate\GateState;
 use App\Platform\FeatureGate\ModeResolver;
 use App\Platform\FeatureGate\Modes\PaymentMode;
+use App\Platform\FinancialLedger\Money;
 use App\Platform\IdentityAccess\ActorContextResolver;
 use App\Platform\IdentityAccess\Roles\Actions\GrantActorRole;
 use App\Platform\IdentityAccess\Roles\ActorRole;
@@ -38,24 +51,31 @@ use App\Platform\Payment\SessionState;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
- * Task 6's booking Step 8 online branch: when `G-PAY-01` is open (dev), the
- * Step 8 online option calls `OpenPaymentSession` with the draft's order and
- * the accepted-quote total, then redirects the customer to the hosted
- * checkout. The gate-closed behaviour is untouched (the manual fallback is
- * covered by the existing suites, which must stay green).
+ * Task 6's booking Step 8 online branch, on the P0 submission chain: when
+ * `G-PAY-01` is open (dev), the Step 8 online option submits the draft as an
+ * idempotent Order (`SubmitBookingDraft`), issues a current Quote when the
+ * order has none (`ComposeQuoteLinesFromBookingDraft` -> `IssueQuote`), then
+ * calls `OpenPaymentSession` with the quote total and redirects the customer
+ * to the hosted checkout. The gate-closed behaviour is untouched (the
+ * manual fallback is covered by the existing suites, which must stay
+ * green).
  *
- * The happy path needs every one of the six guard conditions satisfied —
- * confirmed order, accepted unexpired quote, authorized opener with an
- * ORDER-scope grant, matching amount, bound merchant, open gate — exactly as
- * `OpenPaymentSessionTest` arranges them. A real customer at Step 8 will
- * usually NOT hold those yet (the operator-side quote/confirmation journey
- * happens off-screen); those journeys surface the honest fail-closed states
- * asserted below.
+ * The six-condition guard's preconditions — confirmed order, accepted
+ * unexpired quote, authorized opener with an ORDER-scope grant, matching
+ * amount, bound merchant, open gate — are operator-side acts (the
+ * off-screen confirmation journey), so a customer's first click on a fresh
+ * draft creates the order and its quote and then fails closed honestly;
+ * the redirect happens once those prerequisites exist. The fixtures below
+ * arrange exactly that: the wizard's chain creates order + quote, then
+ * `operatorCompletes()` walks the real status transitions, accepts the
+ * quote and grants the ORDER scope — exactly as `OpenPaymentSessionTest`
+ * arranges the same preconditions.
  */
 final class BookingWizardOnlinePaymentTest extends TestCase
 {
@@ -81,9 +101,16 @@ final class BookingWizardOnlinePaymentTest extends TestCase
     /**
      * Drive the component's own save methods through Steps 1-7 so the draft
      * is bound to this test session exactly as a real journey's is, ending on
-     * Step 8 (PAYMENT).
+     * Step 8 (PAYMENT). `$services` selects Step 4's services — the two
+     * seeded BASIC services by default, plus any additional ones a test
+     * needs (Step 4 validation always requires the basics).
+     *
+     * @param  list<array{code: string, quantity: int}>  $services
      */
-    private function journeyToStepEight(): Testable
+    private function journeyToStepEight(array $services = [
+        ['code' => 'DOCUMENT_PROCESSING', 'quantity' => 1],
+        ['code' => 'GRAVE_DIGGING', 'quantity' => 1],
+    ]): Testable
     {
         $cemetery = Cemetery::query()
             ->where('city', LaunchCityCode::JAKARTA)
@@ -95,10 +122,7 @@ final class BookingWizardOnlinePaymentTest extends TestCase
             ->call('saveStep1', LaunchCityCode::JAKARTA)
             ->call('saveStep2', $cemetery->id)
             ->call('saveStep3', 'NEW_GRAVE')
-            ->call('saveStep4', [
-                ['code' => 'DOCUMENT_PROCESSING', 'quantity' => 1],
-                ['code' => 'GRAVE_DIGGING', 'quantity' => 1],
-            ])
+            ->call('saveStep4', $services)
             ->call('goToStep', BookingWizardStep::CUSTOMER_DATA)
             ->set('customerFullName', 'Test User')
             ->set('customerMobile', '081234567890')
@@ -115,6 +139,140 @@ final class BookingWizardOnlinePaymentTest extends TestCase
             ->set('deceasedGender', 'LAKI_LAKI')
             ->call('saveStep7')
             ->assertSet('currentStep', BookingWizardStep::PAYMENT);
+    }
+
+    /**
+     * The wizard's chain resolves quote lines against a PUBLISHED package
+     * version (`IssueQuote` refuses anything that is not frozen), so every
+     * flow test publishes one package whose items carry the selected
+     * services — the same `DefineServicePackage` + `PublishServicePackageVersion`
+     * path `IssueQuoteTest` uses.
+     *
+     * @param  list<string>  $codes
+     */
+    private function publishedPackageForServices(array $codes): ServicePackageVersion
+    {
+        $package = (new DefineServicePackage)(
+            code: 'PKG-'.Str::upper(Str::random(6)),
+            name: 'Paket Uji Pembayaran Online',
+            items: array_map(
+                fn (string $code): array => [
+                    'service_definition_id' => $this->serviceDefinitionId($code),
+                    'item_type' => ServicePackageItemType::INCLUDED,
+                    'quantity' => 1,
+                    'unit' => 'paket',
+                    'fulfillment_owner' => FulfillmentOwner::PLATFORM,
+                ],
+                $codes,
+            ),
+            actorReference: 7,
+        );
+
+        return (new PublishServicePackageVersion)($package->draftVersion(), actorReference: 7);
+    }
+
+    private function serviceDefinitionId(string $code): int
+    {
+        $definition = ServiceDefinition::findByCode($code);
+        $this->assertNotNull($definition);
+
+        return (int) $definition->getKey();
+    }
+
+    /**
+     * The order the wizard's chain submitted for the draft — idempotent on
+     * `booking:{draft}:submit`, so `sole()` is exactly one.
+     */
+    private function chainOrderFor(string $draftId): Order
+    {
+        return Order::query()->where('booking_draft_id', $draftId)->firstOrFail();
+    }
+
+    /**
+     * The six-condition guard's operator-side half, walked with the REAL
+     * domain Actions on the order the chain created: the status transitions
+     * MASUK -> ... -> PENAWARAN_TERKIRIM (and optionally on to
+     * MENUNGGU_PEMBAYARAN), acceptance of the current quote, and an admin
+     * actor holding the ORDER-scope grant. Never a fixture that cheats past
+     * the model guards.
+     */
+    private function operatorCompletes(Order $order, OrderStatus $target = OrderStatus::PENAWARAN_TERKIRIM): void
+    {
+        $record = app(RecordOrderStatusChange::class);
+        $record($order, OrderStatus::DIVERIFIKASI, 'actor:admin-1', 'admin');
+        $record($order, OrderStatus::MENUNGGU_KETERSEDIAAN, 'actor:admin-1', 'admin');
+        $record($order, OrderStatus::PENAWARAN_TERKIRIM, 'actor:admin-1', 'admin');
+
+        $quote = Quote::query()
+            ->where('order_id', $order->getKey())
+            ->where('status', '!=', QuoteStatus::SUPERSEDED->value)
+            ->firstOrFail();
+        app(AcceptQuote::class)($quote, 'actor:customer-1');
+
+        if ($target === OrderStatus::MENUNGGU_PEMBAYARAN) {
+            $record($order, OrderStatus::DISETUJUI_PEMESAN, 'actor:admin-1', 'admin');
+            $record($order, OrderStatus::MENUNGGU_PEMBAYARAN, 'actor:admin-1', 'admin');
+        }
+
+        $user = User::factory()->create();
+        app(GrantActorRole::class)($user->id, ActorRole::ADMIN, 'test', 1);
+
+        $this->actingAs($user);
+        $this->app->forgetInstance(ActorContextResolver::class);
+
+        ScopeAssignment::query()->create([
+            'actor_identifier' => (string) $user->id,
+            'entity_type' => ScopeEntityType::ORDER,
+            'entity_id' => $order->getKey(),
+        ]);
+    }
+
+    /**
+     * The webhook authority's paid path, applied through the real
+     * `ApplyPaidEffects` Action (the same one `ApplyPaymentSettlement`
+     * calls) — the order moves to DIBAYAR only because the paid trigger's
+     * amount matches the accepted quote total.
+     */
+    private function settleAsPaid(Order $order): void
+    {
+        $quote = Quote::query()
+            ->where('order_id', $order->getKey())
+            ->where('status', '!=', QuoteStatus::SUPERSEDED->value)
+            ->firstOrFail();
+
+        app(ApplyPaidEffects::class)($order, new PaidTrigger(
+            source: PaidTriggerSource::Webhook,
+            sourceId: 'uuid-1',
+            businessKey: 'payment:uuid-1',
+            amount: $quote->totalMinor(),
+            currency: $quote->currency,
+            occurredAt: CarbonImmutable::now(),
+            actorRef: 'actor:admin-1',
+            actorRole: 'admin',
+        ));
+    }
+
+    /**
+     * The sum of the current price versions for the given service codes —
+     * the amount the wizard's composed quote lines must add up to.
+     *
+     * @param  list<string>  $codes
+     */
+    private function expectedTotalMinor(array $codes): int
+    {
+        $total = 0;
+
+        foreach ($codes as $code) {
+            $definition = ServiceDefinition::findByCode($code);
+            $this->assertNotNull($definition);
+
+            $price = $definition->currentPriceVersion();
+            $this->assertNotNull($price);
+
+            $total += Money::fromDecimal((string) $price->amount);
+        }
+
+        return $total;
     }
 
     private function withPaymentGate(bool $open): void
@@ -230,18 +388,39 @@ final class BookingWizardOnlinePaymentTest extends TestCase
     {
         $this->withPaymentGate(open: true);
         $this->fakeProviderSuccess();
+        $this->publishedPackageForServices(['DOCUMENT_PROCESSING', 'GRAVE_DIGGING']);
 
         $draftId = $this->journeyToStepEight()->get('draftId');
-        $this->satisfiedOrderFor($draftId);
 
-        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
-            ->call('openOnlinePayment')
+        // First click: the chain submits the draft and issues its quote.
+        // The guard honestly denies a fresh submission (confirmation,
+        // acceptance and opening authorization are operator-side), so no
+        // provider call happens yet.
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
+        $component->call('openOnlinePayment');
+
+        $order = $this->chainOrderFor($draftId);
+        $this->assertSame(OrderStatus::MASUK->value, $order->status);
+
+        $quote = Quote::query()->where('order_id', $order->getKey())->sole();
+        $this->assertSame(QuoteStatus::ISSUED->value, $quote->status);
+        $this->assertSame($this->expectedTotalMinor(['DOCUMENT_PROCESSING', 'GRAVE_DIGGING']), $quote->totalMinor()->toMinorInt());
+
+        $this->assertSame(0, PaymentSession::query()->count());
+        Http::assertNothingSent();
+
+        // Operator-side prerequisites land (real transitions, real
+        // acceptance, real grant), then the re-click passes the guard and
+        // reaches the hosted checkout.
+        $this->operatorCompletes($order);
+
+        $component->call('openOnlinePayment')
             ->assertRedirect('https://checkout.sumopod.com/x');
 
         $session = PaymentSession::query()->sole();
 
         $this->assertSame(SessionState::AwaitingPayment->value, $session->state);
-        $this->assertSame(self::QUOTE_TOTAL_MINOR, $session->amount_minor);
+        $this->assertSame($quote->totalMinor()->toMinorInt(), $session->amount_minor);
         $this->assertSame(self::MERCHANT_REF, $session->merchant_ref);
         $this->assertSame('https://checkout.sumopod.com/x', $session->payment_link_url);
 
@@ -253,18 +432,38 @@ final class BookingWizardOnlinePaymentTest extends TestCase
         Http::assertSent(fn ($request): bool => str_contains($request->url(), '/api/v1/payments'));
     }
 
-    public function test_online_submit_without_an_order_fails_closed_without_calling_the_provider(): void
+    /**
+     * P0 chain behaviour: a valid draft at Step 8 with no order yet is no
+     * longer a give-up — the click CREATES the order and its quote through
+     * the chain. Payment still fails closed until the operator-side
+     * prerequisites exist, with the manual path as the live alternative.
+     */
+    public function test_online_submit_creates_order_and_quote_but_fails_closed_without_calling_the_provider(): void
     {
         $this->withPaymentGate(open: true);
         Http::fake();
+        $this->publishedPackageForServices(['DOCUMENT_PROCESSING', 'GRAVE_DIGGING']);
 
         $draftId = $this->journeyToStepEight()->get('draftId');
 
-        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
-            ->call('openOnlinePayment')
-            ->assertSet('onlinePaymentError', 'Pesanan belum dapat dibayar secara online. Tim kami akan membuat pesanan resmi dan mengirimkan penawaran harga sebelum pembayaran dapat dibuka. Gunakan pembayaran manual atau hubungi dukungan.')
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
+        $component->call('openOnlinePayment')
+            ->assertSet('onlinePaymentError', 'Pembayaran online belum dapat dibuka saat ini karena konfirmasi pesanan, penawaran harga, atau otorisasi pembayaran belum lengkap. Gunakan pembayaran manual atau hubungi dukungan.')
             ->assertSet('currentStep', BookingWizardStep::PAYMENT);
 
+        $order = $this->chainOrderFor($draftId);
+
+        $this->assertSame(1, Quote::query()->where('order_id', $order->getKey())->count());
+        $this->assertSame(0, PaymentSession::query()->count());
+        Http::assertNothingSent();
+
+        // Re-click without operator-side state: the chain is idempotent —
+        // the SAME order and quote, still honestly closed.
+        $component->call('openOnlinePayment')
+            ->assertSet('onlinePaymentError', 'Pembayaran online belum dapat dibuka saat ini karena konfirmasi pesanan, penawaran harga, atau otorisasi pembayaran belum lengkap. Gunakan pembayaran manual atau hubungi dukungan.');
+
+        $this->assertSame(1, Order::query()->where('booking_draft_id', $draftId)->count());
+        $this->assertSame(1, Quote::query()->where('order_id', $order->getKey())->count());
         $this->assertSame(0, PaymentSession::query()->count());
         Http::assertNothingSent();
     }
@@ -273,73 +472,117 @@ final class BookingWizardOnlinePaymentTest extends TestCase
      * Whole-branch review finding I-1 regression at the wizard seam: a
      * resumed wizard on an already-paid order must NOT open a second session
      * — the customer gets honest copy instead, and no provider call happens.
+     * On the P0 chain the already-paid state arises on the chain's own order:
+     * the webhook authority settles it (DIBAYAR), and the idempotent re-click
+     * resolves to that same order.
      */
     public function test_online_submit_on_an_already_paid_order_is_refused_without_opening_a_second_session(): void
     {
         $this->withPaymentGate(open: true);
         Http::fake();
+        $this->publishedPackageForServices(['DOCUMENT_PROCESSING', 'GRAVE_DIGGING']);
 
         $draftId = $this->journeyToStepEight()->get('draftId');
-        $this->satisfiedOrderFor($draftId, OrderStatus::DIBAYAR);
 
-        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
-            ->call('openOnlinePayment')
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
+        $component->call('openOnlinePayment');
+
+        $order = $this->chainOrderFor($draftId);
+        $this->operatorCompletes($order, OrderStatus::MENUNGGU_PEMBAYARAN);
+        $this->settleAsPaid($order);
+
+        $component->call('openOnlinePayment')
             ->assertSet('onlinePaymentError', 'Pesanan ini telah dibayar dan tidak perlu dibayar lagi.')
             ->assertSet('currentStep', BookingWizardStep::PAYMENT);
 
         $this->assertSame(0, PaymentSession::query()->count());
+        $this->assertSame(OrderStatus::DIBAYAR->value, $order->fresh()->status);
         Http::assertNothingSent();
     }
 
+    /**
+     * The chain's own freshly-submitted order is unconfirmed (MASUK) and its
+     * quote is issued but not accepted — the guard must evaluate that REAL
+     * state and deny, recording a denial intent and never calling the
+     * provider. The old fixture that pre-created a second MASUK order is
+     * gone: the chain IS the order's only creation path on this screen, so
+     * exactly one exists.
+     */
     public function test_online_submit_for_an_unconfirmed_order_is_denied_without_calling_the_provider(): void
     {
         $this->withPaymentGate(open: true);
         Http::fake();
+        $this->publishedPackageForServices(['DOCUMENT_PROCESSING', 'GRAVE_DIGGING']);
 
         $draftId = $this->journeyToStepEight()->get('draftId');
-
-        Order::query()->create([
-            'reference' => 'MK-ORD-1',
-            'product_type' => ProductType::AT_NEED_SERVICE_ORDER->value,
-            'status' => OrderStatus::MASUK->value,
-            'booking_draft_id' => $draftId,
-        ]);
 
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->call('openOnlinePayment')
             ->assertSet('onlinePaymentError', 'Pembayaran online belum dapat dibuka saat ini karena konfirmasi pesanan, penawaran harga, atau otorisasi pembayaran belum lengkap. Gunakan pembayaran manual atau hubungi dukungan.')
             ->assertSet('currentStep', BookingWizardStep::PAYMENT);
 
+        $this->assertSame(1, Order::query()->where('booking_draft_id', $draftId)->count());
+        $this->assertSame(OrderStatus::MASUK->value, $this->chainOrderFor($draftId)->status);
+
+        // The guard's denied evaluation is recorded — the denial is a real,
+        // audited decision, never a silent no-op.
+        $this->assertSame(
+            PaymentIntentDecision::Denied->value,
+            PaymentIntent::query()->sole()->decision,
+        );
         $this->assertSame(0, PaymentSession::query()->count());
         Http::assertNothingSent();
     }
 
-    public function test_a_second_online_submit_does_not_open_a_second_session(): void
+    /**
+     * One journey, three clicks: the first submits the chain (one denied
+     * evaluation), the second opens the session after the operator-side
+     * prerequisites land, and the third re-points at the stored session.
+     * Exactly ONE order (idempotency key), ONE quote (version 1) and ONE
+     * session come out of it — never a duplicate write anywhere in the
+     * chain.
+     */
+    public function test_reclicking_bayar_sekarang_is_idempotent(): void
     {
         $this->withPaymentGate(open: true);
         $this->fakeProviderSuccess();
+        $this->publishedPackageForServices(['DOCUMENT_PROCESSING', 'GRAVE_DIGGING']);
 
         $draftId = $this->journeyToStepEight()->get('draftId');
-        $this->satisfiedOrderFor($draftId);
 
         $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
         $component->call('openOnlinePayment');
-        $component->call('openOnlinePayment');
 
+        $order = $this->chainOrderFor($draftId);
+        $this->operatorCompletes($order);
+
+        $component->call('openOnlinePayment')
+            ->assertRedirect('https://checkout.sumopod.com/x');
+        $component->call('openOnlinePayment')
+            ->assertRedirect('https://checkout.sumopod.com/x');
+
+        $this->assertSame(1, Order::query()->where('booking_draft_id', $draftId)->count());
+        $this->assertSame(1, Quote::query()->where('order_id', $order->getKey())->count());
+        $this->assertSame(1, Quote::query()->where('order_id', $order->getKey())->where('version_number', 1)->count());
         $this->assertSame(1, PaymentSession::query()->count());
-        $this->assertSame(1, PaymentIntent::query()->count());
+        $this->assertSame(
+            1,
+            PaymentIntent::query()->where('decision', PaymentIntentDecision::Allowed->value)->count(),
+        );
     }
 
     public function test_the_wizard_renders_the_webhook_driven_state_after_return(): void
     {
         $this->withPaymentGate(open: true);
         $this->fakeProviderSuccess();
+        $this->publishedPackageForServices(['DOCUMENT_PROCESSING', 'GRAVE_DIGGING']);
 
         $draftId = $this->journeyToStepEight()->get('draftId');
-        $this->satisfiedOrderFor($draftId);
 
-        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
-            ->call('openOnlinePayment');
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
+        $component->call('openOnlinePayment');
+        $this->operatorCompletes($this->chainOrderFor($draftId));
+        $component->call('openOnlinePayment');
 
         // The webhook — not the browser return — moved the session terminal.
         // This lane's wiring is proven by WebhookPaidEffectsTest; here the
@@ -361,6 +604,76 @@ final class BookingWizardOnlinePaymentTest extends TestCase
             ->assertDontSee('Bayar Sekarang')
             ->call('saveStep8', BookingPaymentMethod::ONLINE)
             ->assertHasErrors(['payment_method']);
+    }
+
+    /**
+     * P0 chain fail-closed: a selected service whose price was superseded
+     * (the Step 5 "harga belum tersedia" state) must not produce a quote
+     * with a fabricated amount — the honest copy lands, no session is
+     * opened, no provider call happens, and the manual fallback stays on
+     * screen. The submission itself (the order at MASUK) is a legitimate
+     * `SubmitBookingDraft` result; only the quote was impossible.
+     */
+    public function test_an_unpriced_service_fails_closed_and_keeps_the_manual_path(): void
+    {
+        $this->withPaymentGate(open: true);
+        Http::fake();
+        $this->publishedPackageForServices(['DOCUMENT_PROCESSING', 'GRAVE_DIGGING']);
+
+        // FLOWERS' seeded price is superseded — the one legal price-version
+        // mutation — so the service now has no current price to quote.
+        $flowers = ServiceDefinition::findByCode(ServiceCode::FLOWERS);
+        $this->assertNotNull($flowers);
+        $flowersPrice = $flowers->currentPriceVersion();
+        $this->assertNotNull($flowersPrice);
+        $flowersPrice->forceFill(['superseded_at' => CarbonImmutable::now()])->save();
+
+        $draftId = $this->journeyToStepEight([
+            ['code' => 'DOCUMENT_PROCESSING', 'quantity' => 1],
+            ['code' => 'GRAVE_DIGGING', 'quantity' => 1],
+            ['code' => 'FLOWERS', 'quantity' => 1],
+        ])->get('draftId');
+
+        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->call('openOnlinePayment')
+            ->assertSet('onlinePaymentError', 'Pembayaran online belum dapat dibuka karena harga layanan belum tersedia. Gunakan pembayaran manual atau hubungi dukungan.')
+            ->assertSet('currentStep', BookingWizardStep::PAYMENT)
+            ->assertSee('Pembayaran Manual');
+
+        $this->assertSame(1, Order::query()->where('booking_draft_id', $draftId)->count());
+        $this->assertSame(0, Quote::query()->count());
+        $this->assertSame(0, PaymentSession::query()->count());
+        Http::assertNothingSent();
+    }
+
+    /**
+     * The wizard's provider-failure catch, on the chain: with the operator
+     * prerequisites in place the guard passes, and a provider refusal then
+     * surfaces the "layanan tidak tersedia" copy with the manual path still
+     * live — no session is recorded for an aborted opening.
+     */
+    public function test_a_provider_failure_fails_closed_and_keeps_the_manual_path(): void
+    {
+        $this->withPaymentGate(open: true);
+        $this->publishedPackageForServices(['DOCUMENT_PROCESSING', 'GRAVE_DIGGING']);
+
+        $draftId = $this->journeyToStepEight()->get('draftId');
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
+        $component->call('openOnlinePayment');
+        $this->operatorCompletes($this->chainOrderFor($draftId));
+
+        Http::fake([
+            'api-pay-sandbox.sumopod.com/api/v1/payments' => Http::response(['error' => 'bad'], 400),
+        ]);
+
+        $component->call('openOnlinePayment')
+            ->assertSet('onlinePaymentError', 'Layanan pembayaran online sedang tidak tersedia. Silakan coba lagi atau gunakan pembayaran manual.')
+            ->assertSet('currentStep', BookingWizardStep::PAYMENT)
+            ->assertSee('Pembayaran Manual');
+
+        $this->assertSame(0, PaymentSession::query()->count());
+        $this->assertSame(0, PaymentIntent::query()->where('decision', PaymentIntentDecision::Allowed->value)->count());
     }
 
     public function test_the_return_page_shows_the_webhook_driven_state_without_marking_paid(): void
