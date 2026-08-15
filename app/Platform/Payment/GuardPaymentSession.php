@@ -28,43 +28,44 @@ use Carbon\CarbonImmutable;
  * returns an explanatory result, never a silent no-op."
  *
  * ---------------------------------------------------------------------------
- * DENY-ONLY — Wave 1b ruling 1b-L3-01 (approved 10 Aug 2026)
+ * DENY-ONLY is over; the six conditions are all real (Task 6 + the gateway)
  * ---------------------------------------------------------------------------
- * Read the ruling in `docs/superpowers/plans/2026-08-09-platform-payment-
- * adapter.md` §Task 2 before changing anything here. Its finding, verified
- * against this repository: exactly ONE of the six conditions had an
- * authoritative upstream record at the time of the ruling.
+ * Wave 1b ruling 1b-L3-01 (approved 10 Aug 2026) shipped this guard deny-only
+ * because exactly ONE of the six conditions had an authoritative upstream
+ * record. The ruling's instruction for downstream tasks meeting the wall was
+ * to escalate — and the online-payment gateway design
+ * (`docs/superpowers/specs/2026-08-14-online-payment-integration-design.md`,
+ * human-approved) is that escalation's resolution for condition 6:
  *
- * | # | Condition                              | Status (post-Task-6)             |
- * |---|----------------------------------------|-----------------------------------|
+ * | # | Condition                              | Status (post-gateway)                    |
+ * |---|----------------------------------------|------------------------------------------|
  * | 1 | product gate / server-resolved mode    | REAL — `ModeResolver::paymentMode()`, gate `G-PAY-01` |
  * | 2 | confirmation valid OR reservation active | REAL — `Order::status` membership |
  * | 3 | quote accepted and unexpired           | REAL — `Quote::currentFor()` + `isAcceptedAndUnexpired()` |
  * | 4 | authorized opening                     | REAL — `AuthorizeOrderPaymentOpening` |
  * | 5 | amount == quote total                  | REAL — integer minor-unit comparison |
- * | 6 | merchant + `badan_usaha` bound        | UNAVAILABLE — `FIN-DEC-01` TBD   |
+ * | 6 | merchant + `badan_usaha` bound        | REAL — `config('payment.merchant_ref')` + `config('payment.badan_usaha_ref')` (FIN-DEC-01 provisioning, empty → denies) |
  *
- * Conditions 2-5 are REAL as of Task 6 (2026-08-12). Each denies with a
- * genuine `DomainDenied` when its record is missing or unsatisfied.
- * Condition 6 alone retains `UnavailableUpstream` because the merchant/
- * `badan_usaha` binding cannot exist while financial decision `FIN-DEC-01`
- * is `TBD`.
+ * Condition 6 is now config-evaluated: the merchant/`badan_usaha` binding is
+ * the FIN-DEC-01 provisioning channel the design names ("condition 6's
+ * merchant binding becomes real via config", "merchant ref from config").
+ * When both config values are non-blank the binding exists and the condition
+ * holds; when either is blank the binding does not exist and the condition
+ * denies with `UnavailableUpstream` exactly as it did under the ruling.
  *
- * There is consequently NO pass path and no `CreatePaymentSession` — see
- * `GuardResult` (no allowed factory) and `Models\PaymentSession` (refuses to
- * insert). The ruling's instruction when downstream tasks hit this wall is to
- * escalate, not to widen scope or stub the upstream.
+ * The deny-only posture still holds for production: `G-PAY-01` stays closed
+ * there, so condition 1 denies before anything else can pass. A pass requires
+ * ALL six to hold — the gate open AND the merchant bound AND a confirmed
+ * order AND an accepted unexpired quote AND an authorized opener AND a
+ * matching amount.
  *
  * ---------------------------------------------------------------------------
  * All six conditions are evaluated, not short-circuited at the first failure
  * ---------------------------------------------------------------------------
  * design.md requires all six to hold, so no information is lost by
- * continuing past a failure — and a great deal is gained. With condition 2
- * unconditionally denied today, a fail-fast guard would make conditions 3-6
- * permanently unreachable and untestable, and design.md §Observability's
- * "guard denial reasons" would only ever show one. `GuardResult` reports the
- * first failure in design.md's fixed order as the primary denial and carries
- * the whole list.
+ * continuing past a failure — and a great deal is gained. `GuardResult`
+ * reports the first failure in design.md's fixed order as the primary denial
+ * and carries the whole list.
  *
  * ---------------------------------------------------------------------------
  * The payment mode is server-resolved at evaluation time (AC1)
@@ -74,6 +75,21 @@ use Carbon\CarbonImmutable;
  * `PaymentMode`, a mode name, or a gate state, so no request input, no
  * caller, and no config value can select it. `GuardPaymentSessionTest`
  * asserts that by reflection, not by convention.
+ *
+ * ---------------------------------------------------------------------------
+ * What an ALLOWED evaluation records — nothing, deliberately
+ * ---------------------------------------------------------------------------
+ * Every DENIED evaluation writes one `payment_intents` row plus its
+ * `PAYMENT_GUARD_DENIED` audit event, in one transaction (ruling 1b-L3-01
+ * Step 3's accounting, unchanged). An ALLOWED evaluation writes nothing
+ * here: the decision record for an allowed opening is written by
+ * `Actions\OpenPaymentSession` — the guard's only caller — atomically with
+ * the session it authorizes (intent + session + `PAYMENT_SESSION_OPENED`
+ * audit in one transaction), so an opening can never exist without its
+ * Allowed intent and vice versa. If the provider call fails before that
+ * write, no decision record exists because the authorization was never used
+ * — the exception IS the record. Moving the Allowed-intent write back into
+ * this class would split the pair across two transactions.
  */
 final readonly class GuardPaymentSession
 {
@@ -103,19 +119,22 @@ final readonly class GuardPaymentSession
     /**
      * Evaluate the guard and record the decision.
      *
-     * Writes exactly one `payment_intents` row per call (ruling 1b-L3-01
-     * Step 3: "Every guard evaluation — pass or deny — writes a
-     * `payment_intents` decision record"), and, because every evaluation is
-     * a denial, one `PAYMENT_GUARD_DENIED` audit event with
-     * `AuditOutcome::Denied`, in the SAME transaction as the intent row
-     * (`Audit::wrap`).
+     * A DENIED evaluation writes exactly one `payment_intents` row
+     * (ruling 1b-L3-01 Step 3: "Every guard evaluation — pass or deny —
+     * writes a `payment_intents` decision record") and one
+     * `PAYMENT_GUARD_DENIED` audit event with `AuditOutcome::Denied`, in the
+     * SAME transaction as the intent row (`Audit::wrap`). An ALLOWED
+     * evaluation writes nothing here — see the class doc block: its decision
+     * record is written by `Actions\OpenPaymentSession` atomically with the
+     * session it authorizes.
      *
      * @param  Order  $order  The order to evaluate payment-opening conditions against.
      * @param  Money  $requestedAmount  What the caller wants to charge, in
      *                                  integer minor units. Typed as `Money` so no float can enter the
      *                                  money path (Wave 0 ruling 0c); `Money` itself is owned by the
      *                                  financial-ledger lane and consumed here read-only.
-     * @return GuardResult always a denial — see the class doc block.
+     * @return GuardResult allowed() when all six conditions hold, otherwise a
+     *                     denial — see the class doc block.
      */
     public function __invoke(Order $order, Money $requestedAmount): GuardResult
     {
@@ -133,11 +152,13 @@ final readonly class GuardPaymentSession
             }
         }
 
-        // `GuardResult::denied()` throws on an empty list. That is the
-        // backstop, not an expected branch: condition 6 always denies
-        // (`UnavailableUpstream`), so `$denials` cannot be empty. If a future
-        // edit ever makes it empty, this fails loudly instead of silently
-        // returning something a caller could read as a pass.
+        // All six held. Nothing is recorded here — see the class doc block
+        // for why the allowed decision record belongs to the session-opening
+        // caller instead.
+        if ($denials === []) {
+            return GuardResult::allowed();
+        }
+
         $result = GuardResult::denied($denials);
 
         $this->record($result, $requestedAmount, $mode, $actor);
@@ -191,15 +212,33 @@ final readonly class GuardPaymentSession
             // must be strictly positive.
             GuardCondition::AmountMatchesQuoteTotal => $this->conditionFive($condition, $currentQuote, $requestedAmount),
 
-            // Condition 6 — UNAVAILABLE. The merchant/`badan_usaha` binding
-            // cannot be built while financial decision `FIN-DEC-01` is `TBD`.
-            GuardCondition::MerchantAndBadanUsahaBound => new ConditionDenial(
-                condition: $condition,
-                reason: GuardDenialReason::UnavailableUpstream,
-                publicMessage: 'Payment cannot be started because the merchant and business-entity binding is not available (FIN-DEC-01 pending).',
-                missingUpstream: 'Merchant|BadanUsaha (FIN-DEC-01)',
-            ),
+            // Condition 6 — REAL. The merchant/`badan_usaha` binding is the
+            // FIN-DEC-01 provisioning channel the approved gateway design
+            // makes real via config: when both refs are configured the
+            // binding exists and the condition holds; when either is blank
+            // it does not, and the denial keeps the ruling's
+            // `UnavailableUpstream` shape (`FIN-DEC-01` pending). Production
+            // never reaches this condition's pass side anyway — condition 1
+            // denies while `G-PAY-01` is closed.
+            GuardCondition::MerchantAndBadanUsahaBound => $this->conditionSix($condition),
         };
+    }
+
+    private function conditionSix(GuardCondition $condition): ?ConditionDenial
+    {
+        $merchantRef = trim((string) config('payment.merchant_ref', ''));
+        $badanUsahaRef = trim((string) config('payment.badan_usaha_ref', ''));
+
+        if ($merchantRef !== '' && $badanUsahaRef !== '') {
+            return null;
+        }
+
+        return new ConditionDenial(
+            condition: $condition,
+            reason: GuardDenialReason::UnavailableUpstream,
+            publicMessage: 'Payment cannot be started because the merchant and business-entity binding is not available (FIN-DEC-01 pending).',
+            missingUpstream: 'Merchant|BadanUsaha (FIN-DEC-01)',
+        );
     }
 
     private function conditionTwo(GuardCondition $condition, Order $order): ?ConditionDenial
@@ -284,7 +323,11 @@ final readonly class GuardPaymentSession
     }
 
     /**
-     * Persist the decision record and its audit event together.
+     * Persist a DENIED evaluation's decision record and its audit event
+     * together. Never called for an allowed evaluation — `__invoke` returns
+     * `GuardResult::allowed()` before reaching this, and the allowed
+     * decision record is the session-opening caller's to write (class doc
+     * block).
      */
     private function record(
         GuardResult $result,
@@ -292,9 +335,10 @@ final readonly class GuardPaymentSession
         PaymentMode $mode,
         ActorContext $actor,
     ): void {
-        // `ActorContext::$roles` is always empty today (that class documents
-        // why: no local roles table any spec has authorized), so a role is
-        // derived from authentication state exactly as
+        // The role label is derived from authentication state, not from
+        // `ActorContext::$roles`: a guard evaluation happens at the moment a
+        // payment attempt is made, and the label's only job is to
+        // distinguish a signed-in attempt from a guest one — exactly as
         // `App\Domain\Booking\Actions\StartBookingDraft` already does. An
         // empty roles list is never read as "no roles required".
         $actorRole = $actor->isAuthenticated() ? 'customer' : 'guest';

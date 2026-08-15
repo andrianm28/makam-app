@@ -37,7 +37,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *      its six conditions; with the gate closed it has no reachable pass
  *      outcome.
  *   2. Session creation goes through the guard-composed session-opening
- *      path only — there is no unguarded creation path to call.
+ *      path only — `Actions\OpenPaymentSession` is the sole production
+ *      caller that reaches `PaymentSession::create()` — there is no
+ *      unguarded creation path to call.
  *   3. This hook — defence in depth, now gate-conditional.
  *
  * What layer 3 does NOT stop, stated plainly rather than assumed shut:

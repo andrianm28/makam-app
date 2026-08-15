@@ -15,10 +15,18 @@ use Illuminate\Database\Eloquent\Model;
  * `2026_08_09_100000_create_payment_intents_table.php` for the schema
  * reasoning, including which columns are deliberately absent.
  *
- * ONLY ever written by `App\Platform\Payment\GuardPaymentSession`, which is
- * the single place a guard evaluation is recorded together with its
- * `PAYMENT_GUARD_DENIED` audit event in one transaction. Constructing a row
- * anywhere else produces a decision record for a decision nothing took.
+ * Written by exactly TWO callers, each for one decision value:
+ *
+ *   - `App\Platform\Payment\GuardPaymentSession` — every DENIED evaluation
+ *     (`PaymentIntentDecision::Denied`), together with its
+ *     `PAYMENT_GUARD_DENIED` audit event, in one transaction.
+ *   - `App\Platform\Payment\Actions\OpenPaymentSession` — an ALLOWED
+ *     evaluation (`PaymentIntentDecision::Allowed`), atomically with the
+ *     `PaymentSession` it authorizes and the `PAYMENT_SESSION_OPENED` audit
+ *     event (see the guard's class doc block for the division of labour).
+ *
+ * Constructing a row anywhere else produces a decision record for a decision
+ * nothing took.
  *
  * ---------------------------------------------------------------------------
  * Append-only: what the overrides below do and do NOT stop
