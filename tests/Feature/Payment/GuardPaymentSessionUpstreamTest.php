@@ -24,6 +24,7 @@ use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use App\Platform\Payment\GuardCondition;
 use App\Platform\Payment\GuardDenialReason;
 use App\Platform\Payment\GuardPaymentSession;
+use App\Platform\Payment\Models\PaymentIntent;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -31,13 +32,22 @@ use Tests\TestCase;
 
 /**
  * Task 6 of `docs/superpowers/plans/2026-08-12-platform-order-orchestration.md`
- * — conditions 2-5 made real against the `Order` aggregate and `Quote`.
+ * — conditions 2-5 made real against the `Order` aggregate and `Quote` — as
+ * extended by Task 4 of the online-payment gateway plan
+ * (`docs/superpowers/plans/2026-08-14-online-payment-gateway.md`), which
+ * makes condition 6 real via config: the merchant/`badan_usaha` binding is
+ * the FIN-DEC-01 provisioning channel
+ * (`config('payment.merchant_ref')`/`config('payment.badan_usaha_ref')`).
  *
  * Each condition denies with a genuine `DomainDenied` when its record is
- * missing or unsatisfied. Condition 6 alone retains `UnavailableUpstream`
- * (`FIN-DEC-01` TBD). The load-bearing test (test 6) asserts that even when
- * conditions 1-5 are all genuinely satisfied, the guard STILL denies on
- * condition 6 — proving the lane never reaches `GuardResult::Allowed`.
+ * missing or unsatisfied; condition 6 denies with `UnavailableUpstream`
+ * while the binding is unconfigured (FIN-DEC-01 pending). The load-bearing
+ * tests: (a) with the binding unconfigured, even a fully satisfied order
+ * still denies on condition 6 — the gateway never widens the guard by
+ * default; (b) with the binding configured, ALL six conditions genuinely
+ * hold and the guard returns `GuardResult::allowed()` — the pass path exists
+ * exactly once, in the guard, and the decision record for it is written by
+ * `Actions\OpenPaymentSession`, never here.
  */
 final class GuardPaymentSessionUpstreamTest extends TestCase
 {
@@ -420,5 +430,47 @@ final class GuardPaymentSessionUpstreamTest extends TestCase
         $result = ($this->guardWithPaymentGate(open: true))($order, $this->amount(1_500_000_00));
 
         $this->assertStringContainsString('FIN-DEC-01', $result->missingUpstream() ?? '');
+    }
+
+    public function test_all_six_conditions_hold_when_the_merchant_binding_is_configured(): void
+    {
+        config([
+            'payment.merchant_ref' => 'mk-merchant-dev',
+            'payment.badan_usaha_ref' => 'badan-usaha-dev',
+        ]);
+
+        $order = $this->makeOrder(OrderStatus::MENUNGGU_PEMBAYARAN);
+        $this->acceptedQuote($order, 1_500_000_00);
+        $user = $this->adminActor();
+        $this->grantOrderScope((string) $user->id, $order);
+
+        $result = ($this->guardWithPaymentGate(open: true))($order, $this->amount(1_500_000_00));
+
+        $this->assertTrue($result->isAllowed());
+        $this->assertFalse($result->isDenied());
+        $this->assertSame([], $result->denials());
+    }
+
+    public function test_an_allowed_evaluation_writes_no_decision_record_itself(): void
+    {
+        config([
+            'payment.merchant_ref' => 'mk-merchant-dev',
+            'payment.badan_usaha_ref' => 'badan-usaha-dev',
+        ]);
+
+        $order = $this->makeOrder(OrderStatus::MENUNGGU_PEMBAYARAN);
+        $this->acceptedQuote($order, 1_500_000_00);
+        $user = $this->adminActor();
+        $this->grantOrderScope((string) $user->id, $order);
+
+        $result = ($this->guardWithPaymentGate(open: true))($order, $this->amount(1_500_000_00));
+
+        $this->assertTrue($result->isAllowed());
+        $this->assertSame(
+            0,
+            PaymentIntent::query()->count(),
+            'An allowed evaluation records nothing in the guard; the Allowed decision record is '
+            .'written by OpenPaymentSession atomically with the session it authorizes.',
+        );
     }
 }

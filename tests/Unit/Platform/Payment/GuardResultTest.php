@@ -9,6 +9,7 @@ use App\Platform\Payment\GuardCondition;
 use App\Platform\Payment\GuardDenialReason;
 use App\Platform\Payment\GuardResult;
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use ReflectionClass;
 use ReflectionMethod;
 use ReflectionNamedType;
@@ -20,10 +21,21 @@ use Tests\TestCase;
  * distinct from a genuine domain denial", and the guard must have "no
  * reachable PASS outcome".
  *
- * This test pins the *type-level* half of that invariant: there is no
- * factory anywhere on `GuardResult` that can construct an allowed result, so
- * no caller — not even one inside this module — can manufacture a pass by
- * hand. The behavioural half (the Action never returns one) is pinned by
+ * The online-payment gateway task is the reviewed change that ends the
+ * deny-only era: the guard can now genuinely evaluate all six conditions
+ * (condition 6's merchant binding became real via config), so `allowed()`
+ * exists as the result of all-six-hold. This test pins the type-level shape
+ * of BOTH states:
+ *
+ *   - the constructor stays private — no caller can build either state by
+ *     hand;
+ *   - `allowed()` is the only way to an allowed result, and it is
+ *     denial-free (its denial-scoped accessors throw);
+ *   - `denied()` refuses an empty list, so a pass in all but name can never
+ *     be constructed through the denial factory.
+ *
+ * The behavioural half (which evaluations produce which state) is pinned by
+ * `Tests\Feature\Payment\GuardPaymentSessionUpstreamTest` and
  * `Tests\Feature\Payment\PaymentGuardFailClosedTest`.
  */
 final class GuardResultTest extends TestCase
@@ -41,7 +53,7 @@ final class GuardResultTest extends TestCase
         );
     }
 
-    public function test_the_constructor_is_private_so_only_the_denied_factory_can_build_one(): void
+    public function test_the_constructor_is_private_so_only_the_factories_can_build_one(): void
     {
         $constructor = (new ReflectionClass(GuardResult::class))->getConstructor();
 
@@ -49,7 +61,7 @@ final class GuardResultTest extends TestCase
         $this->assertTrue($constructor->isPrivate());
     }
 
-    public function test_denied_is_the_only_public_factory_on_the_class(): void
+    public function test_allowed_and_denied_are_the_only_public_factories_on_the_class(): void
     {
         $factories = array_map(
             static fn (ReflectionMethod $method): string => $method->getName(),
@@ -68,7 +80,40 @@ final class GuardResultTest extends TestCase
             ),
         );
 
-        $this->assertSame(['denied'], array_values($factories));
+        $this->assertSame(['allowed', 'denied'], array_values($factories));
+    }
+
+    public function test_an_allowed_result_is_constructible_and_is_not_a_denial(): void
+    {
+        $result = GuardResult::allowed();
+
+        $this->assertTrue($result->isAllowed());
+        $this->assertFalse($result->isDenied());
+        $this->assertSame([], $result->denials());
+        $this->assertSame([], $result->deniedConditionValues());
+    }
+
+    /**
+     * @return list<array{0: string}>
+     */
+    public static function denialScopedAccessors(): array
+    {
+        return [
+            'condition' => ['condition'],
+            'reason' => ['reason'],
+            'publicMessage' => ['publicMessage'],
+            'missingUpstream' => ['missingUpstream'],
+            'isUnavailableUpstream' => ['isUnavailableUpstream'],
+        ];
+    }
+
+    #[DataProvider('denialScopedAccessors')]
+    public function test_the_denial_scoped_accessors_throw_on_an_allowed_result(string $accessor): void
+    {
+        $result = GuardResult::allowed();
+
+        $this->expectException(InvalidArgumentException::class);
+        $result->{$accessor}();
     }
 
     public function test_a_denial_carries_the_first_failing_condition_and_a_public_message(): void

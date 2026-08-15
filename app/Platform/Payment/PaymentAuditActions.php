@@ -163,4 +163,22 @@ final class PaymentAuditActions
      * `REFUND` above.
      */
     public const string CHARGEBACK = 'PAYMENT_CHARGEBACK';
+
+    /**
+     * Written by `Actions\OpenPaymentSession` with `AuditOutcome::Allowed`,
+     * subject = the new `PaymentSession` row, when a session opens through
+     * the six-condition guard. The Allowed `payment_intents` decision record
+     * the session links to is written in the same transaction; this event is
+     * the trail an operator reads for "a hosted checkout was opened".
+     *
+     * Deliberately NOT on `SensitiveActions::ACTIONS`, for the same reason
+     * as `GUARD_DENIED` (and the plan's Global Constraints: no new
+     * SensitiveActions entry in this lane beyond the two already present):
+     * an opening is guard-gated and machine-decided — every one of the six
+     * conditions was evaluated before this event can exist — so a mandatory
+     * free-text reason would be boilerplate or a place for a careless caller
+     * to paste restricted data. The structured session row and the
+     * closed-list `note` carry the explanation.
+     */
+    public const string SESSION_OPENED = 'PAYMENT_SESSION_OPENED';
 }

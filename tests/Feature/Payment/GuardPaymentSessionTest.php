@@ -32,16 +32,18 @@ use Tests\TestCase;
 
 /**
  * Wave 1b ruling 1b-L3-01, as it stands after
- * `docs/superpowers/plans/2026-08-12-platform-order-orchestration.md` Task 6:
- * the deny-only six-condition guard.
+ * `docs/superpowers/plans/2026-08-12-platform-order-orchestration.md` Task 6
+ * and the online-payment gateway plan Task 4: the six-condition guard.
  *
  * Condition 1 is REAL (`ModeResolver::paymentMode()`, backed by `G-PAY-01`).
  * Conditions 2-5 are REAL as of Task 6 — they read the `Order` aggregate and
  * the current `Quote`, and deny with a genuine `DomainDenied` when the
  * specific record they need is missing or unsatisfied (asserted in
- * `GuardPaymentSessionUpstreamTest`). Condition 6 alone retains the
- * `UnavailableUpstream` DENIAL, because the merchant/`badan_usaha` binding
- * cannot exist while financial decision `FIN-DEC-01` is `TBD`.
+ * `GuardPaymentSessionUpstreamTest`). Condition 6 is REAL as of the gateway
+ * task: the merchant/`badan_usaha` binding is the FIN-DEC-01 provisioning
+ * channel (`config('payment.merchant_ref')`/`badan_usaha_ref`); while it is
+ * unconfigured — the config default — condition 6 denies with
+ * `UnavailableUpstream`, exactly as it did under the ruling.
  */
 final class GuardPaymentSessionTest extends TestCase
 {
@@ -157,6 +159,10 @@ final class GuardPaymentSessionTest extends TestCase
     public static function unavailableUpstreamConditions(): array
     {
         return [
+            // Condition 6 is config-evaluated since the gateway task: while
+            // `payment.merchant_ref`/`payment.badan_usaha_ref` are unset —
+            // the config default, and this suite's state — the binding does
+            // not exist and the denial keeps the ruling's shape.
             'condition 6 — merchant and badan usaha bound' => [
                 GuardCondition::MerchantAndBadanUsahaBound, 'Merchant|BadanUsaha (FIN-DEC-01)',
             ],
@@ -177,6 +183,23 @@ final class GuardPaymentSessionTest extends TestCase
         $this->assertSame(GuardDenialReason::UnavailableUpstream, $denial->reason);
         $this->assertSame($missingUpstream, $denial->missingUpstream);
         $this->assertNotSame('', trim($denial->publicMessage));
+    }
+
+    public function test_condition_six_holds_when_the_merchant_binding_is_configured(): void
+    {
+        config([
+            'payment.merchant_ref' => 'mk-merchant-dev',
+            'payment.badan_usaha_ref' => 'badan-usaha-dev',
+        ]);
+
+        $denials = $this->denialsByCondition(gateOpen: true);
+
+        $this->assertArrayNotHasKey(
+            GuardCondition::MerchantAndBadanUsahaBound->value,
+            $denials,
+            'A configured merchant/badan_usaha binding must clear condition 6; the order itself '
+            .'still denies conditions 2-5 in this test.',
+        );
     }
 
     public function test_every_guard_evaluation_writes_exactly_one_payment_intent_decision_record(): void

@@ -29,22 +29,35 @@ use ReflectionNamedType;
 use Tests\TestCase;
 
 /**
- * The fail-closed invariant of Wave 1b ruling 1b-L3-01, asserted directly:
+ * The fail-closed invariant of Wave 1b ruling 1b-L3-01, asserted directly,
+ * as it stands after Task 4 of the online-payment gateway plan:
  *
  *   "There must be **no reachable PASS outcome**, and therefore no
  *    `payment_sessions` row creatable by any caller."
  *
+ * The gateway made condition 6 real via config, so the reachable-pass
+ * prohibition is now scoped exactly where the approved design put it: a pass
+ * requires ALL six conditions to hold — gate open AND merchant binding
+ * configured AND a confirmed order AND an accepted unexpired quote AND an
+ * authorized opener AND a matching amount. With the gate closed, the binding
+ * unconfigured, or the order unconfirmed, no input combination reaches a
+ * pass, and this suite's 16-combination sweep is precisely those shapes.
+ * The one all-six-hold combination is exercised deliberately, in
+ * `GuardPaymentSessionUpstreamTest` and `OpenPaymentSessionTest`, not here.
+ *
  * Three independent layers are pinned here, because any one of them alone
  * could be weakened by a later edit without the others noticing:
  *
- *   1. Behaviour — no combination of inputs makes the guard return an
- *      allowed result.
- *   2. Structure — nothing in the application writes a `payment_sessions`
- *      row: `CreatePaymentSession` and the `PaymentProvider` contract are
- *      deliberately NOT built by this task.
+ *   1. Behaviour — no combination of inputs with the gate closed, the
+ *      binding unconfigured, or the order unconfirmed makes the guard return
+ *      an allowed result.
+ *   2. Structure — nothing but `Actions\OpenPaymentSession` writes a
+ *      `payment_sessions` row: `CreatePaymentSession` and the
+ *      `PaymentProvider` contract are deliberately NOT built by this task.
  *   3. Defence in depth — the `PaymentSession` model itself refuses to
- *      insert. See that model's doc block for the paths this does NOT cover
- *      (raw SQL / query builder), stated honestly rather than assumed shut.
+ *      insert while the gate is closed. See that model's doc block for the
+ *      paths this does NOT cover (raw SQL / query builder), stated honestly
+ *      rather than assumed shut.
  */
 final class PaymentGuardFailClosedTest extends TestCase
 {
@@ -90,9 +103,11 @@ final class PaymentGuardFailClosedTest extends TestCase
             foreach ([false, true] as $gateOpen) {
                 foreach ($amounts as $amount) {
                     // A fresh `MASUK` order denies conditions 2-5 by its real
-                    // evaluations and 6 by `UnavailableUpstream`; condition 6
-                    // is unconditional, so no input combination here — order,
-                    // amount, actor, gate — can reach PASS.
+                    // evaluations; condition 6 denies because the merchant
+                    // binding is unconfigured here (its config default is
+                    // empty — fail closed), and condition 1 denies whenever
+                    // the gate is closed. So no input combination here —
+                    // order, amount, actor, gate, binding — can reach PASS.
                     $order = Order::query()->create([
                         'reference' => 'MK-FAILCLOSED-'.strtoupper(substr(bin2hex(random_bytes(4)), 0, 8)),
                         'product_type' => ProductType::AT_NEED_SERVICE_ORDER->value,
@@ -120,7 +135,7 @@ final class PaymentGuardFailClosedTest extends TestCase
         );
     }
 
-    public function test_the_guard_returns_a_result_type_that_has_no_allowed_variant(): void
+    public function test_the_guard_always_returns_a_non_nullable_guard_result(): void
     {
         $returnType = (new ReflectionMethod(GuardPaymentSession::class, '__invoke'))->getReturnType();
 

@@ -48,6 +48,32 @@ return [
 
     'default' => env('PAYMENT_PROVIDER', PaymentProviders::SUMOPOD_SANDBOX),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Merchant of record — the FIN-DEC-01 provisioning channel (AC13)
+    |--------------------------------------------------------------------------
+    |
+    | The merchant/`badan_usaha` pair every `payment_sessions` row binds
+    | (AC13), and the binding the six-condition guard's condition 6 evaluates.
+    | The approved online-payment gateway design makes condition 6 real via
+    | config: "condition 6's merchant binding becomes real via config",
+    | "merchant ref from config" — the same pattern
+    | `config('marketplace.badan_usaha_ref')` /
+    | `MARKETPLACE_BADAN_USAHA_REF` already established.
+    |
+    | Both values default to EMPTY, which fails closed: condition 6 denies
+    | with `UnavailableUpstream` (FIN-DEC-01 pending) until an operator
+    | provisions them, and `Actions\OpenPaymentSession` refuses any session
+    | whose claimed merchant is not the one bound here. FIN-DEC-01 itself is
+    | the human decision that production online payment stays gated on;
+    | `G-PAY-01` stays closed there regardless of these values.
+    |
+    */
+
+    'merchant_ref' => env('PAYMENT_MERCHANT_REF', ''),
+
+    'badan_usaha_ref' => env('PAYMENT_BADAN_USAHA_REF', ''),
+
     'providers' => [
 
         PaymentProviders::SUMOPOD_SANDBOX => [
