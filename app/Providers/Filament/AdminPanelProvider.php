@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Providers\Filament;
 
+use App\Filament\Admin\Pages\FeatureGateAdmin;
 use App\Filament\Admin\Pages\FinanceReports;
 use App\Filament\Admin\Pages\InAppNotifications;
 use App\Filament\Admin\Pages\MfaChallenge;
@@ -134,6 +135,7 @@ class AdminPanelProvider extends PanelProvider
             )
             ->pages([
                 Pages\Dashboard::class,
+                FeatureGateAdmin::class,
                 FinanceReports::class,
                 MfaChallenge::class,
                 MfaSettings::class,

@@ -6,6 +6,11 @@ namespace App\Platform\SiteSettings\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @property string $key
+ * @property string|null $value
+ * @property string|null $updated_by_ref
+ */
 final class SiteSetting extends Model
 {
     public const string KEY_SERVICE_HOURS = 'service_hours';
