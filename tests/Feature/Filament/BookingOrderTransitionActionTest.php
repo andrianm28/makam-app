@@ -59,7 +59,7 @@ final class BookingOrderTransitionActionTest extends TestCase
         $this->assertFalse($action->isAuthorized());
     }
 
-    public function test_finance_money_transition_requires_fresh_authentication(): void
+    public function test_finance_money_transition_is_authorized(): void
     {
         $user = User::factory()->create();
         $this->grantRoleTo($user, ActorRole::FINANCE);

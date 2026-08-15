@@ -14,8 +14,9 @@ use App\Support\Design\StatusIntent;
  * label — never matched on the enum string in a component
  * (`design-system.md` §3.7's "resolve status -> intent in ONE place" rule).
  *
- * The intent comes from `StatusIntent`'s order-lifecycle family; the color
- * is the design-system §8.3 bridge intent → Filament palette key. The label
+ * The color IS `StatusIntent::filamentColor()` with the order-lifecycle
+ * family — the canonical design-system §8.3 bridge (intent → Filament
+ * palette key), same call the marketplace resource lane uses. The label
  * table is this Resource's own copy of the canonical Indonesian order
  * labels (the same table `docs/domain/order-lifecycle.md` drives), kept
  * here because `StatusIntent::label()` deliberately humanises enum strings
@@ -24,20 +25,9 @@ use App\Support\Design\StatusIntent;
  */
 final class BookingOrderStatusBadge
 {
-    /** @var array<string, string> intent → Filament color */
-    private const array INTENT_COLORS = [
-        'negative' => 'danger',
-        'pending' => 'warning',
-        'in_progress' => 'info',
-        'confirmed' => 'primary',
-        'completed' => 'success',
-    ];
-
     public static function color(OrderStatus $status): string
     {
-        $intent = StatusIntent::intent($status->value, StatusIntent::FAMILY_ORDER_LIFECYCLE);
-
-        return self::INTENT_COLORS[$intent] ?? 'gray';
+        return StatusIntent::filamentColor($status->value, StatusIntent::FAMILY_ORDER_LIFECYCLE);
     }
 
     public static function label(OrderStatus $status): string
