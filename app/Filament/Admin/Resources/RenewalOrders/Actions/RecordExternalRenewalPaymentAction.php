@@ -74,7 +74,7 @@ final class RecordExternalRenewalPaymentAction
                         ->send();
 
                     session()->put(RequireRecentAuthentication::REASON_SESSION_KEY, 'money_action');
-                    session()->put('url.intended', url()->current());
+                    session()->put('url.intended', route('filament.admin.resources.renewal-orders.view', ['record' => $renewal->getKey()]));
                     redirect()->route('filament.admin.pages.mfa-challenge');
 
                     return;
