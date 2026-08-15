@@ -18,7 +18,7 @@ use Illuminate\Queue\SerializesModels;
  * returned without waiting for any domain work.
  *
  * ---------------------------------------------------------------------------
- * What it does, and the larger half it deliberately still does not do
+ * What it does, and the half Task 4 deliberately did not build
  * ---------------------------------------------------------------------------
  * UPDATED by Task 4 (10 Aug 2026). This was a deliberate shell while Task 3
  * owned "persist → validate → ack ≤ 2 s → dispatch". It now delegates to
@@ -27,18 +27,12 @@ use Illuminate\Queue\SerializesModels;
  * `SELECT ... FOR UPDATE`, and the `(provider, provider_transaction_id)`
  * apply-time settlement claim.
  *
- * The plan's original Task 4 also named `ApplyWebhookEffect` — the `PAID`
- * transition, the domain `DIBAYAR` state, the same-transaction `Journal::post()`,
- * and the `payment.received.v1` outbox event. None of those is built: every one
- * of them acts on a `payment_sessions` row, and under ruling 1b-L3-01 no such
- * row can exist. That apply half is recorded as NOT TESTED by name in the Task 4
- * report rather than stubbed out here as dead code.
- *
- * `handle()` therefore still must NOT mark the row `PROCESSED`, because nothing
- * has been processed — a status that claimed otherwise would be a false record
- * in the table design.md calls "the replay source of truth", and
- * `provider_events` is append-only precisely so that a false claim could not be
- * quietly corrected later. A claimed row rests at `PROCESSING`.
+ * Task 5 (14 Aug 2026) wired the apply half the ruling deferred: a claimed
+ * settling event is dispatched to `Actions\ApplyPaymentSettlement` inside the
+ * claim transaction — the `PAID`/`DIBAYAR` state, the same-transaction
+ * `payment.received.v1` outbox emission (booking), the marketplace
+ * `payment_state` + vendor payable release, and the audit rows. The claim
+ * ends at `PROCESSED`.
  *
  * ---------------------------------------------------------------------------
  * Two properties that are real now and must survive Task 4
@@ -54,13 +48,16 @@ use Illuminate\Queue\SerializesModels;
  *    `->onQueue()`. `AGENTS.md`: "Imports/reports/media must not starve
  *    critical or urgent queues."
  *
- * NOT TESTED end to end: no dispatch of this job can be triggered through the
- * HTTP receiver today, because no `provider_events` row can reach `VALIDATED`
- * while `payment_sessions` is uncreatable (Wave 1b ruling 1b-L3-01 — see
- * `WebhookValidator`). What IS tested is that the job is queueable, that it
- * targets `critical`, that it carries only an id, and — by invoking `handle()`
- * against a directly seeded `VALIDATED` row — that it really performs the claim
- * (`Tests\Feature\Payment\ProcessWebhookEventTest`).
+ * ---------------------------------------------------------------------------
+ * Failure semantics since Task 5
+ * ---------------------------------------------------------------------------
+ * `handle()` does not act on the returned OUTCOME (every case is a normal,
+ * terminal result for this job), but a SETTLEMENT failure is not an outcome —
+ * it throws, propagating out of `ProcessWebhookEvent`'s transaction and out
+ * of `handle()`. The claim rolls back with it (the row stays VALIDATED, no
+ * effect is half-applied), the job fails, and the queue retries. A
+ * permanently unresolvable event keeps failing until a human intervenes —
+ * recorded as the intended fail-closed behaviour in `ProcessWebhookEvent`.
  */
 final class ProcessProviderEventJob implements ShouldQueue
 {
@@ -87,7 +84,9 @@ final class ProcessProviderEventJob implements ShouldQueue
         // redelivery working; `NotFound` is a stale dispatch against an
         // append-only row that is never deleted; `SettlementConflict` has
         // already recorded itself. None of them is retryable, so none of them
-        // throws — see `ProcessWebhookEventOutcome`.
+        // throws — see `ProcessWebhookEventOutcome`. A thrown SETTLEMENT
+        // failure is a different animal: it propagates (the claim rolled
+        // back, the row stays VALIDATED) so the queue retry can re-claim it.
         $process($this->providerEventId);
     }
 }

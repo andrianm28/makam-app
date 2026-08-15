@@ -8,6 +8,7 @@ use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\AuditSubject;
+use App\Platform\Payment\Actions\ApplyPaymentSettlement;
 use App\Platform\Payment\Models\ProviderEvent;
 use Illuminate\Support\Facades\DB;
 
@@ -17,28 +18,25 @@ use Illuminate\Support\Facades\DB;
  * `ReceiveWebhook::finishValidation()`.
  *
  * ---------------------------------------------------------------------------
- * Scope — this class claims, it does not apply
+ * Scope — this class claims, and dispatches the settlement
  * ---------------------------------------------------------------------------
- * Wave 1b ruling 1b-L3-04 re-scoped Task 4. The plan's original Task 4 was
- * almost entirely downstream of a created `payment_sessions` row: the `PAID`
- * transition, the domain `DIBAYAR` state, the same-transaction `Journal::post()`,
- * and the `payment.received.v1` outbox emission. Under ruling 1b-L3-01 the
- * payment guard is deny-only, so no `payment_sessions` row can exist
- * (`Models\PaymentSession` refuses to insert, and `PaymentGuardFailClosedTest`
- * pins that). None of those effects has anything to act on, and the ruling is
- * explicit that fabricating a session — by factory, `unguarded()`, query
- * builder, raw SQL, or a test-only bypass — is prohibited rather than clever.
+ * Task 5 (of `docs/superpowers/plans/2026-08-14-online-payment-gateway.md`)
+ * wired the apply half that the Wave-1b re-scoped Task 4 deliberately left
+ * open: a claimed SETTLING event is handed to
+ * `Actions\ApplyPaymentSettlement`, which resolves the session and the
+ * target order and applies the paid effects — all inside this claim's
+ * transaction, so the claim, the effects, their audit rows and the outbox
+ * row commit or roll back together. A settling event therefore ends at
+ * `PROCESSED`; a claimed non-settling event (`payment.failed`, `expired`)
+ * ends at `PROCESSED` too, with no effects by design.
  *
- * So this class implements the two claims that ARE reachable, and stops. It
- * deliberately does NOT mark a row `PROCESSED`: nothing has been processed, and
- * `provider_events` is the append-only "replay source of truth" (design.md
- * §Data) where a false claim could not be quietly corrected later. A claimed row
- * rests at `PROCESSING`, which `ReceiveWebhook::resolveLockedDuplicate()`
- * already reads as "owned by a worker, do not create a second effect".
- *
- * The apply half is recorded as NOT TESTED, by name, in the Task 4 report. It is
- * not stubbed here, because a speculative empty apply step would be dead code
- * that a later reader could mistake for a real, exercised path.
+ * A settlement failure (an unresolvable target, a quote mismatch, an
+ * illegal transition) throws OUT of this transaction: the claim rolls back,
+ * the row stays at `VALIDATED`, no effect is half-applied, and the queue
+ * retry re-claims it. A permanently failing event keeps retrying — visible
+ * in the queue and in the row's perpetually-`VALIDATED` status — until a
+ * human intervenes; that is the intended fail-closed behaviour, and the row
+ * is never marked `PROCESSED` for work that did not commit.
  *
  * ---------------------------------------------------------------------------
  * Claim 1 — the row: `VALIDATED -> PROCESSING`, exactly once
@@ -47,8 +45,8 @@ use Illuminate\Support\Facades\DB;
  * the same row id will be handed to a worker more than once. The claim is a
  * compare-and-set under a row lock, following the `OutboxPublisher::claim()`
  * precedent: read the row `FOR UPDATE`, re-check that it is still `VALIDATED`,
- * and only then move it. A second claimant finds `PROCESSING` and returns
- * `NotClaimable` without writing anything.
+ * and only then move it. A second claimant finds `PROCESSING` (or `PROCESSED`)
+ * and returns `NotClaimable` without writing anything.
  *
  * Unlike `OutboxPublisher`, this class does NOT refuse to run on a non-Postgres
  * driver. `OutboxPublisher` must, because `SKIP LOCKED` is syntax SQLite cannot
@@ -137,6 +135,10 @@ final readonly class ProcessWebhookEvent
         ProviderEventStatus::ManualReview,
     ];
 
+    public function __construct(
+        private readonly ApplyPaymentSettlement $settlement,
+    ) {}
+
     public function __invoke(string $providerEventId): ProcessWebhookEventOutcome
     {
         return DB::transaction(function () use ($providerEventId): ProcessWebhookEventOutcome {
@@ -165,8 +167,24 @@ final readonly class ProcessWebhookEvent
 
             $event->markStatus(ProviderEventStatus::Processing);
 
-            // Nothing is applied here — see the class doc block. The row rests
-            // at PROCESSING until the session-dependent apply path exists.
+            // Task 5 — the apply half. A claimed SETTLING event is settled in
+            // THIS transaction: the paid effects, their audit rows and the
+            // outbox row commit together with the claim, or all roll back
+            // together (a thrown settlement failure leaves the row VALIDATED
+            // and re-claimable by the queue retry — never half-applied, never
+            // falsely PROCESSED).
+            //
+            // A settling event without a provider transaction id has no
+            // session anchor to settle by. The receiver can never produce one
+            // (the envelope requires `data.payment_id` for VALIDATED), so the
+            // guard is defensive; the settlement itself still fails closed if
+            // such a row ever reaches it.
+            if ($this->isSettling($event) && $event->provider_transaction_id !== null) {
+                $this->settlement->settle($event);
+            }
+
+            $event->markStatus(ProviderEventStatus::Processed);
+
             return ProcessWebhookEventOutcome::Claimed;
         });
     }

@@ -35,4 +35,21 @@ namespace App\Domain\Marketplace;
 final class MarketplaceAuditActions
 {
     public const string ORDER_STATUS_CHANGED = 'VENDOR_ORDER_STATUS_CHANGED';
+
+    /**
+     * Added by Task 5 of the online-payment-gateway lane
+     * (`docs/superpowers/plans/2026-08-14-online-payment-gateway.md`).
+     * Written by `Actions\MarkMarketplaceOrderPaid` — the only writer of
+     * `marketplace_orders.payment_state = DIBAYAR` — with `previous_state` /
+     * `new_state` metadata, in the same transaction as the transition.
+     *
+     * Deliberately NOT added to `SensitiveActions::ACTIONS`, for the same
+     * category of reason as `ORDER_STATUS_CHANGED` above, stated for this
+     * case: the webhook path is machine-decided (the signed webhook is the
+     * payment authority), there is no human-authored justification to extract,
+     * and the webhook claim plus the audit row are the complete record. The
+     * manual payment decision a human DOES take is already listed under
+     * `PAYMENT_MANUAL_VERIFICATION` elsewhere.
+     */
+    public const string ORDER_PAYMENT_STATE_CHANGED = 'MARKETPLACE_ORDER_PAYMENT_STATE_CHANGED';
 }

@@ -4,21 +4,35 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Payment;
 
+use App\Domain\Marketplace\Models\MarketplaceOrder;
+use App\Domain\Marketplace\Models\Vendor;
+use App\Domain\Marketplace\PaymentState;
 use App\Platform\Audit\Models\AuditEvent;
+use App\Platform\FeatureGate\Models\FeatureGate;
+use App\Platform\FinancialLedger\Actions\VendorPayable;
+use App\Platform\FinancialLedger\Money;
+use App\Platform\FinancialLedger\VendorPayableAssessmentTrigger;
+use App\Platform\FinancialLedger\VendorPayableEligibility;
+use App\Platform\IdentityAccess\ActorContext;
+use App\Platform\Payment\Exceptions\SettlementTargetUnresolvableException;
 use App\Platform\Payment\Jobs\ProcessProviderEventJob;
+use App\Platform\Payment\Models\PaymentIntent;
+use App\Platform\Payment\Models\PaymentSession;
 use App\Platform\Payment\Models\ProviderEvent;
 use App\Platform\Payment\PaymentAuditActions;
+use App\Platform\Payment\PaymentIntentDecision;
 use App\Platform\Payment\PaymentProviders;
 use App\Platform\Payment\ProcessWebhookEvent;
 use App\Platform\Payment\ProcessWebhookEventOutcome;
 use App\Platform\Payment\ProviderEventStatus;
+use App\Platform\Payment\SessionState;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * Task 4 as re-scoped by Wave 1b ruling 1b-L3-04 — the two claims that are
- * reachable without a `payment_sessions` row.
+ * Task 4 as re-scoped by Wave 1b ruling 1b-L3-04, updated by Task 5 (the
+ * online-payment-gateway lane) when the apply half was wired.
  *
  * 1. The `provider_events` row claim: `VALIDATED -> PROCESSING` under
  *    `SELECT ... FOR UPDATE`, exactly once, so a redelivered queue job cannot
@@ -28,12 +42,18 @@ use Tests\TestCase;
  *    same (transaction, invoice) pair settling twice but does NOT stop one
  *    provider transaction settling two DIFFERENT invoices, which is
  *    `docs/contracts/payment-webhook.md` §Idempotency's literal rule.
+ * 3. Task 5's settlement dispatch: a claimed SETTLING event is settled inside
+ *    the claim transaction (`Actions\ApplyPaymentSettlement`), so a settling
+ *    claim ends at `PROCESSED` with its effects committed; a claimed
+ *    non-settling event also ends at `PROCESSED` with no effects by design; a
+ *    settlement failure rolls the claim back and the row stays `VALIDATED`.
  *
  * A `provider_events` row's status is seeded directly through `markStatus()`,
  * exactly as `ProviderEventModelTest::test_the_row_is_append_only_except_for_its_lifecycle_columns`
- * already does. That is seeding a table this lane owns, not fabricating a
- * `payment_sessions` row — no session is created here by any mechanism, and the
- * apply half that would need one is deliberately absent (see `ProcessWebhookEvent`).
+ * already does. Settling claims additionally resolve a REAL session + target
+ * (the settlement refuses to fabricate either), so the fixtures open the
+ * payment gate exactly as `PaymentSessionCreationTest` does and create
+ * marketplace targets through the checkout shape.
  *
  * NOT TESTED here, and not testable on this suite: real concurrency. The suite
  * runs on SQLite (`phpunit.xml`), where `lockForUpdate()` compiles to an empty
@@ -46,19 +66,41 @@ final class ProcessWebhookEventTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_it_claims_a_validated_row_into_processing(): void
+    public function test_a_settling_event_is_claimed_settled_and_processed(): void
     {
-        $event = $this->validatedEvent();
+        $order = $this->marketplaceTarget('order_A');
+        $event = $this->validatedEvent([
+            'provider_transaction_id' => 'pay_claim',
+            'invoice_reference' => 'order_A',
+        ]);
+        $this->paymentSession('pay_claim', 250_000);
 
         $outcome = $this->claim($event);
 
         $this->assertSame(ProcessWebhookEventOutcome::Claimed, $outcome);
-        $this->assertSame(ProviderEventStatus::Processing->value, $event->fresh()->status);
+        $this->assertSame(ProviderEventStatus::Processed->value, $event->fresh()->status);
+        $this->assertSame(PaymentState::DIBAYAR, $order->fresh()->payment_state);
+    }
+
+    public function test_a_claimed_non_settling_event_completes_without_effects(): void
+    {
+        $event = $this->validatedEvent(['event_type' => 'payment.failed']);
+
+        $outcome = $this->claim($event);
+
+        $this->assertSame(ProcessWebhookEventOutcome::Claimed, $outcome);
+        $this->assertSame(ProviderEventStatus::Processed->value, $event->fresh()->status);
+        $this->assertSame(0, MarketplaceOrder::query()->count());
     }
 
     public function test_a_second_claim_of_the_same_row_is_refused_and_changes_nothing(): void
     {
-        $event = $this->validatedEvent();
+        $order = $this->marketplaceTarget('order_once');
+        $event = $this->validatedEvent([
+            'provider_transaction_id' => 'pay_once',
+            'invoice_reference' => 'order_once',
+        ]);
+        $this->paymentSession('pay_once', 250_000);
 
         $this->assertSame(ProcessWebhookEventOutcome::Claimed, $this->claim($event));
 
@@ -67,7 +109,9 @@ final class ProcessWebhookEventTest extends TestCase
         $second = $this->claim($event);
 
         $this->assertSame(ProcessWebhookEventOutcome::NotClaimable, $second);
-        $this->assertSame(ProviderEventStatus::Processing->value, $event->fresh()->status);
+        $this->assertSame(ProviderEventStatus::Processed->value, $event->fresh()->status);
+        $this->assertSame(PaymentState::DIBAYAR, $order->fresh()->payment_state);
+        $this->assertSame(1, $this->paidMarketplaceCount($order));
     }
 
     public function test_a_row_that_never_reached_validated_is_not_claimable(): void
@@ -92,16 +136,26 @@ final class ProcessWebhookEventTest extends TestCase
         }
     }
 
-    public function test_the_claim_never_marks_a_row_processed(): void
+    public function test_a_settling_event_with_no_resolvable_target_fails_closed_and_rolls_back(): void
     {
-        // Nothing is applied yet — the session-dependent apply path is
-        // unbuildable under ruling 1b-L3-01 — so a `PROCESSED` status would be
-        // a false claim written into the append-only replay source of truth.
-        $event = $this->validatedEvent();
+        // A VALIDATED row whose provider transaction resolves to no session —
+        // seeded around the validator — must fail loudly, not settle nowhere.
+        // The claim rolls back: the row stays VALIDATED, no order appears.
+        $event = $this->validatedEvent([
+            'provider_transaction_id' => 'pay_orphan',
+            'invoice_reference' => 'order_orphan',
+        ]);
 
-        $this->claim($event);
+        try {
+            $this->claim($event);
+            $this->fail('Expected SettlementTargetUnresolvableException');
+        } catch (SettlementTargetUnresolvableException) {
+            // expected
+        }
 
-        $this->assertNotSame(ProviderEventStatus::Processed->value, $event->fresh()->status);
+        $this->assertSame(ProviderEventStatus::Validated->value, $event->fresh()->status);
+        $this->assertSame(0, MarketplaceOrder::query()->count());
+        $this->assertSame(0, AuditEvent::query()->count());
     }
 
     public function test_a_missing_row_is_a_no_op_rather_than_an_error(): void
@@ -113,11 +167,13 @@ final class ProcessWebhookEventTest extends TestCase
 
     public function test_one_provider_transaction_cannot_settle_two_different_invoices(): void
     {
+        $order = $this->marketplaceTarget('order_A');
         $first = $this->validatedEvent([
             'provider_transaction_id' => 'pay_conflict',
             'invoice_reference' => 'order_A',
             'event_type' => 'payment.completed',
         ]);
+        $this->paymentSession('pay_conflict', 250_000);
 
         $second = $this->validatedEvent([
             'provider_transaction_id' => 'pay_conflict',
@@ -128,16 +184,19 @@ final class ProcessWebhookEventTest extends TestCase
         $this->assertSame(ProcessWebhookEventOutcome::Claimed, $this->claim($first));
         $this->assertSame(ProcessWebhookEventOutcome::SettlementConflict, $this->claim($second));
 
-        $this->assertSame(ProviderEventStatus::Processing->value, $first->fresh()->status);
+        $this->assertSame(ProviderEventStatus::Processed->value, $first->fresh()->status);
         $this->assertSame(ProviderEventStatus::ManualReview->value, $second->fresh()->status);
+        $this->assertSame(PaymentState::DIBAYAR, $order->fresh()->payment_state);
     }
 
     public function test_a_settlement_conflict_is_recorded_rather_than_silently_dropped(): void
     {
+        $this->marketplaceTarget('order_A');
         $first = $this->validatedEvent([
             'provider_transaction_id' => 'pay_audit',
             'invoice_reference' => 'order_A',
         ]);
+        $this->paymentSession('pay_audit', 250_000);
         $second = $this->validatedEvent([
             'provider_transaction_id' => 'pay_audit',
             'invoice_reference' => 'order_B',
@@ -177,15 +236,18 @@ final class ProcessWebhookEventTest extends TestCase
             'invoice_reference' => 'order_late',
             'event_type' => 'payment.expired',
         ]);
+        $this->paymentSession('pay_late', 250_000);
+        $this->marketplaceTarget('order_late');
 
         $this->assertSame(ProcessWebhookEventOutcome::Claimed, $this->claim($completed));
         $this->assertSame(ProcessWebhookEventOutcome::Claimed, $this->claim($expired));
 
-        $this->assertSame(ProviderEventStatus::Processing->value, $expired->fresh()->status);
+        $this->assertSame(ProviderEventStatus::Processed->value, $expired->fresh()->status);
     }
 
     public function test_a_claimed_non_settling_event_does_not_block_the_settling_one(): void
     {
+        $order = $this->marketplaceTarget('order_x');
         $expired = $this->validatedEvent([
             'provider_transaction_id' => 'pay_order',
             'invoice_reference' => 'order_x',
@@ -197,28 +259,39 @@ final class ProcessWebhookEventTest extends TestCase
             'invoice_reference' => 'order_x',
             'event_type' => 'payment.completed',
         ]);
+        $this->paymentSession('pay_order', 250_000);
 
         $this->assertSame(ProcessWebhookEventOutcome::Claimed, $this->claim($expired));
         $this->assertSame(ProcessWebhookEventOutcome::Claimed, $this->claim($completed));
+        $this->assertSame(PaymentState::DIBAYAR, $order->fresh()->payment_state);
     }
 
     public function test_rows_without_a_provider_transaction_id_do_not_claim_each_other(): void
     {
-        // Two identity-less rows must not collide on `NULL = NULL`.
+        // Two identity-less rows must not collide on `NULL = NULL`. Neither is
+        // settling (no transaction id to settle by), so both claim and complete
+        // with no effects.
         $first = $this->validatedEvent(['provider_transaction_id' => null, 'invoice_reference' => null]);
         $second = $this->validatedEvent(['provider_transaction_id' => null, 'invoice_reference' => null]);
 
         $this->assertSame(ProcessWebhookEventOutcome::Claimed, $this->claim($first));
         $this->assertSame(ProcessWebhookEventOutcome::Claimed, $this->claim($second));
+        $this->assertSame(ProviderEventStatus::Processed->value, $first->fresh()->status);
     }
 
     public function test_the_queued_job_performs_the_claim(): void
     {
-        $event = $this->validatedEvent();
+        $order = $this->marketplaceTarget('order_job');
+        $event = $this->validatedEvent([
+            'provider_transaction_id' => 'pay_job',
+            'invoice_reference' => 'order_job',
+        ]);
+        $this->paymentSession('pay_job', 250_000);
 
         (new ProcessProviderEventJob($event->getKey()))->handle(app(ProcessWebhookEvent::class));
 
-        $this->assertSame(ProviderEventStatus::Processing->value, $event->fresh()->status);
+        $this->assertSame(ProviderEventStatus::Processed->value, $event->fresh()->status);
+        $this->assertSame(PaymentState::DIBAYAR, $order->fresh()->payment_state);
     }
 
     private function claim(ProviderEvent $event): ProcessWebhookEventOutcome
@@ -264,5 +337,76 @@ final class ProcessWebhookEventTest extends TestCase
             'status' => ProviderEventStatus::Received->value,
             'received_at' => CarbonImmutable::now(),
         ], $overrides));
+    }
+
+    /**
+     * The settlement refuses to fabricate a target: a settling claim resolves
+     * a real session (payment gate open, the `PaymentSessionCreationTest`
+     * convention) and a real marketplace order with the payable checkout
+     * opened for it.
+     */
+    private function paymentSession(string $providerPaymentId, int $amountMinor): PaymentSession
+    {
+        FeatureGate::query()->where('gate_id', 'G-PAY-01')->update(['state' => 'open']);
+
+        $intent = PaymentIntent::query()->create([
+            'requested_amount_minor' => $amountMinor,
+            'currency' => 'IDR',
+            'payment_mode' => 'online',
+            'decision' => PaymentIntentDecision::Allowed->value,
+            'actor_role' => 'customer',
+            'evaluated_at' => CarbonImmutable::now(),
+        ]);
+
+        return PaymentSession::query()->create([
+            'payment_intent_id' => $intent->id,
+            'provider' => PaymentProviders::SUMOPOD_SANDBOX,
+            'provider_payment_id' => $providerPaymentId,
+            'payment_link_url' => 'https://checkout.sumopod.com/x',
+            'amount_minor' => $amountMinor,
+            'currency' => 'IDR',
+            'merchant_ref' => 'makam-sandbox',
+            'badan_usaha_ref' => 'BU-JKT-01',
+            'state' => SessionState::AwaitingPayment->value,
+        ]);
+    }
+
+    private function marketplaceTarget(string $orderNumber): MarketplaceOrder
+    {
+        $vendor = Vendor::query()->create(['name' => 'Toko Bunga', 'is_active' => true]);
+
+        $order = MarketplaceOrder::query()->create([
+            'order_number' => $orderNumber,
+            'customer_ref' => 'cust-1',
+            'entity_ref' => 'BU-JKT-01',
+            'vendor_id' => $vendor->id,
+            'subtotal_minor' => 250_000,
+            'delivery_fee_minor' => 0,
+            'total_minor' => 250_000,
+            'payment_state' => PaymentState::BELUM_DIBAYAR,
+            'idempotency_key' => 'mkt-'.$orderNumber,
+            'placed_at' => CarbonImmutable::now(),
+        ]);
+
+        (new VendorPayable(actorContext: app(ActorContext::class)))->assess(
+            vendorId: $vendor->id,
+            entityRef: 'BU-JKT-01',
+            sourceType: 'marketplace_order',
+            sourceId: $order->id,
+            amount: new Money(250_000),
+            eligibility: new VendorPayableEligibility(false, false, null),
+            trigger: VendorPayableAssessmentTrigger::UnattendedAssessment,
+            now: CarbonImmutable::now(),
+        );
+
+        return $order;
+    }
+
+    private function paidMarketplaceCount(MarketplaceOrder $order): int
+    {
+        return MarketplaceOrder::query()
+            ->whereKey($order->getKey())
+            ->where('payment_state', PaymentState::DIBAYAR)
+            ->count();
     }
 }

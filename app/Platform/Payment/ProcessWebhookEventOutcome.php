@@ -18,10 +18,15 @@ namespace App\Platform\Payment;
 enum ProcessWebhookEventOutcome
 {
     /**
-     * The row moved `VALIDATED -> PROCESSING` and this caller owns it.
+     * The row moved `VALIDATED -> PROCESSING -> PROCESSED` and this caller
+     * owned it end to end.
      *
-     * It does NOT mean anything was applied — see `ProcessWebhookEvent`'s doc
-     * block for why the apply half does not exist yet.
+     * For a settling event this ALSO means the settlement ran: `ProcessWebhookEvent`
+     * dispatches `Actions\ApplyPaymentSettlement` inside the claim transaction,
+     * so a `Claimed` outcome implies the paid effects (booking `DIBAYAR` +
+     * `payment.received.v1`, or marketplace `payment_state` + payable
+     * re-assessment) committed together with the claim. A non-settling event
+     * claims with no effects by design.
      */
     case Claimed;
 
