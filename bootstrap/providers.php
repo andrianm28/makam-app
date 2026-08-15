@@ -1,6 +1,7 @@
 <?php
 
 use App\Domain\Faq\Providers\FaqServiceProvider;
+use App\Domain\OrderWorkflow\Providers\OrderWorkflowServiceProvider;
 use App\Platform\Correlation\Providers\CorrelationServiceProvider;
 use App\Platform\DocumentVault\Providers\DocumentVaultServiceProvider;
 use App\Platform\FeatureGate\Providers\FeatureGateServiceProvider;
@@ -81,4 +82,13 @@ return [
     // correct fail-closed behaviour for a missing authorization seam — see
     // `FaqServiceProvider`'s own class-level comment.
     FaqServiceProvider::class,
+    // Task 1 of the P1 `admin-order-management` lane — binds
+    // `App\Domain\OrderWorkflow\Authorization\Contracts\OrderTransitionAuthorizerContract`
+    // to `OrderTransitionAuthorizer`, the seam the admin order surfaces'
+    // transition authorization runs through. Same precedent as every
+    // provider above: without it `app(OrderTransitionAuthorizerContract::class)`
+    // raises `BindingResolutionException` on the first admin order action,
+    // which is the correct fail-closed behaviour for a missing authorization
+    // seam — see `OrderWorkflowServiceProvider`'s own class-level comment.
+    OrderWorkflowServiceProvider::class,
 ];
