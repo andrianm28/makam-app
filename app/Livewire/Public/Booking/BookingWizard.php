@@ -41,6 +41,7 @@ use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
+use OverflowException;
 use Throwable;
 
 /**
@@ -565,10 +566,11 @@ final class BookingWizard extends Component
             $this->currentStep = BookingWizardStep::PAYMENT;
 
             return;
-        } catch (InvalidArgumentException) {
+        } catch (InvalidArgumentException|OverflowException) {
             // A submission or quote-composition failure: the draft cannot be
             // turned into a payable quote right now (no published package
-            // version to quote against, a malformed stored selection, ...).
+            // version to quote against, a malformed stored selection, a line
+            // amount that overflows the integer range, ...).
             // Same honest fail-closed shape as the guard's denials.
             $this->onlinePaymentError = 'Pesanan belum dapat diproses untuk pembayaran online saat ini. Gunakan pembayaran manual atau hubungi dukungan.';
             $this->currentStep = BookingWizardStep::PAYMENT;

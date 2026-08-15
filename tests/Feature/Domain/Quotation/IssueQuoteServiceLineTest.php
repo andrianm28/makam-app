@@ -216,6 +216,91 @@ final class IssueQuoteServiceLineTest extends TestCase
         self::assertSame(0, Quote::query()->count());
     }
 
+    /**
+     * Review finding I-1: the caller-supplied anchor must not contradict
+     * the frozen version it names — the version's own stored values are
+     * authoritative, and an amount mismatch is refused (no quote).
+     */
+    public function test_a_service_line_whose_amount_contradicts_its_price_version_is_refused(): void
+    {
+        $order = $this->makeOrder();
+
+        try {
+            $this->issue($order, [$this->serviceLine(
+                ServiceCode::DOCUMENT_PROCESSING,
+                unitAmount: '999999.00',
+            )]);
+            self::fail('Expected a contradicting unit amount to be refused');
+        } catch (InvalidArgumentException) {
+            // expected
+        }
+
+        self::assertSame(0, Quote::query()->count());
+        self::assertSame(0, QuoteLine::query()->count());
+    }
+
+    public function test_a_service_line_whose_currency_contradicts_its_price_version_is_refused(): void
+    {
+        $order = $this->makeOrder();
+
+        try {
+            $this->issue($order, [$this->serviceLine(
+                ServiceCode::DOCUMENT_PROCESSING,
+                currency: 'USD',
+            )]);
+            self::fail('Expected a contradicting currency to be refused');
+        } catch (InvalidArgumentException) {
+            // expected
+        }
+
+        self::assertSame(0, Quote::query()->count());
+        self::assertSame(0, QuoteLine::query()->count());
+    }
+
+    public function test_a_service_line_whose_version_number_contradicts_its_price_version_is_refused(): void
+    {
+        $order = $this->makeOrder();
+
+        try {
+            $this->issue($order, [$this->serviceLine(
+                ServiceCode::DOCUMENT_PROCESSING,
+                priceVersionNumber: 999,
+            )]);
+            self::fail('Expected a contradicting version number to be refused');
+        } catch (InvalidArgumentException) {
+            // expected
+        }
+
+        self::assertSame(0, Quote::query()->count());
+        self::assertSame(0, QuoteLine::query()->count());
+    }
+
+    /**
+     * Review finding M-2: a line naming NEITHER family key is as ambiguous
+     * as one naming both — refused.
+     */
+    public function test_a_line_naming_neither_family_is_rejected(): void
+    {
+        $order = $this->makeOrder();
+
+        try {
+            $this->issue($order, [[
+                'price_version_id' => (int) ServiceDefinition::findByCode(ServiceCode::DOCUMENT_PROCESSING)->currentPriceVersion()->getKey(),
+                'price_version_number' => 1,
+                'quantity' => 1,
+                'unit_amount' => '350000.00',
+                'currency' => 'IDR',
+                'fulfillment_owner' => FulfillmentOwner::PLATFORM,
+            ]]);
+            self::fail('Expected a line naming neither family to be refused');
+        } catch (InvalidArgumentException) {
+            // expected
+        }
+
+        self::assertSame(0, Quote::query()->count());
+        self::assertSame(0, QuoteLine::query()->count());
+    }
+
     private function makeOrder(): Order
     {
         return Order::query()->create([
@@ -244,7 +329,9 @@ final class IssueQuoteServiceLineTest extends TestCase
      * current price version — the exact shape
      * `ComposeQuoteLinesFromBookingDraft` produces. `$priceVersion`
      * overrides the resolution when a test needs to name a specific
-     * (e.g. already-superseded) version.
+     * (e.g. already-superseded) version; `$unitAmount`/`$currency`
+     * override the caller-supplied anchor fields when a test needs to
+     * contradict the version's stored values.
      *
      * @return array<string, mixed>
      */
@@ -254,6 +341,8 @@ final class IssueQuoteServiceLineTest extends TestCase
         ?PriceVersion $priceVersion = null,
         ?int $priceVersionId = null,
         ?int $priceVersionNumber = null,
+        ?string $unitAmount = null,
+        ?string $currency = null,
     ): array {
         $definition = ServiceDefinition::findByCode($code);
         $price = $priceVersion ?? $definition->currentPriceVersion();
@@ -263,8 +352,8 @@ final class IssueQuoteServiceLineTest extends TestCase
             'price_version_id' => $priceVersionId ?? (int) $price->getKey(),
             'price_version_number' => $priceVersionNumber ?? (int) $price->version_number,
             'quantity' => $quantity,
-            'unit_amount' => (string) $price->amount,
-            'currency' => (string) $price->currency,
+            'unit_amount' => $unitAmount ?? (string) $price->amount,
+            'currency' => $currency ?? (string) $price->currency,
             'fulfillment_owner' => (string) $definition->fulfillment_owner,
         ];
     }

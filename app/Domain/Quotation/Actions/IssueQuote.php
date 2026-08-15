@@ -80,7 +80,9 @@ use OverflowException;
  * invariant, checked here with real queries because the append-only
  * price_versions table holds rows for both `ServiceDefinition` and
  * `ServicePackageVersion` priceables and a caller could name either. The
- * line's `unit_amount`/`currency` are caller-supplied but validated and
+ * line's `unit_amount`/`currency`/`price_version_number` are caller-supplied
+ * but CROSS-CHECKED against the version's OWN stored values — an anchor
+ * that contradicts its frozen version is refused — then validated and
  * converted exactly once (same as the package branch); `description` is
  * NOT accepted on a service line — it is derived from the service
  * definition's canonical name, so no line-level description can drift
@@ -313,9 +315,11 @@ final readonly class IssueQuote
     /**
      * A service line's frozen-snapshot branch: the named `PriceVersion` must
      * exist and be the CURRENT (non-superseded) version of the named
-     * `ServiceDefinition` — never a stale or foreign version. `description`
-     * is derived from the definition's canonical name; a caller-supplied
-     * value is neither accepted nor required.
+     * `ServiceDefinition` — never a stale or foreign version — and the line's
+     * caller-supplied `unit_amount`/`currency`/`price_version_number` must
+     * match that version's OWN stored anchor values (a contradicting anchor
+     * is refused). `description` is derived from the definition's canonical
+     * name; a caller-supplied value is neither accepted nor required.
      *
      * @param  array<string, mixed>  $line
      * @return array<string, mixed>
@@ -351,11 +355,25 @@ final readonly class IssueQuote
             );
         }
 
+        // The line's own anchor fields must not contradict the frozen
+        // version it names: the stored amount/currency/version_number are
+        // authoritative, so a caller-supplied mismatch is refused outright.
+        $priceVersionNumber = $this->requiredInt($line, 'price_version_number', $index);
+
+        if (Money::fromDecimal((string) $priceVersion->amount) !== $unitAmountMinor
+            || $lineCurrency !== (string) $priceVersion->currency
+            || $priceVersionNumber !== (int) $priceVersion->version_number) {
+            throw new InvalidArgumentException(
+                "Quote line [{$index}] unit amount, currency, or version number contradicts ".
+                "price version [{$priceVersionId}]'s frozen anchor."
+            );
+        }
+
         return [
             'service_definition_id' => $serviceDefinitionId,
             'service_package_version_id' => null,
             'price_version_id' => $priceVersionId,
-            'price_version_number' => $this->requiredInt($line, 'price_version_number', $index),
+            'price_version_number' => $priceVersionNumber,
             'description' => $definition->name,
             'quantity' => $quantity,
             'unit_amount_minor' => $unitAmountMinor,
