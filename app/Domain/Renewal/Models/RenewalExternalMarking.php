@@ -18,8 +18,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * (`grave_record_id`, `target_due_period`) on the parent `renewals` row —
  * `Renewal`'s own doc block explains why one `renewals` row per write path
  * (online or external) is what lets one index cover both. This table only
- * records WHO marked it, with WHAT evidence, and WHY, once that parent row
- * already exists with `source = RenewalSource::EXTERNAL`.
+ * records WHO marked it, with WHAT evidence, and WHY. It is written by
+ * `Actions\MarkExternalRenewal` (an EXTERNAL-sourced renewal is created
+ * together with its marking) or by `Actions\MarkRenewalPaidExternally` (an
+ * already-open renewal of ANY source — including ONLINE — settled with
+ * money that changed hands off-platform), so an ONLINE-originated renewal
+ * settled offline carries a marking row here too.
  *
  * `marked_by_actor_ref` is an opaque reference, matching
  * `App\Domain\GraveRegistry\Models\GraveRecord`'s
@@ -27,10 +31,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * actor identity is resolved through `App\Platform\IdentityAccess`, not
  * stored redundantly here.
  *
- * The privileged write path that populates this table
- * (`Actions\MarkExternalRenewal`, gated by `RenewalMarkingPolicy`) is a
- * later task in this lane (Task 7) and does not exist yet; this task only
- * creates the schema and the model.
+ * Both privileged write paths that populate this table now exist:
+ * `Actions\MarkExternalRenewal` (gated by `RenewalMarkingPolicy`) and
+ * `Actions\MarkRenewalPaidExternally` (gated by the admin order authorizer
+ * and the re-authentication guard for finance actors) — see those actions'
+ * own doc blocks for the gate details.
  */
 final class RenewalExternalMarking extends Model
 {

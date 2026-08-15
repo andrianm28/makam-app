@@ -24,6 +24,10 @@ The batches whose rows below said "implemented, pending merge/CI" (or were bare)
 
 PUB-017, PUB-019, and PUB-023 are corrected below: the booking Step 8 online branch and the marketplace checkout online option are now real when `G-PAY-01` is open (dev only — production keeps the gate closed and the manual fallback), and the browser-return pages gained a display-only, webhook-driven state read. The 14 Aug note above is left verbatim; the sentences it superseded are replaced in place.
 
+## Revision note — 15 August 2026, P1 admin order management (lanes B/C/D, PRs #62/#63/#64)
+
+The three admin order-management resources shipped 15 Aug 2026 (`BookingOrderResource`, `MarketplaceOrderResource`, `RenewalOrderResource`) and ADM-040/ADM-050/ADM-060 are marked below with their transition surface: list + view (no Create — orders originate from the public flow), status transitions routed through domain Actions and gated by the `OrderTransitionAuthorizer` role split (operator vs finance), money-adjacent actions under the fresh re-authentication window (`ReauthenticationGuard`), and an audit row + append-only `order_status_events` timeline on every transition. The 15 Aug online-payment note above is left verbatim.
+
 ## A. Public
 
 | Screen ID | Screen | Key states |
@@ -65,9 +69,9 @@ PUB-017, PUB-019, and PUB-023 are corrected below: the booking Step 8 online bra
 | ADM-010 | TPU/TPS list/detail — **shipped** 13 Aug 2026 (`CemeteryResource` + packages relation manager, PRs #41/#44; admin navigation PR #43) |
 | ADM-020 | Package/class/service/tariff — **shipped** 13 Aug 2026 (master-data resources: `ProductResource` PR #40, `ServiceDefinitionResource` with append-only price versions PR #42, cemetery packages relation manager PR #41) |
 | ADM-030 | Vendor and product management |
-| ADM-040 | Booking orders and case detail |
-| ADM-050 | Marketplace orders |
-| ADM-060 | Renewal and grave record |
+| ADM-040 | **Booking orders and case detail — shipped 15 Aug 2026 (P1 lane B, PR #62: `BookingOrderResource`).** List + view (parties, quote, payments, documents, append-only status timeline, active ORDER-scope grants) + non-financial edit; status transitions via domain Actions, one header action per allowed `OrderTransition` edge: operator/restricted_admin → verify, request availability, issue quote (restricted_admin excluded), record buyer approval, process, complete, reject, cancel, expire; finance → authorize payment opening (grant + transition), manual payment verification, mark paid — each under the fresh re-authentication window. Every transition is audited (`AuditSource::Panel`) and reflected in the append-only timeline. No Create/Delete |
+| ADM-050 | **Marketplace orders — shipped 15 Aug 2026 (P1 lane C, PR #63: `MarketplaceOrderResource`).** List + view (items, vendor allocation, payable state, vendor processing status read-only) + finance-gated mark-paid header action (amount-checked against payable, under re-authentication). No Create/Delete |
+| ADM-060 | **Renewal and grave record — shipped 15 Aug 2026 (P1 lane D, PR #64: `RenewalOrderResource`).** List + view (renewal quote, `RenewalExternalMarking` evidence) + finance-gated record-external-payment (evidence-recorded settlement, under re-authentication) + operator expiry action. No Create/Delete |
 | ADM-070 | Payment/transaction/manual verification |
 | ADM-080 | FAQ CMS — **shipped** (resource 26 Jul 2026, S4-T2 `admin-operations` AC6; role authorizer 12 Aug 2026, PR #25 `lane/l9-admin-operations`) |
 | ADM-090 | Reports |

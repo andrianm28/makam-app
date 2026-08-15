@@ -30,9 +30,11 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * AC10). Both are ordinary rows in this one table, so
  * `renewals_grave_period_unique` on `(grave_record_id, target_due_period)`
  * covers both without a second uniqueness mechanism to keep in sync — see
- * that migration's own doc block. Neither write path (`OpenRenewal`,
- * `MarkExternalRenewal`) exists yet; this task only creates the schema and
- * the model those later tasks will use.
+ * that migration's own doc block. Both row-creation paths now exist —
+ * `OpenRenewal` (ONLINE) and `MarkExternalRenewal` (EXTERNAL) — and an
+ * already-open row of either source can additionally be settled off-platform
+ * by `MarkRenewalPaidExternally`, which records its own marking row (see
+ * `externalMarking()` below).
  *
  * `target_due_period` is a `date`, not a string — it holds the grave
  * record's `due_date` AT THE MOMENT this renewal was opened, so it is
@@ -121,9 +123,13 @@ final class Renewal extends Model
     }
 
     /**
-     * Populated only when `source = RenewalSource::EXTERNAL` (AC10). A
-     * `RenewalSource::ONLINE` row has no external marking and this relation
-     * resolves to `null` for it — that is expected, not an error state.
+     * The AC10 evidence row, written by one of two actions: `MarkExternalRenewal`
+     * creates an EXTERNAL-sourced renewal together with its marking, and
+     * `MarkRenewalPaidExternally` settles an already-open renewal of ANY
+     * source (including ONLINE) with money that changed hands off-platform,
+     * recording its marking here. An ONLINE row therefore CAN carry a
+     * marking — a `null` means "no off-platform settlement was recorded",
+     * not "an ONLINE row never has one".
      *
      * @return HasOne<RenewalExternalMarking, $this>
      */
