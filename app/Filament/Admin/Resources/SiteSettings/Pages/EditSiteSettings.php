@@ -73,7 +73,7 @@ final class EditSiteSettings extends Page implements HasForms
         $actorRole = SiteSettingsResource::auditRoleFor($actor);
         $changed = [];
 
-        DB::transaction(function () use (&$changed, $actorRef): void {
+        DB::transaction(function () use (&$changed, $actorRef, $actorRole): void {
             foreach (SiteSetting::KNOWN_KEYS as $key) {
                 $value = trim((string) ($this->data[$key] ?? ''));
                 $current = SiteSetting::valueFor($key);
@@ -88,18 +88,26 @@ final class EditSiteSettings extends Page implements HasForms
                 );
                 $changed[] = $key;
             }
-        });
 
-        if ($changed !== []) {
-            Audit::record(
-                action: SiteSettingsAuditActions::UPDATED,
-                subject: new AuditSubject('site_settings', implode(',', $changed)),
-                outcome: AuditOutcome::Allowed,
-                actorRef: $actorRef,
-                actorRole: $actorRole,
-                source: AuditSource::Panel,
-            );
-        }
+            // Review fix (round 1): the audit record is written INSIDE the
+            // same transaction as the upserts so the SITE_SETTING_UPDATED row
+            // commits atomically with the state change (Audit::record's own
+            // doc block — "call this from inside an existing transaction ...
+            // to get AC4's 'same transaction as the state change' guarantee").
+            // The brief-literal placement after `DB::transaction` committed
+            // state first and could orphan a settings change without its
+            // audit record.
+            if ($changed !== []) {
+                Audit::record(
+                    action: SiteSettingsAuditActions::UPDATED,
+                    subject: new AuditSubject('site_settings', implode(',', $changed)),
+                    outcome: AuditOutcome::Allowed,
+                    actorRef: $actorRef,
+                    actorRole: $actorRole,
+                    source: AuditSource::Panel,
+                );
+            }
+        });
 
         Notification::make()->success()->title('Pengaturan disimpan.')->send();
     }
