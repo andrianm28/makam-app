@@ -96,7 +96,7 @@ final class MarketplaceOrderResource extends Resource
     public static function getEloquentQuery(): Builder
     {
         return MarketplaceOrder::query()
-            ->with(['items', 'vendor'])
+            ->with(['items', 'vendor', 'vendorOrders'])
             ->withCount('items');
     }
 

@@ -47,7 +47,7 @@ final class MarketplaceOrderResourceTest extends TestCase
         ]);
     }
 
-    public function test_operator_cannot_access_marketplace_resource(): void
+    public function test_operator_can_access_marketplace_resource(): void
     {
         $user = User::factory()->create();
         $this->grantRoleTo($user, ActorRole::OPERATOR);
@@ -64,5 +64,16 @@ final class MarketplaceOrderResourceTest extends TestCase
         $order = $this->order('BELUM_DIBAYAR');
         $action = MarkMarketplaceOrderPaidAction::make($order);
         $this->assertFalse($action->isAuthorized());
+    }
+
+    public function test_finance_can_run_mark_paid_action(): void
+    {
+        $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::FINANCE);
+        $this->actingAs($user);
+
+        $order = $this->order('BELUM_DIBAYAR');
+        $action = MarkMarketplaceOrderPaidAction::make($order);
+        $this->assertTrue($action->isAuthorized());
     }
 }
