@@ -221,6 +221,7 @@ final class TransitionOrderAction
             };
 
             Notification::make()->success()->title('Transisi berhasil dicatat.')->send();
+            redirect()->to(url()->current());
         } catch (\Throwable $exception) {
             Notification::make()->danger()->title('Transisi gagal')->body($exception->getMessage())->send();
         }
