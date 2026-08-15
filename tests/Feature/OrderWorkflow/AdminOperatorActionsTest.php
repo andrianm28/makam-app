@@ -86,11 +86,32 @@ final class AdminOperatorActionsTest extends TestCase
         app(IssueOrderQuote::class)($order, CarbonImmutable::now()->addDays(30), 'user:1', 'operator');
     }
 
-    public function test_record_buyer_approval_from_quote_sent(): void
+    public function test_record_buyer_approval_accepts_current_quote_and_transitions(): void
+    {
+        $service = $this->makePricedService();
+        $draft = BookingDraft::query()->create([
+            'service_type' => BookingServiceType::NEW_GRAVE,
+            'selected_services' => [['code' => $service->code, 'quantity' => 1]],
+            'customer_full_name' => 'UAT Penerima',
+        ]);
+        $order = $this->makeOrder(OrderStatus::MENUNGGU_KETERSEDIAAN, $draft);
+
+        app(IssueOrderQuote::class)($order, CarbonImmutable::now()->addDays(30), 'user:1', 'operator');
+        $this->assertSame(OrderStatus::PENAWARAN_TERKIRIM, $order->status());
+
+        app(RecordBuyerApproval::class)($order, 'user:1', 'operator');
+
+        $this->assertSame(OrderStatus::DISETUJUI_PEMESAN, $order->status());
+        $quote = Quote::currentFor($order);
+        $this->assertNotNull($quote);
+        $this->assertTrue($quote->isAcceptedAndUnexpired(CarbonImmutable::now()));
+    }
+
+    public function test_record_buyer_approval_without_quote_throws(): void
     {
         $order = $this->makeOrder(OrderStatus::PENAWARAN_TERKIRIM);
+        $this->expectException(\InvalidArgumentException::class);
         app(RecordBuyerApproval::class)($order, 'user:1', 'operator');
-        $this->assertSame(OrderStatus::DISETUJUI_PEMESAN, $order->status());
     }
 
     public function test_process_and_complete(): void
