@@ -182,7 +182,7 @@ final class TransitionOrderAction
             }
         } catch (ReauthenticationRequiredException) {
             session()->put(RequireRecentAuthentication::REASON_SESSION_KEY, 'money_action');
-            session()->put('url.intended', url()->current());
+            session()->put('url.intended', route('filament.admin.resources.booking-orders.view', ['record' => $order->getKey()]));
 
             Notification::make()
                 ->warning()
@@ -221,7 +221,7 @@ final class TransitionOrderAction
             };
 
             Notification::make()->success()->title('Transisi berhasil dicatat.')->send();
-            redirect()->to(url()->current());
+            redirect()->route('filament.admin.resources.booking-orders.view', ['record' => $order->getKey()]);
         } catch (\Throwable $exception) {
             Notification::make()->danger()->title('Transisi gagal')->body($exception->getMessage())->send();
         }

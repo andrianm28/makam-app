@@ -83,7 +83,7 @@ final class MarkMarketplaceOrderPaidAction
                     app(ReauthenticationGuard::class)->assertFresh($actor);
                 } catch (ReauthenticationRequiredException) {
                     Notification::make()->warning()->title('Perlu verifikasi ulang')->send();
-                    session()->put('url.intended', url()->current());
+                    session()->put('url.intended', route('filament.admin.resources.marketplace-orders.view', ['record' => $order->getKey()]));
                     redirect()->route('filament.admin.pages.mfa-challenge');
 
                     return;
