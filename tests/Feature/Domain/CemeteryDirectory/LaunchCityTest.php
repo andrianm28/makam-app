@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Domain\CemeteryDirectory;
 
+use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\LaunchCityQuery;
 use App\Domain\CemeteryDirectory\Models\LaunchCity;
@@ -56,6 +57,27 @@ final class LaunchCityTest extends TestCase
         $this->assertSame(
             LaunchCityCode::KNOWN_CODES,
             LaunchCity::query()->orderBy('sort_order')->pluck('code')->all(),
+        );
+    }
+
+    /**
+     * The constant fallback that keeps the public catalogue honest when the
+     * table is emptied: `activeCities()` returns `[]` and
+     * `CemeteryPublicQuery::launchCities()` serves the canonical five in
+     * the same `list<array{code, label}>` shape.
+     */
+    public function test_launch_cities_fall_back_to_the_canonical_constants_when_the_table_is_empty(): void
+    {
+        LaunchCity::query()->delete();
+
+        $this->assertSame([], LaunchCityQuery::activeCities());
+
+        $cities = CemeteryPublicQuery::launchCities();
+
+        $this->assertSame(LaunchCityCode::KNOWN_CODES, array_column($cities, 'code'));
+        $this->assertSame(
+            ['Jakarta', 'Bogor', 'Depok', 'Tangerang', 'Bekasi'],
+            array_column($cities, 'label'),
         );
     }
 }

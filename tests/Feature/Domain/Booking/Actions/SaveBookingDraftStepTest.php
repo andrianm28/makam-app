@@ -11,6 +11,7 @@ use App\Domain\Booking\Models\BookingDraft;
 use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\CemeteryDirectory\Models\LaunchCity;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -46,6 +47,20 @@ final class SaveBookingDraftStepTest extends TestCase
         } catch (BookingStepValidationException $e) {
             $this->assertArrayHasKey('city_code', $e->getErrors());
         }
+    }
+
+    public function test_step_1_accepts_an_admin_added_launch_city(): void
+    {
+        LaunchCity::query()->create(['code' => 'SUKABUMI', 'label' => 'Sukabumi']);
+
+        $draft = BookingDraft::create([]);
+
+        $saved = (new SaveBookingDraftStep)($draft, BookingWizardStep::LOCATION, [
+            'city_code' => 'SUKABUMI',
+        ], 'idem-1b');
+
+        $this->assertSame('SUKABUMI', $saved->city_code);
+        $this->assertContains(BookingWizardStep::LOCATION, $saved->completed_steps);
     }
 
     public function test_step_1_rejects_an_unknown_city_code(): void

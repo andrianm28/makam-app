@@ -180,13 +180,15 @@ final class CemeteryPublicQuery
      * An unknown city code returns an empty collection rather than throwing:
      * callers are public screens reading a user-supplied value, and
      * `LaunchCityCode::assertKnown()` at that boundary would turn a tampered
-     * query string into a 500.
+     * query string into a 500. Known means `LaunchCityQuery::isKnown` — a
+     * row in `launch_cities` (active or not, so an admin-added city works
+     * here) or one of the canonical `LaunchCityCode::KNOWN_CODES`.
      *
      * @return Collection<int, Cemetery>
      */
     public static function inCity(string $cityCode): Collection
     {
-        if (! LaunchCityCode::isKnown($cityCode)) {
+        if (! LaunchCityQuery::isKnown($cityCode)) {
             return new Collection;
         }
 

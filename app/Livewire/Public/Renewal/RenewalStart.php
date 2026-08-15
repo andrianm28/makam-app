@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Livewire\Public\Renewal;
 
 use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
-use App\Domain\CemeteryDirectory\LaunchCityCode;
+use App\Domain\CemeteryDirectory\LaunchCityQuery;
 use App\Domain\Renewal\RenewalJourneyStep;
 use App\Platform\FeatureGate\ModeResolver;
 use Illuminate\Contracts\View\View;
@@ -54,10 +54,12 @@ use Throwable;
 final class RenewalStart extends Component
 {
     /**
-     * The launch city selected in AC1's step 1, as a
-     * `LaunchCityCode::KNOWN_CODES` value. Empty means step 1 is still
-     * open — which is what makes the stepper's current step derivable
-     * rather than tracked as a second, drift-prone piece of state.
+     * The launch city selected in AC1's step 1, as a code from the
+     * `launch_cities` table (`LaunchCityQuery::isKnown` — which also
+     * accepts the five canonical `LaunchCityCode::KNOWN_CODES`). Empty
+     * means step 1 is still open — which is what makes the stepper's
+     * current step derivable rather than tracked as a second, drift-prone
+     * piece of state.
      */
     #[Url(as: 'kota', history: true)]
     public string $city = '';
@@ -65,7 +67,8 @@ final class RenewalStart extends Component
     /**
      * §6.5 "Provider unavailable" — set only when the cemetery list query
      * itself throws. The city chooser above it is built from
-     * `LaunchCityCode`, a PHP constant with no database behind it, so
+     * `CemeteryPublicQuery::launchCities()` (the table-backed catalogue,
+     * seeded with the five canonical `LaunchCityCode::KNOWN_CODES`), so
      * step 1 keeps working even when step 2's read is down. That is the
      * whole point of catching here rather than letting the page 500.
      */
@@ -89,14 +92,14 @@ final class RenewalStart extends Component
      */
     private function normalizeCity(): void
     {
-        if ($this->city !== '' && ! LaunchCityCode::isKnown($this->city)) {
+        if ($this->city !== '' && ! LaunchCityQuery::isKnown($this->city)) {
             $this->city = '';
         }
     }
 
     public function selectCity(string $city): void
     {
-        if (! LaunchCityCode::isKnown($city)) {
+        if (! LaunchCityQuery::isKnown($city)) {
             return;
         }
 

@@ -7,13 +7,22 @@ namespace App\Domain\CemeteryDirectory;
 use App\Domain\CemeteryDirectory\Models\LaunchCity;
 
 /**
- * The table-backed read seam for launch cities.
+ * The table-backed read seam for launch cities — the single definition of
+ * "which cities exist" for every city-code consumer in the codebase:
  *
- * `CemeteryPublicQuery::launchCities()` and `BookingDraft`'s city
- * validation both read through here, so an admin-added `launch_cities` row
- * (spec §4.6's product-approved extension) flows into the public screens
- * without touching either consumer — the two public flows share exactly
- * one definition of "which cities exist".
+ *   - `CemeteryPublicQuery::launchCities()` / `::inCity()` (public lists)
+ *   - `BookingDraft` and `Cemetery` saving hooks, `SaveBookingDraftStep`
+ *     (write-path validation)
+ *   - `RenewalStart` and `CemeteryDirectoryIndex` (public screens)
+ *   - `CemeteryForm` (admin city options)
+ *
+ * An admin-added `launch_cities` row (spec §4.6's product-approved
+ * extension) therefore flows through every seam without any consumer
+ * knowing the catalogue is no longer the five constants. `LaunchCityCode::
+ * KNOWN_CODES` remains the canonical fallback: `isKnown()` accepts it, and
+ * `CemeteryPublicQuery::launchCities()` (plus the two screens' option
+ * lists) falls back to it when the table has no active rows — the seed
+ * migration guarantees it does.
  */
 final class LaunchCityQuery
 {

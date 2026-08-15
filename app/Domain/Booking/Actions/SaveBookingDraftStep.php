@@ -14,7 +14,7 @@ use App\Domain\Booking\Exceptions\BookingDraftVersionConflictException;
 use App\Domain\Booking\Exceptions\BookingStepValidationException;
 use App\Domain\Booking\Models\BookingDraft;
 use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
-use App\Domain\CemeteryDirectory\LaunchCityCode;
+use App\Domain\CemeteryDirectory\LaunchCityQuery;
 use App\Domain\ServiceCatalog\ServiceCode;
 use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
@@ -291,7 +291,7 @@ final readonly class SaveBookingDraftStep
             return ['city_code' => ['Pilih kota terlebih dahulu.']];
         }
 
-        if (! LaunchCityCode::isKnown($city)) {
+        if (! LaunchCityQuery::isKnown($city)) {
             return ['city_code' => ['Kota yang dipilih tidak dikenali.']];
         }
 

@@ -8,6 +8,7 @@ use App\Domain\CemeteryCapability\Models\CemeteryCapabilityProfile;
 use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
+use App\Domain\CemeteryDirectory\LaunchCityQuery;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Livewire\Public\Directory\Support\PublicCapabilityProjection;
 use Illuminate\Contracts\View\View;
@@ -84,16 +85,32 @@ final class CemeteryDirectoryIndex extends Component
     public bool $capabilitiesDegraded = false;
 
     /**
-     * Validation is expressed as `in:` against the canonical closed lists
-     * rather than a hand-written list of five city codes — the codes stay
-     * defined exactly once, in `LaunchCityCode`/`CemeteryType`.
+     * The city filter's allowed values are the ACTIVE `launch_cities`
+     * rows (`LaunchCityQuery::activeCities()`), so an admin-added or
+     * deactivated city is reflected here automatically; when the table
+     * has no active rows the canonical `LaunchCityCode::KNOWN_CODES`
+     * remain the fallback (the seed guarantees the five rows exist).
+     *
+     * @return list<string>
+     */
+    private function cityCodes(): array
+    {
+        $codes = array_column(LaunchCityQuery::activeCities(), 'code');
+
+        return $codes !== [] ? $codes : LaunchCityCode::KNOWN_CODES;
+    }
+
+    /**
+     * Validation is expressed as `in:` against the table-backed city
+     * catalogue and the `CemeteryType` closed list rather than a
+     * hand-written list — the codes stay defined exactly once.
      *
      * @return array<string, list<string>>
      */
     protected function rules(): array
     {
         return [
-            'city' => ['nullable', 'string', 'in:'.implode(',', LaunchCityCode::KNOWN_CODES)],
+            'city' => ['nullable', 'string', 'in:'.implode(',', $this->cityCodes())],
             'type' => ['nullable', 'string', 'in:'.implode(',', CemeteryType::KNOWN_TYPES)],
         ];
     }
@@ -121,7 +138,7 @@ final class CemeteryDirectoryIndex extends Component
         // `#[Url]` means both properties can also arrive straight from the
         // query string on a plain GET, which never passes through an action
         // method. `validateOnly`-style partial validation would miss that.
-        $cityValid = $this->city === '' || in_array($this->city, LaunchCityCode::KNOWN_CODES, true);
+        $cityValid = $this->city === '' || in_array($this->city, $this->cityCodes(), true);
         $typeValid = $this->type === '' || in_array($this->type, CemeteryType::KNOWN_TYPES, true);
 
         $this->resetValidation();
