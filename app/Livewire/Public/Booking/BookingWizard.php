@@ -9,15 +9,26 @@ use App\Domain\Booking\Actions\StartBookingDraft;
 use App\Domain\Booking\BookingContactChannel;
 use App\Domain\Booking\BookingDraftBinding;
 use App\Domain\Booking\BookingDraftQuery;
+use App\Domain\Booking\BookingPaymentMethod;
 use App\Domain\Booking\BookingWizardStep;
 use App\Domain\Booking\Exceptions\BookingDraftVersionConflictException;
 use App\Domain\Booking\Exceptions\BookingStepValidationException;
 use App\Domain\Booking\Models\BookingDraft;
 use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\OrderWorkflow\Models\Order;
+use App\Domain\Quotation\Models\Quote;
 use App\Domain\ServiceCatalog\ServiceCatalogQuery;
 use App\Domain\ServiceCatalog\ServiceCode;
 use App\Platform\FeatureGate\ModeResolver;
+use App\Platform\Payment\Actions\OpenPaymentSession;
+use App\Platform\Payment\Actions\OpenPaymentSessionCommand;
+use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutProviderException;
+use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutUnavailableException;
+use App\Platform\Payment\Exceptions\PaymentSessionOpeningDeniedException;
+use App\Platform\Payment\Models\PaymentSession;
+use App\Platform\Payment\OrderType;
+use App\Platform\Payment\SessionState;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -167,6 +178,28 @@ final class BookingWizard extends Component
      * may treat it as settlement. Verification is L7's.
      */
     public string $paymentReference = '';
+
+    /**
+     * The ONLINE branch's fail-closed copy: `null` means the last
+     * `openOnlinePayment()` attempt opened a session or is the first attempt.
+     * Every failure lands here as fixed Indonesian copy with the manual
+     * fallback (and the support escape) still on screen — never a 500 and
+     * never an English exception message (`AGENTS.md` §Observability).
+     */
+    public ?string $onlinePaymentError = null;
+
+    /**
+     * The PHP-session key under which an opened session is remembered for
+     * the draft's journey. Stored server-side keyed by the draft id (the
+     * journey's own resume token, same scoping as `BookingDraftBinding`),
+     * so a resumed wizard never opens a SECOND session for the same draft
+     * and can render the webhook-driven state of the first one after the
+     * hosted-checkout return.
+     */
+    private function onlinePaymentSessionKey(): string
+    {
+        return 'booking_online_payment.'.(string) $this->draftId;
+    }
 
     public function mount(?string $draftId = null): void
     {
@@ -369,6 +402,205 @@ final class BookingWizard extends Component
             'payment_method' => $paymentMethod,
             'payment_reference' => $this->paymentReference,
         ]);
+    }
+
+    /**
+     * Step 8's ONLINE branch (only rendered when `G-PAY-01` is open): persist
+     * the online method choice, then open the hosted-checkout session for
+     * the draft's ORDER and the accepted-quote total, and redirect the
+     * customer to the provider's checkout link.
+     *
+     * ---------------------------------------------------------------------------
+     * Order resolution — the wizard never fabricates an order
+     * ---------------------------------------------------------------------------
+     * The wizard resolves the order from the draft via `orders.
+     * booking_draft_id` and REFUSES to create one: Step 9's own copy states
+     * "Pesanan Anda belum dibuat secara resmi" — order creation is the
+     * operator-side journey's act (confirmation, quote, authorization), and
+     * `AGENTS.md` §Domain and financial invariants forbids a payment before
+     * valid confirmation/reservation, an accepted quote, and an authorized
+     * opening. A draft with no order yet (the common case at Step 8 today)
+     * fails closed with the manual path as the live alternative; the guard
+     * evaluates the rest (`OpenPaymentSession` is the only creation path,
+     * and all six conditions must hold).
+     *
+     * Exactly-once per journey: the opened session is remembered in the PHP
+     * session under the draft id, so a double click or a resume re-points at
+     * the SAME hosted checkout instead of opening a second one. Terminal
+     * states (PAID/FAILED/EXPIRED) are rendered as state cards and never
+     * re-opened here.
+     */
+    public function openOnlinePayment(): void
+    {
+        $this->onlinePaymentError = null;
+
+        if ($this->draftId === null) {
+            $this->onlinePaymentError = 'Sesi pemesanan Anda telah berakhir. Silakan mulai ulang.';
+
+            return;
+        }
+
+        $draft = BookingDraftQuery::findBound($this->draftId);
+
+        if ($draft === null) {
+            $this->onlinePaymentError = 'Sesi pemesanan Anda telah berakhir. Silakan mulai ulang.';
+
+            return;
+        }
+
+        $stored = session($this->onlinePaymentSessionKey());
+
+        if (is_array($stored) && isset($stored['session_id'])) {
+            $existing = PaymentSession::query()->find($stored['session_id']);
+
+            if ($existing instanceof PaymentSession) {
+                $state = SessionState::tryFrom((string) $existing->state);
+
+                if ($state === SessionState::Paid || $state === SessionState::Failed || $state === SessionState::Expired) {
+                    // The state card on the screen governs; a terminal
+                    // session is never re-opened from here. The manual path
+                    // is the recovery route for Failed/Expired.
+                    return;
+                }
+
+                $link = is_string($stored['link_url'] ?? null) ? $stored['link_url'] : '';
+
+                if ($link !== '') {
+                    $this->redirect($link);
+
+                    return;
+                }
+            }
+
+            session()->forget($this->onlinePaymentSessionKey());
+        }
+
+        // The method choice is persisted exactly like the manual branch's —
+        // same payload, same idempotency key — so `SaveBookingDraftStep`'s
+        // server-side gate check is what admits ONLINE, never the button.
+        try {
+            $saved = (new SaveBookingDraftStep)(
+                $draft,
+                BookingWizardStep::PAYMENT,
+                [
+                    'payment_method' => BookingPaymentMethod::ONLINE,
+                    'payment_reference' => $this->paymentReference,
+                ],
+                $this->idempotencyKeyFor(BookingWizardStep::PAYMENT, [
+                    'payment_method' => BookingPaymentMethod::ONLINE,
+                    'payment_reference' => $this->paymentReference,
+                ]),
+                expectedVersion: $this->version,
+            );
+
+            $this->hydrateFrom($saved);
+            $this->autosaveState = 'saved';
+        } catch (BookingStepValidationException $e) {
+            $this->autosaveState = 'failed';
+
+            foreach ($e->getErrors() as $field => $messages) {
+                $this->addError($field, $messages[0]);
+            }
+
+            return;
+        } catch (BookingDraftVersionConflictException) {
+            $this->handleVersionConflict();
+
+            return;
+        }
+
+        $order = Order::query()->where('booking_draft_id', $saved->id)->first();
+
+        if (! $order instanceof Order) {
+            $this->onlinePaymentError = 'Pesanan belum dapat dibayar secara online. Tim kami akan membuat pesanan resmi dan mengirimkan penawaran harga sebelum pembayaran dapat dibuka. Gunakan pembayaran manual atau hubungi dukungan.';
+            $this->currentStep = BookingWizardStep::PAYMENT;
+
+            return;
+        }
+
+        $quote = Quote::currentFor($order);
+
+        if (! $quote instanceof Quote) {
+            $this->onlinePaymentError = 'Pembayaran online belum dapat dibuka saat ini karena konfirmasi pesanan, penawaran harga, atau otorisasi pembayaran belum lengkap. Gunakan pembayaran manual atau hubungi dukungan.';
+            $this->currentStep = BookingWizardStep::PAYMENT;
+
+            return;
+        }
+
+        try {
+            $session = app(OpenPaymentSession::class)(new OpenPaymentSessionCommand(
+                orderType: OrderType::Booking,
+                orderRef: $order->reference,
+                // The current quote's total in integer minor units — the
+                // amount the guard's condition 5 verifies; never a
+                // client-supplied figure.
+                amountMinor: $quote->totalMinor()->toMinorInt(),
+                merchantRef: (string) config('payment.merchant_ref', ''),
+                successReturnUrl: route('payments.return'),
+                cancelReturnUrl: route('payments.cancel'),
+            ));
+        } catch (PaymentSessionOpeningDeniedException) {
+            // The six-condition guard denied. Fixed Indonesian copy — the
+            // guard's own messages are internal English and stay off-screen.
+            $this->onlinePaymentError = 'Pembayaran online belum dapat dibuka saat ini karena konfirmasi pesanan, penawaran harga, atau otorisasi pembayaran belum lengkap. Gunakan pembayaran manual atau hubungi dukungan.';
+            $this->currentStep = BookingWizardStep::PAYMENT;
+
+            return;
+        } catch (PaymentCheckoutProviderException|PaymentCheckoutUnavailableException) {
+            $this->onlinePaymentError = 'Layanan pembayaran online sedang tidak tersedia. Silakan coba lagi atau gunakan pembayaran manual.';
+            $this->currentStep = BookingWizardStep::PAYMENT;
+
+            return;
+        } catch (Throwable $e) {
+            report($e);
+            $this->onlinePaymentError = 'Pembayaran online belum dapat diproses. Silakan gunakan pembayaran manual atau hubungi dukungan.';
+            $this->currentStep = BookingWizardStep::PAYMENT;
+
+            return;
+        }
+
+        session([
+            $this->onlinePaymentSessionKey() => [
+                'session_id' => $session->id,
+                'link_url' => $session->payment_link_url,
+            ],
+        ]);
+
+        $this->redirect($session->payment_link_url);
+    }
+
+    /**
+     * The webhook-driven state of the session opened from this draft's
+     * journey, for display only. `null` when no session was opened yet (or
+     * the stored reference is gone) — the screen then shows the plain online
+     * option. The state is ALWAYS read from the row (`ApplyPaymentSettlement`
+     * is the row's only terminal-state writer); nothing here is ever taken
+     * from a URL.
+     *
+     * @return array{state: SessionState|null, link_url: string|null}
+     */
+    private function onlinePaymentDisplayState(): array
+    {
+        if ($this->draftId === null) {
+            return ['state' => null, 'link_url' => null];
+        }
+
+        $stored = session($this->onlinePaymentSessionKey());
+
+        if (! is_array($stored) || ! isset($stored['session_id'])) {
+            return ['state' => null, 'link_url' => null];
+        }
+
+        $session = PaymentSession::query()->find($stored['session_id']);
+
+        if (! $session instanceof PaymentSession) {
+            return ['state' => null, 'link_url' => null];
+        }
+
+        return [
+            'state' => SessionState::tryFrom((string) $session->state),
+            'link_url' => is_string($stored['link_url'] ?? null) ? $stored['link_url'] : null,
+        ];
     }
 
     private function saveStepOrShowErrors(int $step, array $payload): void
@@ -602,6 +834,8 @@ final class BookingWizard extends Component
         // only what is true.
         $whatsAppMode = $modes->whatsAppMode();
 
+        $onlinePaymentState = $this->onlinePaymentDisplayState();
+
         return view('livewire.public.booking.wizard', [
             'cities' => CemeteryPublicQuery::launchCities(),
             'cemeteries' => $cemeteries,
@@ -612,6 +846,8 @@ final class BookingWizard extends Component
             'confirmationData' => $confirmationData,
             'paymentMode' => $paymentMode,
             'whatsAppMode' => $whatsAppMode,
+            'onlineSessionState' => $onlinePaymentState['state'],
+            'onlinePaymentLinkUrl' => $onlinePaymentState['link_url'],
         ])->layout('layouts.app', [
             'title' => 'Pemesanan Makam - Makam.co.id',
             'active' => null,

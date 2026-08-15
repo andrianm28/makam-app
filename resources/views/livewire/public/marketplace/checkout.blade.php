@@ -34,6 +34,79 @@
                     </x-mk.button>
                 </x-slot>
             </x-mk.alert>
+
+            @if ($onlinePaymentAllowed)
+                <x-mk.card class="mb-6">
+                    <div class="flex flex-col gap-2">
+                        <h2 class="text-base font-semibold text-neutral-900">Pembayaran Online</h2>
+                        <p class="text-sm text-neutral-600">
+                            Anda akan diarahkan ke halaman pembayaran untuk menyelesaikan transaksi.
+                        </p>
+                    </div>
+
+                    @if ($onlinePaymentUnavailable)
+                        {{-- The documented marketplace-online deferral: the
+                             session service refuses Marketplace order types,
+                             and the screen says so honestly instead of failing
+                             with a 500. --}}
+                        <x-mk.alert
+                            intent="danger"
+                            title="Pembayaran online belum tersedia untuk pesanan marketplace"
+                            live="assertive"
+                            class="mt-3"
+                        >
+                            <p class="text-base">
+                                Pembayaran online untuk pesanan marketplace belum tersedia untuk saat ini.
+                                Silakan gunakan transfer manual di bawah ini untuk melanjutkan pembayaran.
+                            </p>
+                            <x-slot name="action">
+                                <x-mk.button
+                                    variant="secondary"
+                                    size="sm"
+                                    href="{{ route('bantuan.index') }}"
+                                >
+                                    Butuh bantuan?
+                                </x-mk.button>
+                            </x-slot>
+                        </x-mk.alert>
+                    @else
+                        @if ($onlinePaymentError !== null)
+                            <x-mk.alert
+                                intent="danger"
+                                title="Pembayaran online belum dapat diproses"
+                                live="assertive"
+                                class="mt-3"
+                            >
+                                <p class="text-base">{{ $onlinePaymentError }}</p>
+                                <x-slot name="action">
+                                    <x-mk.button
+                                        variant="secondary"
+                                        size="sm"
+                                        href="{{ route('bantuan.index') }}"
+                                    >
+                                        Butuh bantuan?
+                                    </x-mk.button>
+                                </x-slot>
+                            </x-mk.alert>
+                        @endif
+
+                        <div class="mt-3 flex flex-wrap items-center gap-3">
+                            <x-mk.button
+                                variant="primary"
+                                wire:click="payOnline"
+                                wire:loading.attr="disabled"
+                                wire:target="payOnline"
+                            >
+                                Bayar Online
+                            </x-mk.button>
+                            <span wire:loading wire:target="payOnline" role="status" class="flex items-center gap-2 text-sm text-neutral-600">
+                                <x-mk.spinner class="size-4" aria-hidden="true" />
+                                Membuka halaman pembayaran&hellip;
+                            </span>
+                        </div>
+                    @endif
+                </x-mk.card>
+            @endif
         @endif
 
         @if (! $onlinePaymentAllowed)

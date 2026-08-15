@@ -4,33 +4,39 @@ declare(strict_types=1);
 
 namespace App\Platform\Payment\Http\Controllers;
 
+use App\Platform\Payment\ReturnPageState;
 use Illuminate\Contracts\View\View;
 
 /**
  * `GET /pembayaran/batal` — ADR-0033's `cancel_return_url`.
  *
- * The mirror of `PaymentReturnController`, and a SEPARATE class on purpose
- * rather than a second method or a branch on a query parameter. Read that
- * class's doc block first: the reasoning about untrusted browser returns is the
- * same and is not repeated here.
- *
- * What is specific to this route is the symmetry of the risk. A cancel return is
- * as untrusted as a success return, in the opposite direction: a visitor who
- * DID pay can be redirected here (by a mis-configured provider, a back button,
- * or an attacker-crafted link) while the webhook that settles the payment is
- * still in flight. So this endpoint must not cancel, expire, fail, or release
- * anything either — a browser return is not evidence that a payment did not
- * happen, any more than it is evidence that one did. It renders a page, and the
- * provider's own webhook remains the only thing that moves state in either
- * direction.
- *
- * Same structural enforcement: no dependency, no model, no query, no action, and
- * a test that fails if any write-shaped name appears in this file's code.
+ * The risk is symmetric to `PaymentReturnController`'s: a visitor who DID pay
+ * can land here — a back button, a mis-configured provider redirect, an
+ * attacker-crafted link — while the webhook that settles the payment is still
+ * in flight. So this page must not tell them the payment failed, was
+ * cancelled, or was released, any more than the success page may tell them it
+ * succeeded. The copy is decided by `ReturnPageState` from the session row's
+ * own webhook-written state (read the sibling controller's doc block and
+ * `ReturnPageState`'s for the display-only trust model); the page itself
+ * writes nothing, structurally — the same absence `Tests\Feature\Payment\
+ * PaymentReturnRouteTest` pins for both return routes.
  */
 final class PaymentCancelController
 {
     public function __invoke(): View
     {
-        return view('payment.cancel');
+        $sessionKey = self::stringQuery('session');
+        $providerPaymentId = self::stringQuery('payment_id');
+
+        $state = ReturnPageState::fromRequest($sessionKey, $providerPaymentId);
+
+        return view('payment.cancel', ['returnState' => $state]);
+    }
+
+    private static function stringQuery(string $key): ?string
+    {
+        $value = request()->query($key);
+
+        return is_string($value) ? $value : null;
     }
 }
