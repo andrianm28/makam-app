@@ -40,6 +40,12 @@ final class Vendor extends Model
         return $this->hasMany(VendorListing::class, 'vendor_id');
     }
 
+    /** @return HasMany<VendorAvailability, $this> */
+    public function availability(): HasMany
+    {
+        return $this->hasMany(VendorAvailability::class, 'vendor_id');
+    }
+
     public function scopeActive(Builder $query): void
     {
         $query->where('is_active', true);
