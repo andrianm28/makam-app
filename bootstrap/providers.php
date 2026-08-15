@@ -9,6 +9,7 @@ use App\Platform\FinancialLedger\Providers\FinancialLedgerServiceProvider;
 use App\Platform\IdentityAccess\Providers\IdentityAccessServiceProvider;
 use App\Platform\Notification\Providers\NotificationServiceProvider;
 use App\Platform\Payment\Providers\PaymentServiceProvider;
+use App\Platform\SiteSettings\Providers\SiteSettingsServiceProvider;
 use App\Providers\AppServiceProvider;
 use App\Providers\Filament\AdminPanelProvider;
 use App\Providers\Filament\VendorPanelProvider;
@@ -91,4 +92,12 @@ return [
     // which is the correct fail-closed behaviour for a missing authorization
     // seam — see `OrderWorkflowServiceProvider`'s own class-level comment.
     OrderWorkflowServiceProvider::class,
+    // Task 1 of the P2 `admin-data-management` lane — binds
+    // `SettingsService` as the singleton that resolves site settings through
+    // the config → env → `site_settings` → default precedence the service's
+    // own doc block records. Same precedent as every provider above:
+    // without it `app(SettingsService::class)` raises
+    // `BindingResolutionException` on the first consumer — see
+    // `SiteSettingsServiceProvider`'s own class-level comment.
+    SiteSettingsServiceProvider::class,
 ];
