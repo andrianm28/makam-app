@@ -12,8 +12,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Eloquent model for `quote_lines` — the frozen line-level snapshot of a
- * quote version. See `2026_08_12_100050_create_quote_lines_table.php` for
- * the schema and why the two version references are real restrict FKs.
+ * quote version. See `2026_08_12_100050_create_quote_lines_table.php` and
+ * `2026_08_15_100000_add_service_definition_id_to_quote_lines_table.php`
+ * for the schema and why the version references are real restrict FKs.
+ *
+ * A line is exactly ONE of two families: a package line references
+ * `service_package_version_id` (the other columns null), or a service
+ * line references `service_definition_id` (P0 ruling — the booking wizard
+ * quotes individual services). Both always carry `price_version_id`, the
+ * append-only frozen amount anchor.
  *
  * Write-once outright, mirroring `App\Platform\Payment\Models\PaymentIntent`
  * / `App\Domain\OrderWorkflow\Models\OrderStatusEvent`: `update()`,
@@ -42,6 +49,7 @@ final class QuoteLine extends Model
      */
     protected $fillable = [
         'quote_id',
+        'service_definition_id',
         'service_package_version_id',
         'price_version_id',
         'price_version_number',
@@ -59,6 +67,7 @@ final class QuoteLine extends Model
     protected function casts(): array
     {
         return [
+            'service_definition_id' => 'integer',
             'service_package_version_id' => 'integer',
             'price_version_id' => 'integer',
             'price_version_number' => 'integer',
