@@ -25,14 +25,20 @@ use InvalidArgumentException;
  * see `SessionStateTest` for the test that pins this.
  *
  * ---------------------------------------------------------------------------
- * Nothing writes a row carrying any of these values today
+ * Only a validated webhook moves a session out of the open states
  * ---------------------------------------------------------------------------
- * Wave 1b ruling 1b-L3-01 re-scoped Task 2 to a deny-only guard: no code
- * path creates a `payment_sessions` row, so no state below is ever reached
- * at runtime yet. The enum ships now because the table ships now (the plan
- * assigns both to this lane) and because the closed list is a contract later
- * tasks read, not because any transition exists. See
- * `Models\PaymentSession` for the refusal that enforces that.
+ * Wave 1b ruling 1b-L3-01 made the payment guard deny-only until the
+ * confirmation/reservation, quote, opening-authorization, and
+ * merchant/`badan_usaha` upstreams exist, and the online-payment-gateway
+ * lane later opened the gate under `G-PAY-01` (dev), so a row can now be
+ * created — and the terminal states below are no longer a dead letter. The
+ * ONLY writer of the terminal states is `Actions\ApplyPaymentSettlement`
+ * (Task 5 of `docs/superpowers/plans/2026-08-14-online-payment-gateway.md`),
+ * which runs inside `ProcessWebhookEvent`'s claim transaction: a settled
+ * `payment.completed` moves the session to `PAID`, a claimed `payment.failed`
+ * to `FAILED`, a claimed `payment.expired` to `EXPIRED` — never from a
+ * browser return URL, and guarded so `PAID` is never regressed by a late
+ * out-of-order `failed`/`expired` arrival.
  *
  * A plain-string column with application-layer validation, not a Postgres
  * enum type — the same convention as `App\Domain\Booking\BookingServiceType`
@@ -56,18 +62,26 @@ enum SessionState: string
 
     /**
      * Set ONLY from a validated webhook or an approved manual verification
-     * (AC4) — never from a browser return URL. No code sets it in this task.
+     * (AC4) — never from a browser return URL. The webhook half is live:
+     * `Actions\ApplyPaymentSettlement` moves the session here when a claimed
+     * `payment.completed` settles (this is what the checkout return screen
+     * reads). The approved-manual-verification half stays open — that trigger
+     * site is unwired.
      */
     case Paid = 'PAID';
 
     /**
      * The provider reported failure. AC11: the order and the draft survive;
-     * a recovery path is exposed rather than a dead end.
+     * a recovery path is exposed rather than a dead end. Set by
+     * `Actions\ApplyPaymentSettlement` when a claimed `payment.failed` event
+     * is processed.
      */
     case Failed = 'FAILED';
 
     /**
-     * The hosted checkout window elapsed unused.
+     * The hosted checkout window elapsed unused. Set by
+     * `Actions\ApplyPaymentSettlement` when a claimed `payment.expired` event
+     * is processed.
      */
     case Expired = 'EXPIRED';
 

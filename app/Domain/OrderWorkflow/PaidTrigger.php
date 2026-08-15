@@ -14,10 +14,13 @@ use InvalidArgumentException;
  * `docs/superpowers/plans/2026-08-12-platform-order-orchestration.md`.
  *
  * The Action takes an `Order` and one of these and nothing else. That is
- * deliberate: it keeps the paid path callable and testable without either
- * trigger site being able to smuggle in a half-resolved provider payload,
- * and it is what lets the Action exist at all while neither trigger site can
- * yet resolve a real `Order` (see the Action's own doc block).
+ * deliberate: it keeps the paid path callable and testable without a trigger
+ * site being able to smuggle in a half-resolved provider payload. Today one
+ * trigger site exists — `ApplyPaymentSettlement` resolves a real `Order`
+ * through the webhook's invoice reference and builds the trigger for it (see
+ * the Action's own doc block) — and the manual-verification trigger site is
+ * still open, which is exactly why the value stays a plain constructor with
+ * no provider types in it.
  *
  * ---------------------------------------------------------------------------
  * `businessKey`, and why it survived the ledger being dropped

@@ -23,32 +23,30 @@ use Illuminate\Support\Facades\DB;
  * `docs/superpowers/plans/2026-08-12-platform-order-orchestration.md`.
  *
  * ---------------------------------------------------------------------------
- * NOT WIRED — both trigger sites are open, and honestly so
+ * The webhook trigger is WIRED; the manual-verification trigger stays open
  * ---------------------------------------------------------------------------
- * Two call sites SHOULD invoke this Action and neither does today
- * (`task-7-brief.md` Ruling 2). This is a deliberate, recorded gap, not an
- * oversight, and AC9 is therefore **implemented but unwired** — the Action
- * is exercised end to end by
- * `tests/Feature/OrderWorkflow/ApplyPaidEffectsTest.php`; the two paths INTO
- * it are `NOT TESTED`, never `PASS`:
+ * Of the two call sites the plan names (`task-7-brief.md` Ruling 2), one is
+ * now real and one is honestly still open:
  *
- *   1. `App\Platform\Payment\ProcessWebhookEvent` — claims a settling
- *      provider event and deliberately applies no paid effect. It cannot
- *      resolve an `Order`: a claimed webhook is scoped to a
- *      `payment_sessions` row, and no `payment_sessions` row is ever created
- *      in this repository, because `GuardPaymentSession` denies on every one
- *      of its conditions 1-6 (condition 6 unconditionally, `FIN-DEC-01`
- *      being TBD). Wiring it would mean inventing the session -> order link.
+ *   1. `App\Platform\Payment\ProcessWebhookEvent` — WIRED by Task 5 of
+ *      `docs/superpowers/plans/2026-08-14-online-payment-gateway.md`: a
+ *      claimed settling event is handed to
+ *      `App\Platform\Payment\Actions\ApplyPaymentSettlement`, which resolves
+ *      the `payment_sessions` row and, through the event's invoice
+ *      reference, the `Order`, then invokes this Action inside the claim
+ *      transaction with a `PaidTrigger` built from the session snapshot.
+ *      The session -> order link is no longer invented: it travels the
+ *      provider round trip (order reference sent as the provider's
+ *      `order_id` at session opening, echoed back in the webhook).
  *   2. `App\Platform\Payment\Http\Controllers\VerifyManualPaymentController`
- *      — approves a `payment_verifications` row. That table carries NO order
- *      foreign key at all, so the controller has no order to hand this
- *      Action. Wiring it would mean inventing that column.
+ *      — STILL OPEN. It approves a `payment_verifications` row; that table
+ *      carries no order foreign key, so the controller still has no order
+ *      to hand this Action. Wiring it would mean inventing that column.
  *
  * Global Constraint, and this lane's standing ruling on the same class of
  * gap: "A missing decision closes the relevant payment/settlement gate; it
- * does not authorize a guessed implementation." So the Action takes an
- * explicit `Order` and a `PaidTrigger` and is callable and testable on its
- * own; the lane that establishes either linkage wires it then.
+ * does not authorize a guessed implementation." The manual half follows
+ * that ruling; the webhook half no longer has to.
  *
  * ---------------------------------------------------------------------------
  * No journal batch is posted, and that is a ruling, not an omission
