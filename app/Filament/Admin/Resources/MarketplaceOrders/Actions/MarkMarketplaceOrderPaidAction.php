@@ -8,6 +8,7 @@ use App\Domain\Marketplace\Actions\MarkMarketplaceOrderPaid;
 use App\Domain\Marketplace\Models\MarketplaceOrder;
 use App\Domain\OrderWorkflow\Authorization\Contracts\OrderTransitionAuthorizerContract;
 use App\Filament\Admin\Resources\MarketplaceOrders\MarketplaceOrderResource;
+use App\Http\Middleware\RequireRecentAuthentication;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Correlation\CorrelationContext;
 use App\Platform\IdentityAccess\ActorContext;
@@ -83,6 +84,7 @@ final class MarkMarketplaceOrderPaidAction
                     app(ReauthenticationGuard::class)->assertFresh($actor);
                 } catch (ReauthenticationRequiredException) {
                     Notification::make()->warning()->title('Perlu verifikasi ulang')->send();
+                    session()->put(RequireRecentAuthentication::REASON_SESSION_KEY, 'money_action');
                     session()->put('url.intended', route('filament.admin.resources.marketplace-orders.view', ['record' => $order->getKey()]));
                     redirect()->route('filament.admin.pages.mfa-challenge');
 

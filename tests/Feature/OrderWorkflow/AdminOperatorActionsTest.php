@@ -114,6 +114,30 @@ final class AdminOperatorActionsTest extends TestCase
         app(RecordBuyerApproval::class)($order, 'user:1', 'operator');
     }
 
+    public function test_record_buyer_approval_second_call_fails_without_wedging(): void
+    {
+        $service = $this->makePricedService();
+        $draft = BookingDraft::query()->create([
+            'service_type' => BookingServiceType::NEW_GRAVE,
+            'selected_services' => [['code' => $service->code, 'quantity' => 1]],
+            'customer_full_name' => 'UAT Penerima',
+        ]);
+        $order = $this->makeOrder(OrderStatus::MENUNGGU_KETERSEDIAAN, $draft);
+
+        app(IssueOrderQuote::class)($order, CarbonImmutable::now()->addDays(30), 'user:1', 'operator');
+        app(RecordBuyerApproval::class)($order, 'user:1', 'operator');
+        $this->assertSame(OrderStatus::DISETUJUI_PEMESAN, $order->status());
+
+        try {
+            app(RecordBuyerApproval::class)($order, 'user:1', 'operator');
+            $this->fail('Expected InvalidArgumentException for a second approval.');
+        } catch (\InvalidArgumentException $exception) {
+            $this->assertStringContainsString('only an issued quote can be accepted', $exception->getMessage());
+        }
+
+        $this->assertSame(OrderStatus::DISETUJUI_PEMESAN, $order->status());
+    }
+
     public function test_process_and_complete(): void
     {
         $order = $this->makeOrder(OrderStatus::DIBAYAR);

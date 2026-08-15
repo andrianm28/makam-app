@@ -9,6 +9,7 @@ use App\Domain\OrderWorkflow\Models\OrderStatusEvent;
 use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\Quotation\Actions\AcceptQuote;
 use App\Domain\Quotation\Models\Quote;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 final readonly class RecordBuyerApproval
@@ -30,15 +31,17 @@ final readonly class RecordBuyerApproval
             throw new InvalidArgumentException('Order has no current quote to accept.');
         }
 
-        ($this->acceptQuote)($quote, $actorRef);
+        return DB::transaction(function () use ($order, $quote, $actorRef, $actorRole, $reason, $metadata): OrderStatusEvent {
+            ($this->acceptQuote)($quote, $actorRef);
 
-        return app(RecordOrderStatusChange::class)(
-            $order,
-            OrderStatus::DISETUJUI_PEMESAN,
-            $actorRef,
-            $actorRole,
-            $reason,
-            $metadata,
-        );
+            return app(RecordOrderStatusChange::class)(
+                $order,
+                OrderStatus::DISETUJUI_PEMESAN,
+                $actorRef,
+                $actorRole,
+                $reason,
+                $metadata,
+            );
+        });
     }
 }

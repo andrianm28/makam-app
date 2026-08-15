@@ -7,7 +7,7 @@
 
 ## 1. Goal
 
-Make every order admin-managed. The operator side of the two-phase payment journey becomes fully clickable: a public booking order created by the P0 chain can be verified, quoted, accepted, granted payment opening (finance), paid (finance), processed, and completed — each transition a domain Action, role-gated, audited, and reflected in an append-only status timeline. The P0 guard's preconditions (valid confirmation, accepted quote, authorized opening) become reachable through the admin surface, so a buyer who re-clicks "Bayar Sekarang" after the operator completes the journey is redirected to the SumoPod hosted checkout.
+Make every order admin-managed. The operator side of the two-phase payment journey becomes fully clickable: a public booking order created by the P0 chain can be verified, quoted, accepted, granted payment opening (finance), paid (finance), processed, and completed — each transition a domain Action, role-gated, audited, and reflected in an append-only status timeline. The P0 guard's preconditions (valid confirmation, accepted quote, authorized opening) become reachable through the admin surface, so the granted admin who re-clicks "Bayar Sekarang" after the operator completes the journey is redirected to the SumoPod hosted checkout. Operational constraint: the re-click that passes the guard is performed by the granted admin actor — guard condition 4 (`AuthorizeOrderPaymentOpening`) requires the ADMIN role plus an ORDER-scope grant under the acting identity, and `GrantOrderPaymentOpening` grants to the acting admin; a genuine buyer/customer role cannot pass condition 4 until a product decision admits one — recorded as deferred.
 
 ## 2. In scope
 
@@ -89,7 +89,7 @@ The resource renders one header action per allowed edge from the record's curren
 
 ## 5. Data flow
 
-Header action → `ActorContext` from admin → authorizer gate (role + re-auth for money-adjacent) → domain Action → [state + outbox event + audit in one transaction] → notification + refresh. The public two-phase journey completes when the order reaches DISETUJUI_PEMESAN (or beyond) and the finance grant exists: the buyer re-clicking "Bayar Sekarang" passes the P0 guard and redirects to SumoPod.
+Header action → `ActorContext` from admin → authorizer gate (role + re-auth for money-adjacent) → domain Action → [state + outbox event + audit in one transaction] → notification + refresh. The public two-phase journey completes when the order reaches DISETUJUI_PEMESAN (or beyond) and the finance grant exists: the granted admin re-clicking "Bayar Sekarang" passes the P0 guard and redirects to SumoPod. Per the operational constraint in §1, the re-click that passes guard condition 4 is the granted admin's own (ADMIN role + ORDER-scope grant under the acting identity); a genuine buyer/customer role cannot pass condition 4 until a product decision admits one — recorded as deferred.
 
 ## 6. Error handling
 
