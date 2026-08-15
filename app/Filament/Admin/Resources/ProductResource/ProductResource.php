@@ -8,6 +8,7 @@ use App\Domain\Marketplace\Models\Product;
 use App\Filament\Admin\Resources\ProductResource\Pages\CreateProduct;
 use App\Filament\Admin\Resources\ProductResource\Pages\EditProduct;
 use App\Filament\Admin\Resources\ProductResource\Pages\ListProducts;
+use App\Filament\Admin\Resources\ProductResource\RelationManagers\VariantsRelationManager;
 use App\Filament\Admin\Resources\ProductResource\Schemas\ProductForm;
 use App\Filament\Admin\Resources\ProductResource\Tables\ProductsTable;
 use App\Platform\IdentityAccess\ActorContext;
@@ -15,6 +16,9 @@ use App\Platform\IdentityAccess\MasterData\Contracts\MasterDataAdminAuthorizerCo
 use App\Platform\IdentityAccess\MasterData\Exceptions\MasterDataNotAuthorisedException;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use BackedEnum;
+use Filament\Resources\RelationManagers\RelationGroup;
+use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Resources\RelationManagers\RelationManagerConfiguration;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -55,10 +59,10 @@ use UnitEnum;
  *
  * Relation managers are the one component type that mounts WITHOUT the page
  * gate (`CanAuthorizeResourceAccess` only guards `Pages\Page` subclasses),
- * so those carry their own hardening — see `PriceVersionsRelationManager`
- * and `PackagesRelationManager`, which override `canViewForRecord()` and
- * put `->authorize(...)` on their actions. `ProductResource` has no
- * relation manager today; if one is ever added it must do the same.
+ * so those carry their own hardening — `VariantsRelationManager` (the one
+ * this resource mounts) overrides `canViewForRecord()` and puts
+ * `->authorize(...)` on its actions, the same hardening
+ * `PriceVersionsRelationManager` and `PackagesRelationManager` document.
  *
  * ---------------------------------------------------------------------------
  * Writes stay on the Eloquent path — no raw bypass
@@ -142,6 +146,16 @@ final class ProductResource extends Resource
             'index' => ListProducts::route('/'),
             'create' => CreateProduct::route('/create'),
             'edit' => EditProduct::route('/{record}/edit'),
+        ];
+    }
+
+    /**
+     * @return array<class-string<RelationManager> | RelationGroup | RelationManagerConfiguration>
+     */
+    public static function getRelations(): array
+    {
+        return [
+            VariantsRelationManager::class,
         ];
     }
 
