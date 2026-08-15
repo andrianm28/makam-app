@@ -1029,6 +1029,12 @@ final readonly class MarkOrderPaid
     ): Order {
         $quote = Quote::currentFor($order);
 
+        if (! $quote instanceof Quote) {
+            throw \App\Domain\OrderWorkflow\Exceptions\PaidAmountDoesNotMatchQuoteException::forMissingAcceptedQuote(
+                (string) $order->getKey()
+            );
+        }
+
         return ($this->applyPaidEffects)(
             $order,
             new PaidTrigger(
@@ -1680,11 +1686,13 @@ final class MarketplaceOrderResourceTest extends TestCase
 
     private function order(string $paymentState): MarketplaceOrder
     {
+        $vendor = \App\Domain\Marketplace\Models\Vendor::factory()->create();
+
         return MarketplaceOrder::query()->create([
             'order_number' => 'MKT-'.Str::upper(Str::random(8)),
             'customer_ref' => 'customer:1',
             'entity_ref' => 'entity:1',
-            'vendor_id' => 1,
+            'vendor_id' => $vendor->getKey(),
             'subtotal_minor' => 250000,
             'delivery_fee_minor' => 0,
             'total_minor' => 250000,
@@ -1861,8 +1869,10 @@ final class AdminRenewalActionsTest extends TestCase
 
     private function renewal(string $status): Renewal
     {
+        $grave = \App\Domain\GraveDirectory\Models\GraveRecord::factory()->create();
+
         return Renewal::query()->create([
-            'grave_record_id' => 1,
+            'grave_record_id' => $grave->getKey(),
             'target_due_period' => '2026-12-01',
             'reference' => 'EXT-'.strtoupper(substr(uniqid(), 0, 8)),
             'status' => $status,
