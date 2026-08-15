@@ -63,6 +63,18 @@ final class CemeteryPublicQuery
      * Bekasi") and `cemetery-directory-and-availability` AC1.
      *
      * ---------------------------------------------------------------------
+     * Table-backed, with the canonical constants as fallback
+     * ---------------------------------------------------------------------
+     * Reads active `launch_cities` rows in `sort_order` — the admin-
+     * extendable catalogue (spec §4.6) — and falls back to
+     * `LaunchCityCode::KNOWN_CODES` only when the table has no active rows.
+     * The five canonical rows ship with the table via the
+     * `2026_08_15_110010_seed_launch_cities` data migration, so the
+     * fallback is a safety net, not the steady state; its label derivation
+     * mirrors the seed's so the two paths can never disagree in shape or
+     * wording.
+     *
+     * ---------------------------------------------------------------------
      * NEVER filter this to cities that have published cemeteries
      * ---------------------------------------------------------------------
      * It is the one change to this method that looks like an obvious
@@ -84,15 +96,16 @@ final class CemeteryPublicQuery
      * because every seeded city currently has published rows. Carry that
      * test forward with this method.
      *
-     * The label is derived from the code (`JAKARTA` -> `Jakarta`), never a
-     * second hand-maintained list: `LaunchCityCode` is the one PHP-side
-     * source for the catalogue (`AGENTS.md` §Documentation), so a city added
-     * there appears here automatically and cannot be silently omitted.
-     *
      * @return list<array{code: string, label: string}>
      */
     public static function launchCities(): array
     {
+        $cities = LaunchCityQuery::activeCities();
+
+        if ($cities !== []) {
+            return $cities;
+        }
+
         return array_map(
             static fn (string $code): array => [
                 'code' => $code,
