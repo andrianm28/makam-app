@@ -6,6 +6,7 @@ namespace App\Platform\Payment\Jobs;
 
 use App\Platform\Outbox\OutboxQueueName;
 use App\Platform\Payment\ProcessWebhookEvent;
+use Carbon\CarbonImmutable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -55,9 +56,25 @@ use Illuminate\Queue\SerializesModels;
  * terminal result for this job), but a SETTLEMENT failure is not an outcome —
  * it throws, propagating out of `ProcessWebhookEvent`'s transaction and out
  * of `handle()`. The claim rolls back with it (the row stays VALIDATED, no
- * effect is half-applied), the job fails, and the queue retries. A
- * permanently unresolvable event keeps failing until a human intervenes —
- * recorded as the intended fail-closed behaviour in `ProcessWebhookEvent`.
+ * effect is half-applied) and the job is retried — BOUNDED, so a transient
+ * failure (a database blip, a brief provider anomaly) is absorbed without
+ * human attention while a permanent one still fails loudly:
+ *
+ *   - `$tries = 3` caps the attempt count (the worker's `--tries=1` default
+ *     would otherwise strand the row on the first transient failure).
+ *   - `retryUntil()` caps the whole retry window at fifteen minutes — in this
+ *     Laravel version the worker's fail decision reads `retryUntil` when it
+ *     is present (`Worker::markJobAsFailedIfWillExceedMaxAttempts`), so the
+ *     window is the hard bound; `$tries` is declared so the attempt cap holds
+ *     under either reading.
+ *   - `backoff()` spaces the attempts so a failing event does not spin on the
+ *     critical queue between retries.
+ *
+ * After the last retry the job moves to `failed_jobs` and a human recovers:
+ * the row is still `VALIDATED` and re-claimable once the underlying cause is
+ * resolved (a re-dispatch, or a fix of the unresolved target). Recorded as
+ * the intended fail-closed behaviour in `ProcessWebhookEvent` — never a
+ * silent drop, and never a `PROCESSED` row for work that did not commit.
  */
 final class ProcessProviderEventJob implements ShouldQueue
 {
@@ -65,6 +82,31 @@ final class ProcessProviderEventJob implements ShouldQueue
     use InteractsWithQueue;
     use Queueable;
     use SerializesModels;
+
+    /**
+     * Attempt cap — see the class doc block for the precedence between this
+     * and `retryUntil()`.
+     */
+    public int $tries = 3;
+
+    /**
+     * The retry window: fifteen minutes from the first attempt. After it, a
+     * still-failing job is failed permanently by the worker.
+     */
+    public function retryUntil(): CarbonImmutable
+    {
+        return CarbonImmutable::now()->addMinutes(15);
+    }
+
+    /**
+     * Spacing between retries, in seconds, per attempt number (0-based).
+     *
+     * @return list<int>
+     */
+    public function backoff(): array
+    {
+        return [30, 60, 180];
+    }
 
     public function __construct(
         public readonly string $providerEventId,

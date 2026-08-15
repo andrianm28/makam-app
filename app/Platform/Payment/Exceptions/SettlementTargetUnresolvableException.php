@@ -25,10 +25,12 @@ use RuntimeException;
  *
  * The exception propagates out of `ProcessWebhookEvent`'s claim transaction:
  * the claim rolls back, the row stays at VALIDATED, no effect is half-applied,
- * and the queue retry re-claims it. A permanently unresolvable event keeps
- * failing — visible in the queue and in the row's perpetually-VALIDATED
- * status — until a human intervenes; that is recorded as the intended
- * fail-closed behaviour, never a silent drop.
+ * and the queue retry re-claims it. The retry is BOUNDED (`Jobs\ProcessProviderEventJob`
+ * — `$tries`/`retryUntil`/`backoff`): a transient failure gets its retries,
+ * and after the last attempt the job fails permanently into `failed_jobs` for
+ * human recovery. A row that is genuinely unresolvable therefore ends as a
+ * failed job with the row visibly still VALIDATED — never `PROCESSED` for
+ * work that did not commit, never silently dropped.
  */
 final class SettlementTargetUnresolvableException extends RuntimeException
 {

@@ -44,13 +44,17 @@ use App\Platform\Payment\Models\PaymentVerification;
  * ---------------------------------------------------------------------------
  * The original plan's Task 5 text asked the approve path to also transition
  * `payment_sessions` to `PAID` and post a same-transaction journal entry
- * (AC10). The Wave 1c ruling found no `payment_sessions` row can exist
- * (`GuardResult::isAllowed()` is always false) and forbids fabricating one
- * or the journal write. This class writes only its own
- * `payment_verifications` row and its own audit event.
+ * (AC10). The Wave 1c ruling forbade fabricating a session or the journal
+ * write, and the online-payment-gateway lane did not change that: the
+ * webhook path is what now transitions sessions to `PAID`
+ * (`Actions\ApplyPaymentSettlement`), and this manual path still writes only
+ * its own `payment_verifications` row and its own audit event.
  * `tests/Feature/Payment/VerifyManualPaymentTest.php` grep-asserts this file
  * contains none of those references and behaviourally asserts
- * `payment_sessions` stays empty across both decisions.
+ * `payment_sessions` stays untouched across both decisions. Wiring the
+ * manual path into `SessionState::Paid` belongs to the task that adds the
+ * `payment_verifications` -> order linkage (`ApplyPaidEffects`'s doc block
+ * names it as the still-open trigger site).
  *
  * ---------------------------------------------------------------------------
  * "Exactly once" is enforced with a row lock, not the caller's in-memory

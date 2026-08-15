@@ -28,15 +28,20 @@ use Illuminate\Support\Facades\DB;
  * transaction, so the claim, the effects, their audit rows and the outbox
  * row commit or roll back together. A settling event therefore ends at
  * `PROCESSED`; a claimed non-settling event (`payment.failed`, `expired`)
- * ends at `PROCESSED` too, with no effects by design.
+ * ends at `PROCESSED` too, with its session outcome (`FAILED`/`EXPIRED`)
+ * recorded and no order effects by design.
  *
  * A settlement failure (an unresolvable target, a quote mismatch, an
  * illegal transition) throws OUT of this transaction: the claim rolls back,
  * the row stays at `VALIDATED`, no effect is half-applied, and the queue
- * retry re-claims it. A permanently failing event keeps retrying — visible
- * in the queue and in the row's perpetually-`VALIDATED` status — until a
- * human intervenes; that is the intended fail-closed behaviour, and the row
- * is never marked `PROCESSED` for work that did not commit.
+ * retry re-claims it. The retry is BOUNDED (see `Jobs\ProcessProviderEventJob`):
+ * within the job's retry window the row is re-claimed on each attempt; once
+ * the job exhausts its attempts the failure is permanent, the job lands in
+ * `failed_jobs`, and a human recovers — the row stays at `VALIDATED`, never
+ * marked `PROCESSED` for work that did not commit. That fail-closed
+ * behaviour is intended; what changed is that a transient failure (a
+ * database blip, a brief provider anomaly) now gets a bounded set of retries
+ * instead of stranding the row on the first failure.
  *
  * ---------------------------------------------------------------------------
  * Claim 1 — the row: `VALIDATED -> PROCESSING`, exactly once
@@ -172,15 +177,21 @@ final readonly class ProcessWebhookEvent
             // outbox row commit together with the claim, or all roll back
             // together (a thrown settlement failure leaves the row VALIDATED
             // and re-claimable by the queue retry — never half-applied, never
-            // falsely PROCESSED).
+            // falsely PROCESSED). A claimed NON-settling event
+            // (`payment.failed`, `payment.expired`) records its outcome on
+            // the bound session (`FAILED`/`EXPIRED`) the same way.
             //
-            // A settling event without a provider transaction id has no
-            // session anchor to settle by. The receiver can never produce one
-            // (the envelope requires `data.payment_id` for VALIDATED), so the
-            // guard is defensive; the settlement itself still fails closed if
-            // such a row ever reaches it.
-            if ($this->isSettling($event) && $event->provider_transaction_id !== null) {
-                $this->settlement->settle($event);
+            // An event without a provider transaction id has no session anchor
+            // to apply anything by. The receiver can never produce one (the
+            // envelope requires `data.payment_id` for VALIDATED), so the guard
+            // is defensive; the apply step itself still fails closed if such a
+            // row ever reaches it.
+            if ($event->provider_transaction_id !== null) {
+                if ($this->isSettling($event)) {
+                    $this->settlement->settle($event);
+                } else {
+                    $this->settlement->applyOutcome($event);
+                }
             }
 
             $event->markStatus(ProviderEventStatus::Processed);

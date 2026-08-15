@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Marketplace\Actions;
 
 use App\Domain\Marketplace\Exceptions\MarketplacePayableMissingException;
+use App\Domain\Marketplace\Exceptions\MarketplacePaymentAmountMismatchException;
 use App\Domain\Marketplace\MarketplaceAuditActions;
 use App\Domain\Marketplace\Models\MarketplaceOrder;
 use App\Domain\Marketplace\PaymentState;
@@ -42,14 +43,32 @@ use Illuminate\Support\Facades\DB;
  * payable (`HELD` -> `payable`) — the release mechanism is wired now.
  *
  * ---------------------------------------------------------------------------
+ * The paid amount is asserted, never assumed
+ * ---------------------------------------------------------------------------
+ * The action takes the paid amount as an explicit integer-minor argument and
+ * refuses the transition unless it EXACTLY equals the order's `total_minor` —
+ * the same precondition `Actions\ApplyPaidEffects::assertAmountMatchesAcceptedQuote`
+ * enforces on the booking leg. A session opened for the wrong amount (a
+ * checkout bug, a tampered session, a provider anomaly) must not mark the
+ * order DIBAYAR for a payment that does not match what is owed: the order
+ * total is the authoritative money fact, and the mismatch throws
+ * `MarketplacePaymentAmountMismatchException` before any state, payable or
+ * audit write. The comparison is integer minor units only — `MarketplaceOrder`
+ * carries no currency column, and the webhook path's currency is already
+ * pinned to the configured currency at validation.
+ *
+ * ---------------------------------------------------------------------------
  * No transition graph, deliberately — the same stance as `UpdateVendorOrderStatus`
  * ---------------------------------------------------------------------------
  * `PaymentState` is a closed list with no documented legality of moves; the
  * action accepts the transition from any known state and is idempotent when
  * the order is already `DIBAYAR` (a replay of the same payment, or a second
- * payment arrival, changes nothing). A future batch with a real state machine
- * replaces the assignment with the machine's validator; the audit + single-
- * write-path shape below is what survives.
+ * payment arrival whose amount matches the total, changes nothing). The
+ * amount assert runs FIRST and is absolute: an arrival whose amount differs
+ * from the total fails closed even against an already-`DIBAYAR` order — the
+ * same stance as the booking leg's `ApplyPaidEffects` precondition. A future
+ * batch with a real state machine replaces the assignment with the machine's
+ * validator; the audit + single-write-path shape below is what survives.
  *
  * ---------------------------------------------------------------------------
  * The vendor payable re-assessment
@@ -80,6 +99,7 @@ final readonly class MarkMarketplaceOrderPaid
 {
     public function __invoke(
         MarketplaceOrder $order,
+        int $amountMinor,
         bool $fulfilmentEvidenceAccepted = false,
         ?CarbonImmutable $disputeWindowEndsAt = null,
         ?string $actorRef = null,
@@ -92,6 +112,7 @@ final readonly class MarkMarketplaceOrderPaid
 
         return DB::transaction(function () use (
             $order,
+            $amountMinor,
             $fulfilmentEvidenceAccepted,
             $disputeWindowEndsAt,
             $actorRef,
@@ -102,6 +123,8 @@ final readonly class MarkMarketplaceOrderPaid
         ): MarketplaceOrder {
             /** @var MarketplaceOrder $order */
             $order = MarketplaceOrder::query()->lockForUpdate()->findOrFail($order->getKey());
+
+            $this->assertAmountMatchesOrderTotal($order, $amountMinor);
 
             if ($order->payment_state === PaymentState::DIBAYAR) {
                 return $order;
@@ -129,6 +152,25 @@ final readonly class MarkMarketplaceOrderPaid
 
             return $order;
         });
+    }
+
+    /**
+     * The paid transition's precondition, enforced before any write: the
+     * amount that arrived must EXACTLY equal what the order owes. Integer
+     * minor units on both sides — never a float, never a tolerance. Mirrors
+     * `ApplyPaidEffects::assertAmountMatchesAcceptedQuote` (sans currency,
+     * which `MarketplaceOrder` does not carry and the validator already pins
+     * to the configured currency).
+     */
+    private function assertAmountMatchesOrderTotal(MarketplaceOrder $order, int $amountMinor): void
+    {
+        if ($amountMinor !== (int) $order->total_minor) {
+            throw MarketplacePaymentAmountMismatchException::forOrder(
+                (string) $order->getKey(),
+                (int) $order->total_minor,
+                $amountMinor,
+            );
+        }
     }
 
     /**

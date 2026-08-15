@@ -45,8 +45,9 @@ use Tests\TestCase;
  * 3. Task 5's settlement dispatch: a claimed SETTLING event is settled inside
  *    the claim transaction (`Actions\ApplyPaymentSettlement`), so a settling
  *    claim ends at `PROCESSED` with its effects committed; a claimed
- *    non-settling event also ends at `PROCESSED` with no effects by design; a
- *    settlement failure rolls the claim back and the row stays `VALIDATED`.
+ *    non-settling event also ends at `PROCESSED`, recording its session
+ *    outcome (`FAILED`/`EXPIRED`) with no order effects; a settlement
+ *    failure rolls the claim back and the row stays `VALIDATED`.
  *
  * A `provider_events` row's status is seeded directly through `markStatus()`,
  * exactly as `ProviderEventModelTest::test_the_row_is_append_only_except_for_its_lifecycle_columns`
@@ -80,17 +81,45 @@ final class ProcessWebhookEventTest extends TestCase
         $this->assertSame(ProcessWebhookEventOutcome::Claimed, $outcome);
         $this->assertSame(ProviderEventStatus::Processed->value, $event->fresh()->status);
         $this->assertSame(PaymentState::DIBAYAR, $order->fresh()->payment_state);
+
+        // The settlement moved the authorizing session to PAID with the claim.
+        $session = PaymentSession::query()->where('provider_payment_id', 'pay_claim')->sole();
+        $this->assertSame(SessionState::Paid->value, $session->state);
     }
 
-    public function test_a_claimed_non_settling_event_completes_without_effects(): void
+    public function test_a_claimed_failed_event_records_the_failure_without_order_effects(): void
     {
-        $event = $this->validatedEvent(['event_type' => 'payment.failed']);
+        // A VALIDATED failed event is always session-bound (the validator
+        // resolves the session before any event-type check), so the claim
+        // records its outcome on the session and applies no order effects.
+        $this->paymentSession('pay_failed', 250_000);
+        $event = $this->validatedEvent([
+            'event_type' => 'payment.failed',
+            'provider_transaction_id' => 'pay_failed',
+        ]);
 
         $outcome = $this->claim($event);
 
         $this->assertSame(ProcessWebhookEventOutcome::Claimed, $outcome);
         $this->assertSame(ProviderEventStatus::Processed->value, $event->fresh()->status);
         $this->assertSame(0, MarketplaceOrder::query()->count());
+
+        $session = PaymentSession::query()->where('provider_payment_id', 'pay_failed')->sole();
+        $this->assertSame(SessionState::Failed->value, $session->state);
+    }
+
+    public function test_a_claimed_expired_event_records_expired_on_its_session(): void
+    {
+        $this->paymentSession('pay_expired', 250_000);
+        $event = $this->validatedEvent([
+            'event_type' => 'payment.expired',
+            'provider_transaction_id' => 'pay_expired',
+        ]);
+
+        $this->assertSame(ProcessWebhookEventOutcome::Claimed, $this->claim($event));
+
+        $session = PaymentSession::query()->where('provider_payment_id', 'pay_expired')->sole();
+        $this->assertSame(SessionState::Expired->value, $session->state);
     }
 
     public function test_a_second_claim_of_the_same_row_is_refused_and_changes_nothing(): void
@@ -243,6 +272,11 @@ final class ProcessWebhookEventTest extends TestCase
         $this->assertSame(ProcessWebhookEventOutcome::Claimed, $this->claim($expired));
 
         $this->assertSame(ProviderEventStatus::Processed->value, $expired->fresh()->status);
+
+        // The late out-of-order `expired` claims fine but must NOT regress the
+        // session: PAID is the strongest fact and stays.
+        $session = PaymentSession::query()->where('provider_payment_id', 'pay_late')->sole();
+        $this->assertSame(SessionState::Paid->value, $session->state);
     }
 
     public function test_a_claimed_non_settling_event_does_not_block_the_settling_one(): void
@@ -264,6 +298,11 @@ final class ProcessWebhookEventTest extends TestCase
         $this->assertSame(ProcessWebhookEventOutcome::Claimed, $this->claim($expired));
         $this->assertSame(ProcessWebhookEventOutcome::Claimed, $this->claim($completed));
         $this->assertSame(PaymentState::DIBAYAR, $order->fresh()->payment_state);
+
+        // The early `expired` moved the session to EXPIRED; the later settling
+        // `completed` is the authoritative money fact and moves it to PAID.
+        $session = PaymentSession::query()->where('provider_payment_id', 'pay_order')->sole();
+        $this->assertSame(SessionState::Paid->value, $session->state);
     }
 
     public function test_rows_without_a_provider_transaction_id_do_not_claim_each_other(): void

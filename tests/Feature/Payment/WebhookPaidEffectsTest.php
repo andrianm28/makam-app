@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Payment;
 
 use App\Domain\Marketplace\Actions\MarkMarketplaceOrderPaid;
+use App\Domain\Marketplace\Exceptions\MarketplacePaymentAmountMismatchException;
 use App\Domain\Marketplace\Models\MarketplaceOrder;
 use App\Domain\Marketplace\Models\Vendor;
 use App\Domain\Marketplace\PaymentState;
@@ -61,10 +62,11 @@ use Tests\TestCase;
  * The claim is exercised through the real contract
  * ---------------------------------------------------------------------------
  * The receiver persists + validates the delivery (row -> VALIDATED) and only
- * then does a worker claim it. This suite runs on the `database` queue
- * (`config/queue.php`), so the dispatched `ProcessProviderEventJob` is not
- * executed inline; each test calls `app(ProcessWebhookEvent::class)` directly,
- * which is exactly what the job's `handle()` delegates to.
+ * then does a worker claim it. This suite runs on the `sync` queue
+ * (`phpunit.xml` sets `QUEUE_CONNECTION=sync`), so the dispatched
+ * `ProcessProviderEventJob` executes INLINE during the delivery itself —
+ * the full HTTP -> validate -> claim -> settle path, not a test shortcut —
+ * which is exactly what the job's `handle()` delegates to on a real worker.
  *
  * Every secret in this file is a locally generated test string.
  */
@@ -131,6 +133,11 @@ final class WebhookPaidEffectsTest extends TestCase
         $this->assertSame(OrderStatus::DIBAYAR->value, $fresh->status);
         $this->assertSame('webhook', $fresh->paid_via);
         $this->assertSame('pay_booking_1', $fresh->paid_source_ref);
+
+        // The session that authorized the payment left AWAITING_PAYMENT and is
+        // now PAID — the state Task 6's return screen reads.
+        $session = PaymentSession::query()->where('provider_payment_id', 'pay_booking_1')->sole();
+        $this->assertSame(SessionState::Paid->value, $session->state);
 
         $this->assertSame(1, $this->paidEventCount($order));
         $this->assertSame(1, $this->paymentReceivedCount($order));
@@ -203,6 +210,9 @@ final class WebhookPaidEffectsTest extends TestCase
         $this->assertSame('pay_redeliver_1', $fresh->paid_source_ref);
         $this->assertSame(1, $this->paidEventCount($order));
         $this->assertSame(1, $this->paymentReceivedCount($order));
+
+        $session = PaymentSession::query()->where('provider_payment_id', 'pay_redeliver_1')->sole();
+        $this->assertSame(SessionState::Paid->value, $session->state);
     }
 
     // -----------------------------------------------------------------
@@ -227,8 +237,29 @@ final class WebhookPaidEffectsTest extends TestCase
         $this->assertSame(PaymentState::DIBAYAR, $order->fresh()->payment_state);
         $this->assertSame(ProviderEventStatus::Processed->value, $event->fresh()->status);
 
+        // The session moved to PAID with the settled claim.
+        $session = PaymentSession::query()->where('provider_payment_id', 'pay_marketplace_1')->sole();
+        $this->assertSame(SessionState::Paid->value, $session->state);
+
         $payable = $this->payableFor($order);
         $this->assertNotNull($payable);
+
+        // M7: ledger timestamps come from the system clock, never the
+        // provider-controlled occurrence time (the fixture's payload declares
+        // `completed_at` 2026-08-14T09:59:00Z — a stamped re-assessment would
+        // sit in the past).
+        $this->assertTrue(
+            $payable->fresh()->updated_at?->greaterThan(CarbonImmutable::now()->subMinutes(5)) ?? false,
+            'the payable re-assessment must be stamped with the system clock',
+        );
+
+        // M6: the DIBAYAR audit carries the internal provider event id as its
+        // actor reference — the same actor identity the booking leg uses.
+        $audit = AuditEvent::query()
+            ->where('action', 'MARKETPLACE_ORDER_PAYMENT_STATE_CHANGED')
+            ->where('subject_id', $order->getKey())
+            ->sole();
+        $this->assertSame($event->getKey(), $audit->actor_ref);
 
         // The paid fact is fed into the eligibility rule. The marketplace
         // domain has no evidence-acceptance or dispute-window records yet
@@ -249,6 +280,7 @@ final class WebhookPaidEffectsTest extends TestCase
 
         app(MarkMarketplaceOrderPaid::class)(
             $order,
+            amountMinor: self::TOTAL_MINOR,
             fulfilmentEvidenceAccepted: true,
             disputeWindowEndsAt: CarbonImmutable::now()->subDay(),
         );
@@ -267,9 +299,11 @@ final class WebhookPaidEffectsTest extends TestCase
         ]);
         $this->assertSame(0, DB::table('payouts')->count());
 
-        // Idempotent: marking the same order paid again changes nothing.
+        // Idempotent: marking the same order paid again with a matching
+        // amount changes nothing.
         app(MarkMarketplaceOrderPaid::class)(
             $order->fresh(),
+            amountMinor: self::TOTAL_MINOR,
             fulfilmentEvidenceAccepted: true,
             disputeWindowEndsAt: CarbonImmutable::now()->subDay(),
         );
@@ -303,6 +337,54 @@ final class WebhookPaidEffectsTest extends TestCase
         $this->assertNull($fresh->paid_via);
         $this->assertSame(0, $this->paidEventCount($order));
         $this->assertSame(0, $this->paymentReceivedCount($order));
+    }
+
+    /**
+     * The marketplace analogue of the booking leg's quote-amount precondition
+     * (I-3 regression): a session opened for the WRONG amount passes the
+     * receiver's validation (the validator compares the payload against the
+     * SESSION snapshot, so a self-consistent wrong session is VALIDATED), but
+     * the settlement must not mark the order DIBAYAR for a payment that does
+     * not equal what the order owes. The action-level amount assert rejects
+     * it, the claim rolls back, and nothing is applied.
+     */
+    public function test_a_marketplace_session_opened_for_the_wrong_amount_cannot_mark_the_order_paid(): void
+    {
+        $order = $this->marketplaceOrder('MKT-WRONGAMT-01', self::TOTAL_MINOR);
+        // The session was opened for Rp 14.900.000 while the order owes
+        // Rp 15.000.000. The payload matches the SESSION (so the receiver
+        // validates and claims it) but not the order.
+        $wrongAmountMinor = self::TOTAL_MINOR - 10_000_00;
+        $this->paymentSession('pay_wrong_amount_1', $wrongAmountMinor);
+
+        $this->withoutExceptionHandling();
+
+        try {
+            $this->deliver(dataOverrides: [
+                'payment_id' => 'pay_wrong_amount_1',
+                'order_id' => 'MKT-WRONGAMT-01',
+                'amount' => 1_490_000,
+            ])->assertOk();
+            $this->fail('Expected MarketplacePaymentAmountMismatchException');
+        } catch (MarketplacePaymentAmountMismatchException) {
+            // expected: the paid transition is refused for the wrong amount.
+        }
+
+        // The claim rolled back: the row stays VALIDATED, never PROCESSED.
+        $event = ProviderEvent::query()->sole();
+        $this->assertSame(ProviderEventStatus::Validated->value, $event->status);
+
+        // No DIBAYAR: the order, its payable and the session are untouched,
+        // and no paid-transition audit was recorded (the fixture's payable
+        // opening assessment does write its own audit row).
+        $this->assertSame(PaymentState::BELUM_DIBAYAR, $order->fresh()->payment_state);
+        $this->assertSame(VendorPayableState::HELD, $this->payableFor($order)->state);
+        $session = PaymentSession::query()->where('provider_payment_id', 'pay_wrong_amount_1')->sole();
+        $this->assertSame(SessionState::AwaitingPayment->value, $session->state);
+        $this->assertSame(0, AuditEvent::query()
+            ->where('action', 'MARKETPLACE_ORDER_PAYMENT_STATE_CHANGED')
+            ->where('subject_id', $order->getKey())
+            ->count());
     }
 
     public function test_a_forged_signature_is_acknowledged_recorded_and_applies_nothing(): void
