@@ -32,4 +32,6 @@ final class PreNeedAuditActions
     public const string PRENEED_ACTIVATED = 'PRENEED_ACTIVATED';
 
     public const string PRENEED_GATE_DENIED = 'PRENEED_GATE_DENIED';
+
+    public const string PRENEED_CONSULTATION_REQUESTED = 'PRENEED_CONSULTATION_REQUESTED';
 }
