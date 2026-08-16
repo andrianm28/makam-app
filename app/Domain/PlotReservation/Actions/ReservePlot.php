@@ -82,10 +82,12 @@ use App\Platform\Outbox\OutboxClassification;
  * re-holdable). The index was removed by
  * `2026_08_16_100030_drop_plot_reservations_active_hold_index.php`; the
  * rejection is recorded in the design spec §4.2 and the plan's Global
- * Constraints. On PostgreSQL the plot-row lock alone serializes the
- * race; on SQLite (no row locks) a second writer blocks on the
- * database-level write lock and its re-read sees `reserved` the same
- * way.
+ * Constraints. The plot-row lock serializes competing reservations on
+ * PostgreSQL, the production engine; on SQLite `lockForUpdate()` is a
+ * no-op (no row-level locking — a concurrent writer either blocks on
+ * SQLite's whole-database write lock or, in a race window, fails with
+ * SQLITE_BUSY, with no post-block re-read), so SQLite is exercised for
+ * the sequential path only — see the PG-only two-connection test.
  *
  * ---------------------------------------------------------------------------
  * `activeForOrder` vs the two-connection race test

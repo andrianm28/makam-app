@@ -66,7 +66,7 @@ Operator → order view → plot select (available, cemetery+class filtered) →
 ## 7. Testing
 
 - Inventory: block create + bulk generation (slot count, unique slots, audit); guards (code, capacity, state); admin access matrix + state overrides; delete blocked.
-- Reservation: happy path (plot → reserved, HELD row, audit, outbox); **concurrent double-reserve** (two-connection test, driver-guarded for PG; lock + unique backstop); occupied/maintenance refusal; order idempotency; lifecycle transitions + terminal refusals; audit/outbox rows per transition.
+- Reservation: happy path (plot → reserved, HELD row, audit, outbox); **concurrent double-reserve** (two-connection test, driver-guarded for PG — the plot-row lock + `plot_state` aggregate; the partial-unique-index backstop was rejected because append-only rows never release the index, see §4.2); occupied/maintenance refusal; order idempotency; lifecycle transitions + terminal refusals; audit/outbox rows per transition.
 - Integration: reserve action options (cemetery + class filtering), reserve → infolist, lifecycle action visibility per state; full journey smoke (submit → operator journey → reserve → confirm → authorize payment — the P1 flow unchanged).
 - Browser (dev, Playwright): blocks+plots admin smoke; operator reserves on a live order; infolist shows the reservation.
 

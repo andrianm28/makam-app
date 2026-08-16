@@ -48,8 +48,8 @@ return new class extends Migration
             // `restrictOnDelete()`, NOT `cascadeOnDelete()` — the same
             // choice as `order_status_events.order_id`. A cascade would
             // let one `DELETE FROM grave_plots` destroy the reservation
-            // evidence AND release `plot_reservations_active_hold` for
-            // that plot, silently making a once-held plot holdable again.
+            // evidence for that plot, silently erasing the append-only
+            // trail that "one active hold per plot" audits against.
             // `GravePlot`'s delete-blocked guard (Task 1) refuses at the
             // model layer for the same reason.
             $table->foreignUuid('plot_id')->constrained('grave_plots')->restrictOnDelete();
