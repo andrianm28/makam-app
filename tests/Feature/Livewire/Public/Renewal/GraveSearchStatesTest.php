@@ -599,7 +599,18 @@ final class GraveSearchStatesTest extends TestCase
         // Safe: RefreshDatabase rolls the whole test transaction back.
         // Children first, in reverse-dependency order: the renewal tables FK
         // into `grave_records`, so they must be dropped before it or
-        // PostgreSQL refuses with 2BP01.
+        // PostgreSQL refuses with 2BP01. P4 memorial tables (16 Aug 2026)
+        // come before the renewal tables: every memorial table FK-references
+        // `memorial_profiles`, which FK-references `grave_records`
+        // (restrictOnDelete), so all seven must precede `grave_records`
+        // below (2BP01).
+        DB::statement('DROP TABLE IF EXISTS abuse_reports');
+        DB::statement('DROP TABLE IF EXISTS moderation_cases');
+        DB::statement('DROP TABLE IF EXISTS memorial_qr_tokens');
+        DB::statement('DROP TABLE IF EXISTS memorial_media');
+        DB::statement('DROP TABLE IF EXISTS memorial_contents');
+        DB::statement('DROP TABLE IF EXISTS memorial_editors');
+        DB::statement('DROP TABLE IF EXISTS memorial_profiles');
         DB::statement('DROP TABLE IF EXISTS renewal_external_markings');
         DB::statement('DROP TABLE IF EXISTS renewal_quotes');
         DB::statement('DROP TABLE IF EXISTS renewals');

@@ -31,6 +31,10 @@ Durable events use the transactional outbox and envelope in `outbox-event-contra
 | `care.cycle_created.v1` | CareSubscription | Billing/work scheduling | One per cycle |
 | `vendor.work_completed.v1` | VendorFulfillment | Case/customer | Evidence reference |
 | `memorial.unpublished.v1` | Memorial | Public read/QR | Privacy/moderation action |
+| `memorial.profile_created.v1` | Memorial | Read models, audit | Privacy default private; grave-record reference only (AC7) |
+| `memorial.published.v1` | Memorial | Public read/QR | Profile made public |
+| `memorial.qr_token_rotated.v1` | Memorial | Public read/QR | Old token invalidated; opaque random token (AC4) |
+| `memorial.content_moderated.v1` | Memorial | Public read/QR | Moderation action; approved-only render (AC6) |
 | `visit.booking_confirmed.v1` | Visitation | Customer/operator | Capacity reservation |
 | `visit.booking_requested.v1` | Visitation | Customer/operator | Booking request, idempotent per booking |
 | `plot_reservation.state_changed.v1` | PlotReservation | Order/case guard, audit | Authoritative hold; append-only, one active hold per plot |
