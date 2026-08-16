@@ -53,6 +53,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * `DB::table('plot_reservations')->delete()`, raw SQL, or any process
  * with direct database credentials — those never pass through this
  * class. Stated plainly rather than assumed closed.
+ *
+ * @property-read GravePlot|null $plot
+ * @property-read Order|null $order
  */
 final class PlotReservation extends Model
 {
@@ -134,18 +137,44 @@ final class PlotReservation extends Model
     /**
      * The incumbent reservation for an order — used by `ReservePlot`'s
      * idempotency pre-check (an order with an active reservation is never
-     * handed a second one). `held` AND `confirmed` count as active: a
-     * confirmed reservation is still the authoritative claim on the plot.
+     * handed a second one) and by the booking-integration UI (Lane 3,
+     * `ViewBookingOrder`) to decide which lifecycle actions are offered.
+     *
+     * The INCUMBENT is the LATEST row of the order's append-only chain:
+     * the chain's head row is returned when its state is `held` or
+     * `confirmed` (both count as active — a confirmed reservation is
+     * still the authoritative claim on the plot), and null otherwise.
+     * The latest-row check is deliberately done AFTER reading the head
+     * row rather than as a query filter: a superseded `held` row remains
+     * in the chain forever (append-only), so filtering by state first
+     * would resurrect exactly the row the chain's later hops superseded
+     * — an order whose reservation was released/expired would still
+     * "have an active reservation".
+     *
+     * `created_at` has second granularity, so the four transition stamps
+     * (each set by exactly one hop of the chain) disambiguate same-second
+     * rows deterministically on both PostgreSQL and SQLite: the chain
+     * head is the row carrying the latest `confirmed_at`/`released_at`/
+     * `expired_at`, and a `held` row carries none of the three.
      *
      * @param  Order  $order  read for its key only — never content.
      */
     public static function activeForOrder(Order $order): ?self
     {
-        return self::query()
+        $latest = self::query()
             ->where('order_id', $order->getKey())
-            ->whereIn('state', [PlotReservationState::HELD, PlotReservationState::CONFIRMED])
-            ->latest()
+            ->orderByDesc('created_at')
+            ->orderByDesc('confirmed_at')
+            ->orderByDesc('released_at')
+            ->orderByDesc('expired_at')
+            ->orderByDesc('id')
             ->first();
+
+        if ($latest === null || ! in_array($latest->state, [PlotReservationState::HELD, PlotReservationState::CONFIRMED], true)) {
+            return null;
+        }
+
+        return $latest;
     }
 
     /**
