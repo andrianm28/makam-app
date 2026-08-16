@@ -92,40 +92,55 @@ final class FeatureGateAdminTest extends TestCase
         $this->assertTrue($gateIds->contains('G-DATA-01'));
     }
 
-    public function test_admin_with_fresh_reauthentication_can_transition_a_gate(): void
+    public function test_transition_reads_gate_evidence_and_reason_from_livewire_properties(): void
     {
         $user = User::factory()->create();
         $this->grantRoleTo($user, ActorRole::ADMIN);
         $this->actingAs($user);
         $this->seedActorSession($user, CarbonImmutable::now());
 
-        $gate = FeatureGate::query()->findOrFail('G-DATA-01');
-        $this->assertSame('closed', $gate->state);
+        FeatureGate::query()->create([
+            'gate_id' => 'G-TEST-01',
+            'capability' => 'data',
+            'type' => 'feature',
+            'owner' => 'admin',
+            'state' => 'closed',
+        ]);
+        $this->assertSame('closed', FeatureGate::query()->findOrFail('G-TEST-01')->state);
 
+        // Regression lock for the live dev bug: interpolating the modal
+        // values into the wire:click arguments froze them at render time,
+        // so the evidence typed after the render never reached the
+        // recorder (blank evidence -> MissingActivationEvidenceException,
+        // zero activations, gate stays closed). transitionGate() must read
+        // the values off the Livewire properties on the confirm request.
         Livewire::actingAs($user)
             ->test(FeatureGateAdmin::class)
-            ->call(
-                'transitionGate',
-                'G-DATA-01',
-                'open',
-                'ref/p2-task-2-evidence',
-                'Test fixture: exercising the evidence-gated transition path.',
-            )
-            ->assertNotified('Gerbang diperbarui.');
+            ->set('activeGateId', 'G-TEST-01')
+            ->set('activeToState', 'open')
+            ->set('evidence', 'UAT evidence')
+            ->set('reason', 'UAT reason')
+            ->call('transitionGate')
+            ->assertNotified('Gerbang diperbarui.')
+            ->assertSet('activeGateId', null)
+            ->assertSet('activeToState', 'open')
+            ->assertSet('evidence', '')
+            ->assertSet('reason', '');
 
-        $activation = GateActivation::query()->where('gate_id', 'G-DATA-01')->latest('id')->first();
+        $activation = GateActivation::query()->where('gate_id', 'G-TEST-01')->latest('id')->first();
         $this->assertNotNull($activation);
         $this->assertSame('closed', $activation->from_state);
         $this->assertSame('open', $activation->to_state);
-        $this->assertSame('ref/p2-task-2-evidence', $activation->evidence_reference);
+        $this->assertSame('UAT evidence', $activation->evidence_reference);
+        $this->assertSame('UAT reason', $activation->reason);
         $this->assertSame((string) $user->id, $activation->actor_reference);
 
-        $this->assertSame('open', FeatureGate::query()->findOrFail('G-DATA-01')->state);
+        $this->assertSame('open', FeatureGate::query()->findOrFail('G-TEST-01')->state);
 
         $audit = AuditEvent::query()
             ->where('action', 'GATE_CHANGE')
             ->where('subject_type', 'feature_gate')
-            ->where('subject_id', 'G-DATA-01')
+            ->where('subject_id', 'G-TEST-01')
             ->latest('id')
             ->first();
         $this->assertNotNull($audit);
@@ -143,13 +158,11 @@ final class FeatureGateAdminTest extends TestCase
 
         Livewire::actingAs($user)
             ->test(FeatureGateAdmin::class)
-            ->call(
-                'transitionGate',
-                'G-DATA-01',
-                'open',
-                '',
-                'Test fixture: blank evidence must be refused.',
-            )
+            ->set('activeGateId', 'G-DATA-01')
+            ->set('activeToState', 'open')
+            ->set('evidence', '')
+            ->set('reason', 'Test fixture: blank evidence must be refused.')
+            ->call('transitionGate')
             ->assertNotified('Gagal memperbarui gerbang');
 
         $this->assertSame('closed', FeatureGate::query()->findOrFail('G-DATA-01')->state);
@@ -157,26 +170,28 @@ final class FeatureGateAdminTest extends TestCase
         $this->assertSame(0, AuditEvent::query()->where('action', 'GATE_CHANGE')->count());
     }
 
-    public function test_confirm_button_interpolates_gate_evidence_and_reason_into_the_wire_click(): void
+    public function test_confirm_button_invokes_the_zero_argument_transition(): void
     {
         $user = User::factory()->create();
         $this->grantRoleTo($user, ActorRole::ADMIN);
         $this->actingAs($user);
         $this->seedActorSession($user, CarbonImmutable::now());
 
-        // Regression lock for the live dev bug: the modal confirm used bare
-        // `$activeGateId`/`$activeToState`/`$evidence`/`$reason` in the
-        // wire:click attribute — Blade does not interpolate those, so the
-        // compiled HTML carried the literal PHP variable names, Alpine
-        // raised "ReferenceError: $activeGateId is not defined" when
-        // parsing the action params, and the transition never fired. The
-        // attribute must render fully quoted, server-interpolated values.
+        // Regression lock for two live dev bugs: (1) bare PHP variable
+        // names in the wire:click attribute were never interpolated and
+        // raised an Alpine ReferenceError; (2) interpolated values were
+        // frozen at render time, so evidence typed into the wire:model
+        // textareas after the render never reached the recorder. The
+        // confirm button must therefore carry NO arguments at all — the
+        // zero-arg transitionGate() reads the live Livewire properties
+        // server-side on the confirm request.
         Livewire::actingAs($user)
             ->test(FeatureGateAdmin::class)
             ->call('beginTransition', 'G-DATA-01', 'open')
             ->set('evidence', 'ref/regression-evidence')
             ->set('reason', 'Regression fixture reason.')
-            ->assertSeeHtml("transitionGate('G-DATA-01', 'open', 'ref/regression-evidence', 'Regression fixture reason.')")
+            ->assertSeeHtml('wire:click="transitionGate()"')
+            ->assertDontSeeHtml("transitionGate('G-DATA-01")
             ->assertDontSeeHtml('$activeGateId');
     }
 
@@ -191,13 +206,11 @@ final class FeatureGateAdminTest extends TestCase
 
         Livewire::actingAs($user)
             ->test(FeatureGateAdmin::class)
-            ->call(
-                'transitionGate',
-                'G-DATA-01',
-                'open',
-                'ref/p2-task-2-evidence',
-                'Test fixture: stale actor must not reach the recorder.',
-            )
+            ->set('activeGateId', 'G-DATA-01')
+            ->set('activeToState', 'open')
+            ->set('evidence', 'ref/p2-task-2-evidence')
+            ->set('reason', 'Test fixture: stale actor must not reach the recorder.')
+            ->call('transitionGate')
             ->assertNotified('Perlu verifikasi ulang')
             ->assertRedirect(route('filament.admin.pages.mfa-challenge'));
 
@@ -216,13 +229,11 @@ final class FeatureGateAdminTest extends TestCase
 
         Livewire::actingAs($user)
             ->test(FeatureGateAdmin::class)
-            ->call(
-                'transitionGate',
-                'G-DATA-01',
-                'open',
-                'ref/p2-task-2-evidence',
-                'Test fixture: operator must not be able to change a gate.',
-            )
+            ->set('activeGateId', 'G-DATA-01')
+            ->set('activeToState', 'open')
+            ->set('evidence', 'ref/p2-task-2-evidence')
+            ->set('reason', 'Test fixture: operator must not be able to change a gate.')
+            ->call('transitionGate')
             ->assertNotified('Hanya admin yang dapat mengubah gerbang fitur.');
 
         $this->assertSame('closed', FeatureGate::query()->findOrFail('G-DATA-01')->state);

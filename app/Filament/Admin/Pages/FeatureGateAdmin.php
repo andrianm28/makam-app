@@ -161,8 +161,16 @@ final class FeatureGateAdmin extends Page
     }
 
     /**
-     * The one Livewire action that changes a gate's state. Order matters and
-     * is deliberate:
+     * The one Livewire action that changes a gate's state. ZERO-ARGUMENT by
+     * design: the confirm button's evidence/reason textareas are
+     * `wire:model`-bound to this page's `$evidence`/`$reason` properties,
+     * so the values exist server-side on THIS Livewire request, and any
+     * value interpolated into the blade at an earlier render is necessarily
+     * stale (typing happens after render). The method therefore reads the
+     * modal state straight off the component — `$activeGateId`,
+     * `$activeToState`, `$evidence`, `$reason` — the same state
+     * `beginTransition()` establishes and the textareas edit. Order of
+     * checks is deliberate:
      *
      * 1. ADMIN-ONLY check — the first gate. A non-admin back-office role
      *    that can view the page gets a danger notification and never touches
@@ -180,8 +188,13 @@ final class FeatureGateAdmin extends Page
      *    recorder's own transaction rolls back everything. A success clears
      *    the modal state.
      */
-    public function transitionGate(string $gateId, string $toState, string $evidenceReference, string $reason): void
+    public function transitionGate(): void
     {
+        $gateId = $this->activeGateId ?? '';
+        $toState = $this->activeToState;
+        $evidenceReference = $this->evidence;
+        $reason = $this->reason;
+
         $actor = app(ActorContext::class);
 
         if (! in_array(ActorRole::ADMIN, $actor->roles, true)) {
@@ -213,6 +226,7 @@ final class FeatureGateAdmin extends Page
             );
             Notification::make()->success()->title('Gerbang diperbarui.')->send();
             $this->activeGateId = null;
+            $this->activeToState = 'open';
             $this->evidence = '';
             $this->reason = '';
         } catch (\Throwable $exception) {
