@@ -16,6 +16,10 @@ use Illuminate\Database\Eloquent\Builder;
  * table query preloads them via `withCount()` — otherwise Filament would
  * run one COUNT query per row (N+1).
  *
+ * The members count mirrors `MembersRelationManager` (P2 review fix):
+ * revoked members (`revoked_at` set) are excluded from both, so the list
+ * total and the "Anggota" column never disagree.
+ *
  * Active renders as a badge with the same color mapping the codebase uses
  * for the identical boolean vocabulary (success for active, gray for
  * inactive).
@@ -25,7 +29,10 @@ final class VendorsTable
     public static function configure(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->withCount(['listings', 'members']))
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->withCount([
+                'listings',
+                'members' => fn (Builder $q): Builder => $q->whereNull('revoked_at'),
+            ]))
             ->columns([
                 TextColumn::make('name')
                     ->label('Nama')
