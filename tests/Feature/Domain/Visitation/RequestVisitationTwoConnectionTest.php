@@ -25,20 +25,32 @@ use Tests\TestCase;
  * here: the fixture must be COMMITTED before the second logical session
  * queries it).
  *
+ * This is NOT a concurrency test, and the name says what the body
+ * proves: SEQUENTIAL re-read semantics across two independent backend
+ * sessions, the same honest framing `ReservePlotTwoConnectionTest` uses.
+ * The two calls run one after the other, so the first
+ * `Audit::wrap()` transaction runs `BEGIN`→`COMMIT` to completion —
+ * creating and committing the date's ledger row with `booked_count = 1`
+ * — before the second call starts; the row lock is never contended.
+ * What is asserted is that the second session's
+ * `lockForUpdate()->firstOrCreate()` FIND-and-lock re-read observes the
+ * first session's ALREADY-COMMITTED `booked_count`, so its own
+ * locked-path capacity check (`1 + 1 > daily_capacity 1`) refuses with
+ * `VisitationCapacityExceededException`, leaving exactly one booking and
+ * `booked_count = 1`.
+ *
+ * The unique-index classifier branch in `RequestVisitation` (the
+ * lost-first-insert race, where a `lockForUpdate()` on a MISSING row
+ * locks nothing on PostgreSQL and the loser's `firstOrCreate` collides)
+ * is deliberately NOT exercised here: it needs a true parallel
+ * first-ever-insert race — both sessions passing the pre-insert read
+ * before either commits — which sequential sessions cannot produce.
+ * That branch is backstopped by the unique constraint and its lock-
+ * and-re-check, and is out of scope on the 2/4 host, as recorded in the
+ * P3 plan.
+ *
  * Both sessions book the SAME date with DIFFERENT idempotency keys, so
- * the idempotency fast-path cannot mask the race: what this test exists
- * to prove is the no-oversell mechanism on the production engine. The
- * first session locks-or-creates the date's ledger row and commits
- * `booked_count = 1`. The second session's `lockForUpdate()` on the
- * (already existing, committed) row would serialize normally — but the
- * interesting branch is the first-ever-insert race, which this test
- * drives deterministically in its sequential form: session 2's
- * `firstOrCreate` collides on the unique `(policy_id, date)` index
- * (a `lockForUpdate()` on a missing row locks nothing on PostgreSQL —
- * no gap locks), the narrow classifier re-reads the committed ledger
- * row (`booked_count = 1`), and the re-run capacity check refuses with
- * `VisitationCapacityExceededException`. One booking, `booked_count`
- * stays 1.
+ * the idempotency fast-path cannot mask the refusal.
  *
  * The trailing `migrate:fresh` is LOAD-BEARING, not a nicety: the two
  * sessions COMMIT real rows, and without the wipe those rows leak into

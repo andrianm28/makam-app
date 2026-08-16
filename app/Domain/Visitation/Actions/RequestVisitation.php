@@ -55,15 +55,23 @@ use InvalidArgumentException;
  *       date's first booking, so on PostgreSQL a `lockForUpdate()` on a
  *       MISSING row locks nothing (PG has no gap locks) — the unique
  *       `(policy_id, date)` constraint backstops the concurrent
- *       first-ever-insert: the loser's `firstOrCreate` throws, the
- *       inner narrow classifier re-reads the now-committed ledger row,
- *       and the capacity check re-runs against it (booking proceeds
- *       when room remains; `VisitationCapacityExceededException` is
- *       thrown honestly when the winner consumed it — the
- *       `RequestVisitationTwoConnectionTest` proves exactly this
- *       second outcome). On SQLite `lockForUpdate()` is a no-op; the
- *       sequential path is exercised there, the race only on PG (same
- *       reasoning `ReservePlot` documents).
+ *       first-ever-insert: the loser's `firstOrCreate` throws and the
+ *       inner narrow classifier re-reads the now-committed ledger row
+ *       UNDER THE SAME ROW LOCK (see the classifier's own comment), then
+ *       the capacity check re-runs against the locked re-read (booking
+ *       proceeds when room remains; `VisitationCapacityExceededException`
+ *       is thrown honestly when the winner consumed it). The
+ *       `RequestVisitationTwoConnectionTest` proves the SEQUENTIAL
+ *       no-oversell outcome — there the row already exists when the
+ *       second session runs, so its `lockForUpdate()` re-read finds and
+ *       locks it and the locked-path capacity check refuses; the
+ *       unique-constraint classifier branch itself needs a true parallel
+ *       first-ever-insert race and is not exercised by that test (same
+ *       honest framing `ReservePlotTwoConnectionTest` uses). On SQLite
+ *       `lockForUpdate()` is a no-op; the sequential find-path is
+ *       exercised there (pinned by `RequestVisitationTest`'s same-date
+ *       test), the race only on PG (same reasoning `ReservePlot`
+ *       documents).
  *    b. Blackout check — `VisitationBlackoutDateException` with the
  *       visitor-visible reason (checked FIRST: a blackout date means
  *       "this date is closed", and that must win over weekday logic).
@@ -148,10 +156,22 @@ final readonly class RequestVisitation
                         // on a missing row locks nothing on PostgreSQL
                         // (no gap locks), so two concurrent first-ever
                         // bookings for a date collide on the unique
-                        // (policy_id, date). Re-read the now-committed
-                        // ledger row and re-run the capacity check below
-                        // against it.
+                        // (policy_id, date) and one of them lands here.
+                        // Re-read the now-committed ledger row UNDER THE
+                        // SAME ROW LOCK the happy path uses: the lock
+                        // serializes this re-read with any third writer,
+                        // so the capacity check below and the increment
+                        // in `book()` read and mutate one consistent
+                        // count — without it, a third writer could
+                        // commit an increment between this re-read and
+                        // our own, and our increment would overshoot
+                        // `daily_capacity`. Exactly one row is locked
+                        // (the unique (policy_id, date) lookup), and no
+                        // other statement in this transaction takes a
+                        // second ledger-row lock, so no deadlock cycle
+                        // is possible.
                         $capacity = VisitationDateCapacity::query()
+                            ->lockForUpdate()
                             ->where('policy_id', $policy->getKey())
                             ->where('date', $date)
                             ->first();

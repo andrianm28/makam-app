@@ -214,6 +214,50 @@ final class RequestVisitationTest extends TestCase
         $this->assertSame(1, DB::table('outbox_events')->count());
     }
 
+    public function test_two_bookings_for_the_same_date_share_one_ledger_row(): void
+    {
+        // The SQLite find-path pin (the engine CI runs): the second
+        // booking's `firstOrCreate` must FIND the first booking's ledger
+        // row — the Carbon-valued `date` binding matches the stored
+        // `'Y-m-d H:i:s'` value (see `capacityRow()`'s doc block) — so
+        // the pair produce ONE ledger row with the summed `booked_count`,
+        // never a second-row insert that would collide on the unique
+        // `(policy_id, date)` constraint.
+        $cemetery = $this->cemetery();
+        $policy = $this->policy($cemetery, ['daily_capacity' => 10]);
+
+        $first = app(RequestVisitation::class)(
+            $cemetery,
+            '2026-08-19',
+            2,
+            '0812-1111-1111',
+            null,
+            null,
+            [],
+            'req-'.Str::random(8),
+            'actor:customer',
+        );
+
+        $second = app(RequestVisitation::class)(
+            $cemetery,
+            '2026-08-19',
+            3,
+            '0812-2222-2222',
+            null,
+            null,
+            [],
+            'req-'.Str::random(8),
+            'actor:customer',
+        );
+
+        $this->assertSame(2, $first->visitor_count);
+        $this->assertSame(3, $second->visitor_count);
+        $this->assertNotSame($first->getKey(), $second->getKey());
+        $this->assertSame(2, VisitationBooking::query()->count());
+        $this->assertSame(1, VisitationDateCapacity::query()->count());
+        $this->assertSame(5, VisitationDateCapacity::query()->value('booked_count'));
+    }
+
     public function test_refuses_a_cemetery_without_a_policy(): void
     {
         $this->expectException(InvalidArgumentException::class);
