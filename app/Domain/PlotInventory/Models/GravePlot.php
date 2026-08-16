@@ -6,11 +6,9 @@ namespace App\Domain\PlotInventory\Models;
 
 use App\Domain\CemeteryCapability\Models\CemeteryPackage;
 use App\Domain\PlotInventory\PlotState;
-use App\Domain\PlotReservation\Models\PlotReservation;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -103,16 +101,5 @@ final class GravePlot extends Model
     public function cemeteryPackage(): BelongsTo
     {
         return $this->belongsTo(CemeteryPackage::class, 'cemetery_package_id');
-    }
-
-    /**
-     * Reservation history for this plot (`plot_reservations`, append-only)
-     * — the P3 lane 2 module owns the table and model; this relation is the
-     * Task 2 landing spot the Task 1 review flagged, added early so the
-     * merge with lane 2 (which ships `PlotReservation`) resolves it.
-     */
-    public function reservations(): HasMany
-    {
-        return $this->hasMany(PlotReservation::class, 'plot_id');
     }
 }
