@@ -6,7 +6,7 @@
     own Blade components and Tailwind classes rather than the public site's
     `<x-mk.*>` primitives, for the identical reason those files record —
     `<x-mk.*>` component files live outside this panel's own Tailwind
-    `@source` scan.
+    source scan.
 
     Required states (§6): loading (none — the table is one query on a tiny
     registry), empty (the registry is seeded by migration, but the loop
@@ -46,7 +46,8 @@
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-neutral-200">
-                    @forelse ($this->gates() as $gate)
+                    @php $gates = $this->gates(); @endphp
+                    @forelse ($gates as $gate)
                         <tr>
                             <td class="px-4 py-2 font-mono text-neutral-900">{{ $gate->gate_id }}</td>
                             <td class="px-4 py-2 text-neutral-900">{{ $gate->capability }}</td>
