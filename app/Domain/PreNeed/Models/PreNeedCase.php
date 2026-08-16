@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domain\PreNeed\Models;
 
+use App\Domain\CemeteryCapability\Models\CemeteryPackage;
+use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\PreNeed\Exceptions\IllegalPreNeedCaseTransitionException;
 use App\Domain\PreNeed\PreNeedCaseStatus;
@@ -83,6 +85,29 @@ final class PreNeedCase extends Model
     public function interest(): BelongsTo
     {
         return $this->belongsTo(PreNeedInterest::class, 'pre_need_interest_id');
+    }
+
+    /**
+     * The proposed cemetery — `null` until `ProposePreNeedPackage` links it.
+     * Read-side only: the proposal is written exclusively by the paid-flow
+     * Action, never through this relation.
+     *
+     * @return BelongsTo<Cemetery, $this>
+     */
+    public function cemetery(): BelongsTo
+    {
+        return $this->belongsTo(Cemetery::class, 'cemetery_id');
+    }
+
+    /**
+     * The proposed package — `null` until `ProposePreNeedPackage` links it;
+     * `cemetery_packages.id` is BIGINT, so this is an integer-key relation.
+     *
+     * @return BelongsTo<CemeteryPackage, $this>
+     */
+    public function package(): BelongsTo
+    {
+        return $this->belongsTo(CemeteryPackage::class, 'cemetery_package_id');
     }
 
     /**

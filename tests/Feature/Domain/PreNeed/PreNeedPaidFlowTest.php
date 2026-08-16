@@ -68,6 +68,10 @@ use Tests\TestCase;
  * through the verified-payment fixture) -> activation (AC8: a NEW
  * At-Need FuneralCase, the original case's agreement/quote/reservation
  * links untouched).
+ *
+ * The reservation-optional branch (the ledgered Task-4 requirement) is
+ * pinned in `test_the_reservation_optional_branch_quotes_a_proposal_without_a_reservation`:
+ * proposal -> quote directly, the reservation step skipped entirely.
  */
 final class PreNeedPaidFlowTest extends TestCase
 {
@@ -310,6 +314,39 @@ final class PreNeedPaidFlowTest extends TestCase
         ]);
         self::assertDatabaseHas('audit_events', [
             'action' => PreNeedAuditActions::PRENEED_ACTIVATED,
+            'outcome' => 'allowed',
+        ]);
+    }
+
+    public function test_the_reservation_optional_branch_quotes_a_proposal_without_a_reservation(): void
+    {
+        $this->bindGateRegistryWith('G-LEGAL-01', open: true);
+
+        $draft = $this->draft(BookingServiceType::PRE_NEED, services: [
+            ['code' => ServiceCode::DOCUMENT_PROCESSING, 'quantity' => 1],
+        ]);
+
+        $order = app(SubmitBookingDraft::class)($draft, 'idem-reservation-optional');
+        $interest = PreNeedInterest::query()->findOrFail($order->pre_need_case_id);
+
+        $case = PreNeedCase::query()->create([
+            'pre_need_interest_id' => $interest->getKey(),
+            'status' => PreNeedCaseStatus::INTEREST->value,
+        ]);
+
+        $proposed = app(ProposePreNeedPackage::class)($case, $this->cemetery(), null, 'actor:admin-1', 'admin');
+
+        self::assertSame(PreNeedCaseStatus::PROPOSAL->value, $proposed->status);
+
+        // The reservation-optional branch (the ledgered Task-4 requirement):
+        // proposal -> quote directly, the reservation step skipped entirely.
+        $quoted = app(QuotePreNeed::class)($proposed, Carbon::now()->addDays(7), 'actor:admin-1', 'admin');
+
+        self::assertSame(PreNeedCaseStatus::QUOTED->value, $quoted->status);
+        self::assertNotNull($quoted->quote_id);
+        self::assertNull($quoted->plot_reservation_id);
+        self::assertDatabaseHas('audit_events', [
+            'action' => PreNeedAuditActions::PRENEED_QUOTED,
             'outcome' => 'allowed',
         ]);
     }
