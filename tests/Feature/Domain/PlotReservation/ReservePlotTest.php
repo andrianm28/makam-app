@@ -14,9 +14,9 @@ use App\Domain\OrderWorkflow\ProductType;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotInventory\PlotState;
+use App\Domain\PlotReservation\Actions\ExpirePlotReservation;
 use App\Domain\PlotReservation\Actions\ReservePlot;
 use App\Domain\PlotReservation\Exceptions\PlotNotAvailableException;
-use App\Domain\PlotReservation\Exceptions\PlotReservationConflictException;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PlotReservation\PlotReservationState;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -99,32 +99,53 @@ final class ReservePlotTest extends TestCase
     }
 
     /**
-     * The classifier test (plan Step 4): the plot is deliberately left
-     * `available` while a HELD row already exists for it — a direct
-     * insert that simulates the race window in which a second session
-     * passed the `available` assert before the first committed. The
-     * plot-state assert therefore passes and the flow reaches the
-     * INSERT, where `plot_reservations_active_hold` fires and the
-     * narrow classifier translates the `QueryException` into the domain
-     * conflict. On SQLite this exercises the `unique` +
-     * `plot_reservations.plot_id` signal; the index-name signal is the
-     * PostgreSQL path, exercised by CI.
+     * The plot-state path of the one-active-hold invariant (the
+     * `plot_reservations_active_hold` index that used to backstop it was
+     * removed — see `ReservePlot`'s class doc block): a plot whose
+     * `plot_state` is `reserved` — here set manually, WITHOUT any
+     * reservation row — is refused by the state assert under the plot
+     * row lock, before any insert is attempted.
      */
-    public function test_duplicate_active_hold_is_classified_as_conflict(): void
+    public function test_reserved_plot_without_reservation_row_is_refused(): void
+    {
+        $plot = $this->plot(PlotState::RESERVED);
+        $order = $this->order();
+
+        $this->expectException(PlotNotAvailableException::class);
+        app(ReservePlot::class)($plot, $order, 'user:1', 'operator');
+    }
+
+    /**
+     * The regression test for the removed backstop index: a plot that
+     * was held and then expired CAN be reserved again. With the old
+     * `plot_reservations_active_hold` partial unique index this threw
+     * `PlotReservationConflictException` — append-only rows never
+     * released the first `held` row's index entry, so a plot could only
+     * ever be reserved once. The old chain is preserved append-only; the
+     * new hold is a NEW row.
+     */
+    public function test_plot_can_be_reserved_again_after_expire(): void
     {
         $plot = $this->plot();
         $order = $this->order();
-        $otherOrder = $this->order();
 
-        PlotReservation::query()->create([
-            'plot_id' => $plot->getKey(),
-            'order_id' => $otherOrder->getKey(),
-            'state' => PlotReservationState::HELD,
-            'reserved_by_ref' => 'user:0',
-            'reserved_at' => now(),
-        ]);
+        $first = app(ReservePlot::class)($plot, $order, 'user:1', 'operator');
+        app(ExpirePlotReservation::class)($first, 'user:1', 'operator');
+        $this->assertSame(PlotState::AVAILABLE, $plot->fresh()->plot_state);
 
-        $this->expectException(PlotReservationConflictException::class);
-        app(ReservePlot::class)($plot, $order, 'user:1', 'operator');
+        $second = app(ReservePlot::class)($plot, $order, 'user:1', 'operator');
+
+        $this->assertNotSame($first->getKey(), $second->getKey());
+        $this->assertSame(PlotReservationState::HELD, $second->state);
+        $this->assertSame(PlotState::RESERVED, $plot->fresh()->plot_state);
+        $this->assertSame(3, PlotReservation::query()->count());
+        $this->assertSame(
+            ['held', 'expired', 'held'],
+            PlotReservation::query()
+                ->orderBy('created_at')
+                ->orderBy('id')
+                ->pluck('state')
+                ->all(),
+        );
     }
 }

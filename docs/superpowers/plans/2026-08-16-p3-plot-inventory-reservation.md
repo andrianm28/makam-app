@@ -4,7 +4,7 @@
 
 **Goal:** Authoritative plot inventory (blocks + bulk-generated plots with states) and an atomic, operator-initiated reservation module wired into the P1 admin order journey.
 
-**Architecture:** Three file-disjoint lanes on trunk. PlotInventory: `CemeteryBlock` + `GravePlot` models, `PlotState` constants, `CreateCemeteryBlock` action (bulk generation), admin surfaces (BlocksRelationManager + GravePlotsResource). PlotReservation: append-only `PlotReservation` rows with a partial unique index `(plot_id) WHERE state='held'`, four actions (`ReservePlot` with row-lock + backstop concurrency, Confirm/Release/Expire), new catalogued event. Booking integration: reservation header actions + infolist section on `ViewBookingOrder`. Spec: `docs/superpowers/specs/2026-08-16-plot-inventory-reservation-design.md`.
+**Architecture:** Three file-disjoint lanes on trunk. PlotInventory: `CemeteryBlock` + `GravePlot` models, `PlotState` constants, `CreateCemeteryBlock` action (bulk generation), admin surfaces (BlocksRelationManager + GravePlotsResource). PlotReservation: append-only `PlotReservation` rows, four actions (`ReservePlot` with plot-row lock + `plot_state` aggregate enforcing one active hold per plot — a partial unique index was tried and rejected, see Global Constraints — plus Confirm/Release/Expire), new catalogued event. Booking integration: reservation header actions + infolist section on `ViewBookingOrder`. Spec: `docs/superpowers/specs/2026-08-16-plot-inventory-reservation-design.md`.
 
 **Tech Stack:** Laravel 13 / PHP 8.5 / Filament 5 / Livewire 4 / PostgreSQL 18 + SQLite (tests).
 
@@ -12,7 +12,7 @@
 
 - Plot state changes happen ONLY through the reservation actions or the admin state-override action; never via bare model writes in resources (the `RecordOrderStatusChange` sole-writer discipline, same shape).
 - `ReservePlot` transaction order: `lockForUpdate` plot → assert `available` → insert HELD row → flip plot state → audit → outbox, one transaction (AC4).
-- One active hold per plot: partial unique index `plot_reservations_active_hold` on `(plot_id) WHERE state = 'held'` (PG + SQLite both support partial indexes); duplicate → `PlotReservationConflictException` via the narrow-classifier pattern (OrderAlreadyPaidException precedent).
+- One active hold per plot: enforced by the plot-row `lockForUpdate()` serialization (every reservation action locks the plot row FIRST) + the plot's `plot_state` aggregate asserted under that lock (available → reserved → available on release/expire), with order-level idempotency via `activeForOrder()`. **Rejected alternative (recorded):** the original design used a partial unique index `plot_reservations_active_hold` on `(plot_id) WHERE state = 'held'`; it was proven on PG18 + SQLite to never release (append-only rows keep the first `held` row's entry forever — a plot could only ever be held once), so it was dropped by `2026_08_16_100030_drop_plot_reservations_active_hold_index.php`.
 - Order-level idempotency: an order with an active reservation (state held OR confirmed) returns the incumbent.
 - Append-only reservations: every transition inserts a new row; no updates/deletes on `plot_reservations`.
 - Audit actions (new constants): `CEMETERY_BLOCK_CREATED`, `GRAVE_PLOTS_GENERATED`, `GRAVE_PLOT_STATE_CHANGED`, `PLOT_RESERVATION_CREATED`, `PLOT_RESERVATION_CONFIRMED`, `PLOT_RESERVATION_RELEASED`, `PLOT_RESERVATION_EXPIRED` — none on `SensitiveActions::ACTIONS` (machine/operator routine, same rationale as the marketplace constants).
@@ -208,7 +208,6 @@ Note: verify `Cemetery::factory()` exists and its required fields (check `databa
 - Create: `app/Domain/PlotReservation/PlotReservationAuditActions.php`
 - Create: `app/Domain/PlotReservation/Models/PlotReservation.php`
 - Create: `app/Domain/PlotReservation/Exceptions/PlotNotAvailableException.php`
-- Create: `app/Domain/PlotReservation/Exceptions/PlotReservationConflictException.php`
 - Create: `app/Domain/PlotReservation/Actions/ReservePlot.php`
 - Modify: `docs/contracts/event-catalog.md` (add `plot_reservation.state_changed.v1`)
 - Test: `tests/Feature/Domain/PlotReservation/ReservePlotTest.php`, `tests/Feature/Domain/PlotReservation/ReservePlotTwoConnectionTest.php`
@@ -219,13 +218,12 @@ Note: verify `Cemetery::factory()` exists and its required fields (check `databa
   - `PlotReservationState`: `HELD='held'`, `CONFIRMED='confirmed'`, `RELEASED='released'`, `EXPIRED='expired'` + KNOWN + isKnown/assertKnown.
   - `PlotReservationAuditActions`: `PLOT_RESERVATION_CREATED='PLOT_RESERVATION_CREATED'`, `PLOT_RESERVATION_CONFIRMED`, `PLOT_RESERVATION_RELEASED`, `PLOT_RESERVATION_EXPIRED`.
   - `PlotNotAvailableException extends RuntimeException` with `static forPlot(int|string $plotId): self`.
-  - `PlotReservationConflictException extends RuntimeException` with `static forPlot(int|string $plotId): self`.
   - `PlotReservation` (table `plot_reservations`): fillable `['plot_id','order_id','state','reserved_by_ref','reason','reserved_at','confirmed_at','released_at','expired_at']`; casts the four timestamps→immutable_datetime; append-only (`update()`/`delete()` throw `PlotReservationIsAppendOnlyException` — new exception); `plot(): BelongsTo`, `order(): BelongsTo`; `static activeForOrder(Order $order): ?self` (state in held|confirmed, latest first); `static activeForPlot(GravePlot $plot): ?self`.
   - `ReservePlot::__invoke(GravePlot $plot, Order $order, int|string $actorReference, string $actorRole, ?string $reason = null, AuditSource $auditSource = AuditSource::Panel): PlotReservation`:
     1. `PlotReservation::activeForOrder($order)` non-null → return incumbent.
     2. `Audit::wrap` + `DB::transaction`: re-read plot `lockForUpdate()->findOrFail` → assert `plot_state === PlotState::AVAILABLE` else `PlotNotAvailableException::forPlot` → insert row (plot_id, order_id, state held, reserved_by_ref, reserved_at now, reason) → `$plot->update(['plot_state' => PlotState::RESERVED])` — wait, GravePlot has NO write guard (plain model) — fine → audit `PLOT_RESERVATION_CREATED` (subject plot_reservation, reason, correlationId) → `Outbox::record('plot_reservation.state_changed.v1', 1, 'plot_reservation', (string) $row->id, ['reservation_id' => ..., 'plot_id' => ..., 'from_state' => null, 'to_state' => 'held'], OutboxClassification::Internal, "plot_reservation:{$row->id}")`.
-    3. `QueryException` narrow-classifier `isDuplicateActiveHold()` (matches `plot_reservations_active_hold` on PG, `unique` + `plot_reservations.plot_id` on SQLite) → `PlotReservationConflictException::forPlot`.
-  - Migration: table + `DB::statement("CREATE UNIQUE INDEX plot_reservations_active_hold ON plot_reservations (plot_id) WHERE state = 'held'")` in `up()`, `DB::statement('DROP INDEX IF EXISTS plot_reservations_active_hold')` in `down()` (no driver guard — PG + SQLite both support partial unique indexes; verify in the test run).
+    3. (No duplicate-hold classifier — the partial unique index was removed; see Global Constraints. The plot-row lock + `plot_state` assert are the invariant.)
+  - Migration: table in `2026_08_16_100020`; the index (created in that migration's `up()`) is dropped by the follow-up `2026_08_16_100030_drop_plot_reservations_active_hold_index.php` (`down()` recreates it for reversibility).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -380,8 +378,7 @@ final class ReservePlotTwoConnectionTest extends TestCase
 
 - [ ] **Step 2: Run to verify they fail** → FAIL (classes not found).
 - [ ] **Step 3: Implement** per the Produces block. `PlotReservationIsAppendOnlyException` in `app/Domain/PlotReservation/Exceptions/`.
-- [ ] **Step 4: Run the tests** → PASS (the two-connection test skips on SQLite). Verify the partial-unique migration works on BOTH engines (the ReservePlotTest on SQLite exercises the index path only on conflict — assert the conflict classifier with a test that force-inserts a duplicate? Add: insert a second HELD row directly → expect QueryException→`PlotReservationConflictException` via ReservePlot on a fresh plot with a manually pre-inserted held row — the classifier test):
-  - `test_duplicate_active_hold_is_classified_as_conflict`: pre-insert a HELD row for the plot via `PlotReservation::query()->create([...])` (append-only guard allows create), then `ReservePlot` → `PlotReservationConflictException` (the plot-state assert passes only if the pre-insert didn't flip the plot — keep the plot `available` so the flow reaches the insert and trips the index).
+- [ ] **Step 4: Run the tests** → PASS (the two-connection test skips on SQLite). Verify the corrected one-active-hold mechanism on BOTH engines (the partial unique index was dropped — see Global Constraints): `test_reserved_plot_without_reservation_row_is_refused` (plot manually `reserved` with no reservation row → `PlotNotAvailableException` — the state-assert path) and `test_plot_can_be_reserved_again_after_expire` (held → expire → re-hold the SAME plot succeeds, old chain preserved append-only — the regression that was impossible with the index).
 - [ ] **Step 5: Event catalog** — append the `plot_reservation.state_changed.v1` row to `docs/contracts/event-catalog.md` in the same style as the existing rows.
 - [ ] **Step 6: Gates + commit** — `feat(plot-reservation): atomic plot reservation with concurrency backstop (P3 lane 2)`.
 

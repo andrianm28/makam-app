@@ -18,7 +18,6 @@ use App\Domain\PlotReservation\Actions\ConfirmPlotReservation;
 use App\Domain\PlotReservation\Actions\ExpirePlotReservation;
 use App\Domain\PlotReservation\Actions\ReleasePlotReservation;
 use App\Domain\PlotReservation\Actions\ReservePlot;
-use App\Domain\PlotReservation\Exceptions\PlotReservationConflictException;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PlotReservation\PlotReservationState;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -176,31 +175,31 @@ final class PlotReservationQueryTest extends TestCase
     }
 
     /**
-     * Documents the CURRENT module contract for the same-plot re-hold:
-     * the `plot_reservations_active_hold` partial unique index keeps the
-     * FIRST `held` row's entry forever (rows are append-only, state
-     * never mutates), so a plot that was ever held cannot be held again
-     * on EITHER engine (verified against PostgreSQL 18 and SQLite).
-     * `activeForOrder()` correctly reports no incumbent here (the fix
-     * this file pins) — the refusal comes from the index, not from a
-     * stale head — which is also the regression signal: with the old
-     * filter-before-order bug the pre-check would silently return the
-     * superseded incumbent and this exception would never be reached.
-     * Flagged for the Lane 2 whole-branch review: the plan's lifecycle
-     * (release/expire → plot `available` → re-holdable) is defeated by
-     * the backstop index as written.
+     * The same-plot re-hold: with the removed `plot_reservations_active_
+     * hold` partial unique index this was impossible (append-only rows
+     * never released the first `held` row's entry — a plot could only
+     * ever be reserved once); the corrected mechanism (plot-row lock +
+     * `plot_state` aggregate) allows the re-hold, and the head must
+     * resolve to the NEW held row by identity.
      */
-    public function test_reholding_the_same_plot_is_refused_by_the_active_hold_backstop(): void
+    public function test_same_plot_can_be_reheld_after_expiry_and_is_the_new_head(): void
     {
         $plot = $this->plot('001');
         $order = $this->order();
 
         $held = app(ReservePlot::class)($plot, $order, 'user:1', 'operator');
         app(ExpirePlotReservation::class)($held, 'user:1', 'operator');
-        $this->assertSame(PlotState::AVAILABLE, $plot->fresh()->plot_state);
+        $this->pinCreatedAt();
         $this->assertNull(PlotReservation::activeForOrder($order));
 
-        $this->expectException(PlotReservationConflictException::class);
-        app(ReservePlot::class)($plot, $order, 'user:1', 'operator');
+        $reheld = app(ReservePlot::class)($plot, $order, 'user:1', 'operator');
+        $this->pinCreatedAt();
+
+        $head = PlotReservation::activeForOrder($order);
+        $this->assertNotNull($head);
+        $this->assertSame($reheld->getKey(), $head->getKey(), 'the head must be the NEW held row, not the superseded one');
+        $this->assertSame(PlotReservationState::HELD, $head->state);
+        $this->assertSame(PlotState::RESERVED, $plot->fresh()->plot_state);
+        $this->assertCount(3, PlotReservation::query()->where('order_id', $order->getKey())->get());
     }
 }

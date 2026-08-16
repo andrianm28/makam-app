@@ -7,12 +7,12 @@
 
 ## 1. Goal
 
-A cemetery's plot inventory becomes an authoritative, queryable record: blocks with capacity, bulk-generated plots with per-plot state (`available`/`reserved`/`occupied`/`maintenance`), and an atomic reservation module where an operator can claim a specific plot for an order — one active hold per plot, enforced by row locks and a partial unique index, with an append-only audit/outbox trail. The P1 admin journey gains the reserve/confirm/release/expire actions; the public flow is unchanged (package/class default stays; specific-plot selection is a later phase).
+A cemetery's plot inventory becomes an authoritative, queryable record: blocks with capacity, bulk-generated plots with per-plot state (`available`/`reserved`/`occupied`/`maintenance`), and an atomic reservation module where an operator can claim a specific plot for an order — one active hold per plot, enforced by the plot-row lock + the plot's state aggregate (a partial unique index was tried and rejected — see §4.2), with an append-only audit/outbox trail. The P1 admin journey gains the reserve/confirm/release/expire actions; the public flow is unchanged (package/class default stays; specific-plot selection is a later phase).
 
 ## 2. In scope
 
 1. **PlotInventory domain** (`app/Domain/PlotInventory/`): `CemeteryBlock` + `GravePlot` models, `PlotState` constants, `CreateCemeteryBlock` action (block + bulk plot generation, atomic), admin surfaces (`BlocksRelationManager` under CemeteryResource + standalone `GravePlotsResource` with state-override actions).
-2. **PlotReservation domain** (`app/Domain/PlotReservation/`): `PlotReservation` append-only model with a partial unique index enforcing one active hold per plot; `ReservePlot` (atomic claim, idempotent per order), `ConfirmPlotReservation`, `ReleasePlotReservation`, `ExpirePlotReservation`; new catalogued event `plot_reservation.state_changed.v1`.
+2. **PlotReservation domain** (`app/Domain/PlotReservation/`): `PlotReservation` append-only model (one active hold per plot enforced by the plot-row lock + plot state aggregate); `ReservePlot` (atomic claim, idempotent per order), `ConfirmPlotReservation`, `ReleasePlotReservation`, `ExpirePlotReservation`; new catalogued event `plot_reservation.state_changed.v1`.
 3. **Booking integration**: 'Reservasi Plot' + lifecycle header actions on `ViewBookingOrder` (operator-initiated), reservation section in the order infolist, plot options filtered by the order's cemetery and package class.
 4. **Admin data surface**: blocks/plots CRUD + state overrides, audited, `MasterDataAdminAuthorizerContract`-gated.
 
@@ -35,10 +35,10 @@ A cemetery's plot inventory becomes an authoritative, queryable record: blocks w
 
 ### 4.2 PlotReservation
 
-- `plot_reservations`: uuid id, `plot_id` FK restrict, nullable `order_id` FK restrict, `reserved_by_ref`, `state` (`held`/`confirmed`/`released`/`expired` — `PlotReservationState` constants), `reason` nullable, `reserved_at`/`confirmed_at`/`released_at`/`expired_at` nullable, timestamps. **Append-only rows**: every transition inserts a new row; the **partial unique index `plot_reservations_active_hold` on `(plot_id) WHERE state = 'held'`** (PG + SQLite) is the database backstop for "one active hold per plot". The plot's `plot_state` mirrors the latest active reservation.
+- `plot_reservations`: uuid id, `plot_id` FK restrict, nullable `order_id` FK restrict, `reserved_by_ref`, `state` (`held`/`confirmed`/`released`/`expired` — `PlotReservationState` constants), `reason` nullable, `reserved_at`/`confirmed_at`/`released_at`/`expired_at` nullable, timestamps. **Append-only rows**: every transition inserts a new row. "One active hold per plot" is enforced by the **plot-row lock + `plot_state` aggregate**: every reservation action `lockForUpdate()`s the plot row FIRST, asserts `plot_state === available` under that lock, and flips it to `reserved` in the same transaction; release/expire flip it back to `available`. The plot's `plot_state` mirrors the latest active reservation. **Rejected alternative (recorded):** the original design backstopped the invariant with a partial unique index `plot_reservations_active_hold` on `(plot_id) WHERE state = 'held'`; it was proven (on PostgreSQL 18 and SQLite) to never release, because rows are append-only and `state` never mutates — the ORIGINAL `held` row keeps its index entry forever, so a plot that was ever held could never be held again, defeating the release/expire → re-hold lifecycle. The index was dropped by `2026_08_16_100030_drop_plot_reservations_active_hold_index.php`.
 - `ReservePlot::__invoke(GravePlot $plot, Order $order, int|string $actorReference, string $actorRole, ?string $reason = null, AuditSource $auditSource = AuditSource::Panel): PlotReservation`:
   1. Order already has an active reservation → return the incumbent (idempotent per order; `activeForOrder()`).
-  2. Transaction: `lockForUpdate` the plot → assert `plot_state === available` (else `PlotNotAvailableException::forPlot`) → insert `held` row (partial-unique backstop; duplicate → `PlotReservationConflictException`, narrow classifier) → plot → `reserved` → audit `PLOT_RESERVATION_CREATED` → outbox `plot_reservation.state_changed.v1` (idempotency key `plot_reservation:{$row->id}`).
+  2. Transaction: `lockForUpdate` the plot → assert `plot_state === available` (else `PlotNotAvailableException::forPlot`) → insert `held` row → plot → `reserved` → audit `PLOT_RESERVATION_CREATED` → outbox `plot_reservation.state_changed.v1` (idempotency key `plot_reservation:{$row->id}`).
 - `ConfirmPlotReservation::__invoke(PlotReservation $reservation, int|string $actorReference, string $actorRole, ?string $reason = null, AuditSource $auditSource = AuditSource::Panel): PlotReservation` — `held`→`confirmed` (plot stays `reserved`); terminal/late-state refusals honest.
 - `ReleasePlotReservation::__invoke(...)` — `held`/`confirmed`→`released`, plot → `available`.
 - `ExpirePlotReservation::__invoke(...)` — `held`→`expired`, plot → `available`.
@@ -60,7 +60,7 @@ Operator → order view → plot select (available, cemetery+class filtered) →
 ## 6. Error handling
 
 - `PlotNotAvailableException` → notification, no state change; selection filtered to available plots (no stale UI).
-- Concurrent double-reserve: row lock serializes; the partial unique index backstops; `PlotReservationConflictException` narrow-classified from `QueryException` (the `OrderAlreadyPaidException` pattern).
+- Concurrent double-reserve: the plot-row `lockForUpdate()` serializes; the loser's re-read sees `plot_state = reserved` and is refused via `PlotNotAvailableException` (the former partial-unique-index backstop was removed — it never released on append-only rows, see §4.2).
 - Terminal/late-state lifecycle refusals → honest notifications; outbox/audit failures roll back with the transition (AC4).
 
 ## 7. Testing

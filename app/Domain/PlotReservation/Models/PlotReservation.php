@@ -15,9 +15,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Eloquent model for `plot_reservations` — see
- * `2026_08_16_100020_create_plot_reservations_table.php` for the schema
- * and, in particular, for the `plot_reservations_active_hold` partial
- * unique index that is this lane's load-bearing invariant.
+ * `2026_08_16_100020_create_plot_reservations_table.php` for the schema.
+ * "One active hold per plot" is enforced by the plot-row lock +
+ * `plot_state` aggregate (see `Actions\ReservePlot`'s class doc block);
+ * the former `plot_reservations_active_hold` partial unique index was
+ * removed by `2026_08_16_100030_drop_plot_reservations_active_hold_
+ * index.php` because append-only rows never release it (a plot could
+ * only ever be held once).
  *
  * Rows are written ONLY by
  * `App\Domain\PlotReservation\Actions\ReservePlot` (a `held` row) and
@@ -32,16 +36,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * Same shape as `App\Domain\OrderWorkflow\Models\OrderStatusEvent`:
  * `update()`, `performUpdate()`, and `delete()` throw unconditionally.
  *
- * `create()` is NOT guarded, and that is load-bearing rather than an
- * oversight. `tests/Feature/Domain/PlotReservation/ReservePlotTest.php::
- * test_duplicate_active_hold_is_classified_as_conflict` deliberately
- * inserts a second `held` row directly via
- * `PlotReservation::query()->create([...])` to prove the DATABASE — not
- * the application — rejects it. A model-level refusal on `create()`
- * would make that test pass for the wrong reason and would convert this
- * lane's load-bearing database assertion into an assertion about a PHP
- * `if` (the `OrderStatusEvent` class doc block records the identical
- * reasoning for its lane).
+ * `create()` is NOT guarded, and that is deliberate: the append-only
+ * guarantee's application-layer refusal on updates/deletes stands alone
+ * as the evidence rationale, and lifecycle tests insert chain rows
+ * directly via `PlotReservation::query()->create([...])` to build
+ * fixtures. A model-level refusal on `create()` would make every chain
+ * impossible, not just the guarded cases (the `OrderStatusEvent` class
+ * doc block records the identical reasoning for its lane).
  *
  * These overrides stop `$reservation->update([...])`,
  * `$reservation->state = ...; $reservation->save()` on an
@@ -116,8 +117,7 @@ final class PlotReservation extends Model
 
     /**
      * Always throws — see the class-level doc block. Deleting a `held`
-     * row would also release `plot_reservations_active_hold` for that
-     * plot.
+     * row would erase the evidence of the hold.
      */
     public function delete(): ?bool
     {
