@@ -181,11 +181,22 @@ final class BookingWizardRouteTest extends TestCase
         });
 
         // Same reverse-dependency drop list as RenewalStartTest's
-        // degradation test. P3 plot tables (16 Aug 2026) come first:
+        // degradation test. P4 visitation tables (16 Aug 2026) come first
+        // of all: PostgreSQL blocks `DROP TABLE` of a parent by ANY
+        // incoming FK (2BP01), so `visitation_bookings` (→ `cemeteries`/
+        // `cemetery_visitation_policies`), `visitation_date_capacities`
+        // (→ `cemetery_visitation_policies`), `visitation_blackout_dates`
+        // (→ `cemetery_visitation_policies`) and
+        // `cemetery_visitation_policies` (→ `cemeteries`) must precede
+        // `cemeteries`. Then the P3 plot tables (16 Aug 2026):
         // PostgreSQL blocks `DROP TABLE` of a parent by ANY incoming FK
         // (2BP01), so `plot_reservations` (→ `grave_plots`/`orders`),
         // `grave_plots` (→ `cemetery_blocks`/`cemetery_packages`) and
         // `cemetery_blocks` (→ `cemeteries`) must precede their parents.
+        Schema::dropIfExists('visitation_bookings');
+        Schema::dropIfExists('visitation_date_capacities');
+        Schema::dropIfExists('visitation_blackout_dates');
+        Schema::dropIfExists('cemetery_visitation_policies');
         Schema::dropIfExists('plot_reservations');
         Schema::dropIfExists('grave_plots');
         Schema::dropIfExists('cemetery_blocks');

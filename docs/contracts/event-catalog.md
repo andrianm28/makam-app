@@ -32,6 +32,7 @@ Durable events use the transactional outbox and envelope in `outbox-event-contra
 | `vendor.work_completed.v1` | VendorFulfillment | Case/customer | Evidence reference |
 | `memorial.unpublished.v1` | Memorial | Public read/QR | Privacy/moderation action |
 | `visit.booking_confirmed.v1` | Visitation | Customer/operator | Capacity reservation |
+| `visit.booking_requested.v1` | Visitation | Customer/operator | Booking request, idempotent per booking |
 | `plot_reservation.state_changed.v1` | PlotReservation | Order/case guard, audit | Authoritative hold; append-only, one active hold per plot |
 
 > **Note (16 Aug 2026):** `plot.reservation_acquired.v1` / `plot.reservation_expired.v1` / `plot.reservation_conflict.v1` above are superseded by `plot_reservation.state_changed.v1` — the shipped P3 module emits the underscore event and no producer exists for the dotted names; kept as history, not evidence of an active contract.

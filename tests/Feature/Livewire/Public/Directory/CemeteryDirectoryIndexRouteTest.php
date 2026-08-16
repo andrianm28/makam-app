@@ -300,6 +300,12 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
      * `cemeteries` block the drops on PostgreSQL (2BP01). `booking_drafts`
      * is empty in this test, so it joins the drop list below; on SQLite
      * `dropIfExists` on the empty table is a no-op.
+     *
+     * FIXED 16 Aug 2026 — the same failure with the P4 visitation migrations
+     * (`2026_08_16_1100xx`), whose four tables FK-reference `cemeteries`/
+     * `cemetery_visitation_policies` and block the drops on PostgreSQL
+     * (2BP01). They are empty in this test, so they join the drop list
+     * below; on SQLite `dropIfExists` on the empty tables is a no-op.
      */
     public function test_the_page_survives_the_cemeteries_table_being_unreadable(): void
     {
@@ -307,10 +313,20 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
         // `orders` / `quotes` (Task 3/4/5, 12 Aug 2026) are dropped first so
         // PostgreSQL's `DROP TABLE` of `booking_drafts` is not blocked by the
         // incoming FKs (2BP01) — the same tripwire this comment documents.
-        // P3 plot tables (16 Aug 2026) are dropped first so PostgreSQL's
-        // `DROP TABLE` of `orders`/`cemetery_packages`/`cemeteries` is not
-        // blocked by the incoming plot FKs (2BP01) — `plot_reservations`
-        // → `grave_plots` → `cemetery_blocks`, each before its parents.
+        // P4 visitation tables (16 Aug 2026) come first of all — the four
+        // FK-reference `cemeteries`/`cemetery_visitation_policies`, and
+        // PostgreSQL blocks `DROP TABLE` of a parent by ANY incoming FK
+        // (2BP01), so `visitation_bookings` → `visitation_date_capacities`
+        // → `visitation_blackout_dates` → `cemetery_visitation_policies`
+        // must precede `cemeteries` at the bottom. P3 plot tables (16 Aug
+        // 2026) are dropped first so PostgreSQL's `DROP TABLE` of
+        // `orders`/`cemetery_packages`/`cemeteries` is not blocked by the
+        // incoming plot FKs (2BP01) — `plot_reservations` → `grave_plots`
+        // → `cemetery_blocks`, each before its parents.
+        Schema::dropIfExists('visitation_bookings');
+        Schema::dropIfExists('visitation_date_capacities');
+        Schema::dropIfExists('visitation_blackout_dates');
+        Schema::dropIfExists('cemetery_visitation_policies');
         Schema::dropIfExists('plot_reservations');
         Schema::dropIfExists('grave_plots');
         Schema::dropIfExists('cemetery_blocks');

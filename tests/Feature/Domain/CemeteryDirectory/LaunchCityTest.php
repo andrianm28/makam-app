@@ -107,10 +107,20 @@ final class LaunchCityTest extends TestCase
             $table->dropForeign(['cemetery_package_id']);
         });
 
-        // P3 plot tables (16 Aug 2026) come first — PostgreSQL blocks
-        // `DROP TABLE` of a parent by ANY incoming FK (2BP01):
-        // `plot_reservations` → `grave_plots` → `cemetery_blocks` must
-        // precede their parents below.
+        // P4 visitation tables (16 Aug 2026) come first of all — the four
+        // FK-reference `cemeteries`/`cemetery_visitation_policies`, and
+        // PostgreSQL blocks `DROP TABLE` of a parent by ANY incoming FK
+        // (2BP01), so `visitation_bookings` → `visitation_date_capacities`
+        // → `visitation_blackout_dates` → `cemetery_visitation_policies`
+        // must precede `cemeteries` below. P3 plot tables (16 Aug 2026)
+        // come before their parents too — PostgreSQL blocks `DROP TABLE`
+        // of a parent by ANY incoming FK (2BP01): `plot_reservations` →
+        // `grave_plots` → `cemetery_blocks` must precede their parents
+        // below.
+        Schema::dropIfExists('visitation_bookings');
+        Schema::dropIfExists('visitation_date_capacities');
+        Schema::dropIfExists('visitation_blackout_dates');
+        Schema::dropIfExists('cemetery_visitation_policies');
         Schema::dropIfExists('plot_reservations');
         Schema::dropIfExists('grave_plots');
         Schema::dropIfExists('cemetery_blocks');

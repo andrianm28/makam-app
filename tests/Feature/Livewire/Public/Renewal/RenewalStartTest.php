@@ -302,8 +302,9 @@ final class RenewalStartTest extends TestCase
      * key to `cemeteries`, this test fails with an FK error rather than
      * passing silently — which is the correct signal, not a flaw. (That
      * tripwire is exactly what caught the `booking_drafts` FK added on
-     * 08 Aug 2026; `booking_drafts` now joins the drop list below, so the
-     * tripwire still guards every table added in the future.)
+     * 08 Aug 2026 and the four P4 visitation tables added on 16 Aug 2026;
+     * each batch's tables join the drop list below, so the tripwire still
+     * guards every table added in the future.)
      *
      * Safe: RefreshDatabase rolls the whole test transaction back.
      */
@@ -318,11 +319,22 @@ final class RenewalStartTest extends TestCase
         // `orders` / `quotes` (Task 3/4/5, 12 Aug 2026) are dropped first so
         // PostgreSQL's `DROP TABLE` of `booking_drafts` is not blocked by the
         // incoming FKs (2BP01) — the same tripwire this comment documents.
-        // P3 plot tables (16 Aug 2026) come first: `plot_reservations`
-        // FK-references `grave_plots` and `orders`, `grave_plots` FK-
-        // references `cemetery_blocks`/`cemetery_packages`, and
-        // `cemetery_blocks` FK-references `cemeteries` — PostgreSQL
+        // P4 visitation tables (16 Aug 2026) come first of all: `visitation_
+        // bookings` FK-references `cemeteries`/`cemetery_visitation_policies`,
+        // `visitation_date_capacities` and `visitation_blackout_dates` FK-
+        // reference `cemetery_visitation_policies`, and
+        // `cemetery_visitation_policies` FK-references `cemeteries` —
+        // PostgreSQL blocks `DROP TABLE` of each parent by ANY incoming FK
+        // (2BP01), so all four must precede `cemeteries` below. P3 plot
+        // tables (16 Aug 2026) come before their parents too:
+        // `plot_reservations` FK-references `grave_plots` and `orders`,
+        // `grave_plots` FK-references `cemetery_blocks`/`cemetery_packages`,
+        // and `cemetery_blocks` FK-references `cemeteries` — PostgreSQL
         // blocks `DROP TABLE` of each parent by ANY incoming FK (2BP01).
+        Schema::dropIfExists('visitation_bookings');
+        Schema::dropIfExists('visitation_date_capacities');
+        Schema::dropIfExists('visitation_blackout_dates');
+        Schema::dropIfExists('cemetery_visitation_policies');
         Schema::dropIfExists('plot_reservations');
         Schema::dropIfExists('grave_plots');
         Schema::dropIfExists('cemetery_blocks');
