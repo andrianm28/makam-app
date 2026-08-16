@@ -9,8 +9,11 @@ use App\Domain\CemeteryCapability\Models\CemeteryPackage;
 use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityQuery;
+use App\Domain\PlotInventory\Models\CemeteryBlock;
+use Database\Factories\CemeteryFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use InvalidArgumentException;
@@ -54,9 +57,33 @@ use InvalidArgumentException;
  */
 final class Cemetery extends Model
 {
-    use HasUuids;
+    /**
+     * `HasFactory` added by the P3 plot-inventory lane (Task 1 ride-along,
+     * not a review finding — the same pattern `Renewal` documents for its
+     * own addition): `Cemetery::factory()` is needed by the P3
+     * plot-inventory tests, and no `CemeteryFactory` existed before
+     * `database/factories/CemeteryFactory.php` (see that file's doc block
+     * for the pre-existing "pick the first seeded cemetery" workaround in
+     * `GraveRecordFactory`). `HasFactory`'s default resolver maps this
+     * model to `Database\Factories\CemeteryFactory` — the convention
+     * `GraveRecord` follows.
+     *
+     * @use HasFactory<CemeteryFactory>
+     */
+    use HasFactory, HasUuids;
 
     protected $table = 'cemeteries';
+
+    /**
+     * `HasFactory`'s default resolver strips a leading `App\Models\` and
+     * nothing else, so it cannot find a factory for a model namespaced
+     * under `App\Domain\...\Models` — the same explicit override
+     * `GraveRecord` documents.
+     */
+    protected static function newFactory(): CemeteryFactory
+    {
+        return CemeteryFactory::new();
+    }
 
     /**
      * @var list<string>
@@ -140,6 +167,19 @@ final class Cemetery extends Model
     public function packages(): HasMany
     {
         return $this->hasMany(CemeteryPackage::class, 'cemetery_id');
+    }
+
+    /**
+     * Plot-inventory blocks of this cemetery (`cemetery_blocks`, owned by
+     * `PlotInventory`) — the relation backing `BlocksRelationManager`
+     * (P3 plot-inventory lane, Task 2). One-line, disclosed addition;
+     * mirrors the cross-module `packages()` relation above.
+     *
+     * @return HasMany<CemeteryBlock, $this>
+     */
+    public function blocks(): HasMany
+    {
+        return $this->hasMany(CemeteryBlock::class, 'cemetery_id');
     }
 
     /**
