@@ -23,7 +23,10 @@ use InvalidArgumentException;
  * §4.1). Every plot is born `available`, with a zero-padded slot
  * (`001..N`); an optional `$cemeteryPackageId` links every generated plot
  * to the cemetery's package/class row the operator generated the block
- * against.
+ * against. `$isActive` (default `true`, matching the column default and
+ * the plan's Task 1 signature for every existing caller) lets the admin
+ * create form's `is_active` toggle control the block row — the form field
+ * is wired through this parameter, it is never a silent no-op.
  *
  * ---------------------------------------------------------------------------
  * Auditing
@@ -54,6 +57,7 @@ final class CreateCemeteryBlock
         int|string $actorReference,
         ?string $actorRole = 'admin',
         ?int $cemeteryPackageId = null,
+        ?bool $isActive = true,
         AuditSource $auditSource = AuditSource::Panel,
         ?string $reason = null,
     ): CemeteryBlock {
@@ -62,13 +66,13 @@ final class CreateCemeteryBlock
         }
 
         return Audit::wrap(
-            mutation: function () use ($cemetery, $code, $name, $capacity, $cemeteryPackageId, $actorReference, $actorRole, $auditSource, $reason): CemeteryBlock {
+            mutation: function () use ($cemetery, $code, $name, $capacity, $cemeteryPackageId, $isActive, $actorReference, $actorRole, $auditSource, $reason): CemeteryBlock {
                 $block = CemeteryBlock::create([
                     'cemetery_id' => $cemetery->getKey(),
                     'code' => $code,
                     'name' => $name,
                     'capacity' => $capacity,
-                    'is_active' => true,
+                    'is_active' => $isActive,
                 ]);
 
                 $plotRows = [];

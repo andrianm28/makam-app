@@ -9,6 +9,7 @@ use App\Domain\CemeteryCapability\Models\CemeteryPackage;
 use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityQuery;
+use App\Domain\PlotInventory\Models\CemeteryBlock;
 use Database\Factories\CemeteryFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -166,6 +167,19 @@ final class Cemetery extends Model
     public function packages(): HasMany
     {
         return $this->hasMany(CemeteryPackage::class, 'cemetery_id');
+    }
+
+    /**
+     * Plot-inventory blocks of this cemetery (`cemetery_blocks`, owned by
+     * `PlotInventory`) — the relation backing `BlocksRelationManager`
+     * (P3 plot-inventory lane, Task 2). One-line, disclosed addition;
+     * mirrors the cross-module `packages()` relation above.
+     *
+     * @return HasMany<CemeteryBlock, $this>
+     */
+    public function blocks(): HasMany
+    {
+        return $this->hasMany(CemeteryBlock::class, 'cemetery_id');
     }
 
     /**

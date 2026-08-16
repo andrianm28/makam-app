@@ -8,6 +8,7 @@ use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Filament\Admin\Resources\CemeteryResource\Pages\CreateCemetery;
 use App\Filament\Admin\Resources\CemeteryResource\Pages\EditCemetery;
 use App\Filament\Admin\Resources\CemeteryResource\Pages\ListCemeteries;
+use App\Filament\Admin\Resources\CemeteryResource\RelationManagers\BlocksRelationManager;
 use App\Filament\Admin\Resources\CemeteryResource\RelationManagers\PackagesRelationManager;
 use App\Filament\Admin\Resources\CemeteryResource\Schemas\CemeteryForm;
 use App\Filament\Admin\Resources\CemeteryResource\Tables\CemeteriesTable;
@@ -114,6 +115,7 @@ final class CemeteryResource extends Resource
     {
         return [
             PackagesRelationManager::class,
+            BlocksRelationManager::class,
         ];
     }
 

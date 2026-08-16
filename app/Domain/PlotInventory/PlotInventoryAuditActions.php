@@ -7,9 +7,11 @@ namespace App\Domain\PlotInventory;
 /**
  * The action names this module writes to `audit_events` via
  * `App\Platform\Audit\Audit::record()` — written by
- * `App\Domain\PlotInventory\Actions\CreateCemeteryBlock`. Named constants
+ * `App\Domain\PlotInventory\Actions\CreateCemeteryBlock` and by the admin
+ * plot state-override actions (`BlocksRelationManager` / `GravePlotsResource`
+ * row actions, Task 2 of the P3 plot-inventory plan). Named constants
  * (not inline string literals) so tests and any future caller reference
- * the same values the action actually emits — mirrors
+ * the same values the actions actually emit — mirrors
  * `App\Domain\CemeteryDirectory\CemeteryAuditActions`'s shape and
  * reasoning.
  *
@@ -37,4 +39,13 @@ final class PlotInventoryAuditActions
     public const string CEMETERY_BLOCK_CREATED = 'CEMETERY_BLOCK_CREATED';
 
     public const string GRAVE_PLOTS_GENERATED = 'GRAVE_PLOTS_GENERATED';
+
+    /**
+     * Written by the admin panel's plot state-override row actions
+     * ('Tandai Terisi'/'Tandai Perawatan'/'Tandai Tersedia') whenever an
+     * operator flips `grave_plots.plot_state` — the same "who changed what,
+     * when" record as the inventory creation actions, so the audit trail is
+     * complete for every state a plot passes through.
+     */
+    public const string GRAVE_PLOT_STATE_CHANGED = 'GRAVE_PLOT_STATE_CHANGED';
 }
