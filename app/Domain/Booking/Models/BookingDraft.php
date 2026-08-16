@@ -6,11 +6,12 @@ namespace App\Domain\Booking\Models;
 
 use App\Domain\Booking\BookingServiceType;
 use App\Domain\CemeteryCapability\Models\CemeteryPackage;
-use App\Domain\CemeteryDirectory\LaunchCityCode;
+use App\Domain\CemeteryDirectory\LaunchCityQuery;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use InvalidArgumentException;
 
 /**
  * Eloquent model for `booking_drafts` — see the migration
@@ -110,8 +111,8 @@ final class BookingDraft extends Model
     protected static function booted(): void
     {
         self::saving(function (self $draft): void {
-            if ($draft->city_code !== null) {
-                LaunchCityCode::assertKnown($draft->city_code);
+            if ($draft->city_code !== null && ! LaunchCityQuery::isKnown($draft->city_code)) {
+                throw new InvalidArgumentException("Unknown launch city code [{$draft->city_code}].");
             }
 
             if ($draft->service_type !== null) {

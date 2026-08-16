@@ -7,6 +7,7 @@ namespace App\Filament\Admin\Resources\CemeteryResource\Schemas;
 use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
+use App\Domain\CemeteryDirectory\LaunchCityQuery;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -18,9 +19,11 @@ use Filament\Schemas\Schema;
  * type, city, address, latitude/longitude, facilities, price_min/price_max,
  * publication_status. Every closed-list field sources its options from the
  * canonical enum vocabularies (`CemeteryType::KNOWN_TYPES`,
- * `LaunchCityCode::KNOWN_CODES`, `CemeteryPublicationStatus::KNOWN_STATUSES`)
- * — no label or value exists here that one of those classes does not define
- * (`AGENTS.md`: "do not invent alternate labels").
+ * `CemeteryPublicationStatus::KNOWN_STATUSES`) or, for `city`, the
+ * table-backed `launch_cities` catalogue (`LaunchCityQuery::activeCities()`,
+ * falling back to `LaunchCityCode::KNOWN_CODES`) — no label or value exists
+ * here that one of those classes does not define (`AGENTS.md`: "do not
+ * invent alternate labels").
  *
  * ---------------------------------------------------------------------------
  * Slug immutability on edit
@@ -86,13 +89,7 @@ final class CemeteryForm
                     ->label('Kota')
                     ->required()
                     ->native(false)
-                    ->options(array_combine(
-                        LaunchCityCode::KNOWN_CODES,
-                        array_map(
-                            fn (string $code): string => ucfirst(strtolower($code)),
-                            LaunchCityCode::KNOWN_CODES,
-                        ),
-                    )),
+                    ->options(self::cityOptions()),
 
                 Textarea::make('address')
                     ->label('Alamat')
@@ -146,5 +143,38 @@ final class CemeteryForm
                     ))
                     ->columnSpanFull(),
             ]);
+    }
+
+    /**
+     * City options from the ACTIVE `launch_cities` rows (the admin-
+     * extendable catalogue, ordered by `sort_order`), falling back to the
+     * canonical `LaunchCityCode::KNOWN_CODES` mapping when the table has
+     * no active rows — the seed migration guarantees it does.
+     *
+     * Filament evaluates form definitions in a static context when it
+     * compiles the schema into its blade view, so this is deliberately
+     * `static` (no `$this`) — every other schema in this resource follows
+     * the same convention.
+     *
+     * @return array<string, string>
+     */
+    private static function cityOptions(): array
+    {
+        $cities = LaunchCityQuery::activeCities();
+
+        if ($cities !== []) {
+            return array_combine(
+                array_column($cities, 'code'),
+                array_column($cities, 'label'),
+            );
+        }
+
+        return array_combine(
+            LaunchCityCode::KNOWN_CODES,
+            array_map(
+                static fn (string $code): string => ucfirst(strtolower($code)),
+                LaunchCityCode::KNOWN_CODES,
+            ),
+        );
     }
 }
