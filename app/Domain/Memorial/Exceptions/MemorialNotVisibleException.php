@@ -14,13 +14,14 @@ use RuntimeException;
  * handling section ("revoked/rotated token responds identically to a
  * token that never existed").
  *
- * Gate-closed, unknown/revoked token, and privacy-denied are the SAME
- * class, by design: anything that let a caller distinguish them would
- * leak which tokens exist (a token that resolves to "gate closed" vs
- * one that resolves to "not found" is exactly the enumeration oracle
- * AC4/AC5 exist to close). The three factories are internal vocabulary
- * for the log message only — a handler renders the uniform
- * "memorial tidak tersedia" state regardless of which one fired.
+ * Gate-closed, unknown/revoked token, unpublished, and privacy-denied
+ * are the SAME class, by design: anything that let a caller distinguish
+ * them would leak which tokens exist (a token that resolves to "gate
+ * closed" vs one that resolves to "not found" is exactly the
+ * enumeration oracle AC4/AC5 exist to close). The factories are
+ * internal vocabulary for the log message only — a handler renders the
+ * uniform "memorial tidak tersedia" state regardless of which one
+ * fired.
  */
 final class MemorialNotVisibleException extends RuntimeException
 {
@@ -32,6 +33,11 @@ final class MemorialNotVisibleException extends RuntimeException
     public static function becauseUnknownToken(): self
     {
         return new self('No memorial is available for this code.');
+    }
+
+    public static function becauseUnpublished(): self
+    {
+        return new self('This memorial is not published.');
     }
 
     public static function becausePrivacy(string $privacyMode): self

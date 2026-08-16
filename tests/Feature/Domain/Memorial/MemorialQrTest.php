@@ -16,6 +16,7 @@ use App\Domain\Memorial\Actions\PublishMemorial;
 use App\Domain\Memorial\Actions\ResolveMemorialQr;
 use App\Domain\Memorial\Actions\RotateMemorialQrToken;
 use App\Domain\Memorial\Actions\SubmitMemorialContent;
+use App\Domain\Memorial\Actions\UnpublishMemorial;
 use App\Domain\Memorial\Exceptions\MemorialNotVisibleException;
 use App\Domain\Memorial\MemorialAuditActions;
 use App\Domain\Memorial\MemorialModerationState;
@@ -145,7 +146,11 @@ final class MemorialQrTest extends TestCase
     public function test_private_profile_resolves_with_the_same_uniform_exception(): void
     {
         $this->openMemorialGate();
-        $profile = $this->profile(MemorialPrivacyMode::PRIVATE->value);
+        $profile = app(PublishMemorial::class)(
+            $this->profile(MemorialPrivacyMode::PRIVATE->value),
+            'user:1',
+            'operator',
+        );
         $token = MemorialQrToken::issueFor($profile);
 
         try {
@@ -262,11 +267,57 @@ final class MemorialQrTest extends TestCase
         $this->assertCount(1, $projection->acceptedMediaRefs);
     }
 
+    /**
+     * The whole-branch review fix: unpublish must stop QR resolution
+     * IMMEDIATELY (AC5, the admin modal's "Kode QR yang sudah dicetak
+     * berhenti berlaku seketika"). A public-mode profile resolves for a
+     * guest while published; the SAME active token resolves to the
+     * uniform not-visible exception the moment `UnpublishMemorial` clears
+     * `published_at` — fail-closed, and a never-published profile never
+     * resolves either.
+     */
+    public function test_unpublishing_stops_token_resolution_immediately(): void
+    {
+        $this->openMemorialGate();
+        $profile = app(PublishMemorial::class)(
+            $this->profile(MemorialPrivacyMode::PUBLIC->value),
+            'user:1',
+            'operator',
+        );
+        $token = MemorialQrToken::issueFor($profile);
+
+        $this->assertInstanceOf(
+            MemorialPublicProjection::class,
+            app(ResolveMemorialQr::class)($token->token, null),
+            'A published public-mode memorial must resolve for a guest.',
+        );
+
+        app(UnpublishMemorial::class)($profile, 'user:1', 'operator');
+
+        try {
+            app(ResolveMemorialQr::class)($token->token, null);
+            $this->fail('An unpublished memorial must never resolve, even with an active token.');
+        } catch (MemorialNotVisibleException $exception) {
+            $this->assertStringContainsString('not published', $exception->getMessage());
+        }
+    }
+
+    public function test_a_never_published_profile_never_resolves(): void
+    {
+        $this->openMemorialGate();
+        $profile = $this->profile(MemorialPrivacyMode::PUBLIC->value);
+        $token = MemorialQrToken::issueFor($profile);
+
+        $this->expectException(MemorialNotVisibleException::class);
+        app(ResolveMemorialQr::class)($token->token, null);
+    }
+
     public function test_projection_never_carries_private_fields(): void
     {
         $this->openMemorialGate();
         $grave = $this->grave();
         $profile = app(CreateMemorialProfile::class)($grave, 'user:1', 'operator', MemorialPrivacyMode::PUBLIC->value);
+        app(PublishMemorial::class)($profile, 'user:1', 'operator');
         $token = MemorialQrToken::issueFor($profile);
 
         $projection = app(ResolveMemorialQr::class)($token->token, null);

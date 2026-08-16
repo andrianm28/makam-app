@@ -6,6 +6,9 @@ namespace App\Filament\Admin\Resources\CemeteryVisitationPolicies\Schemas;
 
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\Visitation\Models\CemeteryVisitationPolicy;
+use App\Platform\IdentityAccess\ActorContext;
+use App\Platform\IdentityAccess\Scopes\ScopeAssignmentReader;
+use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use App\Support\Design\IndonesianDate;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -20,7 +23,12 @@ use Filament\Schemas\Schema;
  * `cemetery_id` is a Select whose options are cemeteries WITHOUT a policy
  * (create) plus the row's own cemetery (edit, where the Select is
  * disabled — the single record can never be moved onto a second
- * cemetery). `operating_hours` is stored as the model's
+ * cemetery), AND only cemeteries the actor can reach: a cemetery-granted
+ * operator sees only their granted cemeteries as offerable options (the
+ * same `ScopeAssignmentReader::grantedEntityIds` grants the resource's
+ * `getEloquentQuery()` applies — the resource scoping and the create
+ * select can never disagree), while an admin with no grants sees all
+ * policy-less cemeteries. `operating_hours` is stored as the model's
  * `{weekday: {open, close}|null}` JSON but edited as seven per-weekday
  * rows (buka toggle + open/close times); the two page hooks
  * (`expandOperatingHours` on fill, `collapseOperatingHours` on create/
@@ -49,6 +57,19 @@ final class CemeteryVisitationPolicyForm
                         $query = Cemetery::query()
                             ->orderBy('name')
                             ->whereNotIn('id', CemeteryVisitationPolicy::query()->select('cemetery_id'));
+
+                        $actor = app(ActorContext::class);
+
+                        if ($actor->isAuthenticated()) {
+                            $grantedCemeteryIds = app(ScopeAssignmentReader::class)->grantedEntityIds(
+                                $actor->identityReference,
+                                ScopeEntityType::CEMETERY,
+                            );
+
+                            if ($grantedCemeteryIds !== []) {
+                                $query->whereIn('id', $grantedCemeteryIds);
+                            }
+                        }
 
                         $record = $component->getRecord();
 

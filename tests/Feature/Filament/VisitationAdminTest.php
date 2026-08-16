@@ -254,6 +254,97 @@ final class VisitationAdminTest extends TestCase
     }
 
     // =========================================================================
+    // Policy resource — per-cemetery scoping (the whole-branch review fix)
+    // =========================================================================
+
+    public function test_a_cemetery_granted_operator_sees_only_their_cemetery_policies(): void
+    {
+        $operator = User::factory()->create();
+        $this->grantRoleTo($operator, ActorRole::OPERATOR);
+        $this->actingAs($operator);
+
+        $theirCemetery = $this->cemetery();
+        $otherCemetery = $this->cemetery();
+        $theirPolicy = $this->policy($theirCemetery);
+        $otherPolicy = $this->policy($otherCemetery);
+
+        app(GrantScopeAssignment::class)(
+            (string) $operator->id,
+            ScopeEntityType::CEMETERY,
+            (string) $theirCemetery->id,
+            null,
+            'Test fixture: the operator is assigned to one cemetery.',
+            null,
+        );
+
+        $this->forgetResolvedActorContext();
+
+        $visible = CemeteryVisitationPolicyResource::getEloquentQuery()->pluck('id')->all();
+
+        $this->assertContains((string) $theirPolicy->id, $visible);
+        $this->assertNotContains((string) $otherPolicy->id, $visible);
+    }
+
+    public function test_an_admin_sees_policies_from_all_cemeteries(): void
+    {
+        $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
+        $this->actingAs($user);
+
+        $first = $this->cemetery();
+        $second = $this->cemetery();
+        $policyA = $this->policy($first);
+        $policyB = $this->policy($second);
+
+        $this->forgetResolvedActorContext();
+
+        $visible = CemeteryVisitationPolicyResource::getEloquentQuery()->pluck('id')->all();
+
+        $this->assertContains((string) $policyA->id, $visible);
+        $this->assertContains((string) $policyB->id, $visible);
+    }
+
+    public function test_the_create_select_offers_only_policy_less_cemeteries_the_actor_can_reach(): void
+    {
+        $operator = User::factory()->create();
+        $this->grantRoleTo($operator, ActorRole::OPERATOR);
+        $this->actingAs($operator);
+
+        $grantedOpen = $this->cemetery();
+        $grantedWithPolicy = $this->cemetery();
+        $this->policy($grantedWithPolicy);
+        $ungrantedOpen = $this->cemetery();
+        $ungrantedWithPolicy = $this->cemetery();
+        $this->policy($ungrantedWithPolicy);
+
+        app(GrantScopeAssignment::class)(
+            (string) $operator->id,
+            ScopeEntityType::CEMETERY,
+            (string) $grantedOpen->id,
+            null,
+            'Test fixture: the operator is assigned to one cemetery.',
+            null,
+        );
+        app(GrantScopeAssignment::class)(
+            (string) $operator->id,
+            ScopeEntityType::CEMETERY,
+            (string) $grantedWithPolicy->id,
+            null,
+            'Test fixture: the operator is assigned to one cemetery.',
+            null,
+        );
+
+        $this->forgetResolvedActorContext();
+
+        $html = (string) Livewire::test(CreateCemeteryVisitationPolicy::class)->html();
+
+        $this->assertStringContainsString($grantedOpen->name, $html);
+        $this->assertStringNotContainsString($grantedWithPolicy->name, $html);
+        $this->assertStringNotContainsString($ungrantedOpen->name, $html);
+        $this->assertStringNotContainsString($ungrantedWithPolicy->name, $html);
+    }
+
+    // =========================================================================
     // Blackout relation manager — required reason, audited create/delete
     // =========================================================================
 
