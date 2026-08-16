@@ -148,7 +148,7 @@
                 </x-filament::button>
                 <x-filament::button
                     color="primary"
-                    wire:click="transitionGate($activeGateId ?? '', $activeToState, $evidence, $reason)"
+                    wire:click="transitionGate('{{ $activeGateId ?? '' }}', '{{ $activeToState }}', '{{ $evidence }}', '{{ $reason }}')"
                 >
                     Simpan
                 </x-filament::button>
