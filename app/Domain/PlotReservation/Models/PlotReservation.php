@@ -151,11 +151,16 @@ final class PlotReservation extends Model
      * — an order whose reservation was released/expired would still
      * "have an active reservation".
      *
-     * `created_at` has second granularity, so the four transition stamps
-     * (each set by exactly one hop of the chain) disambiguate same-second
-     * rows deterministically on both PostgreSQL and SQLite: the chain
-     * head is the row carrying the latest `confirmed_at`/`released_at`/
-     * `expired_at`, and a `held` row carries none of the three.
+     * `id` is a UUIDv7 (`HasUuids`), so its leading timestamp bits are
+     * millisecond-monotonic: `created_at DESC, id DESC` is insertion
+     * order with no NULL involvement, portable across PostgreSQL and
+     * SQLite, and the same tiebreak the lifecycle actions' own re-read
+     * uses. Do NOT add per-state stamp columns (e.g. `confirmed_at`) as
+     * tiebreakers: PostgreSQL sorts NULLs FIRST under `DESC`, so the
+     * unstamped head of a re-opened chain would sort before the stamped
+     * rows that precede it, and SQLite sorts NULLs LAST, so a stamped
+     * older row would outrank a fresh unstamped head — each engine would
+     * resolve the head differently.
      *
      * @param  Order  $order  read for its key only — never content.
      */
@@ -164,9 +169,6 @@ final class PlotReservation extends Model
         $latest = self::query()
             ->where('order_id', $order->getKey())
             ->orderByDesc('created_at')
-            ->orderByDesc('confirmed_at')
-            ->orderByDesc('released_at')
-            ->orderByDesc('expired_at')
             ->orderByDesc('id')
             ->first();
 
@@ -178,19 +180,27 @@ final class PlotReservation extends Model
     }
 
     /**
-     * The incumbent reservation for a plot, with the same active-state
-     * filter as `activeForOrder()` — the plot-level mirror consumed by
-     * `GravePlot`'s delete-blocked guard (Task 1) and the lifecycle
-     * actions (Task 4).
+     * The incumbent reservation for a plot — the plot-level mirror of
+     * `activeForOrder()`. Currently unused by the module (the delete
+     * guard and the lifecycle actions re-read the chain directly); kept
+     * for symmetry with `activeForOrder()` and pinned to the same head-
+     * row semantics so a future consumer cannot reintroduce the
+     * filter-before-order bug.
      *
      * @param  GravePlot  $plot  read for its key only — never content.
      */
     public static function activeForPlot(GravePlot $plot): ?self
     {
-        return self::query()
+        $latest = self::query()
             ->where('plot_id', $plot->getKey())
-            ->whereIn('state', [PlotReservationState::HELD, PlotReservationState::CONFIRMED])
-            ->latest()
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->first();
+
+        if ($latest === null || ! in_array($latest->state, [PlotReservationState::HELD, PlotReservationState::CONFIRMED], true)) {
+            return null;
+        }
+
+        return $latest;
     }
 }
