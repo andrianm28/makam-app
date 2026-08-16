@@ -24,6 +24,7 @@ use App\Livewire\Public\Renewal\RenewalFee;
 use App\Livewire\Public\Renewal\RenewalPayment;
 use App\Livewire\Public\Renewal\RenewalStart;
 use App\Livewire\Public\Support\HelpCentre;
+use App\Livewire\Public\Visitation\VisitationPage;
 use App\Platform\Payment\Http\Controllers\PaymentCancelController;
 use App\Platform\Payment\Http\Controllers\PaymentReturnController;
 use App\Platform\Payment\Http\Controllers\RecordPaymentReversalController;
@@ -158,6 +159,33 @@ Route::get('/marketplace/pesanan/{orderNumber}', OrderTracking::class)->name('ma
 */
 Route::get('/cemeteries', CemeteryDirectoryIndex::class)->name('cemeteries.index');
 Route::get('/cemeteries/{cemeterySlug}', CemeteryDetail::class)->name('cemeteries.show');
+
+/*
+|--------------------------------------------------------------------------
+| Visitation — visitation-booking AC1, AC3, AC5, AC7 (P4 Lane 2)
+|--------------------------------------------------------------------------
+| Task 2 of docs/superpowers/plans/2026-08-16-p4-memorial-qr-visitation.md.
+| Mode-aware page: the slug-less `/kunjungan` is the cemetery picker; each
+| `/kunjungan/{cemeterySlug}` renders the INFORMATION_ONLY banner (hours,
+| no bookable control) or the BOOKABLE request form per
+| PublicCapabilityProjection::forCemetery(...)->visitationMode — the
+| server-side mode authority (kiro visitation-booking design.md §6.9),
+| never a front-end flag. Submit runs RequestVisitation with a session-
+| scoped idempotency key: a repeated submission renders the incumbent
+| confirmation, never a second row (AC7); the card carries AC5's
+| instructions, change/cancel note, and the fallback contact
+| (route('bantuan.index')). Path chosen in this plan, mirroring
+| information-architecture.md §1's Indonesian public route tree.
+|
+| The two routes resolve the cemetery through
+| CemeteryPublicQuery::findPublishedBySlug (abort(404) discipline — an
+| unknown slug and an unpublished cemetery are indistinguishable), and
+| the picker lists only published cemeteries. This spec is excluded from
+| MVP (mvp-scope.md §8) and has no screen-inventory ID yet; this batch
+| adds the page under the plan's own scope.
+*/
+Route::get('/kunjungan', VisitationPage::class)->name('kunjungan.index');
+Route::get('/kunjungan/{cemeterySlug}', VisitationPage::class)->name('kunjungan.cemetery');
 
 /*
 |--------------------------------------------------------------------------
