@@ -18,6 +18,8 @@ use App\Platform\Payment\Actions\OpenPaymentSessionCommand;
 use App\Platform\Payment\Exceptions\PaymentSessionOrderTypeNotSupportedException;
 use App\Platform\Payment\OrderType;
 use App\Platform\Payment\SubmitManualPayment;
+use App\Platform\SiteSettings\Models\SiteSetting;
+use App\Platform\SiteSettings\SettingsService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -269,7 +271,8 @@ final class Checkout extends Component
                 orderType: OrderType::Marketplace,
                 orderRef: $order->order_number,
                 amountMinor: $order->total()->toMinorInt(),
-                merchantRef: (string) config('payment.merchant_ref', ''),
+                merchantRef: (string) app(SettingsService::class)
+                    ->setting(SiteSetting::KEY_PAYMENT_MERCHANT_REF, (string) config('payment.merchant_ref', '')),
                 successReturnUrl: route('payments.return'),
                 cancelReturnUrl: route('payments.cancel'),
             ));

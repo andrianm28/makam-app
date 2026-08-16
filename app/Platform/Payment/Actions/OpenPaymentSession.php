@@ -29,6 +29,8 @@ use App\Platform\Payment\PaymentAuditActions;
 use App\Platform\Payment\PaymentIntentDecision;
 use App\Platform\Payment\PaymentProviders;
 use App\Platform\Payment\SessionState;
+use App\Platform\SiteSettings\Models\SiteSetting;
+use App\Platform\SiteSettings\SettingsService;
 use Carbon\CarbonImmutable;
 
 /**
@@ -177,7 +179,8 @@ final readonly class OpenPaymentSession
                     'amount_minor' => $command->amountMinor,
                     'currency' => (string) config('money.currency'),
                     'merchant_ref' => $command->merchantRef,
-                    'badan_usaha_ref' => (string) config('payment.badan_usaha_ref', ''),
+                    'badan_usaha_ref' => (string) app(SettingsService::class)
+                        ->setting(SiteSetting::KEY_PAYMENT_BADAN_USAHA_REF, (string) config('payment.badan_usaha_ref', '')),
                     'state' => SessionState::AwaitingPayment->value,
                     'expires_at' => $providerResult->expiresAt,
                 ]);
@@ -256,14 +259,18 @@ final readonly class OpenPaymentSession
 
     /**
      * The session's merchant must be the merchant this deployment is bound
-     * to. `config('payment.merchant_ref')` is the FIN-DEC-01 provisioning
-     * channel the approved design makes real via config; the guard's
-     * condition 6 has already verified that binding is non-empty before this
-     * runs, so only the claim-versus-binding comparison is checked here.
+     * to. The binding resolves through `SettingsService`'s config → env →
+     * `site_settings` → default precedence (P2 `admin-data-management`): an
+     * operator-managed `payment_merchant_ref` row now participates without
+     * an environment change, and the config default keeps the pre-existing
+     * env behaviour identical while no DB row exists. The guard's condition
+     * 6 has already verified that binding is non-empty before this runs, so
+     * only the claim-versus-binding comparison is checked here.
      */
     private function assertMerchantBound(OpenPaymentSessionCommand $command): void
     {
-        $boundMerchant = (string) config('payment.merchant_ref', '');
+        $boundMerchant = (string) app(SettingsService::class)
+            ->setting(SiteSetting::KEY_PAYMENT_MERCHANT_REF, (string) config('payment.merchant_ref', ''));
 
         if ($command->merchantRef !== $boundMerchant) {
             throw PaymentSessionMerchantMismatchException::forRefs($command->merchantRef, $boundMerchant);

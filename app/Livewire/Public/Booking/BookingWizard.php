@@ -35,6 +35,8 @@ use App\Platform\Payment\Exceptions\PaymentSessionOrderAlreadyPaidException;
 use App\Platform\Payment\Models\PaymentSession;
 use App\Platform\Payment\OrderType;
 use App\Platform\Payment\SessionState;
+use App\Platform\SiteSettings\Models\SiteSetting;
+use App\Platform\SiteSettings\SettingsService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -586,7 +588,8 @@ final class BookingWizard extends Component
                 // amount the guard's condition 5 verifies; never a
                 // client-supplied figure.
                 amountMinor: $quote->totalMinor()->toMinorInt(),
-                merchantRef: (string) config('payment.merchant_ref', ''),
+                merchantRef: (string) app(SettingsService::class)
+                    ->setting(SiteSetting::KEY_PAYMENT_MERCHANT_REF, (string) config('payment.merchant_ref', '')),
                 successReturnUrl: route('payments.return'),
                 cancelReturnUrl: route('payments.cancel'),
             ));

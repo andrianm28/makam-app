@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Livewire\Public\Support;
 
+use App\Platform\SiteSettings\Models\SiteSetting;
+use App\Platform\SiteSettings\SettingsService;
 use App\Support\CompanyInfo;
 use App\Support\ContactInfo;
 use Illuminate\Contracts\View\View;
@@ -135,7 +137,13 @@ final class HelpCentre extends Component
             'phone' => ContactInfo::PHONE,
             'telHref' => self::telHref(),
             'email' => ContactInfo::EMAIL,
-            'businessHours' => ContactInfo::BUSINESS_HOURS,
+            // P2 `admin-data-management`: service hours resolve through
+            // SettingsService's config → env → `site_settings` → default
+            // precedence; `ContactInfo::BUSINESS_HOURS` stays the fallback
+            // while no config/env/DB value exists, so the public screen
+            // shows the operator-managed hours once provisioned and the
+            // current constant today.
+            'businessHours' => app(SettingsService::class)->setting(SiteSetting::KEY_SERVICE_HOURS, ContactInfo::BUSINESS_HOURS),
             'companyName' => CompanyInfo::NAME,
             'companyAddress' => CompanyInfo::ADDRESS,
         ])->layout('layouts.app', [

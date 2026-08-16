@@ -16,6 +16,8 @@ use App\Platform\FinancialLedger\Money;
 use App\Platform\FinancialLedger\VendorPayableAssessmentTrigger;
 use App\Platform\FinancialLedger\VendorPayableEligibility;
 use App\Platform\IdentityAccess\ActorContext;
+use App\Platform\SiteSettings\Models\SiteSetting;
+use App\Platform\SiteSettings\SettingsService;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -89,7 +91,13 @@ final class PlaceMarketplaceOrder
             );
         }
 
-        $entityRef = (string) config('marketplace.badan_usaha_ref', '');
+        // P2 `admin-data-management` review fix: the entity ref resolves
+        // through SettingsService's config → env → `site_settings` → default
+        // precedence so an operator-managed `marketplace_badan_usaha_ref`
+        // row participates without an environment change; the config default
+        // keeps the pre-existing behaviour identical while no DB row exists.
+        $entityRef = (string) app(SettingsService::class)
+            ->setting(SiteSetting::KEY_MARKETPLACE_BADAN_USAHA_REF, (string) config('marketplace.badan_usaha_ref', ''));
         if (trim($entityRef) === '') {
             throw new BadanUsahaNotConfiguredException(
                 'Marketplace checkout requires `marketplace.badan_usaha_ref` to be configured. '

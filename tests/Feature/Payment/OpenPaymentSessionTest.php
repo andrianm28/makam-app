@@ -37,6 +37,8 @@ use App\Platform\Payment\PaymentAuditActions;
 use App\Platform\Payment\PaymentIntentDecision;
 use App\Platform\Payment\PaymentProviders;
 use App\Platform\Payment\SessionState;
+use App\Platform\SiteSettings\Models\SiteSetting;
+use App\Platform\SiteSettings\SettingsService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -332,6 +334,40 @@ final class OpenPaymentSessionTest extends TestCase
         $this->assertSame(0, PaymentSession::query()->count());
         $this->assertSame(0, PaymentIntent::query()->count(), 'An allowed evaluation writes nothing until the session commits.');
         Http::assertNothingSent();
+    }
+
+    public function test_a_db_set_merchant_ref_is_the_bound_merchant_across_the_read_paths(): void
+    {
+        // Review fix (round 1) regression: condition 6, assertMerchantBound
+        // and the session row's badan_usaha_ref must all resolve a DB-set
+        // value through SettingsService — an operator-managed
+        // `payment_merchant_ref` row must not diverge from
+        // assertMerchantBound's read path (which would throw an uncatchable
+        // PaymentSessionMerchantMismatchException on every booking).
+        $this->guardWithPaymentGate(open: true);
+        $this->fullySatisfiedOrder();
+        $this->fakeProviderSuccess();
+        config(['payment.merchant_ref' => null, 'payment.badan_usaha_ref' => null]);
+
+        SiteSetting::query()->create([
+            'key' => SiteSetting::KEY_PAYMENT_MERCHANT_REF,
+            'value' => 'mk-merchant-db',
+        ]);
+        SiteSetting::query()->create([
+            'key' => SiteSetting::KEY_PAYMENT_BADAN_USAHA_REF,
+            'value' => 'badan-usaha-db',
+        ]);
+
+        $this->assertSame(
+            'mk-merchant-db',
+            app(SettingsService::class)->setting(SiteSetting::KEY_PAYMENT_MERCHANT_REF, 'fallback'),
+        );
+
+        $session = app(OpenPaymentSession::class)($this->command(['merchantRef' => 'mk-merchant-db']));
+
+        $this->assertInstanceOf(PaymentSession::class, $session);
+        $this->assertSame('mk-merchant-db', $session->merchant_ref);
+        $this->assertSame('badan-usaha-db', $session->badan_usaha_ref);
     }
 
     public function test_a_marketplace_order_is_refused_until_the_follow_up(): void
