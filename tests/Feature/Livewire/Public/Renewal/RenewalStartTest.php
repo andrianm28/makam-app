@@ -318,6 +318,14 @@ final class RenewalStartTest extends TestCase
         // `orders` / `quotes` (Task 3/4/5, 12 Aug 2026) are dropped first so
         // PostgreSQL's `DROP TABLE` of `booking_drafts` is not blocked by the
         // incoming FKs (2BP01) — the same tripwire this comment documents.
+        // P3 plot tables (16 Aug 2026) come first: `plot_reservations`
+        // FK-references `grave_plots` and `orders`, `grave_plots` FK-
+        // references `cemetery_blocks`/`cemetery_packages`, and
+        // `cemetery_blocks` FK-references `cemeteries` — PostgreSQL
+        // blocks `DROP TABLE` of each parent by ANY incoming FK (2BP01).
+        Schema::dropIfExists('plot_reservations');
+        Schema::dropIfExists('grave_plots');
+        Schema::dropIfExists('cemetery_blocks');
         Schema::dropIfExists('quote_lines');
         Schema::dropIfExists('order_documents');
         Schema::dropIfExists('order_status_events');

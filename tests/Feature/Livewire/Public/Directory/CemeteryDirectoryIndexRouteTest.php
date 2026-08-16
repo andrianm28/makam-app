@@ -307,6 +307,13 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
         // `orders` / `quotes` (Task 3/4/5, 12 Aug 2026) are dropped first so
         // PostgreSQL's `DROP TABLE` of `booking_drafts` is not blocked by the
         // incoming FKs (2BP01) — the same tripwire this comment documents.
+        // P3 plot tables (16 Aug 2026) are dropped first so PostgreSQL's
+        // `DROP TABLE` of `orders`/`cemetery_packages`/`cemeteries` is not
+        // blocked by the incoming plot FKs (2BP01) — `plot_reservations`
+        // → `grave_plots` → `cemetery_blocks`, each before its parents.
+        Schema::dropIfExists('plot_reservations');
+        Schema::dropIfExists('grave_plots');
+        Schema::dropIfExists('cemetery_blocks');
         Schema::dropIfExists('quote_lines');
         Schema::dropIfExists('order_documents');
         Schema::dropIfExists('order_status_events');
