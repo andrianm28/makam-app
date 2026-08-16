@@ -23,13 +23,18 @@ use App\Platform\Outbox\OutboxClassification;
  * reservation.md` — the `held` → `expired` hop. The mirror image of
  * `ReleasePlotReservation`: the hold lapsed without confirmation, and
  * the plot RETURNS to `PlotState::AVAILABLE` so another order can pick
- * it up. Same sequencing discipline as `ConfirmPlotReservation` and
- * `ReleasePlotReservation` (re-read under `lockForUpdate()`, assert the
- * from-state, INSERT the new append-only row, flip the plot through the
- * locked re-read).
+ * it up.
+ *
+ * ---------------------------------------------------------------------------
+ * Lock discipline — see `ConfirmPlotReservation`'s class doc block
+ * ---------------------------------------------------------------------------
+ * The PLOT row lock is acquired FIRST; the LATEST row of this plot's
+ * reservation chain is then read and its state asserted against the
+ * allowed from-state (`held`); the new `expired` row is appended and
+ * the plot flipped to `available` through the SAME locked re-read.
  *
  * `expired` is terminal — a later confirm/release/expire on the
- * expired row throws `PlotReservationTransitionException`, which the
+ * expired chain throws `PlotReservationTransitionException`, which the
  * lifecycle test's terminal-refusal case proves.
  */
 final readonly class ExpirePlotReservation
@@ -43,17 +48,23 @@ final readonly class ExpirePlotReservation
     ): PlotReservation {
         return Audit::wrap(
             mutation: function () use ($reservation, $reason): PlotReservation {
-                $current = PlotReservation::query()->lockForUpdate()->findOrFail($reservation->getKey());
+                $plot = GravePlot::query()->lockForUpdate()->findOrFail($reservation->plot_id);
 
-                if ($current->state !== PlotReservationState::HELD) {
+                $current = PlotReservation::query()
+                    ->where('plot_id', $plot->getKey())
+                    ->orderByDesc('created_at')
+                    ->orderByDesc('id')
+                    ->first();
+
+                if (! $current instanceof PlotReservation || $current->state !== PlotReservationState::HELD) {
                     throw PlotReservationTransitionException::forTransition(
-                        (string) $current->state,
+                        $current instanceof PlotReservation ? (string) $current->state : 'none',
                         PlotReservationState::EXPIRED
                     );
                 }
 
                 $row = PlotReservation::query()->create([
-                    'plot_id' => $current->plot_id,
+                    'plot_id' => $plot->getKey(),
                     'order_id' => $current->order_id,
                     'state' => PlotReservationState::EXPIRED,
                     'reserved_by_ref' => $current->reserved_by_ref,
@@ -63,7 +74,6 @@ final readonly class ExpirePlotReservation
                     'reason' => $reason,
                 ]);
 
-                $plot = GravePlot::query()->lockForUpdate()->findOrFail($current->plot_id);
                 $plot->update(['plot_state' => PlotState::AVAILABLE]);
 
                 if ($reservation->getKey() !== $row->getKey()) {

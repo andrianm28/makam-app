@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\PlotReservation\Actions;
 
+use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotReservation\Exceptions\PlotReservationTransitionException;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PlotReservation\PlotReservationAuditActions;
@@ -24,24 +25,30 @@ use App\Platform\Outbox\OutboxClassification;
  * `grave_plots` write happens (only the release/expire hops return the
  * plot to `available`).
  *
- * Sequencing — the same discipline as `ReservePlot`, documented there
- * at length, restated briefly here:
- * 1. `Audit::wrap()` (which opens the transaction) re-reads the latest
- *    row under `lockForUpdate()` — NOT the possibly-stale `$reservation`
- *    the caller passed in — so the state assert and the subsequent
- *    INSERT cannot be separated by a competing transition.
- * 2. Assert the re-read row's state is the allowed from-state (`held`);
- *    anything else — an already-confirmed, released, or expired row —
- *    throws `PlotReservationTransitionException::forTransition`.
- * 3. INSERT the new `confirmed` row (append-only; `from_state` is
- *    implied by the input's state, `to_state` the target, the cone
- *    `confirmed_at` timestamp, and the operator's `reason`).
- * 4. Emit `plot_reservation.state_changed.v1` via the transactional
- *    `Outbox` — the single catalogued plot-reservation event
- *    (`docs/contracts/event-catalog.md`), emitted with the same key
- *    shape `ReservePlot` uses.
- * 5. Sync the caller's instance to the new row so
- *    `$reservation->state` reflects the CONFIRMED hop.
+ * ---------------------------------------------------------------------------
+ * Lock discipline — WHY the PLOT row, not the reservation row
+ * ---------------------------------------------------------------------------
+ * The reservation rows are append-only and immutable, so locking the
+ * reservation row the caller handed in serializes nobody: two
+ * concurrent transitions on the same held chain (confirm racing
+ * expire) would both re-read `held` by id, both pass the assert, and
+ * both commit — forking the chain and leaving the plot double-claimed
+ * (one caller's flip to `available` racing another's hold).
+ *
+ * The shared mutable anchor is the PLOT row — the row `ReservePlot`
+ * already serializes on. Every lifecycle transition therefore takes
+ * `GravePlot::query()->lockForUpdate()` FIRST, then reads the LATEST
+ * row of this plot's reservation chain and asserts its state is the
+ * allowed from-state. Competing transitions on the same plot block on
+ * the plot lock; the loser's chain re-read sees the winner's committed
+ * row and throws `PlotReservationTransitionException`. The caller's
+ * `$reservation` instance is used ONLY to derive the plot id (its
+ * `plot_id` is immutable — append-only rows never change it).
+ *
+ * `ConfirmPlotReservation` takes the plot lock too even though it
+ * writes no plot row: serialization is what makes the state assert
+ * meaningful, and the outbox payload's `plot_id` comes from the locked
+ * re-read like every other hop.
  */
 final readonly class ConfirmPlotReservation
 {
@@ -54,17 +61,23 @@ final readonly class ConfirmPlotReservation
     ): PlotReservation {
         return Audit::wrap(
             mutation: function () use ($reservation, $reason): PlotReservation {
-                $current = PlotReservation::query()->lockForUpdate()->findOrFail($reservation->getKey());
+                $plot = GravePlot::query()->lockForUpdate()->findOrFail($reservation->plot_id);
 
-                if ($current->state !== PlotReservationState::HELD) {
+                $current = PlotReservation::query()
+                    ->where('plot_id', $plot->getKey())
+                    ->orderByDesc('created_at')
+                    ->orderByDesc('id')
+                    ->first();
+
+                if (! $current instanceof PlotReservation || $current->state !== PlotReservationState::HELD) {
                     throw PlotReservationTransitionException::forTransition(
-                        (string) $current->state,
+                        $current instanceof PlotReservation ? (string) $current->state : 'none',
                         PlotReservationState::CONFIRMED
                     );
                 }
 
                 $row = PlotReservation::query()->create([
-                    'plot_id' => $current->plot_id,
+                    'plot_id' => $plot->getKey(),
                     'order_id' => $current->order_id,
                     'state' => PlotReservationState::CONFIRMED,
                     'reserved_by_ref' => $current->reserved_by_ref,
@@ -79,7 +92,7 @@ final readonly class ConfirmPlotReservation
                     $reservation->setRawAttributes($row->getAttributes(), true);
                 }
 
-                $this->emitStateChanged($row, (string) $current->getKey());
+                $this->emitStateChanged($row, (string) $plot->getKey());
 
                 return $row;
             },

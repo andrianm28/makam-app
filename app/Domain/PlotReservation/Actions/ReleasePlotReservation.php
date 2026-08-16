@@ -23,15 +23,17 @@ use App\Platform\Outbox\OutboxClassification;
  * reservation.md` — the `held` OR `confirmed` → `released` hop. Unlike
  * `ConfirmPlotReservation` (which keeps the claim), releasing RETURNS
  * the plot to `PlotState::AVAILABLE`: the reservation is no longer the
- * authoritative claim, so the plot write is released in step 4.
+ * authoritative claim.
  *
- * Sequencing — the same discipline as `ReservePlot` (see its class doc
- * block): re-read under `lockForUpdate()` so the state assert and the
- * subsequent INSERT + plot flip cannot be separated by a competing
- * transition, assert the allowed from-states (`held` | `confirmed`),
- * INSERT the new `released` row (append-only), then flip the plot
- * through the LOCKED re-read with the caller's instance synced — the
- * record that a released plot is holdable again.
+ * ---------------------------------------------------------------------------
+ * Lock discipline — see `ConfirmPlotReservation`'s class doc block
+ * ---------------------------------------------------------------------------
+ * The PLOT row lock is acquired FIRST (the shared mutable anchor
+ * `ReservePlot` serializes on); the LATEST row of this plot's
+ * reservation chain is then read and its state asserted against the
+ * allowed from-states (`held` | `confirmed`). The plot flip is written
+ * through the SAME locked re-read (`$plot`), so the INSERT and the
+ * availability flip can never be separated by a competing transaction.
  */
 final readonly class ReleasePlotReservation
 {
@@ -44,17 +46,23 @@ final readonly class ReleasePlotReservation
     ): PlotReservation {
         return Audit::wrap(
             mutation: function () use ($reservation, $reason): PlotReservation {
-                $current = PlotReservation::query()->lockForUpdate()->findOrFail($reservation->getKey());
+                $plot = GravePlot::query()->lockForUpdate()->findOrFail($reservation->plot_id);
 
-                if (! in_array($current->state, [PlotReservationState::HELD, PlotReservationState::CONFIRMED], true)) {
+                $current = PlotReservation::query()
+                    ->where('plot_id', $plot->getKey())
+                    ->orderByDesc('created_at')
+                    ->orderByDesc('id')
+                    ->first();
+
+                if (! $current instanceof PlotReservation || ! in_array($current->state, [PlotReservationState::HELD, PlotReservationState::CONFIRMED], true)) {
                     throw PlotReservationTransitionException::forTransition(
-                        (string) $current->state,
+                        $current instanceof PlotReservation ? (string) $current->state : 'none',
                         PlotReservationState::RELEASED
                     );
                 }
 
                 $row = PlotReservation::query()->create([
-                    'plot_id' => $current->plot_id,
+                    'plot_id' => $plot->getKey(),
                     'order_id' => $current->order_id,
                     'state' => PlotReservationState::RELEASED,
                     'reserved_by_ref' => $current->reserved_by_ref,
@@ -64,7 +72,6 @@ final readonly class ReleasePlotReservation
                     'reason' => $reason,
                 ]);
 
-                $plot = GravePlot::query()->lockForUpdate()->findOrFail($current->plot_id);
                 $plot->update(['plot_state' => PlotState::AVAILABLE]);
 
                 if ($reservation->getKey() !== $row->getKey()) {

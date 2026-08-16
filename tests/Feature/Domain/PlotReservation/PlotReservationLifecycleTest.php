@@ -18,6 +18,7 @@ use App\Domain\PlotReservation\Actions\ReservePlot;
 use App\Domain\PlotReservation\Exceptions\PlotReservationTransitionException;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PlotReservation\PlotReservationState;
+use App\Platform\Outbox\Models\OutboxEvent;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -41,6 +42,16 @@ final class PlotReservationLifecycleTest extends TestCase
         return [$plot, $order, $reservation];
     }
 
+    private function stateChangedEvent(PlotReservation $reservation): OutboxEvent
+    {
+        // The transition's own event — `ReservePlot` already emitted one
+        // for the held row, so filter by the new row's idempotency key.
+        return OutboxEvent::query()
+            ->where('event_name', 'plot_reservation.state_changed.v1')
+            ->where('idempotency_key', "plot_reservation:{$reservation->getKey()}")
+            ->sole();
+    }
+
     public function test_confirm_keeps_plot_reserved(): void
     {
         [$plot, , $reservation] = $this->held();
@@ -48,6 +59,14 @@ final class PlotReservationLifecycleTest extends TestCase
         $this->assertSame(PlotReservationState::CONFIRMED, $confirmed->state);
         $this->assertSame(PlotState::RESERVED, $plot->fresh()->plot_state);
         $this->assertDatabaseHas('audit_events', ['action' => 'PLOT_RESERVATION_CONFIRMED']);
+
+        // Finding A's regression: the outbox payload's `plot_id` must be
+        // the PLOT's key — never the reservation row's key.
+        $this->assertDatabaseHas('outbox_events', ['event_name' => 'plot_reservation.state_changed.v1']);
+        $event = $this->stateChangedEvent($confirmed);
+        $this->assertSame($plot->getKey(), $event->payload['plot_id']);
+        $this->assertSame(PlotReservationState::HELD, $event->payload['from_state']);
+        $this->assertSame(PlotReservationState::CONFIRMED, $event->payload['to_state']);
     }
 
     public function test_release_restores_availability(): void
@@ -57,6 +76,12 @@ final class PlotReservationLifecycleTest extends TestCase
         $this->assertSame(PlotReservationState::RELEASED, $released->state);
         $this->assertSame(PlotState::AVAILABLE, $plot->fresh()->plot_state);
         $this->assertDatabaseHas('audit_events', ['action' => 'PLOT_RESERVATION_RELEASED']);
+
+        $this->assertDatabaseHas('outbox_events', ['event_name' => 'plot_reservation.state_changed.v1']);
+        $event = $this->stateChangedEvent($released);
+        $this->assertSame($plot->getKey(), $event->payload['plot_id']);
+        $this->assertContains($event->payload['from_state'], [PlotReservationState::HELD, PlotReservationState::CONFIRMED]);
+        $this->assertSame(PlotReservationState::RELEASED, $event->payload['to_state']);
     }
 
     public function test_expire_restores_availability(): void
@@ -66,14 +91,34 @@ final class PlotReservationLifecycleTest extends TestCase
         $this->assertSame(PlotReservationState::EXPIRED, $expired->state);
         $this->assertSame(PlotState::AVAILABLE, $plot->fresh()->plot_state);
         $this->assertDatabaseHas('audit_events', ['action' => 'PLOT_RESERVATION_EXPIRED']);
+
+        $this->assertDatabaseHas('outbox_events', ['event_name' => 'plot_reservation.state_changed.v1']);
+        $event = $this->stateChangedEvent($expired);
+        $this->assertSame($plot->getKey(), $event->payload['plot_id']);
+        $this->assertSame(PlotReservationState::HELD, $event->payload['from_state']);
+        $this->assertSame(PlotReservationState::EXPIRED, $event->payload['to_state']);
     }
 
     public function test_terminal_reservation_refuses_further_transitions(): void
     {
         [$plot, , $reservation] = $this->held();
-        app(ExpirePlotReservation::class)($reservation, 'user:1', 'operator');
-        $latest = PlotReservation::query()->where('plot_id', $plot->getKey())->latest()->first();
+        $expired = app(ExpirePlotReservation::class)($reservation, 'user:1', 'operator');
+        $this->assertSame(PlotState::AVAILABLE, $plot->fresh()->plot_state);
         $this->expectException(PlotReservationTransitionException::class);
-        app(ConfirmPlotReservation::class)($latest, 'user:1', 'operator');
+        app(ConfirmPlotReservation::class)($expired, 'user:1', 'operator');
+    }
+
+    public function test_second_transition_on_same_chain_is_refused(): void
+    {
+        // Finding B's regression, in its deterministic (sequential) form:
+        // after confirm commits, the chain's latest row is `confirmed`,
+        // so a second confirm on the same plot must be refused — the same
+        // state-assert failure a LOSING concurrent transition would hit
+        // after the winner commits.
+        [$plot, , $reservation] = $this->held();
+        $confirmed = app(ConfirmPlotReservation::class)($reservation, 'user:1', 'operator');
+        $this->assertSame(PlotState::RESERVED, $plot->fresh()->plot_state);
+        $this->expectException(PlotReservationTransitionException::class);
+        app(ConfirmPlotReservation::class)($confirmed, 'user:1', 'operator');
     }
 }
