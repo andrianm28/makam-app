@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\CemeteryDirectory;
 
 use App\Domain\CemeteryDirectory\Models\LaunchCity;
+use Illuminate\Database\QueryException;
 
 /**
  * The table-backed read seam for launch cities — the single definition of
@@ -31,16 +32,39 @@ final class LaunchCityQuery
      * "known" (drafts referencing it stay valid) while removing it from the
      * public lists.
      *
+     * ---------------------------------------------------------------------
+     * Degradation contract: a failed read returns [], never throws
+     * ---------------------------------------------------------------------
+     * This is a PUBLIC render read — the booking wizard, renewal, and
+     * directory blades reach it (via `CemeteryPublicQuery::launchCities()`)
+     * on every render, and every caller falls back to the canonical
+     * `LaunchCityCode::KNOWN_CODES` when it returns []. A failed or
+     * aborted-transaction read must therefore degrade to that same
+     * fallback: on PostgreSQL one failed statement aborts the WHOLE
+     * transaction (SQLSTATE 25P02), so a caught, already-degraded failure
+     * elsewhere (e.g. the wizard's deliberately-dropped cemetery tables)
+     * poisons this SELECT too — throwing here would turn a handled
+     * degradation into a 500 on a public screen. The fallback contract
+     * therefore extends to "unreadable", not just "empty".
+     *
+     * Validation/write paths deliberately keep failing closed: `isKnown()`
+     * throws on an unreadable table because a code that cannot be verified
+     * must not be trusted.
+     *
      * @return list<array{code: string, label: string}>
      */
     public static function activeCities(): array
     {
-        return LaunchCity::query()
-            ->where('is_active', true)
-            ->orderBy('sort_order')
-            ->get(['code', 'label'])
-            ->map(fn (LaunchCity $city): array => ['code' => $city->code, 'label' => $city->label])
-            ->all();
+        try {
+            return LaunchCity::query()
+                ->where('is_active', true)
+                ->orderBy('sort_order')
+                ->get(['code', 'label'])
+                ->map(fn (LaunchCity $city): array => ['code' => $city->code, 'label' => $city->label])
+                ->all();
+        } catch (QueryException) {
+            return [];
+        }
     }
 
     /**

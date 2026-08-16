@@ -8,7 +8,9 @@ use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\LaunchCityQuery;
 use App\Domain\CemeteryDirectory\Models\LaunchCity;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 /**
@@ -69,6 +71,50 @@ final class LaunchCityTest extends TestCase
     public function test_launch_cities_fall_back_to_the_canonical_constants_when_the_table_is_empty(): void
     {
         LaunchCity::query()->delete();
+
+        $this->assertSame([], LaunchCityQuery::activeCities());
+
+        $cities = CemeteryPublicQuery::launchCities();
+
+        $this->assertSame(LaunchCityCode::KNOWN_CODES, array_column($cities, 'code'));
+        $this->assertSame(
+            ['Jakarta', 'Bogor', 'Depok', 'Tangerang', 'Bekasi'],
+            array_column($cities, 'label'),
+        );
+    }
+
+    /**
+     * The `activeCities()` degradation contract: a launch-city read that
+     * cannot execute returns `[]` instead of throwing, so
+     * `CemeteryPublicQuery::launchCities()` falls back to the canonical
+     * five rather than 500ing a public render. On PostgreSQL the same
+     * symptom appears as SQLSTATE 25P02 when a *caught* failure elsewhere
+     * (e.g. the wizard degradation test's deliberately-dropped cemetery
+     * tables) has already aborted the transaction; on SQLite a failed
+     * statement does not abort the transaction, so the read target itself
+     * is dropped to make the failure deterministic. Same reverse-dependency
+     * drop list as `BookingWizardRouteTest::test_a_failed_cemetery_read_
+     * degrades_honestly_instead_of_500ing` plus `launch_cities`.
+     */
+    public function test_active_cities_degrade_to_the_canonical_fallback_when_the_read_fails(): void
+    {
+        // On PostgreSQL a `DROP TABLE` of a parent is blocked by any
+        // incoming FK constraint (2BP01) regardless of its ON DELETE
+        // action, so the draft's own constraints go first — exactly as
+        // `BookingWizardRouteTest`'s degradation test does.
+        Schema::table('booking_drafts', function (Blueprint $table) {
+            $table->dropForeign(['cemetery_id']);
+            $table->dropForeign(['cemetery_package_id']);
+        });
+
+        Schema::dropIfExists('renewal_external_markings');
+        Schema::dropIfExists('renewal_quotes');
+        Schema::dropIfExists('renewals');
+        Schema::dropIfExists('grave_records');
+        Schema::dropIfExists('cemetery_packages');
+        Schema::dropIfExists('cemetery_capability_profiles');
+        Schema::dropIfExists('cemeteries');
+        Schema::dropIfExists('launch_cities');
 
         $this->assertSame([], LaunchCityQuery::activeCities());
 
