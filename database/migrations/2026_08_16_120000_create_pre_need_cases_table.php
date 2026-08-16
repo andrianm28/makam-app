@@ -86,7 +86,15 @@ return new class extends Migration
                 ->constrained('cemeteries')
                 ->nullOnDelete();
 
-            $table->foreignUuid('cemetery_package_id')
+            // `cemetery_packages.id` is BIGINT (`$table->id()` — the P2/P3
+            // lesson: packages use integer ids), so this is `foreignId`,
+            // NOT `foreignUuid` — PostgreSQL rejects a uuid->bigint
+            // constraint with SQLSTATE[42804] ("incompatible types"), and
+            // SQLite does not enforce the type so the mismatch is invisible
+            // on the local suite. Same shape as `booking_drafts.
+            // cemetery_package_id` (`2026_08_08_130000_create_booking_drafts_
+            // table.php`).
+            $table->foreignId('cemetery_package_id')
                 ->nullable()
                 ->constrained('cemetery_packages')
                 ->nullOnDelete();
