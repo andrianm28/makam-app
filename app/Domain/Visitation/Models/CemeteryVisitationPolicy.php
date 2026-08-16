@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Domain\Visitation\Models;
 
+use App\Domain\CemeteryDirectory\Models\Cemetery;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use InvalidArgumentException;
 
 /**
@@ -224,5 +227,29 @@ final class CemeteryVisitationPolicy extends Model
                 );
             }
         }
+    }
+
+    /**
+     * The owning cemetery — the read side the admin policy resource's
+     * table column (`cemetery.name`) and the scoped bookings resource
+     * both route through.
+     *
+     * @return BelongsTo<Cemetery, $this>
+     */
+    public function cemetery(): BelongsTo
+    {
+        return $this->belongsTo(Cemetery::class, 'cemetery_id');
+    }
+
+    /**
+     * The blackout rows the `BlackoutDatesRelationManager` renders —
+     * `(policy_id, date)` unique (migration), so this is one row per
+     * closed date.
+     *
+     * @return HasMany<VisitationBlackoutDate, $this>
+     */
+    public function blackoutDates(): HasMany
+    {
+        return $this->hasMany(VisitationBlackoutDate::class, 'policy_id');
     }
 }

@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domain\Visitation\Models;
 
+use App\Domain\CemeteryDirectory\Models\Cemetery;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 
@@ -82,5 +84,17 @@ final class VisitationBooking extends Model
                 $booking->reference = 'VST-'.CarbonImmutable::now()->format('Y').'-'.Str::upper(Str::random(8));
             }
         });
+    }
+
+    /**
+     * The cemetery the visit is booked at — the admin bookings resource's
+     * per-cemetery scoping and its `cemetery.name` column both read
+     * through here.
+     *
+     * @return BelongsTo<Cemetery, $this>
+     */
+    public function cemetery(): BelongsTo
+    {
+        return $this->belongsTo(Cemetery::class, 'cemetery_id');
     }
 }
