@@ -18,12 +18,15 @@
 
     The per-row Buka/Tutup buttons call `beginTransition()` (server-side:
     which gate + target state) and `$dispatch('open-modal', ...)` (client-
-    side: open the Filament modal) in the same click; the modal's confirm
-    button passes the page's own Livewire properties back to
-    `transitionGate()`. `$activeGateId ?? ''` is defensive: the confirm
-    button is only reachable after `beginTransition()` set the id, and a
-    null id would fail loudly in the recorder's findOrFail rather than
-    silently no-op.
+    side: open the Filament modal) in the same click. The modal's confirm
+    button calls the page's ZERO-ARGUMENT `transitionGate()` Livewire
+    method: the evidence/reason textareas are `wire:model`-bound to the
+    page's `$evidence`/`$reason` properties, so the method reads the values
+    off the component on the confirm request itself — anything interpolated
+    into this blade at render time would be stale the moment the user types,
+    which is exactly the bug this shape exists to avoid. A null
+    `activeGateId` (confirm reachable only via `beginTransition()`) fails
+    loudly in the recorder's findOrFail rather than silently no-op.
 --}}
 <x-filament-panels::page>
     <div class="grid gap-y-6">
@@ -148,7 +151,7 @@
                 </x-filament::button>
                 <x-filament::button
                     color="primary"
-                    wire:click="transitionGate('{{ $activeGateId ?? '' }}', '{{ $activeToState }}', '{{ $evidence }}', '{{ $reason }}')"
+                    wire:click="transitionGate()"
                 >
                     Simpan
                 </x-filament::button>
