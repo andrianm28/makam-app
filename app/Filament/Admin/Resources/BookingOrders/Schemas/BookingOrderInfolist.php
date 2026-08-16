@@ -178,7 +178,7 @@ final class BookingOrderInfolist
                                     ->label('Status Reservasi')
                                     ->badge()
                                     ->color(fn (string $state): string => self::stateColor($state))
-                                    ->formatStateUsing(fn (string $state): string => self::stateLabel(PlotReservationState::from($state))),
+                                    ->formatStateUsing(fn (string $state): string => self::stateLabel($state)),
                                 TextEntry::make('reserved_by_ref')->label('Direservasikan oleh'),
                                 TextEntry::make('reserved_at')->label('Direservasikan pada')->dateTime(),
                                 TextEntry::make('confirmed_at')
@@ -202,13 +202,13 @@ final class BookingOrderInfolist
     private static function stateColor(string $state): string
     {
         return match ($state) {
-            'held' => 'warning',
-            'confirmed' => 'success',
+            PlotReservationState::HELD => 'warning',
+            PlotReservationState::CONFIRMED => 'success',
             default => 'gray',
         };
     }
 
-    private static function stateLabel(PlotReservationState $state): string
+    private static function stateLabel(string $state): string
     {
         return match ($state) {
             PlotReservationState::HELD => 'Ditahan',

@@ -18,7 +18,9 @@ use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotInventory\PlotState;
 use App\Domain\PlotReservation\Actions\ReservePlot;
+use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PlotReservation\PlotReservationState;
+use App\Filament\Admin\Resources\BookingOrders\Actions\PlotReservationLifecycleActions;
 use App\Filament\Admin\Resources\BookingOrders\Actions\ReservePlotAction;
 use App\Filament\Admin\Resources\BookingOrders\Pages\ViewBookingOrder;
 use App\Models\User;
@@ -59,7 +61,7 @@ final class BookingOrderReservationTest extends TestCase
     /**
      * @return array{cemetery: Cemetery, block: CemeteryBlock, plot1: GravePlot, plot2: GravePlot, order: Order}
      */
-    private function fixture(): array
+    private function fixture(OrderStatus $status = OrderStatus::DIVERIFIKASI): array
     {
         $cemetery = Cemetery::create([
             'type' => CemeteryType::TPU,
@@ -98,11 +100,45 @@ final class BookingOrderReservationTest extends TestCase
         $order = Order::query()->create([
             'reference' => 'MK-2026-'.Str::upper(Str::random(8)),
             'product_type' => ProductType::AT_NEED_SERVICE_ORDER->value,
-            'status' => OrderStatus::DIVERIFIKASI->value,
+            'status' => $status->value,
             'booking_draft_id' => $draft->getKey(),
         ]);
 
         return compact('cemetery', 'block', 'plot1', 'plot2', 'order');
+    }
+
+    public function test_reserve_action_is_visible_at_menunggu_ketersediaan(): void
+    {
+        $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::OPERATOR);
+        $this->actingAs($user);
+
+        ['order' => $order] = $this->fixture(OrderStatus::MENUNGGU_KETERSEDIAAN);
+
+        Livewire::test(ViewBookingOrder::class, ['record' => $order->getRouteKey()])
+            ->assertActionVisible('reserve_plot');
+    }
+
+    public function test_finance_role_is_denied_the_lifecycle_actions(): void
+    {
+        $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::FINANCE);
+        $this->actingAs($user);
+
+        ['plot1' => $plot, 'order' => $order] = $this->fixture();
+        app(ReservePlot::class)($plot, $order, 'user:1', 'operator');
+
+        $reservation = PlotReservation::activeForOrder($order);
+        $this->assertNotNull($reservation);
+
+        $this->assertFalse(PlotReservationLifecycleActions::confirm($order, $reservation)->isAuthorized());
+        $this->assertFalse(PlotReservationLifecycleActions::release($order, $reservation)->isAuthorized());
+        $this->assertFalse(PlotReservationLifecycleActions::expire($order, $reservation)->isAuthorized());
+
+        Livewire::test(ViewBookingOrder::class, ['record' => $order->getRouteKey()])
+            ->assertActionHidden('confirm_plot_reservation')
+            ->assertActionHidden('release_plot_reservation')
+            ->assertActionHidden('expire_plot_reservation');
     }
 
     public function test_operator_reserves_an_available_plot_from_the_order_view(): void
