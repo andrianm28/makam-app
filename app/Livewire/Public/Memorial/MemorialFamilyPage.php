@@ -10,7 +10,6 @@ use App\Domain\Memorial\Actions\SubmitMemorialContent;
 use App\Domain\Memorial\MemorialModerationState;
 use App\Domain\Memorial\MemorialPrivacyMode;
 use App\Domain\Memorial\MemorialQrImage;
-use App\Domain\Memorial\Models\MemorialMedia;
 use App\Domain\Memorial\Models\MemorialProfile;
 use App\Domain\Memorial\Models\MemorialQrToken;
 use App\Platform\DocumentVault\Actions\UploadDocument;
@@ -19,6 +18,7 @@ use App\Platform\DocumentVault\DocumentState;
 use App\Platform\DocumentVault\Models\Document;
 use App\Platform\IdentityAccess\ActorContext;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -59,10 +59,13 @@ use Livewire\Features\SupportFileUploads\WithFileUploads;
  * Attachment happens on render: accepted vault documents owned by this
  * profile attach as PENDING `memorial_media` rows (a small, documented
  * sync step — the queue has no memorial-side consumer, and this page is
- * the family's own reload point). The family therefore sees, in order:
- * uploaded-but-unscanned documents as "Menunggu pemindaian", attached
- * pending media as "Menunggu moderasi", and nothing else until a
- * moderator approves.
+ * the family's own reload point). The unique
+ * `(memorial_profile_id, storage_ref)` index backstops the exists-then-
+ * create against concurrent renders (the loser's `QueryException` is
+ * classified and swallowed — the incumbent row is the result either
+ * way). The family therefore sees, in order: uploaded-but-unscanned
+ * documents as "Menunggu pemindaian", attached pending media as
+ * "Menunggu moderasi", and nothing else until a moderator approves.
  *
  * ===========================================================================
  * PRIVACY + QR
@@ -287,18 +290,42 @@ final class MemorialFamilyPage extends Component
             ->pluck('id');
 
         foreach ($accepted as $documentId) {
-            $alreadyAttached = MemorialMedia::query()
-                ->where('memorial_profile_id', $this->profile->getKey())
-                ->where('storage_ref', $documentId)
-                ->exists();
-
-            if (! $alreadyAttached) {
-                $this->profile->media()->create([
-                    'storage_ref' => (string) $documentId,
-                    'moderation_state' => MemorialModerationState::DEFAULT,
-                ]);
+            try {
+                $this->profile->media()->firstOrCreate(
+                    ['storage_ref' => (string) $documentId],
+                    ['moderation_state' => MemorialModerationState::DEFAULT],
+                );
+            } catch (QueryException $exception) {
+                // Two renders raced the exists-then-create: the unique
+                // index (memorial_media_profile_storage_unique) refused the
+                // loser. The incumbent row IS the result — re-raising would
+                // turn an already-correct state into an error page.
+                if (! $this->isDuplicateAttach($exception)) {
+                    throw $exception;
+                }
             }
         }
+    }
+
+    /**
+     * Narrow duplicate classifier for the attach race — mirrors
+     * `UploadDocument::isDuplicateClientUploadId()`: only the unique
+     * violation on `(memorial_profile_id, storage_ref)` is swallowed,
+     * never an unrelated query failure. The two drivers name the same
+     * constraint differently: PostgreSQL reports the index name
+     * (`memorial_media_profile_storage_unique`), SQLite reports the
+     * column pair ("unique constraint failed: memorial_media.
+     * memorial_profile_id, memorial_media.storage_ref").
+     */
+    private function isDuplicateAttach(QueryException $exception): bool
+    {
+        $message = strtolower($exception->getMessage());
+
+        return str_contains($message, 'memorial_media_profile_storage_unique')
+            || str_contains(
+                $message,
+                'unique constraint failed: memorial_media.memorial_profile_id',
+            );
     }
 
     /**

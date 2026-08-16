@@ -35,9 +35,10 @@ use UnitEnum;
  * cemetery grants, the visitation pattern — an operator holding
  * cemetery grants only sees cases from their cemeteries.
  *
- * Open cases sort first (`status` ascending — `open` < `resolved` <
- * `dismissed` alphabetically), then by recency: the queue surfaces what
- * needs a moderator's hand first.
+ * Open cases sort first (the CASE-ordering in `getEloquentQuery()`, not a
+ * lexical `orderBy('status')` — 'dismissed' would beat 'open'
+ * alphabetically), then by recency: the queue surfaces what needs a
+ * moderator's hand first.
  */
 final class ModerationCaseResource extends Resource
 {
@@ -105,7 +106,12 @@ final class ModerationCaseResource extends Resource
     {
         $query = ModerationCase::query()
             ->with(['profile.graveRecord.cemetery', 'abuseReports'])
-            ->orderBy('status')
+            // Open cases first, then by recency. NOT orderBy('status'):
+            // the lexical order 'dismissed' < 'open' < 'resolved' would put
+            // dismissed cases at the top of the queue. The CASE form is the
+            // repo idiom (ServiceCatalogQuery), keeping the column value
+            // out of the ordering logic.
+            ->orderByRaw("CASE status WHEN 'open' THEN 0 ELSE 1 END")
             ->latest('created_at');
 
         $actor = app(ActorContext::class);

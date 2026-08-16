@@ -17,6 +17,7 @@ use App\Domain\Memorial\Exceptions\MemorialConsentMissingException;
 use App\Domain\Memorial\MemorialAuditActions;
 use App\Domain\Memorial\MemorialModerationState;
 use App\Domain\Memorial\MemorialPrivacyMode;
+use App\Domain\Memorial\Models\MemorialMedia;
 use App\Domain\Memorial\Models\MemorialProfile;
 use App\Domain\Memorial\Models\MemorialQrToken;
 use App\Domain\Memorial\Models\ModerationCase;
@@ -26,11 +27,17 @@ use App\Filament\Admin\Resources\MemorialProfiles\RelationManagers\ContentsRelat
 use App\Filament\Admin\Resources\MemorialProfiles\RelationManagers\EditorsRelationManager;
 use App\Filament\Admin\Resources\MemorialProfiles\RelationManagers\QrTokensRelationManager;
 use App\Filament\Admin\Resources\ModerationCases\ModerationCaseResource;
+use App\Filament\Admin\Resources\ModerationCases\Pages\ListModerationCases;
 use App\Filament\Admin\Resources\ModerationCases\Pages\ViewModerationCase;
 use App\Models\User;
+use App\Platform\DocumentVault\DocumentKind;
+use App\Platform\DocumentVault\DocumentState;
+use App\Platform\DocumentVault\Models\Document;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use App\Platform\IdentityAccess\Scopes\Actions\GrantScopeAssignment;
 use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
+use Carbon\CarbonImmutable;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
@@ -240,12 +247,9 @@ final class MemorialAdminTest extends TestCase
         $cemetery = $this->cemetery();
         $profile = $this->profile($cemetery);
 
-        try {
-            app(GrantMemorialEditor::class)($profile, 1, '', 'admin:1', 'admin');
-            $this->fail('A blank consent evidence reference must be refused.');
-        } catch (MemorialConsentMissingException) {
-            // expected
-        }
+        $this->expectException(MemorialConsentMissingException::class);
+
+        app(GrantMemorialEditor::class)($profile, 1, '', 'admin:1', 'admin');
     }
 
     /**
@@ -444,5 +448,115 @@ final class MemorialAdminTest extends TestCase
         $visibleCases = ModerationCaseResource::getEloquentQuery()->pluck('id')->all();
         $this->assertContains($caseA->getKey(), $visibleCases);
         $this->assertNotContains($caseB->getKey(), $visibleCases);
+    }
+
+    /**
+     * The queue surfaces OPEN cases first (the review fix for the lexical
+     * `orderBy('status')` defect, where 'dismissed' beat 'open'
+     * alphabetically). Three cases with staggered timestamps render in
+     * open → resolved → dismissed order — asserted against the actual
+     * table HTML, not just the query.
+     */
+    public function test_the_queue_orders_open_cases_first_in_the_table_html(): void
+    {
+        $cemetery = $this->cemetery();
+        $profile = $this->profile($cemetery);
+        $this->admin();
+        $this->forgetResolvedActorContext();
+
+        $now = CarbonImmutable::now();
+
+        $dismissed = $this->caseWithReason($profile, 'Laporan dimintakan ditolak.');
+        $dismissed->forceFill(['status' => ModerationCase::STATUS_DISMISSED])->save();
+        $dismissed->forceFill(['created_at' => $now->subMinutes(3)])->save();
+
+        $resolved = $this->caseWithReason($profile, 'Laporan dimintakan selesai.');
+        $resolved->forceFill(['status' => ModerationCase::STATUS_RESOLVED])->save();
+        $resolved->forceFill(['created_at' => $now->subMinutes(2)])->save();
+
+        $open = $this->caseWithReason($profile, 'Laporan masih terbuka.');
+        $open->forceFill(['created_at' => $now->subMinute()])->save();
+
+        // A lexical orderBy('status') would render dismissed first; the
+        // open-first CASE ordering must render open first. Row order is
+        // read from the rendered table HTML via the row-unique reason text.
+        $html = Livewire::test(ListModerationCases::class)->html();
+
+        $positions = [
+            strpos($html, 'Laporan masih terbuka.'),
+            strpos($html, 'Laporan dimintakan selesai.'),
+            strpos($html, 'Laporan dimintakan ditolak.'),
+        ];
+
+        $this->assertNotFalse($positions[0], 'The open case must render in the table.');
+        $this->assertNotFalse($positions[1], 'The resolved case must render in the table.');
+        $this->assertNotFalse($positions[2], 'The dismissed case must render in the table.');
+
+        $this->assertLessThan($positions[1], $positions[0], 'Open must sort before resolved.');
+        $this->assertLessThan($positions[2], $positions[1], 'Resolved must sort before dismissed.');
+    }
+
+    /**
+     * The unique `(memorial_profile_id, storage_ref)` backstop (the review
+     * fix for the family page's exists-then-create attach race): a direct
+     * duplicate insert of the same accepted document fails at the database.
+     */
+    public function test_the_unique_media_attach_backstop_refuses_a_duplicate(): void
+    {
+        $cemetery = $this->cemetery();
+        $profile = $this->profile($cemetery);
+
+        $document = Document::createQuarantined([
+            'document_kind' => DocumentKind::ProductImage,
+            'owner_type' => 'memorial_profile',
+            'owner_id' => $profile->getKey(),
+            'original_filename' => 'foto.png',
+            'storage_prefix' => 'quarantine',
+            'storage_key' => Str::random(40),
+            'size_bytes' => 1024,
+            'mime_declared' => 'image/png',
+        ]);
+        $document->transitionTo(DocumentState::Scanning);
+        $document->promote();
+
+        MemorialMedia::query()->create([
+            'memorial_profile_id' => $profile->getKey(),
+            'storage_ref' => $document->getKey(),
+        ]);
+
+        try {
+            MemorialMedia::query()->create([
+                'memorial_profile_id' => $profile->getKey(),
+                'storage_ref' => $document->getKey(),
+            ]);
+            $this->fail('A duplicate (profile, storage_ref) media attach must be refused by the unique index.');
+        } catch (QueryException $exception) {
+            // SQLite names the columns, PostgreSQL names the index — both
+            // are the same (memorial_profile_id, storage_ref) constraint.
+            $message = strtolower($exception->getMessage());
+
+            $this->assertTrue(
+                str_contains($message, 'memorial_media_profile_storage_unique')
+                    || str_contains(
+                        $message,
+                        'unique constraint failed: memorial_media.memorial_profile_id',
+                    ),
+                'The duplicate attach must fail on the unique (profile, storage_ref) index.',
+            );
+        }
+    }
+
+    private function caseWithReason(MemorialProfile $profile, string $reason): ModerationCase
+    {
+        $content = app(SubmitMemorialContent::class)($profile, 'Konten terperiksa.', 'family:1', 'family');
+
+        return app(ReportMemorialContent::class)(
+            $profile,
+            'memorial_content',
+            $content->getKey(),
+            'reporter:1',
+            'customer',
+            $reason,
+        );
     }
 }
