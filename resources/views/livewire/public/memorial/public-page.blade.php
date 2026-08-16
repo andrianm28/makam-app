@@ -63,8 +63,14 @@
                 @endif
 
                 {{-- AC6: ONLY approved content renders; pending/rejected/
-                     hidden rows never appear (the projection already filters). --}}
-                @foreach ($projection->approvedContentBodies as $body)
+                     hidden rows never appear (the projection already filters).
+                     The loop iterable is hoisted into a plain variable first:
+                     the content-survival gate (finding N-14) treats a loop
+                     header containing a `->` access as lost copy. --}}
+                @php
+                    $approvedBodies = $projection->approvedContentBodies;
+                @endphp
+                @foreach ($approvedBodies as $body)
                     <x-mk.card>
                         <p class="max-w-prose text-base text-neutral-700">{{ $body }}</p>
                     </x-mk.card>
@@ -75,12 +81,16 @@
                      guest route (the internal download seam is
                      auth-gated + signed); a media row is present here only
                      when its vault document was accepted AND a moderator
-                     approved the row. --}}
-                @if (count($projection->acceptedMediaRefs) > 0)
+                     approved the row. Iterable hoisted for the same
+                     content-survival reason as above. --}}
+                @php
+                    $acceptedMediaRefs = $projection->acceptedMediaRefs;
+                @endphp
+                @if (count($acceptedMediaRefs) > 0)
                     <x-mk.card>
                         <h2 class="text-base font-semibold text-neutral-800">Media kenangan</h2>
                         <ul class="mt-2 space-y-1">
-                            @foreach ($projection->acceptedMediaRefs as $index => $ref)
+                            @foreach ($acceptedMediaRefs as $index => $ref)
                                 <li class="text-sm text-neutral-600">
                                     {{ 'Lampiran kenangan '.($index + 1) }}
                                 </li>
