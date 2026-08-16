@@ -17,6 +17,7 @@ use App\Platform\Audit\AuditSubject;
 use App\Platform\Correlation\CorrelationContext;
 use App\Platform\Outbox\Outbox;
 use App\Platform\Outbox\OutboxClassification;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Task 4 of `docs/superpowers/plans/2026-08-16-p3-plot-inventory-
@@ -36,6 +37,21 @@ use App\Platform\Outbox\OutboxClassification;
  * `expired` is terminal — a later confirm/release/expire on the
  * expired chain throws `PlotReservationTransitionException`, which the
  * lifecycle test's terminal-refusal case proves.
+ *
+ * ---------------------------------------------------------------------------
+ * The override-divergence rule (whole-branch review finding C1)
+ * ---------------------------------------------------------------------------
+ * Identical to `ReleasePlotReservation`: the availability flip happens
+ * only while the locked plot's state is `PlotState::RESERVED`. An admin
+ * override behind the chain ('Tandai Terisi' → occupied, 'Tandai
+ * Perawatan' → maintenance) must not be silently destroyed by expiry —
+ * the chain is still closed (the `expired` row is appended) but
+ * `plot_state` is left untouched, and the audit reason records 'plot
+ * state diverged from reserved (override preserved)'. The action writes
+ * its own audit row with `Audit::record()` inside `DB::transaction`
+ * (the documented "same transaction some other way" shape) because the
+ * divergence is only knowable under the plot lock, which `Audit::wrap`'s
+ * call-time `$reason` cannot see.
  */
 final readonly class ExpirePlotReservation
 {
@@ -46,53 +62,64 @@ final readonly class ExpirePlotReservation
         ?string $reason = null,
         AuditSource $auditSource = AuditSource::Panel,
     ): PlotReservation {
-        return Audit::wrap(
-            mutation: function () use ($reservation, $reason): PlotReservation {
-                $plot = GravePlot::query()->lockForUpdate()->findOrFail($reservation->plot_id);
+        return DB::transaction(function () use (
+            $reservation,
+            $actorReference,
+            $actorRole,
+            $auditSource,
+            $reason,
+        ): PlotReservation {
+            $plot = GravePlot::query()->lockForUpdate()->findOrFail($reservation->plot_id);
 
-                $current = PlotReservation::query()
-                    ->where('plot_id', $plot->getKey())
-                    ->orderByDesc('created_at')
-                    ->orderByDesc('id')
-                    ->first();
+            $current = PlotReservation::query()
+                ->where('plot_id', $plot->getKey())
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->first();
 
-                if (! $current instanceof PlotReservation || $current->state !== PlotReservationState::HELD) {
-                    throw PlotReservationTransitionException::forTransition(
-                        $current instanceof PlotReservation ? (string) $current->state : 'none',
-                        PlotReservationState::EXPIRED
-                    );
-                }
+            if (! $current instanceof PlotReservation || $current->state !== PlotReservationState::HELD) {
+                throw PlotReservationTransitionException::forTransition(
+                    $current instanceof PlotReservation ? (string) $current->state : 'none',
+                    PlotReservationState::EXPIRED
+                );
+            }
 
-                $row = PlotReservation::query()->create([
-                    'plot_id' => $plot->getKey(),
-                    'order_id' => $current->order_id,
-                    'state' => PlotReservationState::EXPIRED,
-                    'reserved_by_ref' => $current->reserved_by_ref,
-                    'reserved_at' => $current->reserved_at,
-                    'confirmed_at' => $current->confirmed_at,
-                    'expired_at' => now(),
-                    'reason' => $reason,
-                ]);
+            $row = PlotReservation::query()->create([
+                'plot_id' => $plot->getKey(),
+                'order_id' => $current->order_id,
+                'state' => PlotReservationState::EXPIRED,
+                'reserved_by_ref' => $current->reserved_by_ref,
+                'reserved_at' => $current->reserved_at,
+                'confirmed_at' => $current->confirmed_at,
+                'expired_at' => now(),
+                'reason' => $reason,
+            ]);
 
+            $diverged = $plot->plot_state !== PlotState::RESERVED;
+
+            if (! $diverged) {
                 $plot->update(['plot_state' => PlotState::AVAILABLE]);
+            }
 
-                if ($reservation->getKey() !== $row->getKey()) {
-                    $reservation->setRawAttributes($row->getAttributes(), true);
-                }
+            if ($reservation->getKey() !== $row->getKey()) {
+                $reservation->setRawAttributes($row->getAttributes(), true);
+            }
 
-                $this->emitStateChanged($row, (string) $plot->getKey(), PlotReservationState::HELD);
+            $this->emitStateChanged($row, (string) $plot->getKey(), PlotReservationState::HELD);
 
-                return $row;
-            },
-            action: PlotReservationAuditActions::PLOT_RESERVATION_EXPIRED,
-            subject: fn (PlotReservation $row): AuditSubject => new AuditSubject('plot_reservation', $row->getKey()),
-            outcome: AuditOutcome::Allowed,
-            actorRef: $actorReference,
-            actorRole: $actorRole,
-            source: $auditSource,
-            reason: $reason,
-            correlationId: app(CorrelationContext::class)->current()?->value,
-        );
+            Audit::record(
+                action: PlotReservationAuditActions::PLOT_RESERVATION_EXPIRED,
+                subject: new AuditSubject('plot_reservation', $row->getKey()),
+                outcome: AuditOutcome::Allowed,
+                actorRef: $actorReference,
+                actorRole: $actorRole,
+                source: $auditSource,
+                reason: self::reasonWithDivergence($reason, $diverged),
+                correlationId: app(CorrelationContext::class)->current()?->value,
+            );
+
+            return $row;
+        });
     }
 
     private function emitStateChanged(PlotReservation $row, string $plotId, string $fromState): void
@@ -111,5 +138,21 @@ final readonly class ExpirePlotReservation
             classification: OutboxClassification::Internal,
             idempotencyKey: "plot_reservation:{$row->getKey()}",
         );
+    }
+
+    /**
+     * The override-divergence note appended to the audit `reason` when
+     * the chain was closed without touching the plot (finding C1) — see
+     * `ReleasePlotReservation::reasonWithDivergence()`.
+     */
+    private static function reasonWithDivergence(?string $reason, bool $diverged): ?string
+    {
+        if (! $diverged) {
+            return $reason;
+        }
+
+        $suffix = 'plot state diverged from reserved (override preserved)';
+
+        return $reason === null ? $suffix : $reason.'; '.$suffix;
     }
 }

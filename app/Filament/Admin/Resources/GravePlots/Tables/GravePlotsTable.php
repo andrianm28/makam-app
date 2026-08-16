@@ -46,6 +46,11 @@ use InvalidArgumentException;
  *   that states the state history stays in the audit trail. Writes
  *   `PlotState::AVAILABLE`.
  *
+ * Each action's allowed from-state set is declared once in
+ * `overrideFromStates()` and used BOTH by the `->visible()` closures and
+ * by the run-time re-read in `overrideState()`, so render-time meaning and
+ * wire-call enforcement cannot drift (finding I2).
+ *
  * Every override writes `plot_state` ONLY through
  * `Audit::wrap` + `GRAVE_PLOT_STATE_CHANGED` (the row change and its
  * `audit_events` entry commit in one transaction), so the model's `saving`
@@ -59,13 +64,23 @@ use InvalidArgumentException;
  * 1. `->authorize(...)` — the RENDER/MOUNT gate (the master-data
  *    authorizer), exactly as the sibling master-data surfaces carry it.
  * 2. `->visible(...)` — per-record state meaning (orthogonal to
- *    authorization: "is this action meaningful for this record").
+ *    authorization: "is this action meaningful for this record"). This is
+ *    NOT a security property: Filament's `mountAction` re-checks disabled
+ *    and authorization but not visibility, so a hidden action is still
+ *    wire-addressable.
  * 3. Inside the `->action()` closure, `ReauthenticationGuard::assertFresh()`
  *    — AGENTS.md requires recent re-authentication for plot-override
  *    actions; a stale actor is sent to the MFA challenge before any write.
  *    Layer 3 is the enforcement: a Livewire component method is addressable
  *    directly over the wire, so "the button was not rendered" is not a
  *    security property.
+ * 4. In the shared write path `overrideState()`, a `fresh()` re-read of
+ *    the record followed by a refusal when the CURRENT state is not in
+ *    the target's from-set (finding I2): a wire call against a record
+ *    whose state changed since the page rendered — e.g. `markAvailable`
+ *    on a plot another actor just reserved — is refused with a danger
+ *    notification and no write, instead of freeing a plot behind an
+ *    active reservation.
  *
  * There is deliberately NO delete action (the plan's bound scope: list +
  * overrides only; deletion is model-guarded and no delete surface exists).
@@ -132,7 +147,7 @@ final class GravePlotsTable
                     ->authorize(fn (): bool => self::actorMayManage())
                     ->visible(fn (GravePlot $record): bool => in_array(
                         $record->plot_state,
-                        [PlotState::AVAILABLE, PlotState::RESERVED, PlotState::MAINTENANCE],
+                        self::overrideFromStates(PlotState::OCCUPIED),
                         true,
                     ))
                     ->action(function (GravePlot $record): void {
@@ -151,7 +166,11 @@ final class GravePlotsTable
                     ->modalHeading('Tandai plot perawatan')
                     ->modalDescription('Plot ditandai sedang perawatan dan dicatat di audit.')
                     ->authorize(fn (): bool => self::actorMayManage())
-                    ->visible(fn (GravePlot $record): bool => $record->plot_state !== PlotState::MAINTENANCE)
+                    ->visible(fn (GravePlot $record): bool => in_array(
+                        $record->plot_state,
+                        self::overrideFromStates(PlotState::MAINTENANCE),
+                        true,
+                    ))
                     ->action(function (GravePlot $record): void {
                         if (! self::requireFreshAuthentication()) {
                             return;
@@ -173,7 +192,7 @@ final class GravePlotsTable
                     ->authorize(fn (): bool => self::actorMayManage())
                     ->visible(fn (GravePlot $record): bool => in_array(
                         $record->plot_state,
-                        [PlotState::MAINTENANCE, PlotState::OCCUPIED],
+                        self::overrideFromStates(PlotState::AVAILABLE),
                         true,
                     ))
                     ->action(function (GravePlot $record): void {
@@ -220,6 +239,27 @@ final class GravePlotsTable
     }
 
     /**
+     * The allowed from-state set for each override target — the SINGLE
+     * source of truth consumed by both the row-action `->visible()`
+     * closures (render-time meaning) and `overrideState()`'s run-time
+     * re-read (wire-call enforcement), so the two cannot drift:
+     * - `markAvailable` (→ `available`) is only meaningful FROM
+     *   maintenance/occupied — never from `available` (no-op) and never
+     *   from `reserved`, whose claim belongs to an active reservation.
+     * - `markOccupied` (→ `occupied`) from available/reserved/maintenance.
+     * - `markMaintenance` (→ `maintenance`) from any other state.
+     */
+    private static function overrideFromStates(string $toState): array
+    {
+        return match ($toState) {
+            PlotState::AVAILABLE => [PlotState::MAINTENANCE, PlotState::OCCUPIED],
+            PlotState::OCCUPIED => [PlotState::AVAILABLE, PlotState::RESERVED, PlotState::MAINTENANCE],
+            PlotState::MAINTENANCE => [PlotState::AVAILABLE, PlotState::RESERVED, PlotState::OCCUPIED],
+            default => [],
+        };
+    }
+
+    /**
      * The wire-level re-authentication enforcement for the state overrides
      * (AGENTS.md: plot-override actions). On refusal, a warning notification
      * and a redirect into the MFA challenge — the exact
@@ -254,18 +294,39 @@ final class GravePlotsTable
      * transaction; an `InvalidArgumentException` there (or any other honest
      * refusal) rolls the write AND its audit row back and surfaces as a
      * danger notification.
+     *
+     * The run path re-reads the record (`fresh()`) BEFORE the write and
+     * refuses when its CURRENT state is not in the target's from-set
+     * (`overrideFromStates`): `->visible()` is not re-checked by
+     * Filament's mount, so a wire call against a stale view — e.g.
+     * `markAvailable` on a plot that has been reserved since the page
+     * rendered — would otherwise free the plot behind its active
+     * reservation (finding I2). The refusal is a danger notification and
+     * no write; the audit reason uses the re-read state so the trail
+     * records the transition that actually happened.
      */
     private static function overrideState(GravePlot $record, string $toState, string $successTitle): void
     {
-        $fromState = $record->plot_state;
+        $fresh = $record->fresh() ?? $record;
+        $fromState = $fresh->plot_state;
+
+        if (! in_array($fromState, self::overrideFromStates($toState), true)) {
+            Notification::make()
+                ->title('Status plot tidak dapat diubah.')
+                ->body('Status plot saat ini tidak mengizinkan tindakan ini; tidak ada perubahan yang ditulis.')
+                ->danger()
+                ->send();
+
+            return;
+        }
 
         try {
             $actor = app(ActorContext::class);
 
             Audit::wrap(
-                fn (): bool => $record->update(['plot_state' => $toState]),
+                fn (): bool => $fresh->update(['plot_state' => $toState]),
                 action: PlotInventoryAuditActions::GRAVE_PLOT_STATE_CHANGED,
-                subject: new AuditSubject('grave_plot', (string) $record->getKey()),
+                subject: new AuditSubject('grave_plot', (string) $fresh->getKey()),
                 outcome: AuditOutcome::Allowed,
                 actorRef: $actor->identityReference,
                 actorRole: GravePlotsResource::auditRoleFor($actor),

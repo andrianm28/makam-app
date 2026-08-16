@@ -89,6 +89,33 @@ final class ReservePlotTest extends TestCase
         $this->assertSame(1, PlotReservation::query()->count());
     }
 
+    /**
+     * Finding I1's regression, in its deterministic (sequential) form:
+     * a second claim by the SAME order on a DIFFERENT plot must return
+     * the incumbent — and, the NEW assertion, the second plot must stay
+     * `available` (before the fix the concurrent variant of this race
+     * committed TWO active holds for one order because the pre-check ran
+     * outside the transaction and the pair locked different plot rows;
+     * the authoritative order-row lock inside the transaction is what
+     * prevents it — a sequential session can only reach the pre-check,
+     * so this test pins the observable invariant).
+     */
+    public function test_second_reserve_for_same_order_on_a_different_plot_returns_incumbent_and_keeps_the_plot_available(): void
+    {
+        $plotA = $this->plot();
+        $plotB = $this->plot();
+        $order = $this->order();
+
+        $first = app(ReservePlot::class)($plotA, $order, 'user:1', 'operator');
+
+        $second = app(ReservePlot::class)($plotB, $order, 'user:1', 'operator');
+
+        $this->assertSame($first->getKey(), $second->getKey());
+        $this->assertSame(PlotState::RESERVED, $plotA->fresh()->plot_state);
+        $this->assertSame(PlotState::AVAILABLE, $plotB->fresh()->plot_state);
+        $this->assertSame(1, PlotReservation::query()->count());
+    }
+
     public function test_occupied_plot_is_refused(): void
     {
         $plot = $this->plot(PlotState::OCCUPIED);

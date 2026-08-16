@@ -18,6 +18,7 @@ use App\Domain\PlotReservation\Actions\ReservePlot;
 use App\Domain\PlotReservation\Exceptions\PlotReservationTransitionException;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PlotReservation\PlotReservationState;
+use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\Outbox\Models\OutboxEvent;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -120,5 +121,67 @@ final class PlotReservationLifecycleTest extends TestCase
         $this->assertSame(PlotState::RESERVED, $plot->fresh()->plot_state);
         $this->expectException(PlotReservationTransitionException::class);
         app(ConfirmPlotReservation::class)($confirmed, 'user:1', 'operator');
+    }
+
+    /**
+     * Finding C1's regression: an admin override ('Tandai Terisi' →
+     * occupied) on a reserved plot must survive release — the chain is
+     * still closed (the `released` row is appended, the order loses its
+     * active hold) but `plot_state` is NOT flipped back to `available`,
+     * and the audit reason records the divergence. Before the fix the
+     * unconditional flip destroyed the override (occupied → available =
+     * a buried plot becomes reservable).
+     */
+    public function test_release_preserves_an_admin_override_on_the_plot(): void
+    {
+        [$plot, $order, $reservation] = $this->held();
+
+        $plot->update(['plot_state' => PlotState::OCCUPIED]);
+
+        $released = app(ReleasePlotReservation::class)($reservation, 'user:1', 'operator');
+
+        $this->assertSame(PlotState::OCCUPIED, $plot->fresh()->plot_state);
+        $this->assertSame(PlotReservationState::RELEASED, $released->state);
+        $this->assertNull(PlotReservation::activeForOrder($order));
+        $this->assertDatabaseHas('audit_events', ['action' => 'PLOT_RESERVATION_RELEASED']);
+
+        $event = $this->stateChangedEvent($released);
+        $this->assertSame($plot->getKey(), $event->payload['plot_id']);
+        $this->assertSame(PlotReservationState::RELEASED, $event->payload['to_state']);
+
+        $audit = AuditEvent::query()
+            ->where('action', 'PLOT_RESERVATION_RELEASED')
+            ->where('subject_id', $released->getKey())
+            ->sole();
+        $this->assertStringContainsString('plot state diverged from reserved (override preserved)', $audit->reason);
+    }
+
+    /**
+     * Finding C1's regression for the expiry hop: a maintenance override
+     * behind a held chain survives expire the same way release preserves
+     * it — chain closed, `plot_state` untouched, divergence noted.
+     */
+    public function test_expire_preserves_an_admin_override_on_the_plot(): void
+    {
+        [$plot, $order, $reservation] = $this->held();
+
+        $plot->update(['plot_state' => PlotState::MAINTENANCE]);
+
+        $expired = app(ExpirePlotReservation::class)($reservation, 'user:1', 'operator');
+
+        $this->assertSame(PlotState::MAINTENANCE, $plot->fresh()->plot_state);
+        $this->assertSame(PlotReservationState::EXPIRED, $expired->state);
+        $this->assertNull(PlotReservation::activeForOrder($order));
+        $this->assertDatabaseHas('audit_events', ['action' => 'PLOT_RESERVATION_EXPIRED']);
+
+        $event = $this->stateChangedEvent($expired);
+        $this->assertSame($plot->getKey(), $event->payload['plot_id']);
+        $this->assertSame(PlotReservationState::EXPIRED, $event->payload['to_state']);
+
+        $audit = AuditEvent::query()
+            ->where('action', 'PLOT_RESERVATION_EXPIRED')
+            ->where('subject_id', $expired->getKey())
+            ->sole();
+        $this->assertStringContainsString('plot state diverged from reserved (override preserved)', $audit->reason);
     }
 }
