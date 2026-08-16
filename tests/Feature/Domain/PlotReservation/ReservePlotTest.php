@@ -46,12 +46,12 @@ final class ReservePlotTest extends TestCase
         ]);
     }
 
-    private function plot(PlotState $state = PlotState::AVAILABLE): GravePlot
+    private function plot(string $state = PlotState::AVAILABLE): GravePlot
     {
         $cemetery = $this->cemetery();
         $block = CemeteryBlock::query()->create(['cemetery_id' => $cemetery->getKey(), 'code' => 'BLOK-A', 'name' => 'Blok A', 'capacity' => 1]);
 
-        return GravePlot::query()->create(['block_id' => $block->getKey(), 'slot' => '001', 'plot_state' => $state->value]);
+        return GravePlot::query()->create(['block_id' => $block->getKey(), 'slot' => '001', 'plot_state' => $state]);
     }
 
     private function order(): Order

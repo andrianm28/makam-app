@@ -125,7 +125,7 @@ final readonly class ReservePlot
                         'reason' => $reason,
                     ]);
 
-                    $current->update(['plot_state' => PlotState::RESERVED->value]);
+                    $current->update(['plot_state' => PlotState::RESERVED]);
 
                     if ($plot !== $current) {
                         $plot->setRawAttributes($current->getAttributes(), true);
