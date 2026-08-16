@@ -9,6 +9,9 @@ use App\Domain\CemeteryCapability\VisitationMode;
 use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\Visitation\Actions\RequestVisitation;
+use App\Domain\Visitation\Exceptions\VisitationBlackoutDateException;
+use App\Domain\Visitation\Exceptions\VisitationCapacityExceededException;
+use App\Domain\Visitation\Exceptions\VisitationClosedDayException;
 use App\Domain\Visitation\Models\CemeteryVisitationPolicy;
 use App\Domain\Visitation\Models\VisitationBlackoutDate;
 use App\Domain\Visitation\Models\VisitationBooking;
@@ -357,21 +360,39 @@ final class VisitationPage extends Component
 
         $actor = app(ActorContextResolver::class)->resolve();
 
-        $booking = app(RequestVisitation::class)(
-            $cemetery,
-            $this->visitDate,
-            (int) $this->visitorCount,
-            trim($this->contactPhone),
-            filled($this->contactEmail) ? $this->contactEmail : null,
-            filled($this->accessibilityNeeds) ? $this->accessibilityNeeds : null,
-            $this->facilityRequests,
-            $idempotencyKey,
-            $actor->identityReference !== null
-                ? (string) $actor->identityReference
-                : 'visit_session:'.session()->getId(),
-            $actor->isAuthenticated() ? 'customer' : 'guest',
-            AuditSource::Api,
-        );
+        // TOCTOU window: the capacity/date checks above are courtesy fast
+        // paths against `bookableDates()` — between that read and the
+        // action's own locked, authoritative checks another request can
+        // fill the date (or the policy can gain a blackout/close that
+        // weekday). The three domain refusals are expected outcomes, not
+        // failures: translate each to the SAME inline field error the
+        // pre-check would have shown, never a 500 on the Livewire error
+        // surface.
+        try {
+            $booking = app(RequestVisitation::class)(
+                $cemetery,
+                $this->visitDate,
+                (int) $this->visitorCount,
+                trim($this->contactPhone),
+                filled($this->contactEmail) ? $this->contactEmail : null,
+                filled($this->accessibilityNeeds) ? $this->accessibilityNeeds : null,
+                $this->facilityRequests,
+                $idempotencyKey,
+                $actor->identityReference !== null
+                    ? (string) $actor->identityReference
+                    : 'visit_session:'.session()->getId(),
+                $actor->isAuthenticated() ? 'customer' : 'guest',
+                AuditSource::Api,
+            );
+        } catch (VisitationCapacityExceededException) {
+            $this->addError('visitorCount', 'Jumlah pengunjung melebihi sisa kuota pada tanggal tersebut.');
+
+            return;
+        } catch (VisitationBlackoutDateException|VisitationClosedDayException) {
+            $this->addError('visitDate', 'Tanggal yang dipilih tidak tersedia. Pilih tanggal lain.');
+
+            return;
+        }
 
         $this->confirmationReference = $booking->reference;
         session([$this->confirmationSessionKey() => $booking->reference]);

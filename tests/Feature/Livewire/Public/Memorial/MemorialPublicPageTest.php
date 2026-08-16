@@ -267,6 +267,7 @@ final class MemorialPublicPageTest extends TestCase
         $this->openMemorialGate();
 
         $profile = $this->profile(MemorialPrivacyMode::FAMILY_ONLY->value);
+        app(PublishMemorial::class)($profile, 'moderator:1', 'moderator');
         $this->approvedContent($profile, 'Catatan keluarga.');
         $token = $this->tokenFor($profile);
 
@@ -289,7 +290,9 @@ final class MemorialPublicPageTest extends TestCase
     {
         $this->openMemorialGate();
 
-        $token = $this->tokenFor($this->profile(MemorialPrivacyMode::PUBLIC->value));
+        $profile = $this->profile(MemorialPrivacyMode::PUBLIC->value);
+        app(PublishMemorial::class)($profile, 'moderator:1', 'moderator');
+        $token = $this->tokenFor($profile);
 
         $component = Livewire::test(MemorialPublicPage::class, ['token' => $token->token])
             ->assertOk()
@@ -442,7 +445,10 @@ final class MemorialPublicPageTest extends TestCase
         $this->assertSame(MemorialPrivacyMode::PUBLIC->value, $profile->fresh()->privacy_mode);
         $this->assertDatabaseHas('audit_events', ['action' => MemorialAuditActions::MEMORIAL_PRIVACY_CHANGED]);
 
-        // The QR resolve now serves the projection to a guest.
+        // The QR resolve now serves the projection to a guest (the
+        // profile is published — an unpublished profile never resolves,
+        // the whole-branch review fix).
+        app(PublishMemorial::class)($profile, 'moderator:1', 'moderator');
         $this->actingAs(User::factory()->create());
         $this->forgetResolvedActorContext();
 
@@ -491,7 +497,11 @@ final class MemorialPublicPageTest extends TestCase
             'moderation_state' => 'pending',
         ]);
 
-        // And the public page must not render it (pending is not approved).
+        // And the public page must not render it (pending is not
+        // approved). The profile is published so the projection actually
+        // resolves — the assertion stays about moderation, not about the
+        // unpublished uniform state.
+        app(PublishMemorial::class)($profile, 'moderator:1', 'moderator');
         $this->actingAs(User::factory()->create());
         $this->forgetResolvedActorContext();
 

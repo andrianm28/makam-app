@@ -14,6 +14,8 @@ use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\MasterData\Contracts\MasterDataAdminAuthorizerContract;
 use App\Platform\IdentityAccess\MasterData\Exceptions\MasterDataNotAuthorisedException;
 use App\Platform\IdentityAccess\Roles\ActorRole;
+use App\Platform\IdentityAccess\Scopes\ScopeAssignmentReader;
+use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -55,6 +57,21 @@ use UnitEnum;
  * delegating to `MasterDataAdminAuthorizerContract`, and one
  * `auditRoleFor()` walking that gate's fixed role precedence for the
  * audit calls.
+ *
+ * ---------------------------------------------------------------------------
+ * Per-cemetery scoping (the visitation pattern)
+ * ---------------------------------------------------------------------------
+ * `getEloquentQuery()` scopes by the actor's active cemetery grants
+ * (`ScopeAssignmentReader::grantedEntityIds` — the same
+ * `scope_assignments` grants `GrantScopeAssignment` writes, and the
+ * exact shape `VisitationBookingsResource` uses): an actor holding any
+ * cemetery grant sees ONLY those cemeteries' policies (a cross-cemetery
+ * id in a URL or wire call resolves nothing, because Filament resolves
+ * the record from this scoped query), and an admin — who holds no
+ * cemetery grants — sees all. The create form's cemetery Select applies
+ * the same grants (only policy-less cemeteries the actor can reach are
+ * offerable — see `CemeteryVisitationPolicyForm`), so a cemetery-granted
+ * operator can never create a policy for another cemetery either.
  */
 final class CemeteryVisitationPolicyResource extends Resource
 {
@@ -98,7 +115,22 @@ final class CemeteryVisitationPolicyResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        return CemeteryVisitationPolicy::query()->with('cemetery');
+        $query = CemeteryVisitationPolicy::query()->with('cemetery');
+
+        $actor = app(ActorContext::class);
+
+        if ($actor->isAuthenticated()) {
+            $grantedCemeteryIds = app(ScopeAssignmentReader::class)->grantedEntityIds(
+                $actor->identityReference,
+                ScopeEntityType::CEMETERY,
+            );
+
+            if ($grantedCemeteryIds !== []) {
+                $query->whereIn('cemetery_id', $grantedCemeteryIds);
+            }
+        }
+
+        return $query;
     }
 
     public static function getPages(): array

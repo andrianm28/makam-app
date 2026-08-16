@@ -9,10 +9,12 @@ use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\Visitation\Actions\RequestVisitation;
 use App\Domain\Visitation\Models\CemeteryVisitationPolicy;
 use App\Domain\Visitation\Models\VisitationBlackoutDate;
 use App\Domain\Visitation\Models\VisitationBooking;
 use App\Domain\Visitation\VisitationAuditActions;
+use App\Domain\Visitation\VisitationPublicQuery;
 use App\Livewire\Public\Visitation\VisitationPage;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -219,6 +221,57 @@ final class VisitationPageTest extends TestCase
         $this->assertSame($firstReference, (string) $second->get('confirmationReference'));
         $this->assertSame(1, VisitationBooking::query()->count());
         $second->assertSee($firstReference);
+    }
+
+    /**
+     * The whole-branch review fix: the capacity pre-check and the
+     * authoritative action are two separate reads, and the date can fill
+     * between them. The domain refusal must surface as the SAME inline
+     * field error the pre-check would have shown — never a crash on the
+     * Livewire error surface. The stale `bookableDates` map simulates the
+     * TOCTOU window: the courtesy check passes, the action refuses.
+     */
+    public function test_a_date_that_fills_between_precheck_and_action_renders_an_inline_error_never_a_crash(): void
+    {
+        $cemetery = $this->publishedCemetery();
+        $this->policy($cemetery);
+        $this->setVisitationMode($cemetery, 'BOOKABLE');
+
+        app(RequestVisitation::class)(
+            $cemetery,
+            '2026-08-17',
+            10,
+            '0812-0000-0000',
+            null,
+            null,
+            [],
+            'fixture-full-'.Str::random(8),
+            'actor:fixture',
+        );
+
+        $this->app->instance(VisitationPublicQuery::class, new class
+        {
+            public function policyFor(Cemetery $cemetery): ?CemeteryVisitationPolicy
+            {
+                return CemeteryVisitationPolicy::query()->where('cemetery_id', $cemetery->getKey())->first();
+            }
+
+            public function bookableDates(Cemetery $cemetery, CarbonImmutable $from, CarbonImmutable $to): array
+            {
+                return ['2026-08-17' => ['capacity' => 10, 'capacity_left' => 10]];
+            }
+        });
+
+        Livewire::test(VisitationPage::class, ['cemeterySlug' => $cemetery->slug])
+            ->set('visitDate', '2026-08-17')
+            ->set('visitorCount', '2')
+            ->set('contactPhone', '0812-3456-7890')
+            ->call('requestVisit')
+            ->assertOk()
+            ->assertHasErrors(['visitorCount' => 'Jumlah pengunjung melebihi sisa kuota pada tanggal tersebut.'])
+            ->assertSet('confirmationReference', null);
+
+        $this->assertSame(1, VisitationBooking::query()->count(), 'The refused submission must not create a second booking.');
     }
 
     public function test_an_unknown_slug_returns_404(): void

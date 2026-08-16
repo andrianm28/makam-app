@@ -24,14 +24,22 @@ use App\Platform\IdentityAccess\ActorContext;
  *    exist.
  * 2. Token lookup (active only — revoked/rotated tokens are
  *    indistinguishable from tokens that never existed).
- * 3. Visibility (`MemorialProfile::isVisibleTo`) with `hasToken: true`
+ * 3. Publication (`published_at !== null`). Unpublish is INSTANT (AC5,
+ *    `UnpublishMemorial`): the moderator's "Kode QR yang sudah dicetak
+ *    berhenti berlaku seketika" holds because a printed token stops
+ *    resolving the moment `published_at` clears — and a profile that
+ *    was never published never resolves, fail-closed. This is the
+ *    public-mode resolution gate; the family surface is consent-gated
+ *    independently and is unaffected.
+ * 4. Visibility (`MemorialProfile::isVisibleTo`) with `hasToken: true`
  *    — every resolver physically holds the token.
- * 4. The allowlist projection (`MemorialPublicProjection`), never the
+ * 5. The allowlist projection (`MemorialPublicProjection`), never the
  *    model.
  *
- * Every denial — closed gate, unknown/revoked token, privacy — throws
- * the SAME `MemorialNotVisibleException` (AC5's negative criterion):
- * nothing in the error surface reveals which case applied.
+ * Every denial — closed gate, unknown/revoked token, unpublished,
+ * privacy — throws the SAME `MemorialNotVisibleException` (AC5's
+ * negative criterion): nothing in the error surface reveals which case
+ * applied.
  */
 final readonly class ResolveMemorialQr
 {
@@ -52,6 +60,15 @@ final readonly class ResolveMemorialQr
         }
 
         $profile = $qr->profile;
+
+        // Publication gate (AC5's immediate unpublish): an unpublished
+        // profile's token is uniformly not-visible, matching the admin
+        // unpublish modal's "Kode QR yang sudah dicetak berhenti berlaku
+        // seketika" — and a never-published profile never resolves at all
+        // (fail-closed).
+        if ($profile->published_at === null) {
+            throw MemorialNotVisibleException::becauseUnpublished();
+        }
 
         // Privacy modes: public → anyone; unlisted → token holders (all
         // resolvers hold the token); family_only → token + an active
