@@ -18,7 +18,8 @@ Durable events use the transactional outbox and envelope in `outbox-event-contra
 | `quote.accepted.v1` | Quotation | Payment gate | Exact version |
 | `payment.received.v1` | PaymentAdapter | Journal/order/invoice | Valid webhook only |
 | `order.status_changed.v1` | OrderWorkflow | Notification/reporting | Forward-only commercial status |
-| `agreement.accepted.v1` | Agreement | PreNeed/operations | Exact version and evidence |
+| `agreement.accepted.v1` | Agreement, PreNeed | PreNeed/operations | Exact version and evidence |
+| `pre_need_case.activated.v1` | PreNeed | Operations | AC8: new At-Need FuneralCase linked; original contract history preserved |
 | `certificate.issued.v1` | AgreementCertificate | Customer/audit | Unique issuer number |
 | `certificate.replaced.v1` | AgreementCertificate | Customer/audit | Preserves previous version |
 | `document.uploaded.v1` | DocumentVault | Scan workflow, audit | Private quarantine reference only |
