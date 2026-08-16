@@ -68,6 +68,12 @@ final class EditSiteSettings extends Page implements HasForms
 
     public function save(): void
     {
+        // Review fix (D2): run the form's per-key rules (email, maxLength)
+        // before touching the DB — a ValidationException surfaces as inline
+        // field errors and nothing is written. `getSchema('form')` is the
+        // non-deprecated accessor for the magic `$this->form` property.
+        $this->getSchema('form')?->validate();
+
         $actor = app(ActorContext::class);
         $actorRef = $actor->identityReference;
         $actorRole = SiteSettingsResource::auditRoleFor($actor);

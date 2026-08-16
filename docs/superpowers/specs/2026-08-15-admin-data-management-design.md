@@ -56,6 +56,13 @@ All resources follow the established Filament 5 pattern (Resource + `Pages/` + `
 - Consumers switched to `SettingsService`: payment guard condition 6 (`config('payment.merchant_ref')` → settings with env fallback), marketplace `badan_usaha_ref`. FAQ claims about service hours read from settings (verify the FAQ content seam; document it if the seam is deferred).
 - Keys (canonical, in code as constants): `service_hours`, `support_phone`, `support_whatsapp`, `support_email`, `marketplace_badan_usaha_ref`, `payment_merchant_ref`, `payment_badan_usaha_ref`.
 
+**Deviation notes (whole-branch review reconciliation, 16 Aug 2026):** the shipping code departs from the §4.1–§4.4 descriptions in four places — all reconciled here, and the shipped behavior (plan + real models) is authoritative:
+
+1. §4.1's table description (package name, cemetery, class label, availability status, sort order; filter by cemetery) describes the cemetery-package model, not the shipped `ServicePackageResource` columns (code, name, active, versions count) — the shipped table matches the plan and the real `ServicePackage` model.
+2. §4.2's "variant name/sku/price/is_active CRUD" describes a product-variant shape that does not exist — the real model has size/material/color/calligraphy axes with create/edit only.
+3. §4.3's "VendorListing CRUD" is list + create/edit (no delete) — deactivation is via `is_active`, and listings are restrict-referenced by orders.
+4. §4.4's "no `created_at`" is not shipped — the migration carries `created_at` (harmless for upserted key/value rows; reconciled here).
+
 ### 4.5 FeatureGateAdmin page
 
 - Table of all `FeatureGate` rows: gate_id, capability, type, owner, state, evidence_reference, effective_at.
