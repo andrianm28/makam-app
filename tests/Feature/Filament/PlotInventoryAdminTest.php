@@ -18,6 +18,7 @@ use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\IdentityAccess\Models\ActorSession;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use Carbon\CarbonImmutable;
+use Filament\Notifications\Notification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use InvalidArgumentException;
 use Livewire\Livewire;
@@ -336,6 +337,48 @@ final class PlotInventoryAdminTest extends TestCase
 
         Livewire::test(ListGravePlots::class)
             ->assertTableActionHidden('markAvailable', $plot);
+    }
+
+    /**
+     * Finding I2's regression: the run path must refuse a state change
+     * whose CURRENT plot state is not in the target's from-set, no matter
+     * how the action's closure is reached. The scenario: the view renders
+     * with the plot under maintenance ('Tandai Tersedia' offered), another
+     * actor reserves the plot before the operator confirms, and the action
+     * closure runs with the stale render-time record ('maintenance') — the
+     * wire path on Filament 5.7.3 re-resolves the record at mount, but the
+     * closure-level re-read is the defense that holds regardless of
+     * framework re-check behaviour. The action is invoked directly (the
+     * table action + its record — the brief's "call the action directly
+     * via the table action" option): `overrideState()` re-reads `fresh()`,
+     * sees `reserved`, and refuses with an honest danger notification —
+     * no state change, no audit row. Before the fix the stale record's
+     * maintenance state satisfied the closure and the plot was freed
+     * behind its active reservation.
+     */
+    public function test_mark_available_refuses_when_the_plot_was_reserved_after_the_view_rendered(): void
+    {
+        $user = $this->admin();
+        [, $block] = $this->cemeteryWithBlock(capacity: 1, user: $user);
+        $plot = $block->plots()->sole();
+        $plot->update(['plot_state' => PlotState::MAINTENANCE]);
+
+        $this->forgetResolvedActorContext();
+
+        $component = Livewire::test(ListGravePlots::class);
+        $action = $component->instance()->getTable()->getAction('markAvailable');
+        $this->assertNotNull($action);
+
+        $plot->update(['plot_state' => PlotState::RESERVED]);
+        $staleRenderRecord = $plot->setRawAttributes(['plot_state' => PlotState::MAINTENANCE]);
+
+        $action->record($staleRenderRecord);
+        $action->call();
+
+        $this->assertSame(PlotState::RESERVED, $plot->fresh()->plot_state);
+        $this->assertDatabaseMissing('audit_events', ['action' => 'GRAVE_PLOT_STATE_CHANGED']);
+
+        Notification::assertNotified('Status plot tidak dapat diubah.');
     }
 
     public function test_state_override_requires_recent_reauthentication(): void

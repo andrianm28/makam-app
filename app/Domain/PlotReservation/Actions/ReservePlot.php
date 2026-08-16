@@ -18,6 +18,7 @@ use App\Platform\Audit\AuditSubject;
 use App\Platform\Correlation\CorrelationContext;
 use App\Platform\Outbox\Outbox;
 use App\Platform\Outbox\OutboxClassification;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Task 3 of `docs/superpowers/plans/2026-08-16-p3-plot-inventory-
@@ -32,37 +33,56 @@ use App\Platform\Outbox\OutboxClassification;
  *    reservation gets its incumbent back. This is a courtesy fast path —
  *    the common duplicate is a double-tap seconds apart, and it costs one
  *    SELECT instead of a lock, an INSERT, a rollback, and a SELECT. It is
- *    NOT the correctness mechanism: the plot-level check below is what
+ *    NOT the correctness mechanism: the order-row lock below is what
  *    actually refuses a second reservation.
- * 2. `Audit::wrap()` (which opens the transaction) runs the mutation:
- *    a. Re-read the plot with `lockForUpdate()` INSIDE the transaction —
- *       not the possibly-stale `$plot` the caller passed in. This plot
- *       row is the serialization anchor of the whole reservation module:
- *       every reservation action (`ReservePlot` and all three lifecycle
- *       actions) locks it FIRST, so two concurrent callers racing the
- *       same plot block on this row; the first to commit wins, and the
- *       second's re-read then sees `plot_state = reserved`.
- *    b. Assert `plot_state === available` — otherwise
+ * 2. `DB::transaction` runs the mutation (the mutation writes its own
+ *    audit row via `Audit::record()` — the documented "same transaction
+ *    some other way" shape; see the class doc block on `Audit`):
+ *    a. LOCK THE ORDER ROW FIRST (`Order::query()->lockForUpdate()`),
+ *       then RE-RUN the incumbent check against the locked order. This
+ *       is the authoritative same-order guard (whole-branch review
+ *       finding I1): the outside-the-transaction pre-check cannot stop
+ *       two CONCURRENT same-order claims on DIFFERENT plots — both pass
+ *       it before either transaction commits, then lock DIFFERENT plot
+ *       rows, and both would commit, leaving one order with two active
+ *       holds. Under the order-row lock the pair serializes: the loser
+ *       blocks on the order row until the winner commits, re-runs the
+ *       incumbent check, and returns the winner's reservation instead of
+ *       inserting — the second plot is never touched. Different orders
+ *       never contend on this row (the lock is per-order), and no other
+ *       reservation action takes an order lock, so the order → plot lock
+ *       order cannot deadlock (no transaction holds a plot lock and then
+ *       waits on an order lock).
+ *    b. Re-read the plot with `lockForUpdate()` — not the possibly-stale
+ *       `$plot` the caller passed in. This plot row is the serialization
+ *       anchor of the whole reservation module: every reservation action
+ *       (`ReservePlot` and all three lifecycle actions) locks it FIRST,
+ *       so two concurrent callers racing the same plot block on this
+ *       row; the first to commit wins, and the second's re-read then
+ *       sees `plot_state = reserved`.
+ *    c. Assert `plot_state === available` — otherwise
  *       `PlotNotAvailableException::forPlot`. Read against the LOCKED
  *       row, so the assert and the subsequent write cannot be separated
  *       by a competing transaction.
- *    c. Insert the `held` row (the append-only event record; `create()`
+ *    d. Insert the `held` row (the append-only event record; `create()`
  *       is deliberately the one unguarded write path — see the model's
  *       class doc block).
- *    d. Flip the plot to `reserved` — the plot's state mirrors the
+ *    e. Flip the plot to `reserved` — the plot's state mirrors the
  *       latest active reservation. The write goes through the LOCKED
  *       re-read (`$current`), not the caller's instance, and the
  *       caller's instance is then synced — the same discipline
  *       `RecordOrderStatusChange::record()` documents at length: the
  *       obvious next line (`if ($plot->plot_state === ...)`) reads stale
  *       state otherwise.
- *    e. Emit `plot_reservation.state_changed.v1` via the transactional
+ *    f. Emit `plot_reservation.state_changed.v1` via the transactional
  *       `Outbox` — the single catalogued plot-reservation event
  *       (`docs/contracts/event-catalog.md`); no new event name is
  *       invented (Global Constraint N-12).
- *    `Audit::wrap()` writes the `PLOT_RESERVATION_CREATED` audit row in
- *    the same transaction, so mutation, audit, and outbox row can never
- *    be committed separately (AC4).
+ *    The mutation, the `PLOT_RESERVATION_CREATED` audit row, and the
+ *    outbox row all commit in the same transaction, so they can never be
+ *    committed separately (AC4). The inner incumbent path writes NOTHING
+ *    (no hold, no audit — an idempotent return is not a creation), so no
+ *    audit row is recorded for it.
  *
  * ---------------------------------------------------------------------------
  * "One active hold per plot" — WHY the plot-row lock + plot_state
@@ -71,7 +91,8 @@ use App\Platform\Outbox\OutboxClassification;
  * The invariant is enforced by (a) the plot-row `lockForUpdate()`
  * serialization above, (b) the plot's `plot_state` aggregate
  * (`available`/`reserved`) asserted under that lock, and (c) order-level
- * idempotency via `activeForOrder()`. There is deliberately NO database
+ * idempotency via `activeForOrder()` — authoritative under the order-row
+ * lock, courtesy outside it. There is deliberately NO database
  * uniqueness backstop: the original design's partial unique index
  * `plot_reservations_active_hold` on `(plot_id) WHERE state = 'held'`
  * was proven — on both PostgreSQL 18 and SQLite — to never release,
@@ -96,14 +117,19 @@ use App\Platform\Outbox\OutboxClassification;
  * returns the incumbent — it never reaches the plot-level assert.
  * `ReservePlotTwoConnectionTest` therefore drives its second session
  * with a DIFFERENT order, so the plot-level assert is what refuses it.
+ * (The same-order-different-plots double claim is prevented by the
+ * order-row lock in step 2a; its regression test is sequential — the
+ * outer pre-check returns the incumbent — because only a true parallel
+ * race, not sequential sessions, can pass the pre-check and reach the
+ * locked re-check.)
  *
  * ---------------------------------------------------------------------------
  * Idempotency is order-scoped, availability is plot-scoped
  * ---------------------------------------------------------------------------
  * One order can hold at most one plot, and one plot can be held by at
  * most one order — each guarantee enforced by a different mechanism
- * (the pre-check for the first, the lock + plot_state assert for the
- * second). The two are deliberately not conflated.
+ * (the order-row lock + pre-check for the first, the lock + plot_state
+ * assert for the second). The two are deliberately not conflated.
  */
 final readonly class ReservePlot
 {
@@ -117,54 +143,79 @@ final readonly class ReservePlot
     ): PlotReservation {
         // Step 1 — outside the transaction: a duplicate attempt by the
         // same order costs one SELECT and returns the incumbent (see the
-        // class doc block).
+        // class doc block). The authoritative re-check happens under the
+        // order-row lock inside the transaction (step 2a).
         $incumbent = PlotReservation::activeForOrder($order);
 
         if ($incumbent instanceof PlotReservation) {
             return $incumbent;
         }
 
-        return Audit::wrap(
-            mutation: function () use ($plot, $order, $actorReference, $reason): PlotReservation {
-                $current = GravePlot::query()->lockForUpdate()->findOrFail($plot->getKey());
+        return DB::transaction(function () use (
+            $plot,
+            $order,
+            $actorReference,
+            $actorRole,
+            $auditSource,
+            $reason,
+        ): PlotReservation {
+            // Step 2a — the ORDER-row lock first, then the authoritative
+            // incumbent re-check (finding I1): serializes two concurrent
+            // same-order claims before either reaches a plot row.
+            $lockedOrder = Order::query()->lockForUpdate()->findOrFail($order->getKey());
 
-                if ($current->plot_state !== PlotState::AVAILABLE) {
-                    throw PlotNotAvailableException::forPlot((string) $current->getKey());
-                }
+            $incumbent = PlotReservation::activeForOrder($lockedOrder);
 
-                $row = PlotReservation::query()->create([
-                    'plot_id' => $current->getKey(),
-                    'order_id' => $order->getKey(),
-                    'state' => PlotReservationState::HELD,
-                    'reserved_by_ref' => (string) $actorReference,
-                    'reserved_at' => now(),
-                    'reason' => $reason,
-                ]);
+            if ($incumbent instanceof PlotReservation) {
+                return $incumbent;
+            }
 
-                $current->update(['plot_state' => PlotState::RESERVED]);
+            // Step 2b — the plot-row lock: the shared mutable anchor.
+            $current = GravePlot::query()->lockForUpdate()->findOrFail($plot->getKey());
 
-                if ($plot !== $current) {
-                    $plot->setRawAttributes($current->getAttributes(), true);
-                }
+            // Step 2c — the availability assert against the locked row.
+            if ($current->plot_state !== PlotState::AVAILABLE) {
+                throw PlotNotAvailableException::forPlot((string) $current->getKey());
+            }
 
-                $this->emitStateChanged($row, (string) $current->getKey());
+            // Step 2d — the append-only `held` row.
+            $row = PlotReservation::query()->create([
+                'plot_id' => $current->getKey(),
+                'order_id' => $order->getKey(),
+                'state' => PlotReservationState::HELD,
+                'reserved_by_ref' => (string) $actorReference,
+                'reserved_at' => now(),
+                'reason' => $reason,
+            ]);
 
-                return $row;
-            },
-            action: PlotReservationAuditActions::PLOT_RESERVATION_CREATED,
-            subject: fn (PlotReservation $row): AuditSubject => new AuditSubject('plot_reservation', $row->getKey()),
-            outcome: AuditOutcome::Allowed,
-            actorRef: $actorReference,
-            actorRole: $actorRole,
-            source: $auditSource,
-            reason: $reason,
-            // `AGENTS.md` §Observability: "Preserve trace/request IDs
-            // across request, outbox, queue, provider, and notification
-            // flows." Same read `RecordOrderStatusChange` makes, so the
-            // audit row and the outbox row (which `Outbox::record()`
-            // reads this context for itself) share the trace id.
-            correlationId: app(CorrelationContext::class)->current()?->value,
-        );
+            // Step 2e — the plot flip through the locked re-read.
+            $current->update(['plot_state' => PlotState::RESERVED]);
+
+            if ($plot !== $current) {
+                $plot->setRawAttributes($current->getAttributes(), true);
+            }
+
+            // Step 2f — the catalogued event, same transaction.
+            $this->emitStateChanged($row, (string) $current->getKey());
+
+            Audit::record(
+                action: PlotReservationAuditActions::PLOT_RESERVATION_CREATED,
+                subject: new AuditSubject('plot_reservation', $row->getKey()),
+                outcome: AuditOutcome::Allowed,
+                actorRef: $actorReference,
+                actorRole: $actorRole,
+                source: $auditSource,
+                reason: $reason,
+                // `AGENTS.md` §Observability: "Preserve trace/request IDs
+                // across request, outbox, queue, provider, and notification
+                // flows." Same read `RecordOrderStatusChange` makes, so the
+                // audit row and the outbox row (which `Outbox::record()`
+                // reads this context for itself) share the trace id.
+                correlationId: app(CorrelationContext::class)->current()?->value,
+            );
+
+            return $row;
+        });
     }
 
     /**
