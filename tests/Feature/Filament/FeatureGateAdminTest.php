@@ -157,6 +157,29 @@ final class FeatureGateAdminTest extends TestCase
         $this->assertSame(0, AuditEvent::query()->where('action', 'GATE_CHANGE')->count());
     }
 
+    public function test_confirm_button_interpolates_gate_evidence_and_reason_into_the_wire_click(): void
+    {
+        $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
+        $this->actingAs($user);
+        $this->seedActorSession($user, CarbonImmutable::now());
+
+        // Regression lock for the live dev bug: the modal confirm used bare
+        // `$activeGateId`/`$activeToState`/`$evidence`/`$reason` in the
+        // wire:click attribute — Blade does not interpolate those, so the
+        // compiled HTML carried the literal PHP variable names, Alpine
+        // raised "ReferenceError: $activeGateId is not defined" when
+        // parsing the action params, and the transition never fired. The
+        // attribute must render fully quoted, server-interpolated values.
+        Livewire::actingAs($user)
+            ->test(FeatureGateAdmin::class)
+            ->call('beginTransition', 'G-DATA-01', 'open')
+            ->set('evidence', 'ref/regression-evidence')
+            ->set('reason', 'Regression fixture reason.')
+            ->assertSeeHtml("transitionGate('G-DATA-01', 'open', 'ref/regression-evidence', 'Regression fixture reason.')")
+            ->assertDontSeeHtml('$activeGateId');
+    }
+
     public function test_a_stale_actor_is_redirected_to_the_challenge_instead_of_transitioning(): void
     {
         $user = User::factory()->create();
