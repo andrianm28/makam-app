@@ -7,6 +7,8 @@ namespace App\Filament\Admin\Resources\BookingOrders\Schemas;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\Models\OrderDocument;
 use App\Domain\OrderWorkflow\OrderStatus;
+use App\Domain\PlotReservation\Models\PlotReservation;
+use App\Domain\PlotReservation\PlotReservationState;
 use App\Domain\Quotation\Models\Quote;
 use App\Filament\Admin\Resources\BookingOrders\BookingOrderStatusBadge;
 use App\Platform\IdentityAccess\Scopes\Models\ScopeAssignment;
@@ -19,8 +21,9 @@ use Illuminate\Support\Collection;
 
 /**
  * Read-only view-page schema for `BookingOrderResource` — the six sections
- * the plan's Task 4 brief names: Ringkasan, Pemesan & Almarhum, Penawaran,
- * Dokumen, Riwayat Status, and Otorisasi Pembayaran.
+ * the plan's Task 4 brief names (Ringkasan, Pemesan & Almarhum, Penawaran,
+ * Dokumen, Riwayat Status, Otorisasi Pembayaran) plus the P3 'Reservasi'
+ * section for the order's active plot reservation (Task 5).
  *
  * ---------------------------------------------------------------------------
  * Relationship-name verification (brief's `orderDocuments` did not exist)
@@ -152,6 +155,66 @@ final class BookingOrderInfolist
                                 TextEntry::make('created_at')->label('Diberikan')->dateTime(),
                             ]),
                     ]),
+
+                Section::make('Reservasi')
+                    ->columns(2)
+                    ->schema([
+                        RepeatableEntry::make('activeReservation')
+                            ->label('Reservasi plot aktif')
+                            ->state(function (Order $record): array {
+                                $reservation = self::activeReservation($record);
+
+                                return $reservation === null ? [] : [$reservation];
+                            })
+                            ->placeholder('Belum ada reservasi aktif.')
+                            ->schema([
+                                TextEntry::make('plot')
+                                    ->label('Plot')
+                                    ->state(fn (PlotReservation $reservation): string => "{$reservation->plot->block->code} — {$reservation->plot->slot}"),
+                                TextEntry::make('cemetery')
+                                    ->label('Lokasi')
+                                    ->state(fn (PlotReservation $reservation): string => (string) ($reservation->plot->block->cemetery?->name ?? '—')),
+                                TextEntry::make('state')
+                                    ->label('Status Reservasi')
+                                    ->badge()
+                                    ->color(fn (string $state): string => self::stateColor($state))
+                                    ->formatStateUsing(fn (string $state): string => self::stateLabel(PlotReservationState::from($state))),
+                                TextEntry::make('reserved_by_ref')->label('Direservasikan oleh'),
+                                TextEntry::make('reserved_at')->label('Direservasikan pada')->dateTime(),
+                                TextEntry::make('confirmed_at')
+                                    ->label('Dikonfirmasi pada')
+                                    ->dateTime()
+                                    ->placeholder('Belum dikonfirmasi.'),
+                            ]),
+                    ]),
             ]);
+    }
+
+    /**
+     * The order's active reservation with its plot → block → cemetery chain
+     * eager-loaded, or null when the order holds none.
+     */
+    private static function activeReservation(Order $record): ?PlotReservation
+    {
+        return PlotReservation::activeForOrder($record)?->loadMissing('plot.block.cemetery');
+    }
+
+    private static function stateColor(string $state): string
+    {
+        return match ($state) {
+            'held' => 'warning',
+            'confirmed' => 'success',
+            default => 'gray',
+        };
+    }
+
+    private static function stateLabel(PlotReservationState $state): string
+    {
+        return match ($state) {
+            PlotReservationState::HELD => 'Ditahan',
+            PlotReservationState::CONFIRMED => 'Dikonfirmasi',
+            PlotReservationState::RELEASED => 'Dilepas',
+            PlotReservationState::EXPIRED => 'Kedaluwarsa',
+        };
     }
 }
