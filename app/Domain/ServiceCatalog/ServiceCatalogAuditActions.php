@@ -38,6 +38,21 @@ namespace App\Domain\ServiceCatalog;
  * a mandatory `reason` (see `Filament\Admin\Resources\
  * ServiceDefinitionResource\Schemas\ServiceDefinitionForm`), and the two
  * page classes pass it through to `Audit::record()`.
+ *
+ * ---------------------------------------------------------------------------
+ * The item-authoring actions and the package-delete action (added 16 Aug
+ * 2026 by the P2 admin-data-management batch, Task 5)
+ * ---------------------------------------------------------------------------
+ * `SERVICE_PACKAGE_ITEM_CREATED`/`SERVICE_PACKAGE_ITEM_UPDATED` are written
+ * by `ServicePackages\RelationManagers\VersionItemsRelationManager` via
+ * `Audit::wrap()` around plain model writes — the draft-only rule is
+ * enforced by `Models\ServicePackageItem::booted()`, so a write against a
+ * published version is refused before any audit row exists. They are not
+ * `SensitiveActions`-listed (an item edit inside an open draft is
+ * correctable by further edits to the same draft). `SERVICE_PACKAGE_DELETED`
+ * is written by the resource's delete path around the package delete — the
+ * same "every delete records an audit row" contract `CemeteryAuditActions`
+ * documents.
  */
 final class ServiceCatalogAuditActions
 {
@@ -52,4 +67,10 @@ final class ServiceCatalogAuditActions
     public const string SERVICE_DEFINITION_CREATED = 'SERVICE_DEFINITION_CREATED';
 
     public const string SERVICE_DEFINITION_UPDATED = 'SERVICE_DEFINITION_UPDATED';
+
+    public const string SERVICE_PACKAGE_ITEM_CREATED = 'SERVICE_PACKAGE_ITEM_CREATED';
+
+    public const string SERVICE_PACKAGE_ITEM_UPDATED = 'SERVICE_PACKAGE_ITEM_UPDATED';
+
+    public const string SERVICE_PACKAGE_DELETED = 'SERVICE_PACKAGE_DELETED';
 }
