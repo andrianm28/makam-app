@@ -30,4 +30,22 @@ final class MemorialAuditActions
     public const string MEMORIAL_QR_ROTATED = 'MEMORIAL_QR_ROTATED';
 
     public const string MEMORIAL_CONTENT_MODERATED = 'MEMORIAL_CONTENT_MODERATED';
+
+    /**
+     * Added with Task 4's family surface — the privacy-mode transition
+     * (`ChangeMemorialPrivacy`) records the previous/new modes in the
+     * audit metadata. Same deliberation as the constants above: not a
+     * financial, gate, credential, or bulk-export act, so no
+     * `SensitiveActions` reason requirement.
+     */
+    public const string MEMORIAL_PRIVACY_CHANGED = 'MEMORIAL_PRIVACY_CHANGED';
+
+    /**
+     * Added with Task 4's moderation queue (`ResolveModerationCase`) — a
+     * case closed as resolved/dismissed must carry its reason in the audit
+     * row; the action enforces the reason requirement itself.
+     */
+    public const string MEMORIAL_MODERATION_CASE_RESOLVED = 'MEMORIAL_MODERATION_CASE_RESOLVED';
+
+    public const string MEMORIAL_MODERATION_CASE_DISMISSED = 'MEMORIAL_MODERATION_CASE_DISMISSED';
 }

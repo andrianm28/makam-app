@@ -18,6 +18,8 @@ use App\Livewire\Public\Marketplace\Checkout;
 use App\Livewire\Public\Marketplace\MarketplaceIndex;
 use App\Livewire\Public\Marketplace\OrderTracking;
 use App\Livewire\Public\Marketplace\ProductDetail;
+use App\Livewire\Public\Memorial\MemorialFamilyPage;
+use App\Livewire\Public\Memorial\MemorialPublicPage;
 use App\Livewire\Public\Renewal\GraveSearch;
 use App\Livewire\Public\Renewal\RenewalConfirmation;
 use App\Livewire\Public\Renewal\RenewalFee;
@@ -221,6 +223,35 @@ Route::get('/perpanjangan/konfirmasi', RenewalConfirmation::class)->name('perpan
 Route::get('/faq', FaqIndex::class)->name('faq.index');
 Route::get('/faq/kategori/{categorySlug}', FaqIndex::class)->name('faq.category');
 Route::get('/faq/{articleSlug}', FaqArticleDetail::class)->name('faq.show');
+
+/*
+|--------------------------------------------------------------------------
+| Memorial — memorial-and-qr requirements AC2-AC5 (P4, lane 4)
+|--------------------------------------------------------------------------
+| The two public memorial routes, per docs/superpowers/specs/
+| 2026-08-16-memorial-qr-visitation-design.md §4.2 and .kiro/specs/
+| memorial-and-qr/design.md's "Sequence — QR resolve, gate-checked".
+|
+| `/m/{token}` — the QR resolve page. The token is opaque and never
+| derived from any identifier (AC4); the route renders `MemorialPublicPage`,
+| whose mount runs `ResolveMemorialQr` in try/catch and renders the SAME
+| uniform "Memorial tidak tersedia" state for gate-closed, unknown/revoked
+| token, and privacy denials (AC5's negative criterion — no enumeration,
+| no existence leak). The gate (`G-MEM-01`) is re-checked on render.
+| Read-only: no POST surface exists on this route.
+|
+| `/memorial/{profileId}` — the family surface: consent-gated
+| (an active `memorial_editors` row for the actor, else the uniform
+| not-visible state — AC1). All writes on this surface are Livewire
+| actions (i.e. POSTs) from `MemorialFamilyPage`: content submit (pending,
+| AC6), media upload (document vault, quarantine first), QR rotation
+| (AC5), and the audited privacy change (AC2).
+|
+| Both routes deliberately resolve data only through the page components'
+| projections/actions — never a model in the route closure.
+*/
+Route::get('/m/{token}', MemorialPublicPage::class)->name('memorial.show');
+Route::get('/memorial/{profileId}', MemorialFamilyPage::class)->name('memorial.family');
 
 /*
 |--------------------------------------------------------------------------
