@@ -121,6 +121,21 @@ final class LaunchCityTest extends TestCase
         Schema::dropIfExists('visitation_date_capacities');
         Schema::dropIfExists('visitation_blackout_dates');
         Schema::dropIfExists('cemetery_visitation_policies');
+        // P3 plot tables (16 Aug 2026) come first — PostgreSQL blocks
+        // `DROP TABLE` of a parent by ANY incoming FK (2BP01):
+        // `plot_reservations` → `grave_plots` → `cemetery_blocks` must
+        // precede their parents below.
+        // P4 memorial tables (16 Aug 2026) come before the plot tables:
+        // every memorial table FK-references `memorial_profiles`, which
+        // FK-references `grave_records` (restrictOnDelete), so all seven
+        // must precede `grave_records` below (2BP01).
+        Schema::dropIfExists('abuse_reports');
+        Schema::dropIfExists('moderation_cases');
+        Schema::dropIfExists('memorial_qr_tokens');
+        Schema::dropIfExists('memorial_media');
+        Schema::dropIfExists('memorial_contents');
+        Schema::dropIfExists('memorial_editors');
+        Schema::dropIfExists('memorial_profiles');
         Schema::dropIfExists('plot_reservations');
         Schema::dropIfExists('grave_plots');
         Schema::dropIfExists('cemetery_blocks');
