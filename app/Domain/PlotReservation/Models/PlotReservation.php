@@ -15,9 +15,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Eloquent model for `plot_reservations` — see
- * `2026_08_16_100020_create_plot_reservations_table.php` for the schema
- * and, in particular, for the `plot_reservations_active_hold` partial
- * unique index that is this lane's load-bearing invariant.
+ * `2026_08_16_100020_create_plot_reservations_table.php` for the schema.
+ * "One active hold per plot" is enforced by the plot-row lock +
+ * `plot_state` aggregate (see `Actions\ReservePlot`'s class doc block);
+ * the former `plot_reservations_active_hold` partial unique index was
+ * removed by `2026_08_16_100030_drop_plot_reservations_active_hold_
+ * index.php` because append-only rows never release it (a plot could
+ * only ever be held once).
  *
  * Rows are written ONLY by
  * `App\Domain\PlotReservation\Actions\ReservePlot` (a `held` row) and
@@ -32,16 +36,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * Same shape as `App\Domain\OrderWorkflow\Models\OrderStatusEvent`:
  * `update()`, `performUpdate()`, and `delete()` throw unconditionally.
  *
- * `create()` is NOT guarded, and that is load-bearing rather than an
- * oversight. `tests/Feature/Domain/PlotReservation/ReservePlotTest.php::
- * test_duplicate_active_hold_is_classified_as_conflict` deliberately
- * inserts a second `held` row directly via
- * `PlotReservation::query()->create([...])` to prove the DATABASE — not
- * the application — rejects it. A model-level refusal on `create()`
- * would make that test pass for the wrong reason and would convert this
- * lane's load-bearing database assertion into an assertion about a PHP
- * `if` (the `OrderStatusEvent` class doc block records the identical
- * reasoning for its lane).
+ * `create()` is NOT guarded, and that is deliberate: the append-only
+ * guarantee's application-layer refusal on updates/deletes stands alone
+ * as the evidence rationale, and lifecycle tests insert chain rows
+ * directly via `PlotReservation::query()->create([...])` to build
+ * fixtures. A model-level refusal on `create()` would make every chain
+ * impossible, not just the guarded cases (the `OrderStatusEvent` class
+ * doc block records the identical reasoning for its lane).
  *
  * These overrides stop `$reservation->update([...])`,
  * `$reservation->state = ...; $reservation->save()` on an
@@ -53,6 +54,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * `DB::table('plot_reservations')->delete()`, raw SQL, or any process
  * with direct database credentials — those never pass through this
  * class. Stated plainly rather than assumed closed.
+ *
+ * @property-read GravePlot|null $plot
+ * @property-read Order|null $order
  */
 final class PlotReservation extends Model
 {
@@ -113,8 +117,7 @@ final class PlotReservation extends Model
 
     /**
      * Always throws — see the class-level doc block. Deleting a `held`
-     * row would also release `plot_reservations_active_hold` for that
-     * plot.
+     * row would erase the evidence of the hold.
      */
     public function delete(): ?bool
     {
@@ -134,34 +137,70 @@ final class PlotReservation extends Model
     /**
      * The incumbent reservation for an order — used by `ReservePlot`'s
      * idempotency pre-check (an order with an active reservation is never
-     * handed a second one). `held` AND `confirmed` count as active: a
-     * confirmed reservation is still the authoritative claim on the plot.
+     * handed a second one) and by the booking-integration UI (Lane 3,
+     * `ViewBookingOrder`) to decide which lifecycle actions are offered.
+     *
+     * The INCUMBENT is the LATEST row of the order's append-only chain:
+     * the chain's head row is returned when its state is `held` or
+     * `confirmed` (both count as active — a confirmed reservation is
+     * still the authoritative claim on the plot), and null otherwise.
+     * The latest-row check is deliberately done AFTER reading the head
+     * row rather than as a query filter: a superseded `held` row remains
+     * in the chain forever (append-only), so filtering by state first
+     * would resurrect exactly the row the chain's later hops superseded
+     * — an order whose reservation was released/expired would still
+     * "have an active reservation".
+     *
+     * `id` is a UUIDv7 (`HasUuids`), so its leading timestamp bits are
+     * millisecond-monotonic: `created_at DESC, id DESC` is insertion
+     * order with no NULL involvement, portable across PostgreSQL and
+     * SQLite, and the same tiebreak the lifecycle actions' own re-read
+     * uses. Do NOT add per-state stamp columns (e.g. `confirmed_at`) as
+     * tiebreakers: PostgreSQL sorts NULLs FIRST under `DESC`, so the
+     * unstamped head of a re-opened chain would sort before the stamped
+     * rows that precede it, and SQLite sorts NULLs LAST, so a stamped
+     * older row would outrank a fresh unstamped head — each engine would
+     * resolve the head differently.
      *
      * @param  Order  $order  read for its key only — never content.
      */
     public static function activeForOrder(Order $order): ?self
     {
-        return self::query()
+        $latest = self::query()
             ->where('order_id', $order->getKey())
-            ->whereIn('state', [PlotReservationState::HELD, PlotReservationState::CONFIRMED])
-            ->latest()
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->first();
+
+        if ($latest === null || ! in_array($latest->state, [PlotReservationState::HELD, PlotReservationState::CONFIRMED], true)) {
+            return null;
+        }
+
+        return $latest;
     }
 
     /**
-     * The incumbent reservation for a plot, with the same active-state
-     * filter as `activeForOrder()` — the plot-level mirror consumed by
-     * `GravePlot`'s delete-blocked guard (Task 1) and the lifecycle
-     * actions (Task 4).
+     * The incumbent reservation for a plot — the plot-level mirror of
+     * `activeForOrder()`. Currently unused by the module (the delete
+     * guard and the lifecycle actions re-read the chain directly); kept
+     * for symmetry with `activeForOrder()` and pinned to the same head-
+     * row semantics so a future consumer cannot reintroduce the
+     * filter-before-order bug.
      *
      * @param  GravePlot  $plot  read for its key only — never content.
      */
     public static function activeForPlot(GravePlot $plot): ?self
     {
-        return self::query()
+        $latest = self::query()
             ->where('plot_id', $plot->getKey())
-            ->whereIn('state', [PlotReservationState::HELD, PlotReservationState::CONFIRMED])
-            ->latest()
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->first();
+
+        if ($latest === null || ! in_array($latest->state, [PlotReservationState::HELD, PlotReservationState::CONFIRMED], true)) {
+            return null;
+        }
+
+        return $latest;
     }
 }

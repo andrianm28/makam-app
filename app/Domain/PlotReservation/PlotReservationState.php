@@ -11,9 +11,11 @@ use InvalidArgumentException;
  * `docs/superpowers/plans/2026-08-16-p3-plot-inventory-reservation.md`.
  *
  * The state machine is append-only: every transition INSERTS a new row
- * (the model's `update()`/`delete()` throw), and `held` is the only
- * state the partial unique index `plot_reservations_active_hold`
- * guards — one active hold per plot.
+ * (the model's `update()`/`delete()` throw). `held` and `confirmed` are
+ * the active states — "one active hold per plot" is enforced by the
+ * plot-row lock + `plot_state` aggregate (`Actions\ReservePlot`'s class
+ * doc block records why the partial unique index was rejected and
+ * removed).
  *
  * Plain string constants class, not a backed enum — the same choice
  * `App\Domain\CemeteryDirectory\CemeteryType` makes for its closed list,

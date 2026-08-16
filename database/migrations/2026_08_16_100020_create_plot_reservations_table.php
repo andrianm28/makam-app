@@ -17,25 +17,26 @@ use Illuminate\Support\Facades\Schema;
  * no second PostgreSQL role to REVOKE UPDATE/DELETE from).
  *
  * ---------------------------------------------------------------------------
- * `plot_reservations_active_hold` — the load-bearing invariant of this
- * whole lane
+ * `plot_reservations_active_hold` — created here, dropped by the fix
+ * round
  * ---------------------------------------------------------------------------
- * "One active hold per plot" as a DATABASE guarantee rather than an
- * application-level convention that a race condition (two concurrent
- * `ReservePlot` calls both passing the in-memory availability assert
- * before either commits) could silently violate. The application's
- * `lockForUpdate()` re-read serializes the common race; this index is
- * the backstop for the one narrow window the lock cannot close alone.
+ * This migration originally created a partial unique index
+ * `plot_reservations_active_hold` on `(plot_id) WHERE state = 'held'`
+ * as the database backstop for "one active hold per plot". The fix
+ * round proved the design broken: `plot_reservations` rows are
+ * append-only and `state` never mutates, so the ORIGINAL `held` row
+ * keeps its index entry forever and a plot that was ever held could
+ * never be held again. The index is dropped by
+ * `2026_08_16_100030_drop_plot_reservations_active_hold_index.php`
+ * (which recreates it in `down()`); the invariant is enforced by the
+ * plot-row `lockForUpdate()` + `plot_state` aggregate — see
+ * `Actions\ReservePlot`'s class doc block and the plan's Global
+ * Constraints.
  *
- * Written with `DB::statement()`, unguarded by driver, because
- * Laravel's schema builder has no portable partial-index API and both
- * PostgreSQL and SQLite accept the identical
- * `CREATE UNIQUE INDEX ... WHERE ...` syntax — the same verified
- * approach as `order_status_events_paid_once`
- * (`2026_08_12_100010_create_order_status_events_table.php`), and this
- * migration runs against the hermetic SQLite suite as well as CI's
- * PostgreSQL 18. A constraint that exists in production but not in the
- * test suite is exactly the failure mode this index exists to prevent.
+ * The `DB::statement()` form is kept here exactly as shipped so the
+ * migration history matches what every environment ran; it is written
+ * unguarded by driver because both PostgreSQL and SQLite accept the
+ * identical `CREATE UNIQUE INDEX ... WHERE ...` syntax.
  */
 return new class extends Migration
 {
@@ -47,8 +48,8 @@ return new class extends Migration
             // `restrictOnDelete()`, NOT `cascadeOnDelete()` — the same
             // choice as `order_status_events.order_id`. A cascade would
             // let one `DELETE FROM grave_plots` destroy the reservation
-            // evidence AND release `plot_reservations_active_hold` for
-            // that plot, silently making a once-held plot holdable again.
+            // evidence for that plot, silently erasing the append-only
+            // trail that "one active hold per plot" audits against.
             // `GravePlot`'s delete-blocked guard (Task 1) refuses at the
             // model layer for the same reason.
             $table->foreignUuid('plot_id')->constrained('grave_plots')->restrictOnDelete();

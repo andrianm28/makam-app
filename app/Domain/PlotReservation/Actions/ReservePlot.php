@@ -8,7 +8,6 @@ use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotInventory\PlotState;
 use App\Domain\PlotReservation\Exceptions\PlotNotAvailableException;
-use App\Domain\PlotReservation\Exceptions\PlotReservationConflictException;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PlotReservation\PlotReservationAuditActions;
 use App\Domain\PlotReservation\PlotReservationState;
@@ -19,7 +18,6 @@ use App\Platform\Audit\AuditSubject;
 use App\Platform\Correlation\CorrelationContext;
 use App\Platform\Outbox\Outbox;
 use App\Platform\Outbox\OutboxClassification;
-use Illuminate\Database\QueryException;
 
 /**
  * Task 3 of `docs/superpowers/plans/2026-08-16-p3-plot-inventory-
@@ -35,18 +33,15 @@ use Illuminate\Database\QueryException;
  *    the common duplicate is a double-tap seconds apart, and it costs one
  *    SELECT instead of a lock, an INSERT, a rollback, and a SELECT. It is
  *    NOT the correctness mechanism: the plot-level check below is what
- *    actually refuses a second reservation, and the partial unique index
- *    backstops it at the database.
+ *    actually refuses a second reservation.
  * 2. `Audit::wrap()` (which opens the transaction) runs the mutation:
  *    a. Re-read the plot with `lockForUpdate()` INSIDE the transaction —
- *       not the possibly-stale `$plot` the caller passed in. Two
- *       concurrent callers racing the same plot each block on this row
- *       lock; the first to commit wins, and the second's re-read then
- *       sees `plot_state = reserved`, so its own availability assert is
- *       what actually rejects it (`plot_reservations_active_hold`, the
- *       partial unique index, is the second, database-level backstop for
- *       the one narrow window in which both callers pass the assert
- *       before either commits).
+ *       not the possibly-stale `$plot` the caller passed in. This plot
+ *       row is the serialization anchor of the whole reservation module:
+ *       every reservation action (`ReservePlot` and all three lifecycle
+ *       actions) locks it FIRST, so two concurrent callers racing the
+ *       same plot block on this row; the first to commit wins, and the
+ *       second's re-read then sees `plot_state = reserved`.
  *    b. Assert `plot_state === available` — otherwise
  *       `PlotNotAvailableException::forPlot`. Read against the LOCKED
  *       row, so the assert and the subsequent write cannot be separated
@@ -68,15 +63,37 @@ use Illuminate\Database\QueryException;
  *    `Audit::wrap()` writes the `PLOT_RESERVATION_CREATED` audit row in
  *    the same transaction, so mutation, audit, and outbox row can never
  *    be committed separately (AC4).
- * 3. A `QueryException` matching the narrow duplicate-hold classifier is
- *    translated into `PlotReservationConflictException`; anything else
- *    propagates untouched.
+ *
+ * ---------------------------------------------------------------------------
+ * "One active hold per plot" — WHY the plot-row lock + plot_state
+ * aggregate, and the rejected partial-index backstop
+ * ---------------------------------------------------------------------------
+ * The invariant is enforced by (a) the plot-row `lockForUpdate()`
+ * serialization above, (b) the plot's `plot_state` aggregate
+ * (`available`/`reserved`) asserted under that lock, and (c) order-level
+ * idempotency via `activeForOrder()`. There is deliberately NO database
+ * uniqueness backstop: the original design's partial unique index
+ * `plot_reservations_active_hold` on `(plot_id) WHERE state = 'held'`
+ * was proven — on both PostgreSQL 18 and SQLite — to never release,
+ * because `plot_reservations` rows are append-only and `state` never
+ * mutates: the ORIGINAL `held` row keeps its index entry forever, so a
+ * plot that was ever held could never be held again, defeating the
+ * documented lifecycle (release/expire → plot `available` →
+ * re-holdable). The index was removed by
+ * `2026_08_16_100030_drop_plot_reservations_active_hold_index.php`; the
+ * rejection is recorded in the design spec §4.2 and the plan's Global
+ * Constraints. The plot-row lock serializes competing reservations on
+ * PostgreSQL, the production engine; on SQLite `lockForUpdate()` is a
+ * no-op (no row-level locking — a concurrent writer either blocks on
+ * SQLite's whole-database write lock or, in a race window, fails with
+ * SQLITE_BUSY, with no post-block re-read), so SQLite is exercised for
+ * the sequential path only — see the PG-only two-connection test.
  *
  * ---------------------------------------------------------------------------
  * `activeForOrder` vs the two-connection race test
  * ---------------------------------------------------------------------------
  * The order-level pre-check means a duplicate attempt by the SAME order
- * returns the incumbent — it never reaches the plot-level backstop.
+ * returns the incumbent — it never reaches the plot-level assert.
  * `ReservePlotTwoConnectionTest` therefore drives its second session
  * with a DIFFERENT order, so the plot-level assert is what refuses it.
  *
@@ -85,8 +102,8 @@ use Illuminate\Database\QueryException;
  * ---------------------------------------------------------------------------
  * One order can hold at most one plot, and one plot can be held by at
  * most one order — each guarantee enforced by a different mechanism
- * (the pre-check for the first, the lock + assert + partial unique index
- * for the second). The two are deliberately not conflated.
+ * (the pre-check for the first, the lock + plot_state assert for the
+ * second). The two are deliberately not conflated.
  */
 final readonly class ReservePlot
 {
@@ -107,59 +124,47 @@ final readonly class ReservePlot
             return $incumbent;
         }
 
-        try {
-            return Audit::wrap(
-                mutation: function () use ($plot, $order, $actorReference, $reason): PlotReservation {
-                    $current = GravePlot::query()->lockForUpdate()->findOrFail($plot->getKey());
+        return Audit::wrap(
+            mutation: function () use ($plot, $order, $actorReference, $reason): PlotReservation {
+                $current = GravePlot::query()->lockForUpdate()->findOrFail($plot->getKey());
 
-                    if ($current->plot_state !== PlotState::AVAILABLE) {
-                        throw PlotNotAvailableException::forPlot((string) $current->getKey());
-                    }
+                if ($current->plot_state !== PlotState::AVAILABLE) {
+                    throw PlotNotAvailableException::forPlot((string) $current->getKey());
+                }
 
-                    $row = PlotReservation::query()->create([
-                        'plot_id' => $current->getKey(),
-                        'order_id' => $order->getKey(),
-                        'state' => PlotReservationState::HELD,
-                        'reserved_by_ref' => (string) $actorReference,
-                        'reserved_at' => now(),
-                        'reason' => $reason,
-                    ]);
+                $row = PlotReservation::query()->create([
+                    'plot_id' => $current->getKey(),
+                    'order_id' => $order->getKey(),
+                    'state' => PlotReservationState::HELD,
+                    'reserved_by_ref' => (string) $actorReference,
+                    'reserved_at' => now(),
+                    'reason' => $reason,
+                ]);
 
-                    $current->update(['plot_state' => PlotState::RESERVED]);
+                $current->update(['plot_state' => PlotState::RESERVED]);
 
-                    if ($plot !== $current) {
-                        $plot->setRawAttributes($current->getAttributes(), true);
-                    }
+                if ($plot !== $current) {
+                    $plot->setRawAttributes($current->getAttributes(), true);
+                }
 
-                    $this->emitStateChanged($row, (string) $current->getKey());
+                $this->emitStateChanged($row, (string) $current->getKey());
 
-                    return $row;
-                },
-                action: PlotReservationAuditActions::PLOT_RESERVATION_CREATED,
-                subject: fn (PlotReservation $row): AuditSubject => new AuditSubject('plot_reservation', $row->getKey()),
-                outcome: AuditOutcome::Allowed,
-                actorRef: $actorReference,
-                actorRole: $actorRole,
-                source: $auditSource,
-                reason: $reason,
-                // `AGENTS.md` §Observability: "Preserve trace/request IDs
-                // across request, outbox, queue, provider, and notification
-                // flows." Same read `RecordOrderStatusChange` makes, so the
-                // audit row and the outbox row (which `Outbox::record()`
-                // reads this context for itself) share the trace id.
-                correlationId: app(CorrelationContext::class)->current()?->value,
-            );
-        } catch (QueryException $exception) {
-            if (! $this->isDuplicateActiveHold($exception)) {
-                throw $exception;
-            }
-
-            // Deliberately not chained as `$previous` — see
-            // `PlotReservationConflictException`'s doc block: the original
-            // message carries the interpolated `reserved_by_ref`/`reason`
-            // bindings.
-            throw PlotReservationConflictException::forPlot((string) $plot->getKey());
-        }
+                return $row;
+            },
+            action: PlotReservationAuditActions::PLOT_RESERVATION_CREATED,
+            subject: fn (PlotReservation $row): AuditSubject => new AuditSubject('plot_reservation', $row->getKey()),
+            outcome: AuditOutcome::Allowed,
+            actorRef: $actorReference,
+            actorRole: $actorRole,
+            source: $auditSource,
+            reason: $reason,
+            // `AGENTS.md` §Observability: "Preserve trace/request IDs
+            // across request, outbox, queue, provider, and notification
+            // flows." Same read `RecordOrderStatusChange` makes, so the
+            // audit row and the outbox row (which `Outbox::record()`
+            // reads this context for itself) share the trace id.
+            correlationId: app(CorrelationContext::class)->current()?->value,
+        );
     }
 
     /**
@@ -189,35 +194,5 @@ final readonly class ReservePlot
             classification: OutboxClassification::Internal,
             idempotencyKey: "plot_reservation:{$row->getKey()}",
         );
-    }
-
-    /**
-     * Same narrow-classifier discipline as
-     * `RecordOrderStatusChange::isDuplicatePaidEvent()` and
-     * `SubmitBookingDraft::isDuplicateIdempotencyKey()`, and narrow for
-     * the reason those document at length: a `QueryException`'s message
-     * echoes the INSERT's own column list, so matching a BARE column name
-     * would classify a NOT NULL or length violation on this table as a
-     * duplicate hold.
-     *
-     * PostgreSQL names the failing index directly
-     * (`plot_reservations_active_hold`) and is matched first. SQLite
-     * reports the QUALIFIED `plot_reservations.plot_id` form, which
-     * appears only in its constraint description and never in the
-     * unqualified INSERT column list, and pairs it with the word
-     * "unique" — so both signals are required on that branch, exactly as
-     * the `order_status_events` precedent verified against this
-     * repository's SQLite test driver.
-     */
-    private function isDuplicateActiveHold(QueryException $exception): bool
-    {
-        $message = strtolower($exception->getMessage());
-
-        if (str_contains($message, 'plot_reservations_active_hold')) {
-            return true;
-        }
-
-        return str_contains($message, 'unique')
-            && str_contains($message, 'plot_reservations.plot_id');
     }
 }

@@ -32,17 +32,16 @@ use Tests\TestCase;
  * `ReservePlot`'s first step is order-level idempotency — an order with
  * an active reservation returns the incumbent — so a second attempt with
  * the SAME order would return the incumbent (outcome `ok`) instead of
- * reaching the plot-level backstop. What this test exists to prove is
+ * reaching the plot-level guard. What this test exists to prove is
  * that the second session's `lockForUpdate()` re-read observes the first
  * session's already-committed `plot_state = reserved` and refuses with
  * `PlotNotAvailableException`, leaving exactly one reservation row.
- * A genuine two-writer race — both sessions passing the `available`
- * assert before either commits, with only
- * `plot_reservations_active_hold` between them — is covered separately
- * by `ReservePlotTest::test_duplicate_active_hold_is_classified_as_
- * conflict` (the direct-insert simulation) and is out of scope on the
- * 2/4 host, exactly as `RecordOrderStatusChangeTwoConnectionTest`'s own
- * doc block records for its lane.
+ * This IS the module's one-active-hold mechanism: the plot-row lock
+ * serializes the race, and the `plot_state` aggregate asserted under
+ * that lock refuses the loser (the `plot_reservations_active_hold`
+ * partial unique index that previously backstopped it was removed —
+ * see `ReservePlot`'s class doc block — because append-only rows never
+ * release it).
  *
  * The trailing `migrate:fresh` is LOAD-BEARING, not a nicety: the two
  * sessions COMMIT real rows, and without the wipe those rows leak into
