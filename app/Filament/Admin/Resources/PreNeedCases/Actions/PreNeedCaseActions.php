@@ -26,6 +26,7 @@ use App\Domain\PreNeed\Exceptions\IllegalPreNeedCaseTransitionException;
 use App\Domain\PreNeed\Exceptions\PreNeedGateClosedException;
 use App\Domain\PreNeed\Models\PreNeedCase;
 use App\Domain\PreNeed\Models\PreNeedPaymentScheduleItem;
+use App\Domain\PreNeed\PreNeedGate;
 use App\Domain\PreNeed\PreNeedInstallmentState;
 use App\Filament\Admin\Resources\PreNeedCases\PreNeedCaseResource;
 use App\Http\Middleware\RequireRecentAuthentication;
@@ -49,6 +50,7 @@ use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * The paid-flow header action factories for `PreNeedCaseResource` — the
@@ -80,6 +82,13 @@ use Illuminate\Database\Eloquent\Collection;
  * catches that ONE exception and surfaces the honest 'Belum dapat
  * diaktifkan' notification; state is only ever changed by the owning domain
  * Actions, never by a factory here.
+ *
+ * `runAcceptAgreement` composes TWO aggregates (Lane 1's `agreements` row
+ * AND the case-level binding), so it asserts the gate HERE FIRST — before
+ * `CreateAgreement`/`AcceptAgreement` run — and then executes the whole
+ * composition in ONE transaction: a closed gate leaves zero rows behind,
+ * and a case-level failure can never orphan an accepted agreement
+ * (whole-branch review fix).
  *
  * ---------------------------------------------------------------------------
  * The AC2 binding: the case's own quote, never a caller-chosen one
@@ -391,25 +400,57 @@ final class PreNeedCaseActions
 
         $actor = app(ActorContext::class);
 
-        // Lane 1's machinery first: a fresh `agreements` version row for
-        // this case, accepted against the case's own bound quote (AC2).
-        try {
-            $created = app(CreateAgreement::class)(
-                AgreementType::PreNeedAgreement,
-                $case,
-                (string) $actor->identityReference,
-                PreNeedCaseResource::auditRoleFor($actor),
-                $displayFields,
-                AuditSource::Panel,
-            );
+        // The G-LEGAL-01 paid-flow gate runs FIRST, before any Lane-1
+        // write: a closed gate audits the single `PRENEED_GATE_DENIED`
+        // row and no `agreements`/outbox row can exist (whole-branch
+        // review finding).
+        if (! self::tryPaidFlowGate(fn () => PreNeedGate::assertOpen(
+            (string) $actor->identityReference,
+            PreNeedCaseResource::auditRoleFor($actor),
+            AuditSource::Panel,
+        ), $case)) {
+            return;
+        }
 
-            app(AcceptAgreement::class)(
-                $created,
-                (string) $actor->identityReference,
-                (string) $case->quote_id,
-                (string) $created->getKey(),
-                AuditSource::Panel,
-            );
+        try {
+            // The whole composition is ONE transaction: Lane 1's row
+            // (create + accept, which emits `agreement.accepted.v1`) and
+            // the case-level binding (AC2) either all land or none do — a
+            // case-level failure can never leave an accepted agreement
+            // behind (whole-branch review finding).
+            DB::transaction(function () use ($case, $actor, $displayFields): void {
+                // Lane 1's machinery first: a fresh `agreements` version
+                // row for this case, accepted against the case's own
+                // bound quote (AC2).
+                $created = app(CreateAgreement::class)(
+                    AgreementType::PreNeedAgreement,
+                    $case,
+                    (string) $actor->identityReference,
+                    PreNeedCaseResource::auditRoleFor($actor),
+                    $displayFields,
+                    AuditSource::Panel,
+                );
+
+                app(AcceptAgreement::class)(
+                    $created,
+                    (string) $actor->identityReference,
+                    (string) $case->quote_id,
+                    (string) $created->getKey(),
+                    AuditSource::Panel,
+                );
+
+                // The case-level acceptance — its own quote id, never a
+                // caller choice (Lane-2 review finding). The domain
+                // action re-asserts the gate inside this transaction.
+                app(AcceptPreNeedAgreement::class)(
+                    $case,
+                    $created->reference,
+                    (string) $actor->identityReference,
+                    PreNeedCaseResource::auditRoleFor($actor),
+                    quoteId: (string) $case->quote_id,
+                    auditSource: AuditSource::Panel,
+                );
+            });
         } catch (\Throwable $exception) {
             Notification::make()
                 ->danger()
@@ -417,20 +458,6 @@ final class PreNeedCaseActions
                 ->body($exception->getMessage())
                 ->send();
 
-            return;
-        }
-
-        // The case-level acceptance — its own quote id, never a caller
-        // choice (Lane-2 review finding).
-        if (! self::tryPaidFlowGate(fn () => app(AcceptPreNeedAgreement::class)(
-            $case,
-            $created->reference,
-            (string) $actor->identityReference,
-            PreNeedCaseResource::auditRoleFor($actor),
-            quoteId: (string) $case->quote_id,
-            agreementVersionId: (string) $created->getKey(),
-            auditSource: AuditSource::Panel,
-        ), $case)) {
             return;
         }
 

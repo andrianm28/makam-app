@@ -42,7 +42,7 @@ final class PreNeedCaseStatusBadge
             PreNeedCaseStatus::INTEREST => 'Minat',
             PreNeedCaseStatus::PROPOSAL => 'Proposal',
             PreNeedCaseStatus::RESERVED => 'Direservasi',
-            PreNeedCaseStatus::QUOTED => 'Dikutip',
+            PreNeedCaseStatus::QUOTED => 'Penawaran Diterbitkan',
             PreNeedCaseStatus::AGREED => 'Disepakati',
             PreNeedCaseStatus::SCHEDULED => 'Terjadwal',
             PreNeedCaseStatus::SETTLED => 'Diselesaikan',

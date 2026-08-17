@@ -13,8 +13,6 @@ use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\AuditSubject;
 use App\Platform\Correlation\CorrelationContext;
-use App\Platform\Outbox\Outbox;
-use App\Platform\Outbox\OutboxClassification;
 use InvalidArgumentException;
 
 /**
@@ -24,27 +22,27 @@ use InvalidArgumentException;
  * versions").
  *
  * ---------------------------------------------------------------------------
- * Lane reconciliation — why this takes a plain agreement reference
+ * One producer for `agreement.accepted.v1` (post-merge reality)
  * ---------------------------------------------------------------------------
  * The plan's signature-pinned shape is
  * `AcceptPreNeedAgreement(PreNeedCase $case, Agreement $agreement, string
  * $actorRef, ...)` calling Lane 1's `AcceptAgreement` (which binds
  * `accepted_by_ref`/`accepted_quote_id`/`accepted_agreement_version_id` on
- * the `agreements` row and emits `agreement.accepted.v1`). Lane 1's
- * `Agreement` class does NOT exist on this branch (parallel lane, not yet
- * merged), and referencing it here is forbidden (a phpstan class-not-found
- * on merge). This lane therefore records the acceptance ON THE CASE — the
- * case is the source of truth until the merge: `agreement_id` (an opaque
- * reference string; the `agreements` table is Lane 1's), `accepted_by_ref`,
- * and `accepted_quote_id` (both columns added by
- * `2026_08_16_120000_create_pre_need_cases_table.php` for exactly this).
+ * the `agreements` row and emits `agreement.accepted.v1`). With both lanes
+ * merged this action takes the plain agreement REFERENCE (the panel
+ * composition hands it the created row's `reference`) and records the
+ * acceptance ON THE CASE — the case is bound to the Lane-1 row:
+ * `agreement_id` (an opaque reference string; the `agreements` table is
+ * Lane 1's), `accepted_by_ref`, and `accepted_quote_id` (both columns
+ * added by `2026_08_16_120000_create_pre_need_cases_table.php` for
+ * exactly this).
  *
- * The `agreement.accepted.v1` outbox event is emitted here with the
- * exact-version payload (agreement reference + quote id + agreement
- * version id) so consumers have the same binding Lane 1's event carries;
- * after the merge the event keeps ONE producer (Lane 1's `AcceptAgreement`
- * on its own rows) while the case-level record and this event remain for
- * the case's own acceptance history. Task 4's resource renders the case's
+ * This action does NOT emit `agreement.accepted.v1`: the catalogued event
+ * has exactly ONE producer — Lane 1's `AcceptAgreement`, which emits it
+ * on the `agreements` row it accepts (the panel composition runs that
+ * producer first; whole-branch review finding). This action records only
+ * the case-level binding; a direct-domain caller that never ran Lane 1's
+ * producer leaves the outbox silent. Task 4's resource renders the case's
  * acceptance.
  *
  * ---------------------------------------------------------------------------
@@ -52,10 +50,8 @@ use InvalidArgumentException;
  * ---------------------------------------------------------------------------
  * Gate first (`PreNeedGate::assertOpen()` — denial audited, then the
  * uniform `PreNeedGateClosedException`). Then, under the case-row lock:
- * the status chain is asserted, the acceptance is bound on the case, the
- * audit row is written, and the outbox event is emitted — all in the same
- * transaction (`Audit::wrap()`; `Outbox::record()` reads the trace
- * context itself).
+ * the status chain is asserted, the acceptance is bound on the case, and
+ * the audit row is written — all in one transaction (`Audit::wrap()`).
  */
 final readonly class AcceptPreNeedAgreement
 {
@@ -65,7 +61,6 @@ final readonly class AcceptPreNeedAgreement
         string $actorRef,
         string $actorRole,
         ?string $quoteId = null,
-        ?string $agreementVersionId = null,
         AuditSource $auditSource = AuditSource::Panel,
     ): PreNeedCase {
         if (trim($agreementId) === '') {
@@ -75,7 +70,7 @@ final readonly class AcceptPreNeedAgreement
         PreNeedGate::assertOpen($actorRef, $actorRole, $auditSource);
 
         return Audit::wrap(
-            mutation: fn (): PreNeedCase => $this->apply($case, $agreementId, $actorRef, $quoteId, $agreementVersionId),
+            mutation: fn (): PreNeedCase => $this->apply($case, $agreementId, $actorRef, $quoteId),
             action: PreNeedAuditActions::PRENEED_AGREEMENT_ACCEPTED,
             subject: new AuditSubject('pre_need_case', $case->getKey()),
             outcome: AuditOutcome::Allowed,
@@ -91,7 +86,6 @@ final readonly class AcceptPreNeedAgreement
         string $agreementId,
         string $actorRef,
         ?string $quoteId,
-        ?string $agreementVersionId,
     ): PreNeedCase {
         $current = PreNeedCase::query()->lockForUpdate()->findOrFail($case->getKey());
 
@@ -104,35 +98,6 @@ final readonly class AcceptPreNeedAgreement
             'accepted_quote_id' => $quoteId,
         ])->save();
 
-        $this->emitAgreementAccepted($current, $quoteId, $agreementVersionId);
-
         return $current;
-    }
-
-    /**
-     * `docs/contracts/event-catalog.md:21` — `agreement.accepted.v1`,
-     * producer now "Agreement, PreNeed". References only, no restricted
-     * data: the agreement reference and the exact quote/agreement versions
-     * (AC2), plus the accepting subject's own reference. The idempotency
-     * key is case-scoped, so one case cannot emit this event twice even on
-     * a redelivered transition.
-     */
-    private function emitAgreementAccepted(PreNeedCase $case, ?string $quoteId, ?string $agreementVersionId): void
-    {
-        Outbox::record(
-            eventName: 'agreement.accepted.v1',
-            eventVersion: 1,
-            aggregateType: 'agreement',
-            aggregateId: (string) $case->agreement_id,
-            data: [
-                'agreement_id' => $case->agreement_id,
-                'quote_id' => $quoteId,
-                'agreement_version_id' => $agreementVersionId,
-                'subject_type' => 'pre_need_case',
-                'subject_id' => (string) $case->getKey(),
-            ],
-            classification: OutboxClassification::Internal,
-            idempotencyKey: "pre_need_agreement_accepted:{$case->getKey()}",
-        );
     }
 }
