@@ -33,6 +33,19 @@
     a future caller omits either.
 
     ---------------------------------------------------------------------------
+    UPDATED 17 Aug 2026 (brand identity adoption, Task 4) — real favicon +
+    footer brand row
+    ---------------------------------------------------------------------------
+    `<head>` now carries `<link rel="icon">` / `<link rel="apple-touch-icon">`
+    pointing at Task 3's committed `public/favicon.ico` and
+    `public/apple-touch-icon.png` (previously this document had no favicon
+    at all). The footer gained a brand row — a linked, inverse-variant
+    `<x-mk.logo>` — as the FIRST child of the footer's inner flex column,
+    above the existing "Tautan footer" nav. This is a pure ADDITION: IA §3
+    item 9's footer content (privacy, terms, contact, inverse surface) is
+    unchanged, just preceded by the brand mark.
+
+    ---------------------------------------------------------------------------
     UPDATED 26 Jul 2026 (Sprint 4 S4-T3 `public-home-and-navigation`) —
     footer upgraded to the inverse-surface treatment IA §3 item 9 and
     design-system.md's primitives table specify for the homepage
@@ -89,6 +102,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ $title ?? 'Makam.co.id' }}</title>
+    <link rel="icon" href="{{ asset('favicon.ico') }}" sizes="any">
+    <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="min-h-screen bg-[var(--mk-surface-page)] text-base text-[var(--mk-text-default)] antialiased">
@@ -100,6 +115,9 @@
 
     <footer class="bg-primary-900 px-4 py-8 text-neutral-0 md:px-6 lg:px-8">
         <div class="mx-auto flex max-w-content flex-col items-center gap-4 text-center">
+            <a href="/" class="inline-flex items-center gap-2" aria-label="makam.co.id — beranda">
+                <x-mk.logo variant="inverse" :size="28" />
+            </a>
             <nav aria-label="Tautan footer" class="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm">
                 <a href="{{ route('legal.privacy') }}" class="underline underline-offset-2 hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2">Kebijakan Privasi</a>
                 <a href="{{ route('legal.terms') }}" class="underline underline-offset-2 hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2">Syarat &amp; Ketentuan</a>
