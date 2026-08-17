@@ -170,13 +170,42 @@ final class BrandAssetBuilderTest extends TestCase
      *     [10 deg, 50 deg] hue / >0.15 saturation inverse-recolour band;
      *   - a cluster of green circles ("leaves", mid) — green (~hue 120 deg)
      *     must NOT be recolour by the inverse mark;
-     *   - an explicit, unambiguous >=8px fully-white horizontal band
-     *     (rows 185-210, 26px) — the mark/wordmark separator;
-     *   - a dark rectangle ("wordmark" text stand-in, rows 220-270) below
-     *     the band, with white margin below it down to the canvas edge
-     *     (this deliberately mirrors the real source's trailing white
-     *     margin below the wordmark, so this fixture exercises the same
-     *     content-bbox-restricted band search the real image needs).
+     *   - an isolated, unambiguous 10px fully-white separator band
+     *     (rows 185-194) with opaque content immediately adjacent on BOTH
+     *     sides (mark content ends at row 184, wordmark content starts at
+     *     row 195 — no gap either side that could merge into the band and
+     *     widen it);
+     *   - a dark rectangle ("wordmark" text stand-in, rows 195-250)
+     *     directly below the band;
+     *   - a trailing blank canvas margin below the wordmark, rows 251-299
+     *     (49px) — deliberately WIDER than the true 10px separator band.
+     *
+     * That last point is what makes this fixture an actual regression test
+     * for BrandAssetBuilder::findSeparatorBand()'s content-bbox restriction
+     * (see that method's docblock), not just a fixture that happens to
+     * produce the right answer either way. An UNRESTRICTED "widest
+     * zero-opaque band inside the bottom 40% of height" search (the
+     * brief's literal wording, searching the full canvas rather than the
+     * artwork's own content bounding box) picks the 49px trailing margin
+     * over the true 10px separator — and since there is no wordmark
+     * content below that margin, the resulting wordmark-region bounding
+     * box is empty and BrandAssetBuilder::build() throws
+     * RuntimeException('no separator band found...') instead of
+     * succeeding. The bbox-restricted search correctly excludes the
+     * trailing margin (it is outside the content bounding box) and finds
+     * the true band, so build() succeeds normally.
+     *
+     * Verified manually against both code paths before committing (PHPUnit
+     * cannot run on this host — Global Constraints): with the restriction
+     * removed, every test using this fixture throws/fails; with it in
+     * place, they pass. See the task-3 report's fix-report addendum for
+     * the exact before/after command output.
+     *
+     * An earlier version of this fixture had the white band immediately
+     * bordered by more untouched (white) background on both sides, which
+     * merged into one wide zero-run that happened to still be the widest
+     * one even without the bbox restriction — so it did not actually
+     * exercise the restriction at all. This version closes that gap.
      */
     private function makeSyntheticLogo(): string
     {
@@ -193,8 +222,7 @@ final class BrandAssetBuilderTest extends TestCase
         $brown = imagecolorallocatealpha($im, 150, 90, 40, 0);
         imagefilledellipse($im, 100, 70, 90, 90, $brown);
 
-        // Green "leaves" cluster, mid — stays clear of y=180+ so it never
-        // reaches the explicit white band drawn below.
+        // Green "leaves" cluster, mid.
         $green = imagecolorallocatealpha($im, 34, 139, 34, 0);
         imagefilledellipse($im, 100, 140, 30, 30, $green);
         imagefilledellipse($im, 75, 150, 30, 30, $green);
@@ -202,16 +230,24 @@ final class BrandAssetBuilderTest extends TestCase
         imagefilledellipse($im, 88, 165, 30, 30, $green);
         imagefilledellipse($im, 112, 165, 30, 30, $green);
 
-        // Explicit, unambiguous white separator band — overwrites anything
-        // that might have bled into rows 185-210.
-        imagefilledrectangle($im, 0, 185, $width - 1, 210, $white);
+        // Explicit "stem" cap: guarantees the mark's opaque content reaches
+        // exactly to row 184, immediately adjacent to the separator band
+        // below (row 185) with no gap — the circles alone bottom out
+        // around row 180 and would otherwise leave a few blank rows that
+        // could merge into the band.
+        imagefilledrectangle($im, 90, 175, 110, 184, $green);
 
-        // Dark "wordmark" text stand-in block, below the band.
+        // The TRUE mark/wordmark separator: isolated, 10px (>= the 8px
+        // fail-closed floor), bordered by opaque content on both sides.
+        imagefilledrectangle($im, 0, 185, $width - 1, 194, $white);
+
+        // Dark "wordmark" text stand-in block, starting immediately after
+        // the band (row 195, no gap).
         $dark = imagecolorallocatealpha($im, 30, 30, 30, 0);
-        imagefilledrectangle($im, 30, 220, 170, 270, $dark);
+        imagefilledrectangle($im, 30, 195, 170, 250, $dark);
 
-        // Rows 271-299 remain white background (trailing margin, mirrors
-        // the real source).
+        // Rows 251-299 (49px) are left as untouched white background — the
+        // trailing canvas margin the discrimination above depends on.
         $path = sys_get_temp_dir().'/brand-src-'.uniqid('', true).'.png';
         imagepng($im, $path);
         imagedestroy($im);
