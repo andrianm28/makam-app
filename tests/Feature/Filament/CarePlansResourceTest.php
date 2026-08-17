@@ -198,7 +198,7 @@ final class CarePlansResourceTest extends TestCase
         $subscription = app(CreateSubscription::class)(
             $plan,
             (string) $grave->getKey(),
-            (string) $user->getKey(),
+            (string) Str::uuid(),
             CarePlanFrequency::Monthly,
             actorReference: (string) $user->getKey(),
             actorRole: 'admin',
@@ -223,7 +223,7 @@ final class CarePlansResourceTest extends TestCase
         $subscription = app(CreateSubscription::class)(
             $plan,
             (string) $grave->getKey(),
-            (string) $user->getKey(),
+            (string) Str::uuid(),
             CarePlanFrequency::Monthly,
             actorReference: (string) $user->getKey(),
             actorRole: 'admin',
@@ -248,7 +248,7 @@ final class CarePlansResourceTest extends TestCase
         $subscription = app(CreateSubscription::class)(
             $plan,
             (string) $grave->getKey(),
-            (string) $user->getKey(),
+            (string) Str::uuid(),
             CarePlanFrequency::Monthly,
             actorReference: (string) $user->getKey(),
             actorRole: 'admin',
@@ -273,7 +273,7 @@ final class CarePlansResourceTest extends TestCase
         $subscription = app(CreateSubscription::class)(
             $plan,
             (string) $grave->getKey(),
-            (string) $user->getKey(),
+            (string) Str::uuid(),
             CarePlanFrequency::Monthly,
             actorReference: (string) $user->getKey(),
             actorRole: 'admin',
@@ -295,7 +295,7 @@ final class CarePlansResourceTest extends TestCase
         $subscription = app(CreateSubscription::class)(
             $plan,
             (string) $grave->getKey(),
-            (string) $user->getKey(),
+            (string) Str::uuid(),
             CarePlanFrequency::Monthly,
             actorReference: (string) $user->getKey(),
             actorRole: 'admin',

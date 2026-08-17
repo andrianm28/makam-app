@@ -57,10 +57,7 @@ final readonly class UploadEvidence
                 ]);
             },
             action: VendorFulfillmentAuditActions::EVIDENCE_UPLOADED,
-            subject: fn (WorkEvidence $ev): AuditSubject => new AuditSubject(
-                'work_evidence',
-                $ev->getKey(),
-            ),
+            subject: new AuditSubject('work_order', $workOrder->getKey()),
             outcome: AuditOutcome::Allowed,
             actorRef: $actorRef,
             actorRole: $actorRole,
