@@ -100,6 +100,12 @@ final class StatusIntent
 
     public const FAMILY_MARKETPLACE_PAYMENT = 'marketplace_payment';
 
+    public const FAMILY_CARE_SUBSCRIPTION = 'care_subscription';
+
+    public const FAMILY_CARE_FULFILLMENT = 'care_fulfillment';
+
+    public const FAMILY_CARE_WORK_ORDER = 'care_work_order';
+
     public const INTENT_NEUTRAL = 'neutral';
 
     public const INTENT_INFO = 'info';
@@ -194,6 +200,41 @@ final class StatusIntent
             'DIBAYAR' => ['intent' => self::INTENT_SUCCESS, 'icon' => 'banknote'],
             'GAGAL' => ['intent' => self::INTENT_DANGER, 'icon' => 'x-circle'],
             'DIKEMBALIKAN' => ['intent' => self::INTENT_NEUTRAL, 'icon' => 'clock-x'],
+        ],
+        // Recurring care subscriptions — design-system.md §3.7
+        // "Care subscription" table (P5b Lane 4). Separate family from
+        // fulfillment because a subscription's lifecycle is independent
+        // of any single cycle's payment or work status.
+        self::FAMILY_CARE_SUBSCRIPTION => [
+            'draft' => ['intent' => self::INTENT_NEUTRAL, 'icon' => 'document-text'],
+            'active' => ['intent' => self::INTENT_SUCCESS, 'icon' => 'check-circle'],
+            'paused' => ['intent' => self::INTENT_PENDING, 'icon' => 'pause-circle'],
+            'ended' => ['intent' => self::INTENT_NEUTRAL, 'icon' => 'stop-circle'],
+            'cancelled' => ['intent' => self::INTENT_NEUTRAL, 'icon' => 'slash'],
+        ],
+        // Care cycle / fulfillment statuses — design-system.md §3.7
+        // "Care fulfillment" table (P5b Lane 4). PAID ≠ COMPLETED:
+        // two separate indicators, never collapsed into one "done" badge.
+        self::FAMILY_CARE_FULFILLMENT => [
+            'SCHEDULED' => ['intent' => self::INTENT_NEUTRAL, 'icon' => 'calendar'],
+            'INVOICED' => ['intent' => self::INTENT_PENDING, 'icon' => 'document-text'],
+            'PAID' => ['intent' => self::INTENT_SUCCESS, 'icon' => 'banknote'],
+            'WORK_SCHEDULED' => ['intent' => self::INTENT_INFO, 'icon' => 'cog'],
+            'COMPLETED' => ['intent' => self::INTENT_SUCCESS, 'icon' => 'check-badge'],
+            'EXPIRED' => ['intent' => self::INTENT_NEUTRAL, 'icon' => 'clock-x'],
+        ],
+        // Care work order statuses — design-system.md §3.7
+        // "Care work order" table (P5b Lane 4). Separate from fulfillment
+        // because a work order's lifecycle is independent of the cycle
+        // payment state.
+        self::FAMILY_CARE_WORK_ORDER => [
+            'PENDING' => ['intent' => self::INTENT_NEUTRAL, 'icon' => 'inbox'],
+            'ASSIGNED' => ['intent' => self::INTENT_INFO, 'icon' => 'user-group'],
+            'IN_PROGRESS' => ['intent' => self::INTENT_PENDING, 'icon' => 'cog'],
+            'COMPLETED' => ['intent' => self::INTENT_SUCCESS, 'icon' => 'check-badge'],
+            'FAILED' => ['intent' => self::INTENT_DANGER, 'icon' => 'x-circle'],
+            'RESCHEDULED' => ['intent' => self::INTENT_PENDING, 'icon' => 'arrow-path'],
+            'CANCELLED' => ['intent' => self::INTENT_NEUTRAL, 'icon' => 'slash'],
         ],
     ];
 

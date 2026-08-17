@@ -257,6 +257,10 @@ final class StatusIntentTest extends TestCase
 
         $this->assertContains(StatusIntent::FAMILY_ORDER_LIFECYCLE, $families);
         $this->assertContains(StatusIntent::FAMILY_VENDOR_PROCESSING, $families);
+        $this->assertContains(StatusIntent::FAMILY_MARKETPLACE_PAYMENT, $families);
+        $this->assertContains(StatusIntent::FAMILY_CARE_SUBSCRIPTION, $families);
+        $this->assertContains(StatusIntent::FAMILY_CARE_FULFILLMENT, $families);
+        $this->assertContains(StatusIntent::FAMILY_CARE_WORK_ORDER, $families);
     }
 
     public function test_known_statuses_for_unregistered_family_is_empty_not_an_error(): void
@@ -274,5 +278,119 @@ final class StatusIntentTest extends TestCase
             ['neutral', 'info', 'pending', 'success', 'danger', 'urgent'],
             StatusIntent::INTENTS
         );
+    }
+
+    // -------------------------------------------------------------------
+    // §3.7 table coverage — care subscription statuses
+    // -------------------------------------------------------------------
+
+    /**
+     * @return array<string, array{0: string, 1: string, 2: string}>
+     */
+    public static function careSubscriptionProvider(): array
+    {
+        return [
+            'draft' => ['draft', StatusIntent::INTENT_NEUTRAL, 'document-text'],
+            'active' => ['active', StatusIntent::INTENT_SUCCESS, 'check-circle'],
+            'paused' => ['paused', StatusIntent::INTENT_PENDING, 'pause-circle'],
+            'ended' => ['ended', StatusIntent::INTENT_NEUTRAL, 'stop-circle'],
+            'cancelled' => ['cancelled', StatusIntent::INTENT_NEUTRAL, 'slash'],
+        ];
+    }
+
+    #[DataProvider('careSubscriptionProvider')]
+    public function test_care_subscription_statuses_resolve_per_design_system_table(
+        string $status,
+        string $expectedIntent,
+        string $expectedIcon
+    ): void {
+        $this->assertSame($expectedIntent, StatusIntent::intent($status, StatusIntent::FAMILY_CARE_SUBSCRIPTION));
+        $this->assertSame($expectedIcon, StatusIntent::icon($status, StatusIntent::FAMILY_CARE_SUBSCRIPTION));
+    }
+
+    // -------------------------------------------------------------------
+    // §3.7 table coverage — care fulfillment (cycle) statuses
+    // -------------------------------------------------------------------
+
+    /**
+     * @return array<string, array{0: string, 1: string, 2: string}>
+     */
+    public static function careFulfillmentProvider(): array
+    {
+        return [
+            'SCHEDULED' => ['SCHEDULED', StatusIntent::INTENT_NEUTRAL, 'calendar'],
+            'INVOICED' => ['INVOICED', StatusIntent::INTENT_PENDING, 'document-text'],
+            'PAID' => ['PAID', StatusIntent::INTENT_SUCCESS, 'banknote'],
+            'WORK_SCHEDULED' => ['WORK_SCHEDULED', StatusIntent::INTENT_INFO, 'cog'],
+            'COMPLETED' => ['COMPLETED', StatusIntent::INTENT_SUCCESS, 'check-badge'],
+            'EXPIRED' => ['EXPIRED', StatusIntent::INTENT_NEUTRAL, 'clock-x'],
+        ];
+    }
+
+    #[DataProvider('careFulfillmentProvider')]
+    public function test_care_fulfillment_statuses_resolve_per_design_system_table(
+        string $status,
+        string $expectedIntent,
+        string $expectedIcon
+    ): void {
+        $this->assertSame($expectedIntent, StatusIntent::intent($status, StatusIntent::FAMILY_CARE_FULFILLMENT));
+        $this->assertSame($expectedIcon, StatusIntent::icon($status, StatusIntent::FAMILY_CARE_FULFILLMENT));
+    }
+
+    // -------------------------------------------------------------------
+    // §3.7 table coverage — care work order statuses
+    // -------------------------------------------------------------------
+
+    /**
+     * @return array<string, array{0: string, 1: string, 2: string}>
+     */
+    public static function careWorkOrderProvider(): array
+    {
+        return [
+            'PENDING' => ['PENDING', StatusIntent::INTENT_NEUTRAL, 'inbox'],
+            'ASSIGNED' => ['ASSIGNED', StatusIntent::INTENT_INFO, 'user-group'],
+            'IN_PROGRESS' => ['IN_PROGRESS', StatusIntent::INTENT_PENDING, 'cog'],
+            'COMPLETED' => ['COMPLETED', StatusIntent::INTENT_SUCCESS, 'check-badge'],
+            'FAILED' => ['FAILED', StatusIntent::INTENT_DANGER, 'x-circle'],
+            'RESCHEDULED' => ['RESCHEDULED', StatusIntent::INTENT_PENDING, 'arrow-path'],
+            'CANCELLED' => ['CANCELLED', StatusIntent::INTENT_NEUTRAL, 'slash'],
+        ];
+    }
+
+    #[DataProvider('careWorkOrderProvider')]
+    public function test_care_work_order_statuses_resolve_per_design_system_table(
+        string $status,
+        string $expectedIntent,
+        string $expectedIcon
+    ): void {
+        $this->assertSame($expectedIntent, StatusIntent::intent($status, StatusIntent::FAMILY_CARE_WORK_ORDER));
+        $this->assertSame($expectedIcon, StatusIntent::icon($status, StatusIntent::FAMILY_CARE_WORK_ORDER));
+    }
+
+    // -------------------------------------------------------------------
+    // Rule: PAID ≠ COMPLETED in care fulfillment
+    // -------------------------------------------------------------------
+
+    public function test_paid_and_completed_in_care_fulfillment_are_both_success_but_distinct_indicators(): void
+    {
+        $this->assertSame(
+            StatusIntent::INTENT_SUCCESS,
+            StatusIntent::intent('PAID', StatusIntent::FAMILY_CARE_FULFILLMENT)
+        );
+        $this->assertSame(
+            StatusIntent::INTENT_SUCCESS,
+            StatusIntent::intent('COMPLETED', StatusIntent::FAMILY_CARE_FULFILLMENT)
+        );
+
+        // Distinct icons and labels — never collapsed into one "done" badge
+        $paidIcon = StatusIntent::icon('PAID', StatusIntent::FAMILY_CARE_FULFILLMENT);
+        $completedIcon = StatusIntent::icon('COMPLETED', StatusIntent::FAMILY_CARE_FULFILLMENT);
+        $this->assertNotSame($paidIcon, $completedIcon, 'PAID and COMPLETED must not share an icon.');
+        $this->assertSame('banknote', $paidIcon);
+        $this->assertSame('check-badge', $completedIcon);
+
+        $paidLabel = StatusIntent::label('PAID', StatusIntent::FAMILY_CARE_FULFILLMENT);
+        $completedLabel = StatusIntent::label('COMPLETED', StatusIntent::FAMILY_CARE_FULFILLMENT);
+        $this->assertNotSame($paidLabel, $completedLabel, 'PAID and COMPLETED must not share a label.');
     }
 }
