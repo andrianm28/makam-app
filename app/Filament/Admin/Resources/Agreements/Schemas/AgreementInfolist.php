@@ -76,7 +76,7 @@ final class AgreementInfolist
                             ->columnSpanFull(),
 
                         TextEntry::make('transferability')
-                            ->label('Kealihan')
+                            ->label('Pengalihan')
                             ->placeholder('—')
                             ->columnSpanFull(),
 

@@ -21,9 +21,11 @@ use Illuminate\Database\Eloquent\Model;
  * design-system task: `intent=info`, "must not claim platform
  * issuance").
  *
- * Lane 1 records these rows via the model (the plan's file list assigns
- * no Action to this table); the surfaced write path lands with Task 2's
- * resources.
+ * Rows are recorded at the DOMAIN level, straight through this model
+ * (the plan's file list assigns no Action to this table; the certificate
+ * test suite drives it directly) — no admin resource surfaces a write
+ * path for this table on this branch. Surfacing external-reference
+ * capture is deferred/recorded, not shipped.
  */
 final class ExternalCertificateReference extends Model
 {

@@ -36,10 +36,13 @@ use App\Filament\Admin\Resources\PreNeedCases\PreNeedCaseResource;
 use App\Models\User;
 use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\FeatureGate\Contracts\GateRegistrySource;
+use App\Platform\FeatureGate\FeatureGateResolver;
 use App\Platform\FeatureGate\GateRegistrySnapshot;
 use App\Platform\FeatureGate\GateState;
+use App\Platform\FeatureGate\Models\FeatureGate;
 use App\Platform\IdentityAccess\Models\ActorSession;
 use App\Platform\IdentityAccess\Roles\ActorRole;
+use App\Platform\Outbox\Models\OutboxEvent;
 use App\Platform\Payment\Models\PaymentIntent;
 use App\Platform\Payment\Models\PaymentSession;
 use App\Platform\Payment\PaymentProviders;
@@ -281,6 +284,53 @@ final class PreNeedCaseResourceTest extends TestCase
         ]);
     }
 
+    public function test_gate_closed_accept_agreement_leaves_zero_agreements_zero_events_and_one_denial(): void
+    {
+        // The production DB-backed source, so the gate can flip mid-request:
+        // setup needs it OPEN (propose + quote are gated actions), the
+        // attempt needs it CLOSED. The in-memory stub cannot change after
+        // the request-scoped resolver first resolves (MemorialQrTest's
+        // gate-flip pattern).
+        FeatureGate::query()->where('gate_id', 'G-LEGAL-01')->update(['state' => 'open']);
+        app(FeatureGateResolver::class)->forget();
+
+        $admin = User::factory()->create();
+        $this->grantRoleTo($admin, ActorRole::ADMIN);
+        $this->actingAs($admin);
+
+        $case = $this->proposalCase();
+        $this->driveQuote($case);
+
+        FeatureGate::query()->where('gate_id', 'G-LEGAL-01')->update(['state' => 'closed']);
+        app(FeatureGateResolver::class)->forget();
+
+        $fields = [
+            'price_guarantee' => 'Harga final saat penetapan makam.',
+            'cancellation_refund' => 'Pengembalian sesuai syarat kontrak.',
+            'transferability' => 'Dapat dialihkan sekali.',
+            'term' => '5 tahun sejak aktivasi.',
+            'included_services' => 'Penggalian, dokumen, pemakaman.',
+            'responsible_entity' => 'Pengelola TPU.',
+        ];
+
+        Livewire::test(ViewPreNeedCase::class, ['record' => $case->getKey()])
+            ->callAction('accept_agreement', data: $fields)
+            ->assertNotified('Belum dapat diaktifkan');
+
+        // The gate-first composition: no Lane-1 write, no case write, no
+        // outbox event — a closed gate cannot create OR accept a legal
+        // binding (whole-branch review finding).
+        $fresh = $case->fresh();
+        $this->assertSame(PreNeedCaseStatus::QUOTED->value, $fresh->status);
+        $this->assertNull($fresh->agreement_id);
+        $this->assertNull($fresh->accepted_by_ref);
+        $this->assertNull($fresh->accepted_quote_id);
+
+        $this->assertSame(0, Agreement::query()->count());
+        $this->assertSame(0, OutboxEvent::query()->where('event_name', 'agreement.accepted.v1')->count());
+        $this->assertSame(1, AuditEvent::query()->where('action', PreNeedAuditActions::PRENEED_GATE_DENIED)->count());
+    }
+
     public function test_schedule_action_creates_the_installments(): void
     {
         $this->bindGateRegistryWith(['G-LEGAL-01' => true]);
@@ -443,7 +493,6 @@ final class PreNeedCaseResourceTest extends TestCase
             'actor:admin-1',
             'admin',
             quoteId: $quote->getKey(),
-            agreementVersionId: 'agmt-resource-1-v1',
         );
 
         return $case->fresh();

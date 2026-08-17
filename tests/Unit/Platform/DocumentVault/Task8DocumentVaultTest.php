@@ -38,12 +38,12 @@ final class Task8DocumentVaultTest extends TestCase
         $this->assertStringContainsString('DELETE FROM document_access_events', $sql);
     }
 
-    public function test_event_catalog_advances_to_v05_with_the_three_document_events(): void
+    public function test_event_catalog_advances_to_v06_with_the_three_document_events(): void
     {
         $catalog = file_get_contents(base_path('docs/contracts/event-catalog.md'));
 
         $this->assertIsString($catalog);
-        $this->assertStringContainsString('# Event Catalog — v0.5', $catalog);
+        $this->assertStringContainsString('# Event Catalog — v0.6', $catalog);
         $this->assertStringContainsString('| `document.uploaded.v1` |', $catalog);
         $this->assertStringContainsString('| `document.accepted.v1` |', $catalog);
         $this->assertStringContainsString('| `document.deleted.v1` |', $catalog);

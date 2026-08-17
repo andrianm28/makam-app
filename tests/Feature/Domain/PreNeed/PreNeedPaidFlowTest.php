@@ -165,8 +165,12 @@ final class PreNeedPaidFlowTest extends TestCase
 
         // -----------------------------------------------------------------
         // 5. Agreement acceptance — the case-level AC2 binding: agreement
-        //    id + the exact quote version + the actor are recorded, and
-        //    `agreement.accepted.v1` carries the exact versions.
+        //    id + the exact quote version + the actor are recorded. The
+        //    `agreement.accepted.v1` event is NOT emitted here: its single
+        //    producer is Lane 1's `AcceptAgreement` on the `agreements`
+        //    row (the panel composition runs that producer first;
+        //    whole-branch review finding) — a direct-domain acceptance
+        //    without a Lane-1 row leaves the outbox silent.
         // -----------------------------------------------------------------
         $accepted = app(AcceptPreNeedAgreement::class)(
             $quoted,
@@ -174,7 +178,6 @@ final class PreNeedPaidFlowTest extends TestCase
             'actor:admin-1',
             'admin',
             quoteId: $quote->getKey(),
-            agreementVersionId: 'agmt-preneed-1-v3',
         );
 
         self::assertSame(PreNeedCaseStatus::AGREED->value, $accepted->status);
@@ -186,16 +189,7 @@ final class PreNeedPaidFlowTest extends TestCase
             'outcome' => 'allowed',
         ]);
 
-        $acceptedEvent = OutboxEvent::query()->where('event_name', 'agreement.accepted.v1')->sole();
-        self::assertSame(1, $acceptedEvent->event_version);
-        self::assertSame(OutboxClassification::Internal->value, $acceptedEvent->classification);
-        self::assertEqualsCanonicalizing([
-            'agreement_id' => 'agmt-preneed-1',
-            'quote_id' => $quote->getKey(),
-            'agreement_version_id' => 'agmt-preneed-1-v3',
-            'subject_type' => 'pre_need_case',
-            'subject_id' => $case->getKey(),
-        ], $acceptedEvent->payload);
+        self::assertSame(0, OutboxEvent::query()->where('event_name', 'agreement.accepted.v1')->count());
 
         // -----------------------------------------------------------------
         // 6. Payment schedule — installments denominated in the bound

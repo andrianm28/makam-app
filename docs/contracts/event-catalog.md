@@ -1,4 +1,4 @@
-# Event Catalog — v0.5
+# Event Catalog — v0.6
 
 Durable events use the transactional outbox and envelope in `outbox-event-contract.md`. All events include `event_id`, `event_version`, `occurred_at`, actor/service identity, `trace_id`, aggregate reference, idempotency key, and data classification. Restricted documents or permanent file URLs are never embedded.
 
@@ -18,7 +18,7 @@ Durable events use the transactional outbox and envelope in `outbox-event-contra
 | `quote.accepted.v1` | Quotation | Payment gate | Exact version |
 | `payment.received.v1` | PaymentAdapter | Journal/order/invoice | Valid webhook only |
 | `order.status_changed.v1` | OrderWorkflow | Notification/reporting | Forward-only commercial status |
-| `agreement.accepted.v1` | Agreement, PreNeed | PreNeed/operations | Exact version and evidence |
+| `agreement.accepted.v1` | Agreement (AcceptAgreement) | PreNeed/operations | Exact version and evidence; emitted once on the `agreements` row — the pre-need case-level acceptance binds the same row without re-emitting |
 | `pre_need_case.activated.v1` | PreNeed | Operations | AC8: new At-Need FuneralCase linked; original contract history preserved |
 | `certificate.issued.v1` | AgreementCertificate | Customer/audit | Unique issuer number |
 | `certificate.replaced.v1` | AgreementCertificate | Customer/audit | Preserves previous version |
@@ -41,6 +41,8 @@ Durable events use the transactional outbox and envelope in `outbox-event-contra
 | `plot_reservation.state_changed.v1` | PlotReservation | Order/case guard, audit | Authoritative hold; append-only, one active hold per plot |
 
 > **Note (16 Aug 2026):** `plot.reservation_acquired.v1` / `plot.reservation_expired.v1` / `plot.reservation_conflict.v1` above are superseded by `plot_reservation.state_changed.v1` — the shipped P3 module emits the underscore event and no producer exists for the dotted names; kept as history, not evidence of an active contract.
+
+> **Note (17 Aug 2026):** v0.6 — P5a whole-branch review: `agreement.accepted.v1` has exactly one producer, Lane 1's `AcceptAgreement`, emitting on the `agreements` row (UUID aggregate id, `{agreement_id, version_number, quote_id, accepted_by_ref}` payload); `AcceptPreNeedAgreement` records the case binding without a second emission.
 
 ## Compatibility
 
