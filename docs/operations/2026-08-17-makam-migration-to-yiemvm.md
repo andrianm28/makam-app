@@ -90,3 +90,12 @@ Move the complete makam non-production environment to yiemvm with zero data loss
 - Production provisioning (gates closed; yiemvm is the nonprod host).
 - CI reconfiguration (GitHub Actions untouched).
 - DNS zone transfer or any Cloudflare change beyond the single A-record flip.
+
+## Addendum (17 Aug 2026, same day) — coming-soon landing page + makam.co.id TLS
+
+Executed after the core cutover, per user request:
+
+- **Landing page (makam.co.id + www):** the nginx site (`makam.co.id.conf`, static root `/var/www/makam.co.id`, HSTS/security headers, static caching) carried from adrivm to yiemvm; the apex + www A records already pointed at yiemvm (Domainesia, user-flipped).
+- **Notify service:** `makam-notify.service` (node `--experimental-sqlite` email subscriber service on 127.0.0.1:3001, proxied by nginx at `/api/notify`) migrated — files (`/opt/makam-notify/server.js`), the subscribers SQLite DB (`/var/lib/makam-notify/subscribers.db` — carried data verified), the systemd unit; Node 22 LTS installed on yiemvm (required for `node:sqlite`; adrivm ran v24).
+- **TLS fix:** the carried Let's Encrypt cert for makam.co.id serves correctly (valid to 8 Oct 2026); certbot renewal on yiemvm was BROKEN ("nginx plugin not installed") — fixed by installing `python3-certbot-nginx`; `certbot renew --dry-run` now succeeds for makam.co.id. The other carried renewal entries (adri.web.id, fund*) are out of scope (their vhosts live on other hosts/accounts).
+- **Verified:** landing 200 over TLS, HTTP→HTTPS 301, HSTS headers, notify POST 200 with the carried subscriber data intact.
