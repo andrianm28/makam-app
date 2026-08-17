@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Vendor\Resources\WorkOrders\Schemas;
 
+use App\Domain\VendorFulfillment\Models\WorkOrderTask;
 use App\Filament\Vendor\Resources\WorkOrders\Tables\WorkOrdersTable;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
@@ -62,16 +63,11 @@ final class WorkOrderInfolist
                             ->label('Item checklist')
                             ->placeholder('Tidak ada checklist')
                             ->columnSpanFull()
-                            ->formatStateUsing(function ($state): string {
-                                if ($state === null || $state->isEmpty()) {
-                                    return '—';
-                                }
+                            ->listWithLineBreaks()
+                            ->formatStateUsing(function (WorkOrderTask $state): string {
+                                $icon = $state->status === 'completed' ? '✓' : '○';
 
-                                return $state->map(function ($task) {
-                                    $icon = $task->status === 'completed' ? '✓' : '○';
-
-                                    return $icon.' '.$task->name;
-                                })->implode("\n");
+                                return $icon.' '.$state->name;
                             }),
                     ]),
             ]);

@@ -200,6 +200,8 @@ final class CarePlansResourceTest extends TestCase
             (string) $grave->getKey(),
             (string) $user->getKey(),
             CarePlanFrequency::Monthly,
+            actorReference: (string) $user->getKey(),
+            actorRole: 'admin',
         );
 
         $this->actingUserWithRole(ActorRole::ADMIN);
@@ -223,6 +225,8 @@ final class CarePlansResourceTest extends TestCase
             (string) $grave->getKey(),
             (string) $user->getKey(),
             CarePlanFrequency::Monthly,
+            actorReference: (string) $user->getKey(),
+            actorRole: 'admin',
         );
 
         // Manually set to active so the action is visible
@@ -246,6 +250,8 @@ final class CarePlansResourceTest extends TestCase
             (string) $grave->getKey(),
             (string) $user->getKey(),
             CarePlanFrequency::Monthly,
+            actorReference: (string) $user->getKey(),
+            actorRole: 'admin',
         );
 
         // Manually set to active so the action is visible
@@ -269,6 +275,8 @@ final class CarePlansResourceTest extends TestCase
             (string) $grave->getKey(),
             (string) $user->getKey(),
             CarePlanFrequency::Monthly,
+            actorReference: (string) $user->getKey(),
+            actorRole: 'admin',
         );
 
         // draft status — action should be hidden
@@ -289,6 +297,8 @@ final class CarePlansResourceTest extends TestCase
             (string) $grave->getKey(),
             (string) $user->getKey(),
             CarePlanFrequency::Monthly,
+            actorReference: (string) $user->getKey(),
+            actorRole: 'admin',
         );
 
         $subscription->update(['status' => 'ended']);

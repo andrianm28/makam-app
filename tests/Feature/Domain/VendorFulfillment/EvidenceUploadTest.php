@@ -74,8 +74,7 @@ final class EvidenceUploadTest extends TestCase
 
     private function promoteDocumentToAccepted(Document $document): Document
     {
-        $document->state = DocumentState::Scanning;
-        $document->save();
+        $document->transitionTo(DocumentState::Scanning);
         $document->promote();
 
         return $document->fresh();
