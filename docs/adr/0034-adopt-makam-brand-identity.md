@@ -206,6 +206,19 @@ planning time:
    PWA manifest exists in this repo to consume them (YAGNI); tracked as an
    OQ-12 follow-up if a manifest is ever added.
 
+### D11 — Final-review fix: spec §4.5's email brand-usage rule was missing (not planning-time)
+
+Unlike D10, this is not a reviewed planning-time deviation — it is a Task 6
+execution gap caught during the whole-branch final review. The spec's §4.5
+Surfaces table required "a new short rule section in design-system.md
+(hosted `/brand/` lockup URL reference only, brown-on-white only, no
+attachments — consistent with AGENTS.md notification rules). No templates
+built." Task 6 synced most of design-system.md to this ADR but never added
+that section. Fixed post-hoc as `design-system.md` §8.6 "Email brand usage":
+hosted `/brand/` lockup URL reference only (no inline/attached logo),
+brown-on-white only (no inverse variant in email), no attachments (per
+`AGENTS.md`'s notification rules) — rule only, no templates exist yet.
+
 ## Consequences
 
 ### Positive

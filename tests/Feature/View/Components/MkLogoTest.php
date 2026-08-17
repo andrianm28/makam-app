@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\View\Components;
 
 use Illuminate\Support\Facades\Blade;
+use Illuminate\View\ViewException;
 use InvalidArgumentException;
 use Tests\TestCase;
 
@@ -49,8 +50,25 @@ final class MkLogoTest extends TestCase
 
     public function test_unknown_variant_throws(): void
     {
-        $this->expectException(InvalidArgumentException::class);
+        // The component's @php block throws InvalidArgumentException, but
+        // Blade::render() evaluates compiled views through
+        // Illuminate\View\Engines\CompilerEngine::get(), whose
+        // handleViewException() unconditionally wraps every throwable that
+        // is not HttpException/HttpResponseException/RecordNotFoundException/
+        // RecordsNotFoundException into a new Illuminate\View\ViewException
+        // (itself an ErrorException) before rethrowing — see
+        // CompilerEngine::handleViewException(). So the exception that
+        // actually propagates out of Blade::render() is ViewException, with
+        // the original InvalidArgumentException preserved as
+        // ViewException::getPrevious().
+        try {
+            Blade::render('<x-mk.logo variant="neon" />');
+            $this->fail('Expected a ViewException wrapping InvalidArgumentException to be thrown.');
+        } catch (ViewException $e) {
+            $previous = $e->getPrevious();
 
-        Blade::render('<x-mk.logo variant="neon" />');
+            $this->assertInstanceOf(InvalidArgumentException::class, $previous);
+            $this->assertSame('x-mk.logo: unknown variant [neon]', $previous->getMessage());
+        }
     }
 }

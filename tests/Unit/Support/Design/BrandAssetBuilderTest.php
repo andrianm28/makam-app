@@ -164,7 +164,6 @@ final class BrandAssetBuilderTest extends TestCase
 
         $out = sys_get_temp_dir().'/brand-'.uniqid('', true);
         $this->tempDirs[] = $out;
-        $this->tempDirs[] = dirname($path); // harmless if not otherwise cleaned
 
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('no separator band found');

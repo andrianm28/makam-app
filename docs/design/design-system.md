@@ -217,7 +217,7 @@ Easing: `--ease-standard` default · `--ease-decelerate` entering · `--ease-acc
 - Show the source and last-updated time on any fee or availability figure (renewal tariff, `G-RATE-01`).
 - Pair every status colour with an icon **and** an Indonesian text label.
 - Keep the customer-service escape hatch visible on every transactional screen — required by `AGENTS.md` and `screen-inventory.md` §D.
-- Use `--mk-surface-warm` (Sandstone 50) for trust/reassurance sections to soften long white pages.
+- Use `--mk-surface-warm` (Earth `primary-50`, ADR-0034 D6 — no longer Leaf) for trust/reassurance sections to soften long white pages.
 
 **DON'T**
 
@@ -225,7 +225,7 @@ Easing: `--ease-standard` default · `--ease-decelerate` entering · `--ease-acc
 - ❌ **No celebration.** No confetti, no checkmark animation, no "Selamat!". Step 9 success is quiet: reference number, status, next action.
 - ❌ **No colour-only status.** Fails WCAG 1.4.1 and fails the 8% of Indonesian men with CVD.
 - ❌ **No green for `primary`** (see §1.2a).
-- ❌ **No Sandstone fills** — surface/accent only (§1.2b).
+- ❌ **No Leaf fills** — surface/accent only (§1.2b).
 - ❌ **No pill buttons, no shadows above `--shadow-xl`, no gradient on any interactive surface.**
 - ❌ **No stock photography of grieving people.** Cemetery, garden, facility, and product photography only.
 - ❌ **No dark mode** until OQ-07 is resolved — it is absent from `screen-inventory.md`, so it has no required states and no test coverage.
@@ -1287,6 +1287,14 @@ Tables\Columns\TextColumn::make('status')
   a[data-signed-url]::after { content: ""; }
 }
 ```
+
+### 8.6 Email brand usage
+
+No email templates exist yet in this repository — this is a rule section for future template work, not a description of anything shipped. When email templates are built, brand usage in email is limited to:
+
+- **Reference the hosted `/brand/` lockup URL, never an inline embed.** Link or `<img src>` the mark/lockup from the deployed `public/brand/` assets (§8, `<x-mk.logo>`, ADR-0034 Task 3/4) — do not attach or inline the logo as a MIME attachment.
+- **Brown-on-white only.** Email always uses the normal (brown-on-white) mark; never the inverse (white-on-brown) variant — email clients handle transparency and dark/inverse backgrounds unreliably, so there is no dark-surface email context to justify it.
+- **No attachments.** Consistent with `AGENTS.md`'s notification rules (email/WhatsApp never carry private attachments) — the brand mark is referenced by URL, not attached, and this applies regardless of the attachment's sensitivity.
 
 ---
 
