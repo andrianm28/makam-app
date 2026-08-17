@@ -104,7 +104,9 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: "8.5"
-          extensions: pdo_pgsql, pgsql, redis, zip, intl, bcmath
+          # gd: brand-asset builder tests (tests/Unit/Support/Design/BrandAssetBuilderTest.php)
+          # require ext-gd, including WebP support, to build/verify raster logo assets.
+          extensions: pdo_pgsql, pgsql, redis, zip, intl, bcmath, gd
           tools: composer:v2
           coverage: none
 
