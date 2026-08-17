@@ -13,6 +13,18 @@
 | FIN-DEC-07 | DP/partial-payment policy for At-Need | Business/finance | DP | TBD |
 | FIN-DEC-08 | Pre-Need reserve/liability model | Legal/finance | Paid Pre-Need | GATED |
 
+### FIN-DEC-09 — Pre-Need per-installment online payment linking — recorded 16 Aug 2026 (P5a Task 4 review)
+
+| ID | Decision | Owner | Gate | Status |
+|---|---|---|---|---|
+| FIN-DEC-09 | Pre-Need per-installment online payment linking | Legal/finance | Per-installment payment link | AWAITING DECISION — fail-closed while open |
+
+The P5a pre-need build (PR #89) ships the installment schedule (`pre_need_payment_schedules` rows via `SchedulePreNeedPayments` — explicit + idempotent, AC6) with a per-installment payment-link action on the admin case resource, and that action is **fail-closed by construction**, recorded here as the Task 4 review's adjudication capture:
+
+1. **The guard's amount invariant forbids per-installment opening.** `GuardPaymentSession` condition 5 requires the requested amount to equal the **quote total**, and `.kiro/specs/platform-payment-adapter/requirements.md` states both `amount == quote total` and "no implicit partial payment or deposit assumption". A per-installment amount (less than the quote total by definition) therefore can never open a `payment_sessions` row — `test_a_per_installment_payment_link_never_opens_a_session_for_an_installment_amount` pins exactly that (no session row, the installment untouched, the guard's denial intent surfaced honestly).
+2. **MVP settlement is the manual-verification path.** Settlement runs through the shared money path's manual fallback: the pre-need order is walked to DIBAYAR via `MarkOrderPaid` (manual payment verification, finance + re-authentication), then `SettlePreNeed` records the settled state with `settled_paid_source_ref`. No online settlement is claimed.
+3. **Per-installment online linking awaits this decision.** Whether an installment may open its own online session (a partial payment against an accepted quote — a change to the guard's condition 5 and the kiro no-partial-payment rule) is a financial/legal decision for the owners above, not something the P5a build was allowed to guess. Until FIN-DEC-09 is granted, per-installment linking stays fail-closed and settlement stays manual-verification.
+
 ## Required shared-service interfaces
 
 ```text

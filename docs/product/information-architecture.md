@@ -18,6 +18,8 @@
 │   ├── /cari
 │   ├── /permohonan/{renewalReference}
 │   └── /konfirmasi/{renewalReference}
+├── /preneed
+├── /sertifikat/{subjectType}/{subjectId}
 ├── /faq
 │   ├── /kategori/{categorySlug}
 │   └── /{articleSlug}
@@ -32,6 +34,8 @@
 │   └── /dokumen
 └── /bantuan
 ```
+
+`/preneed` dan `/sertifikat/{subjectType}/{subjectId}` (ditambahkan 16 Agu 2026, P5a — `docs/superpowers/specs/2026-08-16-p5a-certificates-preneed-design.md`; dirujuk oleh komentar rute di `routes/web.php`). `/preneed` adalah permukaan Pra-Pesan publik: registrasi minat + permintaan konsultasi, **tidak pernah di-gate** oleh `G-LEGAL-01` — saat gate tertutup halaman merender banner info `PreNeedMode::InterestOnly` yang tidak bisa ditutup ("registers interest; no payment created"), dan alur minat/konsultasi tetap berjalan. `/sertifikat/{subjectType}/{subjectId}` adalah tampilan status sertifikat pelanggan (AC6, state-only): `{subjectType}` adalah nama kelas penuh subjek yang di-URL-encode (konvensi yang sama dengan kolom `certificates.subject_type`), diselesaikan terhadap allowlist tertutup — tipe tak dikenal dan id tak dikenal 404 yang tidak bisa dibedakan (tanpa enumerasi); referensi vault dokumen dan nomor dokumen tidak pernah meninggalkan server.
 
 `/pembayaran/kembali` dan `/pembayaran/batal` (ditambahkan 10 Agu 2026, `platform-payment-adapter` AC4) adalah tujuan redirect BROWSER dari penyedia pembayaran — `success_return_url`/`cancel_return_url` pada ADR-0033. Keduanya hanya merender halaman: tidak ada transisi status, tidak ada jurnal, tidak ada klaim "sudah dibayar". Callback penyedia yang sesungguhnya adalah `POST /api/payments/webhook/{merchant}` (`docs/contracts/payment-webhook.md`), bukan kedua rute ini. Lihat `AGENTS.md` §Domain and financial invariants: "Never mark paid from browser return URL."
 
