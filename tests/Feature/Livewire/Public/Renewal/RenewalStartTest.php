@@ -332,11 +332,14 @@ final class RenewalStartTest extends TestCase
         // and `cemetery_blocks` FK-references `cemeteries` — PostgreSQL
         // blocks `DROP TABLE` of each parent by ANY incoming FK (2BP01).
         // P5a pre-need tables (16 Aug 2026) come first of all:
+        // `pre_need_consultation_requests` FK-references `pre_need_interests`
+        // (nullable, nullOnDelete), so it must precede that table below;
         // `pre_need_payment_schedules` FK-references `pre_need_cases`
         // (restrictOnDelete), and `pre_need_cases` FK-references
         // `quotes`/`plot_reservations`/`funeral_cases`/
         // `cemetery_packages`/`cemeteries`, so both must precede their
         // parents below (2BP01).
+        Schema::dropIfExists('pre_need_consultation_requests');
         Schema::dropIfExists('pre_need_payment_schedules');
         Schema::dropIfExists('pre_need_cases');
         Schema::dropIfExists('visitation_bookings');
