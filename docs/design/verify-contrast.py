@@ -83,7 +83,7 @@ PAIRS = [
     ("text-muted on surface-raised", "color-neutral-600", WHITE, NEED_TEXT),
     ("text-placeholder on surface-raised", "color-neutral-500", WHITE, NEED_TEXT),
     ("text-default on surface-page", "color-neutral-700", "color-neutral-50", NEED_TEXT),
-    ("text-default on surface-warm", "color-neutral-700", "color-secondary-50", NEED_TEXT),
+    ("text-default on surface-warm", "color-neutral-700", "color-primary-50", NEED_TEXT),
     ("text-strong on secondary-100", "color-neutral-900", "color-secondary-100", NEED_TEXT),
     ("text-disabled on surface-disabled", "color-neutral-500", "color-neutral-100", NEED_NONTEXT),
     # Solid button fills — white label on 600, and hover 700
@@ -115,7 +115,7 @@ PAIRS = [
     # Non-text: interactive control boundaries must hold on all three surfaces
     ("border-interactive on surface-raised", "color-neutral-450", WHITE, NEED_NONTEXT),
     ("border-interactive on surface-page", "color-neutral-450", "color-neutral-50", NEED_NONTEXT),
-    ("border-interactive on surface-warm", "color-neutral-450", "color-secondary-50", NEED_NONTEXT),
+    ("border-interactive on surface-warm", "color-neutral-450", "color-primary-50", NEED_NONTEXT),
     ("focus ring on surface-raised", "color-primary-600", WHITE, NEED_NONTEXT),
     ("focus ring on surface-page", "color-primary-600", "color-neutral-50", NEED_NONTEXT),
     ("focus ring inverse on primary-600", "color-primary-300", "color-primary-600", NEED_NONTEXT),
@@ -136,10 +136,13 @@ PAIRS = [
 HUE_MIN_SEPARATION = 30.0
 HUE_FAMILIES = ["primary", "success", "info", "danger"]
 
-# Documented, accepted exception: `secondary` (hue ~32) sits close to `warning`
-# (hue ~39). Mitigated by a usage constraint, not by hue — secondary is never a
-# filled status chip. See tokens.css §1.2 and design-system.md §2.2.
-HUE_EXCEPTIONS = {("secondary", "warning")}
+# The Sandstone/warning hue exception retired with Sandstone (ADR-0034):
+# `secondary` is now "Leaf" (hue ~123°). Leaf is caged — never a fill, badge,
+# button, or status chip (see tokens.css §1.2 and design-system.md §2.2) — so
+# it needs no hue exception even though it now sits closer to `success` (146°)
+# than the old Sandstone ever sat to `warning`. The ≥30° rule stands unchanged
+# for the actual status families: primary/success/info/danger.
+HUE_EXCEPTIONS: set[tuple[str, str]] = set()
 
 
 def resolve(tokens: dict, ref: str) -> str:
