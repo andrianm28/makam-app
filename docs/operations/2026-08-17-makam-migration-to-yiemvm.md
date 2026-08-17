@@ -99,3 +99,33 @@ Executed after the core cutover, per user request:
 - **Notify service:** `makam-notify.service` (node `--experimental-sqlite` email subscriber service on 127.0.0.1:3001, proxied by nginx at `/api/notify`) migrated — files (`/opt/makam-notify/server.js`), the subscribers SQLite DB (`/var/lib/makam-notify/subscribers.db` — carried data verified), the systemd unit; Node 22 LTS installed on yiemvm (required for `node:sqlite`; adrivm ran v24).
 - **TLS fix:** the carried Let's Encrypt cert for makam.co.id serves correctly (valid to 8 Oct 2026); certbot renewal on yiemvm was BROKEN ("nginx plugin not installed") — fixed by installing `python3-certbot-nginx`; `certbot renew --dry-run` now succeeds for makam.co.id. The other carried renewal entries (adri.web.id, fund*) are out of scope (their vhosts live on other hosts/accounts).
 - **Verified:** landing 200 over TLS, HTTP→HTTPS 301, HSTS headers, notify POST 200 with the carried subscriber data intact.
+# HANDOFF STATUS — 17 Aug 2026
+
+**Read this first on resume. This file is the resumption anchor; the repo + ledgers below are on disk and authoritative. Nothing here exists only in a conversation.**
+
+## 1. Migration adrivm → yiemvm — COMPLETE
+
+Governing plan: `docs/operations/2026-08-17-makam-migration-to-yiemvm.md` (+ addenda). All verified:
+
+- Stack (dev + stg) on **yiemvm** (`103.92.214.243`, Ubuntu 24.04.4, 8 vCPU/31 GB/93 GB free): Docker 29.1.3 + Compose 2.40.3, images, PostgreSQL (row counts matched 21/75/2/1), secrets (999:999), APP_KEY (MFA decrypts + browser login verified), nginx TLS front (carried Let's Encrypt; certbot renewal dry-run OK for makam.co.id), ufw 80/443/22.
+- Landing page (makam.co.id + www) + `/api/notify` (node+SQLite subscriber service; carried DB data intact) — 200 over TLS.
+- Repo at **`/home/ubuntu/makam-app` on yiemvm** @ `a193ada` (docs/design-system-and-planning) — clone from the bundle + all 33 worktrees re-registered + `.superpowers/` ledgers carried.
+- Credentials: `gh` (HTTPS), docker ghcr, `~/.secrets/cloudflare` (AccountID/APIToken — **valid only for the `adri.web.id` zone, NOT makam.co.id**; makam.co.id DNS lives at **Domainesia**), `~/.cloudflare`, wrangler config, kiro state (excluded), the SSH key.
+- Agent envs: `~/.config/opencode` + `~/.local/share/opencode` (auth + state DB) + `~/.claude` (credentials, skills, agents, plans, projects) + `~/.claude.json` — all on yiemvm.
+- **Rollback standby:** adrivm still running (direct-IP 200); the Domainesia A records are the rollback lever. Decommission after 7 green days (plan Phase 6) — adrivm's compose stack must be stopped via `docker compose down` (keep the data volume) and the `makam-l6-verify-pg` leftover was already removed.
+- **Known post-migration notes:** the opencode/claude daemons were NOT carried (regenerate on yiemvm); the carried Cloudflare token is invalid for makam.co.id (see above); adri.web.id + fund* certbot renewal entries on yiemvm are out of scope (their vhosts live elsewhere).
+
+## 2. Program state — phases P0–P5a SHIPPED
+
+Trunk `docs/design-system-and-planning` carries: P0 (payment chain), P1 (admin orders), P2 (data management), P3 (plots+reservation), P4 (memorial+QR+visitation), P5a (certificates+pre-need). Each phase's spec/plan/ledger committed under `docs/superpowers/` + `.superpowers/sdd/` (carried). Gates green (CI incl. PG18), UAT verified.
+
+**Next phase: P5b — care subscriptions + vendor fulfillment** (roadmap: kiro `recurring-care-subscriptions` + `grave-care-fulfillment`, 8 ACs each). Decomposition approved: P5b = admin-managed care + customer status view + vendor-panel fulfillment + admin work-order management; no public care purchase. Follow the established rhythm: spec → plan → staged lanes → deploy → UAT → whole-branch review.
+
+**Open items (parked/recorded):** FIN-DEC-09 (per-installment pre-need payment links fail-closed; manual-verification settlement is the MVP — `docs/domain/financial-ledger-and-settlement.md`); the per-phase deferred-minor parking lots live in each phase's ledger.
+
+## 3. Resume instructions
+
+1. Work ON yiemvm (the repo is there; adrivm is standby).
+2. Read this section + the migration plan doc, then the P5b-relevant kiro specs (`/home/ubuntu/makam-app/.kiro/specs/recurring-care-subscriptions/` + `grave-care-fulfillment/`).
+3. Run the standard rhythm (brainstorming → spec at `docs/superpowers/specs/` → plan at `docs/superpowers/plans/` → staged lanes → PRs → deploy via the compose at `/opt/makam/compose`).
+4. Environment facts: dev creds (admin user 2, `UatDevPass#2026`, MFA recovery codes issued on yiemvm); compose project `makam-nonprod`, dev-web on 127.0.0.1:8081 + nginx 443; deploy = pull the new ghcr digest into `/opt/makam/compose/compose.yml` + `docker compose up -d dev-web` + `migrate --force`.
