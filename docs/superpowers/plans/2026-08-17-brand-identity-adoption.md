@@ -1,5 +1,36 @@
 # Brand Identity Adoption Implementation Plan
 
+## HANDOFF STATUS — 17 Aug 2026
+
+**Stage: PLANNING COMPLETE — execution NOT started.** Paused by user choice ("handoff" at the execution-mode question), not by an error. Nothing is in flight: no worktree exists, no subagents were ever dispatched, no code or token file has been modified for this work.
+
+**Durable artifacts (committed to `docs/design-system-and-planning`):**
+- Spec: `docs/superpowers/specs/2026-08-17-brand-identity-design.md` — commit `00cd3a6` (written user review passed: "reviewed, proceed").
+- This plan — commit `8696671` (+ the handoff-section amendment commit on top).
+
+**Blocking input owed by the stakeholder:** the logo source PNG at `docs/design/brand/source/logo.png` (transparent background preferred; white-background render acceptable — the pipeline white-keys it and stays PROVISIONAL under OQ-12). Task 1 can start without it (documented candidate-value fallback); **Task 3 hard-blocks** until the file exists.
+
+**Pending decision on resume:** execution mode — subagent-driven (recommended) vs inline. The user has NOT chosen; "handoff" answered instead.
+
+**Locked decisions — do NOT re-litigate on resume** (full rationale in the spec and ADR-0034's Task-1 brief):
+1. Full palette rebase: Earth brown primary, Petrol retired (resolves OQ-01, reverses design-system §1.2a); resolves OQ-02 (official identity adopted).
+2. Brand values derived from the render, ALL flagged PROVISIONAL (new OQ-12 tracks official hexes + vector source).
+3. Poppins 600 = `--font-display` (h1/h2, hero, wordmark) via `@fontsource/poppins`; Inter stays body/UI/h3/h4; new `--font-document` keeps Source Serif 4 for documents; Filament stays all-Inter.
+4. Raster assets, not SVG — ext-gd pipeline (`BrandAssetBuilder` + artisan wrapper + plain-CLI driver; neither sharp nor Pillow exists on the tooling path; GD incl. WebP verified present).
+5. Leaf green = `secondary-*` under the existing restricted-usage cage, re-justified against success proximity; `--mk-surface-warm` re-points to `primary-50`.
+6. Danger hue tuned −11° (≈352°) to restore the verifier's ≥30° primary/danger separation — fix the token, never the assertion (§9.4).
+7. Planning-time deviations from spec (recorded in Global Constraints): no print.css/document views exist → token + doc annotation only; fontsource instead of hand-written `@font-face`; `icon-192/512` dropped (no PWA manifest); favicon.ico via embedded PNG-in-ICO writer.
+
+**Resume instructions (exact):**
+1. Read this plan's Global Constraints, then the spec — both are already committed; never regenerate them.
+2. Confirm the PNG prerequisite (above) with the stakeholder; if still absent, only Tasks 1–2 may run.
+3. Get the execution-mode answer; default recommendation: subagent-driven.
+4. Create the worktree: `.worktrees/brand-identity` branched from current `origin/docs/design-system-and-planning` tip (re-check base freshness — sibling lanes merge often; the handoff-skill's stale-base check applies).
+5. Ledger execution at `.superpowers/sdd/brand-identity/progress.md` inside the worktree (git-ignored).
+6. Start at **Task 1 Step 1**. Tasks are ordered T1→T7; T3 requires the PNG; T4 requires T3's assets; T5 requires T1's tokens.
+
+---
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Adopt the official Makam.co.id brand identity (figure-8/8-leaf mark, Earth brown + Leaf green, Poppins) across tokens, public web, Filament panels, and favicons — with all 46 contrast pairs re-verified and every product contract untouched.
