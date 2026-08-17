@@ -347,13 +347,13 @@ final class StatusIntentTest extends TestCase
     public static function careWorkOrderProvider(): array
     {
         return [
-            'PENDING' => ['PENDING', StatusIntent::INTENT_NEUTRAL, 'inbox'],
-            'ASSIGNED' => ['ASSIGNED', StatusIntent::INTENT_INFO, 'user-group'],
-            'IN_PROGRESS' => ['IN_PROGRESS', StatusIntent::INTENT_PENDING, 'cog'],
-            'COMPLETED' => ['COMPLETED', StatusIntent::INTENT_SUCCESS, 'check-badge'],
-            'FAILED' => ['FAILED', StatusIntent::INTENT_DANGER, 'x-circle'],
-            'RESCHEDULED' => ['RESCHEDULED', StatusIntent::INTENT_PENDING, 'arrow-path'],
-            'CANCELLED' => ['CANCELLED', StatusIntent::INTENT_NEUTRAL, 'slash'],
+            'pending' => ['pending', StatusIntent::INTENT_NEUTRAL, 'inbox'],
+            'assigned' => ['assigned', StatusIntent::INTENT_INFO, 'user-group'],
+            'scheduled' => ['scheduled', StatusIntent::INTENT_NEUTRAL, 'calendar'],
+            'in_progress' => ['in_progress', StatusIntent::INTENT_PENDING, 'cog'],
+            'completed' => ['completed', StatusIntent::INTENT_SUCCESS, 'check-badge'],
+            'missed' => ['missed', StatusIntent::INTENT_DANGER, 'x-circle'],
+            'complaint' => ['complaint', StatusIntent::INTENT_DANGER, 'exclamation-triangle'],
         ];
     }
 

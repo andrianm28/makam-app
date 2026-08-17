@@ -65,6 +65,7 @@ final class CarePlansResourceTest extends TestCase
     {
         return app(CreateCarePlan::class)(
             name: 'Perawatan Bulanan Standar',
+            productCode: 'GRAVE_CARE_MONTHLY',
             frequency: CarePlanFrequency::Monthly,
             priceMinor: 250000,
         );

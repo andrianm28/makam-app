@@ -30,6 +30,7 @@ final class SubscriptionStatusPageTest extends TestCase
         return CarePlan::query()->create([
             'reference' => 'CP-'.Str::upper(Str::random(8)),
             'name' => 'Perawatan Bulanan Standar',
+            'product_code' => 'GRAVE_CARE_MONTHLY',
             'frequency' => CarePlanFrequency::Monthly->value,
             'price_minor' => 150000,
             'currency' => 'IDR',

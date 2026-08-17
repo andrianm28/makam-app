@@ -60,7 +60,7 @@ final class EvidenceUploadTest extends TestCase
     private function makeAcceptedDocument(): Document
     {
         return Document::createQuarantined([
-            'document_kind' => DocumentKind::PhotoEvidence->value,
+            'document_kind' => DocumentKind::VendorEvidence->value,
             'original_filename' => 'evidence.jpg',
             'storage_prefix' => 'test',
             'storage_key' => Str::random(32),

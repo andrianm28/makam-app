@@ -18,6 +18,7 @@ use App\Models\User;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\ActorContextResolver;
 use App\Platform\IdentityAccess\Roles\ActorRole;
+use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\Support\GrantsActorRoles;
@@ -40,6 +41,15 @@ final class VendorWorkOrdersTest extends TestCase
     {
         parent::setUp();
         $this->withoutVite();
+
+        Filament::setCurrentPanel('vendor');
+    }
+
+    protected function tearDown(): void
+    {
+        Filament::setCurrentPanel(null);
+
+        parent::tearDown();
     }
 
     private function actingUserWithRole(string $role): User
@@ -62,6 +72,7 @@ final class VendorWorkOrdersTest extends TestCase
     {
         return app(CreateCarePlan::class)(
             name: 'Perawatan Bulanan Standar',
+            productCode: 'GRAVE_CARE_MONTHLY',
             frequency: CarePlanFrequency::Monthly,
             priceMinor: 250000,
         );
