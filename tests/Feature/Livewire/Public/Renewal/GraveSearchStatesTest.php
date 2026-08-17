@@ -603,7 +603,13 @@ final class GraveSearchStatesTest extends TestCase
         // come before the renewal tables: every memorial table FK-references
         // `memorial_profiles`, which FK-references `grave_records`
         // (restrictOnDelete), so all seven must precede `grave_records`
-        // below (2BP01).
+        // below (2BP01). P5a pre-need tables (16 Aug 2026) come first:
+        // `pre_need_payment_schedules` FK-references `pre_need_cases`
+        // (restrictOnDelete), and `pre_need_cases` FK-references
+        // `quotes`/`plot_reservations`/`funeral_cases`, so both must be
+        // dropped before any plot/quote/order table (2BP01).
+        DB::statement('DROP TABLE IF EXISTS pre_need_payment_schedules');
+        DB::statement('DROP TABLE IF EXISTS pre_need_cases');
         DB::statement('DROP TABLE IF EXISTS abuse_reports');
         DB::statement('DROP TABLE IF EXISTS moderation_cases');
         DB::statement('DROP TABLE IF EXISTS memorial_qr_tokens');

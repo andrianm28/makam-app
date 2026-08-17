@@ -302,7 +302,14 @@ final class CemeteryDetailRouteTest extends TestCase
         // P3 plot tables (16 Aug 2026) are dropped first — PostgreSQL
         // blocks `DROP TABLE` of `orders`/`cemetery_packages` by the
         // incoming plot FKs (2BP01): `plot_reservations` → `grave_plots`
-        // → `cemetery_blocks`, each before its parents.
+        // → `cemetery_blocks`, each before its parents. P5a pre-need
+        // tables (16 Aug 2026) come first of all: `pre_need_payment_
+        // schedules` FK-references `pre_need_cases` (restrictOnDelete),
+        // and `pre_need_cases` FK-references `quotes`/`plot_reservations`/
+        // `funeral_cases`/`cemetery_packages`, so both must precede their
+        // parents below (2BP01).
+        Schema::dropIfExists('pre_need_payment_schedules');
+        Schema::dropIfExists('pre_need_cases');
         Schema::dropIfExists('plot_reservations');
         Schema::dropIfExists('grave_plots');
         Schema::dropIfExists('cemetery_blocks');

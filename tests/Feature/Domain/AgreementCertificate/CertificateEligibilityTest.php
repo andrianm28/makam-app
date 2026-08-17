@@ -11,6 +11,8 @@ use App\Domain\OrderWorkflow\Actions\RecordOrderStatusChange;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\OrderWorkflow\ProductType;
+use App\Domain\PreNeed\Models\PreNeedCase;
+use App\Domain\PreNeed\PreNeedCaseStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -83,5 +85,39 @@ final class CertificateEligibilityTest extends TestCase
         ]);
 
         $this->assertFalse($policy->eligibleFor(CertificateType::OrderSettlement->value, $agreement));
+    }
+
+    public function test_pre_need_settlement_rule_allows_a_settled_pre_need_case(): void
+    {
+        $case = PreNeedCase::query()->create([
+            'status' => PreNeedCaseStatus::SETTLED->value,
+        ]);
+
+        $this->assertTrue((new CertificateEligibilityPolicy)->eligibleFor(
+            CertificateType::PreNeedSettlement->value,
+            $case,
+        ));
+    }
+
+    public function test_pre_need_settlement_rule_refuses_an_unsatisfied_case(): void
+    {
+        $case = PreNeedCase::query()->create([
+            'status' => PreNeedCaseStatus::INTEREST->value,
+        ]);
+
+        $this->assertFalse((new CertificateEligibilityPolicy)->eligibleFor(
+            CertificateType::PreNeedSettlement->value,
+            $case,
+        ));
+    }
+
+    public function test_pre_need_settlement_rule_refuses_a_non_case_subject(): void
+    {
+        // A DIBAYAR order is never "a settled pre-need case" — the rule
+        // reads the case's OWN state, never a payment column.
+        $this->assertFalse((new CertificateEligibilityPolicy)->eligibleFor(
+            CertificateType::PreNeedSettlement->value,
+            $this->makePaidOrder(),
+        ));
     }
 }

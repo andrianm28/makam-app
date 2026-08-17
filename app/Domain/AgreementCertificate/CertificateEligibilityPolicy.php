@@ -6,6 +6,8 @@ namespace App\Domain\AgreementCertificate;
 
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\OrderStatus;
+use App\Domain\PreNeed\Models\PreNeedCase;
+use App\Domain\PreNeed\PreNeedCaseStatus;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -22,12 +24,12 @@ use Illuminate\Database\Eloquent\Model;
  * eligibility cannot be gamed through (or broken by) a payment-column
  * shortcut.
  *
- * The pre-need certificate rule ("a settled pre-need case") is
- * deliberately absent in Lane 1: the pre-need case model does not exist
- * on this branch, and the plan's staged dispatch lands it with Lane 2
- * (Task 3) as a recorded follow-up. Until then a pre-need certificate
- * kind has no rule in this map and is honestly refused — see
- * `CertificateType`'s doc block.
+ * The pre-need certificate rule ("a settled pre-need case") was deferred
+ * out of Lane 1 because the pre-need case model did not exist on that
+ * branch; it lands HERE at the Lane-2 merge (Task 3's recorded follow-up):
+ * the rule reads the CASE's own `PreNeedCaseStatus` — never a payment
+ * column — so a `DIBAYAR` pre-need order is not evidence of a settled
+ * case, and vice versa.
  *
  * An unknown certificate type or a subject the rule does not recognise
  * evaluates to false: no rule, no certificate.
@@ -39,6 +41,7 @@ final class CertificateEligibilityPolicy
      */
     private const array CERTIFICATE_ELIGIBILITY_RULES = [
         CertificateType::OrderSettlement->value => [self::class, 'orderSettlementRule'],
+        CertificateType::PreNeedSettlement->value => [self::class, 'preNeedSettlementRule'],
     ];
 
     public function eligibleFor(string $certificateType, Model $subject): bool
@@ -56,5 +59,19 @@ final class CertificateEligibilityPolicy
     {
         return $subject instanceof Order
             && $subject->status() === OrderStatus::DIBAYAR;
+    }
+
+    /**
+     * The pre-need certificate rule: the subject must be a Pre-Need CASE
+     * in the `settled` state. The rule reads the case's own status value —
+     * the coordination aggregate `SettlePreNeed` writes under its row lock,
+     * reachable only through the paid flow — never an order or payment
+     * column, so a paid order without a settled case (or a settled case
+     * whose order was later touched) stays honestly ineligible.
+     */
+    private static function preNeedSettlementRule(Model $subject): bool
+    {
+        return $subject instanceof PreNeedCase
+            && PreNeedCaseStatus::tryFrom((string) $subject->status) === PreNeedCaseStatus::SETTLED;
     }
 }
