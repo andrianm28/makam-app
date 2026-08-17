@@ -24,5 +24,5 @@
     asserted every §8.2 utility as compiling but never verified it, since no
     Tailwind build had run against this file until today.
 --}}
-<div class="max-w-form max-w-prose max-w-content duration-fast z-modal z-header touch-target h-11 h-13 xs:block border-neutral-450 ease-standard text-base">
+<div class="max-w-form max-w-prose max-w-content duration-fast z-modal z-header touch-target h-11 h-13 xs:block border-neutral-450 ease-standard text-base font-display">
 </div>
