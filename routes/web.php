@@ -6,6 +6,7 @@ use App\Http\Controllers\DocumentVault\DownloadDocumentController;
 use App\Http\Middleware\EnforceMfaChallenge;
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Livewire\Public\Booking\BookingWizard;
+use App\Livewire\Public\Certificates\CertificateStatusPage;
 use App\Livewire\Public\Directory\CemeteryDetail;
 use App\Livewire\Public\Directory\CemeteryDirectoryIndex;
 use App\Livewire\Public\Faq\FaqArticleDetail;
@@ -280,6 +281,29 @@ Route::get('/faq/{articleSlug}', FaqArticleDetail::class)->name('faq.show');
 */
 Route::get('/m/{token}', MemorialPublicPage::class)->name('memorial.show');
 Route::get('/memorial/{profileId}', MemorialFamilyPage::class)->name('memorial.family');
+
+/*
+|--------------------------------------------------------------------------
+| Certificate status — certificates-and-agreements AC6 (P5a, Lane 1, Task 2)
+|--------------------------------------------------------------------------
+| The customer-facing issuance status view:
+| `/sertifikat/{subjectType}/{subjectId}` renders `CertificateStatusPage` —
+| a state-only table over `CertificateStatusView` (type / status / version /
+| effective date / issuer role). The vault document reference, the
+| certificate's own document number, and subject internals NEVER leave the
+| server through this route (AC6; the domain test pins the projection's key
+| set, and this template reads only the projected rows).
+|
+| `{subjectType}` is the subject's fully-qualified class name — the same
+| no-morph-map convention the `certificates.subject_type` column stores
+| (e.g. `App\Domain\OrderWorkflow\Models\Order`, URL-encoded) — and
+| `{subjectId}` its primary key. Resolution is restricted to a closed
+| allowlist of subject types; an unknown type and an unknown id are
+| indistinguishable 404s (no enumeration, no existence leak).
+|
+| Read-only GET: no write surface exists on this route.
+*/
+Route::get('/sertifikat/{subjectType}/{subjectId}', CertificateStatusPage::class)->name('sertifikat.status');
 
 /*
 |--------------------------------------------------------------------------
