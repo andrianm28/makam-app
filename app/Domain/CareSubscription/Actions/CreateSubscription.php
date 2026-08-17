@@ -72,7 +72,7 @@ final readonly class CreateSubscription
         return match ($frequency) {
             CarePlanFrequency::Monthly => $start->addMonth()->subDay(),
             CarePlanFrequency::Quarterly => $start->addMonths(3)->subDay(),
-            CarePlanFrequency::Semiannual => $start->addMonths(6)->subDay(),
+            CarePlanFrequency::SemiAnnual => $start->addMonths(6)->subDay(),
             CarePlanFrequency::Annual => $start->addYear()->subDay(),
         };
     }

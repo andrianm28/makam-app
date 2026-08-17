@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\VendorFulfillment\Actions;
 
+use App\Domain\CareSubscription\Models\CarePlan;
 use App\Domain\CareSubscription\Models\SubscriptionCycle;
 use App\Domain\VendorFulfillment\MakeGoodStatus;
 use App\Domain\VendorFulfillment\Models\MakeGoodOrder;
@@ -16,7 +17,6 @@ use App\Platform\Audit\AuditSubject;
 use App\Platform\Correlation\CorrelationContext;
 use App\Platform\Outbox\Outbox;
 use App\Platform\Outbox\OutboxClassification;
-use Illuminate\Support\Str;
 
 /**
  * Creates a make-good (remediation) order for a failed or unsatisfactory
@@ -38,13 +38,14 @@ final readonly class CreateMakeGood
                         $originalWorkOrder->subscription_cycle_id
                     );
 
-                    $carePlan = \App\Domain\CareSubscription\Models\CarePlan::query()->findOrFail(
+                    $carePlan = CarePlan::query()->findOrFail(
                         $originalWorkOrder->care_plan_id
                     );
 
                     $replacementWorkOrder = app(CreateWorkOrderFromCycle::class)(
                         $cycle,
                         $carePlan,
+                        forceNew: true,
                     );
                 }
 

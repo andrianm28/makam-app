@@ -8,14 +8,15 @@ use App\Domain\CareSubscription\Actions\CreateCarePlan;
 use App\Domain\CareSubscription\CarePlanFrequency;
 use App\Domain\CareSubscription\Models\CarePlan;
 use App\Domain\PlotInventory\Models\GravePlot;
-use App\Domain\VendorFulfillment\Actions\CreateWorkOrder;
 use App\Domain\VendorFulfillment\Actions\CompleteTask;
+use App\Domain\VendorFulfillment\Actions\CreateWorkOrder;
 use App\Domain\VendorFulfillment\Models\WorkOrder;
-use App\Domain\VendorFulfillment\Models\WorkOrderTask;
 use App\Filament\Vendor\Resources\WorkOrders\Pages\ListWorkOrders;
 use App\Filament\Vendor\Resources\WorkOrders\Pages\ViewWorkOrder;
 use App\Filament\Vendor\Resources\WorkOrders\WorkOrdersResource;
 use App\Models\User;
+use App\Platform\IdentityAccess\ActorContext;
+use App\Platform\IdentityAccess\ActorContextResolver;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -53,8 +54,8 @@ final class VendorWorkOrdersTest extends TestCase
 
     private function forgetResolvedActorContext(): void
     {
-        $this->app->forgetInstance(\App\Platform\IdentityAccess\ActorContext::class);
-        $this->app->forgetInstance(\App\Platform\IdentityAccess\ActorContextResolver::class);
+        $this->app->forgetInstance(ActorContext::class);
+        $this->app->forgetInstance(ActorContextResolver::class);
     }
 
     private function makeCarePlan(): CarePlan

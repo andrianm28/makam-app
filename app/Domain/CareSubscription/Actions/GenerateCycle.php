@@ -5,17 +5,17 @@ declare(strict_types=1);
 namespace App\Domain\CareSubscription\Actions;
 
 use App\Domain\CareSubscription\CareSubscriptionAuditActions;
-use App\Domain\CareSubscription\SubscriptionCycleStatus;
 use App\Domain\CareSubscription\Models\Subscription;
 use App\Domain\CareSubscription\Models\SubscriptionCycle;
 use App\Domain\CareSubscription\Models\SubscriptionInvoice;
+use App\Domain\CareSubscription\SubscriptionCycleStatus;
 use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\AuditSubject;
 use App\Platform\Correlation\CorrelationContext;
 use Carbon\CarbonInterface;
-use Illuminate\Support\Str;
+use Illuminate\Database\UniqueConstraintViolationException;
 
 /**
  * Generates a subscription cycle with a pending invoice.
@@ -42,24 +42,32 @@ final readonly class GenerateCycle
 
         return Audit::wrap(
             mutation: function () use ($subscription, $cycleStart, $cycleEnd): SubscriptionCycle {
-                $cycle = SubscriptionCycle::query()->create([
-                    'subscription_id' => $subscription->getKey(),
-                    'cycle_start' => $cycleStart->toDateString(),
-                    'cycle_end' => $cycleEnd->toDateString(),
-                    'status' => SubscriptionCycleStatus::Scheduled->value,
-                ]);
+                try {
+                    $cycle = SubscriptionCycle::query()->create([
+                        'subscription_id' => $subscription->getKey(),
+                        'cycle_start' => $cycleStart->toDateString(),
+                        'cycle_end' => $cycleEnd->toDateString(),
+                        'status' => SubscriptionCycleStatus::Scheduled->value,
+                    ]);
 
-                $invoice = SubscriptionInvoice::query()->create([
-                    'subscription_cycle_id' => $cycle->getKey(),
-                    'amount_minor' => $subscription->price_minor,
-                    'currency' => $subscription->currency,
-                    'status' => 'pending',
-                    'issued_at' => now(),
-                ]);
+                    $invoice = SubscriptionInvoice::query()->create([
+                        'subscription_cycle_id' => $cycle->getKey(),
+                        'amount_minor' => $subscription->price_minor,
+                        'currency' => $subscription->currency,
+                        'status' => 'pending',
+                        'issued_at' => now(),
+                    ]);
 
-                $cycle->update(['invoice_id' => $invoice->getKey()]);
+                    $cycle->update(['invoice_id' => $invoice->getKey()]);
 
-                return $cycle->fresh();
+                    return $cycle->fresh();
+                } catch (UniqueConstraintViolationException) {
+                    return SubscriptionCycle::query()
+                        ->where('subscription_id', $subscription->getKey())
+                        ->where('cycle_start', $cycleStart->toDateString())
+                        ->where('cycle_end', $cycleEnd->toDateString())
+                        ->firstOrFail();
+                }
             },
             action: CareSubscriptionAuditActions::CYCLE_GENERATED,
             subject: fn (SubscriptionCycle $cycle): AuditSubject => new AuditSubject(

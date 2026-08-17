@@ -5,9 +5,6 @@ declare(strict_types=1);
 namespace App\Filament\Admin\Resources\Subscriptions;
 
 use App\Domain\CareSubscription\Models\Subscription;
-use App\Filament\Admin\Resources\Subscriptions\Actions\CancelSubscriptionAction;
-use App\Filament\Admin\Resources\Subscriptions\Actions\CreateSubscriptionAction;
-use App\Filament\Admin\Resources\Subscriptions\Actions\PauseSubscriptionAction;
 use App\Filament\Admin\Resources\Subscriptions\Pages\ListSubscriptions;
 use App\Filament\Admin\Resources\Subscriptions\Pages\ViewSubscription;
 use App\Filament\Admin\Resources\Subscriptions\Schemas\SubscriptionInfolist;
@@ -37,8 +34,6 @@ final class SubscriptionsResource extends Resource
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedArrowPathRoundedSquare;
 
     protected static ?string $recordTitleAttribute = 'reference';
-
-    protected static ?string $navigationGroup = 'Master Data';
 
     protected static ?int $navigationSort = 61;
 

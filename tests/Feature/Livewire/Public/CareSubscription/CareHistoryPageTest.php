@@ -8,7 +8,6 @@ use App\Domain\CareSubscription\CarePlanFrequency;
 use App\Domain\CareSubscription\Models\CarePlan;
 use App\Domain\CareSubscription\Models\Subscription;
 use App\Domain\CareSubscription\Models\SubscriptionCycle;
-use App\Domain\VendorFulfillment\WorkOrderStatus;
 use App\Domain\VendorFulfillment\Models\WorkOrder;
 use App\Livewire\Public\CareSubscription\CareHistoryPage;
 use Illuminate\Foundation\Testing\RefreshDatabase;

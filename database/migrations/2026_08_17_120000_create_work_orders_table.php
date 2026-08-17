@@ -10,13 +10,17 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * `work_orders` — the primary fulfillment record for a care service visit.
- * One work order per paid subscription cycle (AC5/AC8) when created from a
- * cycle; null `subscription_cycle_id` for one-off work orders.
+ * One work order per paid subscription cycle (AC5/AC8) is the NORMAL case
+ * when created from a cycle via `CreateWorkOrderFromCycle` (enforced there
+ * by a check-then-create idempotency read, not a DB constraint); null
+ * `subscription_cycle_id` for one-off work orders.
  *
- * The unique constraint on `subscription_cycle_id` (when not null) enforces
- * one work order per paid cycle at the database level — the same
- * "the database decides, not a read-then-write" discipline as
- * `agreements_subject_type_version_unique`.
+ * Deliberately NOT a DB-level unique constraint on `subscription_cycle_id`:
+ * make-good/complaint remediation (`CreateMakeGood`) issues a SECOND work
+ * order for the same cycle (the replacement), which a strict 1:1 constraint
+ * would reject. AC5/AC8's "one per cycle" rule is the default path's
+ * behaviour, not an absolute database invariant — make-good is the
+ * documented, tested exception (see `ComplaintFlowTest`).
  */
 return new class extends Migration
 {
@@ -55,11 +59,6 @@ return new class extends Migration
             DB::statement(
                 'ALTER TABLE work_orders ADD CONSTRAINT work_orders_status_check '.
                 "CHECK (status IN ('{$statuses}'))"
-            );
-
-            DB::statement(
-                'ALTER TABLE work_orders ADD CONSTRAINT work_orders_subscription_cycle_id_unique '.
-                'UNIQUE (subscription_cycle_id) WHERE subscription_cycle_id IS NOT NULL'
             );
         }
     }

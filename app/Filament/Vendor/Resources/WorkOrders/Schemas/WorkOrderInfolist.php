@@ -69,6 +69,7 @@ final class WorkOrderInfolist
 
                                 return $state->map(function ($task) {
                                     $icon = $task->status === 'completed' ? '✓' : '○';
+
                                     return $icon.' '.$task->name;
                                 })->implode("\n");
                             }),

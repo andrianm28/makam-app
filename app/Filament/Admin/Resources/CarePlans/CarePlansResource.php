@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Filament\Admin\Resources\CarePlans;
 
-use App\Domain\CareSubscription\CarePlanFrequency;
-use App\Domain\CareSubscription\CarePlanStatus;
 use App\Domain\CareSubscription\Models\CarePlan;
 use App\Filament\Admin\Resources\CarePlans\Pages\CreateCarePlan;
 use App\Filament\Admin\Resources\CarePlans\Pages\ListCarePlans;
@@ -39,8 +37,6 @@ final class CarePlansResource extends Resource
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClipboardDocumentCheck;
 
     protected static ?string $recordTitleAttribute = 'reference';
-
-    protected static ?string $navigationGroup = 'Master Data';
 
     protected static ?int $navigationSort = 60;
 

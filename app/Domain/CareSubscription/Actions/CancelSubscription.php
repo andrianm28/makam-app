@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Domain\CareSubscription\Actions;
 
 use App\Domain\CareSubscription\CareSubscriptionAuditActions;
-use App\Domain\CareSubscription\SubscriptionStatus;
 use App\Domain\CareSubscription\Models\Subscription;
+use App\Domain\CareSubscription\SubscriptionStatus;
 use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;

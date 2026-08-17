@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\VendorFulfillment\Models;
 
+use App\Domain\CareSubscription\Models\CarePlan;
 use App\Domain\VendorFulfillment\WorkOrderStatus;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -59,11 +60,11 @@ final class WorkOrder extends Model
     }
 
     /**
-     * @return BelongsTo<\App\Domain\CareSubscription\Models\CarePlan, $this>
+     * @return BelongsTo<CarePlan, $this>
      */
     public function carePlan(): BelongsTo
     {
-        return $this->belongsTo(\App\Domain\CareSubscription\Models\CarePlan::class, 'care_plan_id');
+        return $this->belongsTo(CarePlan::class, 'care_plan_id');
     }
 
     /**

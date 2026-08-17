@@ -9,7 +9,7 @@ use App\Domain\CareSubscription\Models\Subscription;
 use App\Domain\CareSubscription\Models\SubscriptionCycle;
 use App\Domain\VendorFulfillment\Actions\CreateWorkOrderFromCycle;
 use App\Domain\VendorFulfillment\Actions\UploadEvidence;
-use App\Domain\VendorFulfillment\Models\WorkEvidence;
+use App\Domain\VendorFulfillment\Models\WorkOrder;
 use App\Platform\DocumentVault\DocumentKind;
 use App\Platform\DocumentVault\DocumentState;
 use App\Platform\DocumentVault\Models\Document;
@@ -26,7 +26,7 @@ final class EvidenceUploadTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function makeWorkOrder(): \App\Domain\VendorFulfillment\Models\WorkOrder
+    private function makeWorkOrder(): WorkOrder
     {
         $carePlan = CarePlan::query()->create([
             'reference' => 'CP-'.Str::upper(Str::random(8)),

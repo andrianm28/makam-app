@@ -4,16 +4,15 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Domain\CareSubscription;
 
-use App\Domain\CareSubscription\Actions\GenerateCycle;
 use App\Domain\CareSubscription\Actions\MarkCyclePaid;
 use App\Domain\CareSubscription\CarePlanFrequency;
 use App\Domain\CareSubscription\CareSubscriptionAuditActions;
-use App\Domain\CareSubscription\SubscriptionCycleStatus;
-use App\Domain\CareSubscription\SubscriptionStatus;
 use App\Domain\CareSubscription\Models\CarePlan;
 use App\Domain\CareSubscription\Models\Subscription;
 use App\Domain\CareSubscription\Models\SubscriptionCycle;
 use App\Domain\CareSubscription\Models\SubscriptionInvoice;
+use App\Domain\CareSubscription\SubscriptionCycleStatus;
+use App\Domain\CareSubscription\SubscriptionStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -62,13 +61,15 @@ final class MarkCyclePaidTest extends TestCase
             'status' => SubscriptionCycleStatus::Scheduled->value,
         ]);
 
-        SubscriptionInvoice::query()->create([
+        $invoice = SubscriptionInvoice::query()->create([
             'subscription_cycle_id' => $cycle->getKey(),
             'amount_minor' => $subscription->price_minor,
             'currency' => $subscription->currency,
             'status' => 'pending',
             'issued_at' => now(),
         ]);
+
+        $cycle->update(['invoice_id' => $invoice->getKey()]);
 
         return $cycle;
     }

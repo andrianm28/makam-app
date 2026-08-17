@@ -34,15 +34,18 @@ final readonly class CreateWorkOrderFromCycle
     public function __invoke(
         SubscriptionCycle $cycle,
         CarePlan $carePlan,
+        bool $forceNew = false,
     ): WorkOrder {
         return Audit::wrap(
-            mutation: function () use ($cycle, $carePlan): WorkOrder {
-                $existing = WorkOrder::query()
-                    ->where('subscription_cycle_id', $cycle->getKey())
-                    ->first();
+            mutation: function () use ($cycle, $carePlan, $forceNew): WorkOrder {
+                if (! $forceNew) {
+                    $existing = WorkOrder::query()
+                        ->where('subscription_cycle_id', $cycle->getKey())
+                        ->first();
 
-                if ($existing instanceof WorkOrder) {
-                    return $existing;
+                    if ($existing instanceof WorkOrder) {
+                        return $existing;
+                    }
                 }
 
                 $workOrder = WorkOrder::query()->create([

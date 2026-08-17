@@ -6,6 +6,7 @@ namespace App\Filament\Admin\Resources\Subscriptions\Tables;
 
 use App\Domain\CareSubscription\CarePlanFrequency;
 use App\Domain\CareSubscription\SubscriptionStatus;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;

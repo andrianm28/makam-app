@@ -100,7 +100,7 @@ final class ComplaintFlowTest extends TestCase
 
         $replacement = WorkOrder::query()->find($makeGood->replacement_work_order_id);
         $this->assertNotNull($replacement);
-        $this->assertSame('PENDING', $replacement->status);
+        $this->assertSame('pending', $replacement->status);
         $this->assertSame(
             (string) $workOrder->care_plan_id,
             (string) $replacement->care_plan_id,

@@ -14,10 +14,12 @@ use App\Filament\Admin\Resources\CarePlans\CarePlansResource;
 use App\Filament\Admin\Resources\CarePlans\Pages\CreateCarePlan as CreateCarePlanPage;
 use App\Filament\Admin\Resources\CarePlans\Pages\ListCarePlans;
 use App\Filament\Admin\Resources\CarePlans\Pages\ViewCarePlan;
-use App\Filament\Admin\Resources\Subscriptions\SubscriptionsResource;
 use App\Filament\Admin\Resources\Subscriptions\Pages\ListSubscriptions;
 use App\Filament\Admin\Resources\Subscriptions\Pages\ViewSubscription;
+use App\Filament\Admin\Resources\Subscriptions\SubscriptionsResource;
 use App\Models\User;
+use App\Platform\IdentityAccess\ActorContext;
+use App\Platform\IdentityAccess\ActorContextResolver;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -55,8 +57,8 @@ final class CarePlansResourceTest extends TestCase
 
     private function forgetResolvedActorContext(): void
     {
-        $this->app->forgetInstance(\App\Platform\IdentityAccess\ActorContext::class);
-        $this->app->forgetInstance(\App\Platform\IdentityAccess\ActorContextResolver::class);
+        $this->app->forgetInstance(ActorContext::class);
+        $this->app->forgetInstance(ActorContextResolver::class);
     }
 
     private function makeCarePlan(): CarePlan

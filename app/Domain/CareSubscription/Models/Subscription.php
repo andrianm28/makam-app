@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\CareSubscription\Models;
 
 use App\Domain\CareSubscription\SubscriptionStatus;
+use App\Domain\PlotInventory\Models\GravePlot;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -65,11 +66,11 @@ final class Subscription extends Model
     }
 
     /**
-     * @return BelongsTo<\App\Domain\PlotInventory\Models\GravePlot, $this>
+     * @return BelongsTo<GravePlot, $this>
      */
     public function grave(): BelongsTo
     {
-        return $this->belongsTo(\App\Domain\PlotInventory\Models\GravePlot::class, 'grave_id');
+        return $this->belongsTo(GravePlot::class, 'grave_id');
     }
 
     /**

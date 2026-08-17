@@ -24,7 +24,7 @@ final readonly class CycleScheduler
             ->where('status', SubscriptionStatus::Active->value)
             ->get();
 
-        $cycles = new Collection();
+        $cycles = new Collection;
 
         foreach ($subscriptions as $subscription) {
             $nextCycleStart = $this->calculateNextCycleStart($subscription);
@@ -56,11 +56,11 @@ final readonly class CycleScheduler
         $interval = match ($frequency) {
             CarePlanFrequency::Monthly => 1,
             CarePlanFrequency::Quarterly => 3,
-            CarePlanFrequency::Semiannual => 6,
+            CarePlanFrequency::SemiAnnual => 6,
             CarePlanFrequency::Annual => 12,
         };
 
-        $nextStart = $lastCycleEnd->addMonths($interval * $subscription->current_cycle_number);
+        $nextStart = $lastCycleEnd->addMonths($interval * ($subscription->current_cycle_number + 1));
 
         if ($nextStart->isFuture()) {
             return null;
@@ -76,7 +76,7 @@ final readonly class CycleScheduler
         return match ($frequency) {
             CarePlanFrequency::Monthly => $start->addMonth()->subDay(),
             CarePlanFrequency::Quarterly => $start->addMonths(3)->subDay(),
-            CarePlanFrequency::Semiannual => $start->addMonths(6)->subDay(),
+            CarePlanFrequency::SemiAnnual => $start->addMonths(6)->subDay(),
             CarePlanFrequency::Annual => $start->addYear()->subDay(),
         };
     }

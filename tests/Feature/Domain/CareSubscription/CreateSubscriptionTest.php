@@ -7,10 +7,10 @@ namespace Tests\Feature\Domain\CareSubscription;
 use App\Domain\CareSubscription\Actions\CreateSubscription;
 use App\Domain\CareSubscription\CarePlanFrequency;
 use App\Domain\CareSubscription\CareSubscriptionAuditActions;
-use App\Domain\CareSubscription\SubscriptionStatus;
 use App\Domain\CareSubscription\Models\CarePlan;
-use App\Domain\CareSubscription\Models\Subscription;
 use App\Domain\CareSubscription\Models\SubscriptionCycle;
+use App\Domain\CareSubscription\SubscriptionStatus;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -89,8 +89,8 @@ final class CreateSubscriptionTest extends TestCase
             ->first();
 
         $this->assertNotNull($cycle);
-        $start = \Carbon\CarbonImmutable::parse($cycle->cycle_start);
-        $end = \Carbon\CarbonImmutable::parse($cycle->cycle_end);
+        $start = CarbonImmutable::parse($cycle->cycle_start);
+        $end = CarbonImmutable::parse($cycle->cycle_end);
         $this->assertTrue($start->addMonths(3)->subDay()->isSameDay($end));
     }
 
@@ -112,8 +112,8 @@ final class CreateSubscriptionTest extends TestCase
             ->first();
 
         $this->assertNotNull($cycle);
-        $start = \Carbon\CarbonImmutable::parse($cycle->cycle_start);
-        $end = \Carbon\CarbonImmutable::parse($cycle->cycle_end);
+        $start = CarbonImmutable::parse($cycle->cycle_start);
+        $end = CarbonImmutable::parse($cycle->cycle_end);
         $this->assertTrue($start->addYear()->subDay()->isSameDay($end));
     }
 }

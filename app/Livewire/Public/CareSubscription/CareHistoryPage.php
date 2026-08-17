@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Livewire\Public\CareSubscription;
 
-use App\Domain\VendorFulfillment\Models\WorkOrder;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Livewire\Component;
 
@@ -59,9 +59,9 @@ final class CareHistoryPage extends Component
      * Resolve work orders for the customer through their subscriptions.
      * Uses a single query joining subscriptions → cycles → work orders.
      *
-     * @return \Illuminate\Support\Collection<int, object>
+     * @return Collection<int, object>
      */
-    private function resolveWorkOrders(): \Illuminate\Support\Collection
+    private function resolveWorkOrders(): Collection
     {
         return DB::table('work_orders')
             ->join('subscription_cycles', 'work_orders.subscription_cycle_id', '=', 'subscription_cycles.id')

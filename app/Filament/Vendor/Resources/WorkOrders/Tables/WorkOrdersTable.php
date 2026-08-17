@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Filament\Vendor\Resources\WorkOrders\Tables;
 
+use App\Domain\VendorFulfillment\Models\WorkOrder;
 use App\Domain\VendorFulfillment\WorkOrderStatus;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;

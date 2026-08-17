@@ -63,7 +63,7 @@ final class CreateWorkOrderTest extends TestCase
 
         $workOrder = app(CreateWorkOrderFromCycle::class)($cycle, $carePlan);
 
-        $this->assertSame('PENDING', $workOrder->status);
+        $this->assertSame('pending', $workOrder->status);
         $this->assertSame((string) $carePlan->getKey(), $workOrder->care_plan_id);
         $this->assertSame((string) $cycle->getKey(), $workOrder->subscription_cycle_id);
         $this->assertStringStartsWith('WO-', $workOrder->reference);

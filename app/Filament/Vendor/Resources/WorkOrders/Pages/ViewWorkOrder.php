@@ -4,11 +4,9 @@ declare(strict_types=1);
 
 namespace App\Filament\Vendor\Resources\WorkOrders\Pages;
 
-use App\Domain\VendorFulfillment\Models\WorkOrder;
 use App\Filament\Vendor\Resources\WorkOrders\WorkOrdersResource;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\ViewRecord;
-use Filament\Support\Icons\Heroicon;
 
 /**
  * View page for `WorkOrdersResource` — checklist tasks (checkboxes),

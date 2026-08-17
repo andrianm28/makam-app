@@ -159,6 +159,8 @@ final class SensitiveActionsTest extends TestCase
                 'SCOPE_REVOKE',
                 'RENEWAL_EXTERNAL_MARKING',
                 'PRODUCT_UPDATED',
+                'SUBSCRIPTION_PAUSED',
+                'SUBSCRIPTION_CANCELLED',
             ],
             SensitiveActions::ACTIONS
         );

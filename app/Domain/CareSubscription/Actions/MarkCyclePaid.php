@@ -5,10 +5,11 @@ declare(strict_types=1);
 namespace App\Domain\CareSubscription\Actions;
 
 use App\Domain\CareSubscription\CareSubscriptionAuditActions;
-use App\Domain\CareSubscription\SubscriptionCycleStatus;
-use App\Domain\CareSubscription\SubscriptionStatus;
 use App\Domain\CareSubscription\Models\Subscription;
 use App\Domain\CareSubscription\Models\SubscriptionCycle;
+use App\Domain\CareSubscription\Models\SubscriptionInvoice;
+use App\Domain\CareSubscription\SubscriptionCycleStatus;
+use App\Domain\CareSubscription\SubscriptionStatus;
 use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
@@ -36,6 +37,7 @@ final readonly class MarkCyclePaid
                 $cycle->status = SubscriptionCycleStatus::Paid->value;
                 $cycle->save();
 
+                /** @var SubscriptionInvoice|null $invoice */
                 $invoice = $cycle->invoice;
                 if ($invoice !== null) {
                     $invoice->status = 'paid';

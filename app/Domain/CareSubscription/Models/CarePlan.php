@@ -6,6 +6,7 @@ namespace App\Domain\CareSubscription\Models;
 
 use App\Domain\CareSubscription\CarePlanFrequency;
 use App\Domain\CareSubscription\CarePlanStatus;
+use App\Domain\Marketplace\Models\Vendor;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -64,11 +65,11 @@ final class CarePlan extends Model
     }
 
     /**
-     * @return BelongsTo<\App\Domain\Marketplace\Models\Vendor, $this>
+     * @return BelongsTo<Vendor, $this>
      */
     public function vendor(): BelongsTo
     {
-        return $this->belongsTo(\App\Domain\Marketplace\Models\Vendor::class, 'vendor_id');
+        return $this->belongsTo(Vendor::class, 'vendor_id');
     }
 
     /**

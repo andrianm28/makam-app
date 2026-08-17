@@ -11,6 +11,7 @@ use App\Domain\CareSubscription\Models\Subscription;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Filament\Admin\Resources\Subscriptions\SubscriptionsResource;
 use App\Platform\IdentityAccess\ActorContext;
+use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
@@ -21,9 +22,9 @@ use Filament\Support\Icons\Heroicon;
  */
 final class CreateSubscriptionAction
 {
-    public static function make(): \Filament\Actions\Action
+    public static function make(): Action
     {
-        return \Filament\Actions\Action::make('buatLangganan')
+        return Action::make('buatLangganan')
             ->label('Buat Langganan')
             ->icon(Heroicon::OutlinedPlus)
             ->color('primary')

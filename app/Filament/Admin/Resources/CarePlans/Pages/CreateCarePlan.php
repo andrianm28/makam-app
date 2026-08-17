@@ -7,8 +7,10 @@ namespace App\Filament\Admin\Resources\CarePlans\Pages;
 use App\Domain\CareSubscription\Actions\CreateCarePlan as CreateCarePlanAction;
 use App\Domain\CareSubscription\CarePlanFrequency;
 use App\Filament\Admin\Resources\CarePlans\CarePlansResource;
+use App\Platform\IdentityAccess\ActorContext;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
+use Illuminate\Database\Eloquent\Model;
 use Throwable;
 
 /**
@@ -18,7 +20,7 @@ final class CreateCarePlan extends CreateRecord
 {
     protected static string $resource = CarePlansResource::class;
 
-    protected function handleRecordCreation(array $data): \Illuminate\Database\Eloquent\Model
+    protected function handleRecordCreation(array $data): Model
     {
         try {
             return app(CreateCarePlanAction::class)(
@@ -29,7 +31,7 @@ final class CreateCarePlan extends CreateRecord
                 vendorId: $data['vendor_id'] ?? null,
                 checklistTemplate: $data['checklist_template'] ?? null,
                 actorRef: (string) auth()->id(),
-                actorRole: CarePlansResource::auditRoleFor(app(\App\Platform\IdentityAccess\ActorContext::class)),
+                actorRole: CarePlansResource::auditRoleFor(app(ActorContext::class)),
             );
         } catch (Throwable $exception) {
             Notification::make()
