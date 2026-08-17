@@ -67,7 +67,7 @@ final class CareHistoryPageTest extends TestCase
         ]);
     }
 
-    private function createWorkOrderForCycle(SubscriptionCycle $cycle, string $workStatus = 'COMPLETED'): WorkOrder
+    private function createWorkOrderForCycle(SubscriptionCycle $cycle, string $workStatus = 'completed'): WorkOrder
     {
         return WorkOrder::query()->create([
             'reference' => 'WO-'.Str::upper(Str::random(8)),
@@ -88,7 +88,7 @@ final class CareHistoryPageTest extends TestCase
             'status' => 'COMPLETED',
         ]);
 
-        $this->createWorkOrderForCycle($cycle, 'COMPLETED');
+        $this->createWorkOrderForCycle($cycle, 'completed');
 
         Livewire::test(CareHistoryPage::class, [
             'customerId' => $this->customerId,
@@ -109,7 +109,7 @@ final class CareHistoryPageTest extends TestCase
             'status' => 'PAID',
         ]);
 
-        $this->createWorkOrderForCycle($cycle, 'IN_PROGRESS');
+        $this->createWorkOrderForCycle($cycle, 'in_progress');
 
         $html = Livewire::test(CareHistoryPage::class, [
             'customerId' => $this->customerId,
@@ -119,7 +119,7 @@ final class CareHistoryPageTest extends TestCase
 
         // Billing and work order are TWO SEPARATE indicators (AC2/AC6)
         $this->assertStringContainsString('Paid', $html);
-        $this->assertStringContainsString('In progress', $html);
+        $this->assertStringContainsString('In Progress', $html);
 
         // They are never collapsed into one badge — both labels exist
         $this->assertStringContainsString('Status Pembayaran', $html);
@@ -146,14 +146,14 @@ final class CareHistoryPageTest extends TestCase
             'status' => 'PAID',
         ]);
 
-        $this->createWorkOrderForCycle($cycle, 'FAILED');
+        $this->createWorkOrderForCycle($cycle, 'missed');
 
         Livewire::test(CareHistoryPage::class, [
             'customerId' => $this->customerId,
         ])
             ->assertOk()
             ->assertSee('Pekerjaan belum terselesaikan')
-            ->assertSee('Failed');
+            ->assertSee('Missed');
     }
 
     public function test_paid_is_never_shown_as_completed(): void
@@ -167,7 +167,7 @@ final class CareHistoryPageTest extends TestCase
             'status' => 'PAID',
         ]);
 
-        $this->createWorkOrderForCycle($cycle, 'PENDING');
+        $this->createWorkOrderForCycle($cycle, 'pending');
 
         $html = Livewire::test(CareHistoryPage::class, [
             'customerId' => $this->customerId,

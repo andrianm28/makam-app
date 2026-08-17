@@ -9,6 +9,11 @@ use App\Domain\CareSubscription\Actions\CreateSubscription;
 use App\Domain\CareSubscription\CarePlanFrequency;
 use App\Domain\CareSubscription\Models\CarePlan;
 use App\Domain\CareSubscription\Models\Subscription;
+use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
+use App\Domain\CemeteryDirectory\CemeteryType;
+use App\Domain\CemeteryDirectory\LaunchCityCode;
+use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Filament\Admin\Resources\CarePlans\CarePlansResource;
 use App\Filament\Admin\Resources\CarePlans\Pages\CreateCarePlan as CreateCarePlanPage;
@@ -22,6 +27,7 @@ use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\ActorContextResolver;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Livewire\Livewire;
 use Tests\Support\GrantsActorRoles;
 use Tests\TestCase;
@@ -73,8 +79,24 @@ final class CarePlansResourceTest extends TestCase
 
     private function makeGravePlot(): GravePlot
     {
+        $cemetery = Cemetery::query()->create([
+            'type' => CemeteryType::TPU,
+            'publication_status' => CemeteryPublicationStatus::DRAFT,
+            'name' => 'TPU Uji Coba',
+            'slug' => 'tpu-uji-coba-'.Str::lower(Str::random(6)),
+            'city' => LaunchCityCode::JAKARTA,
+            'address' => 'Jl. Contoh No. 1',
+        ]);
+
+        $block = CemeteryBlock::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'code' => 'BLOK-A',
+            'name' => 'Blok A',
+            'capacity' => 1,
+        ]);
+
         return GravePlot::query()->create([
-            'block_id' => 'B1',
+            'block_id' => $block->getKey(),
             'slot' => '001',
             'plot_state' => 'available',
         ]);

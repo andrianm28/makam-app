@@ -8,6 +8,7 @@ use App\Domain\CareSubscription\CarePlanFrequency;
 use App\Domain\CareSubscription\CareSubscriptionAuditActions;
 use App\Domain\CareSubscription\Models\CarePlan;
 use App\Domain\CareSubscription\Models\Subscription;
+use App\Domain\CareSubscription\SubscriptionStatus;
 use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
@@ -40,7 +41,7 @@ final readonly class CreateSubscription
                     'grave_id' => $graveId,
                     'care_plan_id' => $carePlan->getKey(),
                     'customer_id' => $customerId,
-                    'status' => 'DRAFT',
+                    'status' => SubscriptionStatus::Draft->value,
                     'frequency' => $frequency->value,
                     'price_minor' => $carePlan->price_minor,
                     'currency' => $carePlan->currency,

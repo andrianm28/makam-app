@@ -7,6 +7,7 @@ namespace Tests\Feature\Filament;
 use App\Domain\CareSubscription\Actions\CreateCarePlan;
 use App\Domain\CareSubscription\CarePlanFrequency;
 use App\Domain\CareSubscription\Models\CarePlan;
+use App\Domain\Marketplace\Models\Vendor;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\VendorFulfillment\Actions\CompleteTask;
 use App\Domain\VendorFulfillment\Actions\CreateWorkOrder;
@@ -18,6 +19,8 @@ use App\Models\User;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\ActorContextResolver;
 use App\Platform\IdentityAccess\Roles\ActorRole;
+use App\Platform\IdentityAccess\Scopes\Models\ScopeAssignment;
+use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -52,10 +55,29 @@ final class VendorWorkOrdersTest extends TestCase
         parent::tearDown();
     }
 
+    private ?string $vendorId = null;
+
+    private function vendorId(): string
+    {
+        return $this->vendorId ??= (string) Vendor::query()->create([
+            'name' => 'Vendor Uji Coba',
+            'is_active' => true,
+        ])->id;
+    }
+
     private function actingUserWithRole(string $role): User
     {
         $user = User::factory()->create();
         $this->grantRoleTo($user, $role);
+
+        if ($role === ActorRole::VENDOR) {
+            ScopeAssignment::query()->create([
+                'actor_identifier' => (string) $user->id,
+                'entity_type' => ScopeEntityType::VENDOR,
+                'entity_id' => $this->vendorId(),
+            ]);
+        }
+
         $this->actingAs($user);
         $this->forgetResolvedActorContext();
 
@@ -93,6 +115,7 @@ final class VendorWorkOrdersTest extends TestCase
 
         return app(CreateWorkOrder::class)(
             $plan,
+            vendorId: $this->vendorId(),
             checklistItems: ['Membersihkan area makam', 'Merawat tanaman', 'Memperbaiki batu nisan'],
         );
     }

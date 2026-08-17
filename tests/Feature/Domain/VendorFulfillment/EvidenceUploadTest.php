@@ -61,6 +61,8 @@ final class EvidenceUploadTest extends TestCase
     {
         return Document::createQuarantined([
             'document_kind' => DocumentKind::VendorEvidence->value,
+            'owner_type' => 'work_order',
+            'owner_id' => 'test-work-order',
             'original_filename' => 'evidence.jpg',
             'storage_prefix' => 'test',
             'storage_key' => Str::random(32),

@@ -81,7 +81,7 @@
                         @endif
                     </dl>
 
-                    @if ($wo->work_status === 'FAILED')
+                    @if ($wo->work_status === 'missed')
                         <x-mk.alert intent="warning" title="Pekerjaan belum terselesaikan.">
                             <p class="text-sm">
                                 Pekerjaan perawatan ini belum dapat diselesaikan. Tim kami akan
