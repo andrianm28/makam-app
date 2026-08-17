@@ -21,6 +21,7 @@ use App\Livewire\Public\Marketplace\OrderTracking;
 use App\Livewire\Public\Marketplace\ProductDetail;
 use App\Livewire\Public\Memorial\MemorialFamilyPage;
 use App\Livewire\Public\Memorial\MemorialPublicPage;
+use App\Livewire\Public\PreNeed\PreNeedInterestPage;
 use App\Livewire\Public\Renewal\GraveSearch;
 use App\Livewire\Public\Renewal\RenewalConfirmation;
 use App\Livewire\Public\Renewal\RenewalFee;
@@ -347,6 +348,34 @@ Route::get('/syarat-ketentuan', TermsOfService::class)->name('legal.terms');
 | no contact form exists and why no wa.me deep link is minted.
 */
 Route::get('/bantuan', HelpCentre::class)->name('bantuan.index');
+
+/*
+|--------------------------------------------------------------------------
+| Pre-Need — P5a Lane 3 (docs/superpowers/specs/
+| 2026-08-16-p5a-certificates-preneed-design.md)
+|--------------------------------------------------------------------------
+| The public /preneed surface: register Pre-Need interest, request a
+| consultation, and check a certificate's status (state-only). Route named
+| in information-architecture.md §1's Indonesian public tree (`/preneed`).
+|
+| While G-LEGAL-01 is closed the page renders PreNeedMode::InterestOnly's
+| non-dismissible info banner ("registers interest; no payment created" —
+| design-system.md §6.9); the interest and consultation flows themselves
+| are NEVER gated (the mode's own doc block and §6.9 Negative criteria).
+| Registration runs RegisterPreNeedInterest behind a minimal PRE_NEED
+| BookingDraft (the plan's pinned seam, documented in the component);
+| consultation runs RequestPreNeedConsultation, audited
+| PRENEED_CONSULTATION_REQUESTED. Read-only GETs; every write is a
+| Livewire action (a POST) from the component.
+|
+| The certificate status ROUTE `/sertifikat/{subjectType}/{subjectId}`
+| (the AC6 customer view) is Task 2's own route — owned by
+| lane/p5a-certificate-admin, not re-registered here. Until that lane
+| merges, the pre-need page's certificate-status section resolves the
+| state-only projection in-page; once it lands the canonical status page
+| becomes the destination.
+*/
+Route::get('/preneed', PreNeedInterestPage::class)->name('preneed.index');
 
 /*
 |--------------------------------------------------------------------------
