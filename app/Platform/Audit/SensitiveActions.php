@@ -138,6 +138,12 @@ final class SensitiveActions
         // is the first cut of a definition (price_version 1), the same
         // non-sensitive category as FAQ article creation.
         'PRODUCT_UPDATED',
+
+        // Added by P5b Lane 3 (care subscriptions). Pause and cancel
+        // change a subscription's billing lifecycle, same category as
+        // payment-state changes above.
+        'SUBSCRIPTION_PAUSED',
+        'SUBSCRIPTION_CANCELLED',
     ];
 
     public static function requiresReason(string $action): bool

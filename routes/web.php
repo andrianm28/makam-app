@@ -6,6 +6,8 @@ use App\Http\Controllers\DocumentVault\DownloadDocumentController;
 use App\Http\Middleware\EnforceMfaChallenge;
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Livewire\Public\Booking\BookingWizard;
+use App\Livewire\Public\CareSubscription\CareHistoryPage;
+use App\Livewire\Public\CareSubscription\SubscriptionStatusPage;
 use App\Livewire\Public\Certificates\CertificateStatusPage;
 use App\Livewire\Public\Directory\CemeteryDetail;
 use App\Livewire\Public\Directory\CemeteryDirectoryIndex;
@@ -376,6 +378,32 @@ Route::get('/bantuan', HelpCentre::class)->name('bantuan.index');
 | becomes the destination.
 */
 Route::get('/preneed', PreNeedInterestPage::class)->name('preneed.index');
+
+/*
+|--------------------------------------------------------------------------
+| Care subscriptions — P5b Lane 4 (recurring-care-subscriptions +
+| grave-care-fulfillment)
+|--------------------------------------------------------------------------
+| Customer-facing subscription status and care history views. Both are
+| read-only GET routes resolving server-confirmed state only (AC4). Billing
+| status and work order status render as TWO SEPARATE badge indicators
+| (AC6) — never collapsed into one "done" badge. PAID ≠ COMPLETED.
+|
+| `/langganan/{subscriptionReference}` — SubscriptionStatusPage: shows
+| subscription status, care plan name, frequency, price, and cycle history.
+| The reference is an opaque public token; an unknown reference 404s
+| indistinguishably from a missing one (no enumeration).
+|
+| `/riwayat-perawatan/{customerId}` — CareHistoryPage: shows work order
+| history with separate billing + work status badges, evidence status, and
+| acceptance/complaint actions. Missed/failed service shows an honest
+| operational state, never styled as a customer error (AC6).
+|
+| No vault references or subject internals leave the server through these
+| routes. Read-only GETs; no write surface exists on either route.
+*/
+Route::get('/langganan/{subscriptionReference}', SubscriptionStatusPage::class)->name('langganan.status');
+Route::get('/riwayat-perawatan/{customerId}', CareHistoryPage::class)->name('riwayat-perawatan.index');
 
 /*
 |--------------------------------------------------------------------------

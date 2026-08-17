@@ -30,6 +30,9 @@ Durable events use the transactional outbox and envelope in `outbox-event-contra
 | `renewal.marked_external.v1` | Renewal | Billing guard | Prevents duplicate period |
 | `grave.reminder_sent.v1` | GraveRegistry | Reporting | Idempotent window key |
 | `care.cycle_created.v1` | CareSubscription | Billing/work scheduling | One per cycle |
+| `care.work_order_created.v1` | VendorFulfillment | Case/customer | Evidence reference; one per paid cycle |
+| `care.complaint_filed.v1` | VendorFulfillment | Case/customer/audit | Linked to work order; audited |
+| `care.make_good_created.v1` | VendorFulfillment | Case/customer | Replacement order linked to original |
 | `vendor.work_completed.v1` | VendorFulfillment | Case/customer | Evidence reference |
 | `memorial.unpublished.v1` | Memorial | Public read/QR | Privacy/moderation action |
 | `memorial.profile_created.v1` | Memorial | Read models, audit | Privacy default private; grave-record reference only (AC7) |
