@@ -41,7 +41,7 @@ final readonly class CreateWorkOrder
                     'care_plan_id' => $carePlan->getKey(),
                     'subscription_cycle_id' => $cycleId,
                     'vendor_id' => $vendorId,
-                    'status' => WorkOrderStatus::Pending->value,
+                    'status' => WorkOrderStatus::Scheduled->value,
                     'scheduled_at' => $scheduledAt,
                 ]);
 

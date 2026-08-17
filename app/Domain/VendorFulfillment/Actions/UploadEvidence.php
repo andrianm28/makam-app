@@ -15,33 +15,26 @@ use App\Platform\Correlation\CorrelationContext;
 
 /**
  * Records evidence upload against a work order.
- * Evidence enters quarantine (status: pending) until validated.
+ * References a `documents` row in the vault (private quarantine).
  * Audited `EVIDENCE_UPLOADED`.
  */
 final readonly class UploadEvidence
 {
     public function __invoke(
         WorkOrder $workOrder,
+        string $documentId,
         string $evidenceType,
-        string $filePath,
-        string $fileName,
-        ?string $fileType = null,
-        ?int $fileSize = null,
         ?string $uploadedBy = null,
         string $actorRef = 'system',
         string $actorRole = 'vendor',
         AuditSource $auditSource = AuditSource::Panel,
     ): WorkEvidence {
         return Audit::wrap(
-            mutation: function () use ($workOrder, $evidenceType, $filePath, $fileName, $fileType, $fileSize, $uploadedBy): WorkEvidence {
+            mutation: function () use ($workOrder, $documentId, $evidenceType, $uploadedBy): WorkEvidence {
                 return WorkEvidence::query()->create([
                     'work_order_id' => $workOrder->getKey(),
+                    'document_id' => $documentId,
                     'evidence_type' => $evidenceType,
-                    'file_path' => $filePath,
-                    'file_name' => $fileName,
-                    'file_type' => $fileType,
-                    'file_size' => $fileSize,
-                    'status' => 'pending',
                     'uploaded_by' => $uploadedBy,
                 ]);
             },

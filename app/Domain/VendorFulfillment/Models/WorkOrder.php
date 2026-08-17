@@ -12,8 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Eloquent model for `work_orders` — the primary fulfillment record for
- * a care service visit. See
- * `2026_08_17_120000_create_work_orders_table.php` for the schema.
+ * a care service visit.
  *
  * Billing status and work status are TWO separate indicators (AC2).
  * One work order per paid subscription cycle (AC5/AC8).

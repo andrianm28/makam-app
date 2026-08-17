@@ -64,11 +64,25 @@ final class Subscription extends Model
         return SubscriptionStatus::from($this->status);
     }
 
+    /**
+     * @return BelongsTo<\App\Domain\PlotInventory\Models\GravePlot, $this>
+     */
+    public function grave(): BelongsTo
+    {
+        return $this->belongsTo(\App\Domain\PlotInventory\Models\GravePlot::class, 'grave_id');
+    }
+
+    /**
+     * @return BelongsTo<CarePlan, $this>
+     */
     public function carePlan(): BelongsTo
     {
         return $this->belongsTo(CarePlan::class, 'care_plan_id');
     }
 
+    /**
+     * @return HasMany<SubscriptionCycle, $this>
+     */
     public function cycles(): HasMany
     {
         return $this->hasMany(SubscriptionCycle::class, 'subscription_id');

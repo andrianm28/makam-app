@@ -15,8 +15,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * Eloquent model for `care_plans` — the master-data catalogue for recurring
  * grave maintenance plans.
  *
- * Each plan defines a frequency, price, and optional checklist template.
- * Subscriptions reference a care plan; work orders derive from paid cycles.
+ * Each plan defines a frequency, price (in minor units), and optional checklist
+ * template. Subscriptions reference a care plan; work orders derive from paid cycles.
  */
 final class CarePlan extends Model
 {
@@ -32,11 +32,14 @@ final class CarePlan extends Model
     protected $fillable = [
         'reference',
         'name',
+        'description',
+        'product_code',
         'frequency',
-        'price',
-        'status',
+        'price_minor',
+        'currency',
         'vendor_id',
         'checklist_template',
+        'status',
     ];
 
     /**
@@ -45,7 +48,7 @@ final class CarePlan extends Model
     protected function casts(): array
     {
         return [
-            'price' => 'decimal:2',
+            'price_minor' => 'integer',
             'checklist_template' => 'array',
         ];
     }
