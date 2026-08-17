@@ -22,6 +22,19 @@ use Tests\TestCase;
  * identity plan). Every method below carries #[RequiresPhpExtension('gd')]
  * so hosts without ext-gd skip rather than fail — this repo's CI php job
  * gains `gd` in this same batch (.github/workflows/ci.yml).
+ *
+ * Path note: this file lives at
+ * tests/Unit/Support/Design/BrandAssetBuilderTest.php, mirroring
+ * app/Support/Design/BrandAssetBuilder.php's actual directory (every other
+ * class under app/Support/Design/ — FilamentPaletteGenerator, StatusIntent
+ * — has its test under tests/Unit/Support/Design/, e.g.
+ * StatusIntentTest.php). The task-3 brief's file list names the path
+ * without the `Support` segment (tests/Unit/Design/BrandAssetBuilderTest.php);
+ * that was a brief shorthand, not a directory that exists elsewhere in this
+ * codebase. PSR-4 and PHPUnit's directory autodiscovery both work fine with
+ * either path — this note exists purely so `git log --grep`/`git blame`
+ * against the brief's literal path finds this file's actual history instead
+ * of nothing.
  */
 #[RequiresPhpExtension('gd')]
 final class BrandAssetBuilderTest extends TestCase
