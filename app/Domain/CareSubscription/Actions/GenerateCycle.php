@@ -49,7 +49,7 @@ final readonly class GenerateCycle
                     'status' => SubscriptionCycleStatus::Scheduled->value,
                 ]);
 
-                SubscriptionInvoice::query()->create([
+                $invoice = SubscriptionInvoice::query()->create([
                     'subscription_cycle_id' => $cycle->getKey(),
                     'amount_minor' => $subscription->price_minor,
                     'currency' => $subscription->currency,
@@ -57,7 +57,9 @@ final readonly class GenerateCycle
                     'issued_at' => now(),
                 ]);
 
-                return $cycle;
+                $cycle->update(['invoice_id' => $invoice->getKey()]);
+
+                return $cycle->fresh();
             },
             action: CareSubscriptionAuditActions::CYCLE_GENERATED,
             subject: fn (SubscriptionCycle $cycle): AuditSubject => new AuditSubject(

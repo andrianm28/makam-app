@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -23,6 +24,10 @@ return new class extends Migration
 
             $table->foreign('subscription_cycle_id')->references('id')->on('subscription_cycles');
         });
+
+        if (config('database.default') === 'pgsql') {
+            DB::statement("ALTER TABLE subscription_invoices ADD CONSTRAINT subscription_invoices_status_check CHECK (status IN ('pending', 'paid', 'failed'))");
+        }
     }
 
     public function down(): void

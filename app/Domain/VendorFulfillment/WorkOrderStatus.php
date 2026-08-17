@@ -10,6 +10,10 @@ namespace App\Domain\VendorFulfillment;
  */
 enum WorkOrderStatus: string
 {
+    case Pending = 'pending';
+
+    case Assigned = 'assigned';
+
     case Scheduled = 'scheduled';
 
     case InProgress = 'in_progress';
@@ -24,6 +28,8 @@ enum WorkOrderStatus: string
      * @var list<string>
      */
     public const array KNOWN_STATUSES = [
+        self::Pending->value,
+        self::Assigned->value,
         self::Scheduled->value,
         self::InProgress->value,
         self::Completed->value,

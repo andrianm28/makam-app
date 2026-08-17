@@ -106,6 +106,10 @@ final class StatusIntent
 
     public const FAMILY_CARE_WORK_ORDER = 'care_work_order';
 
+    public const FAMILY_CARE_COMPLAINT = 'care_complaint';
+
+    public const FAMILY_CARE_MAKE_GOOD = 'care_make_good';
+
     public const INTENT_NEUTRAL = 'neutral';
 
     public const INTENT_INFO = 'info';
@@ -226,15 +230,28 @@ final class StatusIntent
         // Care work order statuses — design-system.md §3.7
         // "Care work order" table (P5b Lane 4). Separate from fulfillment
         // because a work order's lifecycle is independent of the cycle
-        // payment state.
+        // payment state. Keys MUST match WorkOrderStatus enum values.
         self::FAMILY_CARE_WORK_ORDER => [
-            'PENDING' => ['intent' => self::INTENT_NEUTRAL, 'icon' => 'inbox'],
-            'ASSIGNED' => ['intent' => self::INTENT_INFO, 'icon' => 'user-group'],
-            'IN_PROGRESS' => ['intent' => self::INTENT_PENDING, 'icon' => 'cog'],
+            'pending' => ['intent' => self::INTENT_NEUTRAL, 'icon' => 'inbox'],
+            'assigned' => ['intent' => self::INTENT_INFO, 'icon' => 'user-group'],
+            'scheduled' => ['intent' => self::INTENT_NEUTRAL, 'icon' => 'calendar'],
+            'in_progress' => ['intent' => self::INTENT_PENDING, 'icon' => 'cog'],
+            'completed' => ['intent' => self::INTENT_SUCCESS, 'icon' => 'check-badge'],
+            'missed' => ['intent' => self::INTENT_DANGER, 'icon' => 'x-circle'],
+            'complaint' => ['intent' => self::INTENT_DANGER, 'icon' => 'exclamation-triangle'],
+        ],
+        // Care complaint statuses (P5b Lane 4).
+        self::FAMILY_CARE_COMPLAINT => [
+            'OPEN' => ['intent' => self::INTENT_DANGER, 'icon' => 'exclamation-triangle'],
+            'INVESTIGATING' => ['intent' => self::INTENT_PENDING, 'icon' => 'clock'],
+            'RESOLVED' => ['intent' => self::INTENT_SUCCESS, 'icon' => 'check-badge'],
+            'DISMISSED' => ['intent' => self::INTENT_NEUTRAL, 'icon' => 'slash'],
+        ],
+        // Care make-good statuses (P5b Lane 4).
+        self::FAMILY_CARE_MAKE_GOOD => [
+            'PENDING' => ['intent' => self::INTENT_PENDING, 'icon' => 'clock'],
+            'IN_PROGRESS' => ['intent' => self::INTENT_INFO, 'icon' => 'cog'],
             'COMPLETED' => ['intent' => self::INTENT_SUCCESS, 'icon' => 'check-badge'],
-            'FAILED' => ['intent' => self::INTENT_DANGER, 'icon' => 'x-circle'],
-            'RESCHEDULED' => ['intent' => self::INTENT_PENDING, 'icon' => 'arrow-path'],
-            'CANCELLED' => ['intent' => self::INTENT_NEUTRAL, 'icon' => 'slash'],
         ],
     ];
 

@@ -51,7 +51,7 @@ final readonly class CreateMakeGood
                 $makeGood = MakeGoodOrder::query()->create([
                     'original_work_order_id' => $originalWorkOrder->getKey(),
                     'replacement_work_order_id' => $replacementWorkOrder?->getKey(),
-                    'original_cycle_id' => $originalWorkOrder->subscription_cycle_id ?? $originalWorkOrder->care_plan_id,
+                    'original_cycle_id' => $originalWorkOrder->subscription_cycle_id,
                     'status' => MakeGoodStatus::Pending->value,
                     'notes' => $notes,
                 ]);

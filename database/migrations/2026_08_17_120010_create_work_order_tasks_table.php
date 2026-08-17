@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -27,6 +28,10 @@ return new class extends Migration
 
             $table->index('work_order_id', 'work_order_tasks_wo_index');
         });
+
+        if (config('database.default') === 'pgsql') {
+            DB::statement("ALTER TABLE work_order_tasks ADD CONSTRAINT work_order_tasks_status_check CHECK (status IN ('pending', 'completed'))");
+        }
     }
 
     public function down(): void
