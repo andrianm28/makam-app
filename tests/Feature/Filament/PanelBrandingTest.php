@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Filament;
 
+use Filament\Facades\Filament;
 use Illuminate\Contracts\Support\Htmlable;
 use Tests\TestCase;
 
@@ -40,7 +41,7 @@ final class PanelBrandingTest extends TestCase
     public function test_panels_carry_the_brand_mark_and_generated_palette(): void
     {
         foreach (['admin', 'vendor'] as $id) {
-            $panel = \Filament\Facades\Filament::getPanel($id);
+            $panel = Filament::getPanel($id);
             $logo = $panel->getBrandLogo();
             $this->assertNotNull($logo, "{$id} panel has no brand logo");
             $this->assertStringContainsString(

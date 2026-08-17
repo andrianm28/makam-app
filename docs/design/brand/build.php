@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+use App\Support\Design\BrandAssetBuilder;
 
 /**
  * Plain-CLI driver for BrandAssetBuilder — mirrors the
@@ -16,7 +17,7 @@ require __DIR__.'/../../../app/Support/Design/BrandAssetBuilder.php';
 
 $noKey = in_array('--no-key', $argv, true);
 
-$m = App\Support\Design\BrandAssetBuilder::build(
+$m = BrandAssetBuilder::build(
     __DIR__.'/source/logo.png',
     __DIR__.'/../../../public/brand',
     __DIR__.'/../../../public',

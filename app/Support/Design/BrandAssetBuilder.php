@@ -100,10 +100,10 @@ final class BrandAssetBuilder
      * Build the full brand asset manifest from $sourcePng.
      *
      * @return list<string> sorted list of the ten emitted asset basenames
-     *                       (eight go to $brandOutDir, two — favicon.ico and
-     *                       apple-touch-icon.png — go to $publicRootDir by
-     *                       web convention; the manifest itself is the flat,
-     *                       sorted basename list the brief specifies).
+     *                      (eight go to $brandOutDir, two — favicon.ico and
+     *                      apple-touch-icon.png — go to $publicRootDir by
+     *                      web convention; the manifest itself is the flat,
+     *                      sorted basename list the brief specifies).
      */
     public static function build(
         string $sourcePng,
