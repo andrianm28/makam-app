@@ -116,7 +116,14 @@ final class LaunchCityTest extends TestCase
         // come before their parents too — PostgreSQL blocks `DROP TABLE`
         // of a parent by ANY incoming FK (2BP01): `plot_reservations` →
         // `grave_plots` → `cemetery_blocks` must precede their parents
-        // below.
+        // below. P5a pre-need tables (16 Aug 2026) come first of all:
+        // `pre_need_payment_schedules` FK-references `pre_need_cases`
+        // (restrictOnDelete), and `pre_need_cases` FK-references
+        // `quotes`/`plot_reservations`/`funeral_cases`/
+        // `cemetery_packages`/`cemeteries`, so both must precede their
+        // parents below (2BP01).
+        Schema::dropIfExists('pre_need_payment_schedules');
+        Schema::dropIfExists('pre_need_cases');
         Schema::dropIfExists('visitation_bookings');
         Schema::dropIfExists('visitation_date_capacities');
         Schema::dropIfExists('visitation_blackout_dates');

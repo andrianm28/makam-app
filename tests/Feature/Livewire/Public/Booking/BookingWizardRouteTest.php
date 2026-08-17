@@ -193,6 +193,14 @@ final class BookingWizardRouteTest extends TestCase
         // (2BP01), so `plot_reservations` (→ `grave_plots`/`orders`),
         // `grave_plots` (→ `cemetery_blocks`/`cemetery_packages`) and
         // `cemetery_blocks` (→ `cemeteries`) must precede their parents.
+        // P5a pre-need tables (16 Aug 2026) come first of all: PostgreSQL
+        // blocks `DROP TABLE` of a parent by ANY incoming FK (2BP01), so
+        // `pre_need_payment_schedules` (→ `pre_need_cases`) and
+        // `pre_need_cases` (→ `quotes`/`plot_reservations`/`funeral_cases`/
+        // `cemetery_packages`/`cemeteries`) must precede their parents
+        // below.
+        Schema::dropIfExists('pre_need_payment_schedules');
+        Schema::dropIfExists('pre_need_cases');
         Schema::dropIfExists('visitation_bookings');
         Schema::dropIfExists('visitation_date_capacities');
         Schema::dropIfExists('visitation_blackout_dates');
