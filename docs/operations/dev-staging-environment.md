@@ -1,13 +1,21 @@
-# Combined Development and Staging Environment — Ubuntu 22.04, 2 vCPU / 4 GB — v0.5
+# Combined Development and Staging Environment — Ubuntu 24.04, 8 vCPU / 31 GB — v0.6
+
+> **Updated 17 Aug 2026 — host migration (adrivm → yiemvm).** The combined host
+> moved to yiemvm (`103.92.214.243`, Ubuntu 24.04.4, 8 vCPU / 31 GB / 93 GB free).
+> The migration (`docs/operations/2026-08-17-makam-migration-to-yiemvm.md`)
+> carried the compose stack, images, PostgreSQL data (verified row-count match),
+> the repo + all worktrees, credentials, and the nginx TLS front (Let's Encrypt,
+> carried) — `dev.makam.co.id` now resolves to yiemvm via Domainesia DNS.
+> adrivm (old host) was kept running as the 7-day rollback standby.
 
 ## 1. Decision
 
 Use one temporary non-production host for both development and staging:
 
 ```text
-Host OS: Ubuntu 22.04 LTS
-Compute: 2 vCPU
-Memory: 4 GB RAM
+Host OS: Ubuntu 24.04 LTS
+Compute: 8 vCPU
+Memory: 31 GB RAM
 Swap: 2–4 GB emergency buffer
 Role: combined development + staging only
 ```
