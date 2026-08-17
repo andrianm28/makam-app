@@ -1,6 +1,6 @@
 # Design System — Makam.co.id
 
-**Version:** v0.1 — design baseline, **PROPOSED** (awaiting design + product approval)
+**Version:** v0.2 — brand identity adopted (ADR-0034), OQ-01/OQ-02 resolved; remaining sections **PROPOSED** (awaiting design + product approval)
 **Date:** 25 Juli 2026
 **Scope:** Public web (Blade + Livewire 4), Filament 5 panels (`/admin`, `/vendor`), and printed documents (invoice, kwitansi, agreement, certificate).
 **Token source of truth:** [`resources/css/tokens.css`](../../resources/css/tokens.css)
@@ -38,6 +38,8 @@ This document is the **single source of truth for visual design decisions**. It 
 
 `v0.1 PROPOSED`. The **token values are verified for accessibility** (§7.1, 46/46 pairs pass) but **no brand approval, no user testing, and no rendered build has occurred**. See §12 NOT TESTED and §11 OPEN QUESTIONS. Per `AGENTS.md`, nothing in this document may be reported as `PASS` beyond what §7.1 explicitly measured.
 
+`v0.2` (17 Aug 2026): the official Makam.co.id brand identity was adopted per [ADR-0034](../adr/0034-adopt-makam-brand-identity.md). Earth brown replaces the provisional Petrol teal as `primary`, Leaf green replaces Sandstone as the caged `secondary`, and Poppins joins as the `--font-display` face (§1.4). **OQ-01** (brand primary) and **OQ-02** (existing identity) are resolved (§11). Every adopted brand hex remains **PROVISIONAL** pending **OQ-12** (official brand values, vector source, horizontal lockup) — see §11.
+
 ---
 
 ## 1. Design tokens
@@ -66,21 +68,21 @@ Why two layers: `--color-primary-600` says *what*, `--mk-text-link` says *why*. 
 
 | Family | Base (600) | Hue | Role |
 |---|---|---|---|
-| **Primary — "Petrol"** | `#12545E` | 188° | Brand, primary CTA, links, active nav, focus ring |
-| **Secondary — "Sandstone"** | `#8A6A45` | 32° | Warm surface tint + accent **only** (never a fill) |
+| **Primary — "Earth"** | `#5D3A1F` (PROVISIONAL — OQ-12) | 26° | Brand, primary CTA, links, active nav, focus ring |
+| **Secondary — "Leaf"** | `#2E7D32` (PROVISIONAL — OQ-12) | 123° | Surface tint + accent **only** (never a fill, badge, button, or alert) |
 | **Neutral** | `#576060` | — | Text, borders, surfaces, dividers |
 | **Success** | `#1C7A44` | 146° | `DIBAYAR`, `SELESAI`, upload accepted, autosave saved |
 | **Warning** | `#9A6300` | 39° | All `MENUNGGU_*`, quote expiring, scan pending, Urgent |
-| **Danger** | `#A32A24` | 3° | `DITOLAK`, validation error, payment failed, file rejected |
+| **Danger** | `#A32435` | 352° | `DITOLAK`, validation error, payment failed, file rejected — hue tuned **−11°** (was 3°) to restore ≥30° separation from Earth `primary` (ADR-0034 D4) |
 | **Info** | `#3A4E9B` | 228° | Gated-fallback mode banners, neutral system notices |
 
 **Three deliberate decisions worth stating, because they look wrong at first glance:**
 
-**(a) Primary is teal, not green.** A cemetery/memorial brand in Indonesia invites green, and green is culturally resonant. It was rejected as *primary* because `success` must also be green, and a green "Selesai" badge sitting next to a green "Bayar Sekarang" button is genuinely ambiguous on the one screen where ambiguity is most expensive (Step 8/9, payment). Petrol at 188° sits 42° from success green and 40° from info indigo — all three stay distinguishable. Petrol still reads calm, institutional, and non-celebratory, which is the required tone. **This is the single most reversible-but-consequential choice here → OQ-01.**
+**(a) Primary is Earth brown, not teal — OQ-01 resolved.** v0.1 chose Petrol teal as a deliberately *provisional* primary, made only because [OQ-02](#11-open-questions) had no prior identity to defer to, and deliberately "not green" so a brand CTA could never be confused with a `success` badge. On 17 Aug 2026 the stakeholder supplied the official Makam.co.id brand identity — a render plus the *Filosofi Logo Makam.co.id* philosophy text — which **reverses** that choice: *"dark brown = earth, calm, stability, warmth, respect, humanist (deliberately 'not too tech')."* [ADR-0034](../adr/0034-adopt-makam-brand-identity.md) records the decision. The old green-CTA-vs-success-badge ambiguity that justified avoiding green as primary no longer needs a hue-avoidance answer — it is now avoided **structurally**: brand fills are Earth brown, and `secondary` (Leaf, below) is caged so it never fills a button, badge, or alert regardless of how close its hue sits to `success`. **OQ-01 and OQ-02 are resolved; every Earth value is PROVISIONAL pending OQ-12** (official brand hex, vector source, horizontal lockup).
 
-**(b) Secondary is constrained, not equal.** Sandstone (32°) is only 6.5° from warning (39°) — objectively too close for two families that both carry meaning. Rather than pick a worse warm colour, secondary is **restricted by usage**: shades 50–200 as surface tint, 700–900 as text on those tints, 300–400 as decorative rules/icons. It is **never** a filled badge, alert, or button. A restrained palette is also correct for this domain: one brand colour, one warm surface, four semantics, neutrals.
+**(b) Secondary is constrained, not equal — Sandstone retired, Leaf inherits the cage.** The philosophy text reads the mark's eight radial leaves as "life, growth, renewal," so `secondary` becomes **Leaf** green (`#2E7D32`, hue ≈123°), replacing Sandstone. The restricted-usage cage is unchanged and, if anything, matters *more* now: Leaf sits only ≈23° from `success` (146°) — closer than Sandstone ever sat to `warning` (was ≈6.5°) — so any Leaf fill would misread as a status success. Secondary stays **restricted by usage**: shades 50–200 as surface tint, 700–900 as text on those tints, 300–400 as decorative rules/icons. It is **never** a filled badge, alert, or button. A restrained palette is also correct for this domain: one brand colour, one accent, four semantics, neutrals.
 
-**(c) Danger is muted brick `#A32A24`, not a bright red.** Users on this site are frequently in the first hours of bereavement. A saturated alarm red is hostile. `#A32A24` holds 7.21:1 on white — it is *more* legible than a typical bright red while reading as serious rather than panicked.
+**(c) Danger is muted brick `#A32435`, not a bright red.** Users on this site are frequently in the first hours of bereavement. A saturated alarm red is hostile. `#A32435` holds 7.34:1 on white — it is *more* legible than a typical bright red while reading as serious rather than panicked. (Hue tuned −11° from the v0.1 value, `#A32A24`, by ADR-0034 D4 — see the danger row above.)
 
 **"Urgent" is an alias, not a new colour.** `information-architecture.md` §4 requires `Urgent` to have visual priority, and `AGENTS.md` forbids implying a service claim while gate `G-OPS-01` is closed. So `--mk-intent-urgent-*` aliases the warning family with a strong left border, and **must always ship with an explicit availability label**. No new hue, no implied promise.
 
@@ -112,13 +114,14 @@ Never use an odd value. `p-[13px]` is a lint failure (§9.5).
 
 | Token | Stack | Where |
 |---|---|---|
-| `--font-sans` | Inter var → system fallback | Everything by default |
-| `--font-display` | Source Serif 4 / Lora → Georgia | Homepage hero H1, certificate/agreement/invoice documents **only** |
+| `--font-sans` | Inter var → system fallback | Everything by default. Filament panels stay **all-Inter** — brand voice is a public-surface concern (ADR-0034 D7). |
+| `--font-display` | Poppins → Inter var → system fallback | `h1`/`h2`, hero, header wordmark **only** (ADR-0034 D7). Self-hosted via `@fontsource/poppins`, latin subset, weight **600 only**. `h3`/`h4` stay Inter — Poppins' wide geometry hurts at small sizes. Measured initial route payload (Poppins latin-600 + Inter latin, gzipped woff2, Task 2): **≈56 KB** (8 KB Poppins + 48 KB Inter) — under the §4.6 60 KB budget. |
+| `--font-document` | Source Serif 4 / Lora → Georgia | Certificate/agreement/invoice documents **only**, consumed by `print.css` (§8.5) once it is built. Holds the value `--font-display` carried before ADR-0034, verbatim — added specifically so a document can never silently inherit the new Poppins brand face. |
 | `--font-mono` | JetBrains Mono → system | Order reference, payment reference, audit IDs |
 
 **Self-hosting is mandatory.** No Google Fonts, no CDN. Two reasons, both from existing baselines: staging is `noindex` and access-restricted ([`security-baseline.md`](../security/security-baseline.md) §Non-production isolation), and a third-party font request leaks the visitor's IP and referrer on pages where that visitor is arranging a funeral or uploading a death certificate. Subset to `latin` + `latin-ext`; Indonesian needs no extra ranges.
 
-`--font-display` is loaded **per-route** (hero + document routes), never on the booking wizard — see the weight budget in §4.6.
+`--font-display` (Poppins) ships site-wide as part of `app.css` (§4.6 budget covers it as part of the initial route payload) and applies only to `h1`/`h2`; it is never used on the booking wizard's own body copy. `--font-document` is a separate, unrelated stack reserved for printed documents (§8.5) — it does not load on any public route today because `print.css` does not exist yet.
 
 **Scale** (mobile-first; 16 px root; `rem`-based so browser zoom works)
 
@@ -214,7 +217,7 @@ Easing: `--ease-standard` default · `--ease-decelerate` entering · `--ease-acc
 - Show the source and last-updated time on any fee or availability figure (renewal tariff, `G-RATE-01`).
 - Pair every status colour with an icon **and** an Indonesian text label.
 - Keep the customer-service escape hatch visible on every transactional screen — required by `AGENTS.md` and `screen-inventory.md` §D.
-- Use `--mk-surface-warm` (Sandstone 50) for trust/reassurance sections to soften long white pages.
+- Use `--mk-surface-warm` (Earth `primary-50`, ADR-0034 D6 — no longer Leaf) for trust/reassurance sections to soften long white pages.
 
 **DON'T**
 
@@ -222,7 +225,7 @@ Easing: `--ease-standard` default · `--ease-decelerate` entering · `--ease-acc
 - ❌ **No celebration.** No confetti, no checkmark animation, no "Selamat!". Step 9 success is quiet: reference number, status, next action.
 - ❌ **No colour-only status.** Fails WCAG 1.4.1 and fails the 8% of Indonesian men with CVD.
 - ❌ **No green for `primary`** (see §1.2a).
-- ❌ **No Sandstone fills** — surface/accent only (§1.2b).
+- ❌ **No Leaf fills** — surface/accent only (§1.2b).
 - ❌ **No pill buttons, no shadows above `--shadow-xl`, no gradient on any interactive surface.**
 - ❌ **No stock photography of grieving people.** Cemetery, garden, facility, and product photography only.
 - ❌ **No dark mode** until OQ-07 is resolved — it is absent from `screen-inventory.md`, so it has no required states and no test coverage.
@@ -862,37 +865,96 @@ Target: **WCAG 2.1 Level AA**. `lang="id"` on `<html>`.
 
 Verified by [`verify-contrast.py`](verify-contrast.py) against `resources/css/tokens.css`.
 
+Real output, re-run 17 Aug 2026 against the shipped Earth/Leaf `tokens.css` (ADR-0034):
+
 ```
 $ python3 docs/design/verify-contrast.py
+WCAG contrast verification — resources/css/tokens.css
 79 colour tokens parsed, 46 pairs asserted
+
+PASS   16.67  (min 4.5)  text-strong on surface-raised  #1A1F1F on #FFFFFF
+PASS   12.86  (min 4.5)  headings on surface-raised  #2D3333 on #FFFFFF
+PASS    8.92  (min 4.5)  text-default (body) on surface-raised  #444B4B on #FFFFFF
+PASS    6.47  (min 4.5)  text-muted on surface-raised  #576060 on #FFFFFF
+PASS    4.53  (min 4.5)  text-placeholder on surface-raised  #6F7878 on #FFFFFF
+PASS    8.39  (min 4.5)  text-default on surface-page  #444B4B on #F7F8F8
+PASS    8.23  (min 4.5)  text-default on surface-warm  #444B4B on #FAF5EF
+PASS   13.65  (min 4.5)  text-strong on secondary-100  #1A1F1F on #DCEDDD
+PASS    3.96  (min 3.0)  text-disabled on surface-disabled  #6F7878 on #EEF0F0
+PASS   10.05  (min 4.5)  white on primary-600  #FFFFFF on #5D3A1F
+PASS   11.98  (min 4.5)  white on primary-700 (hover)  #FFFFFF on #4D3019
+PASS    5.36  (min 4.5)  white on success-600  #FFFFFF on #1C7A44
+PASS    5.05  (min 4.5)  white on warning-600  #FFFFFF on #9A6300
+PASS    7.34  (min 4.5)  white on danger-600  #FFFFFF on #A32435
+PASS    9.37  (min 4.5)  white on danger-700 (hover)  #FFFFFF on #871D2C
+PASS    7.66  (min 4.5)  white on info-600  #FFFFFF on #3A4E9B
+PASS   11.05  (min 4.5)  primary-700 on primary-50  #4D3019 on #FAF5EF
+PASS   11.53  (min 4.5)  primary-800 on primary-100  #3E2713 on #F2E8DC
+PASS    6.82  (min 4.5)  success-700 on success-50  #166237 on #EEF8F1
+PASS    7.94  (min 4.5)  success-800 on success-100  #134E2D on #D5EEDD
+PASS    5.99  (min 4.5)  warning-700 on warning-50  #855400 on #FDF6EB
+PASS    7.25  (min 4.5)  warning-800 on warning-100  #6A4400 on #FAEACB
+PASS    8.49  (min 4.5)  danger-700 on danger-50  #871D2C on #FDF1F2
+PASS    9.01  (min 4.5)  danger-800 on danger-100  #6E1825 on #FBDCDF
+PASS    8.65  (min 4.5)  info-700 on info-50  #31417F on #F1F3FC
+PASS    9.28  (min 4.5)  info-800 on info-100  #293568 on #E0E5F8
+PASS    6.21  (min 4.5)  secondary-700 on secondary-50  #27682B on #F0F7F0
+PASS    7.31  (min 4.5)  secondary-800 on secondary-100  #205423 on #DCEDDD
+PASS   10.05  (min 4.5)  text-link on surface-raised  #5D3A1F on #FFFFFF
+PASS   11.98  (min 4.5)  text-link-hover on surface-raised  #4D3019 on #FFFFFF
+PASS   11.26  (min 4.5)  text-link on surface-page  #4D3019 on #F7F8F8
+PASS    7.34  (min 4.5)  error text on surface-raised  #A32435 on #FFFFFF
+PASS    3.67  (min 3.0)  border-interactive on surface-raised  #7F8787 on #FFFFFF
+PASS    3.45  (min 3.0)  border-interactive on surface-page  #7F8787 on #F7F8F8
+PASS    3.39  (min 3.0)  border-interactive on surface-warm  #7F8787 on #FAF5EF
+PASS   10.05  (min 3.0)  focus ring on surface-raised  #5D3A1F on #FFFFFF
+PASS    9.44  (min 3.0)  focus ring on surface-page  #5D3A1F on #F7F8F8
+PASS    4.55  (min 3.0)  focus ring inverse on primary-600  #CDA882 on #5D3A1F
+PASS    7.34  (min 3.0)  border-error on surface-raised  #A32435 on #FFFFFF
+PASS    4.70  (min 3.0)  urgent border on urgent bg  #9A6300 on #FDF6EB
+PASS   10.05  (min 3.0)  primary heading on surface-raised  #5D3A1F on #FFFFFF
+PASS    4.44  (min 3.0)  white on primary-500 (large only)  #FFFFFF on #9A6F42
+PASS   16.12  (min 4.5)  white on surface-inverse  #FFFFFF on #2F1D0E
+PASS   13.32  (min 4.5)  primary-100 on surface-inverse  #F2E8DC on #2F1D0E
+PASS   10.47  (min 4.5)  primary-200 on surface-inverse  #E2CDB6 on #2F1D0E
+PASS   16.67  (min 4.5)  white on neutral-900  #FFFFFF on #1A1F1F
+
+Hue separation of semantic families (600 shade):
+  primary      26.1 deg
+  success     145.5 deg
+  info        227.6 deg
+  danger      352.0 deg
+  secondary   123.0 deg
+  warning      38.6 deg
+
 RESULT: PASS — all 46 pairs meet WCAG 2.1 AA
-EXIT=0
 ```
 
-Selected measured ratios (full output from the script):
+Selected measured ratios (full output above):
 
 | Pair | Ratio | Min |
 |---|---|---|
 | body text `neutral-700` on white | **8.92** | 4.5 |
 | muted `neutral-600` on white | **6.47** | 4.5 |
 | placeholder `neutral-500` on white | **4.53** | 4.5 |
-| white on `primary-600` (primary button) | **8.55** | 4.5 |
+| white on `primary-600` (Earth, primary button) | **10.05** | 4.5 |
 | white on `success-600` | **5.36** | 4.5 |
 | white on `warning-600` | **5.05** | 4.5 |
-| white on `danger-600` | **7.21** | 4.5 |
+| white on `danger-600` (tuned, ADR-0034) | **7.34** | 4.5 |
 | white on `info-600` | **7.66** | 4.5 |
-| badge `*-800` on `*-100` (all six families) | **7.25 – 10.22** | 4.5 |
-| link `primary-600` on white | **8.55** | 4.5 |
-| `border-interactive` on white / page / warm | **3.67 / 3.45 / 3.47** | 3.0 |
-| focus ring `primary-600` on white | **8.55** | 3.0 |
-| inverse focus ring `primary-300` on `primary-600` | **3.94** | 3.0 |
-| white on `surface-inverse` (footer) | **14.40** | 4.5 |
+| badge `*-800` on `*-100` (all six families) | **7.25 – 11.53** | 4.5 |
+| link `primary-600` on white | **10.05** | 4.5 |
+| `border-interactive` on white / page / warm | **3.67 / 3.45 / 3.39** | 3.0 |
+| focus ring `primary-600` on white | **10.05** | 3.0 |
+| inverse focus ring `primary-300` on `primary-600` | **4.55** | 3.0 |
+| white on `surface-inverse` (footer) | **16.12** | 4.5 |
 | disabled text `neutral-500` on `neutral-100` | **3.96** | 3.0 |
 
-**Two findings from that verification worth keeping visible:**
+**Three findings from that verification worth keeping visible:**
 
 1. `warning-600` was originally `#A66B00` and measured **4.44:1** — a real AA failure for a white label. Darkened to `#9A6300` → 5.05:1.
 2. `neutral-300` (1.71:1) and `neutral-400` (2.67:1) **both fail WCAG 1.4.11** as input borders. This is why `--color-neutral-450` (`#7F8787`, 3.67:1) exists and why `--mk-border-interactive` is mandatory for control boundaries. `neutral-200`/`300` remain valid for **decorative** dividers only, where 1.4.11 does not apply.
+3. **Danger's hue was tuned −11° when Earth replaced Petrol as `primary` (ADR-0034 D4).** Earth's hue (≈26°) sits only ≈24° from the pre-existing danger hue (≈3°) — below the verifier's `HUE_MIN_SEPARATION = 30.0°` for the `primary`/`success`/`info`/`danger` status families. Per §9.4 ("fix the token, never the assertion"), every danger shade's hue was rotated −11° (lightness/saturation held), moving 600 from `#A32A24` (hue 3°) to `#A32435` (measured hue **352.0°**). Measured primary/danger separation after the tune: **≈34.1°** (`|26.1 − 352.0| = 325.9`, `360 − 325.9 = 34.1`), clearing the 30° floor.
 
 **Re-run this script in CI on every colour change** (§9.5).
 
@@ -1132,34 +1194,40 @@ Goal: `/admin` and `/vendor` inherit the same tokens, so a `DIBAYAR` badge is id
 ```
 
 ```php
-// app/Providers/Filament/AdminPanelProvider.php
-use Filament\Support\Colors\Color;
-
+// app/Providers/Filament/AdminPanelProvider.php — as shipped (ADR-0034, Task 5)
 public function panel(Panel $panel): Panel
 {
     return $panel
         ->id('admin')
         ->path('admin')
-        ->colors([
-            // Hex mirrors tokens.css. This duplication is a KNOWN GAP (OQ-09):
-            // Filament resolves colours in PHP, which cannot read CSS vars.
-            // Mitigation: generate this array from tokens.css at build time.
-            'primary' => [
-                50 => '#EFF7F8', 100 => '#D6EBEE', 200 => '#ADD7DD',
-                300 => '#7BBAC5', 400 => '#4A97A6', 500 => '#2A7A8B',
-                600 => '#12545E', 700 => '#0F4550', 800 => '#0D3842',
-                900 => '#0B2E36', 950 => '#061A1F',
-            ],
-            'success' => Color::hex('#1C7A44'),
-            'warning' => Color::hex('#9A6300'),
-            'danger'  => Color::hex('#A32A24'),
-            'info'    => Color::hex('#3A4E9B'),
-            'gray'    => Color::hex('#576060'),
-        ])
-        ->font('Inter var', provider: LocalFontProvider::class) // self-hosted, §1.4
+        ->colors($this->filamentColors())
+        ->brandLogo(asset('brand/mark-96.png'))
+        ->brandLogoHeight('2rem')
+        ->font('Inter var')
         ->viteTheme('resources/css/filament/admin/theme.css');
 }
+
+/**
+ * Loads the tokens.css-derived palette instead of a hand-maintained hex
+ * array. Throws loudly if the generator has never been run — a missing
+ * palette should fail panel boot, not silently fall back to Filament's
+ * own default colours.
+ */
+private function filamentColors(): array
+{
+    $path = app_path('Support/Design/generated/FilamentPalette.php');
+
+    if (! is_file($path)) {
+        throw new RuntimeException(
+            'Filament palette has not been generated. Run: php artisan design:generate-filament-palette'
+        );
+    }
+
+    return require $path;
+}
 ```
+
+**Values are generated from `tokens.css` — never hand-maintained.** `app/Support/Design/generated/FilamentPalette.php` is produced by `php artisan design:generate-filament-palette`; regenerate it after any token change and confirm no drift with `php artisan design:verify-filament-palette` (§9.5 gate 6). `VendorPanelProvider` follows the identical pattern.
 
 **Filament status badges must use the §3.7 mapping**, not Filament's default colour guesses:
 
@@ -1172,7 +1240,7 @@ Tables\Columns\TextColumn::make('status')
     ->formatStateUsing(fn (string $state): string => StatusIntent::label($state));
 ```
 
-**Known gap (OQ-09):** Filament resolves colours in PHP and cannot read CSS custom properties, so the hex values above duplicate `tokens.css`. Until a build-time generator exists, **`tokens.css` remains authoritative and the PHP array must be regenerated from it** — never edited independently. A CI check should diff the two (§9.5).
+**OQ-09 — resolved.** Filament resolves colours in PHP and cannot read CSS custom properties, so the array above still duplicates `tokens.css` values in a generated file — but that generated file (`app/Support/Design/generated/FilamentPalette.php`) is produced and diff-checked by `FilamentPaletteGenerator`, never hand-typed. `tokens.css` remains rank 1 (§9.1); the generated file is overwritten on every regeneration and CI gate 6 (§9.5) fails the build on drift.
 
 **Uncertainty:** the exact theme-file path, the `vendor/filament/.../theme.css` import target, and `LocalFontProvider` naming are written from the documented Filament 5 baseline and are **not verified against an installed Filament 5**. Confirm against the shipped docs at scaffold time.
 
@@ -1201,6 +1269,8 @@ Tables\Columns\TextColumn::make('status')
 
 ### 8.5 Print / document stylesheet
 
+**Not yet built** — `print.css` does not exist in this repository (ADR-0034 D10.1); the snippet below is the intended shape, not a shipped file. **Its body font is `var(--font-document)`, not `var(--font-display)`.** `--font-display` is now the Poppins brand face (§1.4) and must never appear on a certificate/agreement/invoice; `--font-document` (Source Serif 4) exists specifically so a printed legal document keeps serif gravitas regardless of what the public site's display face becomes.
+
 ```css
 /* resources/css/print.css — invoice, kwitansi, agreement, certificate */
 @import "tailwindcss";
@@ -1209,13 +1279,22 @@ Tables\Columns\TextColumn::make('status')
 @page { size: A4; margin: 18mm 16mm; }
 
 @layer base {
-  body { font-family: var(--font-display); font-size: 11pt; color: #000; }
+  /* --font-document, NOT --font-display — that is Poppins now (§1.4, ADR-0034 D7). */
+  body { font-family: var(--font-document); font-size: 11pt; color: #000; }
   .page-break { break-after: page; }
   a[href]::after { content: " (" attr(href) ")"; font-size: 9pt; }
   /* Never print a signed document URL — it expires in 5 minutes and is audited. */
   a[data-signed-url]::after { content: ""; }
 }
 ```
+
+### 8.6 Email brand usage
+
+No email templates exist yet in this repository — this is a rule section for future template work, not a description of anything shipped. When email templates are built, brand usage in email is limited to:
+
+- **Reference the hosted `/brand/` lockup URL, never an inline embed.** Link or `<img src>` the mark/lockup from the deployed `public/brand/` assets (§8, `<x-mk.logo>`, ADR-0034 Task 3/4) — do not attach or inline the logo as a MIME attachment.
+- **Brown-on-white only.** Email always uses the normal (brown-on-white) mark; never the inverse (white-on-brown) variant — email clients handle transparency and dark/inverse backgrounds unreliably, so there is no dark-surface email context to justify it.
+- **No attachments.** Consistent with `AGENTS.md`'s notification rules (email/WhatsApp never carry private attachments) — the brand mark is referenced by URL, not attached, and this applies regardless of the attachment's sensitivity.
 
 ---
 
@@ -1256,7 +1335,7 @@ A conflict between ranks is a **defect**. Rank 1 wins for values; rank 2 wins fo
 4. ❌ `outline: none` without a replacement focus ring.
 5. ❌ `opacity-50` for disabled states — it silently breaks contrast.
 6. ❌ Convey status by colour alone.
-7. ❌ Use `secondary` (Sandstone) as a fill, badge, or button.
+7. ❌ Use `secondary` (**Leaf**) as a fill, badge, button, or alert. The rule stands from v0.1 — only the family changed (Sandstone → Leaf, ADR-0034).
 8. ❌ Add `dark:` utilities before OQ-07 is resolved.
 9. ❌ Rename, reorder, or hide a product label, route, menu item, or booking step (§0.1).
 10. ❌ Style a pending state as success, or claim a notification delivery without delivery state.
@@ -1335,14 +1414,14 @@ Also recommended: `axe-core` in the browser-test suite, and a Lighthouse budget 
 ## 10. Quick reference
 
 ```
-COLOUR    primary-600 #12545E  brand/CTA/link/focus
+COLOUR    primary-600 #5D3A1F  brand/CTA/link/focus (Earth — PROVISIONAL, OQ-12)
           success-600 #1C7A44  DIBAYAR, SELESAI
           warning-600 #9A6300  MENUNGGU_*, Urgent, scan pending
-          danger-600  #A32A24  DITOLAK, error, failed
+          danger-600  #A32435  DITOLAK, error, failed (hue tuned −11°, ADR-0034)
           info-600    #3A4E9B  gated-fallback banners
           neutral-700 #444B4B  body text
           neutral-450 #7F8787  interactive borders  ← not 300
-          secondary   surface/accent ONLY, never a fill
+          secondary   #2E7D32  Leaf — surface/accent ONLY, never a fill (PROVISIONAL, OQ-12)
 
 TEXT      16px floor on all inputs · text-base body · 500 UI · 600 headings
 SPACE     4px base · gutter p-4/md:p-6/lg:px-8 · section 40/64 · touch h-11
@@ -1368,9 +1447,10 @@ These require a decision from design, product, or brand. **Each is a real fork, 
 
 | ID | Question | Default in force | Blocks |
 |---|---|---|---|
-| **OQ-01** | Is **Petrol teal** the accepted brand primary? A green primary is culturally resonant for an Indonesian cemetery brand but collides with `success` (§1.2a). If green is mandated, `success` must move to teal and every §7.1 pair must be re-verified. | Petrol `#12545E` | Whole palette |
-| **OQ-02** | Is there an existing Makam.co.id brand identity — logo, colour, typeface? The live site at `makam.co.id` is a static landing page (14 KB `index.html`) not derived from this repo; it was **not** treated as brand authority here. | No prior identity assumed | §1.2, §1.4 |
-| **OQ-03** | Is **Inter + Source Serif 4** acceptable, and is there budget/licence for a commercial alternative? Both chosen are open-licence and self-hostable. | Inter + Source Serif 4 | §1.4, §4.6 |
+| **OQ-01** | Is **Petrol teal** the accepted brand primary? A green primary is culturally resonant for an Indonesian cemetery brand but collides with `success` (§1.2a). If green is mandated, `success` must move to teal and every §7.1 pair must be re-verified. | **Resolved (Earth, ADR-0034), 17 Aug 2026.** The official brand identity mandates Earth brown `#5D3A1F` as primary; Petrol is retired. The green-vs-success ambiguity this question worried about is now solved structurally, not by hue-avoidance: brand fills are brown, `secondary` (Leaf) never fills anything (§1.2b). **PROVISIONAL pending OQ-12.** | Whole palette — resolved |
+| **OQ-02** | Is there an existing Makam.co.id brand identity — logo, colour, typeface? The live site at `makam.co.id` is a static landing page (14 KB `index.html`) not derived from this repo; it was **not** treated as brand authority here. | **Resolved, 17 Aug 2026 (ADR-0034).** The stakeholder supplied an official identity render plus the *Filosofi Logo Makam.co.id* philosophy text in chat on 17 Aug 2026; it is now authoritative. See §1.2, §1.4. | §1.2, §1.4 — resolved |
+| **OQ-03** | Is **Inter + Source Serif 4** acceptable, and is there budget/licence for a commercial alternative? Both chosen are open-licence and self-hostable. | **Amended, 17 Aug 2026 (ADR-0034).** Poppins added as `--font-display` (`h1`/`h2`, hero, header wordmark; philosophy: "modern, clean, digital, friendly, professional"), self-hosted via `@fontsource/poppins`, latin subset, weight 600 only. Inter is retained for body/UI/`h3`/`h4`/Filament. Source Serif 4 is retained too, moved to the new `--font-document` token (documents only, §1.4) so it can never be silently replaced by Poppins. | §1.4, §4.6 |
+| **OQ-12** | Official brand hex values, a vector source for the mark, and a horizontal lockup are still outstanding. Every Earth/Leaf hex adopted in this pass was derived from a chat-reviewed render, not sampled from confirmed brand collateral (ADR-0034 D9), and every raster asset built from it (§8, Task 3 — `mark-96`, `mark-inverse-96`, `lockup-320`/`640`, `favicon.ico`, `apple-touch-icon.png`) is provisional for the same reason. | **Default in force: derived values.** `primary` Earth `#5D3A1F`, `secondary` Leaf `#2E7D32`, and the full raster asset set stay **PROVISIONAL** until official brand hex values, a vector logo source, and a horizontal lockup are supplied and sampled directly. | §1.2, §1.4, §8, all brand raster assets |
 | **OQ-04** | **Mobile bottom navigation** — approve or reject? IA §2 specifies hamburger + persistent Bantuan; a bottom nav would be a navigation change requiring product approval (§3.11). | IA-compliant header only; bottom nav **not shipped** | §3.11 |
 | **OQ-05** | Which **icon set**? An outline set at 1.5 px stroke is assumed (Heroicons/Lucide class). Affects the SVG sprite and §4.6 budget. | Outline, 1.5 px, inline sprite | §3, §4.6 |
 | **OQ-06** | Exact **Indonesian microcopy** for each state in §6. Strings here are illustrative; final copy needs a product/legal pass, especially payment, Urgent availability, and privacy notices (`faq-catalog.md` forbids publishing unsupported SLA or method). | Illustrative only | §6 |
@@ -1391,9 +1471,10 @@ Per `AGENTS.md`: *"Never report `PASS` for a check that was not executed; use `B
 | Item | Result | Evidence |
 |---|---|---|
 | WCAG 2.1 AA contrast, 46 documented pairs | **PASS** | `python3 docs/design/verify-contrast.py` → exit 0, 79 tokens parsed, 46/46 pass (§7.1) |
-| Semantic hue separation ≥ 30° for primary/success/info/danger | **PASS** | Same script: 188° / 146° / 228° / 3° |
-| Two real AA failures found and fixed during authoring | **PASS** | `warning-600` 4.44 → 5.05; `neutral-300`/`400` borders 1.71/2.67 → `neutral-450` 3.67 |
+| Semantic hue separation ≥ 30° for primary/success/info/danger | **PASS** | Same script: 26.1° / 145.5° / 227.6° / 352.0° |
+| Two real AA failures found and fixed during v0.1 authoring | **PASS** | `warning-600` 4.44 → 5.05; `neutral-300`/`400` borders 1.71/2.67 → `neutral-450` 3.67 |
 | `tokens.css` parses as CSS token declarations | **PASS** | Verifier extracted all 79 `--color-*-<shade>` tokens |
+| Re-verified 17 Aug 2026 against the shipped Earth/Leaf palette (ADR-0034) — all 46 pairs re-pass, including the danger-hue tune | **PASS** | `python3 docs/design/verify-contrast.py`, re-run for this document sync: 79 tokens parsed, 46/46 pass, `RESULT: PASS — all 46 pairs meet WCAG 2.1 AA` (full output §7.1); danger/primary separation ≈34.1° after the −11° hue tune (ADR-0034 D4), clearing the 30° floor |
 
 ### NOT TESTED — updated as items get verified; not a static snapshot
 
@@ -1408,6 +1489,8 @@ This table was written when `makam-app` had no application code at all. The scaf
 | **Filament 5 theming (§8.3)** — `LocalFontProvider`, `discoverResources()`/`discoverPages()`/`discoverWidgets()` | **NOT VERIFIED, deliberately not used** — see §8.3's own updated note for the specific, documented reason each was skipped rather than guessed at |
 | All Blade/Livewire snippets (§3.1, §3.2, §6.1, §8.4) | **NOT TESTED** — never rendered or compiled |
 | `StatusIntent` helper and `design:verify-filament-palette` command | **Written and tested 25 Jul 2026** — `app/Support/Design/StatusIntent.php`, 26 tests green in CI (real PHPUnit run, not the earlier `php -l`-only claim); `design:verify-filament-palette` exists and works when run manually, not yet wired into CI (that's S2-T4/Batch 2.5) |
+| Logo/wordmark — real Earth/Leaf mark in header + footer, placeholder "M" monogram retired (ADR-0034, Task 4) | **Test written, NOT RUN locally.** `<x-mk.logo>` rewritten; `tests/Feature/View/Components/MkLogoTest.php` (4 assertions) and `tests/Feature/View/BrandIdentityTest.php` (`GET /` renders header mark, footer inverse mark, favicon links) exist and are `php -l` clean, but PHPUnit needs PHP ≥8.5 and this host runs 8.3.6 — **CI evidence pending.** |
+| Favicon set (`favicon.ico`, `apple-touch-icon.png`) and brand raster assets (`mark-96`, `mark-inverse-96`, `lockup-320`/`640`, PNG+WebP, Task 3) | **Generated for real, structurally verified on-host; not yet asserted by a run test.** Built by `BrandAssetBuilder` (ext-gd) against the real source PNG; file existence, real byte sizes, ICO magic/3-entry structure, and deterministic output across repeated builds were confirmed by direct on-host inspection (task-3-report.md). Wired into `<head>` (Task 4) and asserted by `BrandIdentityTest`, which is **NOT RUN locally** — same PHP-version limitation as above, CI evidence pending. |
 | Rendered visual appearance of the palette | **NOT TESTED** — no screenshot, no browser, no device |
 | Screen-reader behaviour (NVDA/VoiceOver/TalkBack) | **NOT TESTED** |
 | Keyboard-only walkthroughs, focus-order verification, focus-trap behaviour | **NOT TESTED** |
@@ -1430,7 +1513,7 @@ Illustration style, photography direction and sourcing, logo design, motion-grap
 
 Ordered, because some steps depend on earlier ones.
 
-1. [ ] Resolve **OQ-01** (brand primary) and **OQ-02** (existing identity) — everything downstream depends on the palette
+1. [x] Resolve **OQ-01** (brand primary) and **OQ-02** (existing identity) — **resolved 17 Aug 2026, ADR-0034** (Earth brown primary, Leaf green secondary; every value PROVISIONAL pending OQ-12) — everything downstream depends on the palette
 2. [ ] Resolve **OQ-04** (bottom nav) — it is a navigation contract, not a style choice
 3. [ ] Record **ADR-0028 — Adopt token-driven design system** (§9.4)
 4. [x] Add `docs/design/design-system.md` to Kiro steering (**OQ-11**) so agents actually read it — done 25 Jul 2026, `.kiro/steering/design.md`

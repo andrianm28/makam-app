@@ -40,6 +40,11 @@ use RuntimeException;
  * public site and the panels to render the same status colours). The previous
  * version of this file passed `fn () => []`, which silently fell back to
  * Filament's own default palette and defeated that requirement.
+ *
+ * `->brandLogo()` / `->brandLogoHeight()` (brand-identity-adoption Task 5,
+ * ADR-0034) wire the same real raster mark as `/admin`
+ * (`public/brand/mark-96.png`, Task 3), so the two panels cannot drift on
+ * brand mark either.
  */
 final class VendorPanelProvider extends PanelProvider
 {
@@ -50,6 +55,10 @@ final class VendorPanelProvider extends PanelProvider
             ->path('vendor')
             ->login()
             ->colors($this->filamentColors())
+            // ADR-0034: official mark; stacked lockup reads badly at 2rem, so
+            // the panel carries the mark — a horizontal lockup is OQ-12 scope.
+            ->brandLogo(asset('brand/mark-96.png'))
+            ->brandLogoHeight('2rem')
             ->discoverResources(
                 in: app_path('Filament/Vendor/Resources'),
                 for: 'App\\Filament\\Vendor\\Resources',

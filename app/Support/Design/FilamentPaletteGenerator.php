@@ -36,7 +36,7 @@ final class FilamentPaletteGenerator
     /**
      * tokens.css colour family -> Filament panel `colors()` key.
      *
-     * `secondary` ("Sandstone") is deliberately EXCLUDED: design-system.md
+     * `secondary` ("Leaf") is deliberately EXCLUDED: design-system.md
      * §1.2b restricts it to surface/accent use only — "never a filled
      * badge, alert, or button" — and design-system.md §8.3's own
      * `colors()` snippet only ever defined six keys: primary, success,

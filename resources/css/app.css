@@ -75,6 +75,7 @@
   }
 
   h1, h2 {
+    font-family: var(--font-display);
     letter-spacing: var(--tracking-tight);
   }
 
@@ -115,3 +116,8 @@
  * Inter ships via the @fontsource-variable/inter package in package.json.
  * -------------------------------------------------------------------------- */
 @import "@fontsource-variable/inter/index.css";
+
+/* Poppins — brand display face (ADR-0034): h1/h2, hero, logo wordmark.
+ * Self-hosted via npm package, same pattern as Inter above; latin subset,
+ * weight 600 only (headings are semibold; §4.6 weight budget). */
+@import "@fontsource/poppins/latin-600.css";

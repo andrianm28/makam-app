@@ -34,6 +34,15 @@
     "Menu utama (seluler)" — distinct from the desktop nav's "Menu utama"
     so the two landmarks do not collide on axe `landmark-unique`, while the
     visible labels stay identical per IA §2.
+
+    UPDATED 17 Aug 2026 (brand identity adoption, Task 4) — the hardcoded
+    "Makam.co.id" text node after each `<x-mk.logo>` call was deleted at
+    both call sites (mobile and desktop bars). `<x-mk.logo>` now renders
+    its own live-text wordmark (font-display, lowercase "makam.co.id") as
+    part of the component itself, so repeating it here would have
+    duplicated the accessible name. The anchors' own `text-lg`/`text-xl`
+    font-size classes are kept — the wordmark span inherits size from its
+    ancestor; its own weight/colour come from the component.
 --}}
 @props([
     'active' => null,          // 'pemesanan' | 'layanan' | 'perpanjangan' | 'faq' | null
@@ -107,7 +116,6 @@
 
         <a href="{{ $logoHref }}" class="flex min-w-0 flex-1 items-center justify-center gap-2 text-lg font-semibold text-neutral-900">
             <x-mk.logo :size="28" />
-            Makam.co.id
         </a>
 
         {{-- Persistent Bantuan action — mandatory, never collapsed into the
@@ -180,7 +188,6 @@
     <div class="hidden lg:flex sticky top-0 z-header h-[var(--mk-header-h-lg)] items-center justify-between gap-6 border-b border-neutral-200 bg-neutral-0 px-8">
         <a href="{{ $logoHref }}" class="flex shrink-0 items-center gap-2 text-xl font-semibold text-neutral-900">
             <x-mk.logo :size="32" />
-            Makam.co.id
         </a>
 
         <nav aria-label="Menu utama" class="flex h-full items-center gap-6">

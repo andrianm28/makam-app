@@ -118,6 +118,14 @@ use RuntimeException;
  * one real panel as the default is the standard fix for a single-panel
  * app and has no effect on which panel serves a `/admin`-prefixed
  * request, which was already unambiguous.
+ *
+ * A FOURTH change (brand-identity-adoption Task 5, ADR-0034): `->brandLogo()`
+ * / `->brandLogoHeight()` wire the real raster mark
+ * (`public/brand/mark-96.png`, Task 3) into the panel header, replacing
+ * Filament's default text/icon brand. Confirmed against the installed
+ * `filament/filament` v5.7.3 — both methods live on
+ * `Filament\Panel\Concerns\HasBrandLogo`, matching the names this batch's
+ * brief assumed; no correction needed.
  */
 class AdminPanelProvider extends PanelProvider
 {
@@ -129,6 +137,10 @@ class AdminPanelProvider extends PanelProvider
             ->default()
             ->login()
             ->colors($this->filamentColors())
+            // ADR-0034: official mark; stacked lockup reads badly at 2rem, so
+            // the panel carries the mark — a horizontal lockup is OQ-12 scope.
+            ->brandLogo(asset('brand/mark-96.png'))
+            ->brandLogoHeight('2rem')
             ->discoverResources(
                 in: app_path('Filament/Admin/Resources'),
                 for: 'App\\Filament\\Admin\\Resources',

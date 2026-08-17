@@ -104,7 +104,9 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: "8.5"
-          extensions: pdo_pgsql, pgsql, redis, zip, intl, bcmath
+          # gd: brand-asset builder tests (tests/Unit/Support/Design/BrandAssetBuilderTest.php)
+          # require ext-gd, including WebP support, to build/verify raster logo assets.
+          extensions: pdo_pgsql, pgsql, redis, zip, intl, bcmath, gd
           tools: composer:v2
           coverage: none
 
@@ -238,7 +240,7 @@ jobs:
           missing=0
           for cls in max-w-form max-w-prose max-w-content duration-fast \
                      z-modal z-header touch-target h-11 h-13 border-neutral-450 \
-                     ease-standard text-base; do
+                     ease-standard text-base font-display; do
             grep -qF ".${cls}" "$css" || { echo "MISSING: .$cls"; missing=1; }
           done
           # xs: is a variant prefix, not a bare class — its presence shows up

@@ -2,6 +2,7 @@
 
 ## v0.6 — 23 Juli 2026
 
+- Mengadopsi identitas brand resmi Makam.co.id: palet Earth/Leaf menggantikan Petrol/Sandstone, font display Poppins (self-hosted, latin 600), logo raster nyata pada header/footer, favicon set, serta sinkronisasi ulang palet Filament — ADR-0034 (OQ-01/OQ-02 resolved). Seluruh nilai warna brand dan aset raster bersifat PROVISIONAL menunggu OQ-12 (nilai hex resmi, sumber vektor, dan horizontal lockup).
 - Menambahkan master prompt siap-eksekusi untuk AI agent yang melakukan setup development, staging, project runtime, CI/CD, dan developer tooling.
 - Menambahkan discovery, planning, execution, validation, rollback, dan required final-report contract untuk agent.
 - Menambahkan template variabel non-secret; secret tetap wajib melalui protected environment atau secret manager.
