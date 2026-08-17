@@ -15,6 +15,12 @@ use Tests\TestCase;
  */
 final class BrandIdentityTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->withoutVite();
+    }
+
     public function test_public_shell_carries_the_real_brand(): void
     {
         $html = $this->get('/')->assertOk()->getContent();

@@ -51,24 +51,30 @@ final class MkLogoTest extends TestCase
     public function test_unknown_variant_throws(): void
     {
         // The component's @php block throws InvalidArgumentException, but
-        // Blade::render() evaluates compiled views through
-        // Illuminate\View\Engines\CompilerEngine::get(), whose
-        // handleViewException() unconditionally wraps every throwable that
-        // is not HttpException/HttpResponseException/RecordNotFoundException/
-        // RecordsNotFoundException into a new Illuminate\View\ViewException
-        // (itself an ErrorException) before rethrowing — see
-        // CompilerEngine::handleViewException(). So the exception that
-        // actually propagates out of Blade::render() is ViewException, with
-        // the original InvalidArgumentException preserved as
-        // ViewException::getPrevious().
+        // Illuminate\View\Engines\CompilerEngine::handleViewException()
+        // unconditionally wraps every throwable that isn't HttpException/
+        // HttpResponseException/RecordNotFoundException/RecordsNotFoundException
+        // into a new Illuminate\View\ViewException before rethrowing — and it
+        // does so once per nested View::render() call. Blade::render() here
+        // compiles the inline template AND renders <x-mk.logo> as its own
+        // nested component view, so the exception is wrapped TWICE: the
+        // component's own CompilerEngine::get() wraps the InvalidArgumentException
+        // into an inner ViewException, then the outer inline-template render
+        // wraps that inner ViewException into the outer one that actually
+        // escapes Blade::render(). Walk getPrevious() until it stops being a
+        // ViewException to reach the real cause.
         try {
             Blade::render('<x-mk.logo variant="neon" />');
-            $this->fail('Expected a ViewException wrapping InvalidArgumentException to be thrown.');
+            $this->fail('Expected a ViewException chain wrapping InvalidArgumentException to be thrown.');
         } catch (ViewException $e) {
-            $previous = $e->getPrevious();
+            $cause = $e;
 
-            $this->assertInstanceOf(InvalidArgumentException::class, $previous);
-            $this->assertSame('x-mk.logo: unknown variant [neon]', $previous->getMessage());
+            while ($cause instanceof ViewException && $cause->getPrevious() instanceof \Throwable) {
+                $cause = $cause->getPrevious();
+            }
+
+            $this->assertInstanceOf(InvalidArgumentException::class, $cause);
+            $this->assertSame('x-mk.logo: unknown variant [neon]', $cause->getMessage());
         }
     }
 }
