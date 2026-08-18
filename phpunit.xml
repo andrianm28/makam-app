@@ -40,6 +40,18 @@
             payload privately".
         -->
         <env name="APP_KEY" value="base64:RKxTuGlM4MNUB65volwGUsTfCiDumShAS0GGdu5zXn4="/>
+        <!--
+            config/app.php's locale default became 'id' (public-beta
+            readiness, lang/id/validation.php's own doc block) — but
+            PHPUnit's own env vars are set before Dotenv loads and are never
+            overwritten by it (see the APP_KEY comment above), so if
+            .env.example pins APP_LOCALE=en explicitly, that value — not
+            config/app.php's new default — is what CI's "cp .env.example
+            .env" step would otherwise hand every test. Pinned here so the
+            suite exercises the real intended default deterministically,
+            independent of whatever .env.example currently contains.
+        -->
+        <env name="APP_LOCALE" value="id"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
