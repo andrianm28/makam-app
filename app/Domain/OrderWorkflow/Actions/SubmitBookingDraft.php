@@ -200,10 +200,22 @@ final readonly class SubmitBookingDraft
             // Null for an anonymous draft, which is a supported state.
             'user_id' => $draft->user_id,
             'role' => OrderPartyRole::PEMESAN->value,
-            // Every remaining Step 6 field stays null: `booking_drafts` has
-            // no column carrying any of them, and steps 6-9 are lane L6's.
-            // See `2026_08_12_100020_create_order_parties_table.php` — a
-            // placeholder here would be fabricated customer data.
+            // Carried from the draft's own Step 6 fields
+            // (`2026_08_12_100000_add_booking_draft_steps_6_to_8_fields.php`,
+            // validated in `SaveBookingDraftStep`). Copied verbatim, never
+            // defaulted or fabricated — a draft that never reached Step 6
+            // (a service-catalogue-only submission, or a test fixture) has
+            // these as null on the draft already, and null carries through
+            // unchanged. This is the only reference a notification's
+            // recipient resolution has for a guest customer's contact
+            // details — see `Platform\Notification\Support\
+            // OrderPartySubjectSupport`, which reads this row back.
+            'full_name' => $draft->customer_full_name,
+            'contact_phone' => $draft->customer_mobile,
+            'contact_email' => $draft->customer_email,
+            'address' => $draft->customer_address,
+            'relationship_to_deceased' => $draft->customer_relationship,
+            'preferred_contact_channel' => $draft->customer_contact_channel,
         ]);
 
         return $order;
