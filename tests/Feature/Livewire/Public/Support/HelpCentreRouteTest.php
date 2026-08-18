@@ -90,8 +90,8 @@ final class HelpCentreRouteTest extends TestCase
         $response = $this->get('/bantuan');
 
         $response->assertOk();
-        $response->assertSee(ContactInfo::PHONE);
-        $response->assertSee(ContactInfo::EMAIL);
+        $response->assertSee(ContactInfo::phone());
+        $response->assertSee(ContactInfo::email());
         $response->assertSee('Telepon');
         $response->assertSee('WhatsApp');
     }
@@ -101,7 +101,7 @@ final class HelpCentreRouteTest extends TestCase
         $response = $this->get('/bantuan');
 
         $response->assertOk();
-        $response->assertSee(ContactInfo::BUSINESS_HOURS);
+        $response->assertSee(ContactInfo::businessHours());
     }
 
     public function test_help_centre_carries_the_emergency_disclaimer(): void
@@ -180,7 +180,7 @@ final class HelpCentreRouteTest extends TestCase
         // The rendered hours string legitimately contains digits, so it is
         // removed before the promise pattern is applied — otherwise this
         // assertion would fail on the very data it is meant to protect.
-        $withoutHours = str_replace(ContactInfo::BUSINESS_HOURS, '', $body);
+        $withoutHours = str_replace(ContactInfo::businessHours(), '', $body);
 
         $this->assertDoesNotMatchRegularExpression('/dalam\s+\d+\s*(x\s*\d+\s*)?(menit|jam|hari)/i', $withoutHours);
         $this->assertStringContainsString('Kami tidak menjanjikan durasi balasan tertentu', $body);
@@ -222,8 +222,8 @@ final class HelpCentreRouteTest extends TestCase
         $response = $this->get('/bantuan');
 
         $response->assertOk();
-        $response->assertSee(CompanyInfo::NAME);
-        $response->assertSee(CompanyInfo::ADDRESS);
+        $response->assertSee(CompanyInfo::name());
+        $response->assertSee(CompanyInfo::address());
     }
 
     public function test_help_centre_does_not_contradict_the_seeded_faq_on_extra_channels(): void

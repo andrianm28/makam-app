@@ -27,6 +27,16 @@ final class SiteSetting extends Model
 
     public const string KEY_PAYMENT_BADAN_USAHA_REF = 'payment_badan_usaha_ref';
 
+    /**
+     * Added for public-beta readiness alongside `App\Support\CompanyInfo`
+     * becoming settings-aware — see that class's own doc block. Placeholder
+     * "Contoh"/"Jl. Contoh ..." values stay its fallback default until an
+     * operator sets a real one here.
+     */
+    public const string KEY_COMPANY_NAME = 'company_name';
+
+    public const string KEY_COMPANY_ADDRESS = 'company_address';
+
     public const array KNOWN_KEYS = [
         self::KEY_SERVICE_HOURS,
         self::KEY_SUPPORT_PHONE,
@@ -35,6 +45,8 @@ final class SiteSetting extends Model
         self::KEY_MARKETPLACE_BADAN_USAHA_REF,
         self::KEY_PAYMENT_MERCHANT_REF,
         self::KEY_PAYMENT_BADAN_USAHA_REF,
+        self::KEY_COMPANY_NAME,
+        self::KEY_COMPANY_ADDRESS,
     ];
 
     protected $table = 'site_settings';

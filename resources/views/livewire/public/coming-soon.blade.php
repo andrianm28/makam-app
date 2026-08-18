@@ -52,7 +52,7 @@
 <div class="flex flex-col items-center gap-3 px-4 py-12 text-center">
     <h1 class="text-lg font-semibold text-neutral-800">{{ $heading }}</h1>
     <p class="max-w-prose text-base text-neutral-600">{{ $body }}</p>
-    <p class="text-sm text-neutral-600">{{ ContactInfo::PHONE }} · {{ ContactInfo::EMAIL }}</p>
+    <p class="text-sm text-neutral-600">{{ ContactInfo::phone() }} · {{ ContactInfo::email() }}</p>
     <div class="mt-2 flex flex-wrap justify-center gap-3">
         <a
             href="/"

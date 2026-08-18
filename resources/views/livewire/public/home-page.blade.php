@@ -103,7 +103,7 @@
                      international dial string. Found while building PUB-060, which
                      had already made the opposite call — see App\Livewire\Public\
                      Support\HelpCentre::telHref(). --}}
-                <a href="tel:+{{ preg_replace('/[^0-9]/', '', ContactInfo::PHONE) }}" class="font-medium underline underline-offset-2">{{ ContactInfo::PHONE }}</a>
+                <a href="tel:+{{ preg_replace('/[^0-9]/', '', ContactInfo::phone()) }}" class="font-medium underline underline-offset-2">{{ ContactInfo::phone() }}</a>
                 atau
                 <a href="/bantuan" class="font-medium underline underline-offset-2">hubungi Bantuan</a>.
             </x-mk.alert>
@@ -296,8 +296,8 @@
                 Tim customer service kami siap membantu Anda menentukan langkah terbaik, kapan pun Anda membutuhkannya.
             </p>
             <p class="text-sm text-neutral-600">
-                {{ ContactInfo::PHONE }} (telepon/WhatsApp) · {{ ContactInfo::EMAIL }}<br>
-                {{ ContactInfo::BUSINESS_HOURS }}
+                {{ ContactInfo::phone() }} (telepon/WhatsApp) · {{ ContactInfo::email() }}<br>
+                {{ ContactInfo::businessHours() }}
             </p>
             <a
                 href="/bantuan"

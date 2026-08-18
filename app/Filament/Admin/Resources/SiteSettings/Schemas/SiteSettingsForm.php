@@ -29,6 +29,10 @@ final class SiteSettingsForm
                 TextInput::make('data.support_whatsapp')->label('WhatsApp')->maxLength(40),
                 TextInput::make('data.support_email')->label('Email')->email()->maxLength(120),
             ]),
+            Section::make('Identitas perusahaan')->schema([
+                TextInput::make('data.company_name')->label('Nama perusahaan')->maxLength(191),
+                TextInput::make('data.company_address')->label('Alamat terdaftar')->maxLength(255),
+            ])->description('Ditampilkan di footer dan halaman legal (Kebijakan Privasi, Syarat & Ketentuan).'),
             Section::make('Entitas & pemrosesan pembayaran')->schema([
                 TextInput::make('data.marketplace_badan_usaha_ref')->label('Ref badan usaha marketplace')->maxLength(120),
                 TextInput::make('data.payment_merchant_ref')->label('Ref merchant pembayaran')->maxLength(120),
