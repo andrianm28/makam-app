@@ -153,6 +153,18 @@ final class BookingWizardOnlinePaymentTest extends TestCase
      * MENUNGGU_PEMBAYARAN), acceptance of the current quote, and an admin
      * actor holding the ORDER-scope grant. Never a fixture that cheats past
      * the model guards.
+     *
+     * Fixed 18 Aug 2026: this used to leave the test's own session
+     * authenticated as the admin it creates here (`$this->actingAs($user)`
+     * with no matching logout), so every caller's SUBSEQUENT
+     * `openOnlinePayment()` call — meant to represent the CUSTOMER's own
+     * click — actually ran as that admin. That silently validated "an admin
+     * can pay," which was never broken, while `AuthorizeOrderPaymentOpening`
+     * required the calling actor to hold the grant it had JUST checked the
+     * CALLER'S OWN identity against — masking that no real (guest) customer
+     * could ever pass condition 4. The admin setup now explicitly logs back
+     * out before returning, so every caller's next action runs as the guest
+     * a real customer actually is.
      */
     private function operatorCompletes(Order $order, OrderStatus $target = OrderStatus::PENAWARAN_TERKIRIM): void
     {
@@ -172,9 +184,15 @@ final class BookingWizardOnlinePaymentTest extends TestCase
             $record($order, OrderStatus::MENUNGGU_PEMBAYARAN, 'actor:admin-1', 'admin');
         }
 
+        // The admin exists only to author the order-scope grant — condition
+        // 4 now reads that grant as a property of the ORDER, not of whoever
+        // is currently logged in (see AuthorizeOrderPaymentOpening's class
+        // doc block). `actingAs()`/grant creation need the admin briefly
+        // authenticated to go through the normal identity-resolution path,
+        // but this method logs back out before returning, so every
+        // caller's next action runs as the guest a real customer is.
         $user = User::factory()->create();
         app(GrantActorRole::class)($user->id, ActorRole::ADMIN, 'test', 1);
-
         $this->actingAs($user);
         $this->app->forgetInstance(ActorContextResolver::class);
 
@@ -183,6 +201,9 @@ final class BookingWizardOnlinePaymentTest extends TestCase
             'entity_type' => ScopeEntityType::ORDER,
             'entity_id' => $order->getKey(),
         ]);
+
+        $this->app['auth']->guard('web')->logout();
+        $this->app->forgetInstance(ActorContextResolver::class);
     }
 
     /**
