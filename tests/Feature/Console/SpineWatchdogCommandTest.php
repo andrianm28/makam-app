@@ -168,6 +168,29 @@ final class SpineWatchdogCommandTest extends TestCase
         )->getKey();
 
         ConsumeOutboxNotificationJob::dispatchSync($outboxEventId);
+
+        // DIAGNOSTIC (temporary — remove once the pipeline fixture is
+        // confirmed working): CI has twice reported zero QUEUED deliveries
+        // from this fixture despite `Tests\Feature\Notification\
+        // NotificationDispatchPipelineTest` exercising the identical
+        // booking.draft_submitted.v2 + ConsumeOutboxNotificationJob::
+        // dispatchSync() pattern successfully. Fails loudly with exactly
+        // which pipeline stage is empty, since static reasoning about the
+        // difference hasn't converged and this cannot be run locally
+        // (PHP 8.3.6 host vs composer.lock requiring >=8.5).
+        $eventCount = DB::table('notification_events')->where('event_id', $outboxEventId)->count();
+        $recipientCount = DB::table('notification_recipients')->where('event_id', $outboxEventId)->count();
+        $deliveries = DB::table('notification_deliveries')->where('event_id', $outboxEventId)->get();
+
+        if ($eventCount === 0 || $recipientCount === 0 || $deliveries->isEmpty()) {
+            $this->fail(sprintf(
+                'Pipeline diagnostic: notification_events=%d notification_recipients=%d notification_deliveries=%d states=[%s]',
+                $eventCount,
+                $recipientCount,
+                $deliveries->count(),
+                $deliveries->pluck('state')->implode(','),
+            ));
+        }
     }
 
     public function test_it_detects_a_recent_failed_job_and_reports_it(): void
