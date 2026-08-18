@@ -4,8 +4,16 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Console;
 
-use App\Platform\Notification\DeliveryState;
+use App\Domain\Booking\Actions\StartBookingDraft;
+use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
+use App\Domain\CemeteryDirectory\CemeteryType;
+use App\Domain\CemeteryDirectory\LaunchCityCode;
+use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Models\User;
+use App\Platform\Notification\Jobs\ConsumeOutboxNotificationJob;
 use App\Platform\Observability\SpineDegradedException;
+use App\Platform\Outbox\Outbox;
+use App\Platform\Outbox\OutboxClassification;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -15,11 +23,21 @@ use Tests\TestCase;
 
 /**
  * `spine:watchdog` — see its own doc block for why these three signals and
- * why each is checked independently. Every fixture row below is a plain
- * `DB::table()` insert of the exact shape the real spine writes, not a
- * scenario walked through the real pipeline — the three detection queries
- * are what is under test, not the pipeline that would normally produce
- * their input.
+ * why each is checked independently.
+ *
+ * `outbox_events`/`failed_jobs` fixtures below are plain `DB::table()`
+ * inserts — neither table carries the runtime write guard
+ * `notification_deliveries` does. A `notification_deliveries` fixture,
+ * though, MUST go through the real pipeline
+ * (`ConsumeOutboxNotificationJob::dispatchSync()`, mirroring
+ * `Tests\Feature\Notification\NotificationDispatchPipelineTest`'s own
+ * fixture helpers): `NotificationDeliveryWriteGuard` rejects any write to
+ * that table from outside `Actions\DispatchNotification` at the connection
+ * level (AC9), and its own `withWritesUnlocked()` refuses to run unless
+ * `Actions\DispatchNotification` is genuinely on the call stack — there is
+ * no test-side escape hatch, deliberately. Not running
+ * `SendNotificationChannelJob` afterward leaves the row `QUEUED`, exactly
+ * the state this watchdog looks for.
  */
 final class SpineWatchdogCommandTest extends TestCase
 {
@@ -80,7 +98,9 @@ final class SpineWatchdogCommandTest extends TestCase
 
     public function test_it_detects_a_stale_queued_delivery_and_reports_it(): void
     {
-        $this->insertQueuedDelivery(queuedMinutesAgo: 20);
+        $this->createQueuedDelivery();
+
+        $this->travel(20)->minutes();
 
         $this->artisan('spine:watchdog')
             ->expectsOutputToContain('Notification queue worker stalled: 1 delivery(ies)')
@@ -89,7 +109,7 @@ final class SpineWatchdogCommandTest extends TestCase
 
     public function test_a_recently_queued_delivery_within_the_threshold_is_not_flagged(): void
     {
-        $this->insertQueuedDelivery(queuedMinutesAgo: 1);
+        $this->createQueuedDelivery();
 
         $this->artisan('spine:watchdog')
             ->expectsOutputToContain('Spine healthy')
@@ -97,42 +117,38 @@ final class SpineWatchdogCommandTest extends TestCase
     }
 
     /**
-     * `notification_deliveries.event_id` restrictOnDelete's on
-     * `notification_events.event_id`, and `notification_recipient_id`
-     * restrictOnDelete's on `notification_recipients.id` — both real,
-     * required foreign keys, so a stale-delivery fixture needs a minimal
-     * valid row on each parent table first.
+     * `booking.draft_submitted.v2` is a real, seeded matrix event with a
+     * real customer-recipient producer — the same fixture shape
+     * `NotificationDispatchPipelineTest::bookingSubmittedFixture()`/
+     * `recordBookingSubmitted()` use, reused here rather than restated.
+     * Runs the dispatch action synchronously and stops — no channel job —
+     * so the resulting delivery stays `QUEUED`.
      */
-    private function insertQueuedDelivery(int $queuedMinutesAgo): void
+    private function createQueuedDelivery(): void
     {
-        $eventId = (string) Str::uuid();
-
-        DB::table('notification_events')->insert([
-            'event_id' => $eventId,
-            'event_name' => 'payment.received.v1',
-            'matrix_event_name' => 'Payment received',
-            'aggregate_type' => 'fixture',
-            'aggregate_id' => '1',
-            'consumed_at' => now(),
+        $user = User::factory()->create();
+        $cemetery = Cemetery::create([
+            'type' => CemeteryType::TPU,
+            'publication_status' => CemeteryPublicationStatus::DRAFT,
+            'name' => 'Spine Watchdog Test Cemetery',
+            'slug' => 'spine-watchdog-test-cemetery-'.Str::random(8),
+            'city' => LaunchCityCode::JAKARTA,
+            'address' => 'Jl. Uji Coba Spine Watchdog',
         ]);
 
-        $recipientId = DB::table('notification_recipients')->insertGetId([
-            'event_id' => $eventId,
-            'recipient_ref' => '1',
-            'actor_role' => 'customer',
-        ]);
+        $draft = (new StartBookingDraft)(userId: $user->id);
+        $draft->forceFill(['cemetery_id' => $cemetery->id])->save();
 
-        DB::table('notification_deliveries')->insert([
-            'event_id' => $eventId,
-            'notification_recipient_id' => $recipientId,
-            'recipient_ref' => '1',
-            'channel' => 'EMAIL',
-            'window_key' => 'fixture',
-            'state' => DeliveryState::Queued->value,
-            'attempt_count' => 0,
-            'created_at' => now()->subMinutes($queuedMinutesAgo),
-            'updated_at' => now()->subMinutes($queuedMinutesAgo),
-        ]);
+        $outboxEventId = Outbox::record(
+            eventName: 'booking.draft_submitted.v2',
+            eventVersion: 2,
+            aggregateType: 'booking_draft',
+            aggregateId: $draft->getKey(),
+            data: ['draft_id' => $draft->getKey()],
+            classification: OutboxClassification::Internal,
+        )->getKey();
+
+        ConsumeOutboxNotificationJob::dispatchSync($outboxEventId);
     }
 
     public function test_it_detects_a_recent_failed_job_and_reports_it(): void
