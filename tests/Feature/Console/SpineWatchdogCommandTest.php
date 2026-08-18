@@ -17,6 +17,7 @@ use App\Platform\Outbox\OutboxClassification;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Mockery;
 use Tests\TestCase;
@@ -35,9 +36,11 @@ use Tests\TestCase;
  * that table from outside `Actions\DispatchNotification` at the connection
  * level (AC9), and its own `withWritesUnlocked()` refuses to run unless
  * `Actions\DispatchNotification` is genuinely on the call stack — there is
- * no test-side escape hatch, deliberately. Not running
- * `SendNotificationChannelJob` afterward leaves the row `QUEUED`, exactly
- * the state this watchdog looks for.
+ * no test-side escape hatch, deliberately. `Queue::fake()` (see
+ * `createQueuedDelivery()`'s own doc block) is what keeps the resulting
+ * row `QUEUED` — phpunit.xml pins `QUEUE_CONNECTION=sync`, so without it
+ * `SendNotificationChannelJob` runs in-process before the fixture method
+ * even returns, moving the row straight past `QUEUED` to its final state.
  */
 final class SpineWatchdogCommandTest extends TestCase
 {
@@ -160,6 +163,26 @@ final class SpineWatchdogCommandTest extends TestCase
 
         $this->ensureActiveTemplateVersion('Booking submitted');
 
+        // Root cause, found via two rounds of diagnostics: phpunit.xml pins
+        // QUEUE_CONNECTION=sync, so `SendNotificationChannelJob::dispatch()`
+        // inside `Actions\DispatchNotification::consumeOutboxEvent()` (the
+        // call AFTER the recording transaction, once per queued delivery
+        // id) runs immediately, in-process — not merely "queued". By the
+        // time `dispatchSync()` below returns, the channel job had ALREADY
+        // run too, moving the delivery straight past `QUEUED` to `SENT`
+        // (confirmed directly: a temporary diagnostic showed
+        // `EMAIL:SENT` after every earlier fix attempt). `Queue::fake()`
+        // intercepts that nested `dispatch()` call so the job records but
+        // never executes, leaving the row genuinely `QUEUED` — the state
+        // this whole fixture exists to produce.
+        //
+        // `ConsumeOutboxNotificationJob::dispatchSync($outboxEventId)`
+        // itself is UNAFFECTED by the fake: `dispatchSync()` always runs
+        // in-process regardless of the queue driver, which is exactly why
+        // this method's own DB writes (the QUEUED row included) still
+        // happen correctly.
+        Queue::fake();
+
         $outboxEventId = Outbox::record(
             eventName: 'booking.draft_submitted.v2',
             eventVersion: 2,
@@ -170,19 +193,6 @@ final class SpineWatchdogCommandTest extends TestCase
         )->getKey();
 
         ConsumeOutboxNotificationJob::dispatchSync($outboxEventId);
-
-        // DIAGNOSTIC (temporary, round 2): the guaranteed-active-version fix
-        // did not resolve it -- still zero detected. Dumps every delivery
-        // row's actual (channel, state, failure_message) so the next CI run
-        // shows exactly what got recorded instead of another guess.
-        $deliveries = DB::table('notification_deliveries')->where('event_id', $outboxEventId)->get(['channel', 'state', 'failure_message']);
-        $templateRow = DB::table('notification_templates')->where('event_name', 'Booking submitted')->first();
-
-        $this->fail(sprintf(
-            'Pipeline diagnostic 2: template active_version_id=%s deliveries=[%s]',
-            $templateRow?->active_version_id ?? 'NULL',
-            $deliveries->map(fn ($d) => "{$d->channel}:{$d->state}:{$d->failure_message}")->implode(' | ') ?: 'NONE',
-        ));
     }
 
     /**
