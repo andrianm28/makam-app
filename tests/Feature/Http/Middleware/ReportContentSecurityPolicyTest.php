@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Http\Middleware;
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
@@ -11,9 +12,21 @@ use Tests\TestCase;
  * global middleware (must reach the Filament `/admin`/`/vendor` panels,
  * which do not go through the `web` group at all) and why it ships
  * report-only.
+ *
+ * `RefreshDatabase`: every test here hits the real homepage, whose
+ * `mount()` records a real `MenuInteractionEvent` row per primary menu
+ * (`App\Livewire\Public\HomePage::mount()`) with no dedup. Without a
+ * transaction to roll back, six real `$this->get('/')` calls across this
+ * class's methods committed 24 permanent rows straight into the shared
+ * test database, which `Tests\Feature\Livewire\Public\HomePageRouteTest`'s
+ * OWN precondition (`assertSame(0, MenuInteractionEvent::query()->count())`)
+ * then failed against — this class's writes outliving its own tests
+ * entirely, in whichever unrelated later test happened to check that count.
  */
 final class ReportContentSecurityPolicyTest extends TestCase
 {
+    use RefreshDatabase;
+
     public function test_the_header_is_present_on_a_public_response(): void
     {
         $response = $this->get('/');
