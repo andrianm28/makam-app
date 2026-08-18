@@ -158,6 +158,8 @@ final class SpineWatchdogCommandTest extends TestCase
         $draft = (new StartBookingDraft)(userId: $user->id);
         $draft->forceFill(['cemetery_id' => $cemetery->id])->save();
 
+        $this->ensureActiveTemplateVersion('Booking submitted');
+
         $outboxEventId = Outbox::record(
             eventName: 'booking.draft_submitted.v2',
             eventVersion: 2,
@@ -168,29 +170,53 @@ final class SpineWatchdogCommandTest extends TestCase
         )->getKey();
 
         ConsumeOutboxNotificationJob::dispatchSync($outboxEventId);
+    }
 
-        // DIAGNOSTIC (temporary — remove once the pipeline fixture is
-        // confirmed working): CI has twice reported zero QUEUED deliveries
-        // from this fixture despite `Tests\Feature\Notification\
-        // NotificationDispatchPipelineTest` exercising the identical
-        // booking.draft_submitted.v2 + ConsumeOutboxNotificationJob::
-        // dispatchSync() pattern successfully. Fails loudly with exactly
-        // which pipeline stage is empty, since static reasoning about the
-        // difference hasn't converged and this cannot be run locally
-        // (PHP 8.3.6 host vs composer.lock requiring >=8.5).
-        $eventCount = DB::table('notification_events')->where('event_id', $outboxEventId)->count();
-        $recipientCount = DB::table('notification_recipients')->where('event_id', $outboxEventId)->count();
-        $deliveries = DB::table('notification_deliveries')->where('event_id', $outboxEventId)->get();
+    /**
+     * Diagnosed via a prior CI round: the delivery row this fixture produced
+     * did exist (a temporary diagnostic assertion here confirmed
+     * notification_events/notification_recipients/notification_deliveries
+     * were all non-empty) but was never `QUEUED` — meaning `Actions\
+     * DispatchNotification`'s `$version === null` branch fired, recording
+     * `Unavailable` instead. `Tests\Feature\Notification\
+     * NotificationDispatchPipelineTest`'s own delivery-count assertions
+     * (`deliveryCount()`) only check that a row EXISTS for an
+     * (event, recipient, channel) triple, never its `state` — so that
+     * suite passing was never actual proof this event has a reliably
+     * ACTIVE template version on a freshly migrated database, only that
+     * migration seeds an unconditional matrix ROW. Rather than depend on
+     * ambient seed state this fixture doesn't control, explicitly
+     * guarantees an active version exists first.
+     */
+    private function ensureActiveTemplateVersion(string $eventName): void
+    {
+        $template = DB::table('notification_templates')->where('event_name', $eventName)->first();
 
-        if ($eventCount === 0 || $recipientCount === 0 || $deliveries->isEmpty()) {
-            $this->fail(sprintf(
-                'Pipeline diagnostic: notification_events=%d notification_recipients=%d notification_deliveries=%d states=[%s]',
-                $eventCount,
-                $recipientCount,
-                $deliveries->count(),
-                $deliveries->pluck('state')->implode(','),
-            ));
+        if ($template === null || $template->active_version_id !== null) {
+            return;
         }
+
+        // (template_id, version) is uniquely constrained
+        // (2026_08_09_100010_create_notification_template_versions_table.php)
+        // — a null active_version_id does not guarantee no version rows
+        // exist at all, only that none is ACTIVE, so this picks the next
+        // free version number rather than assuming 1.
+        $nextVersion = 1 + (int) DB::table('notification_template_versions')
+            ->where('template_id', $template->id)
+            ->max('version');
+
+        $versionId = DB::table('notification_template_versions')->insertGetId([
+            'template_id' => $template->id,
+            'version' => $nextVersion,
+            'subject' => 'Test subject',
+            'body' => 'Test body',
+            'variable_allowlist' => json_encode([]),
+            'restricted_fields' => json_encode([]),
+            'created_by' => 'test-fixture',
+            'created_at' => now(),
+        ]);
+
+        DB::table('notification_templates')->where('id', $template->id)->update(['active_version_id' => $versionId]);
     }
 
     public function test_it_detects_a_recent_failed_job_and_reports_it(): void
