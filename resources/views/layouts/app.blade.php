@@ -89,11 +89,12 @@
     (no route exists for it yet), not touched by this batch.
 
     The muted company-info line below the nav is placeholder legal-entity
-    data — a fictional PT name and a "Jl. Contoh ..." placeholder address,
-    the same honest-placeholder convention `2026_07_26_190300_seed_
+    data — a fictional PT name and a "Jl. Contoh ..." placeholder address
+    until an operator configures a real one via the admin Site Settings
+    page — the same honest-placeholder convention `2026_07_26_190300_seed_
     cemeteries_and_capability_profiles.php` already established in this
-    codebase. Read from `App\Support\CompanyInfo::NAME`/`::ADDRESS` — the
-    one place this data is defined, also used by `PrivacyPolicy`'s and
+    codebase. Read from `App\Support\CompanyInfo::name()`/`::address()` —
+    the one place this data is resolved, also used by `PrivacyPolicy`'s and
     `TermsOfService`'s own views — not hardcoded a second time here.
 --}}
 <!DOCTYPE html>
@@ -124,7 +125,7 @@
                 <a href="/bantuan" class="underline underline-offset-2 hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2">Bantuan / Kontak</a>
             </nav>
             <p class="text-sm">&copy; {{ date('Y') }} Makam.co.id</p>
-            <p class="text-xs text-primary-200">{{ \App\Support\CompanyInfo::NAME }} &middot; {{ \App\Support\CompanyInfo::ADDRESS }}</p>
+            <p class="text-xs text-primary-200">{{ \App\Support\CompanyInfo::name() }} &middot; {{ \App\Support\CompanyInfo::address() }}</p>
         </div>
     </footer>
 </body>

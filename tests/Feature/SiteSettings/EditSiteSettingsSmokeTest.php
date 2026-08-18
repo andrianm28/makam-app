@@ -37,15 +37,19 @@ final class EditSiteSettingsSmokeTest extends TestCase
 
         $component->assertFormFieldExists('data.service_hours');
         $component->assertFormFieldExists('data.support_email');
+        $component->assertFormFieldExists('data.company_name');
+        $component->assertFormFieldExists('data.company_address');
 
         $component
             ->set('data.service_hours', 'Senin-Jumat 09.00-18.00')
             ->set('data.payment_merchant_ref', 'MERCH-1')
+            ->set('data.company_name', 'PT Makam Digital Nusantara')
             ->call('save')
             ->assertNotified();
 
         $this->assertSame('Senin-Jumat 09.00-18.00', SiteSetting::valueFor(SiteSetting::KEY_SERVICE_HOURS));
         $this->assertSame('MERCH-1', SiteSetting::valueFor(SiteSetting::KEY_PAYMENT_MERCHANT_REF));
+        $this->assertSame('PT Makam Digital Nusantara', SiteSetting::valueFor(SiteSetting::KEY_COMPANY_NAME));
 
         $event = AuditEvent::query()->where('action', SiteSettingsAuditActions::UPDATED)->first();
         $this->assertNotNull($event);

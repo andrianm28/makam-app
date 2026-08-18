@@ -99,11 +99,12 @@
                         </div>
 
                         {{-- Same number as Telepon, presented as one number
-                             reachable two ways — ContactInfo::WHATSAPP is
-                             defined as `self::PHONE` and its doc block asks
-                             call sites to say exactly this instead of
-                             restating a second constant. No wa.me deep link:
-                             see the component's doc block. --}}
+                             reachable two ways — ContactInfo::whatsapp()
+                             falls back to phone()'s resolved value when no
+                             support_whatsapp setting is configured; its doc
+                             block asks call sites to say exactly this
+                             instead of restating a second value. No wa.me
+                             deep link: see the component's doc block. --}}
                         <div>
                             <dt class="text-sm font-medium text-neutral-600">WhatsApp</dt>
                             <dd class="mt-1 text-base text-neutral-700">

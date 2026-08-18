@@ -36,8 +36,8 @@ final class TermsOfService extends Component
     public function render(): View
     {
         return view('livewire.public.legal.terms-of-service', [
-            'companyName' => CompanyInfo::NAME,
-            'companyAddress' => CompanyInfo::ADDRESS,
+            'companyName' => CompanyInfo::name(),
+            'companyAddress' => CompanyInfo::address(),
             'updatedAt' => self::UPDATED_AT,
         ])->layout('layouts.app', [
             'title' => 'Syarat & Ketentuan - Makam.co.id',

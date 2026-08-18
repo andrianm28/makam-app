@@ -3,6 +3,8 @@
 use App\Http\Controllers\Admin\DisableMfaController;
 use App\Http\Controllers\Admin\FinanceExportController;
 use App\Http\Controllers\DocumentVault\DownloadDocumentController;
+use App\Http\Controllers\Health\HealthLiveController;
+use App\Http\Controllers\Health\HealthReadyController;
 use App\Http\Middleware\EnforceMfaChallenge;
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Livewire\Public\Booking\BookingWizard;
@@ -89,6 +91,14 @@ use Illuminate\Support\Facades\Route;
 | resources/views/livewire/public/coming-soon.blade.php's own doc block,
 | including why it is deliberately NOT <x-mk.gate-closed-page>.
 */
+
+// ci-cd-and-release.md §8's liveness/readiness pair — see the two
+// controllers' own doc blocks. Placed before the MVP entry points
+// deliberately: these are infrastructure routes, not product surface, and
+// a deploy/monitoring probe should find them without scanning past every
+// public journey below.
+Route::get('/health/live', HealthLiveController::class)->name('health.live');
+Route::get('/health/ready', HealthReadyController::class)->name('health.ready');
 
 Route::get('/', HomePage::class)->name('home');
 

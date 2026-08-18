@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AssignCorrelationId;
+use App\Http\Middleware\ReportContentSecurityPolicy;
 use App\Platform\DocumentVault\Jobs\ReconcileDocumentStorageCleanupJob;
 use App\Platform\Outbox\OutboxQueueName;
 use Illuminate\Console\Scheduling\Schedule;
@@ -45,6 +46,14 @@ return Application::configure(basePath: dirname(__DIR__))
         // ever reach it to set these headers in the first place.
         $middleware->trustProxies(at: '*');
 
+        // Public-beta readiness (finding N-2/OQ-11): global, not a group
+        // append — must cover the Filament /admin and /vendor panels too,
+        // and both declare their own middleware arrays outside the `web`
+        // group entirely (see the comment on AssignCorrelationId below).
+        // See ReportContentSecurityPolicy's own doc block for why this
+        // ships report-only.
+        $middleware->append(ReportContentSecurityPolicy::class);
+
         // S3-T10 (platform-audit AC10 / platform-outbox AC13): the
         // request-boundary origin point for correlation-id propagation.
         // appendToGroup() puts this after the framework's own default
@@ -61,6 +70,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // AuthenticateSession's session-recording path sits later in that
         // same array (see AdminPanelProvider's comment).
         $middleware->appendToGroup('web', AssignCorrelationId::class);
+
+        // Public-beta readiness: every public journey is unthrottled and
+        // anonymous today — see the `public-guest` limiter's own doc block
+        // in `AppServiceProvider::boot()` for why the `web` group is the
+        // right (and only reachable) attachment point for a Livewire-heavy
+        // application, and why an authenticated request is exempt.
+        $middleware->appendToGroup('web', 'throttle:public-guest');
 
         // Same origin point for the `api` group. `platform-audit` design.md
         // requires a correlation id to originate at the request boundary and

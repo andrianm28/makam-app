@@ -4,68 +4,94 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Platform\SiteSettings\Models\SiteSetting;
+use App\Platform\SiteSettings\SettingsService;
+
 /**
- * The ONE place this codebase's placeholder customer-service contact
- * details are defined — hotline, WhatsApp, email, business hours.
+ * The ONE place this codebase's customer-service contact details are
+ * resolved — hotline, WhatsApp, email, business hours.
  *
  * ---------------------------------------------------------------------------
- * These are DUMMY values, not real contact points — read before changing
+ * Settings-aware since 18 Aug 2026 (public-beta readiness) — read before changing
  * ---------------------------------------------------------------------------
- * No real hotline/WhatsApp/email/hours were ever configured anywhere in
- * this repository (see docs/planning/sprint-plan.md's "data yang perlu
- * disediakan" checklist and `App\Platform\FeatureGate\Modes\UrgentMode`'s
- * own doc block, which explicitly documented this gap). The user has since
- * explicitly authorized filling every public-facing gap with clearly
- * plausible placeholder data for full display on the dev environment
- * (dev.makam.co.id is a real, public, non-production site by design —
- * docs/operations/dev-staging-environment.md — synthetic data is the
- * correct content type there).
+ * `phone()`/`whatsapp()`/`email()`/`businessHours()` resolve through
+ * `SettingsService`'s config → env → `site_settings` → default precedence.
+ * `service_hours`/`support_phone`/`support_whatsapp`/`support_email` were
+ * already `SiteSetting::KNOWN_KEYS` rows exposed on the admin Site Settings
+ * form BEFORE this change, but nothing in the public-facing code actually
+ * read three of the four — `App\Livewire\Public\Support\HelpCentre` wired
+ * only `service_hours` (see its own now-simplified comment). An operator
+ * could configure a real phone number in the admin panel and the public
+ * site would keep showing the placeholder regardless. This class closes
+ * that gap once, for every caller, rather than each call site wiring
+ * `SettingsService` for itself.
  *
- * `PHONE` deliberately uses an obviously-placeholder digit pattern
- * (`0000-1234`) within a real, valid Indonesian mobile number FORMAT —
- * plausible enough to satisfy "look complete" without risking that the
- * exact digits happen to belong to a real person's phone (this codebase
- * has no way to verify a number is unassigned, so a sequential/placeholder
- * pattern is the safer middle ground). `EMAIL` uses the real `makam.co.id`
- * domain the business already owns (per design-system.md OQ-02, the live
- * site at that domain is real) — it is NOT actually configured to receive
- * mail today; this is a display value, not a working inbox.
+ * `WHATSAPP` and `PHONE` are independently overridable (`support_whatsapp`
+ * is its own `site_settings` row) even though they currently share one
+ * fallback default — a real deployment may legitimately run support voice
+ * and WhatsApp on different numbers.
  *
- * Every one of these four constants is the single source every view/Action
- * that shows contact information reads from — do NOT hardcode the phone
- * number, email, or hours a second time anywhere else (AGENTS.md
- * §Documentation's "do not duplicate canonical data" rule, applied here
- * the same way `StatusIntent` applies it to status colours).
- *
- * A future real-business-data batch replaces these four values with real
- * ones in this one file; nothing else needs to change.
+ * Every constant below stays the fallback DEFAULT for as long as no real
+ * value is configured — see the class's prior revision for why they are
+ * deliberately fictional placeholders. All four stay `private`: no call
+ * site may read a constant directly, or it would silently stop honouring
+ * whatever an operator has since configured.
  */
 final class ContactInfo
 {
     /**
-     * Indonesian mobile format, obviously-placeholder digit pattern — see
-     * class doc block for why. Used for both the voice hotline and
-     * WhatsApp (one shared number, common for a small support team).
+     * Indonesian mobile format, obviously-placeholder digit pattern —
+     * plausible enough to satisfy "look complete" without risking that the
+     * exact digits happen to belong to a real person's phone (this codebase
+     * has no way to verify a number is unassigned, so a sequential/
+     * placeholder pattern is the safer middle ground while it remains the
+     * effective value).
      */
-    public const string PHONE = '+62 812-0000-1234';
+    private const string PHONE = '+62 812-0000-1234';
 
     /**
-     * Same number as PHONE — display copy should say "hubungi atau
-     * WhatsApp nomor yang sama" rather than restating a second constant
-     * that would only ever hold an identical value.
+     * Uses the real `makam.co.id` domain the business already owns (per
+     * design-system.md OQ-02) — it is NOT actually configured to receive
+     * mail until an operator sets a real, monitored inbox via the admin
+     * Site Settings page; this is a display fallback, not a working inbox.
      */
-    public const string WHATSAPP = self::PHONE;
-
-    public const string EMAIL = 'bantuan@makam.co.id';
+    private const string EMAIL = 'bantuan@makam.co.id';
 
     /**
      * General customer-service hours. Urgent/At-Need coverage is a
-     * SEPARATE claim (see UrgentMode's own honesty framing — this app
+     * SEPARATE claim (see `UrgentMode`'s own honesty framing — this app
      * never claims 24-hour automatic Urgent acceptance, only that the
      * hotline itself can be called any time to ask) — do not conflate the
-     * two when writing copy that cites this constant.
+     * two when writing copy that cites this method.
      */
-    public const string BUSINESS_HOURS = 'Senin–Jumat 08.00–17.00 WIB';
+    private const string BUSINESS_HOURS = 'Senin–Jumat 08.00–17.00 WIB';
+
+    public static function phone(): string
+    {
+        return (string) app(SettingsService::class)->setting(SiteSetting::KEY_SUPPORT_PHONE, self::PHONE);
+    }
+
+    /**
+     * Falls back to `PHONE`'s resolved value, not the bare `WHATSAPP`
+     * constant, when no `support_whatsapp` setting is configured — a real
+     * deployment that has only entered one contact number almost certainly
+     * means "reach us the same way either channel," which `phone()`'s own
+     * resolution already expresses.
+     */
+    public static function whatsapp(): string
+    {
+        return (string) app(SettingsService::class)->setting(SiteSetting::KEY_SUPPORT_WHATSAPP, self::phone());
+    }
+
+    public static function email(): string
+    {
+        return (string) app(SettingsService::class)->setting(SiteSetting::KEY_SUPPORT_EMAIL, self::EMAIL);
+    }
+
+    public static function businessHours(): string
+    {
+        return (string) app(SettingsService::class)->setting(SiteSetting::KEY_SERVICE_HOURS, self::BUSINESS_HOURS);
+    }
 
     /**
      * Human-readable line combining phone + hours, for contexts (footer,
@@ -74,6 +100,6 @@ final class ContactInfo
      */
     public static function summaryLine(): string
     {
-        return self::PHONE.' · '.self::BUSINESS_HOURS;
+        return self::phone().' · '.self::businessHours();
     }
 }

@@ -86,7 +86,7 @@
                  migrating it is optional cleanup, not required. --}}
             <div class="mt-8 border-t border-neutral-200 pt-6">
                 <p class="mb-3 text-sm text-neutral-600">
-                    {{ ContactInfo::PHONE }} (telepon/WhatsApp) · {{ ContactInfo::EMAIL }} · {{ ContactInfo::BUSINESS_HOURS }}
+                    {{ ContactInfo::phone() }} (telepon/WhatsApp) · {{ ContactInfo::email() }} · {{ ContactInfo::businessHours() }}
                 </p>
                 <a
                     href="{{ route('bantuan.index') }}"
