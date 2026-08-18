@@ -97,22 +97,31 @@ final class SpineWatchdogCommandTest extends TestCase
     }
 
     /**
-     * `--stale-delivery-minutes=0`, not `$this->travel()`: `Actions\
+     * `--stale-delivery-minutes=-1`, not `$this->travel()`: `Actions\
      * DispatchNotification` stamps `created_at` via `CarbonImmutable::now()`
      * (real wall-clock, always), while `$this->travel()` only mocks
      * `Illuminate\Support\Carbon`'s test-now — the two classes' test-now
      * state is independent (a PHP trait gives each USING class its own copy
      * of a static property; `Carbon` and `CarbonImmutable` are unrelated
      * classes, not parent/child), so travelling forward never ages a row
-     * this fixture created. A threshold of 0 sidesteps needing to fake
-     * elapsed time at all: any row created even a moment ago is already
-     * `created_at < now()` by construction.
+     * this fixture created.
+     *
+     * A threshold of exactly `0` looked like it should sidestep needing to
+     * fake elapsed time at all, but doesn't reliably: `notification_
+     * deliveries.created_at` is `timestamp(0)` — no sub-second precision
+     * (verified against the live schema) — and the fixture's insert and
+     * this command's own `now()` both run within the same test method,
+     * comfortably inside the same wall-clock second. `created_at < now()`
+     * then compares two values that round to an IDENTICAL second, which is
+     * false, not true — confirmed: this was the actual CI failure with `0`.
+     * `-1` computes `now()->subMinutes(-1)` = one minute in the FUTURE,
+     * building in real margin far larger than any sub-second rounding gap.
      */
     public function test_it_detects_a_stale_queued_delivery_and_reports_it(): void
     {
         $this->createQueuedDelivery();
 
-        $this->artisan('spine:watchdog', ['--stale-delivery-minutes' => 0])
+        $this->artisan('spine:watchdog', ['--stale-delivery-minutes' => -1])
             ->expectsOutputToContain('Notification queue worker stalled: 1 delivery(ies)')
             ->assertExitCode(1);
     }
