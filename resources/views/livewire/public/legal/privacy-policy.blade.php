@@ -13,6 +13,11 @@
     "Terakhir diperbarui" line below is not decorative: it is the one
     honesty marker this batch's brief requires to stay regardless of "show
     the full page publicly" — do not remove it when editing this file.
+
+    $legalReviewNote (App\Support\LegalReviewStatus::note()) supersedes the
+    draft disclaimer once an operator enters a review confirmation via the
+    admin Site Settings page (SiteSettingsForm's "Tinjauan hukum" section)
+    — do not delete the draft branch, it is the honest default state.
 --}}
 <div class="py-8 md:py-12">
     <div class="mx-auto max-w-content px-4">
@@ -20,8 +25,15 @@
             <header class="mb-6 space-y-2">
                 <h1 class="text-3xl font-semibold tracking-tight text-neutral-900">Kebijakan Privasi</h1>
                 <p class="text-sm text-neutral-600">
-                    Terakhir diperbarui {{ $updatedAt }}. Dokumen ini adalah draf awal dan akan diperbarui setelah tinjauan hukum resmi.
+                    @if ($legalReviewNote !== null)
+                        Terakhir diperbarui {{ $updatedAt }}. {{ $legalReviewNote }}
+                    @else
+                        Terakhir diperbarui {{ $updatedAt }}. Dokumen ini adalah draf awal dan akan diperbarui setelah tinjauan hukum resmi.
+                    @endif
                 </p>
+                @if ($companyNib !== null)
+                    <p class="text-sm text-neutral-600">NIB: {{ $companyNib }}</p>
+                @endif
             </header>
 
             <div class="space-y-8 text-base text-neutral-700">

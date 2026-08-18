@@ -63,4 +63,21 @@ final class CompanyInfo
     {
         return (string) app(SettingsService::class)->setting(SiteSetting::KEY_COMPANY_ADDRESS, self::ADDRESS);
     }
+
+    /**
+     * Nomor Induk Berusaha — Indonesia's single business registration
+     * number. Unlike `name()`/`address()`, this has no fictional fallback
+     * constant: a plausible-looking fake registration number would be
+     * actively misleading in a way "PT Contoh ..." is not (that name
+     * self-labels as a placeholder; a 13-digit NIB pattern would not).
+     * Returns null until an operator enters a real one via the admin Site
+     * Settings page — callers must not render an NIB line when this is
+     * null, not substitute a placeholder of their own.
+     */
+    public static function nib(): ?string
+    {
+        $value = trim((string) app(SettingsService::class)->setting(SiteSetting::KEY_COMPANY_NIB, ''));
+
+        return $value === '' ? null : $value;
+    }
 }
