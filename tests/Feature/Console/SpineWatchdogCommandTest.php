@@ -11,6 +11,7 @@ use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Models\User;
 use App\Platform\Notification\Jobs\ConsumeOutboxNotificationJob;
+use App\Platform\Notification\Jobs\SendNotificationChannelJob;
 use App\Platform\Observability\SpineDegradedException;
 use App\Platform\Outbox\Outbox;
 use App\Platform\Outbox\OutboxClassification;
@@ -36,11 +37,15 @@ use Tests\TestCase;
  * that table from outside `Actions\DispatchNotification` at the connection
  * level (AC9), and its own `withWritesUnlocked()` refuses to run unless
  * `Actions\DispatchNotification` is genuinely on the call stack — there is
- * no test-side escape hatch, deliberately. `Queue::fake()` (see
- * `createQueuedDelivery()`'s own doc block) is what keeps the resulting
- * row `QUEUED` — phpunit.xml pins `QUEUE_CONNECTION=sync`, so without it
- * `SendNotificationChannelJob` runs in-process before the fixture method
- * even returns, moving the row straight past `QUEUED` to its final state.
+ * no test-side escape hatch, deliberately. A selective `Queue::fake([
+ * SendNotificationChannelJob::class])` (see `createQueuedDelivery()`'s own
+ * doc block) is what keeps the resulting row `QUEUED` — phpunit.xml pins
+ * `QUEUE_CONNECTION=sync`, so without it `SendNotificationChannelJob` runs
+ * in-process before the fixture method even returns, moving the row
+ * straight past `QUEUED` to its final state. The fake must stay scoped to
+ * that one job class: `ConsumeOutboxNotificationJob` (dispatched via
+ * `dispatchSync()` below) is itself `ShouldQueue`, and a blanket fake would
+ * swallow that outer dispatch too, so the fixture would never run at all.
  */
 final class SpineWatchdogCommandTest extends TestCase
 {
@@ -163,25 +168,32 @@ final class SpineWatchdogCommandTest extends TestCase
 
         $this->ensureActiveTemplateVersion('Booking submitted');
 
-        // Root cause, found via two rounds of diagnostics: phpunit.xml pins
-        // QUEUE_CONNECTION=sync, so `SendNotificationChannelJob::dispatch()`
-        // inside `Actions\DispatchNotification::consumeOutboxEvent()` (the
-        // call AFTER the recording transaction, once per queued delivery
-        // id) runs immediately, in-process — not merely "queued". By the
-        // time `dispatchSync()` below returns, the channel job had ALREADY
-        // run too, moving the delivery straight past `QUEUED` to `SENT`
-        // (confirmed directly: a temporary diagnostic showed
-        // `EMAIL:SENT` after every earlier fix attempt). `Queue::fake()`
-        // intercepts that nested `dispatch()` call so the job records but
-        // never executes, leaving the row genuinely `QUEUED` — the state
-        // this whole fixture exists to produce.
+        // Root cause, found via three rounds of diagnostics: phpunit.xml
+        // pins QUEUE_CONNECTION=sync, so `SendNotificationChannelJob::
+        // dispatch()` inside `Actions\DispatchNotification::
+        // consumeOutboxEvent()` (the call AFTER the recording transaction,
+        // once per queued delivery id) runs immediately, in-process — not
+        // merely "queued". By the time `dispatchSync()` below returns, the
+        // channel job had ALREADY run too, moving the delivery straight
+        // past `QUEUED` to `SENT` (confirmed directly: a temporary
+        // diagnostic showed `EMAIL:SENT` after every earlier fix attempt).
         //
-        // `ConsumeOutboxNotificationJob::dispatchSync($outboxEventId)`
-        // itself is UNAFFECTED by the fake: `dispatchSync()` always runs
-        // in-process regardless of the queue driver, which is exactly why
-        // this method's own DB writes (the QUEUED row included) still
-        // happen correctly.
-        Queue::fake();
+        // A blanket `Queue::fake()` overcorrects, though — confirmed by a
+        // second diagnostic round after that fix still failed CI:
+        // `ConsumeOutboxNotificationJob implements ShouldQueue`, so
+        // `dispatchSync()` (`Illuminate\Bus\Dispatcher::dispatchSync()`)
+        // itself routes through `dispatchToQueue()`, not straight to
+        // `dispatchNow()`, whenever the command is queueable — see that
+        // method's own source. Under a blanket fake, THIS outer dispatch is
+        // the one that gets swallowed: it is recorded as pushed and never
+        // actually runs, so `consumeOutboxEvent()` never executes at all,
+        // no delivery row is ever created, and the watchdog reports
+        // healthy. Faking only `SendNotificationChannelJob` leaves
+        // `ConsumeOutboxNotificationJob` unfaked, so its push falls through
+        // to the real (sync) queue connection and runs in-process as
+        // intended, while the inner channel-job dispatch it makes is still
+        // the one that gets intercepted.
+        Queue::fake([SendNotificationChannelJob::class]);
 
         $outboxEventId = Outbox::record(
             eventName: 'booking.draft_submitted.v2',
