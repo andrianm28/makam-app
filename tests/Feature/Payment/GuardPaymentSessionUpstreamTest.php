@@ -342,6 +342,66 @@ final class GuardPaymentSessionUpstreamTest extends TestCase
         $this->assertNull($denial->missingUpstream);
     }
 
+    /**
+     * The real-world case none of the three tests above actually cover:
+     * each of them uses the SAME actor as both the admin who granted the
+     * order scope AND the actor evaluating the guard. `OpenPaymentSession`
+     * is invoked from the PUBLIC booking wizard by an anonymous customer —
+     * this test's session is deliberately never `actingAs()`'d, reproducing
+     * that guest `ActorContext`. Before the 18 Aug 2026 fix, this denied
+     * unconditionally for every real customer, regardless of order state.
+     */
+    public function test_condition_4_passes_for_a_guest_actor_once_an_admin_has_authorized_the_order(): void
+    {
+        $order = $this->makeOrder(OrderStatus::PENAWARAN_TERKIRIM);
+        $this->acceptedQuote($order, 1_500_000_00);
+
+        // An admin authorizes THIS ORDER but never becomes the evaluating
+        // actor — no actingAs() call for this user anywhere in this test.
+        $admin = User::factory()->create();
+        app(GrantActorRole::class)($admin->id, ActorRole::ADMIN, 'test', 1);
+        $this->grantOrderScope((string) $admin->id, $order);
+
+        $result = ($this->guardWithPaymentGate(open: true))($order, $this->amount(1_500_000_00));
+
+        foreach ($result->denials() as $denial) {
+            $this->assertNotSame(
+                GuardCondition::AuthorizedOpening,
+                $denial->condition,
+                'Condition 4 must not deny a guest actor once an admin has authorized this order — authorization is a property of the order, not of who is now paying.',
+            );
+        }
+    }
+
+    /**
+     * Mutation guard for the fix above: proves the ADMIN-role join is
+     * load-bearing. A guest evaluator must still be denied when the only
+     * order grant belongs to a non-admin — otherwise the fix would have
+     * silently widened condition 4 to "any order grant at all, by anyone."
+     */
+    public function test_condition_4_still_denies_for_a_guest_actor_when_the_order_grant_belongs_to_a_non_admin(): void
+    {
+        $order = $this->makeOrder(OrderStatus::PENAWARAN_TERKIRIM);
+        $this->acceptedQuote($order, 1_500_000_00);
+
+        $caseManager = User::factory()->create();
+        app(GrantActorRole::class)($caseManager->id, ActorRole::CASE_MANAGER, 'test', 1);
+        $this->grantOrderScope((string) $caseManager->id, $order);
+
+        $result = ($this->guardWithPaymentGate(open: true))($order, $this->amount(1_500_000_00));
+
+        $denial = null;
+        foreach ($result->denials() as $d) {
+            if ($d->condition === GuardCondition::AuthorizedOpening) {
+                $denial = $d;
+                break;
+            }
+        }
+
+        $this->assertNotNull($denial);
+        $this->assertSame(GuardDenialReason::DomainDenied, $denial->reason);
+    }
+
     public function test_condition_5_denies_for_an_amount_differing_by_one_minor_unit(): void
     {
         $order = $this->makeOrder(OrderStatus::PENAWARAN_TERKIRIM);

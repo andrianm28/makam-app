@@ -205,8 +205,14 @@ final readonly class GuardPaymentSession
             // Condition 3 — REAL. Requires a current accepted, unexpired quote.
             GuardCondition::QuoteAcceptedAndUnexpired => $this->conditionThree($condition, $currentQuote),
 
-            // Condition 4 — REAL. Requires the actor to hold an ADMIN role
-            // AND an active ORDER-scope grant.
+            // Condition 4 — REAL. Requires THIS ORDER to hold an active
+            // ORDER-scope grant held by an actor who currently holds ADMIN —
+            // a property of the order (an admin authorized it), not of the
+            // current caller. Fixed 18 Aug 2026: previously required the
+            // CALLING actor to hold that grant, which made online payment
+            // structurally unreachable from the public booking wizard for
+            // every real (guest) customer — see
+            // `AuthorizeOrderPaymentOpening`'s class doc block.
             GuardCondition::AuthorizedOpening => $this->conditionFour($condition, $order, $actor),
 
             // Condition 5 — REAL. Requires the requested amount to match the
