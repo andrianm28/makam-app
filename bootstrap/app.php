@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AssignCorrelationId;
+use App\Http\Middleware\ReportContentSecurityPolicy;
 use App\Platform\DocumentVault\Jobs\ReconcileDocumentStorageCleanupJob;
 use App\Platform\Outbox\OutboxQueueName;
 use Illuminate\Console\Scheduling\Schedule;
@@ -44,6 +45,14 @@ return Application::configure(basePath: dirname(__DIR__))
         // (ci/verify-infra.sh GATE I7) — only the host's own reverse proxy can
         // ever reach it to set these headers in the first place.
         $middleware->trustProxies(at: '*');
+
+        // Public-beta readiness (finding N-2/OQ-11): global, not a group
+        // append — must cover the Filament /admin and /vendor panels too,
+        // and both declare their own middleware arrays outside the `web`
+        // group entirely (see the comment on AssignCorrelationId below).
+        // See ReportContentSecurityPolicy's own doc block for why this
+        // ships report-only.
+        $middleware->append(ReportContentSecurityPolicy::class);
 
         // S3-T10 (platform-audit AC10 / platform-outbox AC13): the
         // request-boundary origin point for correlation-id propagation.
