@@ -62,6 +62,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // same array (see AdminPanelProvider's comment).
         $middleware->appendToGroup('web', AssignCorrelationId::class);
 
+        // Public-beta readiness: every public journey is unthrottled and
+        // anonymous today — see the `public-guest` limiter's own doc block
+        // in `AppServiceProvider::boot()` for why the `web` group is the
+        // right (and only reachable) attachment point for a Livewire-heavy
+        // application, and why an authenticated request is exempt.
+        $middleware->appendToGroup('web', 'throttle:public-guest');
+
         // Same origin point for the `api` group. `platform-audit` design.md
         // requires a correlation id to originate at the request boundary and
         // propagate into outbox events and queue jobs; the payment webhook
