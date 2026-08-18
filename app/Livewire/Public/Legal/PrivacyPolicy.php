@@ -58,8 +58,8 @@ final class PrivacyPolicy extends Component
     public function render(): View
     {
         return view('livewire.public.legal.privacy-policy', [
-            'companyName' => CompanyInfo::NAME,
-            'companyAddress' => CompanyInfo::ADDRESS,
+            'companyName' => CompanyInfo::name(),
+            'companyAddress' => CompanyInfo::address(),
             'updatedAt' => self::UPDATED_AT,
         ])->layout('layouts.app', [
             'title' => 'Kebijakan Privasi - Makam.co.id',

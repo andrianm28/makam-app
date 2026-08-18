@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Livewire\Public\Support;
 
-use App\Platform\SiteSettings\Models\SiteSetting;
-use App\Platform\SiteSettings\SettingsService;
 use App\Support\CompanyInfo;
 use App\Support\ContactInfo;
 use Illuminate\Contracts\View\View;
@@ -78,16 +76,17 @@ use Livewire\Component;
  * required part of this screen and not decoration — a fabricated-looking
  * hotline on a funeral platform is a promise to someone in crisis.
  *
- * `ContactInfo::WHATSAPP` is the same number as `PHONE` by design (see that
- * class), so it is presented as one number reachable two ways rather than
- * restated as a second channel. No `wa.me` deep link is generated: the
+ * `ContactInfo::whatsapp()` falls back to the same number as `phone()` when
+ * no `support_whatsapp` setting is configured (see that class), so it is
+ * presented as one number reachable two ways rather than restated as a
+ * second channel. No `wa.me` deep link is generated: the
  * seeded FAQ article `bagaimana-menghubungi-customer-service` still says
  * additional channels "seperti WhatsApp" will be announced when they become
  * available, and minting a deep link into a WhatsApp Business account that
  * nothing in this repository configures would contradict it.
  *
  * No response time, SLA, ticket number, or 24/7 claim appears anywhere on
- * this screen. `BUSINESS_HOURS` is general customer-service coverage only;
+ * this screen. `businessHours()` is general customer-service coverage only;
  * `App\Platform\FeatureGate\Modes\UrgentMode` documents that Urgent/At-Need
  * acceptance is a SEPARATE claim this platform does not make automatically
  * (`G-OPS-01` is seeded closed), so the view states the hours as what they
@@ -113,9 +112,9 @@ use Livewire\Component;
 final class HelpCentre extends Component
 {
     /**
-     * `tel:` target derived from `ContactInfo::PHONE` rather than written
-     * out again — the constant stays the one source, and a future real
-     * number needs no change here.
+     * `tel:` target derived from `ContactInfo::phone()` rather than written
+     * out again — that method stays the one source, and a future real
+     * number needs no change here, only a `site_settings` row.
      *
      * The leading `+` is KEPT (unlike `home-page.blade.php`, which strips
      * it): `+62…` is an unambiguous international dial string, whereas the
@@ -126,7 +125,7 @@ final class HelpCentre extends Component
      */
     private static function telHref(): string
     {
-        $digits = preg_replace('/[^0-9]/', '', ContactInfo::PHONE) ?? '';
+        $digits = preg_replace('/[^0-9]/', '', ContactInfo::phone()) ?? '';
 
         return 'tel:+'.$digits;
     }
@@ -134,18 +133,12 @@ final class HelpCentre extends Component
     public function render(): View
     {
         return view('livewire.public.support.help-centre', [
-            'phone' => ContactInfo::PHONE,
+            'phone' => ContactInfo::phone(),
             'telHref' => self::telHref(),
-            'email' => ContactInfo::EMAIL,
-            // P2 `admin-data-management`: service hours resolve through
-            // SettingsService's config → env → `site_settings` → default
-            // precedence; `ContactInfo::BUSINESS_HOURS` stays the fallback
-            // while no config/env/DB value exists, so the public screen
-            // shows the operator-managed hours once provisioned and the
-            // current constant today.
-            'businessHours' => app(SettingsService::class)->setting(SiteSetting::KEY_SERVICE_HOURS, ContactInfo::BUSINESS_HOURS),
-            'companyName' => CompanyInfo::NAME,
-            'companyAddress' => CompanyInfo::ADDRESS,
+            'email' => ContactInfo::email(),
+            'businessHours' => ContactInfo::businessHours(),
+            'companyName' => CompanyInfo::name(),
+            'companyAddress' => CompanyInfo::address(),
         ])->layout('layouts.app', [
             'title' => 'Bantuan dan Kontak - Makam.co.id',
             // <x-mk.header>'s nav keys are only 'pemesanan' | 'layanan' |
