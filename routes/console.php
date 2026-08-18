@@ -30,3 +30,11 @@ Schedule::command('care:generate-cycles')->dailyAt('03:30');
 // `withoutOverlapping()` is belt-and-braces — `claim()` uses FOR UPDATE SKIP
 // LOCKED, so concurrent publishers are already safe by construction.
 Schedule::command('outbox:publish')->everyMinute()->withoutOverlapping();
+
+// Detects a silently stalled outbox publisher or notification queue
+// worker — see SpineWatchdogCommand's own doc block for why this is the
+// highest-value alert available: every layer upstream of the async spine
+// can look perfectly healthy while it has quietly stopped. Every five
+// minutes, independent of outbox:publish's own every-minute schedule —
+// the watchdog must keep running even if the thing it watches has died.
+Schedule::command('spine:watchdog')->everyFiveMinutes()->withoutOverlapping();
