@@ -37,5 +37,41 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perMinute(5)->by("{$actorRef}|{$request->ip()}");
         });
+
+        // Public-beta readiness: every public journey (booking wizard,
+        // marketplace checkout/cart, grave search, pre-need interest,
+        // visitation booking) is a Livewire component, and Livewire's own
+        // actions all funnel through its ONE shared `/livewire/update`
+        // endpoint (vendor/livewire/livewire's `HandleRequests` registers
+        // that route on the `web` middleware group) — there is no
+        // per-action route to attach a named `throttle:` limiter to the
+        // way `document-download`/`financial-export` do above. This limiter
+        // is instead applied to the whole `web` group
+        // (`bootstrap/app.php`), which covers both the initial page load
+        // and every subsequent Livewire round trip for every public screen
+        // in one place.
+        //
+        // `Limit::none()` for an authenticated request: today that exempts
+        // nothing real (the Filament `/admin` and `/vendor` panels do NOT
+        // go through the `web` group at all — see `bootstrap/app.php`'s own
+        // comment on `AssignCorrelationId`), but it is the correct default
+        // for the day a customer account area lands in this group, and
+        // costs nothing today.
+        //
+        // 60/minute per IP is deliberately generous: a real visitor filling
+        // the 9-step booking wizard makes tens of Livewire round trips
+        // (`wire:model` updates plus each `saveStepN` call) across several
+        // minutes, and this must never be the reason a genuine customer
+        // gets cut off mid-booking. It is tight enough to blunt a scripted
+        // flood, which is the actual threat on an unthrottled anonymous
+        // surface — not a precise capacity figure (no load test has been
+        // run; `performance-and-capacity.md`'s profiles remain unexecuted).
+        RateLimiter::for('public-guest', static function (Request $request): Limit {
+            if ($request->user() !== null) {
+                return Limit::none();
+            }
+
+            return Limit::perMinute(60)->by($request->ip());
+        });
     }
 }
