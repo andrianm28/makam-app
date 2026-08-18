@@ -78,7 +78,17 @@ return [
     |
     */
 
-    'locale' => env('APP_LOCALE', 'en'),
+    // Public-beta readiness: this product is Indonesian-first end to end
+    // (every domain validation message, every catalogue label, every piece
+    // of UI copy already is) — 'en' was an unexamined Laravel skeleton
+    // default, never a deliberate choice. lang/id/{validation,pagination,
+    // auth}.php now exist for exactly this default to be correct out of the
+    // box. fallback_locale stays 'en', not 'id': lang/id/passwords.php does
+    // not exist yet (this repository's own .claude/settings.json correctly
+    // denies writing a file matching that name — see lang/id/validation.php's
+    // doc block), so an English fallback for that one file is a complete,
+    // correct set rather than a partial Indonesian one with a hole in it.
+    'locale' => env('APP_LOCALE', 'id'),
 
     'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
 
