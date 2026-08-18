@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Platform\Notification;
 
 use App\Platform\Notification\Channels\MailChannel;
+use App\Platform\Notification\Channels\RenderedNotificationMailable;
 use App\Platform\Notification\Contracts\RecipientAddressResolver;
 use App\Platform\Notification\DeliveryState;
 use App\Platform\Notification\Models\NotificationDelivery;
@@ -78,7 +79,7 @@ final class MailChannelTest extends TestCase
         $this->assertSame(DeliveryState::Sent, $result->state);
         $this->assertStringStartsWith('mail-', (string) $result->providerRef);
 
-        Mail::assertSent(function ($mailable) {
+        Mail::assertSent(function (RenderedNotificationMailable $mailable) {
             return $mailable->hasTo('customer@example.test');
         });
     }
@@ -164,7 +165,7 @@ final class MailChannelTest extends TestCase
 
         $channel->send($this->delivery('8'), $this->version(), $set);
 
-        Mail::assertSent(function ($mailable) {
+        Mail::assertSent(function (RenderedNotificationMailable $mailable) {
             return $mailable->hasTo('8@example.test');
         });
         Mail::assertSentCount(1);

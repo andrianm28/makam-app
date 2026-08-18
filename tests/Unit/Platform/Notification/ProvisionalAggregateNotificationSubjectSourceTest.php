@@ -103,8 +103,7 @@ final class ProvisionalAggregateNotificationSubjectSourceTest extends TestCase
     {
         $cemetery = $this->createCemetery();
         $draft = BookingDraft::query()->create(['cemetery_id' => $cemetery->id]);
-        $order = $this->makeOrder();
-        $order->forceFill(['booking_draft_id' => $draft->id])->save();
+        $order = $this->makeOrder($draft->id);
 
         $party = OrderParty::query()->create([
             'order_id' => $order->getKey(),
@@ -203,8 +202,7 @@ final class ProvisionalAggregateNotificationSubjectSourceTest extends TestCase
     {
         $cemetery = $this->createCemetery();
         $draft = BookingDraft::query()->create(['cemetery_id' => $cemetery->id]);
-        $order = $this->makeOrder();
-        $order->forceFill(['booking_draft_id' => $draft->id])->save();
+        $order = $this->makeOrder($draft->id);
 
         $party = OrderParty::query()->create([
             'order_id' => $order->getKey(),
@@ -244,12 +242,20 @@ final class ProvisionalAggregateNotificationSubjectSourceTest extends TestCase
         $this->assertNull($subject);
     }
 
-    private function makeOrder(): Order
+    /**
+     * `bookingDraftId` is accepted here rather than set via a later
+     * `->save()` — `Order` is a guarded model (`OrderIsGuardedException`):
+     * only `App\Domain\OrderWorkflow\Actions\RecordOrderStatusChange` may
+     * update a persisted row, so every field this test needs must be
+     * present at `create()` time.
+     */
+    private function makeOrder(?string $bookingDraftId = null): Order
     {
         return Order::query()->create([
             'reference' => 'MK-SUBJECT-'.Str::upper(Str::random(8)),
             'product_type' => ProductType::AT_NEED_SERVICE_ORDER->value,
             'status' => OrderStatus::MASUK->value,
+            'booking_draft_id' => $bookingDraftId,
         ]);
     }
 
