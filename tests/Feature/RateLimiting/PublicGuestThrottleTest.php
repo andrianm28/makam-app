@@ -28,6 +28,17 @@ final class PublicGuestThrottleTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // CI's PHP job never builds frontend assets (that's the separate
+        // `frontend` job) — `/`'s real view carries `@vite(...)`, which
+        // would otherwise throw ViteManifestNotFoundException before this
+        // throttle is ever reached. Same convention `EditSiteSettingsSmokeTest`
+        // already establishes for the same reason.
+        $this->withoutVite();
+    }
+
     public function test_a_guest_is_throttled_after_60_requests_in_a_minute(): void
     {
         for ($i = 0; $i < 60; $i++) {
