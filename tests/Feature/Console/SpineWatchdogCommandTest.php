@@ -96,13 +96,23 @@ final class SpineWatchdogCommandTest extends TestCase
             ->assertExitCode(0);
     }
 
+    /**
+     * `--stale-delivery-minutes=0`, not `$this->travel()`: `Actions\
+     * DispatchNotification` stamps `created_at` via `CarbonImmutable::now()`
+     * (real wall-clock, always), while `$this->travel()` only mocks
+     * `Illuminate\Support\Carbon`'s test-now — the two classes' test-now
+     * state is independent (a PHP trait gives each USING class its own copy
+     * of a static property; `Carbon` and `CarbonImmutable` are unrelated
+     * classes, not parent/child), so travelling forward never ages a row
+     * this fixture created. A threshold of 0 sidesteps needing to fake
+     * elapsed time at all: any row created even a moment ago is already
+     * `created_at < now()` by construction.
+     */
     public function test_it_detects_a_stale_queued_delivery_and_reports_it(): void
     {
         $this->createQueuedDelivery();
 
-        $this->travel(20)->minutes();
-
-        $this->artisan('spine:watchdog')
+        $this->artisan('spine:watchdog', ['--stale-delivery-minutes' => 0])
             ->expectsOutputToContain('Notification queue worker stalled: 1 delivery(ies)')
             ->assertExitCode(1);
     }
