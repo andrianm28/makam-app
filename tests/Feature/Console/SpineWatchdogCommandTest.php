@@ -170,6 +170,19 @@ final class SpineWatchdogCommandTest extends TestCase
         )->getKey();
 
         ConsumeOutboxNotificationJob::dispatchSync($outboxEventId);
+
+        // DIAGNOSTIC (temporary, round 2): the guaranteed-active-version fix
+        // did not resolve it -- still zero detected. Dumps every delivery
+        // row's actual (channel, state, failure_message) so the next CI run
+        // shows exactly what got recorded instead of another guess.
+        $deliveries = DB::table('notification_deliveries')->where('event_id', $outboxEventId)->get(['channel', 'state', 'failure_message']);
+        $templateRow = DB::table('notification_templates')->where('event_name', 'Booking submitted')->first();
+
+        $this->fail(sprintf(
+            'Pipeline diagnostic 2: template active_version_id=%s deliveries=[%s]',
+            $templateRow?->active_version_id ?? 'NULL',
+            $deliveries->map(fn ($d) => "{$d->channel}:{$d->state}:{$d->failure_message}")->implode(' | ') ?: 'NONE',
+        ));
     }
 
     /**
