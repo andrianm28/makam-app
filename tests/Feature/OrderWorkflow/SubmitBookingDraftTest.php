@@ -96,6 +96,63 @@ final class SubmitBookingDraftTest extends TestCase
     }
 
     /**
+     * The customer contact details collected at Step 6
+     * (`SaveBookingDraftStep`, `booking_drafts.customer_*`) are the only
+     * reference notification recipient resolution has for a guest
+     * customer — see `Platform\Notification\Support\
+     * OrderPartySubjectSupport`. Before this test, `SubmitBookingDraft`
+     * collected these fields on the draft and then wrote every one of them
+     * as null onto `order_parties`, so a validated email address a customer
+     * had just typed in was discarded at the exact moment it needed to be
+     * durable.
+     */
+    public function test_the_ordering_partys_step_6_contact_details_are_carried_onto_the_order(): void
+    {
+        $draft = $this->draft(BookingServiceType::NEW_GRAVE);
+        $draft->forceFill([
+            'customer_full_name' => 'Siti Aminah',
+            'customer_mobile' => '081234567890',
+            'customer_email' => 'siti.aminah@example.test',
+            'customer_address' => 'Jl. Melati No. 12, Jakarta Selatan',
+            'customer_relationship' => 'anak',
+            'customer_contact_channel' => 'whatsapp',
+        ])->save();
+
+        $order = app(SubmitBookingDraft::class)($draft, 'idem-contact-carry-1');
+
+        $party = OrderParty::query()->where('order_id', $order->getKey())->firstOrFail();
+
+        self::assertSame('Siti Aminah', $party->full_name);
+        self::assertSame('081234567890', $party->contact_phone);
+        self::assertSame('siti.aminah@example.test', $party->contact_email);
+        self::assertSame('Jl. Melati No. 12, Jakarta Selatan', $party->address);
+        self::assertSame('anak', $party->relationship_to_deceased);
+        self::assertSame('whatsapp', $party->preferred_contact_channel);
+    }
+
+    /**
+     * A draft that never reached Step 6 (a fixture, or a service-catalogue-
+     * only submission) has these fields null on the draft already — this
+     * asserts the carry-through stays a plain copy, never a fabricated
+     * default.
+     */
+    public function test_a_draft_with_no_step_6_contact_details_yields_a_party_with_none_either(): void
+    {
+        $draft = $this->draft(BookingServiceType::NEW_GRAVE);
+
+        $order = app(SubmitBookingDraft::class)($draft, 'idem-contact-carry-2');
+
+        $party = OrderParty::query()->where('order_id', $order->getKey())->firstOrFail();
+
+        self::assertNull($party->full_name);
+        self::assertNull($party->contact_phone);
+        self::assertNull($party->contact_email);
+        self::assertNull($party->address);
+        self::assertNull($party->relationship_to_deceased);
+        self::assertNull($party->preferred_contact_channel);
+    }
+
+    /**
      * AC5, Pre-Need arm, and the `G-LEGAL-01` restriction. Absence of a
      * financial obligation is asserted POSITIVELY against every financial
      * table, not inferred from "the code does not call it".
