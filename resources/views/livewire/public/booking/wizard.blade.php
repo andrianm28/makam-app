@@ -855,6 +855,35 @@
                                     </p>
                                 </div>
 
+                                {{-- ADR-0035 item 1's mitigation: unmissable
+                                     labelling before any redirect to the
+                                     sandbox — a real customer could otherwise
+                                     complete a real booking, "pay" through a
+                                     sandbox that moves no money, and have the
+                                     order marked paid with no real settlement
+                                     behind it. Deliberately placed on the
+                                     button's own card, not only in a
+                                     dismissible site-wide banner a grieving
+                                     user is unlikely to read carefully. --}}
+                                @if ($isSandboxPayment)
+                                    <x-mk.alert
+                                        intent="urgent"
+                                        icon="alert-triangle"
+                                        title="ANDA TIDAK AKAN MENGIRIM UANG SUNGGUHAN"
+                                        live="off"
+                                        class="mt-3"
+                                    >
+                                        <p class="text-sm">
+                                            Makam.co.id masih dalam masa uji coba publik (beta). Halaman pembayaran
+                                            di bawah ini adalah <strong>simulasi (sandbox)</strong> milik penyedia
+                                            pembayaran &mdash; tidak ada transaksi finansial nyata yang terjadi,
+                                            berapa pun nominal yang tertera. Pesanan Anda tetap tercatat, dan tim
+                                            kami akan menghubungi Anda secara langsung untuk menyelesaikan
+                                            pembayaran sesungguhnya secara manual.
+                                        </p>
+                                    </x-mk.alert>
+                                @endif
+
                                 @if ($onlinePaymentError !== null)
                                     <x-mk.alert
                                         intent="danger"
