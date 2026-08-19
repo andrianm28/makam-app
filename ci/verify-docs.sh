@@ -22,7 +22,7 @@ head2() { printf '\n== %s ==\n' "$1"; }
 head2 "GATE 1 — WCAG AA contrast (design system)"
 # ---------------------------------------------------------------------------
 if python3 docs/design/verify-contrast.py --quiet >/tmp/contrast.log 2>&1; then
-  pass "46 asserted colour pairs meet WCAG 2.1 AA"
+  pass "49 asserted colour pairs meet WCAG 2.1 AA"
 else
   fail "contrast regression — see output below"; cat /tmp/contrast.log
 fi
