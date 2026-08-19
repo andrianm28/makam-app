@@ -32,7 +32,17 @@ final class SiteSettingsForm
             Section::make('Identitas perusahaan')->schema([
                 TextInput::make('data.company_name')->label('Nama perusahaan')->maxLength(191),
                 TextInput::make('data.company_address')->label('Alamat terdaftar')->maxLength(255),
+                TextInput::make('data.company_nib')
+                    ->label('NIB (Nomor Induk Berusaha)')
+                    ->maxLength(60)
+                    ->helperText('Kosongkan jika belum ada — baris NIB tidak ditampilkan di halaman legal sampai diisi.'),
             ])->description('Ditampilkan di footer dan halaman legal (Kebijakan Privasi, Syarat & Ketentuan).'),
+            Section::make('Tinjauan hukum')->schema([
+                TextInput::make('data.legal_review_note')
+                    ->label('Konfirmasi tinjauan hukum')
+                    ->maxLength(255)
+                    ->helperText('Kosongkan agar halaman legal tetap menampilkan label "draf awal". Isi setelah tinjauan hukum resmi selesai, mis. "Ditinjau 1 Sep 2026 oleh [nama firma hukum]" — teks ini langsung menggantikan label draf di /privasi dan /syarat-ketentuan tanpa perlu deploy kode.'),
+            ]),
             Section::make('Entitas & pemrosesan pembayaran')->schema([
                 TextInput::make('data.marketplace_badan_usaha_ref')->label('Ref badan usaha marketplace')->maxLength(120),
                 TextInput::make('data.payment_merchant_ref')->label('Ref merchant pembayaran')->maxLength(120),

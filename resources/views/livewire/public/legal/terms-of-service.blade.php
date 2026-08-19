@@ -7,11 +7,14 @@
     --container-prose / heading-scale / N-14 reasoning, not repeated here.
 
     Same honesty discipline as its sibling: the "Terakhir diperbarui" line
-    below carries the draft notice and must stay. Section 3 (Kebijakan
-    Pembayaran) deliberately does not state a specific refund percentage or
-    timeline — see App\Livewire\Public\Legal\TermsOfService's own doc block
-    for why (assumptions-and-gates.md §5 item 8 is a real open decision, not
-    an oversight here).
+    below carries the draft notice and must stay while $legalReviewNote is
+    null (App\Support\LegalReviewStatus::note()) — see privacy-policy.blade.php's
+    own doc block for how an operator supersedes it via the admin Site
+    Settings page. Section 3 (Kebijakan Pembayaran) deliberately does not
+    state a specific refund percentage or timeline — see App\Livewire\
+    Public\Legal\TermsOfService's own doc block for why
+    (assumptions-and-gates.md §5 item 8 is a real open decision, not an
+    oversight here).
 --}}
 <div class="py-8 md:py-12">
     <div class="mx-auto max-w-content px-4">
@@ -19,8 +22,15 @@
             <header class="mb-6 space-y-2">
                 <h1 class="text-3xl font-semibold tracking-tight text-neutral-900">Syarat &amp; Ketentuan</h1>
                 <p class="text-sm text-neutral-600">
-                    Terakhir diperbarui {{ $updatedAt }}. Dokumen ini adalah draf awal dan akan diperbarui setelah tinjauan hukum resmi.
+                    @if ($legalReviewNote !== null)
+                        Terakhir diperbarui {{ $updatedAt }}. {{ $legalReviewNote }}
+                    @else
+                        Terakhir diperbarui {{ $updatedAt }}. Dokumen ini adalah draf awal dan akan diperbarui setelah tinjauan hukum resmi.
+                    @endif
                 </p>
+                @if ($companyNib !== null)
+                    <p class="text-sm text-neutral-600">NIB: {{ $companyNib }}</p>
+                @endif
             </header>
 
             <div class="space-y-8 text-base text-neutral-700">

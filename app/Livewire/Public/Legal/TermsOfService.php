@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Livewire\Public\Legal;
 
 use App\Support\CompanyInfo;
+use App\Support\LegalReviewStatus;
 use Illuminate\Contracts\View\View;
 use Livewire\Component;
 
@@ -38,6 +39,8 @@ final class TermsOfService extends Component
         return view('livewire.public.legal.terms-of-service', [
             'companyName' => CompanyInfo::name(),
             'companyAddress' => CompanyInfo::address(),
+            'companyNib' => CompanyInfo::nib(),
+            'legalReviewNote' => LegalReviewStatus::note(),
             'updatedAt' => self::UPDATED_AT,
         ])->layout('layouts.app', [
             'title' => 'Syarat & Ketentuan - Makam.co.id',

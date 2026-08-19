@@ -40,4 +40,28 @@ final class CompanyInfoTest extends TestCase
         $this->assertSame('PT Makam Digital Nusantara', CompanyInfo::name());
         $this->assertStringContainsString('Jl. Contoh', CompanyInfo::address());
     }
+
+    /**
+     * Unlike `name()`/`address()`, `nib()` has no fictional placeholder
+     * fallback — see its own doc block for why a fake NIB pattern would be
+     * actively misleading rather than self-labelling as a placeholder.
+     */
+    public function test_nib_is_null_until_an_operator_configures_one(): void
+    {
+        $this->assertNull(CompanyInfo::nib());
+    }
+
+    public function test_nib_reads_the_configured_value(): void
+    {
+        SiteSetting::query()->create(['key' => SiteSetting::KEY_COMPANY_NIB, 'value' => '1234567890123']);
+
+        $this->assertSame('1234567890123', CompanyInfo::nib());
+    }
+
+    public function test_a_blank_nib_value_is_treated_as_not_configured(): void
+    {
+        SiteSetting::query()->create(['key' => SiteSetting::KEY_COMPANY_NIB, 'value' => '   ']);
+
+        $this->assertNull(CompanyInfo::nib());
+    }
 }
