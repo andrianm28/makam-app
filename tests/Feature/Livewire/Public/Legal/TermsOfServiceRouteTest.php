@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Livewire\Public\Legal;
 
+use App\Platform\SiteSettings\Models\SiteSetting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -96,5 +97,41 @@ final class TermsOfServiceRouteTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('<title>Syarat &amp; Ketentuan - Makam.co.id</title>', false);
+    }
+
+    /**
+     * Same H3-as-admin-editable-field behaviour as PrivacyPolicyRouteTest's
+     * own test — see that test's doc block.
+     */
+    public function test_a_configured_legal_review_note_supersedes_the_draft_disclaimer(): void
+    {
+        SiteSetting::query()->create([
+            'key' => SiteSetting::KEY_LEGAL_REVIEW_NOTE,
+            'value' => 'Ditinjau 1 Sep 2026 oleh Firma Hukum Contoh',
+        ]);
+
+        $response = $this->get('/syarat-ketentuan');
+
+        $response->assertOk();
+        $response->assertSee('Ditinjau 1 Sep 2026 oleh Firma Hukum Contoh');
+        $response->assertDontSee('Dokumen ini adalah draf awal dan akan diperbarui setelah tinjauan hukum resmi.');
+    }
+
+    public function test_no_nib_line_is_rendered_until_an_operator_configures_one(): void
+    {
+        $response = $this->get('/syarat-ketentuan');
+
+        $response->assertOk();
+        $response->assertDontSee('NIB:');
+    }
+
+    public function test_a_configured_nib_is_rendered(): void
+    {
+        SiteSetting::query()->create(['key' => SiteSetting::KEY_COMPANY_NIB, 'value' => '1234567890123']);
+
+        $response = $this->get('/syarat-ketentuan');
+
+        $response->assertOk();
+        $response->assertSee('NIB: 1234567890123');
     }
 }
