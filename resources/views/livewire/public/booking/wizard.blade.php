@@ -868,7 +868,7 @@
                                 @if ($isSandboxPayment)
                                     <x-mk.alert
                                         intent="urgent"
-                                        icon="alert-triangle"
+                                        icon="exclamation-triangle"
                                         title="ANDA TIDAK AKAN MENGIRIM UANG SUNGGUHAN"
                                         live="off"
                                         class="mt-3"
