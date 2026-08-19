@@ -431,9 +431,27 @@ Route::get('/riwayat-perawatan/{customerId}', CareHistoryPage::class)->name('riw
 | this repo (S3-T3 built it fully audited and tested, but never wired) — a
 | stale or absent `ActorContext::$lastAuthenticatedAt` redirects here to
 | `MfaChallenge` instead of letting the disable through.
+|
+| `throttle:mfa-disable` and `EnforceMfaChallenge` added (public-beta-
+| release plan, Lane D4) — this route previously carried none. `throttle:
+| mfa-disable` only, deliberately NOT `EnforceMfaChallenge` (unlike
+| `/admin/finance/exports` below, which combines all three): this route is
+| itself the self-service escape valve out of MFA. An actor with a
+| confirmed enrolment reaching it has, by definition, not yet completed
+| this session's MFA challenge for anything else either — `EnforceMfaChallenge`
+| would redirect them to the challenge before they could ever reach the
+| disable action, a lockout paradox (you would need to pass an MFA
+| challenge to turn MFA off) that `DisableMfaControllerTest`'s own
+| "actually revokes" fixture does not (and should not) set up. Caught
+| before push by that exact regression while wiring this.
 */
 Route::post('/admin/mfa/disable', DisableMfaController::class)
-    ->middleware(['web', 'auth', RequireRecentAuthentication::class.':mfa_disable,filament.admin.pages.mfa-challenge'])
+    ->middleware([
+        'web',
+        'auth',
+        'throttle:mfa-disable',
+        RequireRecentAuthentication::class.':mfa_disable,filament.admin.pages.mfa-challenge',
+    ])
     ->name('admin.mfa.disable');
 
 /*
@@ -523,9 +541,19 @@ Route::get('/pembayaran/batal', PaymentCancelController::class)->name('payments.
 | status — see `App\Platform\Payment\VerifyManualPayment`'s own doc block
 | for why those remain structurally absent under the current deny-only
 | payment guard (Wave 1b ruling 1b-L3-01).
+|
+| `throttle:payment-manual-verification` and `EnforceMfaChallenge` added
+| (public-beta-release plan, Lane D4) — same reasoning as `/admin/mfa/
+| disable`'s own comment above.
 */
 Route::post('/admin/payments/manual-verifications/{paymentVerification}/verify', VerifyManualPaymentController::class)
-    ->middleware(['web', 'auth', RequireRecentAuthentication::class.':payment_manual_verification,filament.admin.pages.mfa-challenge'])
+    ->middleware([
+        'web',
+        'auth',
+        'throttle:payment-manual-verification',
+        EnforceMfaChallenge::class,
+        RequireRecentAuthentication::class.':payment_manual_verification,filament.admin.pages.mfa-challenge',
+    ])
     ->name('admin.payments.manual-verifications.verify');
 
 /*
@@ -552,10 +580,20 @@ Route::post('/admin/payments/manual-verifications/{paymentVerification}/verify',
 | flagged judgement call, see
 | `App\Platform\Payment\Http\Controllers\RecordPaymentReversalController`'s
 | own doc block for why.
+|
+| `throttle:payment-reversal` and `EnforceMfaChallenge` added (public-beta-
+| release plan, Lane D4) — same reasoning as `/admin/mfa/disable`'s own
+| comment above.
 */
 Route::post('/admin/payments/reversals/{reversalType}', RecordPaymentReversalController::class)
     ->whereIn('reversalType', ['refund', 'chargeback'])
-    ->middleware(['web', 'auth', RequireRecentAuthentication::class.':payment_reversal,filament.admin.pages.mfa-challenge'])
+    ->middleware([
+        'web',
+        'auth',
+        'throttle:payment-reversal',
+        EnforceMfaChallenge::class,
+        RequireRecentAuthentication::class.':payment_reversal,filament.admin.pages.mfa-challenge',
+    ])
     ->name('admin.payments.reversals.record');
 
 Route::get('/internal/documents/{document}/download/{token}', DownloadDocumentController::class)

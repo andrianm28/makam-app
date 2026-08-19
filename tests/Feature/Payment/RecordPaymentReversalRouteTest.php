@@ -632,4 +632,35 @@ final class RecordPaymentReversalRouteTest extends TestCase
 
         $this->assertSame(0, PaymentSession::query()->count());
     }
+
+    /**
+     * `throttle:payment-reversal` (public-beta-release plan, Lane D4) —
+     * 5/minute per actor+ip. Reuses the "without a fresh authentication"
+     * fixture (same $user, repeated): that path is side-effect-free
+     * (redirects to the MFA challenge, writes no row), so it is safe to
+     * call 6 times in one test without the underlying business logic
+     * itself rejecting a repeat call for an unrelated reason (e.g. the
+     * unique reference constraint a real recorded reversal would trip).
+     */
+    public function test_the_route_is_rate_limited(): void
+    {
+        $user = User::factory()->create();
+        $this->grantRole($user, ActorRole::FINANCE);
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->actingAs($user)
+                ->post($this->url('refund'), [
+                    'reference' => 'TRX-route-throttle',
+                    'reason' => 'Customer requested a refund',
+                ])
+                ->assertRedirect(route('filament.admin.pages.mfa-challenge'));
+        }
+
+        $this->actingAs($user)
+            ->post($this->url('refund'), [
+                'reference' => 'TRX-route-throttle',
+                'reason' => 'Customer requested a refund',
+            ])
+            ->assertStatus(429);
+    }
 }
