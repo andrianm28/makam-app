@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AssignCorrelationId;
+use App\Http\Middleware\BetaNoindexTag;
 use App\Http\Middleware\ReportContentSecurityPolicy;
 use App\Platform\DocumentVault\Jobs\ReconcileDocumentStorageCleanupJob;
 use App\Platform\Outbox\OutboxQueueName;
@@ -53,6 +54,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // See ReportContentSecurityPolicy's own doc block for why this
         // ships report-only.
         $middleware->append(ReportContentSecurityPolicy::class);
+
+        // Public-beta readiness (Lane C3): same global-not-group-append
+        // reasoning as ReportContentSecurityPolicy immediately above — see
+        // BetaNoindexTag's own doc block for why this is app-level rather
+        // than only an nginx vhost header, and why it defaults to a no-op.
+        $middleware->append(BetaNoindexTag::class);
 
         // S3-T10 (platform-audit AC10 / platform-outbox AC13): the
         // request-boundary origin point for correlation-id propagation.

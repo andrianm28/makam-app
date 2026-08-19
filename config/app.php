@@ -43,6 +43,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Beta search-engine exclusion
+    |--------------------------------------------------------------------------
+    |
+    | Public-beta readiness (Lane C3). `false` by default so dev/CI/eventual
+    | production never carry this by accident — only a deployment that sets
+    | BETA_NOINDEX=true (the beta environment specifically) emits
+    | `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet` on every
+    | response, via App\Http\Middleware\BetaNoindexTag. See that class's own
+    | doc block for why this is an app-level header rather than only an
+    | nginx `add_header` line.
+    |
+    */
+
+    'beta_noindex' => (bool) env('BETA_NOINDEX', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application URL
     |--------------------------------------------------------------------------
     |
