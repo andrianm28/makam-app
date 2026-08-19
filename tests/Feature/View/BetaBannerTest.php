@@ -53,11 +53,23 @@ final class BetaBannerTest extends TestCase
         $html = $this->get('/')->assertOk()->getContent();
 
         $bodyPos = strpos($html, '<body');
-        $skipLinkPos = strpos($html, 'Lewati ke konten utama');
         $this->assertNotFalse($bodyPos);
-        $this->assertNotFalse($skipLinkPos);
 
-        $beforeSkipLink = substr($html, $bodyPos, $skipLinkPos - $bodyPos);
+        // Anchored on the skip link's own OPENING TAG, not its text content
+        // ("Lewati ke konten utama"): the text sits after the tag's `<a`
+        // start, so anchoring on the text would include the skip link's own
+        // `<a` tag inside "before the skip link" and falsely flag it as
+        // something preceding itself. Found via its `href="#main"`
+        // attribute, then walking back to that attribute's own `<a` —
+        // robust to exact whitespace between `<a` and `href` in the
+        // rendered HTML, unlike matching a literal multi-line string would
+        // be.
+        $hrefPos = strpos($html, 'href="#main"');
+        $this->assertNotFalse($hrefPos);
+        $skipLinkTagStart = strrpos(substr($html, 0, $hrefPos), '<a');
+        $this->assertNotFalse($skipLinkTagStart);
+
+        $beforeSkipLink = substr($html, $bodyPos, $skipLinkTagStart - $bodyPos);
 
         $this->assertDoesNotMatchRegularExpression('/<a\s|<button\s/i', $beforeSkipLink);
     }
