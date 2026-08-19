@@ -29,6 +29,20 @@ final class BetaBannerTest extends TestCase
         $this->assertStringContainsString('mode simulasi (sandbox)', $html);
     }
 
+    /**
+     * CI's own axe-core smoke test (tests/browser/smoke.spec.ts) caught a
+     * real violation here: the `region` rule ("Ensure all page content is
+     * contained by landmarks") flagged the banner's outer wrapper, which
+     * sits directly in `<body>` outside any landmark. Regression guard for
+     * that fix.
+     */
+    public function test_the_beta_banner_wrapper_is_a_labelled_landmark(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $this->assertStringContainsString('role="region" aria-label="Pemberitahuan beta"', $html);
+    }
+
     public function test_the_beta_banner_is_not_dismissible(): void
     {
         // `<x-mk.alert>`'s own doc block: a dismiss button is only wired up

@@ -129,6 +129,15 @@
     persistent "Bantuan" action (§3.10, already present in both its mobile
     and desktop bars) is the real, reachable link — this banner does not
     need to duplicate it.
+
+    `role="region" aria-label="Pemberitahuan beta"` on the outer wrapper —
+    CI's own axe-core smoke test (`tests/browser/smoke.spec.ts`) caught
+    this for real: the `region` rule ("Ensure all page content is
+    contained by landmarks") flagged this `<div>` because it sits directly
+    in `<body>`, a sibling of `<header>`/`<main>`/`<footer>`, outside any
+    of them. A labelled `region` landmark is the generic container axe
+    accepts for exactly this "real content, no more specific landmark
+    fits" case.
 --}}
 <!DOCTYPE html>
 <html lang="id">
@@ -141,7 +150,7 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="min-h-screen bg-[var(--mk-surface-page)] text-base text-[var(--mk-text-default)] antialiased">
-    <div class="px-4 pt-4 md:px-6 lg:px-8">
+    <div role="region" aria-label="Pemberitahuan beta" class="px-4 pt-4 md:px-6 lg:px-8">
         <div class="mx-auto max-w-content">
             <x-mk.alert intent="pending" title="Makam.co.id versi Beta" live="off" :dismissible="false">
                 <p class="text-sm">
