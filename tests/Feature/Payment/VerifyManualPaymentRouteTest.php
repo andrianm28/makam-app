@@ -659,4 +659,36 @@ final class VerifyManualPaymentRouteTest extends TestCase
 
         $this->assertSame(0, PaymentSession::query()->count());
     }
+
+    /**
+     * `throttle:payment-manual-verification` (public-beta-release plan,
+     * Lane D4) — 5/minute per actor+ip. Reuses the "without a fresh
+     * authentication" fixture (same $verification, same $user, repeated):
+     * that path is side-effect-free (redirects to the MFA challenge,
+     * changes nothing), so it is safe to call 6 times in one test without
+     * the underlying business logic itself rejecting a repeat call for an
+     * unrelated reason.
+     */
+    public function test_the_route_is_rate_limited(): void
+    {
+        $user = User::factory()->create();
+        $this->grantRole($user, ActorRole::FINANCE);
+        $verification = $this->submittedVerification();
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->actingAs($user)
+                ->post($this->verifyUrl($verification), [
+                    'decision' => 'approve',
+                    'reason' => 'Proof matched provider statement',
+                ])
+                ->assertRedirect(route('filament.admin.pages.mfa-challenge'));
+        }
+
+        $this->actingAs($user)
+            ->post($this->verifyUrl($verification), [
+                'decision' => 'approve',
+                'reason' => 'Proof matched provider statement',
+            ])
+            ->assertStatus(429);
+    }
 }

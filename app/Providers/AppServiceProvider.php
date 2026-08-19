@@ -38,6 +38,31 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(5)->by("{$actorRef}|{$request->ip()}");
         });
 
+        // Public-beta readiness (Lane D4): three admin/money-adjacent routes
+        // outside the Filament panel's own middleware stack —
+        // /admin/mfa/disable, the manual-payment-verification approval, and
+        // payment reversals — previously carried no throttle at all, unlike
+        // document-download/financial-export above. Same 5/minute-per-
+        // actor+ip shape: none of these three is a high-frequency legitimate
+        // action, so tight is correct, not merely convenient.
+        RateLimiter::for('mfa-disable', static function (Request $request): Limit {
+            $actorRef = $request->user()?->getAuthIdentifier() ?? 'guest';
+
+            return Limit::perMinute(5)->by("{$actorRef}|{$request->ip()}");
+        });
+
+        RateLimiter::for('payment-manual-verification', static function (Request $request): Limit {
+            $actorRef = $request->user()?->getAuthIdentifier() ?? 'guest';
+
+            return Limit::perMinute(5)->by("{$actorRef}|{$request->ip()}");
+        });
+
+        RateLimiter::for('payment-reversal', static function (Request $request): Limit {
+            $actorRef = $request->user()?->getAuthIdentifier() ?? 'guest';
+
+            return Limit::perMinute(5)->by("{$actorRef}|{$request->ip()}");
+        });
+
         // Public-beta readiness: every public journey (booking wizard,
         // marketplace checkout/cart, grave search, pre-need interest,
         // visitation booking) is a Livewire component, and Livewire's own
