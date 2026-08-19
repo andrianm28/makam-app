@@ -15,8 +15,14 @@ just green CI.
 records the user's 18 Aug 2026 decision to take Makam.co.id to a public soft launch at `makam.co.id` on the
 existing non-production host, rather than standing up new production infrastructure first. That plan's Phase 1
 (lanes A, B, C1, D3, D7, E, F2, F3 — async spine, demo-data purge tooling, settings-driven identity, public
-rate limits, report-only CSP, the spine watchdog, the footer contrast fix, and Indonesian locale strings) has
-shipped as PRs #96–#103, merged into `docs/design-system-and-planning`.
+rate limits, report-only CSP, the spine watchdog, the footer contrast fix, and Indonesian locale strings), the
+payment-step sandbox warning and site-wide beta banner (Lane C4), and admin-manageable NIB/legal-review-status
+settings have shipped as PRs #96–#107, merged into `docs/design-system-and-planning`.
+
+On 19 Aug 2026 the user made three further explicit decisions, opting out of three of the plan's own
+recommended (not required) hardening steps, recorded as items 9–10 below and as an update to item 3's status:
+skip real legal review before launch, deploy the beta stack on this same host in its own containers (Lane D1 —
+now built, see item 3), and skip MFA enrolment on beta admin accounts entirely.
 
 Per the plan's own "Recorded dissent" section, two of the choices behind this launch carry risk the plan's
 author flagged as worth reconsidering rather than silently proceeding past: sandbox payments in front of real
@@ -42,15 +48,16 @@ moves no real money; the order is then marked paid. `G-PAY-01` (online payment) 
 explicit decision, rather than closed with the documented manual-fallback alternative.
 
 **Mitigations:**
-- Unmissable payment-step labelling (Lane C4, not yet built) — the booking flow must show a simulated-payment
-  warning before any redirect to the sandbox, not just a global site banner.
-- Daily reconciliation of orders marked paid against actual settlement (none exists, since no real settlement
-  occurs) — a named human contacts any customer whose order shows paid-without-money.
+- Unmissable payment-step labelling — **built** (PR #106): an urgent-intent warning on the "Bayar Sekarang"
+  card itself, before any redirect to the sandbox, stating plainly no real transaction occurs. A second,
+  calmer-intent site-wide banner (PR #107, Lane C4) reinforces the same point on every page.
+- Daily reconciliation of orders marked paid against actual settlement — **still not built**: no real
+  settlement occurs, and no named human has been assigned to contact a customer whose order shows
+  paid-without-money.
 - Reversing this is a one-row gate change (`G-PAY-01` → closed), no code.
 
-**Not yet built as of this ADR:** the payment-step-specific warning (Lane C4) and the reconciliation process
-and its named owner. This ADR does not claim these mitigations are in place — only that they are the accepted
-plan for closing the gap. Launch should not proceed while `G-PAY-01` is open and Lane C4 is unbuilt.
+**Still not built as of this update:** the reconciliation process and its named owner. The labelling half of
+this mitigation is done; launch should not proceed on item 1 while reconciliation ownership remains unassigned.
 
 ### 2. No point-in-time recovery (deviates from [ADR-0021](0021-use-managed-postgresql-pitr.md))
 
@@ -66,6 +73,15 @@ scratch database — a backup is not considered valid until restored, per
 justifies it; no schema changes required, this is an infrastructure-only reversal.
 
 ### 3. Single host, no high availability (deviates from the production topology implied by [ADR-0027](0027-combine-dev-staging-on-ubuntu22-2v4g.md)'s "not accepted as production" framing)
+
+**Status: built, 19 Aug 2026.** Per the user's explicit decision, the beta stack runs on the SAME host as
+dev/stg — `beta-web`/`beta-worker`/`beta-scheduler` containers, own `makam_beta` database/role/secret (never
+reusing `makam_dev`'s credentials), postgres/redis memory limits raised (2g/512m) to accommodate a third
+application. Pinned to the image digest CI built for `docs/design-system-and-planning` AFTER PR #107 merged
+(sha-fca46caffb26, CI run 32223062075) — NOT the same digest `dev-web` runs, which predates PRs #96–#107 and
+was deliberately not reused (see `compose.yml`'s own comment on `beta-web` for why). Migrations applied,
+example/demo data purged (`example-data:purge --force`), `/health/ready` and `/up` both verified reachable on
+`127.0.0.1:8083`.
 
 Host loss is a total outage with an RTO measured in hours (manual redeploy from the last GHCR image and
 restored backup), not automated failover.
@@ -104,8 +120,9 @@ launch and should be revisited before any broader promotion beyond soft launch.
 
 The ~2,754-test automated suite passing (confirmed green on `docs/design-system-and-planning` as of this ADR)
 is not the same claim as all 60 documented release gates having been walked. Phase 2 F1 (scripted manual UAT
-on the beta host) is the mechanism intended to close this gap and has **not yet run** — no beta host exists
-yet (Lane D1 is unbuilt as of this ADR).
+on the beta host) is the mechanism intended to close this gap and has **still not run** — the beta host now
+exists (item 3), which removes the blocker, but the scripted walkthrough itself is a separate, not-yet-done
+step.
 
 ### 8. Postgres and Redis share a host with the public, unauthenticated dev environment ([ADR-0031](0031-make-dev-environment-public.md))
 
@@ -113,16 +130,50 @@ yet (Lane D1 is unbuilt as of this ADR).
 backup files, and SSH keys against this host. The beta stack adds a second public-facing surface to the same
 host and the same shared Postgres/Redis instances (isolated by database/credentials, not by host).
 
-**Mitigation:** beta gets its own database, user, and secret files (Lane D1/D6, not yet built) — never reuses
-`makam_dev`'s credentials, none of which are trustworthy after being committed to git history (Lane D6).
+**Mitigation:** beta gets its own database, user, and secret file — **built** (19 Aug 2026): `makam_beta`
+database, `makam_beta_user` role, `secrets/makam_beta_db_password.txt` (uid 999, mode 0400), never reusing
+`makam_dev`'s credentials. Lane D6 (broader credential hygiene — e.g. rotating anything else touched by the
+dev admin password's git-history exposure) remains not built.
+
+### 9. No real legal review before launch (deviates from Lane C2's own plan text and from H3, which named this the human decision gating de-DRAFT'ing the legal pages)
+
+Per the user's explicit 19 Aug 2026 decision, beta launches without waiting for a lawyer to review `/privasi`
+and `/syarat-ketentuan`. The admin-editable mechanism for closing this gap once a real review happens exists
+(PR #105, `App\Support\LegalReviewStatus`) — an operator can enter a review confirmation via the Site Settings
+page and the draft disclaimer disappears immediately, no deploy required — but no review has occurred, and
+none is planned before launch. Both pages continue to show, honestly, "Dokumen ini adalah draf awal dan akan
+diperbarui setelah tinjauan hukum resmi."
+
+**Mitigation:** the honest draft disclaimer itself — customers are told plainly the legal text is not final,
+rather than presented with unreviewed text as if it were binding.
+
+**Reversal:** none needed — this is a state the platform can remain in indefinitely; enter a real review note
+via Site Settings whenever a review eventually happens.
+
+### 10. No MFA enforcement on beta admin accounts (opts out of Lane D4's recommended, non-required hardening step)
+
+Per the user's explicit 19 Aug 2026 decision, beta admin accounts will not be enrolled in MFA. This required
+no code change: `App\Http\Middleware\EnforceMfaChallenge` only ever challenges an actor whose `MfaEnrolment`
+is already confirmed (`ActorContext::MFA_STATE_ENROLLED`) — an actor who never enrols is never touched by it.
+The plan's Lane D4 recommended enrolling MFA on every beta admin account as a hardening step for money-route
+access; that recommendation is explicitly declined here, not overridden by any config flag (none exists —
+enrolment is the only lever).
+
+**Mitigation:** none. Beta admin panel access is single-factor (password only) for the duration of this
+decision.
+
+**Reversal:** cheap and fully backward-compatible — MFA enrolment is a self-service, per-account action any
+admin can take at any time without a deploy or a config change; this ADR item simply records that none have
+been asked to.
 
 ## What this ADR does not decide
 
 This ADR records the risk acceptance already made for the items above; it does not itself authorize executing
-the remaining unbuilt Phase 1/Phase 2 work (Lane C2–C4, D1–D2, D4–D6, F1) or the cutover to `makam.co.id`. Per
-`AGENTS.md` §Infrastructure-agent execution, DNS changes, firewall changes, and the apex cutover each require
-their own explicit human review and sign-off at execution time, not blanket pre-authorization via this
-document.
+the remaining unbuilt work (Lane C2–C3, D2, D6, F1) or the cutover to `makam.co.id`. Lane C4 and D1 are now
+built (items 1, 3, 9, 10 above); D4's throttle/route-hardening code portion also remains unbuilt, separate from
+its now-explicitly-declined MFA-enrolment portion (item 10). Per `AGENTS.md` §Infrastructure-agent execution,
+DNS changes, firewall changes, and the apex cutover each require their own explicit human review and sign-off
+at execution time, not blanket pre-authorization via this document.
 
 ## Consequences
 
@@ -136,12 +187,17 @@ document.
 
 ### Negative
 
-- Items 1, 2, 3, 4, 6 and 7 are real, stacked risk for a bereavement-sector product handling real customer
-  bookings, even with the mitigations listed. None of the mitigations for item 1 (payment labelling,
-  reconciliation) exist yet as of this ADR — this document intentionally separates "the accepted plan" from
-  "what is actually built," and launch should not proceed on item 1 while that gap remains open.
+- Items 1, 2, 4, 6, 7, 9 and 10 are real, stacked risk for a bereavement-sector product handling real customer
+  bookings, even with the mitigations listed. Item 1's payment labelling is now built; its reconciliation
+  process and owner are still not — launch should not proceed on item 1 while that gap remains open.
+- Items 9 and 10 stack specifically on the admin/legal surface: unreviewed legal text stays live indefinitely,
+  and the admin panel protecting money-route actions (payment reversals, marketplace order payout marking) has
+  no second factor for the duration of the beta. Neither has a mitigation beyond honest labelling (item 9) or
+  none at all (item 10) — both are accepted risk, not risk believed to be small.
 
 ## Reversal
 
-Each item's reversal path is stated inline above. None of items 1–8 create a data migration or schema
-dependency that would block reversing them independently of one another.
+Each item's reversal path is stated inline above. None of items 1–10 create a data migration or schema
+dependency that would block reversing them independently of one another. Items 9 and 10 are the cheapest to
+reverse of all ten — a Site Settings field and a self-service MFA enrolment, respectively, neither needing a
+deploy.
