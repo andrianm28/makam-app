@@ -34,6 +34,7 @@ use App\Platform\Payment\Exceptions\PaymentSessionOpeningDeniedException;
 use App\Platform\Payment\Exceptions\PaymentSessionOrderAlreadyPaidException;
 use App\Platform\Payment\Models\PaymentSession;
 use App\Platform\Payment\OrderType;
+use App\Platform\Payment\PaymentProviders;
 use App\Platform\Payment\SessionState;
 use App\Platform\SiteSettings\Models\SiteSetting;
 use App\Platform\SiteSettings\SettingsService;
@@ -898,6 +899,16 @@ final class BookingWizard extends Component
 
         $onlinePaymentState = $this->onlinePaymentDisplayState();
 
+        // ADR-0035 item 1's mitigation: "unmissable payment-step labelling
+        // ... before any redirect to the sandbox." `PaymentProviders`
+        // currently defines only the sandbox slug (production activation
+        // is a separate, not-yet-made decision — see that class's own doc
+        // block), so `config('payment.default')` resolving to it IS "we
+        // are on the sandbox" today; this becomes false automatically the
+        // day a real production provider slug is added and selected,
+        // without this file changing.
+        $isSandboxPayment = config('payment.default') === PaymentProviders::SUMOPOD_SANDBOX;
+
         return view('livewire.public.booking.wizard', [
             'cities' => CemeteryPublicQuery::launchCities(),
             'cemeteries' => $cemeteries,
@@ -910,6 +921,7 @@ final class BookingWizard extends Component
             'whatsAppMode' => $whatsAppMode,
             'onlineSessionState' => $onlinePaymentState['state'],
             'onlinePaymentLinkUrl' => $onlinePaymentState['link_url'],
+            'isSandboxPayment' => $isSandboxPayment,
         ])->layout('layouts.app', [
             'title' => 'Pemesanan Makam - Makam.co.id',
             'active' => null,

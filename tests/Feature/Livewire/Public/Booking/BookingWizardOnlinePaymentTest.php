@@ -363,6 +363,35 @@ final class BookingWizardOnlinePaymentTest extends TestCase
             ->assertSee('Bayar Sekarang');
     }
 
+    /**
+     * ADR-0035 item 1's mitigation: "unmissable payment-step labelling ...
+     * before any redirect to the sandbox." `setUp()` never overrides
+     * `payment.default`, so it stays on `PaymentProviders::SUMOPOD_SANDBOX`
+     * — the warning must show under exactly the config this whole test
+     * class otherwise runs against.
+     */
+    public function test_the_sandbox_warning_shows_before_the_pay_now_button(): void
+    {
+        $this->withPaymentGate(open: true);
+
+        $this->journeyToStepEight()
+            ->assertSeeInOrder([
+                'ANDA TIDAK AKAN MENGIRIM UANG SUNGGUHAN',
+                'Bayar Sekarang',
+            ])
+            ->assertSee('simulasi (sandbox)');
+    }
+
+    public function test_the_sandbox_warning_does_not_show_for_a_non_sandbox_provider(): void
+    {
+        $this->withPaymentGate(open: true);
+        config(['payment.default' => 'some-future-production-provider']);
+
+        $this->journeyToStepEight()
+            ->assertSee('Bayar Sekarang')
+            ->assertDontSee('ANDA TIDAK AKAN MENGIRIM UANG SUNGGUHAN');
+    }
+
     public function test_submitting_online_opens_a_session_and_redirects_to_the_hosted_checkout(): void
     {
         $this->withPaymentGate(open: true);
