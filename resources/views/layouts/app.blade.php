@@ -96,6 +96,39 @@
     codebase. Read from `App\Support\CompanyInfo::name()`/`::address()` —
     the one place this data is resolved, also used by `PrivacyPolicy`'s and
     `TermsOfService`'s own views — not hardcoded a second time here.
+
+    ---------------------------------------------------------------------------
+    UPDATED 19 Aug 2026 (public-beta-release plan, Lane C4) — persistent beta banner
+    ---------------------------------------------------------------------------
+    Plan's own words: "given the payment decision, this is the single
+    cheapest risk-reducer on the whole list." A non-dismissible
+    `<x-mk.alert>` at the very top of the page shell, ABOVE `<x-mk.header>`
+    so it is the first thing on every page using this layout, not inside
+    `<main>` (it is chrome, not page content, same category as the header/
+    footer). `intent="pending"` (the calmer of the two warning-family
+    intents) deliberately, not `urgent` — the louder `urgent` intent is
+    reserved for `App\Livewire\Public\Booking\BookingWizard`'s own
+    payment-step-specific warning (Step 8, right before the "Bayar
+    Sekarang" redirect), which needs to read as more severe than this
+    ambient, every-page notice. `live="off"`: present on initial load, not
+    a dynamic update, per the same convention `alert.blade.php`'s own file
+    header documents for ambient/pre-existing notices — actually `off`
+    specifically (not `polite`) because this is permanent page chrome, not
+    a state that changes during the visit; nothing here needs a live-region
+    announcement at all. Never conditional on route/gate state: it applies
+    uniformly whether `G-PAY-01` is open or closed, because the beta status
+    itself — not just the payment mode — is what customers need to know.
+
+    Deliberately NO `<a href="/bantuan">` inside this banner (plain text
+    "Bantuan" instead): `<x-mk.header>`'s own "Lewati ke konten utama" skip
+    link (header.blade.php) must be the FIRST focusable element in the DOM
+    so a keyboard user's very first Tab reaches it — that is the entire
+    point of a skip link. This banner sits before `<x-mk.header>` in markup
+    order (see above for why), so any real link inside it would land ahead
+    of the skip link in tab order and silently defeat it. The header's own
+    persistent "Bantuan" action (§3.10, already present in both its mobile
+    and desktop bars) is the real, reachable link — this banner does not
+    need to duplicate it.
 --}}
 <!DOCTYPE html>
 <html lang="id">
@@ -108,6 +141,19 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="min-h-screen bg-[var(--mk-surface-page)] text-base text-[var(--mk-text-default)] antialiased">
+    <div class="px-4 pt-4 md:px-6 lg:px-8">
+        <div class="mx-auto max-w-content">
+            <x-mk.alert intent="pending" title="Makam.co.id versi Beta" live="off" :dismissible="false">
+                <p class="text-sm">
+                    Anda sedang menggunakan versi <strong>beta publik</strong>. Sebagian fitur masih dalam
+                    tahap uji coba dan dapat berubah sewaktu-waktu, termasuk pembayaran online yang saat ini
+                    berjalan dalam mode simulasi (sandbox) &mdash; tidak ada transaksi finansial nyata yang
+                    terjadi melaluinya. Hubungi tim Bantuan jika Anda menemukan kendala.
+                </p>
+            </x-mk.alert>
+        </div>
+    </div>
+
     <x-mk.header :active="$active ?? null" />
 
     <main id="main">
