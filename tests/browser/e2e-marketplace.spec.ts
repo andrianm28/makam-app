@@ -234,3 +234,164 @@ test.describe('E2E-MKT — single-vendor conflict', () => {
         expect(results.violations).toEqual([]);
     });
 });
+
+async function addProductAToCart(page: Page): Promise<void> {
+    await page.goto(`/marketplace/produk/${PRODUCT_A.code}`);
+    await page.getByRole('button', { name: 'Tambah ke Keranjang' }).click();
+    await page.waitForURL(/\/marketplace\/keranjang$/);
+}
+
+test.describe('E2E-MKT — checkout and manual payment', () => {
+    test('a guest completes checkout and submits manual payment proof', async ({ page }) => {
+        await addProductAToCart(page);
+        await page.getByRole('link', { name: 'Lanjut ke pembayaran' }).click();
+        await page.waitForURL(/\/marketplace\/checkout$/);
+
+        await expect(page.getByRole('heading', { level: 1, name: 'Checkout' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Ringkasan pesanan' })).toBeVisible();
+
+        await page.getByLabel('Nama penerima').fill(RECIPIENT.name);
+
+        // Every field on this form (checkout.blade.php) is bound with plain
+        // "wire:model", never "wire:model.live" — verified directly against
+        // the Blade source, not assumed from the brief — and none of the
+        // recipient inputs carry an HTML `maxlength` (field.blade.php's
+        // input branch renders no such attribute). So the deferred
+        // selectedAreaCode value only reaches the server, and the
+        // server-rendered "Ongkos kirim" line only appears, on the NEXT
+        // Livewire round-trip — confirmed live: selecting the area alone
+        // sends nothing over the wire, and a straight-through valid submit
+        // places the order and empties the cart in that same round-trip,
+        // so the fee line never has a moment to be visible on its own path.
+        // An intentionally too-long phone number (over Checkout.php's own
+        // `max:32` rule) forces exactly the round-trip needed without ever
+        // being blocked client-side by the native `required` constraint
+        // (the field itself always has non-blank text) — it fails Laravel
+        // validation, so the page re-renders with the cart/order form still
+        // in place and `selectedAreaCode` already committed server-side.
+        await page.getByLabel('Nomor HP penerima').fill('0'.repeat(40));
+        await page.getByLabel('Email penerima').fill(RECIPIENT.email);
+
+        // "Jakarta Selatan" (not "Jakarta Pusat"): vendor 0's Jakarta Pusat
+        // delivery fee is 0 (see this plan's fixture reference table), which
+        // would make the "Ongkos kirim" line indistinguishable from a fee
+        // that never rendered at all. Jakarta Selatan's non-zero fee lets
+        // this test actually prove the fee line appears once an area is
+        // chosen, not just that the select works.
+        await page.getByLabel('Area layanan').selectOption({ label: 'Jakarta Selatan' });
+
+        await page.getByRole('button', { name: 'Buat pesanan' }).click();
+        await expect(page.getByText('Ongkos kirim (Jakarta Selatan)')).toBeVisible();
+
+        // Correct the phone number to the real fixture value before the
+        // actual submit.
+        await page.getByLabel('Nomor HP penerima').fill(RECIPIENT.phone);
+
+        // Schedule is optional (E2E-MKT's "schedule" AC) — filling it proves
+        // the field exists and accepts a real date without blocking submit.
+        await page.getByLabel('Tanggal pelaksanaan (opsional)').fill('2026-09-15');
+
+        await page.getByRole('button', { name: 'Buat pesanan' }).click();
+
+        // checkout.blade.php's success banner is an <x-mk.alert title="Pesanan
+        // diterima">, and alert.blade.php renders `title` as a plain
+        // `<p class="font-semibold">`, never a heading — verified directly
+        // against the component source, not assumed from the brief.
+        // getByText is the correct locator here, not getByRole('heading').
+        await expect(page.getByText('Pesanan diterima')).toBeVisible();
+        const trackLink = page.getByRole('link', { name: 'Lacak pesanan' });
+        await expect(trackLink).toBeVisible();
+        const trackHref = await trackLink.getAttribute('href');
+        expect(trackHref).toMatch(/\/marketplace\/pesanan\//);
+
+        // Manual payment section appears in place, same page, no navigation.
+        await expect(page.getByRole('heading', { name: 'Pembayaran transfer manual' })).toBeVisible();
+        await page.getByLabel('Nomor referensi transfer').fill('TRX-E2E-MKT-0001');
+        await page.getByRole('button', { name: 'Kirim bukti transfer' }).click();
+
+        // Re-submitting is a no-op (idempotency) — button remains usable,
+        // no duplicate order/section appears. Assert the order summary is
+        // still singular, not that a specific post-submit message renders,
+        // since Checkout.php's own doc block only promises the create side
+        // is idempotent, not a particular UI acknowledgement copy.
+        await expect(page.getByRole('heading', { name: 'Pesanan diterima' }).or(page.getByText('Pesanan diterima'))).toBeVisible();
+
+        // Follow the tracking link and confirm both status indicators render
+        // separately (AC12 — never merged).
+        await trackLink.click();
+        await page.waitForURL(/\/marketplace\/pesanan\//);
+        await expect(page.getByRole('heading', { level: 1, name: 'Status Pesanan' })).toBeVisible();
+
+        // getByText matches case-insensitively by default, and the
+        // site-wide beta banner (present on every page) contains the
+        // lowercase substring "pembayaran" in its own copy — verified live:
+        // an unqualified getByText('Pembayaran') hits both that banner
+        // paragraph and this row's label span, a strict-mode violation.
+        // exact: true scopes this to the "Pembayaran" status row label.
+        await expect(page.getByText('Pembayaran', { exact: true })).toBeVisible();
+
+        // PlaceMarketplaceOrder always creates exactly one vendorOrders row
+        // (status VendorProcessingStatus::MENUNGGU_VENDOR) in the same
+        // transaction that places the order — verified directly against
+        // PlaceMarketplaceOrder.php, not assumed from the brief — so
+        // OrderTracking's `$vendorStatus` is never null on this path and
+        // order-tracking.blade.php's "Menunggu vendor" fallback span never
+        // renders here. The badge shows StatusIntent::label()'s humanized
+        // form, "Menunggu Vendor" (confirmed live), which happens to
+        // case-insensitively substring-match the brief's originally
+        // proposed `getByText('Menunggu vendor')` fallback check — an
+        // `.or()` between the two would incorrectly resolve to both this
+        // badge AND the always-present "Proses vendor" row label at once
+        // (a strict-mode violation, confirmed live), so assert both
+        // real, distinct pieces of text directly instead.
+        await expect(page.getByText('Proses vendor', { exact: true })).toBeVisible();
+        await expect(page.getByText('Menunggu Vendor', { exact: true })).toBeVisible();
+    });
+
+    test('placing an order with an empty cart is impossible — the button is disabled or absent', async ({ page }) => {
+        await page.goto('/marketplace/checkout');
+
+        await expect(page.getByText('Keranjang Anda kosong.')).toBeVisible();
+
+        // checkout.blade.php renders "Buat pesanan" unconditionally whenever
+        // `! $orderPlaced` — it is bound via
+        // `:disabled="$items->isEmpty() || $hasStalePricing"` on
+        // <x-mk.button>, not wrapped in an `@if ($items->isNotEmpty())`.
+        // button.blade.php then renders a real `<button disabled>`, which
+        // still has an accessible name and role — `toHaveCount(0)` would be
+        // wrong here (verified directly against both Blade sources, not
+        // assumed from the brief). Assert the disabled state instead.
+        await expect(page.getByRole('button', { name: 'Buat pesanan' })).toBeDisabled();
+    });
+
+    test('an unknown order number reaches an honest not-found state, never a leak', async ({ page }) => {
+        await page.goto('/marketplace/pesanan/NOT-A-REAL-ORDER-NUMBER');
+
+        await expect(page.getByText('Pesanan tidak ditemukan')).toBeVisible();
+        await expect(page.getByRole('link', { name: 'Lihat katalog' })).toBeVisible();
+    });
+
+    test('checkout, its post-order state, and order tracking are all accessible', async ({ page }) => {
+        await addProductAToCart(page);
+        await page.getByRole('link', { name: 'Lanjut ke pembayaran' }).click();
+        await page.waitForURL(/\/marketplace\/checkout$/);
+
+        let results = await new AxeBuilder({ page }).analyze();
+        expect(results.violations).toEqual([]);
+
+        await page.getByLabel('Nama penerima').fill(RECIPIENT.name);
+        await page.getByLabel('Nomor HP penerima').fill(RECIPIENT.phone);
+        await page.getByLabel('Email penerima').fill(RECIPIENT.email);
+        await page.getByLabel('Area layanan').selectOption({ label: 'Jakarta Selatan' });
+        await page.getByRole('button', { name: 'Buat pesanan' }).click();
+        await expect(page.getByText('Pesanan diterima')).toBeVisible();
+
+        results = await new AxeBuilder({ page }).analyze();
+        expect(results.violations).toEqual([]);
+
+        await page.getByRole('link', { name: 'Lacak pesanan' }).click();
+        await page.waitForURL(/\/marketplace\/pesanan\//);
+        results = await new AxeBuilder({ page }).analyze();
+        expect(results.violations).toEqual([]);
+    });
+});
