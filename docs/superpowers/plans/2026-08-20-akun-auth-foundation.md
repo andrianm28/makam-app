@@ -131,13 +131,17 @@ register.
 **View (`resources/views/livewire/public/auth/login-page.blade.php`):** email field, password
 field (`type="password"`), a "remember me" checkbox, submit button (`wire:click="login"` or
 `wire:submit="login"` on a `<form>` — match whichever pattern `PreNeedInterestPage`'s own view
-uses), a link to `/daftar` ("Belum punya akun? Daftar") and a link to `/lupa-password` ("Lupa kata
-sandi?") — both links reference routes that will exist by the end of Task 3, safe to hardcode as
-`route('register')` / `route('password.request')` since this task runs before Task 3 registers
-those routes... **actually resolve this by writing them as `route()` calls regardless of dispatch
-order**: Blade resolves route names at render time, and Task 3 will have landed those routes
-before anyone loads this page outside a test — a `LoginPageTest` in Task 1 that doesn't click
-those links will pass even before Task 3 exists. Do not hardcode the literal paths.
+uses), a link to "Belum punya akun? Daftar" and a link to "Lupa kata sandi?".
+
+**Preflight ruling (recorded before Task 1 was dispatched):** these two links must use the literal
+paths `/daftar` and `/lupa-password` in Task 1, NOT `route('register')`/`route('password.request')`.
+Those two named routes don't exist until Task 2 and Task 3 respectively; `LoginPageTest` renders
+this view via `Livewire::test(LoginPage::class)`, which would throw `RouteNotFoundException` if the
+view called either named route before its route is registered — a plan-internal ordering defect,
+caught and fixed here rather than left for the implementer to discover. Task 2 and Task 3 each get
+a small step (below) to swap these two literal paths to their real named-route calls once the
+routes they reference exist — same destination URL either way, so nothing else about the page
+changes.
 
 ### Tests
 
@@ -211,6 +215,10 @@ whole public rate limit.
 
 **View:** name, email, password, password-confirmation fields; submit button; a link to `/masuk`
 ("Sudah punya akun? Masuk") via `route('login')`.
+
+**Also in this task:** in `login-page.blade.php` (from Task 1), swap the literal `/daftar` href to
+`route('register')` — the route now exists. Leave the `/lupa-password` link as a literal path;
+Task 3 swaps that one.
 
 **`app/Providers/AppServiceProvider.php` — the exact current code to change:**
 ```php
@@ -331,6 +339,10 @@ makes the already-wired broker's email work with zero custom notification class.
 **Views:** `forgot-password-page.blade.php` (email field + submit, or the `linkSent` confirmation
 state), `reset-password-page.blade.php` (hidden/prefilled email + password + confirmation +
 submit).
+
+**Also in this task:** in `login-page.blade.php`, swap the literal `/lupa-password` href to
+`route('password.request')` — the route now exists (last of the two swaps; `/daftar` was already
+swapped in Task 2).
 
 **`docs/product/information-architecture.md`:** add the 5 new paths from this PR to §1's existing
 route-tree table/list (open the file, find §1, match its existing row format exactly — do not
