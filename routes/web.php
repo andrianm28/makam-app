@@ -418,10 +418,15 @@ Route::get('/preneed', PreNeedInterestPage::class)->name('preneed.index');
 | operational state, never styled as a customer error (AC6).
 |
 | No vault references or subject internals leave the server through these
-| routes. Read-only GETs; no write surface exists on either route.
+| routes. `/langganan/{ref}` remains read-only, no write surface.
+| `/riwayat-perawatan/{customerId}` gained a write surface (accept/complain)
+| in this batch — `auth` middleware added below; the component's own
+| `isAuthorizedCustomer()`/`ownedWorkOrder()` checks stay as defense in
+| depth (an authenticated actor viewing someone else's `$customerId` must
+| still be refused), not a substitute for the route-level gate.
 */
 Route::get('/langganan/{subscriptionReference}', SubscriptionStatusPage::class)->name('langganan.status');
-Route::get('/riwayat-perawatan/{customerId}', CareHistoryPage::class)->name('riwayat-perawatan.index');
+Route::get('/riwayat-perawatan/{customerId}', CareHistoryPage::class)->middleware('auth')->name('riwayat-perawatan.index');
 
 /*
 |--------------------------------------------------------------------------
