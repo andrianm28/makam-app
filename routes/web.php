@@ -8,8 +8,10 @@ use App\Http\Controllers\Health\HealthLiveController;
 use App\Http\Controllers\Health\HealthReadyController;
 use App\Http\Middleware\EnforceMfaChallenge;
 use App\Http\Middleware\RequireRecentAuthentication;
+use App\Livewire\Public\Auth\ForgotPasswordPage;
 use App\Livewire\Public\Auth\LoginPage;
 use App\Livewire\Public\Auth\RegisterPage;
+use App\Livewire\Public\Auth\ResetPasswordPage;
 use App\Livewire\Public\Booking\BookingWizard;
 use App\Livewire\Public\CareSubscription\CareHistoryPage;
 use App\Livewire\Public\CareSubscription\SubscriptionStatusPage;
@@ -420,14 +422,13 @@ Route::get('/riwayat-perawatan/{customerId}', CareHistoryPage::class)->name('riw
 
 /*
 |--------------------------------------------------------------------------
-| Account — login, logout, and registration (Tasks 1-2 of 3, `/akun`
-| account area, `.superpowers/sdd/2026-08-20-akun-auth-foundation/
-| task-1-brief.md` and `task-2-brief.md`)
+| Account — login, logout, registration, and password reset (Tasks 1-3 of
+| 3, `/akun` account area, `.superpowers/sdd/2026-08-20-akun-auth-foundation/
+| task-1-brief.md` through `task-3-brief.md`)
 |--------------------------------------------------------------------------
-| PR 1 of 3: the guard-mutation trio only. Password reset is Task 3, a
-| separate PR. No `<x-mk.header>` change and no `/akun/*` routes here —
-| both are a later PR; these three routes are reachable only by direct URL
-| until then.
+| PR 1 of 3, complete: login, logout, registration, and password reset.
+| No `<x-mk.header>` change and no `/akun/*` routes here — both are a
+| later PR; these five routes are reachable only by direct URL until then.
 |
 | The route NAME `login` is load-bearing, not just this page's own path:
 | `Illuminate\Auth\Middleware\Authenticate` redirects an unauthenticated
@@ -438,10 +439,19 @@ Route::get('/riwayat-perawatan/{customerId}', CareHistoryPage::class)->name('riw
 | `RegisterPage::register()`, without that future PR needing to know about
 | this one. `guest` and `auth` are Laravel 13's own default middleware
 | aliases — no new alias registered.
+|
+| The route NAME `password.reset` is likewise load-bearing:
+| `Illuminate\Auth\Notifications\ResetPassword::toMail()` (Laravel's own
+| built-in notification, dispatched automatically by the `Password::`
+| broker) builds its email link via `route('password.reset', ['token' =>
+| ..., 'email' => ...])` — naming it this makes the already-wired broker's
+| email work with zero custom notification class.
 */
 Route::get('/masuk', LoginPage::class)->middleware('guest')->name('login');
 Route::get('/daftar', RegisterPage::class)->middleware('guest')->name('register');
 Route::post('/keluar', LogoutController::class)->middleware('auth')->name('logout');
+Route::get('/lupa-password', ForgotPasswordPage::class)->middleware('guest')->name('password.request');
+Route::get('/reset-password/{token}', ResetPasswordPage::class)->middleware('guest')->name('password.reset');
 
 /*
 |--------------------------------------------------------------------------

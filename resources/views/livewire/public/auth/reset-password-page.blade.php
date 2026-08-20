@@ -1,35 +1,26 @@
 {{--
-    resources/views/livewire/public/auth/login-page.blade.php
+    resources/views/livewire/public/auth/reset-password-page.blade.php
 
-    App\Livewire\Public\Auth\LoginPage's view — `/masuk`, Task 1 of the
-    `/akun` account area (`.superpowers/sdd/2026-08-20-akun-auth-foundation/
-    task-1-brief.md`). Guest-only login: email, password, remember-me,
-    submit.
-
-    --- Preflight ruling (recorded before Task 1 was dispatched) ---
-    The "Daftar" and "Lupa kata sandi?" links below used the LITERAL paths
-    `/daftar` and `/lupa-password` in Task 1, NOT `route('register')`/
-    `route('password.request')` — those named routes didn't exist until
-    Task 2 and Task 3 respectively, and this view is rendered by
-    `Livewire::test(LoginPage::class)` before either route is registered.
-    Task 2 swapped `/daftar` for `route('register')` once that route
-    existed. Task 3 (this change) does the same for `/lupa-password` now
-    that `route('password.request')` exists.
+    App\Livewire\Public\Auth\ResetPasswordPage's view —
+    `/reset-password/{token}`, Task 3 of the `/akun` account area
+    (`.superpowers/sdd/2026-08-20-akun-auth-foundation/task-3-brief.md`).
+    Email (pre-filled from the `?email=` query string when present),
+    new password, confirmation, submit. No remember-me, no auto-login.
 --}}
 <div class="py-8 md:py-12">
     <div class="mx-auto max-w-content px-4">
         <div class="mx-auto w-full max-w-sm">
             <div class="mb-8 text-center">
                 <h1 class="text-3xl font-semibold tracking-tight text-neutral-900">
-                    Masuk
+                    Reset Kata Sandi
                 </h1>
                 <p class="mt-2 text-base text-neutral-600">
-                    Masuk ke akun Anda untuk melanjutkan.
+                    Masukkan kata sandi baru Anda.
                 </p>
             </div>
 
             <x-mk.card class="flex flex-col gap-4 p-6">
-                <form wire:submit="login" class="space-y-4" novalidate>
+                <form wire:submit="reset" class="space-y-4" novalidate>
                     <x-mk.field
                         type="email"
                         label="Email"
@@ -42,19 +33,21 @@
 
                     <x-mk.field
                         type="password"
-                        label="Kata Sandi"
+                        label="Kata Sandi Baru"
                         name="password"
                         :required="true"
-                        autocomplete="current-password"
+                        autocomplete="new-password"
                         wire:model="password"
                         :error="$errors->first('password')"
                     />
 
                     <x-mk.field
-                        type="checkbox"
-                        label="Ingat saya"
-                        name="remember"
-                        wire:model="remember"
+                        type="password"
+                        label="Konfirmasi Kata Sandi Baru"
+                        name="password_confirmation"
+                        :required="true"
+                        autocomplete="new-password"
+                        wire:model="password_confirmation"
                     />
 
                     <div class="flex flex-wrap items-center gap-3">
@@ -63,11 +56,11 @@
                             variant="primary"
                             full
                             wire:loading.attr="disabled"
-                            wire:target="login"
+                            wire:target="reset"
                         >
-                            Masuk
+                            Reset Kata Sandi
                         </x-mk.button>
-                        <span wire:loading wire:target="login" role="status" class="flex items-center gap-2 text-sm text-neutral-600">
+                        <span wire:loading wire:target="reset" role="status" class="flex items-center gap-2 text-sm text-neutral-600">
                             <x-mk.spinner class="size-4" aria-hidden="true" />
                             Memproses&hellip;
                         </span>
@@ -75,13 +68,10 @@
                 </form>
 
                 <div class="flex flex-col items-center gap-2 pt-2 text-sm">
-                    <a href="{{ route('password.request') }}" class="font-medium text-primary-700 underline underline-offset-2">
-                        Lupa kata sandi?
-                    </a>
                     <p class="text-neutral-600">
-                        Belum punya akun?
-                        <a href="{{ route('register') }}" class="font-medium text-primary-700 underline underline-offset-2">
-                            Daftar
+                        Sudah ingat kata sandi Anda?
+                        <a href="{{ route('login') }}" class="font-medium text-primary-700 underline underline-offset-2">
+                            Masuk
                         </a>
                     </p>
                 </div>
