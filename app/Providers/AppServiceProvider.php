@@ -76,24 +76,47 @@ class AppServiceProvider extends ServiceProvider
         // and every subsequent Livewire round trip for every public screen
         // in one place.
         //
-        // `Limit::none()` for an authenticated request: today that exempts
-        // nothing real (the Filament `/admin` and `/vendor` panels do NOT
-        // go through the `web` group at all — see `bootstrap/app.php`'s own
-        // comment on `AssignCorrelationId`), but it is the correct default
-        // for the day a customer account area lands in this group, and
-        // costs nothing today.
+        // Authenticated arm: `Limit::none()` was the original default here,
+        // exempting every authenticated request from this limiter entirely.
+        // That stopped being harmless the moment `/daftar` (Task 2 of
+        // the `/akun` account area,
+        // `.superpowers/sdd/2026-08-20-akun-auth-foundation/task-2-brief.md`)
+        // let a guest self-authenticate on a public route: "create a free
+        // account" would otherwise have become a standing, unthrottled
+        // bypass of the whole public rate limit. `Limit::perMinute(120)->by
+        // ('user:'.$user->getAuthIdentifier())` keyed per authenticated
+        // actor instead — 120/minute preserves this limiter's original
+        // concern (a real customer's own multi-step booking wizard makes
+        // many round trips) while closing the bypass with a generous but
+        // finite ceiling.
         //
-        // 60/minute per IP is deliberately generous: a real visitor filling
-        // the 9-step booking wizard makes tens of Livewire round trips
-        // (`wire:model` updates plus each `saveStepN` call) across several
-        // minutes, and this must never be the reason a genuine customer
-        // gets cut off mid-booking. It is tight enough to blunt a scripted
-        // flood, which is the actual threat on an unthrottled anonymous
-        // surface — not a precise capacity figure (no load test has been
-        // run; `performance-and-capacity.md`'s profiles remain unexecuted).
-        RateLimiter::for('public-guest', static function (Request $request): Limit {
-            if ($request->user() !== null) {
-                return Limit::none();
+        // The authenticated arm also carries an IP floor
+        // (`Limit::perMinute(120)->by($request->ip())`, ALL limits in the
+        // returned array must pass): registration is only rate-limited to
+        // 3/min/IP, so without an IP-keyed limit here, one IP could mint
+        // many accounts and give each one its own fresh 120/min budget —
+        // narrowing the bypass instead of closing it. The IP floor shares
+        // one bucket across every authenticated user from the same IP,
+        // closing that gap while still leaving a single real customer
+        // comfortably inside 120/minute.
+        //
+        // 60/minute per IP (guest arm) is deliberately generous: a real
+        // visitor filling the 9-step booking wizard makes tens of Livewire
+        // round trips (`wire:model` updates plus each `saveStepN` call)
+        // across several minutes, and this must never be the reason a
+        // genuine customer gets cut off mid-booking. It is tight enough to
+        // blunt a scripted flood, which is the actual threat on an
+        // unthrottled anonymous surface — not a precise capacity figure (no
+        // load test has been run; `performance-and-capacity.md`'s profiles
+        // remain unexecuted).
+        RateLimiter::for('public-guest', static function (Request $request): array|Limit {
+            $user = $request->user();
+
+            if ($user !== null) {
+                return [
+                    Limit::perMinute(120)->by('user:'.$user->getAuthIdentifier()),
+                    Limit::perMinute(120)->by($request->ip()),
+                ];
             }
 
             return Limit::perMinute(60)->by($request->ip());
