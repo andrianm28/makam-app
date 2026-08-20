@@ -11,6 +11,7 @@ use App\Domain\VendorFulfillment\WorkOrderStatus;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Livewire\Component;
 
@@ -249,12 +250,25 @@ final class CareHistoryPage extends Component
      * `App\Filament\Admin\Resources\Subscriptions\Actions
      * \CreateSubscriptionAction` already writes
      * `(string) $actor->identityReference` (the ADMIN's own bigint id, not
-     * even a customer selection) into this same uuid column today — and
-     * only goes unnoticed because the test suite runs on SQLite, which does
-     * not enforce uuid column typing. Flagged in the task report as a
-     * cross-lane finding, not fixed here: this equality check is the best
-     * available reading of the existing (buggy) convention, not a claim
-     * that it works end-to-end against Postgres yet.
+     * even a customer selection) into this same uuid column today.
+     *
+     * CONFIRMED SEVERE, not just theoretical: a real CI run against Postgres
+     * (this class's own route test, `CareHistoryPageRouteTest`) showed this
+     * mismatch is not merely "the equality never succeeds" — a bigint-shaped
+     * `$customerId` passed straight into a `uuid`-column `WHERE` clause
+     * throws an uncaught "invalid input syntax for type uuid" (a 500) on
+     * Postgres, which SQLite's looser column typing had been silently
+     * masking in every local run. `resolveWorkOrders()`/`ownedWorkOrder()`
+     * below now guard with `Str::isUuid()` before querying, so a
+     * non-UUID-shaped `$customerId` degrades to the honest "no history"
+     * empty state this codebase's own conventions already establish
+     * elsewhere, rather than crashing — this stops the production-breaking
+     * failure. It does NOT fix the underlying gap: a real customer still has
+     * no way to ever see a genuinely non-empty history, because nothing
+     * mints them a UUID identity to match against `customer_id` in the first
+     * place. That is a real product/architecture decision (how does an
+     * authenticated user's identity link to `subscriptions.customer_id`?),
+     * flagged for a human, not decided here.
      */
     private function isAuthorizedCustomer(): bool
     {
@@ -268,7 +282,7 @@ final class CareHistoryPage extends Component
      */
     private function ownedWorkOrder(string $workOrderId): ?WorkOrder
     {
-        if ($workOrderId === '') {
+        if ($workOrderId === '' || ! Str::isUuid($workOrderId) || ! Str::isUuid($this->customerId)) {
             return null;
         }
 
@@ -292,10 +306,18 @@ final class CareHistoryPage extends Component
      * a per-row acceptance/complaint state so the view can decide which
      * actions to offer without an N+1 query per row.
      *
+     * A non-UUID-shaped `$customerId` (see class doc block) returns an empty
+     * collection rather than querying — the honest "no history" state, not
+     * a crash.
+     *
      * @return Collection<int, object>
      */
     private function resolveWorkOrders(): Collection
     {
+        if (! Str::isUuid($this->customerId)) {
+            return new Collection;
+        }
+
         return DB::table('work_orders')
             ->join('subscription_cycles', 'work_orders.subscription_cycle_id', '=', 'subscription_cycles.id')
             ->join('subscriptions', 'subscription_cycles.subscription_id', '=', 'subscriptions.id')
