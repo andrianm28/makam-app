@@ -140,3 +140,91 @@ test.describe('E2E-MKT — product detail', () => {
         expect(results.violations).toEqual([]);
     });
 });
+
+test.describe('E2E-MKT — cart', () => {
+    test('the cart is empty before anything is added', async ({ page }) => {
+        await page.goto('/marketplace/keranjang');
+
+        await expect(page.getByText('Keranjang Anda masih kosong')).toBeVisible();
+        await expect(page.getByRole('link', { name: 'Lihat katalog' })).toBeVisible();
+    });
+
+    test('an added item appears in the cart with a working remove control', async ({ page }) => {
+        await page.goto(`/marketplace/produk/${PRODUCT_A.code}`);
+        await page.getByRole('button', { name: 'Tambah ke Keranjang' }).click();
+        await page.waitForURL(/\/marketplace\/keranjang$/);
+
+        const table = page.getByRole('table', { name: 'Isi keranjang' });
+        await expect(table).toBeVisible();
+        await expect(page.getByText(/^Total /)).toBeVisible();
+        await expect(page.getByRole('link', { name: 'Lanjut ke pembayaran' })).toBeVisible();
+
+        await page.getByRole('button', { name: 'Hapus' }).click();
+        await expect(page.getByText('Keranjang Anda masih kosong')).toBeVisible();
+    });
+});
+
+test.describe('E2E-MKT — single-vendor conflict', () => {
+    test('adding a second vendor\'s product offers replace-or-finish, and replacing works', async ({ page }) => {
+        await page.goto(`/marketplace/produk/${PRODUCT_A.code}`);
+        await page.getByRole('button', { name: 'Tambah ke Keranjang' }).click();
+        await page.waitForURL(/\/marketplace\/keranjang$/);
+
+        await page.goto(`/marketplace/produk/${PRODUCT_B.code}`);
+        await page.getByRole('button', { name: 'Tambah ke Keranjang' }).click();
+
+        const modal = page.getByRole('dialog', { name: 'Hanya satu vendor per pesanan' });
+        await expect(modal).toBeVisible();
+        await expect(modal.getByText(PRODUCT_A.vendorName)).toBeVisible();
+        await expect(modal.getByText(PRODUCT_B.vendorName)).toBeVisible();
+
+        await modal.getByRole('button', { name: 'Ganti keranjang' }).click();
+        await page.waitForURL(/\/marketplace\/keranjang$/);
+
+        // Cart now holds exactly the incoming vendor's single item — the
+        // conflict resolution replaced the cart's contents, not merged them.
+        // The table has no vendor-name column (confirmed against
+        // cart.blade.php: Produk/Harga satuan/Jumlah/Subtotal/actions only),
+        // so row COUNT is what this can actually prove, not vendor identity
+        // by name.
+        const rows = page.getByRole('table', { name: 'Isi keranjang' }).getByRole('row');
+        await expect(rows).toHaveCount(2); // header row + one item row
+    });
+
+    test('choosing "finish this order first" leaves the original vendor\'s cart untouched', async ({ page }) => {
+        await page.goto(`/marketplace/produk/${PRODUCT_A.code}`);
+        await page.getByRole('button', { name: 'Tambah ke Keranjang' }).click();
+        await page.waitForURL(/\/marketplace\/keranjang$/);
+
+        const cartRowsBefore = await page.getByRole('table', { name: 'Isi keranjang' }).getByRole('row').count();
+
+        await page.goto(`/marketplace/produk/${PRODUCT_B.code}`);
+        await page.getByRole('button', { name: 'Tambah ke Keranjang' }).click();
+
+        const modal = page.getByRole('dialog', { name: 'Hanya satu vendor per pesanan' });
+        await expect(modal).toBeVisible();
+        await modal.getByRole('button', { name: 'Selesaikan pesanan ini dulu' }).click();
+        await expect(modal).toBeHidden();
+
+        // Still on the product page, cart unchanged — go check it directly.
+        await page.goto('/marketplace/keranjang');
+        const cartRowsAfter = await page.getByRole('table', { name: 'Isi keranjang' }).getByRole('row').count();
+        expect(cartRowsAfter).toBe(cartRowsBefore);
+    });
+
+    test('the populated cart and conflict modal are accessible', async ({ page }) => {
+        await page.goto(`/marketplace/produk/${PRODUCT_A.code}`);
+        await page.getByRole('button', { name: 'Tambah ke Keranjang' }).click();
+        await page.waitForURL(/\/marketplace\/keranjang$/);
+
+        let results = await new AxeBuilder({ page }).analyze();
+        expect(results.violations).toEqual([]);
+
+        await page.goto(`/marketplace/produk/${PRODUCT_B.code}`);
+        await page.getByRole('button', { name: 'Tambah ke Keranjang' }).click();
+        await expect(page.getByRole('dialog', { name: 'Hanya satu vendor per pesanan' })).toBeVisible();
+
+        results = await new AxeBuilder({ page }).analyze();
+        expect(results.violations).toEqual([]);
+    });
+});
