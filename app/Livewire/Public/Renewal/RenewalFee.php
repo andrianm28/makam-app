@@ -15,6 +15,7 @@ use App\Domain\Renewal\RenewalQuoteDraft;
 use App\Platform\FeatureGate\ModeResolver;
 use App\Platform\FeatureGate\Modes\GraveSearchMode;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -89,7 +90,7 @@ final class RenewalFee extends Component
             return null;
         }
 
-        $grave = GraveRecord::query()->find($this->makam);
+        $grave = Str::isUuid($this->makam) ? GraveRecord::query()->find($this->makam) : null;
 
         if (! $grave instanceof GraveRecord) {
             return null;
@@ -157,7 +158,9 @@ final class RenewalFee extends Component
             ];
         }
 
-        $grave = GraveRecord::query()->with('cemetery')->find($this->makam);
+        $grave = Str::isUuid($this->makam)
+            ? GraveRecord::query()->with('cemetery')->find($this->makam)
+            : null;
 
         if (! $grave instanceof GraveRecord) {
             return [...$empty, 'errorMessage' => 'Data makam tidak ditemukan.'];
