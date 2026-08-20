@@ -252,7 +252,7 @@
                                 </p>
 
                                 @if ($price !== null)
-                                    <p class="text-xs text-neutral-500">{{ $price['source'] }}</p>
+                                    <p class="text-xs text-neutral-600">{{ $price['source'] }}</p>
                                 @endif
                             </x-mk.card>
                         </li>
