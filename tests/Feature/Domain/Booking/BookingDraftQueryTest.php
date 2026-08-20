@@ -6,9 +6,14 @@ namespace Tests\Feature\Domain\Booking;
 
 use App\Domain\Booking\BookingDraftQuery;
 use App\Domain\Booking\Models\BookingDraft;
+use App\Domain\OrderWorkflow\Models\Order;
+use App\Domain\OrderWorkflow\OrderStatus;
+use App\Domain\OrderWorkflow\ProductType;
 use App\Domain\ServiceCatalog\Models\PriceVersion;
 use App\Domain\ServiceCatalog\Models\ServiceDefinition;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 final class BookingDraftQueryTest extends TestCase
@@ -158,5 +163,55 @@ final class BookingDraftQueryTest extends TestCase
         $this->assertNull($summary['lines'][0]['line_total']);
         $this->assertNull($summary['total'], 'A guessed quantity must never produce a priced total.');
         $this->assertFalse($summary['all_prices_available']);
+    }
+
+    public function test_open_for_user_returns_only_that_users_drafts(): void
+    {
+        $user = User::factory()->create();
+        $otherUser = User::factory()->create();
+
+        $draft = BookingDraft::create(['user_id' => $user->id]);
+        BookingDraft::create(['user_id' => $otherUser->id]);
+        BookingDraft::create([]);
+
+        $result = BookingDraftQuery::openForUser($user->id);
+
+        $this->assertCount(1, $result);
+        $this->assertSame($draft->id, $result->first()->id);
+    }
+
+    public function test_open_for_user_excludes_a_draft_that_already_has_an_order(): void
+    {
+        $user = User::factory()->create();
+
+        $draftWithOrder = BookingDraft::create(['user_id' => $user->id]);
+        $openDraft = BookingDraft::create(['user_id' => $user->id]);
+
+        Order::query()->create([
+            'reference' => 'MK-2026-'.Str::upper(Str::random(8)),
+            'product_type' => ProductType::AT_NEED_SERVICE_ORDER->value,
+            'status' => OrderStatus::MASUK->value,
+            'booking_draft_id' => $draftWithOrder->id,
+        ]);
+
+        $result = BookingDraftQuery::openForUser($user->id);
+
+        $this->assertCount(1, $result);
+        $this->assertSame($openDraft->id, $result->first()->id);
+    }
+
+    public function test_open_for_user_orders_by_updated_at_descending(): void
+    {
+        $user = User::factory()->create();
+
+        $older = BookingDraft::create(['user_id' => $user->id]);
+        $newer = BookingDraft::create(['user_id' => $user->id]);
+
+        BookingDraft::query()->where('id', $older->id)->update(['updated_at' => now()->subDay()]);
+        BookingDraft::query()->where('id', $newer->id)->update(['updated_at' => now()]);
+
+        $result = BookingDraftQuery::openForUser($user->id);
+
+        $this->assertSame([$newer->id, $older->id], $result->pluck('id')->all());
     }
 }

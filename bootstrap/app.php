@@ -47,6 +47,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // ever reach it to set these headers in the first place.
         $middleware->trustProxies(at: '*');
 
+        // `/akun` account area, Task 2 of `.superpowers/sdd/
+        // 2026-08-20-akun-shell-and-drafts/task-2-brief.md`: an
+        // authenticated visitor hitting a `guest`-only route (`/masuk`,
+        // `/daftar`, ...) should land on their account home, not the
+        // framework's own default `/home`.
+        $middleware->redirectUsersTo('/akun');
+
         // Public-beta readiness (finding N-2/OQ-11): global, not a group
         // append — must cover the Filament /admin and /vendor panels too,
         // and both declare their own middleware arrays outside the `web`

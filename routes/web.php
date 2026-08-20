@@ -8,6 +8,10 @@ use App\Http\Controllers\Health\HealthLiveController;
 use App\Http\Controllers\Health\HealthReadyController;
 use App\Http\Middleware\EnforceMfaChallenge;
 use App\Http\Middleware\RequireRecentAuthentication;
+use App\Livewire\Public\Akun\AkunIndex;
+use App\Livewire\Public\Akun\DocumentList;
+use App\Livewire\Public\Akun\DraftList;
+use App\Livewire\Public\Akun\RenewalList;
 use App\Livewire\Public\Auth\ForgotPasswordPage;
 use App\Livewire\Public\Auth\LoginPage;
 use App\Livewire\Public\Auth\RegisterPage;
@@ -427,8 +431,9 @@ Route::get('/riwayat-perawatan/{customerId}', CareHistoryPage::class)->name('riw
 | task-1-brief.md` through `task-3-brief.md`)
 |--------------------------------------------------------------------------
 | PR 1 of 3, complete: login, logout, registration, and password reset.
-| No `<x-mk.header>` change and no `/akun/*` routes here — both are a
-| later PR; these five routes are reachable only by direct URL until then.
+| PR 2 of 3 (see the "Akun" block below, near the bottom of this file) adds
+| the `<x-mk.header>` wiring and the `/akun/*` route group these five
+| routes anticipated.
 |
 | The route NAME `login` is load-bearing, not just this page's own path:
 | `Illuminate\Auth\Middleware\Authenticate` redirects an unauthenticated
@@ -452,6 +457,40 @@ Route::get('/daftar', RegisterPage::class)->middleware('guest')->name('register'
 Route::post('/keluar', LogoutController::class)->middleware('auth')->name('logout');
 Route::get('/lupa-password', ForgotPasswordPage::class)->middleware('guest')->name('password.request');
 Route::get('/reset-password/{token}', ResetPasswordPage::class)->middleware('guest')->name('password.reset');
+
+/*
+|--------------------------------------------------------------------------
+| Akun — account area shell and draft resume list (Task 2 of 3, `/akun`
+| account area, `.superpowers/sdd/2026-08-20-akun-shell-and-drafts/
+| task-2-brief.md`)
+|--------------------------------------------------------------------------
+| PR 2 of 3, "switch on" batch: the two routes this PR's own scope covers.
+| `<x-mk.header>`'s `akunHref` now always resolves to `route('akun.index')`
+| for an authenticated visitor (see layouts/app.blade.php), which is what
+| makes this route name load-bearing beyond this file, same as `login`'s
+| own doc block above explains for itself.
+|
+| Renewal (`/akun/perpanjangan`) and document (`/akun/dokumen`) routes are
+| Task 3, added below — both honest "not yet available" pages over
+| `<x-mk.gate-closed-page>`, per that task's own brief
+| (`.superpowers/sdd/2026-08-20-akun-shell-and-drafts/task-3-brief.md`):
+| renewals have zero customer-ownership infrastructure and documents have
+| zero customer-facing upload path, so neither fabricates account-scoped
+| data. `AkunIndex`'s view now renders tiles for all three sub-routes.
+|
+| `auth` is Laravel 13's own default middleware alias — an unauthenticated
+| request redirects to `route('login')` (the `Authenticate` middleware's
+| own by-name resolution, already relied on by this file's `login` route
+| comment above), and `LoginPage::login()`/`RegisterPage::register()`'s
+| `redirectIntended(route('akun.index'), ...)` fallback sends a visitor
+| with no prior intended URL here too.
+*/
+Route::middleware('auth')->prefix('akun')->name('akun.')->group(function (): void {
+    Route::get('/', AkunIndex::class)->name('index');
+    Route::get('/draft', DraftList::class)->name('draft');
+    Route::get('/perpanjangan', RenewalList::class)->name('perpanjangan');
+    Route::get('/dokumen', DocumentList::class)->name('dokumen');
+});
 
 /*
 |--------------------------------------------------------------------------
