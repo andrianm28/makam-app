@@ -51,13 +51,16 @@ explicit decision, rather than closed with the documented manual-fallback altern
 - Unmissable payment-step labelling — **built** (PR #106): an urgent-intent warning on the "Bayar Sekarang"
   card itself, before any redirect to the sandbox, stating plainly no real transaction occurs. A second,
   calmer-intent site-wide banner (PR #107, Lane C4) reinforces the same point on every page.
-- Daily reconciliation of orders marked paid against actual settlement — **still not built**: no real
-  settlement occurs, and no named human has been assigned to contact a customer whose order shows
-  paid-without-money.
+- Daily reconciliation of orders marked paid against actual settlement — **process still not built; owner
+  named 20 Aug 2026.** Ira is the named daily payment-reconciliation owner, per the user's explicit decision
+  recorded during this ADR's closeout pass. The reconciliation *process itself* (a scripted or tooled daily
+  check against `docs/domain/traceability-matrix.md`-class evidence) remains unbuilt — naming an owner
+  unblocks launch per this item's own prior condition, but does not substitute for the process existing.
 - Reversing this is a one-row gate change (`G-PAY-01` → closed), no code.
 
-**Still not built as of this update:** the reconciliation process and its named owner. The labelling half of
-this mitigation is done; launch should not proceed on item 1 while reconciliation ownership remains unassigned.
+**Status as of 20 Aug 2026:** the reconciliation owner gap that blocked launch is closed (Ira, named above).
+The reconciliation process itself is still not built and should be tracked as its own follow-up, not
+reopened as a launch blocker now that ownership exists to run a manual check daily in its absence.
 
 ### 2. No point-in-time recovery (deviates from [ADR-0021](0021-use-managed-postgresql-pitr.md))
 
@@ -169,11 +172,34 @@ been asked to.
 ## What this ADR does not decide
 
 This ADR records the risk acceptance already made for the items above; it does not itself authorize executing
-the remaining unbuilt work (Lane C2–C3, D2, D6, F1) or the cutover to `makam.co.id`. Lane C4 and D1 are now
-built (items 1, 3, 9, 10 above); D4's throttle/route-hardening code portion also remains unbuilt, separate from
-its now-explicitly-declined MFA-enrolment portion (item 10). Per `AGENTS.md` §Infrastructure-agent execution,
-DNS changes, firewall changes, and the apex cutover each require their own explicit human review and sign-off
-at execution time, not blanket pre-authorization via this document.
+the remaining unbuilt work (Lane C2–C3, D2, D6, F1). Lane C4 and D1 are now built (items 1, 3, 9, 10 above);
+D4's throttle/route-hardening code portion also remains unbuilt, separate from its now-explicitly-declined
+MFA-enrolment portion (item 10). Per `AGENTS.md` §Infrastructure-agent execution, DNS changes, firewall
+changes, and the apex cutover each require their own explicit human review and sign-off at execution time,
+not blanket pre-authorization via this document — that separate sign-off is a fact of record, not something
+this document is inferring: **the cutover to `makam.co.id` has already happened.**
+[`docs/superpowers/plans/2026-08-19-homepage-visual-refresh.md`](../superpowers/plans/2026-08-19-homepage-visual-refresh.md)
+records it as done by 19 Aug 2026; re-verified directly on 20 Aug 2026 during this ADR's closeout pass —
+`makam.co.id` resolves to this host's public IP and `https://makam.co.id/` returns `200`. This document's
+item 3 (single host, no HA) and item 8 (shared host with the public dev environment) describe the live state
+those users are now served from, not a future plan.
+
+### 11. Customer authentication (`/masuk`, `/daftar`, `/lupa-password`, `/akun`) shipped after this ADR's
+last update, not covered by items 1–10 above
+
+PRs #112–#114 (merged 20 Aug 2026, after this ADR's 19 Aug content was last written) added self-service
+login, registration, password reset, and an authenticated `/akun` account area (draft resume, order list,
+two gate-closed sub-pages) — a genuinely new, security-relevant surface: credential storage, session/remember
+cookies, and per-user data scoping (`order_parties.user_id`, `#[Scope] forUser`) that none of items 1–10
+above were written against. Its absence from the original risk list is a stated fact, not a silent gap.
+
+**Assessment, not a new deviation:** this surface was built and reviewed under this repository's normal
+Superpowers task-review + whole-branch-review bar (not fast-tracked), and its own traceability rows
+(`docs/domain/traceability-matrix.md` §E, `AKUN-01`–`AKUN-08`, added 20 Aug 2026 alongside this update) cite
+tests for the no-enumeration login/register/reset behaviour, remember-token rotation on reset, and
+per-user data scoping — the same bar items 1–10 hold sandbox payments and the money routes to. No new
+accepted-risk item is being opened here; this addendum exists so a reader of this ADR is not left assuming
+`/akun` was reviewed under items 1–10 when it postdates them.
 
 ## Consequences
 
@@ -188,8 +214,8 @@ at execution time, not blanket pre-authorization via this document.
 ### Negative
 
 - Items 1, 2, 4, 6, 7, 9 and 10 are real, stacked risk for a bereavement-sector product handling real customer
-  bookings, even with the mitigations listed. Item 1's payment labelling is now built; its reconciliation
-  process and owner are still not — launch should not proceed on item 1 while that gap remains open.
+  bookings, even with the mitigations listed. Item 1's payment labelling is now built and its owner named
+  (20 Aug 2026); the reconciliation process itself is still not built and remains a real, accepted gap.
 - Items 9 and 10 stack specifically on the admin/legal surface: unreviewed legal text stays live indefinitely,
   and the admin panel protecting money-route actions (payment reversals, marketplace order payout marking) has
   no second factor for the duration of the beta. Neither has a mitigation beyond honest labelling (item 9) or
