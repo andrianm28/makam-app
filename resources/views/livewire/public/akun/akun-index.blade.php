@@ -11,10 +11,13 @@
     backed by a Layer 1 token in tokens.css, no hex, no arbitrary value
     (design-system.md §9.2 MUST NOT 1/2).
 
-    Three tiles — see the component's own doc block. The renewal and
+    Four tiles — see the component's own doc block. The renewal and
     document tiles carry a `<x-mk.badge intent="neutral">` "Segera hadir"
     marker (per this task's brief) since both routes render
-    `<x-mk.gate-closed-page>` rather than real account-scoped data.
+    `<x-mk.gate-closed-page>` rather than real account-scoped data. The
+    order tile (PR 3, Task 2 of `.superpowers/sdd/2026-08-20-akun-pesanan/
+    task-2-brief.md`) carries no such marker — it links to `OrderList`,
+    real account-scoped data.
 --}}
 <div class="mx-auto max-w-content px-4 py-8 md:px-6 lg:px-8">
     <h1 class="text-3xl font-semibold tracking-tight text-neutral-900">Akun Saya</h1>
@@ -33,6 +36,22 @@
                             {{ $openDraftCount }} draft belum selesai
                         @else
                             Belum ada draft pemesanan
+                        @endif
+                    </p>
+                </div>
+            </div>
+        </x-mk.card>
+
+        <x-mk.card :href="route('akun.pesanan')" interactive>
+            <div class="flex items-start gap-4">
+                <x-mk.icon-medallion icon="inbox" />
+                <div>
+                    <h2 class="text-lg font-semibold text-neutral-900">Pesanan</h2>
+                    <p class="mt-1 text-sm text-neutral-600">
+                        @if ($orderCount > 0)
+                            {{ $orderCount }} pesanan tercatat
+                        @else
+                            Belum ada pesanan
                         @endif
                     </p>
                 </div>
