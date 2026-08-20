@@ -12,13 +12,17 @@ use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\FinancialLedger\FinanceReconciliationAuthorizer;
 use App\Platform\FinancialLedger\Jobs\ReconcileStatementJob;
 use App\Platform\FinancialLedger\ProviderStatement;
+use App\Platform\FinancialLedger\ReconciliationStatus;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use App\Platform\IdentityAccess\Scopes\Models\ScopeAssignment;
 use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use App\Platform\IdentityAccess\Scopes\ScopeGrantLevel;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 use Livewire\Livewire;
 use Tests\Support\GrantsActorRoles;
 use Tests\TestCase;
@@ -102,6 +106,58 @@ final class ReconciliationAdminTest extends TestCase
         Livewire::test(ListReconciliations::class)
             ->assertOk()
             ->assertActionVisible('unggah_pernyataan');
+    }
+
+    /**
+     * `getEloquentQuery()` previously only ordered by `ran_at` — it never
+     * filtered by the actor's granted `entityRefs`, so any actor who could
+     * see this page at all (the coarse `canAccess()` mount gate only proves
+     * SOME grant exists) saw every badan usaha's reconciliation runs, not
+     * just their own. The same query-level-scope-is-mandatory rule
+     * `LedgerReadScope`'s own doc block states and `FinanceReports` already
+     * applies. Found while building the ADM-001 dashboard's
+     * `FinancialOverviewWidget`, which does scope correctly — flagged there,
+     * fixed here.
+     */
+    public function test_the_reconciliation_list_only_shows_runs_for_the_actors_granted_entity(): void
+    {
+        $this->authorisedFinanceUser('badan-usaha-1');
+
+        $this->makeReconciliationRow('badan-usaha-1', '2026-08');
+        $this->makeReconciliationRow('badan-usaha-2', '2026-08');
+
+        $visible = ReconciliationsResource::getEloquentQuery()->pluck('entity_ref');
+
+        $this->assertSame(['badan-usaha-1'], $visible->all());
+    }
+
+    public function test_an_actor_with_no_grant_at_all_sees_no_reconciliation_rows(): void
+    {
+        $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::FINANCE);
+        $this->actingAs($user);
+        $this->forgetResolvedActorContext();
+
+        $this->makeReconciliationRow('badan-usaha-1', '2026-08');
+
+        $this->assertSame(0, ReconciliationsResource::getEloquentQuery()->count());
+    }
+
+    private function makeReconciliationRow(string $entityRef, string $period): void
+    {
+        DB::table('reconciliations')->insert([
+            'id' => (string) Str::uuid(),
+            'entity_ref' => $entityRef,
+            'period' => $period,
+            'status' => ReconciliationStatus::MATCHED,
+            'statement_reference' => 'statement-'.$entityRef.'-'.$period,
+            'statement_total_minor' => 0,
+            'journal_total_minor' => 0,
+            'correlation_id' => null,
+            'ran_at' => CarbonImmutable::now(),
+            'created_at' => CarbonImmutable::now(),
+            'updated_at' => CarbonImmutable::now(),
+        ]);
     }
 
     // =========================================================================
