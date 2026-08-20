@@ -148,7 +148,7 @@ final class PasswordResetTest extends TestCase
             ->set('password', 'old-password')
             ->set('remember', true)
             ->call('login')
-            ->assertRedirect('/');
+            ->assertRedirect(route('akun.index'));
 
         $user->refresh();
         $originalRememberToken = $user->remember_token;

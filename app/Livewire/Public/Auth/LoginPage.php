@@ -89,7 +89,7 @@ final class LoginPage extends Component
         // Laravel's `Authenticate` middleware sets, falling back to the
         // given default, then calls `$this->redirect()` itself — no
         // `Redirector` instance involved at all.
-        $this->redirectIntended('/', navigate: false);
+        $this->redirectIntended(route('akun.index'), navigate: false);
     }
 
     public function render(): View

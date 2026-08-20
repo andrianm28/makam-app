@@ -85,14 +85,15 @@ final class RegisterPage extends Component
         session()->regenerate();
         app(ActorContextResolver::class)->forget();
 
-        // `redirectIntended('/')` — see `LoginPage::login()`'s doc comment
-        // for why: `redirect()->intended('/')->getTargetUrl()` throws at
+        // `redirectIntended(...)` — see `LoginPage::login()`'s doc comment
+        // for why: `redirect()->intended(...)->getTargetUrl()` throws at
         // runtime inside a Livewire action (the global `redirect()` helper
         // resolves to Livewire's own `Redirector`, which has no
-        // `getTargetUrl()` method). `'/'` is the same PR-1 fallback as
-        // `LoginPage`, not `route('akun.index')` (that route does not exist
-        // yet).
-        $this->redirectIntended('/', navigate: false);
+        // `getTargetUrl()` method). `route('akun.index')` is the same
+        // PR-2 fallback as `LoginPage` (`.superpowers/sdd/
+        // 2026-08-20-akun-shell-and-drafts/task-2-brief.md`) — PR-1's `'/'`
+        // fallback is retired now that the route exists.
+        $this->redirectIntended(route('akun.index'), navigate: false);
     }
 
     public function render(): View

@@ -46,7 +46,7 @@ final class LoginPageTest extends TestCase
         $response->assertSee('Kata sandi berhasil direset. Silakan masuk.');
     }
 
-    public function test_correct_credentials_authenticate_and_redirect_to_home(): void
+    public function test_correct_credentials_authenticate_and_redirect_to_akun(): void
     {
         $user = User::factory()->create(['password' => 'password']);
 
@@ -54,7 +54,7 @@ final class LoginPageTest extends TestCase
             ->set('email', $user->email)
             ->set('password', 'password')
             ->call('login')
-            ->assertRedirect('/');
+            ->assertRedirect(route('akun.index'));
 
         $this->assertTrue(auth()->check());
         $this->assertSame($user->id, auth()->id());
@@ -148,7 +148,7 @@ final class LoginPageTest extends TestCase
             ->set('password', 'password')
             ->set('remember', true)
             ->call('login')
-            ->assertRedirect('/');
+            ->assertRedirect(route('akun.index'));
 
         $this->assertTrue(auth()->check());
         $this->assertTrue($this->recallerCookieIsQueued($recallerName));
@@ -164,7 +164,7 @@ final class LoginPageTest extends TestCase
             ->set('password', 'password')
             ->set('remember', false)
             ->call('login')
-            ->assertRedirect('/');
+            ->assertRedirect(route('akun.index'));
 
         $this->assertTrue(auth()->check());
         $this->assertFalse($this->recallerCookieIsQueued($recallerName));
@@ -197,7 +197,7 @@ final class LoginPageTest extends TestCase
             ->set('email', $user->email)
             ->set('password', 'password')
             ->call('login')
-            ->assertRedirect('/');
+            ->assertRedirect(route('akun.index'));
 
         $this->assertTrue($resolver->resolve()->isAuthenticated());
     }

@@ -38,7 +38,7 @@ final class RegisterPageTest extends TestCase
             ->set('password', 'a-very-secure-password')
             ->set('password_confirmation', 'a-very-secure-password')
             ->call('register')
-            ->assertRedirect('/');
+            ->assertRedirect(route('akun.index'));
 
         $user = User::query()->where('email', 'budi@example.test')->first();
 
