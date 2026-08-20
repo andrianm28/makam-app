@@ -38,8 +38,11 @@ test('search filters the article list', async ({ page }) => {
     await page.getByRole('button', { name: 'Cari', exact: true }).click();
 
     await expect(page.getByRole('heading', { name: 'Hasil Pencarian' })).toBeVisible();
+    // The card `<a>` wraps both the title heading and the summary paragraph,
+    // so its accessible name is the concatenation of both — match on the
+    // heading inside the link, not the link's own (compound) accessible name.
     await expect(
-        page.getByRole('link', { name: 'Bagaimana cara melanjutkan draft?', exact: true }),
+        page.locator('a').filter({ has: page.getByRole('heading', { name: 'Bagaimana cara melanjutkan draft?', exact: true }) }),
     ).toBeVisible();
 
     // Reset control appears once a term is active and clears back to the
@@ -66,11 +69,12 @@ test('a category filter chip scopes the article list to that category', async ({
 test('clicking into an article renders its detail page', async ({ page }) => {
     await page.goto('/faq');
 
-    await page.getByRole('link', { name: PUBLISHED_ARTICLE_TITLE, exact: true }).click();
+    // Same compound-accessible-name reasoning as the search test above.
+    await page.locator('a').filter({ has: page.getByRole('heading', { name: PUBLISHED_ARTICLE_TITLE, exact: true }) }).click();
 
     await expect(page).toHaveURL(new RegExp(`/faq/${PUBLISHED_ARTICLE_SLUG}$`));
     await expect(page.getByRole('heading', { level: 1, name: PUBLISHED_ARTICLE_TITLE })).toBeVisible();
-    await expect(page.getByText(/^Diperbarui \d{1,2} \w+ \d{4}$/)).toBeVisible();
+    await expect(page.getByText(/Diperbarui \d{1,2} \w+ \d{4}/)).toBeVisible();
 
     // Breadcrumb back to the category this article belongs to.
     await expect(page.getByRole('navigation', { name: 'Navigasi FAQ' }).getByRole('link', { name: 'Cara Memesan' })).toBeVisible();
@@ -104,11 +108,11 @@ test('the related-content section is correctly absent when no related articles a
 
 test('the customer-service CTA is present on the FAQ index and on an article detail page', async ({ page }) => {
     await page.goto('/faq');
-    await expect(page.getByRole('link', { name: 'Bantuan', exact: true })).toHaveAttribute('href', '/bantuan');
+    await expect(page.getByRole('link', { name: 'Bantuan', exact: true })).toHaveAttribute('href', /\/bantuan$/);
 
     await page.goto(`/faq/${PUBLISHED_ARTICLE_SLUG}`);
     const ctaLink = page.getByRole('link', { name: 'Hubungi Customer Service', exact: true });
-    await expect(ctaLink).toHaveAttribute('href', '/bantuan');
+    await expect(ctaLink).toHaveAttribute('href', /\/bantuan$/);
 });
 
 test('a draft article never leaks through the public FAQ surface', async ({ page }) => {

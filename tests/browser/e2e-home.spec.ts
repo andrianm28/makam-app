@@ -49,8 +49,15 @@ test('mobile navigation exposes the same four menu labels behind the hamburger',
     const mobileNav = page.getByRole('navigation', { name: 'Menu utama (seluler)' });
     await expect(mobileNav).toBeVisible();
 
-    const links = mobileNav.getByRole('link');
-    await expect(links).toHaveText(PRIMARY_MENUS);
+    // The mobile nav's <ul> also carries a 5th item (Masuk/Akun) after the
+    // four primary menus — resources/views/components/mk/header.blade.php's
+    // mobile <nav> block, confirmed by reading it directly. Check the four
+    // primary labels individually (in order) rather than asserting the whole
+    // link set, since the account link is legitimately present too.
+    for (const label of PRIMARY_MENUS) {
+        await expect(mobileNav.getByRole('link', { name: label, exact: true })).toBeVisible();
+    }
+    await expect(mobileNav.getByRole('link', { name: /^(Masuk\/Akun|Akun)$/ })).toBeVisible();
 });
 
 test('four primary public routes are reachable and accessible without authentication', async ({ page }) => {

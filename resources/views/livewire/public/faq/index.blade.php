@@ -309,7 +309,7 @@
                     @foreach ($articles as $article)
                         <li>
                             <x-mk.card as="a" interactive :href="route('faq.show', ['articleSlug' => $article->slug])" class="h-full touch-target">
-                                <h3 class="text-lg font-semibold text-neutral-900">{{ $article->title }}</h3>
+                                <h2 class="text-lg font-semibold text-neutral-900">{{ $article->title }}</h2>
                                 <p class="text-base text-neutral-600">{{ $article->summary }}</p>
                             </x-mk.card>
                         </li>
