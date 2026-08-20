@@ -18,6 +18,7 @@ use App\Platform\FeatureGate\ModeResolver;
 use App\Platform\FinancialLedger\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -101,9 +102,7 @@ final class GuardMarketplacePaymentOpeningTest extends TestCase
         $this->assertStringContainsString('Online payment is not currently available', $result->denialReason());
     }
 
-    /**
-     * @dataProvider notAwaitingPaymentStates
-     */
+    #[DataProvider('notAwaitingPaymentStates')]
     public function test_an_order_not_in_belum_dibayar_denies(string $state): void
     {
         $this->withPaymentGate(open: true);
