@@ -17,11 +17,14 @@ use RuntimeException;
  *     which performs the same lookup, so this arm is defence in depth against
  *     an event seeded or replayed around the validator — the settlement never
  *     trusts the claim on its own.
- *  2. No order carries the event's invoice reference (the booking `Order` by
- *     `reference`, or the `MarketplaceOrder` by `order_number`). The invoice
- *     reference is the provider's echo of the order id we sent at session
- *     opening, so an unresolvable one is a data-integrity anomaly that must
- *     fail loudly rather than settle nowhere.
+ *  2. No target carries the event's invoice reference: the booking `Order`
+ *     by `reference`, the `MarketplaceOrder` by `order_number`, or the
+ *     `SubscriptionCycle` by its own id (see `Actions\ApplyPaymentSettlement`'s
+ *     "Care subscription" doc section for why a cycle is keyed by id rather
+ *     than a business reference column). The invoice reference is the
+ *     provider's echo of the order id we sent at session opening, so an
+ *     unresolvable one is a data-integrity anomaly that must fail loudly
+ *     rather than settle nowhere.
  *
  * The exception propagates out of `ProcessWebhookEvent`'s claim transaction:
  * the claim rolls back, the row stays at VALIDATED, no effect is half-applied,
@@ -45,8 +48,9 @@ final class SettlementTargetUnresolvableException extends RuntimeException
     public static function becauseNoOrder(string $invoiceReference): self
     {
         return new self(
-            'Cannot settle: no booking order (by reference) or marketplace order '
-            ."(by order number) carries invoice reference [{$invoiceReference}]."
+            'Cannot settle: no booking order (by reference), marketplace order '
+            .'(by order number), or subscription cycle (by id) carries invoice '
+            ."reference [{$invoiceReference}]."
         );
     }
 }
