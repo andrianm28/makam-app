@@ -9,6 +9,7 @@ use App\Http\Controllers\Health\HealthReadyController;
 use App\Http\Middleware\EnforceMfaChallenge;
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Livewire\Public\Auth\LoginPage;
+use App\Livewire\Public\Auth\RegisterPage;
 use App\Livewire\Public\Booking\BookingWizard;
 use App\Livewire\Public\CareSubscription\CareHistoryPage;
 use App\Livewire\Public\CareSubscription\SubscriptionStatusPage;
@@ -419,24 +420,27 @@ Route::get('/riwayat-perawatan/{customerId}', CareHistoryPage::class)->name('riw
 
 /*
 |--------------------------------------------------------------------------
-| Account — login and logout (Task 1 of 3, `/akun` account area,
-| `.superpowers/sdd/2026-08-20-akun-auth-foundation/task-1-brief.md`)
+| Account — login, logout, and registration (Tasks 1-2 of 3, `/akun`
+| account area, `.superpowers/sdd/2026-08-20-akun-auth-foundation/
+| task-1-brief.md` and `task-2-brief.md`)
 |--------------------------------------------------------------------------
-| PR 1 of 3: the guard-mutation pair only. Registration and password reset
-| are Task 2 and Task 3, separate PRs. No `<x-mk.header>` change and no
-| `/akun/*` routes here — both are a later PR; these two routes are
-| reachable only by direct URL until then.
+| PR 1 of 3: the guard-mutation trio only. Password reset is Task 3, a
+| separate PR. No `<x-mk.header>` change and no `/akun/*` routes here —
+| both are a later PR; these three routes are reachable only by direct URL
+| until then.
 |
 | The route NAME `login` is load-bearing, not just this page's own path:
 | `Illuminate\Auth\Middleware\Authenticate` redirects an unauthenticated
 | request to a protected route to `route('login')` by name when it exists
 | — this is what will make a future `/akun/*` `auth` middleware group
 | "redirect to login, then return to where you were" work for free via
-| `redirect()->intended(...)` inside `LoginPage::login()`, without that
-| future PR needing to know about this one. `guest` and `auth` are
-| Laravel 13's own default middleware aliases — no new alias registered.
+| `redirect()->intended(...)` inside `LoginPage::login()`/
+| `RegisterPage::register()`, without that future PR needing to know about
+| this one. `guest` and `auth` are Laravel 13's own default middleware
+| aliases — no new alias registered.
 */
 Route::get('/masuk', LoginPage::class)->middleware('guest')->name('login');
+Route::get('/daftar', RegisterPage::class)->middleware('guest')->name('register');
 Route::post('/keluar', LogoutController::class)->middleware('auth')->name('logout');
 
 /*

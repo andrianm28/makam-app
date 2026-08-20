@@ -48,14 +48,16 @@ final class PublicGuestThrottleTest extends TestCase
         $this->get('/')->assertStatus(429);
     }
 
-    public function test_an_authenticated_request_is_never_throttled(): void
+    public function test_an_authenticated_request_gets_a_generous_but_finite_limit(): void
     {
         $user = User::factory()->create();
         $this->actingAs($user);
 
-        for ($i = 0; $i < 65; $i++) {
+        for ($i = 0; $i < 120; $i++) {
             $this->get('/')->assertOk();
         }
+
+        $this->get('/')->assertStatus(429);
     }
 
     public function test_two_different_guest_ips_are_throttled_independently(): void
