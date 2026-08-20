@@ -94,7 +94,7 @@ final class PasswordResetTest extends TestCase
             ->set('email', $user->email)
             ->set('password', 'a-brand-new-password')
             ->set('password_confirmation', 'a-brand-new-password')
-            ->call('reset')
+            ->call('submitReset')
             ->assertRedirect(route('login'));
 
         $user->refresh();
@@ -112,7 +112,7 @@ final class PasswordResetTest extends TestCase
             ->set('email', $user->email)
             ->set('password', 'a-brand-new-password')
             ->set('password_confirmation', 'a-brand-new-password')
-            ->call('reset')
+            ->call('submitReset')
             ->assertHasErrors(['email']);
 
         $user->refresh();
@@ -150,7 +150,7 @@ final class PasswordResetTest extends TestCase
             ->set('email', $user->email)
             ->set('password', 'a-brand-new-password')
             ->set('password_confirmation', 'a-brand-new-password')
-            ->call('reset')
+            ->call('submitReset')
             ->assertRedirect(route('login'));
 
         $user->refresh();

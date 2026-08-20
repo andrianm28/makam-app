@@ -20,7 +20,7 @@
             </div>
 
             <x-mk.card class="flex flex-col gap-4 p-6">
-                <form wire:submit="reset" class="space-y-4" novalidate>
+                <form wire:submit="submitReset" class="space-y-4" novalidate>
                     <x-mk.field
                         type="email"
                         label="Email"
@@ -56,11 +56,11 @@
                             variant="primary"
                             full
                             wire:loading.attr="disabled"
-                            wire:target="reset"
+                            wire:target="submitReset"
                         >
                             Reset Kata Sandi
                         </x-mk.button>
-                        <span wire:loading wire:target="reset" role="status" class="flex items-center gap-2 text-sm text-neutral-600">
+                        <span wire:loading wire:target="submitReset" role="status" class="flex items-center gap-2 text-sm text-neutral-600">
                             <x-mk.spinner class="size-4" aria-hidden="true" />
                             Memproses&hellip;
                         </span>

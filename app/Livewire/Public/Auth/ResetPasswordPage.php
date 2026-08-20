@@ -27,7 +27,7 @@ use Livewire\Component;
  * as the same generic error — no enumeration of which specific thing was
  * wrong.
  *
- * No `RateLimiter` call in `reset()`, unlike the other three auth
+ * No `RateLimiter` call in `submitReset()`, unlike the other three auth
  * components — deliberate, not an oversight: the token itself is the rate
  * limit. It is a high-entropy value the broker generates and hashes (see
  * `config/auth.php`'s `password_reset_tokens` wiring), so brute-forcing a
@@ -60,7 +60,7 @@ final class ResetPasswordPage extends Component
         $this->email = is_string($queryEmail) ? $queryEmail : '';
     }
 
-    public function reset(): void
+    public function submitReset(): void
     {
         $this->validate([
             'email' => ['required', 'email'],
@@ -98,12 +98,7 @@ final class ResetPasswordPage extends Component
 
         $this->addError('email', 'Tautan reset tidak valid atau sudah kedaluwarsa.');
 
-        // Not `$this->reset(...)` — this class's own submit action is named
-        // `reset()` (matching the blade's `wire:submit="reset"`), which
-        // shadows `Livewire\Component::reset()`. Calling `$this->reset(...)`
-        // here would recurse into THIS method instead of clearing the
-        // properties. `parent::reset(...)` reaches the real one.
-        parent::reset('password', 'password_confirmation');
+        $this->reset('password', 'password_confirmation');
     }
 
     public function render(): View
