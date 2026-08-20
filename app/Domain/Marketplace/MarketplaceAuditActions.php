@@ -52,4 +52,21 @@ final class MarketplaceAuditActions
      * `PAYMENT_MANUAL_VERIFICATION` elsewhere.
      */
     public const string ORDER_PAYMENT_STATE_CHANGED = 'MARKETPLACE_ORDER_PAYMENT_STATE_CHANGED';
+
+    /**
+     * Written by `Actions\GuardMarketplacePaymentOpening` with
+     * `AuditOutcome::Denied`, subject = the `MarketplaceOrder`, whenever a
+     * marketplace online-payment-opening precondition denies — the
+     * marketplace analog of `App\Platform\Payment\PaymentAuditActions::
+     * GUARD_DENIED`, owned here instead of by `app/Platform/Payment` because
+     * the guard itself is (see that class's doc block for why it is not a
+     * reuse of the booking guard's types).
+     *
+     * Deliberately NOT added to `SensitiveActions::ACTIONS`, for the same
+     * reason as `GUARD_DENIED`: a denial here is a high-volume, automatic,
+     * machine-decided event with a fixed, closed-set `note` — never a place
+     * for a careless caller to paste restricted data — so a mandatory
+     * free-text reason would add nothing.
+     */
+    public const string PAYMENT_OPENING_DENIED = 'MARKETPLACE_PAYMENT_OPENING_DENIED';
 }

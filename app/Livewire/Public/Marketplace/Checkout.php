@@ -15,8 +15,14 @@ use App\Platform\FeatureGate\ModeResolver;
 use App\Platform\FeatureGate\Modes\PaymentMode;
 use App\Platform\Payment\Actions\OpenPaymentSession;
 use App\Platform\Payment\Actions\OpenPaymentSessionCommand;
-use App\Platform\Payment\Exceptions\PaymentSessionOrderTypeNotSupportedException;
+use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutProviderException;
+use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutUnavailableException;
+use App\Platform\Payment\Exceptions\PaymentSessionOpeningDeniedException;
+use App\Platform\Payment\Exceptions\PaymentSessionOrderAlreadyPaidException;
+use App\Platform\Payment\Models\PaymentSession;
 use App\Platform\Payment\OrderType;
+use App\Platform\Payment\PaymentProviders;
+use App\Platform\Payment\SessionState;
 use App\Platform\Payment\SubmitManualPayment;
 use App\Platform\SiteSettings\Models\SiteSetting;
 use App\Platform\SiteSettings\SettingsService;
@@ -36,13 +42,10 @@ use Throwable;
  * The online option renders a gate-closed banner explaining that online
  * payment is unavailable and pointing at the manual path. The gate is read
  * through `ModeResolver::paymentMode()` — the SAME server-resolved authority
- * `GuardPaymentSession`'s condition 1 evaluates (`ProductGateOpen`), and the
- * same source the booking wizard and renewal screens render their §6.9
- * banners from. `GuardPaymentSession` itself is not invoked: it requires an
- * order-workflow `Order` and writes booking-domain `payment_intents` rows
- * per evaluation, so calling it from a marketplace checkout would fabricate
- * wrong-domain records (cross-lane ownership: L7's guard is consumed, never
- * modified). The screen starts working the day the gate opens without any
+ * `App\Domain\Marketplace\Actions\GuardMarketplacePaymentOpening`'s own
+ * first condition re-checks server-side at submit time (a mount-time read
+ * alone would be a TOCTOU gap if the gate closed between page load and
+ * click). The screen starts working the day the gate opens without any
  * code change — the mode flips, the banner disappears.
  *
  * ---------------------------------------------------------------------------
@@ -92,17 +95,6 @@ final class Checkout extends Component
     public ?string $placedOrderNumber = null;
 
     public ?string $manualSubmissionError = null;
-
-    /**
-     * The marketplace ONLINE deferral, surfaced honestly: `OpenPaymentSession`
-     * refuses a Marketplace `OrderType` until the marketplace precondition
-     * lane lands (see `OrderType`'s doc block). `true` means the online
-     * submit attempted the real path and the service refused it — the screen
-     * then explains that online payment for marketplace orders is not yet
-     * available and keeps the manual path live. Never a 500, never a
-     * fabricated session.
-     */
-    public bool $onlinePaymentUnavailable = false;
 
     public ?string $onlinePaymentError = null;
 
@@ -231,16 +223,20 @@ final class Checkout extends Component
     }
 
     /**
-     * The online branch (only rendered when `G-PAY-01` is open): attempt the
-     * REAL session-opening path for the placed marketplace order.
+     * The online branch (only rendered when `G-PAY-01` is open): open a real
+     * session for the placed marketplace order through
+     * `GuardMarketplacePaymentOpening` and redirect to the hosted checkout.
      *
-     * The marketplace session path is DEFERRED — `OpenPaymentSession` refuses
-     * a Marketplace `OrderType` with `PaymentSessionOrderTypeNotSupported
-     * Exception` before any guard or provider step — so this submit surfaces
-     * that refusal as an honest fail-closed state ("belum tersedia" + support
-     * escape + the manual path), never as a 500. The day the deferred service
-     * lands, this method starts redirecting to the hosted checkout with no
-     * code change here.
+     * Every failure lands honest fail-closed copy with the manual path (and
+     * the support escape) still on screen — never a 500, never a fabricated
+     * session. Catch order and copy mirror `BookingWizard::
+     * openOnlinePayment()`'s own established pattern — including the
+     * exactly-once re-click guard below: a stored non-terminal session is
+     * re-pointed at rather than re-opened, since neither this guard nor
+     * `payment_sessions` (which carries no order reference — see
+     * `SessionState`'s doc block) stops a second `OpenPaymentSession` call
+     * for the same still-`BELUM_DIBAYAR` order from creating a second
+     * session and a second provider charge.
      */
     public function payOnline(): void
     {
@@ -252,11 +248,35 @@ final class Checkout extends Component
             return;
         }
 
-        if ($this->onlinePaymentUnavailable) {
-            return;
-        }
-
         $this->onlinePaymentError = null;
+
+        $sessionKey = 'marketplace_online_payment.'.$this->placedOrderNumber;
+        $stored = session($sessionKey);
+
+        if (is_array($stored) && isset($stored['session_id'])) {
+            $existing = PaymentSession::query()->find($stored['session_id']);
+
+            if ($existing instanceof PaymentSession) {
+                $state = SessionState::tryFrom((string) $existing->state);
+
+                if ($state === SessionState::Paid || $state === SessionState::Failed || $state === SessionState::Expired) {
+                    // A terminal session is never re-opened from here — the
+                    // order-tracking screen governs; the manual path is the
+                    // recovery route for Failed/Expired.
+                    return;
+                }
+
+                $link = is_string($stored['link_url'] ?? null) ? $stored['link_url'] : '';
+
+                if ($link !== '') {
+                    $this->redirect($link);
+
+                    return;
+                }
+            }
+
+            session()->forget($sessionKey);
+        }
 
         $order = MarketplaceOrder::query()->where('order_number', $this->placedOrderNumber)->first();
 
@@ -276,10 +296,21 @@ final class Checkout extends Component
                 successReturnUrl: route('payments.return'),
                 cancelReturnUrl: route('payments.cancel'),
             ));
-        } catch (PaymentSessionOrderTypeNotSupportedException) {
-            // The documented marketplace-online deferral. Fail closed
-            // honestly; do not fabricate a session or a provider call.
-            $this->onlinePaymentUnavailable = true;
+        } catch (PaymentSessionOpeningDeniedException) {
+            // The marketplace guard denied. Fixed Indonesian copy — the
+            // guard's own messages are internal English and stay off-screen.
+            $this->onlinePaymentError = 'Pembayaran online belum dapat dibuka saat ini. Gunakan transfer manual atau hubungi dukungan.';
+
+            return;
+        } catch (PaymentSessionOrderAlreadyPaidException) {
+            // The order is already paid; a second session would only allow a
+            // second charge. Honest copy instead of the generic denial — and
+            // no `report()`: this is a normal customer action, not an error.
+            $this->onlinePaymentError = 'Pesanan ini telah dibayar dan tidak perlu dibayar lagi.';
+
+            return;
+        } catch (PaymentCheckoutProviderException|PaymentCheckoutUnavailableException) {
+            $this->onlinePaymentError = 'Layanan pembayaran online sedang tidak tersedia. Silakan coba lagi atau gunakan transfer manual.';
 
             return;
         } catch (Throwable $e) {
@@ -289,9 +320,8 @@ final class Checkout extends Component
             return;
         }
 
-        // Unreachable until the deferred marketplace session path lands.
         session([
-            'marketplace_online_payment.'.$order->order_number => [
+            $sessionKey => [
                 'session_id' => $session->id,
                 'link_url' => $session->payment_link_url,
             ],
@@ -311,6 +341,9 @@ final class Checkout extends Component
             'hasStalePricing' => $cart->hasStalePricing(),
             'paymentMode' => app(ModeResolver::class)->paymentMode(),
             'deliveryFeeByCode' => collect($this->serviceAreas)->keyBy('area_code'),
+            // ADR-0035 item 1's mitigation — see `wizard.blade.php`'s own
+            // `$isSandboxPayment` for the identical booking-side warning.
+            'isSandboxPayment' => config('payment.default') === PaymentProviders::SUMOPOD_SANDBOX,
         ])->layout('layouts.app', [
             'title' => 'Checkout - Layanan Pemakaman - Makam.co.id',
             'active' => 'layanan',
