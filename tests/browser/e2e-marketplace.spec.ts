@@ -147,6 +147,9 @@ test.describe('E2E-MKT — cart', () => {
 
         await expect(page.getByText('Keranjang Anda masih kosong')).toBeVisible();
         await expect(page.getByRole('link', { name: 'Lihat katalog' })).toBeVisible();
+
+        const results = await new AxeBuilder({ page }).analyze();
+        expect(results.violations).toEqual([]);
     });
 
     test('an added item appears in the cart with a working remove control', async ({ page }) => {
@@ -210,6 +213,9 @@ test.describe('E2E-MKT — single-vendor conflict', () => {
         await page.goto('/marketplace/keranjang');
         const cartRowsAfter = await page.getByRole('table', { name: 'Isi keranjang' }).getByRole('row').count();
         expect(cartRowsAfter).toBe(cartRowsBefore);
+
+        const results = await new AxeBuilder({ page }).analyze();
+        expect(results.violations).toEqual([]);
     });
 
     test('the populated cart and conflict modal are accessible', async ({ page }) => {
