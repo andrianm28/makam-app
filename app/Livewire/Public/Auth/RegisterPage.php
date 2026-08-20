@@ -31,6 +31,18 @@ use Livewire\Component;
  * documented escape hatch for a mid-request guard mutation that happens
  * after something earlier in the same request already cached a guest
  * `ActorContext`.
+ *
+ * ---------------------------------------------------------------------------
+ * Accepted email-enumeration exception
+ * ---------------------------------------------------------------------------
+ * Unlike `LoginPage` and `ForgotPasswordPage`, which deliberately share one
+ * generic error/confirmation regardless of whether the email exists, this
+ * component's `'unique:users,email'` validation rule necessarily reveals
+ * whether an email is already registered. That is a standard, near-
+ * universal tradeoff for registration forms (a form has to say "that email
+ * is taken" somehow), blunted here by the 3/min/IP rate limit below. This
+ * is a deliberate, accepted exception to the rest of this branch's
+ * non-enumeration discipline, not an oversight.
  */
 final class RegisterPage extends Component
 {
@@ -50,17 +62,18 @@ final class RegisterPage extends Component
             $seconds = RateLimiter::availableIn($key);
 
             $this->addError('email', "Terlalu banyak percobaan pendaftaran. Coba lagi dalam {$seconds} detik.");
+            $this->reset('password', 'password_confirmation');
 
             return;
         }
-
-        RateLimiter::hit($key, 60);
 
         $this->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'confirmed', Password::defaults()],
         ]);
+
+        RateLimiter::hit($key, 60);
 
         $user = User::query()->create([
             'name' => $this->name,

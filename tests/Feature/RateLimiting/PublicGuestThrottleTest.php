@@ -71,4 +71,60 @@ final class PublicGuestThrottleTest extends TestCase
         // A different IP has its own, untouched budget.
         $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.2'])->get('/')->assertOk();
     }
+
+    /**
+     * The IP floor added to the authenticated arm of `public-guest`
+     * (`AppServiceProvider::boot()`'s own doc block): without it, one IP
+     * could register many accounts (registration is 3/min/IP) and each
+     * fresh account would get its own untouched 120/min budget, making the
+     * per-user limit alone a bypass narrowed, not closed. This proves the
+     * IP-keyed limit is shared across DIFFERENT authenticated users from
+     * the SAME IP, not just tracked per user: two users each make 50
+     * requests (well under their own individual 120/min budget) from the
+     * same test-client IP, then a third user's requests trip the shared
+     * IP-keyed limit well before that third user's OWN per-user counter
+     * gets anywhere near 120 — proving the block came from the IP floor,
+     * not that user's own budget.
+     */
+    public function test_many_authenticated_users_from_the_same_ip_eventually_trip_the_shared_ip_floor(): void
+    {
+        $userOne = User::factory()->create();
+        $this->actingAs($userOne);
+        for ($i = 0; $i < 50; $i++) {
+            $this->get('/')->assertOk();
+        }
+
+        $userTwo = User::factory()->create();
+        $this->actingAs($userTwo);
+        for ($i = 0; $i < 50; $i++) {
+            $this->get('/')->assertOk();
+        }
+
+        // The shared IP-keyed bucket is now at 100/120. A third, distinct
+        // user — with its OWN per-user counter starting fresh at 0 — trips
+        // the IP floor after only ~20 more requests, long before that
+        // user's own 120/min budget would ever be a factor.
+        $userThree = User::factory()->create();
+        $this->actingAs($userThree);
+
+        $blockedAt = null;
+        for ($i = 0; $i < 50; $i++) {
+            $response = $this->get('/');
+
+            if ($response->getStatusCode() === 429) {
+                $blockedAt = $i;
+
+                break;
+            }
+
+            $response->assertOk();
+        }
+
+        $this->assertNotNull($blockedAt, 'Expected the shared IP-keyed limit to eventually block a request.');
+        $this->assertLessThan(
+            120,
+            $blockedAt,
+            "The third user's own per-user budget is 120/min; a block this early can only be the shared IP floor.",
+        );
+    }
 }

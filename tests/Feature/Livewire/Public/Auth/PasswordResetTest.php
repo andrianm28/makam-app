@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Livewire\Public\Auth;
 
 use App\Livewire\Public\Auth\ForgotPasswordPage;
+use App\Livewire\Public\Auth\LoginPage;
 use App\Livewire\Public\Auth\ResetPasswordPage;
 use App\Models\User;
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -120,6 +121,63 @@ final class PasswordResetTest extends TestCase
         $this->assertFalse(auth()->check());
     }
 
+    /**
+     * A stolen `remember_web_...` recaller cookie must stop authenticating
+     * the moment its owner resets their password — this branch's own
+     * `LoginPage` ships remember-me, so this is a real gap, not a
+     * theoretical one. Simplest sufficient proof (per the fix-wave brief):
+     * assert the `remember_token` differs after a successful reset from
+     * its value before, rather than simulating the full cookie round trip.
+     */
+    public function test_a_successful_reset_rotates_the_remember_token(): void
+    {
+        $user = User::factory()->create(['password' => 'old-password']);
+
+        Livewire::test(LoginPage::class)
+            ->set('email', $user->email)
+            ->set('password', 'old-password')
+            ->set('remember', true)
+            ->call('login')
+            ->assertRedirect('/');
+
+        $user->refresh();
+        $originalRememberToken = $user->remember_token;
+        $this->assertNotEmpty($originalRememberToken, 'The remember-me login must set a remember_token to rotate.');
+
+        $token = Password::broker()->createToken($user);
+
+        Livewire::test(ResetPasswordPage::class, ['token' => $token])
+            ->set('email', $user->email)
+            ->set('password', 'a-brand-new-password')
+            ->set('password_confirmation', 'a-brand-new-password')
+            ->call('reset')
+            ->assertRedirect(route('login'));
+
+        $user->refresh();
+
+        $this->assertNotEmpty($user->remember_token);
+        $this->assertNotSame($originalRememberToken, $user->remember_token);
+    }
+
+    public function test_reset_password_mount_does_not_crash_on_an_array_shaped_email_query_parameter(): void
+    {
+        $response = $this->get('/reset-password/some-token?email[]=x');
+
+        $response->assertOk();
+    }
+
+    /**
+     * The 4th call landing on "nothing sent" is ambiguous by itself: it
+     * could be this component's own `RateLimiter` blocking the attempt, or
+     * it could be Laravel's `PasswordBroker`'s own 60s per-user throttle
+     * (`config/auth.php`'s `'throttle' => 60`) blocking it instead — both
+     * produce the identical "no notification" outcome. `linkSent` is what
+     * discriminates them: the component ALWAYS sets it to `true` after
+     * calling the broker, regardless of the broker's own result, so
+     * `linkSent === false` plus a validation error can only come from THIS
+     * component's own limiter short-circuiting before the broker is ever
+     * called.
+     */
     public function test_the_fourth_send_reset_link_attempt_within_sixty_seconds_is_blocked(): void
     {
         Notification::fake();
@@ -137,7 +195,9 @@ final class PasswordResetTest extends TestCase
 
         Livewire::test(ForgotPasswordPage::class)
             ->set('email', $user->email)
-            ->call('sendResetLink');
+            ->call('sendResetLink')
+            ->assertHasErrors(['email'])
+            ->assertSet('linkSent', false);
 
         Notification::assertNothingSent();
     }

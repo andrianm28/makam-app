@@ -32,6 +32,20 @@ final class LoginPageTest extends TestCase
         $this->withoutVite();
     }
 
+    /**
+     * `ResetPasswordPage::reset()` flashes `session('status')` before
+     * redirecting to `route('login')` — a user completing a reset must see
+     * that confirmation on `/masuk`, not silence.
+     */
+    public function test_a_flashed_status_message_renders_on_the_login_page(): void
+    {
+        $response = $this->withSession(['status' => 'Kata sandi berhasil direset. Silakan masuk.'])
+            ->get('/masuk');
+
+        $response->assertOk();
+        $response->assertSee('Kata sandi berhasil direset. Silakan masuk.');
+    }
+
     public function test_correct_credentials_authenticate_and_redirect_to_home(): void
     {
         $user = User::factory()->create(['password' => 'password']);

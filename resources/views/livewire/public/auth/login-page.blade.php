@@ -28,6 +28,10 @@
                 </p>
             </div>
 
+            @if (session('status'))
+                <x-mk.alert intent="success" class="mb-4">{{ session('status') }}</x-mk.alert>
+            @endif
+
             <x-mk.card class="flex flex-col gap-4 p-6">
                 <form wire:submit="login" class="space-y-4" novalidate>
                     <x-mk.field

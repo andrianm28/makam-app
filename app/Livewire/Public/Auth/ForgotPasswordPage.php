@@ -22,9 +22,11 @@ use Livewire\Component;
  * password vs. unknown email).
  *
  * Rate limiting mirrors `RegisterPage::register()`'s idiom, not
- * `LoginPage::login()`'s: the hit is unconditional on every attempt
- * (there is no success/failure branch to hit on here, unlike a login
- * attempt), checked before validation.
+ * `LoginPage::login()`'s: the hit is unconditional on every VALIDATED
+ * attempt (there is no success/failure branch to hit on here, unlike a
+ * login attempt) — the lockout check runs before validation, but the hit
+ * itself runs after `validate()` succeeds, so an ordinary typo (a
+ * malformed email) does not burn the caller's limited attempt budget.
  *
  * No `ActorContextResolver::forget()` here — no guard mutation happens
  * anywhere in this component.
@@ -47,11 +49,11 @@ final class ForgotPasswordPage extends Component
             return;
         }
 
-        RateLimiter::hit($key, 60);
-
         $this->validate([
             'email' => ['required', 'email'],
         ]);
+
+        RateLimiter::hit($key, 60);
 
         // The return value is deliberately never branched on for display —
         // see this class's own doc block. Both a known and an unknown email

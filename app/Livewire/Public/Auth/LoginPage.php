@@ -56,6 +56,7 @@ final class LoginPage extends Component
             $seconds = RateLimiter::availableIn($key);
 
             $this->addError('email', "Terlalu banyak percobaan masuk. Coba lagi dalam {$seconds} detik.");
+            $this->reset('password');
 
             return;
         }
@@ -64,6 +65,7 @@ final class LoginPage extends Component
             RateLimiter::hit($key, 60);
 
             $this->addError('email', 'Email atau kata sandi salah.');
+            $this->reset('password');
 
             return;
         }

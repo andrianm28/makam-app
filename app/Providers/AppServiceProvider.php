@@ -78,7 +78,7 @@ class AppServiceProvider extends ServiceProvider
         //
         // Authenticated arm: `Limit::none()` was the original default here,
         // exempting every authenticated request from this limiter entirely.
-        // That stopped being harmless the moment `/akun/daftar` (Task 2 of
+        // That stopped being harmless the moment `/daftar` (Task 2 of
         // the `/akun` account area,
         // `.superpowers/sdd/2026-08-20-akun-auth-foundation/task-2-brief.md`)
         // let a guest self-authenticate on a public route: "create a free
@@ -90,6 +90,16 @@ class AppServiceProvider extends ServiceProvider
         // many round trips) while closing the bypass with a generous but
         // finite ceiling.
         //
+        // The authenticated arm also carries an IP floor
+        // (`Limit::perMinute(120)->by($request->ip())`, ALL limits in the
+        // returned array must pass): registration is only rate-limited to
+        // 3/min/IP, so without an IP-keyed limit here, one IP could mint
+        // many accounts and give each one its own fresh 120/min budget —
+        // narrowing the bypass instead of closing it. The IP floor shares
+        // one bucket across every authenticated user from the same IP,
+        // closing that gap while still leaving a single real customer
+        // comfortably inside 120/minute.
+        //
         // 60/minute per IP (guest arm) is deliberately generous: a real
         // visitor filling the 9-step booking wizard makes tens of Livewire
         // round trips (`wire:model` updates plus each `saveStepN` call)
@@ -99,11 +109,14 @@ class AppServiceProvider extends ServiceProvider
         // unthrottled anonymous surface — not a precise capacity figure (no
         // load test has been run; `performance-and-capacity.md`'s profiles
         // remain unexecuted).
-        RateLimiter::for('public-guest', static function (Request $request): Limit {
+        RateLimiter::for('public-guest', static function (Request $request): array|Limit {
             $user = $request->user();
 
             if ($user !== null) {
-                return Limit::perMinute(120)->by('user:'.$user->getAuthIdentifier());
+                return [
+                    Limit::perMinute(120)->by('user:'.$user->getAuthIdentifier()),
+                    Limit::perMinute(120)->by($request->ip()),
+                ];
             }
 
             return Limit::perMinute(60)->by($request->ip());
