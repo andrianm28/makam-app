@@ -7,6 +7,7 @@ namespace App\Domain\OrderWorkflow\Models;
 use App\Domain\Booking\Models\BookingDraft;
 use App\Domain\OrderWorkflow\Exceptions\OrderIsGuardedException;
 use App\Domain\OrderWorkflow\OrderStatus;
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -300,5 +301,22 @@ final class Order extends Model
     public function statusEvents(): HasMany
     {
         return $this->hasMany(OrderStatusEvent::class, 'order_id');
+    }
+
+    public function parties(): HasMany
+    {
+        return $this->hasMany(OrderParty::class, 'order_id');
+    }
+
+    /**
+     * Every order the given user has a `order_parties` row on, most recent
+     * first — the filter behind `/akun/pesanan`, matching `/akun/draft`'s
+     * own most-recent-first convention from PR 2.
+     */
+    #[Scope]
+    protected function forUser(Builder $query, int $userId): void
+    {
+        $query->whereHas('parties', fn (Builder $q) => $q->where('user_id', $userId))
+            ->orderByDesc('created_at');
     }
 }
