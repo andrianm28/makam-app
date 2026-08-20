@@ -8,6 +8,7 @@ use App\Livewire\Public\Auth\LoginPage;
 use App\Models\User;
 use App\Platform\IdentityAccess\ActorContextResolver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cookie;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -105,9 +106,20 @@ final class LoginPageTest extends TestCase
         $this->assertFalse(auth()->check());
     }
 
-    public function test_the_remember_checkbox_authenticates_via_remember_token(): void
+    /**
+     * `auth()->viaRemember()` cannot be asserted here: `SessionGuard::attempt()`
+     * -> `login($user, $remember)` -> `setUser($user)` sets the user directly
+     * on the SAME guard instance and never touches `$this->viaRemember` — that
+     * flag is only set inside `userFromRecaller()`, which only runs on a FRESH
+     * guard resolution with no live session. So this asserts the OTHER thing
+     * `login($user, $remember)` actually does when `$remember` is true: queue
+     * the `remember_web_...` recaller cookie (`createRememberTokenIfDoesntExist`
+     * + `queueRecallerCookie`) — the brief's own named alternative.
+     */
+    public function test_the_remember_checkbox_queues_the_remember_cookie(): void
     {
         $user = User::factory()->create(['password' => 'password']);
+        $recallerName = auth()->guard('web')->getRecallerName();
 
         Livewire::test(LoginPage::class)
             ->set('email', $user->email)
@@ -117,12 +129,13 @@ final class LoginPageTest extends TestCase
             ->assertRedirect('/');
 
         $this->assertTrue(auth()->check());
-        $this->assertTrue(auth()->viaRemember());
+        $this->assertTrue(Cookie::hasQueued($recallerName));
     }
 
-    public function test_without_the_remember_checkbox_the_session_is_not_authenticated_via_remember_token(): void
+    public function test_without_the_remember_checkbox_no_remember_cookie_is_queued(): void
     {
         $user = User::factory()->create(['password' => 'password']);
+        $recallerName = auth()->guard('web')->getRecallerName();
 
         Livewire::test(LoginPage::class)
             ->set('email', $user->email)
@@ -132,7 +145,7 @@ final class LoginPageTest extends TestCase
             ->assertRedirect('/');
 
         $this->assertTrue(auth()->check());
-        $this->assertFalse(auth()->viaRemember());
+        $this->assertFalse(Cookie::hasQueued($recallerName));
     }
 
     /**
