@@ -307,13 +307,48 @@ test.describe('E2E-MKT — checkout and manual payment', () => {
         // Manual payment section appears in place, same page, no navigation.
         await expect(page.getByRole('heading', { name: 'Pembayaran transfer manual' })).toBeVisible();
         await page.getByLabel('Nomor referensi transfer').fill('TRX-E2E-MKT-0001');
-        await page.getByRole('button', { name: 'Kirim bukti transfer' }).click();
 
-        // Re-submitting is a no-op (idempotency) — button remains usable,
-        // no duplicate order/section appears. Assert the order summary is
-        // still singular, not that a specific post-submit message renders,
-        // since Checkout.php's own doc block only promises the create side
-        // is idempotent, not a particular UI acknowledgement copy.
+        const submitProofButton = page.getByRole('button', { name: 'Kirim bukti transfer' });
+        await submitProofButton.click();
+
+        // Livewire's `SupportDisablingFormsDuringRequest` feature (verified
+        // directly against vendor/livewire/livewire/dist/livewire.js, not
+        // assumed — it isn't documented in the PHP-side source tree) disables
+        // every `wire:submit` form's own submit button for the DURATION of
+        // the request, and only re-enables it once the commit's response
+        // phase completes — i.e. once the full round trip (server call + DOM
+        // morph) is actually done, not just once the click event fired.
+        // Waiting for this button to become enabled again is a real barrier:
+        // it forces the assertions below to run AFTER submitManualProof()
+        // has genuinely returned, so the negative assertion that follows
+        // isn't just trivially true because the round trip hasn't happened
+        // yet.
+        await expect(submitProofButton).toBeEnabled();
+
+        // Checkout.php's submitManualProof() (read directly against the
+        // source, not assumed) has exactly two outcomes once that round trip
+        // completes: `$manualSubmissionError` stays null — the only way that
+        // happens is that `SubmitManualPayment::submit()` inside the try
+        // block ran to completion and wrote its `payment_verifications` row,
+        // since nothing else in the method's body is reachable without going
+        // through that call — or the catch(Throwable) branch set it to the
+        // fixed failure copy and checkout.blade.php renders the danger
+        // alert below the field. Nothing else in the component's rendered
+        // output changes on success (the reference field is not cleared, no
+        // success badge exists — moving `payment_state` is deliberately
+        // deferred to the verifier lane per SubmitManualPayment's own doc
+        // block, so the order-tracking badge doesn't move either), so the
+        // absence of this alert — checked only now that the round trip is
+        // guaranteed complete — is the one real, meaningful success signal
+        // available anywhere in this screen's DOM. This replaces the
+        // previous assertion here, which only re-checked the order-placed
+        // banner from several lines earlier and would have stayed green even
+        // if manual payment submission silently failed every time.
+        await expect(page.getByText('Bukti transfer belum terkirim')).toHaveCount(0);
+
+        // The order-placed banner and tracking link are still the same ones
+        // from before the manual-proof submit — a full-page regression from
+        // that submit would fail this too.
         await expect(page.getByRole('heading', { name: 'Pesanan diterima' }).or(page.getByText('Pesanan diterima'))).toBeVisible();
 
         // Follow the tracking link and confirm both status indicators render
@@ -362,6 +397,9 @@ test.describe('E2E-MKT — checkout and manual payment', () => {
         // wrong here (verified directly against both Blade sources, not
         // assumed from the brief). Assert the disabled state instead.
         await expect(page.getByRole('button', { name: 'Buat pesanan' })).toBeDisabled();
+
+        const results = await new AxeBuilder({ page }).analyze();
+        expect(results.violations).toEqual([]);
     });
 
     test('an unknown order number reaches an honest not-found state, never a leak', async ({ page }) => {
@@ -369,6 +407,9 @@ test.describe('E2E-MKT — checkout and manual payment', () => {
 
         await expect(page.getByText('Pesanan tidak ditemukan')).toBeVisible();
         await expect(page.getByRole('link', { name: 'Lihat katalog' })).toBeVisible();
+
+        const results = await new AxeBuilder({ page }).analyze();
+        expect(results.violations).toEqual([]);
     });
 
     test('checkout, its post-order state, and order tracking are all accessible', async ({ page }) => {
