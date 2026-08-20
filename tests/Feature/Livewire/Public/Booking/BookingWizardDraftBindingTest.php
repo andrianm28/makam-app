@@ -15,6 +15,7 @@ use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\ServiceCatalog\ServiceCode;
 use App\Livewire\Public\Booking\BookingWizard;
+use App\Models\User;
 use App\Platform\FeatureGate\Contracts\GateRegistrySource;
 use App\Platform\FeatureGate\FeatureGateResolver;
 use App\Platform\FeatureGate\GateRegistrySnapshot;
@@ -322,6 +323,156 @@ final class BookingWizardDraftBindingTest extends TestCase
     }
 
     // =====================================================================
+    // Ownership rescue — the deliberate reversal of the session-only ruling
+    //
+    // `BookingDraftBinding`'s doc block used to rule out cross-device/
+    // cross-session resume entirely. That ruling predates customer accounts.
+    // `BookingWizard::resolveDraftById()` now additionally accepts a session
+    // secret miss when the current authenticated user IS the draft's owner
+    // (`$candidate->user_id === auth()->id()`) — a strictly stronger proof
+    // than the session secret it supplements, since it cannot be
+    // reconstructed from a shared URL. A guest, or an authenticated user who
+    // is NOT the owner, must still be denied exactly as before.
+    // =====================================================================
+
+    public function test_an_authenticated_owner_resumes_their_own_draft_via_mount_after_losing_the_session_secret(): void
+    {
+        $owner = User::factory()->create();
+        $draftId = $this->victimDraftWithCustomerData();
+
+        BookingDraft::query()->where('id', $draftId)->update(['user_id' => $owner->id]);
+
+        $oldHash = DB::table('booking_drafts')->where('id', $draftId)->value('resume_secret_hash');
+
+        $this->becomeADifferentAuthenticatedVisitor($owner);
+
+        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->assertSet('draftId', $draftId)
+            ->assertSet('customerFullName', self::VICTIM_NAME)
+            ->assertSet('customerMobile', self::VICTIM_MOBILE)
+            ->assertSet('customerEmail', self::VICTIM_EMAIL)
+            ->assertSet('customerAddress', self::VICTIM_ADDRESS)
+            ->assertSet('currentStep', BookingWizardStep::DECEASED_DATA);
+
+        $newHash = DB::table('booking_drafts')->where('id', $draftId)->value('resume_secret_hash');
+
+        $this->assertIsString($newHash);
+        $this->assertNotSame(
+            $oldHash,
+            $newHash,
+            'A rescued resume must mint a fresh secret via BookingDraftBinding::issue(), proving the rescue path actually ran.',
+        );
+    }
+
+    public function test_an_authenticated_owner_resumes_their_own_draft_via_save_step_one_after_losing_the_session_secret(): void
+    {
+        $owner = User::factory()->create();
+        $draftId = $this->draftThroughStep4();
+
+        BookingDraft::query()->where('id', $draftId)->update(['user_id' => $owner->id]);
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->assertSet('draftId', $draftId);
+
+        $oldHash = DB::table('booking_drafts')->where('id', $draftId)->value('resume_secret_hash');
+
+        $this->becomeADifferentAuthenticatedVisitor($owner);
+
+        $component->call('saveStep1', LaunchCityCode::BOGOR)
+            ->assertHasNoErrors()
+            ->assertSet('draftId', $draftId)
+            ->assertSet('city', LaunchCityCode::BOGOR);
+
+        $this->assertSame(
+            1,
+            BookingDraft::query()->count(),
+            'The ownership rescue must resume the SAME draft, not silently start a second one.',
+        );
+
+        $newHash = DB::table('booking_drafts')->where('id', $draftId)->value('resume_secret_hash');
+
+        $this->assertIsString($newHash);
+        $this->assertNotSame($oldHash, $newHash);
+    }
+
+    public function test_a_guest_who_loses_the_session_secret_still_gets_a_brand_new_draft_from_save_step_one(): void
+    {
+        $draftId = $this->draftThroughStep4();
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->assertSet('draftId', $draftId);
+
+        $this->becomeADifferentVisitor();
+
+        $newDraftId = $component->call('saveStep1', LaunchCityCode::BOGOR)
+            ->assertHasNoErrors()
+            ->get('draftId');
+
+        $this->assertIsString($newDraftId);
+        $this->assertNotSame(
+            $draftId,
+            $newDraftId,
+            'currentOrNewDraft() must not resume a draft the current guest session cannot prove ownership of.',
+        );
+        $this->assertSame(
+            2,
+            BookingDraft::query()->count(),
+            'A rescue miss must fall back to a genuinely new draft, not reuse the old one.',
+        );
+    }
+
+    public function test_an_authenticated_non_owner_cannot_resume_someone_elses_draft_via_mount(): void
+    {
+        $owner = User::factory()->create();
+        $attacker = User::factory()->create();
+
+        $draftId = $this->victimDraftWithCustomerData();
+        BookingDraft::query()->where('id', $draftId)->update(['user_id' => $owner->id]);
+
+        $this->becomeADifferentAuthenticatedVisitor($attacker);
+
+        $stranger = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
+
+        $stranger->assertSet('draftId', null)
+            ->assertSet('customerFullName', '')
+            ->assertSet('customerEmail', '')
+            ->assertSet('customerMobile', '')
+            ->assertSet('customerAddress', '')
+            ->assertSet('currentStep', BookingWizardStep::LOCATION);
+
+        $stranger->assertDontSee(self::VICTIM_NAME)
+            ->assertDontSee(self::VICTIM_MOBILE)
+            ->assertDontSee(self::VICTIM_EMAIL)
+            ->assertDontSee(self::VICTIM_ADDRESS);
+    }
+
+    public function test_an_authenticated_non_owner_cannot_resume_someone_elses_draft_via_save_step_one(): void
+    {
+        $owner = User::factory()->create();
+        $attacker = User::factory()->create();
+
+        $draftId = $this->draftThroughStep4();
+        BookingDraft::query()->where('id', $draftId)->update(['user_id' => $owner->id]);
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->assertSet('draftId', $draftId);
+
+        $this->becomeADifferentAuthenticatedVisitor($attacker);
+
+        $newDraftId = $component->call('saveStep1', LaunchCityCode::BOGOR)
+            ->assertHasNoErrors()
+            ->get('draftId');
+
+        $this->assertIsString($newDraftId);
+        $this->assertNotSame(
+            $draftId,
+            $newDraftId,
+            'An authenticated user must never be able to resume a draft owned by someone else.',
+        );
+        $this->assertSame(2, BookingDraft::query()->count());
+    }
+
+    // =====================================================================
     // Reaching (and re-reaching) the read-only steps
     //
     // Steps 5 and 9 are read-only and therefore never recorded in
@@ -489,6 +640,20 @@ final class BookingWizardDraftBindingTest extends TestCase
     private function becomeADifferentVisitor(): void
     {
         Session::flush();
+    }
+
+    /**
+     * A different, but genuinely AUTHENTICATED, visitor — as opposed to
+     * `becomeADifferentVisitor()`, which also logs out any authenticated
+     * user because session-guard state lives in session data. `Session::
+     * flush()` first, then `actingAs()`, so the new auth state does not
+     * inherit anything from the previous session (including any resume
+     * secret it held).
+     */
+    private function becomeADifferentAuthenticatedVisitor(User $user): void
+    {
+        Session::flush();
+        $this->actingAs($user);
     }
 
     private function withClosedPaymentGate(): void

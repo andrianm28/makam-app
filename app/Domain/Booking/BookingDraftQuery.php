@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Domain\Booking;
 
 use App\Domain\Booking\Models\BookingDraft;
+use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\ServiceCatalog\Models\ServiceDefinition;
 use App\Platform\FinancialLedger\Money;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Str;
 
 /**
@@ -68,6 +70,23 @@ final class BookingDraftQuery
         }
 
         return $draft;
+    }
+
+    /**
+     * A user's own open drafts — the ones without a matching order yet — for
+     * `/akun/draft`'s "Lanjutkan" list. A subquery against `Order`, not a new
+     * `BookingDraft::order()` inverse relation: `Order` already depends on
+     * `BookingDraft` one-directionally, and an inverse relation would create
+     * a cross-domain model cycle between `Domain\Booking` and
+     * `Domain\OrderWorkflow`.
+     */
+    public static function openForUser(int $userId): Collection
+    {
+        return BookingDraft::query()
+            ->where('user_id', $userId)
+            ->whereNotIn('id', Order::query()->whereNotNull('booking_draft_id')->select('booking_draft_id'))
+            ->orderByDesc('updated_at')
+            ->get();
     }
 
     /**

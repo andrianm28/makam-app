@@ -24,11 +24,20 @@ use Illuminate\Support\Str;
  * lives on the row, so a database read alone cannot reconstruct it. Resuming
  * requires proving possession of the secret, not merely knowing the id.
  *
- * Deliberately session-only: the coordinator's ruling for this lane is that
- * cross-device resume is NOT a requirement. Opening the link on another
- * device is therefore expected to fail closed, and that is the intended
- * trade — a resume token that survived a shared URL would reintroduce the
- * exact hole this closes.
+ * Session secret OR proven authenticated ownership — never a URL alone. The
+ * original ruling for this lane was session-only, full stop: cross-device
+ * resume was NOT a requirement, and opening the link on another device was
+ * expected to fail closed. That predates customer accounts existing at all.
+ * Now that a draft can carry a `user_id`, `App\Livewire\Public\Booking\
+ * BookingWizard::resolveDraftById()` additionally accepts a session-secret
+ * miss when the current authenticated user IS the draft's owner
+ * (`$candidate->user_id === auth()->id()`) — a strictly stronger proof than
+ * the session secret, since unlike the secret it cannot be reconstructed
+ * from a shared URL. A successful ownership rescue still calls `issue()`
+ * below, re-establishing normal session-bound resume for the rest of that
+ * visit. Possession of the id alone is still never authorisation: a guest,
+ * or an authenticated user who is not the owner, fails closed exactly as
+ * before.
  *
  * Fails closed everywhere: an absent session entry, an absent hash, or a
  * mismatch all deny. A draft created before this binding existed has a null
