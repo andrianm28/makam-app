@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\VendorFulfillment\Models;
 
 use App\Domain\CareSubscription\Models\CarePlan;
+use App\Domain\Marketplace\Models\Vendor;
 use App\Domain\VendorFulfillment\WorkOrderStatus;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -81,5 +82,13 @@ final class WorkOrder extends Model
     public function evidence(): HasMany
     {
         return $this->hasMany(WorkEvidence::class, 'work_order_id');
+    }
+
+    /**
+     * @return BelongsTo<Vendor, $this>
+     */
+    public function vendor(): BelongsTo
+    {
+        return $this->belongsTo(Vendor::class, 'vendor_id');
     }
 }
