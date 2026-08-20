@@ -27,6 +27,7 @@ use App\Platform\Payment\PaymentAuditActions;
 use App\Platform\Payment\ProviderEventType;
 use App\Platform\Payment\SessionState;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 
 /**
  * Task 5 — the dual-target settlement dispatcher: everything that happens
@@ -188,7 +189,7 @@ final readonly class ApplyPaymentSettlement
             return;
         }
 
-        $cycle = SubscriptionCycle::query()->find($invoiceReference);
+        $cycle = Str::isUuid($invoiceReference) ? SubscriptionCycle::query()->find($invoiceReference) : null;
 
         if (! $cycle instanceof SubscriptionCycle) {
             throw SettlementTargetUnresolvableException::becauseNoOrder($invoiceReference);
