@@ -18,6 +18,7 @@ use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\OrderWorkflow\ProductType;
 use App\Domain\PreNeed\Models\PreNeedInterest;
 use App\Domain\PreNeed\PreNeedInterestStatus;
+use App\Models\User;
 use App\Platform\FeatureGate\Contracts\GateRegistrySource;
 use App\Platform\FeatureGate\GateRegistrySnapshot;
 use App\Platform\FeatureGate\GateState;
@@ -93,6 +94,27 @@ final class SubmitBookingDraftTest extends TestCase
 
         // The ordering party is recorded against the order.
         self::assertSame(1, OrderParty::query()->where('order_id', $order->getKey())->count());
+    }
+
+    /**
+     * The join between `StartBookingDraft` (sets `booking_drafts.user_id`
+     * from the authenticated actor) and this Action (reads it back onto
+     * `order_parties.user_id`, the column `Order::forUser()` filters on for
+     * `/akun/pesanan`) had no direct test anywhere in this 3-PR series until
+     * now — see the final-review fix wave that added this test.
+     */
+    public function test_an_authenticated_customers_draft_attributes_its_order_party_to_them(): void
+    {
+        $user = User::factory()->create();
+        $draft = $this->draft(BookingServiceType::NEW_GRAVE);
+        $draft->forceFill(['user_id' => $user->getKey()])->save();
+
+        $order = app(SubmitBookingDraft::class)($draft, 'idem-user-attribution-1');
+
+        self::assertSame(
+            $user->getKey(),
+            OrderParty::query()->where('order_id', $order->getKey())->firstOrFail()->user_id,
+        );
     }
 
     /**

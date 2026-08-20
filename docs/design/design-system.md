@@ -82,6 +82,8 @@ Why two layers: `--color-primary-600` says *what*, `--mk-text-link` says *why*. 
 
 **(b) Secondary is constrained, not equal — Sandstone retired, Leaf inherits the cage.** The philosophy text reads the mark's eight radial leaves as "life, growth, renewal," so `secondary` becomes **Leaf** green (`#2E7D32`, hue ≈123°), replacing Sandstone. The restricted-usage cage is unchanged and, if anything, matters *more* now: Leaf sits only ≈23° from `success` (146°) — closer than Sandstone ever sat to `warning` (was ≈6.5°) — so any Leaf fill would misread as a status success. Secondary stays **restricted by usage**: shades 50–200 as surface tint, 700–900 as text on those tints, 300–400 as decorative rules/icons. It is **never** a filled badge, alert, or button. A restrained palette is also correct for this domain: one brand colour, one accent, four semantics, neutrals.
 
+A `secondary-100` tile carrying a `secondary-800` icon (`<x-mk.icon-medallion tone="leaf">`, added 19 Aug 2026) is a surface-tint-plus-text usage, not a fill — it stays inside the cage, not an exception to it. It is `aria-hidden`, decorative only, and never appears adjacent to order/payment/availability data where a status reading could attach to it.
+
 **(c) Danger is muted brick `#A32435`, not a bright red.** Users on this site are frequently in the first hours of bereavement. A saturated alarm red is hostile. `#A32435` holds 7.34:1 on white — it is *more* legible than a typical bright red while reading as serious rather than panicked. (Hue tuned −11° from the v0.1 value, `#A32A24`, by ADR-0034 D4 — see the danger row above.)
 
 **"Urgent" is an alias, not a new colour.** `information-architecture.md` §4 requires `Urgent` to have visual priority, and `AGENTS.md` forbids implying a service claim while gate `G-OPS-01` is closed. So `--mk-intent-urgent-*` aliases the warning family with a strong left border, and **must always ship with an explicit availability label**. No new hue, no implied promise.
@@ -389,13 +391,31 @@ Checkbox/radio: 20 px box inside a **44 px** clickable row; the whole row is the
 
 **Base:** `bg-white rounded-lg border border-neutral-200 shadow-sm`
 **Padding:** mobile `p-4`, `md:p-6`.
-**Interactive** (whole card is a link — TPU/TPS card, product card): add `hover:border-primary-300 hover:shadow-md focus-within:ring-2 focus-within:ring-primary-600 focus-within:ring-offset-2 transition-shadow duration-fast`.
+**Interactive** (whole card is a link — TPU/TPS card, product card): add `hover:border-primary-300 hover:shadow-md focus-within:ring-2 focus-within:ring-primary-600 focus-within:ring-offset-2 transition-[border-color,box-shadow,background-color] duration-fast`. A card with no `intent` set also gets `hover:bg-primary-50` (added 19 Aug 2026, homepage visual refresh) — an intent card keeps its own `$intentSurfaces` background instead, never competing with it. Colour-only; no transform (§5's interaction table: hover Transform is `none`).
 
 Interactive cards must contain **exactly one** focusable anchor covering the title, with the rest of the card as a pseudo-element overlay — never nest multiple links inside a clickable card (keyboard trap + confusing tab order).
 
 **Variant — Cemetery card (Booking Step 2, PUB-011).** Must show: type badge (TPU/TPS), name, primary photo, address, facilities, price range **with source**, availability status, and the `"Perlu konfirmasi"` label when indicative. Availability uses §3.7 intent mapping; an indicative price is `neutral`, **never** `success`.
 
 **Variant — Service/add-on row (Step 4, PUB-013).** Name, description, **fulfillment owner** (platform / operator / vendor — required by `service-catalog.md`), price, availability, quantity/variant control. An unavailable item stays visible only with a reason and an alternative; render it `bg-neutral-50 border-neutral-200` with a `neutral` badge — **not** `danger` (it is not an error).
+
+### 3.3a Icon Medallion — `<x-mk.icon-medallion>` (added 19 Aug 2026, homepage visual refresh)
+
+A decorative icon-or-numeral-on-a-tinted-tile figure — the "livelier" device the homepage visual
+refresh introduced, used inside `<x-mk.card>`'s default slot (service cards, Cara Kerja steps,
+trust points), never as a standalone status indicator.
+
+**Props:** `icon` (`icon.*` component name; omit and use the default slot for a numeral instead)
+· `tone` (`earth` | `leaf`, closed list) · `size` (`md` 44px default | `lg` 52px).
+
+**Base:** `rounded-xl` (never `rounded-full` — §1.5 restricts that to avatars/stepper-dots/
+progress-tracks). `earth` → `bg-primary-100 text-primary-800`. `leaf` → `bg-secondary-100
+text-secondary-800` — a surface-tint usage already inside the Leaf cage (§1.2(b), §9.2 MUST-NOT
+#7), not an exception to it. Both pairs are asserted in `docs/design/verify-contrast.py`.
+
+Always `aria-hidden="true"` — decorative only, never a substitute for a real text label (same
+rule `<x-mk.badge>`'s `dot` prop follows). Never placed adjacent to order/payment/availability
+data, so it never carries a status reading despite `leaf` sitting near the `success` hue.
 
 ### 3.4 Modal and Bottom Sheet — `<x-mk.modal>`
 
@@ -865,12 +885,14 @@ Target: **WCAG 2.1 Level AA**. `lang="id"` on `<html>`.
 
 Verified by [`verify-contrast.py`](verify-contrast.py) against `resources/css/tokens.css`.
 
-Real output, re-run 17 Aug 2026 against the shipped Earth/Leaf `tokens.css` (ADR-0034):
+Real output, re-run 19 Aug 2026 (homepage visual refresh added 3 pairs — text on `secondary-50`,
+text-strong on `secondary-50`, focus ring on `surface-warm`) against the shipped Earth/Leaf
+`tokens.css` (ADR-0034):
 
 ```
 $ python3 docs/design/verify-contrast.py
 WCAG contrast verification — resources/css/tokens.css
-79 colour tokens parsed, 46 pairs asserted
+79 colour tokens parsed, 49 pairs asserted
 
 PASS   16.67  (min 4.5)  text-strong on surface-raised  #1A1F1F on #FFFFFF
 PASS   12.86  (min 4.5)  headings on surface-raised  #2D3333 on #FFFFFF
@@ -880,6 +902,8 @@ PASS    4.53  (min 4.5)  text-placeholder on surface-raised  #6F7878 on #FFFFFF
 PASS    8.39  (min 4.5)  text-default on surface-page  #444B4B on #F7F8F8
 PASS    8.23  (min 4.5)  text-default on surface-warm  #444B4B on #FAF5EF
 PASS   13.65  (min 4.5)  text-strong on secondary-100  #1A1F1F on #DCEDDD
+PASS    8.19  (min 4.5)  text-default on secondary-50  #444B4B on #F0F7F0
+PASS   15.30  (min 4.5)  text-strong on secondary-50  #1A1F1F on #F0F7F0
 PASS    3.96  (min 3.0)  text-disabled on surface-disabled  #6F7878 on #EEF0F0
 PASS   10.05  (min 4.5)  white on primary-600  #FFFFFF on #5D3A1F
 PASS   11.98  (min 4.5)  white on primary-700 (hover)  #FFFFFF on #4D3019
@@ -909,6 +933,7 @@ PASS    3.45  (min 3.0)  border-interactive on surface-page  #7F8787 on #F7F8F8
 PASS    3.39  (min 3.0)  border-interactive on surface-warm  #7F8787 on #FAF5EF
 PASS   10.05  (min 3.0)  focus ring on surface-raised  #5D3A1F on #FFFFFF
 PASS    9.44  (min 3.0)  focus ring on surface-page  #5D3A1F on #F7F8F8
+PASS    9.27  (min 3.0)  focus ring on surface-warm  #5D3A1F on #FAF5EF
 PASS    4.55  (min 3.0)  focus ring inverse on primary-600  #CDA882 on #5D3A1F
 PASS    7.34  (min 3.0)  border-error on surface-raised  #A32435 on #FFFFFF
 PASS    4.70  (min 3.0)  urgent border on urgent bg  #9A6300 on #FDF6EB
@@ -927,7 +952,7 @@ Hue separation of semantic families (600 shade):
   secondary   123.0 deg
   warning      38.6 deg
 
-RESULT: PASS — all 46 pairs meet WCAG 2.1 AA
+RESULT: PASS — all 49 pairs meet WCAG 2.1 AA
 ```
 
 Selected measured ratios (full output above):
@@ -1335,7 +1360,7 @@ A conflict between ranks is a **defect**. Rank 1 wins for values; rank 2 wins fo
 4. ❌ `outline: none` without a replacement focus ring.
 5. ❌ `opacity-50` for disabled states — it silently breaks contrast.
 6. ❌ Convey status by colour alone.
-7. ❌ Use `secondary` (**Leaf**) as a fill, badge, button, or alert. The rule stands from v0.1 — only the family changed (Sandstone → Leaf, ADR-0034).
+7. ❌ Use `secondary` (**Leaf**) as a fill, badge, button, or alert. The rule stands from v0.1 — only the family changed (Sandstone → Leaf, ADR-0034). *(A `secondary-100`-tile-with-`secondary-800`-icon decorative medallion, §1.2(b), is a surface-tint usage already inside the cage — not an exception to this rule.)*
 8. ❌ Add `dark:` utilities before OQ-07 is resolved.
 9. ❌ Rename, reorder, or hide a product label, route, menu item, or booking step (§0.1).
 10. ❌ Style a pending state as success, or claim a notification delivery without delivery state.

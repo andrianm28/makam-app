@@ -220,7 +220,7 @@ final class BookingWizard extends Component
             return;
         }
 
-        $draft = BookingDraftQuery::findBound($draftId);
+        $draft = $this->resolveDraftById($draftId);
 
         if ($draft === null) {
             // Unknown, tampered, purged — or real but belonging to a session
@@ -783,13 +783,50 @@ final class BookingWizard extends Component
     private function currentOrNewDraft(): BookingDraft
     {
         if ($this->draftId !== null) {
-            $existing = BookingDraftQuery::findBound($this->draftId);
+            $existing = $this->resolveDraftById($this->draftId);
             if ($existing !== null) {
                 return $existing;
             }
         }
 
-        return (new StartBookingDraft)();
+        return (new StartBookingDraft)(auth()->id());
+    }
+
+    /**
+     * Resolve a draft by id for a request-facing caller — the session
+     * secret proves it (`BookingDraftQuery::findBound()`), OR, failing that,
+     * the current authenticated user IS the draft's owner. The ownership
+     * check is a deliberate, narrow reversal of `BookingDraftBinding`'s
+     * original session-only ruling (see that class's doc block): an
+     * authenticated `$candidate->user_id === auth()->id()` match is a
+     * strictly stronger proof than the session secret it supplements, since
+     * it cannot be reconstructed from a mere shared URL the way the
+     * session-secret hole could. A successful rescue re-issues the binding
+     * (`BookingDraftBinding::issue()`), which also re-establishes normal
+     * session-bound resume for the rest of this visit.
+     *
+     * A guest, or an authenticated user who is not the owner, gets `null`
+     * here exactly as a stranger always has — this method draws no
+     * distinction between "unknown", "tampered", "not bound", and "real but
+     * not yours".
+     */
+    private function resolveDraftById(string $draftId): ?BookingDraft
+    {
+        $draft = BookingDraftQuery::findBound($draftId);
+
+        if ($draft !== null) {
+            return $draft;
+        }
+
+        $candidate = BookingDraftQuery::find($draftId);
+
+        if ($candidate !== null && auth()->check() && $candidate->user_id === auth()->id()) {
+            BookingDraftBinding::issue($candidate);
+
+            return $candidate;
+        }
+
+        return null;
     }
 
     public function render(): View

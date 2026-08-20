@@ -590,20 +590,23 @@ final class RecordPaymentReversalRouteTest extends TestCase
 
     public function test_an_unauthenticated_request_is_refused_by_the_auth_guard(): void
     {
-        // Same gap `VerifyManualPaymentRouteTest`'s own precedent
-        // documents — no `login` named route exists anywhere in this repo
-        // yet, so Laravel's default `Authenticate` middleware's
-        // `redirectTo()` throws `RouteNotFoundException` rather than
-        // silently letting the request through. Asserted as "definitely
-        // not a 2xx success" rather than a specific status, since the
-        // exact rendering of a missing named route is a
-        // framework/environment detail this test does not own.
+        // Updated by the `/akun` account area's auth-foundation PR
+        // (`.superpowers/sdd/2026-08-20-akun-auth-foundation/`), which
+        // registers the first real `login` named route this repo has ever
+        // had — exactly the "whichever future task builds the login UI"
+        // this test's own precedent (`VerifyManualPaymentRouteTest`)
+        // anticipated. Laravel's default `Authenticate` middleware's
+        // `redirectTo()` now resolves `route('login')` successfully instead
+        // of throwing `RouteNotFoundException`, so an unauthenticated
+        // request gets a clean redirect rather than an incidental 500 —
+        // that redirect (not a crash) is what actually proves the `auth`
+        // guard runs before this route's own logic.
         $response = $this->post($this->url('refund'), [
             'reference' => 'TRX-route-6',
             'reason' => 'Some reason',
         ]);
 
-        $response->assertStatus(500);
+        $response->assertRedirect(route('login'));
         $this->assertSame(0, PaymentReversal::query()->where('reference', 'TRX-route-6')->count());
     }
 
@@ -631,5 +634,36 @@ final class RecordPaymentReversalRouteTest extends TestCase
         ]);
 
         $this->assertSame(0, PaymentSession::query()->count());
+    }
+
+    /**
+     * `throttle:payment-reversal` (public-beta-release plan, Lane D4) —
+     * 5/minute per actor+ip. Reuses the "without a fresh authentication"
+     * fixture (same $user, repeated): that path is side-effect-free
+     * (redirects to the MFA challenge, writes no row), so it is safe to
+     * call 6 times in one test without the underlying business logic
+     * itself rejecting a repeat call for an unrelated reason (e.g. the
+     * unique reference constraint a real recorded reversal would trip).
+     */
+    public function test_the_route_is_rate_limited(): void
+    {
+        $user = User::factory()->create();
+        $this->grantRole($user, ActorRole::FINANCE);
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->actingAs($user)
+                ->post($this->url('refund'), [
+                    'reference' => 'TRX-route-throttle',
+                    'reason' => 'Customer requested a refund',
+                ])
+                ->assertRedirect(route('filament.admin.pages.mfa-challenge'));
+        }
+
+        $this->actingAs($user)
+            ->post($this->url('refund'), [
+                'reference' => 'TRX-route-throttle',
+                'reason' => 'Customer requested a refund',
+            ])
+            ->assertStatus(429);
     }
 }

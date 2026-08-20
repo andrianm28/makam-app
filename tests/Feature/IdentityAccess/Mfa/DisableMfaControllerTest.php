@@ -116,4 +116,28 @@ final class DisableMfaControllerTest extends TestCase
             'Passing the gate is not proof of re-authentication; only a completed challenge is.',
         );
     }
+
+    /**
+     * `throttle:mfa-disable` (public-beta-release plan, Lane D4) —
+     * 5/minute per actor+ip. Reuses the "without a fresh authentication"
+     * fixture (same $user and $enrolment, repeated): that path is
+     * side-effect-free (redirects to the challenge, the enrolment stays
+     * CONFIRMED), so it is safe to call 6 times in one test.
+     */
+    public function test_the_route_is_rate_limited(): void
+    {
+        $user = User::factory()->create();
+        $enrolment = app(MfaEnrolmentService::class)->startEnrolment($user->id);
+        $this->confirmEnrolment($enrolment, $user);
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->actingAs($user)
+                ->post(route('admin.mfa.disable'))
+                ->assertRedirect(route('filament.admin.pages.mfa-challenge'));
+        }
+
+        $this->actingAs($user)
+            ->post(route('admin.mfa.disable'))
+            ->assertStatus(429);
+    }
 }

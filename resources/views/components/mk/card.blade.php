@@ -89,9 +89,20 @@
     // Interactive: whole card becomes a clickable link (§3.3). Border/shadow
     // change on hover, so both are transitioned, not just shadow as the
     // doc's literal snippet shows — the hover state changes both.
+    //
+    // Background-tint hover added (homepage visual refresh, 19 Aug 2026):
+    // `hover:bg-primary-50` joins the transition, gated on `$intent === null`
+    // — an intent card already owns its surface via `$intentSurfaces` above
+    // (§3.3's cemetery/service-row variants), and this tint must never
+    // compete with that. This is the site-wide "livelier" hover: colour-only,
+    // no transform (design-system.md §5's interaction table states, for
+    // hover, "Transform: none" — a lift/scale effect would need a change to
+    // that normative table, not a component tweak), same `duration-fast`/
+    // `ease-standard` budget as before.
     $interactiveClasses = $interactive
-        ? 'transition-[border-color,box-shadow] duration-fast ease-standard
-           hover:border-primary-300 hover:shadow-md
+        ? 'transition-[border-color,box-shadow,background-color] duration-fast ease-standard
+           hover:border-primary-300 hover:shadow-md'
+           . ($intent === null ? ' hover:bg-primary-50' : '') . '
            focus-within:outline-none focus-within:ring-2 focus-within:ring-primary-600 focus-within:ring-offset-2'
         : '';
 

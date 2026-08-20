@@ -85,6 +85,13 @@ PAIRS = [
     ("text-default on surface-page", "color-neutral-700", "color-neutral-50", NEED_TEXT),
     ("text-default on surface-warm", "color-neutral-700", "color-primary-50", NEED_TEXT),
     ("text-strong on secondary-100", "color-neutral-900", "color-secondary-100", NEED_TEXT),
+    # Homepage visual refresh (19 Aug 2026): Cara Kerja's full-bleed band is
+    # secondary-50 with its own section heading/copy sitting directly on it
+    # (not inside a white card) — a genuinely new usage, not covered by the
+    # existing secondary-700-on-secondary-50 pair above (that one asserts
+    # green text on the tint; this is ordinary body/heading text on it).
+    ("text-default on secondary-50", "color-neutral-700", "color-secondary-50", NEED_TEXT),
+    ("text-strong on secondary-50", "color-neutral-900", "color-secondary-50", NEED_TEXT),
     ("text-disabled on surface-disabled", "color-neutral-500", "color-neutral-100", NEED_NONTEXT),
     # Solid button fills — white label on 600, and hover 700
     ("white on primary-600", WHITE, "color-primary-600", NEED_TEXT),
@@ -118,6 +125,11 @@ PAIRS = [
     ("border-interactive on surface-warm", "color-neutral-450", "color-primary-50", NEED_NONTEXT),
     ("focus ring on surface-raised", "color-primary-600", WHITE, NEED_NONTEXT),
     ("focus ring on surface-page", "color-primary-600", "color-neutral-50", NEED_NONTEXT),
+    # Homepage visual refresh (19 Aug 2026): the hero and CS-CTA panel put
+    # focusable elements (buttons, links) directly on surface-warm
+    # (primary-50) for the first time — previously only text and non-focus
+    # borders were asserted there.
+    ("focus ring on surface-warm", "color-primary-600", "color-primary-50", NEED_NONTEXT),
     ("focus ring inverse on primary-600", "color-primary-300", "color-primary-600", NEED_NONTEXT),
     ("border-error on surface-raised", "color-danger-600", WHITE, NEED_NONTEXT),
     ("urgent border on urgent bg", "color-warning-600", "color-warning-50", NEED_NONTEXT),

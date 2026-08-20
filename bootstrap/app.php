@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AssignCorrelationId;
+use App\Http\Middleware\BetaNoindexTag;
 use App\Http\Middleware\ReportContentSecurityPolicy;
 use App\Platform\DocumentVault\Jobs\ReconcileDocumentStorageCleanupJob;
 use App\Platform\Outbox\OutboxQueueName;
@@ -46,6 +47,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // ever reach it to set these headers in the first place.
         $middleware->trustProxies(at: '*');
 
+        // `/akun` account area, Task 2 of `.superpowers/sdd/
+        // 2026-08-20-akun-shell-and-drafts/task-2-brief.md`: an
+        // authenticated visitor hitting a `guest`-only route (`/masuk`,
+        // `/daftar`, ...) should land on their account home, not the
+        // framework's own default `/home`.
+        $middleware->redirectUsersTo('/akun');
+
         // Public-beta readiness (finding N-2/OQ-11): global, not a group
         // append — must cover the Filament /admin and /vendor panels too,
         // and both declare their own middleware arrays outside the `web`
@@ -53,6 +61,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // See ReportContentSecurityPolicy's own doc block for why this
         // ships report-only.
         $middleware->append(ReportContentSecurityPolicy::class);
+
+        // Public-beta readiness (Lane C3): same global-not-group-append
+        // reasoning as ReportContentSecurityPolicy immediately above — see
+        // BetaNoindexTag's own doc block for why this is app-level rather
+        // than only an nginx vhost header, and why it defaults to a no-op.
+        $middleware->append(BetaNoindexTag::class);
 
         // S3-T10 (platform-audit AC10 / platform-outbox AC13): the
         // request-boundary origin point for correlation-id propagation.

@@ -29,11 +29,24 @@
     map_price_and_photo_for_seeded_cemeteries.php` for the data itself), so
     that "hide entirely" state is no longer the true one — it remains coded
     below for the case where every cemetery is later unpublished, but is
-    not reachable against today's seed data. Cards are intentionally NOT
-    links: `cemetery-directory-and-availability` (S4-T6) — the spec that
-    would build a real detail/directory page to link to — has not been
-    built yet, and inventing an unrouted `href` would trade one honesty gap
-    for another.
+    not reachable against today's seed data.
+
+    UPDATED 19 Aug 2026 (homepage visual refresh) — cards are now real
+    links. `cemetery-directory-and-availability` (S4-T6) has since shipped
+    a real detail route (`cemeteries.show`,
+    resources/views/livewire/public/directory/index.blade.php renders the
+    identical `<x-mk.card as="a" interactive>` pattern this section now
+    reuses), so the "no route to link to" reasoning that justified
+    NOT-a-link cards no longer holds. Price now renders through
+    `CemeteryPresenter::priceRange()`/`priceAttribution()` (same presenter
+    the directory page uses) rather than a bare `Rp {min}-{max}` string —
+    the previous version rendered a fee figure with no source, which
+    design-system.md §2.3's DO ("show the source and last-updated time on
+    any fee figure") requires and the directory page already did
+    correctly; the homepage was the one place still missing it. The
+    availability badge the directory page shows is deliberately still
+    omitted here — it needs a per-row capability-profile lookup, not worth
+    the homepage's query budget for six featured cards.
 
     --- Section 9 (footer) is NOT re-rendered here ---
     design-system.md §4.1's page-shell diagram places the footer as a
@@ -63,18 +76,23 @@
     (first, prominent, truthful, never dismissible) over a pixel-identical
     match to a schematic diagram.
 
-    --- Hand-written primary CTA button, not <x-mk.button> ---
-    See docs/planning/sprint-plan.md finding N-14 and
-    resources/views/livewire/public/faq/index.blade.php's own doc comment
-    for the full history. N-14's root cause is fixed, but this batch's own
-    brief is explicit: every current Livewire full-page view in this repo
-    still hand-writes button markup for consistency, and reverting is
-    optional future cleanup, not this batch's job. The classes below are
-    button.blade.php's own literal `size=lg` + `variant=primary` recipe,
-    copied verbatim (base + `$sizes['lg']` + `$variants['primary']`) — no
-    new design value introduced.
+    --- UPDATED 19 Aug 2026 — hand-written buttons converted to <x-mk.button> ---
+    Previously hand-written (see docs/planning/sprint-plan.md finding N-14
+    and resources/views/livewire/public/faq/index.blade.php's own doc
+    comment for the full history — N-14's root cause was fixed, but every
+    Livewire full-page view kept hand-writing button markup anyway, with
+    reverting flagged explicitly as "optional future cleanup, not this
+    batch's job"). The homepage visual refresh is that cleanup, for this
+    file only: the hero's primary CTA and the CS CTA button both became
+    real `<x-mk.button>` instances. Verified byte-for-byte before
+    converting: `<x-mk.button variant="primary" size="lg" href="...">`
+    renders `href="{{ $href }}"` and the slot text verbatim, so
+    `HomePageRouteTest::test_pemesanan_makam_is_the_primary_call_to_action`'s
+    literal `assertSee('Pesan Makam')` / `assertSee('href="/pemesanan-makam"')`
+    still pass — copy is unchanged, only the markup generating it changed.
 --}}
 @php
+    use App\Livewire\Public\Directory\Support\CemeteryPresenter;
     use App\Support\ContactInfo;
 @endphp
 <div>
@@ -110,23 +128,35 @@
         </div>
     @endif
 
-    {{-- Section 2: Hero. --}}
-    <section aria-labelledby="hero-heading" class="mx-auto max-w-content px-4 py-5 md:px-6 lg:px-8 lg:py-8">
-        <div class="mx-auto max-w-prose space-y-4 text-center">
-            <h1 id="hero-heading" class="text-3xl font-semibold tracking-tight text-neutral-900 md:text-4xl">
-                Urus Pemakaman dengan Tenang, dalam Satu Platform
-            </h1>
-            <p class="text-base text-neutral-600 md:text-lg">
-                Pesan makam, jelajahi layanan pemakaman, dan urus perpanjangan masa sewa makam secara online. Setiap
-                langkah tercatat jelas, dari pemesanan hingga konfirmasi.
-            </p>
-            <div class="flex justify-center pt-2">
-                <a
-                    href="/pemesanan-makam"
-                    class="inline-flex h-13 select-none items-center justify-center gap-2 rounded-md border border-transparent bg-primary-600 px-6 text-base font-medium text-neutral-0 transition-[color,background-color,border-color,box-shadow] duration-fast ease-standard hover:bg-primary-700 active:bg-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
-                >
-                    <span>Pesan Makam</span>
-                </a>
+    {{-- Section 2: Hero — full-bleed bg-primary-50 band (--mk-surface-warm),
+         same pattern the footer uses. Eyebrow + short bg-secondary-400 rule
+         is the page's one sanctioned Leaf-as-decorative-accent moment
+         (design-system.md §1.2(b): 300-400 permitted as "decorative
+         rules/icons"). h1 promoted to text-4xl/text-5xl — the scale tokens
+         already label these "hero mobile"/"hero desktop" (§1.4); this is
+         the first place on the page that actually uses them. Dual CTA
+         (primary "Pesan Makam" + secondary "Lihat TPU & TPS") stays inside
+         §2.3's "exactly one primary action" — only one is `variant=primary`. --}}
+    <section aria-labelledby="hero-heading" class="bg-primary-50 py-8 lg:py-12">
+        <div class="mx-auto max-w-content px-4 md:px-6 lg:px-8">
+            <div class="mx-auto max-w-prose space-y-4 text-center">
+                <p class="text-sm font-medium uppercase tracking-wide text-primary-700">Makam.co.id</p>
+                <div class="mx-auto h-1 w-12 rounded-sm bg-secondary-400" aria-hidden="true"></div>
+                <h1 id="hero-heading" class="text-4xl font-semibold tracking-tight text-neutral-900 lg:text-5xl">
+                    Urus Pemakaman dengan Tenang, dalam Satu Platform
+                </h1>
+                <p class="text-base text-neutral-600 md:text-lg">
+                    Pesan makam, jelajahi layanan pemakaman, dan urus perpanjangan masa sewa makam secara online. Setiap
+                    langkah tercatat jelas, dari pemesanan hingga konfirmasi.
+                </p>
+                <div class="flex flex-col items-center justify-center gap-3 pt-2 sm:flex-row">
+                    <x-mk.button variant="primary" size="lg" href="/pemesanan-makam">
+                        Pesan Makam
+                    </x-mk.button>
+                    <x-mk.button variant="secondary" size="lg" :href="route('cemeteries.index')">
+                        Lihat TPU &amp; TPS
+                    </x-mk.button>
+                </div>
             </div>
         </div>
     </section>
@@ -144,13 +174,28 @@
                 'perpanjangan' => 'Cari data makam dan ajukan perpanjangan masa sewa secara online.',
                 'faq' => 'Temukan jawaban seputar pemesanan, dokumen, pembayaran, dan perpanjangan.',
             ];
+            // Decorative only (icon-medallion.blade.php is always
+            // aria-hidden) — the card's own <h3> text is what actually
+            // labels each destination, so an unmapped $key just renders no
+            // icon rather than failing.
+            $serviceIcons = [
+                'pemesanan' => 'document-text',
+                'layanan' => 'truck',
+                'perpanjangan' => 'clock',
+                'faq' => 'question-mark-circle',
+            ];
         @endphp
         <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-4" aria-label="Layanan utama">
             @foreach ($primaryMenus as $key => $menu)
                 <li wire:key="service-card-{{ $key }}">
                     <x-mk.card as="a" interactive :href="$menu['route']" class="h-full touch-target">
-                        <h3 class="text-lg font-semibold text-neutral-900">{{ $menu['label'] }}</h3>
-                        <p class="text-base text-neutral-600">{{ $serviceDescriptions[$key] ?? '' }}</p>
+                        <div class="space-y-3">
+                            @if (isset($serviceIcons[$key]))
+                                <x-mk.icon-medallion :icon="$serviceIcons[$key]" tone="earth" />
+                            @endif
+                            <h3 class="text-lg font-semibold text-neutral-900">{{ $menu['label'] }}</h3>
+                            <p class="text-base text-neutral-600">{{ $serviceDescriptions[$key] ?? '' }}</p>
+                        </div>
                     </x-mk.card>
                 </li>
             @endforeach
@@ -158,35 +203,51 @@
     </section>
 
     {{-- Section 4: Cara kerja singkat — a simplified summary of
-         mvp-scope.md §2's real nine booking steps, not an invented flow. --}}
-    <section aria-labelledby="how-it-works-heading" class="mx-auto max-w-content px-4 py-5 md:px-6 lg:px-8 lg:py-8">
-        <h2 id="how-it-works-heading" class="mb-6 text-center text-2xl font-semibold text-neutral-900">
-            Cara Kerja
-        </h2>
-        <ol class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-4">
-            @foreach ([
-                ['title' => 'Pilih lokasi & jenis layanan', 'body' => 'Pilih kota, TPU/TPS, dan jenis layanan: makam baru, makam tumpang, Urgent, atau Pre-Need.'],
-                ['title' => 'Lengkapi data & dokumen', 'body' => 'Isi data pemesan dan almarhum, unggah dokumen yang diperlukan secara privat dan aman.'],
-                ['title' => 'Selesaikan pembayaran', 'body' => 'Bayar online bila tersedia, atau ikuti instruksi pembayaran manual.'],
-                ['title' => 'Terima konfirmasi', 'body' => 'Dapatkan nomor pesanan, status, dan langkah selanjutnya.'],
-            ] as $index => $step)
-                <li wire:key="how-it-works-{{ $index }}" class="flex flex-col gap-2 rounded-lg border border-neutral-200 bg-neutral-0 p-4 md:p-6">
-                    <span class="text-sm font-semibold text-primary-700" aria-hidden="true">{{ $index + 1 }}</span>
-                    <h3 class="text-base font-semibold text-neutral-900">{{ $step['title'] }}</h3>
-                    <p class="text-sm text-neutral-600">{{ $step['body'] }}</p>
-                </li>
-            @endforeach
-        </ol>
+         mvp-scope.md §2's real nine booking steps, not an invented flow.
+
+         UPDATED 19 Aug 2026 — full-bleed bg-secondary-50 band (the Leaf
+         tint moved here from the trust band, section 6, which now
+         correctly uses bg-primary-50 — see that section's own comment for
+         why). Each step is a real <x-mk.card> (non-interactive — nothing
+         to click here) instead of a hand-rolled bordered <li>, per
+         design-system.md §9.2 MUST #2 ("extend primitives rather than
+         forking"). The numeral moves into <x-mk.icon-medallion>'s default
+         slot rather than an icon — a number is the correct affordance for
+         an ordered <ol> item; see icon-medallion.blade.php's own doc block
+         for why Cara Kerja specifically does not use icons. --}}
+    <section aria-labelledby="how-it-works-heading" class="bg-secondary-50 py-5 lg:py-8">
+        <div class="mx-auto max-w-content px-4 md:px-6 lg:px-8">
+            <h2 id="how-it-works-heading" class="mb-6 text-center text-2xl font-semibold text-neutral-900">
+                Cara Kerja
+            </h2>
+            <ol class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-4">
+                @foreach ([
+                    ['title' => 'Pilih lokasi & jenis layanan', 'body' => 'Pilih kota, TPU/TPS, dan jenis layanan: makam baru, makam tumpang, Urgent, atau Pre-Need.'],
+                    ['title' => 'Lengkapi data & dokumen', 'body' => 'Isi data pemesan dan almarhum, unggah dokumen yang diperlukan secara privat dan aman.'],
+                    ['title' => 'Selesaikan pembayaran', 'body' => 'Bayar online bila tersedia, atau ikuti instruksi pembayaran manual.'],
+                    ['title' => 'Terima konfirmasi', 'body' => 'Dapatkan nomor pesanan, status, dan langkah selanjutnya.'],
+                ] as $index => $step)
+                    <li wire:key="how-it-works-{{ $index }}">
+                        <x-mk.card class="h-full">
+                            <div class="space-y-2">
+                                <x-mk.icon-medallion tone="leaf">{{ $index + 1 }}</x-mk.icon-medallion>
+                                <h3 class="text-base font-semibold text-neutral-900">{{ $step['title'] }}</h3>
+                                <p class="text-sm text-neutral-600">{{ $step['body'] }}</p>
+                            </div>
+                        </x-mk.card>
+                    </li>
+                @endforeach
+            </ol>
+        </div>
     </section>
 
     {{-- Section 5: TPU/TPS unggulan — HomePage::render()'s own doc block
-         has the full "why this now renders" reasoning. §6.2 provider-
-         unavailable / truly-empty degrade the same way FAQ highlights does
-         below: hide the section entirely rather than an empty shell, per
-         design-system.md §6.2's own required-states row for this section.
-         Cards show name/city/address/price range/photo — deliberately not
-         wrapped in <a>, since no cemetery detail/directory route exists
-         yet (S4-T6, not built this batch). --}}
+         has the full "why this now renders" reasoning; the top-of-file doc
+         block above has the "why cards are real links now" reasoning
+         (UPDATED 19 Aug 2026). §6.2 provider-unavailable / truly-empty
+         degrade the same way FAQ highlights does below: hide the section
+         entirely rather than an empty shell, per design-system.md §6.2's
+         own required-states row for this section. --}}
     @unless ($featuredCemeteriesUnavailable || $featuredCemeteries->isEmpty())
         <section aria-labelledby="featured-cemeteries-heading" class="mx-auto max-w-content px-4 py-5 md:px-6 lg:px-8 lg:py-8">
             <h2 id="featured-cemeteries-heading" class="mb-6 text-center text-2xl font-semibold text-neutral-900">
@@ -194,25 +255,51 @@
             </h2>
             <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-3" aria-label="TPU dan TPS tersedia">
                 @foreach ($featuredCemeteries as $cemetery)
+                    @php
+                        $priceRange = CemeteryPresenter::priceRange($cemetery);
+                        $priceAttribution = CemeteryPresenter::priceAttribution($cemetery);
+                        $photoUrl = CemeteryPresenter::photoUrl($cemetery);
+                    @endphp
                     <li wire:key="featured-cemetery-{{ $cemetery->id }}">
-                        <x-mk.card class="h-full">
+                        <x-mk.card
+                            as="a"
+                            interactive
+                            :href="route('cemeteries.show', ['cemeterySlug' => $cemetery->slug])"
+                            class="h-full touch-target"
+                        >
                             <x-slot:media>
-                                <img
-                                    src="{{ asset($cemetery->primary_photo_path) }}"
-                                    alt=""
-                                    class="h-40 w-full object-cover"
-                                    loading="lazy"
-                                >
+                                @if ($photoUrl)
+                                    <img
+                                        src="{{ $photoUrl }}"
+                                        alt="Ilustrasi {{ $cemetery->name }}"
+                                        loading="lazy"
+                                        class="h-40 w-full object-cover"
+                                    >
+                                @else
+                                    {{-- Same labelled-placeholder pattern
+                                         directory/index.blade.php uses — a
+                                         real state, not an edge case. --}}
+                                    <div class="flex h-40 w-full items-center justify-center bg-neutral-100">
+                                        <span class="text-sm text-neutral-600">Foto belum tersedia</span>
+                                    </div>
+                                @endif
                             </x-slot:media>
-                            <h3 class="text-lg font-semibold text-neutral-900">{{ $cemetery->name }}</h3>
-                            <p class="text-sm text-neutral-600">{{ $cemetery->address }}</p>
-                            @if ($cemetery->price_min !== null && $cemetery->price_max !== null)
-                                <p class="mt-2 text-base font-medium text-neutral-800">
-                                    Rp {{ number_format((float) $cemetery->price_min, 0, ',', '.') }}
-                                    &ndash;
-                                    Rp {{ number_format((float) $cemetery->price_max, 0, ',', '.') }}
-                                </p>
-                            @endif
+                            <div class="space-y-2">
+                                <x-mk.badge intent="neutral">{{ $cemetery->type }}</x-mk.badge>
+                                <h3 class="text-lg font-semibold text-neutral-900">{{ $cemetery->name }}</h3>
+                                <p class="text-sm text-neutral-600">{{ $cemetery->address }}</p>
+                                {{-- Price WITH source, one block so a figure
+                                     can never appear without its
+                                     attribution (design-system.md §2.3) —
+                                     same presenter, same rule the directory
+                                     page already follows. --}}
+                                @if ($priceRange !== null && $priceAttribution !== null)
+                                    <p class="pt-1 text-base font-medium text-neutral-900">{{ $priceRange }}</p>
+                                    <p class="text-sm text-[var(--mk-text-muted)]">
+                                        Sumber: {{ $priceAttribution['source'] }}@if ($priceAttribution['effective']) &middot; per {{ $priceAttribution['effective'] }}@endif
+                                    </p>
+                                @endif
+                            </div>
                         </x-mk.card>
                     </li>
                 @endforeach
@@ -221,21 +308,30 @@
     @endunless
 
     {{-- Section 6: Trust/safety — surface-warm (--mk-surface-warm ->
-         --color-secondary-50 -> bg-secondary-50, already a generated
-         Tailwind utility, no arbitrary value needed). Full-bleed tint with
-         a contained inner wrapper, the same pattern the footer below uses. --}}
-    <section aria-labelledby="trust-heading" class="bg-secondary-50 py-5 lg:py-8">
+         --color-primary-50 -> bg-primary-50, already a generated Tailwind
+         utility, no arbitrary value needed). Full-bleed tint with a
+         contained inner wrapper, the same pattern the footer below uses.
+
+         FIXED 19 Aug 2026: this section previously used bg-secondary-50 on
+         a stale comment's claim that `--mk-surface-warm` mapped there.
+         Since ADR-0034, `--mk-surface-warm` maps to `--color-primary-50`
+         (Earth, not Leaf) — design-system.md §2.3's DO and §4.5 item 6
+         both say explicitly to use it for trust/reassurance sections. The
+         Leaf tint moved to the Cara Kerja band (section 4) instead, which
+         is what actually produces the page's warm/leaf/warm rhythm. --}}
+    <section aria-labelledby="trust-heading" class="bg-primary-50 py-5 lg:py-8">
         <div class="mx-auto max-w-content px-4 md:px-6 lg:px-8">
             <h2 id="trust-heading" class="mb-6 text-center text-2xl font-semibold text-neutral-900">
                 Kenapa Makam.co.id
             </h2>
             <ul class="grid grid-cols-1 gap-4 sm:grid-cols-3 md:gap-6">
                 @foreach ([
-                    ['title' => 'Dokumen privat & aman', 'body' => 'Dokumen seperti KTP, KK, dan surat keterangan kematian disimpan secara privat dan diperiksa sebelum dapat diakses siapa pun, termasuk tim kami.'],
-                    ['title' => 'Pembayaran diverifikasi', 'body' => 'Status pesanan hanya berubah menjadi lunas setelah pembayaran benar-benar terverifikasi oleh tim kami — bukan otomatis saat Anda kembali dari halaman pembayaran.'],
-                    ['title' => 'Jujur soal keterbatasan', 'body' => 'Kami tidak mengarang data, tarif, atau ketersediaan yang belum dapat kami pastikan. Kami akan menyatakannya dengan jelas dan mengarahkan Anda ke customer service.'],
+                    ['icon' => 'shield-check', 'title' => 'Dokumen privat & aman', 'body' => 'Dokumen seperti KTP, KK, dan surat keterangan kematian disimpan secara privat dan diperiksa sebelum dapat diakses siapa pun, termasuk tim kami.'],
+                    ['icon' => 'check-badge', 'title' => 'Pembayaran diverifikasi', 'body' => 'Status pesanan hanya berubah menjadi lunas setelah pembayaran benar-benar terverifikasi oleh tim kami — bukan otomatis saat Anda kembali dari halaman pembayaran.'],
+                    ['icon' => 'alert-circle', 'title' => 'Jujur soal keterbatasan', 'body' => 'Kami tidak mengarang data, tarif, atau ketersediaan yang belum dapat kami pastikan. Kami akan menyatakannya dengan jelas dan mengarahkan Anda ke customer service.'],
                 ] as $index => $point)
-                    <li wire:key="trust-point-{{ $index }}" class="space-y-1 text-center sm:text-left">
+                    <li wire:key="trust-point-{{ $index }}" class="flex flex-col items-start gap-2 text-left">
+                        <x-mk.icon-medallion :icon="$point['icon']" tone="leaf" />
                         <h3 class="text-base font-semibold text-neutral-900">{{ $point['title'] }}</h3>
                         <p class="text-sm text-neutral-700">{{ $point['body'] }}</p>
                     </li>
@@ -277,9 +373,9 @@
                 @endforeach
             </ul>
             <div class="mt-6 text-center">
-                <a href="{{ route('faq.index') }}" class="text-base font-medium text-primary-700 underline underline-offset-2">
+                <x-mk.button variant="secondary" :href="route('faq.index')">
                     Lihat semua FAQ
-                </a>
+                </x-mk.button>
             </div>
         @endif
     </section>
@@ -288,7 +384,8 @@
          from the Urgent banner above: this is a general "need help
          choosing" invitation, not a gate-state notice. --}}
     <section aria-labelledby="cs-cta-heading" class="mx-auto max-w-content px-4 py-5 md:px-6 lg:px-8 lg:py-8">
-        <div class="mx-auto flex max-w-prose flex-col items-center gap-3 rounded-lg border border-neutral-200 bg-neutral-0 p-6 text-center md:p-8">
+        <div class="mx-auto flex max-w-prose flex-col items-center gap-3 rounded-lg border border-primary-200 bg-primary-50 p-6 text-center md:p-8">
+            <x-mk.icon-medallion icon="question-mark-circle" tone="earth" size="lg" />
             <h2 id="cs-cta-heading" class="text-xl font-semibold text-neutral-900">
                 Butuh Bantuan Memilih Layanan?
             </h2>
@@ -299,12 +396,9 @@
                 {{ ContactInfo::phone() }} (telepon/WhatsApp) · {{ ContactInfo::email() }}<br>
                 {{ ContactInfo::businessHours() }}
             </p>
-            <a
-                href="/bantuan"
-                class="mt-2 inline-flex h-11 select-none items-center justify-center gap-2 rounded-md border border-primary-600 bg-neutral-0 px-4 text-base font-medium text-primary-700 transition-[color,background-color,border-color,box-shadow] duration-fast ease-standard hover:bg-primary-50 active:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
-            >
+            <x-mk.button variant="secondary" href="/bantuan" class="mt-2">
                 Hubungi Bantuan
-            </a>
+            </x-mk.button>
         </div>
     </section>
 </div>

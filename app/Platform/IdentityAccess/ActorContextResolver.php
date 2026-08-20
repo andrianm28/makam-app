@@ -53,13 +53,13 @@ use Illuminate\Contracts\Auth\Factory as AuthFactory;
  *   `ActorContext` yet.
  *
  * `forget()` exists as an explicit escape hatch for the one case the cache
- * cannot know about on its own: a future login controller calling
- * `Auth::login()` mid-request, after something earlier in the same request
- * already resolved a guest `ActorContext`. No such controller exists yet in
- * this batch's scope (`routes/web.php` has no login route; Filament's own
- * `/admin` login page is a full request-response round trip, so it does not
- * hit this mid-request-login-mutation case). Flagged here rather than
- * silently left for whoever builds that flow to discover the hard way.
+ * cannot know about on its own: a login/registration flow calling
+ * `Auth::login()`/`auth()->attempt()` mid-request, after something earlier
+ * in the same request already resolved a guest `ActorContext`. That case is
+ * no longer hypothetical: `App\Livewire\Public\Auth\LoginPage::login()`,
+ * `App\Livewire\Public\Auth\RegisterPage::register()`, and
+ * `App\Http\Controllers\Auth\LogoutController` each call `forget()`
+ * immediately after mutating the `web` guard, exactly per this note.
  */
 final class ActorContextResolver
 {

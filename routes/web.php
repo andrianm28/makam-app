@@ -2,11 +2,21 @@
 
 use App\Http\Controllers\Admin\DisableMfaController;
 use App\Http\Controllers\Admin\FinanceExportController;
+use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\DocumentVault\DownloadDocumentController;
 use App\Http\Controllers\Health\HealthLiveController;
 use App\Http\Controllers\Health\HealthReadyController;
 use App\Http\Middleware\EnforceMfaChallenge;
 use App\Http\Middleware\RequireRecentAuthentication;
+use App\Livewire\Public\Akun\AkunIndex;
+use App\Livewire\Public\Akun\DocumentList;
+use App\Livewire\Public\Akun\DraftList;
+use App\Livewire\Public\Akun\OrderList;
+use App\Livewire\Public\Akun\RenewalList;
+use App\Livewire\Public\Auth\ForgotPasswordPage;
+use App\Livewire\Public\Auth\LoginPage;
+use App\Livewire\Public\Auth\RegisterPage;
+use App\Livewire\Public\Auth\ResetPasswordPage;
 use App\Livewire\Public\Booking\BookingWizard;
 use App\Livewire\Public\CareSubscription\CareHistoryPage;
 use App\Livewire\Public\CareSubscription\SubscriptionStatusPage;
@@ -417,6 +427,80 @@ Route::get('/riwayat-perawatan/{customerId}', CareHistoryPage::class)->name('riw
 
 /*
 |--------------------------------------------------------------------------
+| Account — login, logout, registration, and password reset (Tasks 1-3 of
+| 3, `/akun` account area, `.superpowers/sdd/2026-08-20-akun-auth-foundation/
+| task-1-brief.md` through `task-3-brief.md`)
+|--------------------------------------------------------------------------
+| PR 1 of 3, complete: login, logout, registration, and password reset.
+| PR 2 of 3 (see the "Akun" block below, near the bottom of this file) adds
+| the `<x-mk.header>` wiring and the `/akun/*` route group these five
+| routes anticipated.
+|
+| The route NAME `login` is load-bearing, not just this page's own path:
+| `Illuminate\Auth\Middleware\Authenticate` redirects an unauthenticated
+| request to a protected route to `route('login')` by name when it exists
+| — this is what will make a future `/akun/*` `auth` middleware group
+| "redirect to login, then return to where you were" work for free via
+| `redirect()->intended(...)` inside `LoginPage::login()`/
+| `RegisterPage::register()`, without that future PR needing to know about
+| this one. `guest` and `auth` are Laravel 13's own default middleware
+| aliases — no new alias registered.
+|
+| The route NAME `password.reset` is likewise load-bearing:
+| `Illuminate\Auth\Notifications\ResetPassword::toMail()` (Laravel's own
+| built-in notification, dispatched automatically by the `Password::`
+| broker) builds its email link via `route('password.reset', ['token' =>
+| ..., 'email' => ...])` — naming it this makes the already-wired broker's
+| email work with zero custom notification class.
+*/
+Route::get('/masuk', LoginPage::class)->middleware('guest')->name('login');
+Route::get('/daftar', RegisterPage::class)->middleware('guest')->name('register');
+Route::post('/keluar', LogoutController::class)->middleware('auth')->name('logout');
+Route::get('/lupa-password', ForgotPasswordPage::class)->middleware('guest')->name('password.request');
+Route::get('/reset-password/{token}', ResetPasswordPage::class)->middleware('guest')->name('password.reset');
+
+/*
+|--------------------------------------------------------------------------
+| Akun — account area shell and draft resume list (Task 2 of 3, `/akun`
+| account area, `.superpowers/sdd/2026-08-20-akun-shell-and-drafts/
+| task-2-brief.md`)
+|--------------------------------------------------------------------------
+| PR 2 of 3, "switch on" batch: the two routes this PR's own scope covers.
+| `<x-mk.header>`'s `akunHref` now always resolves to `route('akun.index')`
+| for an authenticated visitor (see layouts/app.blade.php), which is what
+| makes this route name load-bearing beyond this file, same as `login`'s
+| own doc block above explains for itself.
+|
+| Renewal (`/akun/perpanjangan`) and document (`/akun/dokumen`) routes are
+| Task 3, added below — both honest "not yet available" pages over
+| `<x-mk.gate-closed-page>`, per that task's own brief
+| (`.superpowers/sdd/2026-08-20-akun-shell-and-drafts/task-3-brief.md`):
+| renewals have zero customer-ownership infrastructure and documents have
+| zero customer-facing upload path, so neither fabricates account-scoped
+| data. `AkunIndex`'s view now renders tiles for all three sub-routes.
+|
+| `/pesanan` (`OrderList`) is PR 3's own addition — Task 2 of
+| `.superpowers/sdd/2026-08-20-akun-pesanan/task-2-brief.md`, closing the
+| account area's fourth tile. It renders `Order::forUser(auth()->id())`
+| (Task 1's `#[Scope]`), real account-scoped data, not a deferred page.
+|
+| `auth` is Laravel 13's own default middleware alias — an unauthenticated
+| request redirects to `route('login')` (the `Authenticate` middleware's
+| own by-name resolution, already relied on by this file's `login` route
+| comment above), and `LoginPage::login()`/`RegisterPage::register()`'s
+| `redirectIntended(route('akun.index'), ...)` fallback sends a visitor
+| with no prior intended URL here too.
+*/
+Route::middleware('auth')->prefix('akun')->name('akun.')->group(function (): void {
+    Route::get('/', AkunIndex::class)->name('index');
+    Route::get('/draft', DraftList::class)->name('draft');
+    Route::get('/pesanan', OrderList::class)->name('pesanan');
+    Route::get('/perpanjangan', RenewalList::class)->name('perpanjangan');
+    Route::get('/dokumen', DocumentList::class)->name('dokumen');
+});
+
+/*
+|--------------------------------------------------------------------------
 | Admin — MFA disable (Task 6, mfa-reauthentication-integration)
 |--------------------------------------------------------------------------
 | Not a Filament panel page (those auto-register their own routes via
@@ -431,9 +515,27 @@ Route::get('/riwayat-perawatan/{customerId}', CareHistoryPage::class)->name('riw
 | this repo (S3-T3 built it fully audited and tested, but never wired) — a
 | stale or absent `ActorContext::$lastAuthenticatedAt` redirects here to
 | `MfaChallenge` instead of letting the disable through.
+|
+| `throttle:mfa-disable` and `EnforceMfaChallenge` added (public-beta-
+| release plan, Lane D4) — this route previously carried none. `throttle:
+| mfa-disable` only, deliberately NOT `EnforceMfaChallenge` (unlike
+| `/admin/finance/exports` below, which combines all three): this route is
+| itself the self-service escape valve out of MFA. An actor with a
+| confirmed enrolment reaching it has, by definition, not yet completed
+| this session's MFA challenge for anything else either — `EnforceMfaChallenge`
+| would redirect them to the challenge before they could ever reach the
+| disable action, a lockout paradox (you would need to pass an MFA
+| challenge to turn MFA off) that `DisableMfaControllerTest`'s own
+| "actually revokes" fixture does not (and should not) set up. Caught
+| before push by that exact regression while wiring this.
 */
 Route::post('/admin/mfa/disable', DisableMfaController::class)
-    ->middleware(['web', 'auth', RequireRecentAuthentication::class.':mfa_disable,filament.admin.pages.mfa-challenge'])
+    ->middleware([
+        'web',
+        'auth',
+        'throttle:mfa-disable',
+        RequireRecentAuthentication::class.':mfa_disable,filament.admin.pages.mfa-challenge',
+    ])
     ->name('admin.mfa.disable');
 
 /*
@@ -523,9 +625,19 @@ Route::get('/pembayaran/batal', PaymentCancelController::class)->name('payments.
 | status — see `App\Platform\Payment\VerifyManualPayment`'s own doc block
 | for why those remain structurally absent under the current deny-only
 | payment guard (Wave 1b ruling 1b-L3-01).
+|
+| `throttle:payment-manual-verification` and `EnforceMfaChallenge` added
+| (public-beta-release plan, Lane D4) — same reasoning as `/admin/mfa/
+| disable`'s own comment above.
 */
 Route::post('/admin/payments/manual-verifications/{paymentVerification}/verify', VerifyManualPaymentController::class)
-    ->middleware(['web', 'auth', RequireRecentAuthentication::class.':payment_manual_verification,filament.admin.pages.mfa-challenge'])
+    ->middleware([
+        'web',
+        'auth',
+        'throttle:payment-manual-verification',
+        EnforceMfaChallenge::class,
+        RequireRecentAuthentication::class.':payment_manual_verification,filament.admin.pages.mfa-challenge',
+    ])
     ->name('admin.payments.manual-verifications.verify');
 
 /*
@@ -552,10 +664,20 @@ Route::post('/admin/payments/manual-verifications/{paymentVerification}/verify',
 | flagged judgement call, see
 | `App\Platform\Payment\Http\Controllers\RecordPaymentReversalController`'s
 | own doc block for why.
+|
+| `throttle:payment-reversal` and `EnforceMfaChallenge` added (public-beta-
+| release plan, Lane D4) — same reasoning as `/admin/mfa/disable`'s own
+| comment above.
 */
 Route::post('/admin/payments/reversals/{reversalType}', RecordPaymentReversalController::class)
     ->whereIn('reversalType', ['refund', 'chargeback'])
-    ->middleware(['web', 'auth', RequireRecentAuthentication::class.':payment_reversal,filament.admin.pages.mfa-challenge'])
+    ->middleware([
+        'web',
+        'auth',
+        'throttle:payment-reversal',
+        EnforceMfaChallenge::class,
+        RequireRecentAuthentication::class.':payment_reversal,filament.admin.pages.mfa-challenge',
+    ])
     ->name('admin.payments.reversals.record');
 
 Route::get('/internal/documents/{document}/download/{token}', DownloadDocumentController::class)

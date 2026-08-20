@@ -138,6 +138,19 @@
     of them. A labelled `region` landmark is the generic container axe
     accepts for exactly this "real content, no more specific landmark
     fits" case.
+
+    ---------------------------------------------------------------------------
+    UPDATED 20 Aug 2026 (`/akun` account area, Task 2 — `.superpowers/sdd/
+    2026-08-20-akun-shell-and-drafts/task-2-brief.md`) — `<x-mk.header>` now
+    switched on
+    ---------------------------------------------------------------------------
+    `<x-mk.header>` no longer renders its "account area not built yet"
+    disabled fallback (its own doc block's `$akunAvailable` gate): this
+    layout now always passes a real `akunHref` — `route('akun.index')` for
+    an authenticated visitor, `route('login')` for a guest — and
+    `authenticated` so the header can pick "Akun" vs "Masuk/Akun" copy.
+    `auth()->check()` is read once into `$akunAuthenticated` rather than
+    called twice, since this layout renders on every request.
 --}}
 <!DOCTYPE html>
 <html lang="id">
@@ -163,7 +176,12 @@
         </div>
     </div>
 
-    <x-mk.header :active="$active ?? null" />
+    @php $akunAuthenticated = auth()->check(); @endphp
+    <x-mk.header
+        :active="$active ?? null"
+        :authenticated="$akunAuthenticated"
+        :akunHref="$akunAuthenticated ? route('akun.index') : route('login')"
+    />
 
     <main id="main">
         {{ $slot }}

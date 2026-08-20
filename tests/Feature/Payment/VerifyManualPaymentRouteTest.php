@@ -606,30 +606,24 @@ final class VerifyManualPaymentRouteTest extends TestCase
 
     public function test_an_unauthenticated_request_is_refused_by_the_auth_guard(): void
     {
-        // No `login` named route exists anywhere in this repo yet (no
-        // login UI has been built — same gap DisableMfaControllerTest's
-        // suite never exercises either). Laravel's default `Authenticate`
-        // middleware's `redirectTo()` calls `route('login')`
-        // unconditionally on an unauthenticated request, which throws
-        // RouteNotFoundException rather than silently letting the request
-        // through — an honest failure, not a bypass. Whichever future task
-        // builds the login UI turns this into a real redirect; until then
-        // this test pins that the `auth` guard is genuinely evaluated
-        // BEFORE this route's own logic ever runs.
+        // Updated by the `/akun` account area's auth-foundation PR
+        // (`.superpowers/sdd/2026-08-20-akun-auth-foundation/`) — this is
+        // the "whichever future task builds the login UI" this test's own
+        // comment used to anticipate. A real `login` named route now
+        // exists, so Laravel's default `Authenticate` middleware's
+        // `redirectTo()` resolves `route('login')` successfully instead of
+        // throwing `RouteNotFoundException`: an unauthenticated request now
+        // gets a clean redirect rather than an incidental 500. That
+        // redirect (not a crash) is what actually proves the `auth` guard
+        // is evaluated BEFORE this route's own logic ever runs.
         $verification = $this->submittedVerification();
 
-        // Laravel's exception handler renders the RouteNotFoundException as
-        // a server error response rather than letting it bubble out of the
-        // HTTP kernel — asserted as "definitely not a 2xx success" rather
-        // than a specific status, since the exact rendering of a missing
-        // named route is a framework/environment detail this test does not
-        // own.
         $response = $this->post($this->verifyUrl($verification), [
             'decision' => 'approve',
             'reason' => 'Proof matched provider statement',
         ]);
 
-        $response->assertStatus(500);
+        $response->assertRedirect(route('login'));
         $this->assertSame(PaymentVerificationStatus::Submitted, $verification->fresh()->status());
     }
 
@@ -658,5 +652,37 @@ final class VerifyManualPaymentRouteTest extends TestCase
         ]);
 
         $this->assertSame(0, PaymentSession::query()->count());
+    }
+
+    /**
+     * `throttle:payment-manual-verification` (public-beta-release plan,
+     * Lane D4) — 5/minute per actor+ip. Reuses the "without a fresh
+     * authentication" fixture (same $verification, same $user, repeated):
+     * that path is side-effect-free (redirects to the MFA challenge,
+     * changes nothing), so it is safe to call 6 times in one test without
+     * the underlying business logic itself rejecting a repeat call for an
+     * unrelated reason.
+     */
+    public function test_the_route_is_rate_limited(): void
+    {
+        $user = User::factory()->create();
+        $this->grantRole($user, ActorRole::FINANCE);
+        $verification = $this->submittedVerification();
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->actingAs($user)
+                ->post($this->verifyUrl($verification), [
+                    'decision' => 'approve',
+                    'reason' => 'Proof matched provider statement',
+                ])
+                ->assertRedirect(route('filament.admin.pages.mfa-challenge'));
+        }
+
+        $this->actingAs($user)
+            ->post($this->verifyUrl($verification), [
+                'decision' => 'approve',
+                'reason' => 'Proof matched provider statement',
+            ])
+            ->assertStatus(429);
     }
 }
