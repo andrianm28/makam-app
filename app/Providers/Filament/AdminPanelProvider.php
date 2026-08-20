@@ -9,6 +9,10 @@ use App\Filament\Admin\Pages\FinanceReports;
 use App\Filament\Admin\Pages\InAppNotifications;
 use App\Filament\Admin\Pages\MfaChallenge;
 use App\Filament\Admin\Pages\MfaSettings;
+use App\Filament\Admin\Widgets\FailedPaymentExceptionQueueWidget;
+use App\Filament\Admin\Widgets\FinancialOverviewWidget;
+use App\Filament\Admin\Widgets\OrderStatusOverviewWidget;
+use App\Filament\Admin\Widgets\PlatformOverviewWidget;
 use App\Http\Middleware\AssignCorrelationId;
 use App\Http\Middleware\EnforceMfaChallenge;
 use Filament\Http\Middleware\Authenticate;
@@ -126,6 +130,16 @@ use RuntimeException;
  * `filament/filament` v5.7.3 — both methods live on
  * `Filament\Panel\Concerns\HasBrandLogo`, matching the names this batch's
  * brief assumed; no correction needed.
+ *
+ * A FIFTH change (ADM-001, `.kiro/specs/admin-operations/requirements.md`
+ * AC1/AC11): `Filament/Admin/Widgets/` is no longer the unpopulated
+ * directory the SECOND note above describes. Four dashboard-summary widgets
+ * now exist there and are registered explicitly in `->widgets([...])`
+ * below, the same explicit-array shape `->pages([...])` already uses — not
+ * `->discoverWidgets()`, for the identical unconfirmed-discovery-behaviour
+ * reason the SECOND note gives for pages. See each widget class's own doc
+ * block for what it covers and, for the two finance-gated ones, why they
+ * are authorized and query-scoped differently from the master-data ones.
  */
 class AdminPanelProvider extends PanelProvider
 {
@@ -156,6 +170,16 @@ class AdminPanelProvider extends PanelProvider
             ->widgets([
                 Widgets\AccountWidget::class,
                 Widgets\FilamentInfoWidget::class,
+                // ADM-001 (AC1, AC11 partial) — dashboard summary. Order
+                // matters here: it is render order on the default Dashboard
+                // page. Master-data counts first (visible to all four
+                // back-office roles), then the narrower finance-gated
+                // widgets, which simply do not render for an actor without
+                // ledger-read authority (`canView()` returns false).
+                PlatformOverviewWidget::class,
+                OrderStatusOverviewWidget::class,
+                FinancialOverviewWidget::class,
+                FailedPaymentExceptionQueueWidget::class,
             ])
             ->middleware([
                 // S3-T10 (platform-audit AC10 / platform-outbox AC13): this
