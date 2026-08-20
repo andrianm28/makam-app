@@ -59,11 +59,22 @@ final class PasswordResetTest extends TestCase
             ->set('email', $user->email)
             ->call('sendResetLink');
 
+        Notification::assertSentTo($user, ResetPassword::class);
+
+        // Reset the fake between sub-cases (same pattern the rate-limit
+        // test below uses): `NotificationFake::assertNothingSentTo()`
+        // requires an actual notifiable (Model/AnonymousNotifiable), not a
+        // raw email string — there is no notifiable to assert against for
+        // a nonexistent email, so the ONLY way to prove nothing was sent
+        // for the unknown case is a clean fake plus `assertNothingSent()`
+        // (no argument).
+        Notification::fake();
+
         $unknown = Livewire::test(ForgotPasswordPage::class)
             ->set('email', 'does-not-exist@example.test')
             ->call('sendResetLink');
 
-        Notification::assertNothingSentTo('does-not-exist@example.test');
+        Notification::assertNothingSent();
         $unknown->assertSet('linkSent', true);
 
         $this->assertSame(
