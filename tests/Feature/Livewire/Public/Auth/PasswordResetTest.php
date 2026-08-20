@@ -78,9 +78,19 @@ final class PasswordResetTest extends TestCase
         Notification::assertNothingSent();
         $unknown->assertSet('linkSent', true);
 
+        // `wire:id` is a random per-render instance token Livewire embeds
+        // in the rendered root element — comparing raw `html()` output
+        // would fail on that alone even though every OTHER byte is
+        // identical, since `$known` and `$unknown` are two separate
+        // component instances. Strip it before comparing so the assertion
+        // actually verifies the thing it claims to (identical confirmation
+        // content), not "these happen to be the same component instance,"
+        // which they never are.
+        $stripWireId = static fn (string $html): string => preg_replace('/wire:id="[^"]*"/', 'wire:id="STRIPPED"', $html);
+
         $this->assertSame(
-            $known->html(),
-            $unknown->html(),
+            $stripWireId($known->html()),
+            $stripWireId($unknown->html()),
             'A known and unknown email must render the identical confirmation shape.',
         );
     }

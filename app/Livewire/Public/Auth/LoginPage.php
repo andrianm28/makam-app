@@ -74,16 +74,22 @@ final class LoginPage extends Component
         app(ActorContextResolver::class)->forget();
         RateLimiter::clear($key);
 
-        // `redirect()->intended('/')` (not a literal `$this->redirect('/')`)
-        // is what makes this work for both a plain `/masuk` visit and a
-        // guest bounced here by `Authenticate` from a protected route:
-        // Laravel's `Redirector::intended()` reads and consumes the
-        // `url.intended` session key that middleware sets, falling back to
-        // the given default. Its target URL is handed to Livewire's own
-        // `redirect()` (the house convention every other component here
-        // uses) rather than returned directly, since `login()` keeps the
-        // brief's `void` signature.
-        $this->redirect(redirect()->intended('/')->getTargetUrl(), navigate: false);
+        // `redirectIntended('/')` (not `redirect()->intended('/')->getTargetUrl()`,
+        // an earlier revision of this method) — inside a Livewire component
+        // the global `redirect()` helper resolves to Livewire's OWN
+        // `Redirector` (`Livewire\Features\SupportRedirects\Redirector`),
+        // which has no `getTargetUrl()` method (that's an
+        // `Illuminate\Http\RedirectResponse` method, never reachable this
+        // way); calling it throws `BadMethodCallException` at runtime — a
+        // real, verified bug caught only by CI actually executing this
+        // action, since neither `php -l` nor a static read of the code
+        // reveals it. `Livewire\Component`'s own `HandlesRedirects` trait
+        // ships `redirectIntended($default, $navigate)` for exactly this
+        // case: it pulls and consumes the same `url.intended` session key
+        // Laravel's `Authenticate` middleware sets, falling back to the
+        // given default, then calls `$this->redirect()` itself — no
+        // `Redirector` instance involved at all.
+        $this->redirectIntended('/', navigate: false);
     }
 
     public function render(): View

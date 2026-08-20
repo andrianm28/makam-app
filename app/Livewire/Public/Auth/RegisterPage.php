@@ -85,12 +85,14 @@ final class RegisterPage extends Component
         session()->regenerate();
         app(ActorContextResolver::class)->forget();
 
-        // `redirect()->intended('/')` — same PR-1 fallback as `LoginPage`,
-        // not `route('akun.index')` (that route does not exist yet). Its
-        // target URL is handed to Livewire's own `redirect()` (the house
-        // convention every other component here uses) rather than returned
-        // directly, since `register()` keeps the brief's `void` signature.
-        $this->redirect(redirect()->intended('/')->getTargetUrl(), navigate: false);
+        // `redirectIntended('/')` — see `LoginPage::login()`'s doc comment
+        // for why: `redirect()->intended('/')->getTargetUrl()` throws at
+        // runtime inside a Livewire action (the global `redirect()` helper
+        // resolves to Livewire's own `Redirector`, which has no
+        // `getTargetUrl()` method). `'/'` is the same PR-1 fallback as
+        // `LoginPage`, not `route('akun.index')` (that route does not exist
+        // yet).
+        $this->redirectIntended('/', navigate: false);
     }
 
     public function render(): View
