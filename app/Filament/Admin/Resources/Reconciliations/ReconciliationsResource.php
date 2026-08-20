@@ -81,10 +81,33 @@ final class ReconciliationsResource extends Resource
      * Newest run first — the same "most recent conclusion at the top"
      * ordering `ReconciliationsTable`'s default sort restates for the user;
      * this is the query-level floor beneath it.
+     *
+     * ---------------------------------------------------------------------------
+     * Entity-scoped, not just role-gated — a real gap this closes
+     * ---------------------------------------------------------------------------
+     * `canAccess()` only proves the actor holds SOME `LedgerReadAuthorizer`
+     * grant (entity-less mount check); before this fix, the query itself
+     * never filtered by `entityRefs`, so any actor who could see this page at
+     * all saw every badan usaha's reconciliation runs — the same
+     * query-level-scope-is-mandatory rule `LedgerReadScope`'s own doc block
+     * states (`AGENTS.md` §Authorization) and that `FinanceReports` and the
+     * `FinancialOverviewWidget` dashboard widget both already apply. An actor
+     * with no active grant at all gets an always-false query
+     * (`whereRaw('1 = 0')`) rather than an empty `whereIn` (an empty
+     * `whereIn([])` is a no-op in some query builder paths — never rely on
+     * that to mean "nothing", assert it explicitly).
      */
     public static function getEloquentQuery(): Builder
     {
-        return Reconciliation::query()->latest('ran_at');
+        try {
+            $scope = app(LedgerReadAuthorizer::class)->authorize(app(ActorContext::class));
+        } catch (LedgerReadNotAuthorisedException) {
+            return Reconciliation::query()->whereRaw('1 = 0');
+        }
+
+        return Reconciliation::query()
+            ->whereIn('entity_ref', $scope->entityRefs)
+            ->latest('ran_at');
     }
 
     public static function getPages(): array
