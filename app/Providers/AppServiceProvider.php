@@ -110,6 +110,14 @@ class AppServiceProvider extends ServiceProvider
         // load test has been run; `performance-and-capacity.md`'s profiles
         // remain unexecuted).
         RateLimiter::for('public-guest', static function (Request $request): array|Limit {
+            // See config/rate_limiting.php's doc block for why this exists
+            // and why it is NOT gated on environment('testing') (that value
+            // is also what every ordinary PHPUnit run uses, which would
+            // silently defeat PublicGuestThrottleTest).
+            if (config('rate_limiting.public_guest_disabled')) {
+                return Limit::none();
+            }
+
             $user = $request->user();
 
             if ($user !== null) {

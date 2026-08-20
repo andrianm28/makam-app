@@ -399,6 +399,16 @@ jobs:
 
       - name: Serve the app and run the browser smoke test
         env:
+          # Exempts this run from the public-guest rate limiter
+          # (config/rate_limiting.php, app/Providers/AppServiceProvider.php)
+          # -- the browser and `php artisan serve` share one IP here, so the
+          # whole suite's traffic previously hit one guest bucket and
+          # produced real 429s. Deliberately NOT APP_ENV=testing -- that
+          # value is also what PHPUnit itself runs under (phpunit.xml), which
+          # would silently defeat PublicGuestThrottleTest instead. This flag
+          # is scoped to nothing but this one step's server process;
+          # production is untouched.
+          THROTTLE_PUBLIC_GUEST_DISABLED: "true"
           DB_CONNECTION: pgsql
           DB_HOST: 127.0.0.1
           DB_PORT: 5432

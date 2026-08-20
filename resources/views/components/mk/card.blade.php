@@ -61,12 +61,17 @@
     //
     // MUST be a static array of complete literal strings, one per intent —
     // never build the class name by interpolating $intent at request time
-    // (e.g. "border-[var(--mk-intent-{$intent}-border)]"). Tailwind's
-    // @source scanner reads file TEXT for literal class-shaped strings; it
-    // cannot execute PHP, so an interpolated class is invisible to it and
-    // silently generates no CSS. Found and fixed 25 Jul 2026 — an earlier
-    // revision of this file did exactly that, so every `intent` card
-    // rendered with zero border/background styling. badge.blade.php's
+    // into a border/token bracket string. Tailwind's @source scanner reads
+    // file TEXT for literal class-shaped strings; it cannot execute PHP, so
+    // an interpolated class is invisible to it and silently generates no
+    // CSS — and, separately, a literal bracket string containing a
+    // placeholder like "{$intent}" is just as broken the other direction:
+    // the scanner treats it as a real candidate and fails to compile it
+    // (confirmed 20 Aug 2026 via badge.blade.php's identical doc-comment
+    // bug), so never write that placeholder form even as a comment example
+    // either. Found and fixed 25 Jul 2026 — an earlier revision of this
+    // file did exactly that, so every `intent` card rendered with zero
+    // border/background styling. badge.blade.php's
     // $intents array (§3.6) already gets this right; this mirrors it.
     $intentSurfaces = [
         'neutral' => 'border-[var(--mk-intent-neutral-border)] bg-[var(--mk-intent-neutral-bg)]',
