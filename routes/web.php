@@ -11,6 +11,7 @@ use App\Http\Middleware\RequireRecentAuthentication;
 use App\Livewire\Public\Akun\AkunIndex;
 use App\Livewire\Public\Akun\DocumentList;
 use App\Livewire\Public\Akun\DraftList;
+use App\Livewire\Public\Akun\OrderList;
 use App\Livewire\Public\Akun\RenewalList;
 use App\Livewire\Public\Auth\ForgotPasswordPage;
 use App\Livewire\Public\Auth\LoginPage;
@@ -478,6 +479,11 @@ Route::get('/reset-password/{token}', ResetPasswordPage::class)->middleware('gue
 | zero customer-facing upload path, so neither fabricates account-scoped
 | data. `AkunIndex`'s view now renders tiles for all three sub-routes.
 |
+| `/pesanan` (`OrderList`) is PR 3's own addition — Task 2 of
+| `.superpowers/sdd/2026-08-20-akun-pesanan/task-2-brief.md`, closing the
+| account area's fourth tile. It renders `Order::forUser(auth()->id())`
+| (Task 1's `#[Scope]`), real account-scoped data, not a deferred page.
+|
 | `auth` is Laravel 13's own default middleware alias — an unauthenticated
 | request redirects to `route('login')` (the `Authenticate` middleware's
 | own by-name resolution, already relied on by this file's `login` route
@@ -488,6 +494,7 @@ Route::get('/reset-password/{token}', ResetPasswordPage::class)->middleware('gue
 Route::middleware('auth')->prefix('akun')->name('akun.')->group(function (): void {
     Route::get('/', AkunIndex::class)->name('index');
     Route::get('/draft', DraftList::class)->name('draft');
+    Route::get('/pesanan', OrderList::class)->name('pesanan');
     Route::get('/perpanjangan', RenewalList::class)->name('perpanjangan');
     Route::get('/dokumen', DocumentList::class)->name('dokumen');
 });

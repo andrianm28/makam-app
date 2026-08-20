@@ -5,6 +5,11 @@ declare(strict_types=1);
 namespace Tests\Feature\Livewire\Public\Akun;
 
 use App\Domain\Booking\Models\BookingDraft;
+use App\Domain\OrderWorkflow\Models\Order;
+use App\Domain\OrderWorkflow\Models\OrderParty;
+use App\Domain\OrderWorkflow\OrderPartyRole;
+use App\Domain\OrderWorkflow\OrderStatus;
+use App\Domain\OrderWorkflow\ProductType;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -54,5 +59,54 @@ final class AkunIndexTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Belum ada draft pemesanan');
+    }
+
+    public function test_the_order_tile_links_to_the_order_list_route(): void
+    {
+        $user = User::factory()->create();
+
+        $html = $this->actingAs($user)->get('/akun')->assertOk()->getContent();
+
+        // Not just "both strings appear somewhere on the page" — the href
+        // must belong to the SAME anchor that wraps the "Pesanan" tile's own
+        // heading text (card.blade.php: an interactive card's root <a>
+        // wraps its entire slot, so href always precedes the tile's text).
+        self::assertMatchesRegularExpression(
+            '#<a\s+href="'.preg_quote(route('akun.pesanan'), '#').'"[^>]*>.*?Pesanan.*?</a>#s',
+            $html,
+        );
+    }
+
+    public function test_the_order_tile_count_is_scoped_to_the_viewing_user_only(): void
+    {
+        $user = User::factory()->create();
+        $otherUser = User::factory()->create();
+
+        $ownOrder = Order::query()->create([
+            'reference' => 'MK-2026-OWNTILEONE',
+            'product_type' => ProductType::AT_NEED_SERVICE_ORDER->value,
+            'status' => OrderStatus::MASUK->value,
+        ]);
+        OrderParty::query()->create([
+            'order_id' => $ownOrder->getKey(),
+            'user_id' => $user->getKey(),
+            'role' => OrderPartyRole::PEMESAN->value,
+        ]);
+
+        $otherOrder = Order::query()->create([
+            'reference' => 'MK-2026-OTHERTILEONE',
+            'product_type' => ProductType::AT_NEED_SERVICE_ORDER->value,
+            'status' => OrderStatus::MASUK->value,
+        ]);
+        OrderParty::query()->create([
+            'order_id' => $otherOrder->getKey(),
+            'user_id' => $otherUser->getKey(),
+            'role' => OrderPartyRole::PEMESAN->value,
+        ]);
+
+        $response = $this->actingAs($user)->get('/akun');
+
+        $response->assertOk();
+        $response->assertSee('1 pesanan tercatat');
     }
 }
