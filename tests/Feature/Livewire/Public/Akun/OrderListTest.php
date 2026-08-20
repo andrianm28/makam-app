@@ -76,6 +76,13 @@ final class OrderListTest extends TestCase
         $response->assertSee('MK-2026-MASUKONE');
         $response->assertSee('At Need Service Order');
         $response->assertSee('Masuk');
+        // MASUK resolves to StatusIntent::INTENT_NEUTRAL — assert the actual
+        // rendered badge CSS fragment badge.blade.php emits for that intent
+        // (resources/views/components/mk/badge.blade.php's $intents map),
+        // not just the humanized label text, so a local string-humanizer
+        // with no StatusIntent involvement could not pass this test.
+        $response->assertSee('bg-[var(--mk-intent-neutral-bg)]', false);
+        $response->assertDontSee('bg-[var(--mk-intent-success-bg)]', false);
     }
 
     public function test_row_shows_status_badge_for_dibayar_with_a_different_intent_than_masuk(): void
@@ -89,6 +96,14 @@ final class OrderListTest extends TestCase
 
         $response->assertSee('MK-2026-DIBAYARO');
         $response->assertSee('Dibayar');
+        // DIBAYAR resolves to StatusIntent::INTENT_SUCCESS — a DIFFERENT
+        // intent than MASUK's neutral above. Asserting the success-intent
+        // badge fragment IS present and the neutral-intent one is NOT is
+        // what actually proves this goes through StatusIntent's
+        // status -> intent resolution rather than a hardcoded/humanized
+        // label that happens to differ in text only.
+        $response->assertSee('bg-[var(--mk-intent-success-bg)]', false);
+        $response->assertDontSee('bg-[var(--mk-intent-neutral-bg)]', false);
     }
 
     public function test_a_guest_is_redirected_to_login(): void
