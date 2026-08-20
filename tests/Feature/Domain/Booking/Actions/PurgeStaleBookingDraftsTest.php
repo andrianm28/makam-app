@@ -30,6 +30,33 @@ final class PurgeStaleBookingDraftsTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * Freezes "now" for the whole test: `makeDraftAged()` computes an aged
+     * timestamp from `Carbon::now()`, and `PurgeStaleBookingDrafts` computes
+     * its cutoff from a SEPARATE `Carbon::now()` call inside the action.
+     * Without freezing, any real wall-clock time elapsing between those two
+     * calls (a slow CI runner, an unlucky second-boundary crossing) shifts
+     * the cutoff later than the aged timestamp, which silently turns
+     * `test_a_draft_at_the_cutoff_boundary_survives` into `updated_at <
+     * cutoff` = true — the exact-boundary draft gets deleted even though the
+     * test's own intent (and the action's `<` comparison) says it should
+     * survive. Confirmed as a real, reproducible CI failure (20 Aug 2026,
+     * unrelated PR's rebase surfaced it), not a hypothetical race.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Carbon::setTestNow(Carbon::now());
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+
+        parent::tearDown();
+    }
+
     public function test_drafts_untouched_past_the_window_are_deleted(): void
     {
         $abandoned = $this->makeDraftAged(days: 45);
