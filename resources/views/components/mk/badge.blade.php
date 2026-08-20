@@ -13,14 +13,27 @@
     the status → intent mapping themselves until `StatusIntent` lands.
 
     --- The dynamic-intent-class vs Tailwind-JIT-scanning problem (§3.6) ---
-    §3.6's colour recipe is `bg-[var(--mk-intent-{intent}-bg)]
-    text-[var(--mk-intent-{intent}-fg)] border-[var(--mk-intent-{intent}-border)]`.
-    Building that string at request time via PHP interpolation
-    (`"bg-[var(--mk-intent-{$intent}-bg)]"`) would never appear as literal
-    text anywhere in this file — Tailwind 4's `@source`-driven JIT scanner
-    (resources/css/app.css) only generates a utility for class names it can
-    find as literal text in scanned files, so an interpolated class is
-    silently dropped and the badge renders with no colour at all.
+    §3.6's colour recipe pairs bg/text/border utilities with the token
+    triple `--mk-intent-<intent>-bg`, `-fg`, `-border` (see tokens.css
+    §2.10) via Tailwind's `var()` arbitrary-value bracket syntax.
+
+    Two things this doc block deliberately does NOT do, both proven broken
+    this session (20 Aug 2026):
+
+    1. Build that class string at request time via PHP interpolation of
+       `$intent`. Tailwind 4's `@source`-driven JIT scanner
+       (resources/css/app.css) only generates a utility for class names it
+       finds as literal text in scanned files — an interpolated class never
+       appears as literal text, so the scanner silently drops it and the
+       badge renders with no colour at all.
+    2. Write that recipe out as an *example* arbitrary-value bracket string
+       containing a placeholder token instead of a real intent name. The
+       scanner reads raw file TEXT, including inside comments, and cannot
+       tell "illustrative example" from "real class" — a placeholder inside
+       the brackets is not valid CSS, so the scanner tries to compile it
+       anyway and produces broken output. Do not "restore" a literal
+       bracket example with a placeholder here; describe the pattern in
+       prose instead, the way this paragraph does.
 
     The fix: $intents below is a STATIC PHP ARRAY where every value is a
     complete, already-written class string, one per intent. All six
@@ -67,9 +80,9 @@
     ];
 
     // Complete, literal per-intent strings — see file header. Every value
-    // MUST stay fully written out; refactoring this into
-    // "bg-[var(--mk-intent-{$intent}-bg)]" interpolation looks equivalent
-    // but is invisible to Tailwind's scanner (no CSS would be generated).
+    // MUST stay fully written out; refactoring this into a PHP-interpolated
+    // bracket string built from $intent looks equivalent but is invisible
+    // to Tailwind's scanner (no CSS would be generated).
     $intents = [
         'neutral' => 'bg-[var(--mk-intent-neutral-bg)] text-[var(--mk-intent-neutral-fg)] border-[var(--mk-intent-neutral-border)]',
         'info'    => 'bg-[var(--mk-intent-info-bg)] text-[var(--mk-intent-info-fg)] border-[var(--mk-intent-info-border)]',
