@@ -409,6 +409,21 @@ jobs:
           # is scoped to nothing but this one step's server process;
           # production is untouched.
           THROTTLE_PUBLIC_GUEST_DISABLED: "true"
+          # Without this, EVERY marketplace order placement -- online AND
+          # manual, unlike G-PAY-01's online-only gate that booking's E2E
+          # suite routes around by testing the manual path -- throws
+          # BadanUsahaNotConfiguredException (config/marketplace.php's
+          # badan_usaha_ref, unset by .env.example on purpose: "Marketplace
+          # checkout fails closed while this is unset (requirement 10)").
+          # That is a real, intentional production/staging fail-closed
+          # gate confirming business-registration readiness -- NOT
+          # something to relax there. This value only exists in this one
+          # ephemeral CI step's server process, is discarded when the job
+          # ends, and is the exact same fake value
+          # tests/Feature/Livewire/Public/Marketplace/CheckoutScreenTest.php
+          # already sets for identical reasons -- an established, accepted
+          # test-only convention in this codebase, not a new one.
+          MARKETPLACE_BADAN_USAHA_REF: "badan-usaha-test"
           DB_CONNECTION: pgsql
           DB_HOST: 127.0.0.1
           DB_PORT: 5432
