@@ -21,6 +21,18 @@ namespace App\Platform\Payment;
  * no `Quote`, no `AuthorizeOrderPaymentOpening` analog, and no accepted
  * session shape). The case is declared NOW so the follow-up and the Task 5
  * router can code against the closed enum instead of inventing a string.
+ *
+ * ---------------------------------------------------------------------------
+ * `CareSubscription` resolves a `SubscriptionCycle`, keyed by its own id
+ * ---------------------------------------------------------------------------
+ * See `Actions\ApplyPaymentSettlement`'s doc block, "Care subscription"
+ * section, for the full resolution design. In short: `subscription_invoices`
+ * carries no business reference column comparable to `orders.reference` /
+ * `MarketplaceOrder.order_number`, so a `SubscriptionCycle`'s own UUID
+ * primary key IS its `orderRef` for this case. Like `Marketplace` above, no
+ * session-opening producer sends `OrderType::CareSubscription` yet — this
+ * case and the settlement branch that resolves it are declared now so the
+ * closed-list/router shape exists before the producer does.
  */
 enum OrderType: string
 {
@@ -29,4 +41,7 @@ enum OrderType: string
 
     /** A `MarketplaceOrder` (the marketplace domain). Deferred — see above. */
     case Marketplace = 'marketplace';
+
+    /** A `SubscriptionCycle` (the recurring-care-subscriptions domain). Deferred — see above. */
+    case CareSubscription = 'care_subscription';
 }

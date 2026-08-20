@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Platform\Payment\Actions;
 
+use App\Domain\CareSubscription\Actions\MarkCyclePaid;
+use App\Domain\CareSubscription\Models\CarePlan;
+use App\Domain\CareSubscription\Models\SubscriptionCycle;
 use App\Domain\Marketplace\Actions\MarkMarketplaceOrderPaid;
 use App\Domain\Marketplace\Models\MarketplaceOrder;
 use App\Domain\OrderWorkflow\Actions\ApplyPaidEffects;
@@ -11,6 +14,7 @@ use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\OrderWorkflow\PaidTrigger;
 use App\Domain\OrderWorkflow\PaidTriggerSource;
+use App\Domain\VendorFulfillment\Actions\CreateWorkOrderFromCycle;
 use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
@@ -23,6 +27,7 @@ use App\Platform\Payment\PaymentAuditActions;
 use App\Platform\Payment\ProviderEventType;
 use App\Platform\Payment\SessionState;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 
 /**
  * Task 5 — the dual-target settlement dispatcher: everything that happens
@@ -111,6 +116,44 @@ use Carbon\CarbonImmutable;
  * G-PAYOUT-01 stays closed: the payable release is a re-assessment
  * (`HELD` -> `payable` when the eligibility rule permits), never a call to
  * `ManualPayout::pay()` and never a `paid` state on this path.
+ *
+ * ---------------------------------------------------------------------------
+ * Care subscription: a cycle keyed by its own id, plus auto work-order creation
+ * ---------------------------------------------------------------------------
+ * `subscription_invoices` carries no business reference column comparable to
+ * `orders.reference` or `MarketplaceOrder.order_number` (it has no reference
+ * column at all — see the table's migration). Rather than add one via a new
+ * migration outside this batch's assigned scope, a `SubscriptionCycle`'s own
+ * UUID primary key IS its `orderRef`/`invoice_reference` for this case: a
+ * future session-opening path for a care-subscription cycle must pass
+ * `orderRef: (string) $cycle->getKey()` to `OpenPaymentSessionCommand` for
+ * this branch to ever be reached in production — no such producer exists
+ * yet, the same "closed case declared before its producer" stance
+ * `OrderType::Marketplace` already documents. `SubscriptionCycle::find()`
+ * on a UUID can never collide with the `MK-`/`MKT-`-prefixed booking and
+ * marketplace reference formats, so the lookup order (booking, then
+ * marketplace, then cycle) stays deterministic.
+ *
+ * `Domain\CareSubscription\Actions\MarkCyclePaid` now owns the
+ * amount-match-assertion + row-lock + idempotent-if-already-paid shape
+ * `MarkMarketplaceOrderPaid` established above (a change made in this same
+ * batch — it previously had none of the three, a real gap for a
+ * webhook-driven money transition). The session snapshot (`amount_minor`) is
+ * passed the same way the other two legs pass it: the authority is what this
+ * system authorized at session-open time, not the payload.
+ *
+ * Unlike the booking leg, this branch does NOT audit a duplicate-arrival: it
+ * mirrors the marketplace leg, which also has none. Flagged as a known
+ * asymmetry across all three legs, not a decision silently made here.
+ *
+ * `Domain\VendorFulfillment\Actions\CreateWorkOrderFromCycle` is called from
+ * THIS class, not from inside `MarkCyclePaid` — cross-domain orchestration
+ * (`CareSubscription` -> `VendorFulfillment`) belongs at the settlement
+ * dispatcher, the same seam that already keeps `Marketplace` and
+ * `FinancialLedger` uncoupled above ("the router dispatches without coupling
+ * domains"). `CreateWorkOrderFromCycle` is itself idempotent per cycle, so
+ * calling it on every settlement of this cycle (including an idempotent
+ * `MarkCyclePaid` replay) is safe.
  */
 final readonly class ApplyPaymentSettlement
 {
@@ -139,11 +182,20 @@ final readonly class ApplyPaymentSettlement
 
         $marketplaceOrder = MarketplaceOrder::query()->where('order_number', $invoiceReference)->first();
 
-        if (! $marketplaceOrder instanceof MarketplaceOrder) {
+        if ($marketplaceOrder instanceof MarketplaceOrder) {
+            $this->settleMarketplace($marketplaceOrder, $event, $session);
+            $this->transitionToTerminal($session, SessionState::Paid);
+
+            return;
+        }
+
+        $cycle = Str::isUuid($invoiceReference) ? SubscriptionCycle::query()->find($invoiceReference) : null;
+
+        if (! $cycle instanceof SubscriptionCycle) {
             throw SettlementTargetUnresolvableException::becauseNoOrder($invoiceReference);
         }
 
-        $this->settleMarketplace($marketplaceOrder, $event, $session);
+        $this->settleCareSubscription($cycle, $event, $session);
         $this->transitionToTerminal($session, SessionState::Paid);
     }
 
@@ -307,5 +359,35 @@ final readonly class ApplyPaymentSettlement
             // journal batches) are stamped with the system clock, never the
             // provider-controlled occurrence time.
         );
+    }
+
+    /**
+     * Marks the cycle's invoice PAID (see `MarkCyclePaid`'s doc block for the
+     * amount-match + idempotency shape it now owns) and — the reason this
+     * leg exists as more than a settlement — auto-creates the fulfilment
+     * work order for the now-paid cycle (CARE-SUB-04). A cycle whose
+     * subscription carries no resolvable care plan is a data-integrity
+     * anomaly and fails closed the same way an unresolvable invoice
+     * reference does.
+     */
+    private function settleCareSubscription(SubscriptionCycle $cycle, ProviderEvent $event, PaymentSession $session): void
+    {
+        $carePlan = $cycle->subscription?->carePlan;
+
+        if (! $carePlan instanceof CarePlan) {
+            throw SettlementTargetUnresolvableException::becauseNoOrder((string) $event->invoice_reference);
+        }
+
+        $paidCycle = app(MarkCyclePaid::class)(
+            $cycle,
+            amountMinor: (int) $session->amount_minor,
+            paidSourceRef: (string) $event->provider_transaction_id,
+            // The internal `provider_events` id, the same actor reference the
+            // booking and marketplace legs pass: a webhook holds no
+            // credential of ours.
+            actorReference: (string) $event->getKey(),
+        );
+
+        app(CreateWorkOrderFromCycle::class)($paidCycle->fresh(), $carePlan);
     }
 }

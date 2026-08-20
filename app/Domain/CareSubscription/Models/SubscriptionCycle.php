@@ -43,11 +43,17 @@ final class SubscriptionCycle extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<SubscriptionInvoice, $this>
+     */
     public function invoice(): BelongsTo
     {
         return $this->belongsTo(SubscriptionInvoice::class, 'invoice_id');
     }
 
+    /**
+     * @return BelongsTo<Subscription, $this>
+     */
     public function subscription(): BelongsTo
     {
         return $this->belongsTo(Subscription::class, 'subscription_id');
