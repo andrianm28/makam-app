@@ -9,7 +9,9 @@ use App\Http\Controllers\Health\HealthReadyController;
 use App\Http\Middleware\EnforceMfaChallenge;
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Livewire\Public\Akun\AkunIndex;
+use App\Livewire\Public\Akun\DocumentList;
 use App\Livewire\Public\Akun\DraftList;
+use App\Livewire\Public\Akun\RenewalList;
 use App\Livewire\Public\Auth\ForgotPasswordPage;
 use App\Livewire\Public\Auth\LoginPage;
 use App\Livewire\Public\Auth\RegisterPage;
@@ -469,10 +471,12 @@ Route::get('/reset-password/{token}', ResetPasswordPage::class)->middleware('gue
 | own doc block above explains for itself.
 |
 | Renewal (`/akun/perpanjangan`) and document (`/akun/dokumen`) routes are
-| Task 3 — deliberately NOT added here; `AkunIndex`'s view renders a tile
-| only for `/akun/draft`, the one sub-route that exists after this task, so
-| no page in this PR ever links to a route absent from this same merge
-| state.
+| Task 3, added below — both honest "not yet available" pages over
+| `<x-mk.gate-closed-page>`, per that task's own brief
+| (`.superpowers/sdd/2026-08-20-akun-shell-and-drafts/task-3-brief.md`):
+| renewals have zero customer-ownership infrastructure and documents have
+| zero customer-facing upload path, so neither fabricates account-scoped
+| data. `AkunIndex`'s view now renders tiles for all three sub-routes.
 |
 | `auth` is Laravel 13's own default middleware alias — an unauthenticated
 | request redirects to `route('login')` (the `Authenticate` middleware's
@@ -484,6 +488,8 @@ Route::get('/reset-password/{token}', ResetPasswordPage::class)->middleware('gue
 Route::middleware('auth')->prefix('akun')->name('akun.')->group(function (): void {
     Route::get('/', AkunIndex::class)->name('index');
     Route::get('/draft', DraftList::class)->name('draft');
+    Route::get('/perpanjangan', RenewalList::class)->name('perpanjangan');
+    Route::get('/dokumen', DocumentList::class)->name('dokumen');
 });
 
 /*

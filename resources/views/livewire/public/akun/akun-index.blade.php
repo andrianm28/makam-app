@@ -11,10 +11,10 @@
     backed by a Layer 1 token in tokens.css, no hex, no arbitrary value
     (design-system.md §9.2 MUST NOT 1/2).
 
-    Only ONE tile (`/akun/draft`) — see the component's own doc block for
-    why a second tile is deliberately absent this task. Task 3 adds two
-    more tiles here once `akun.perpanjangan`/`akun.dokumen` exist, each
-    carrying a `<x-mk.badge>` "Segera hadir" marker per that task's brief.
+    Three tiles — see the component's own doc block. The renewal and
+    document tiles carry a `<x-mk.badge intent="neutral">` "Segera hadir"
+    marker (per this task's brief) since both routes render
+    `<x-mk.gate-closed-page>` rather than real account-scoped data.
 --}}
 <div class="mx-auto max-w-content px-4 py-8 md:px-6 lg:px-8">
     <h1 class="text-3xl font-semibold tracking-tight text-neutral-900">Akun Saya</h1>
@@ -34,6 +34,36 @@
                         @else
                             Belum ada draft pemesanan
                         @endif
+                    </p>
+                </div>
+            </div>
+        </x-mk.card>
+
+        <x-mk.card :href="route('akun.perpanjangan')" interactive>
+            <div class="flex items-start gap-4">
+                <x-mk.icon-medallion icon="clock-x" />
+                <div>
+                    <h2 class="text-lg font-semibold text-neutral-900">
+                        Perpanjangan
+                        <x-mk.badge intent="neutral">Segera hadir</x-mk.badge>
+                    </h2>
+                    <p class="mt-1 text-sm text-neutral-600">
+                        Perpanjangan makam via akun belum tersedia
+                    </p>
+                </div>
+            </div>
+        </x-mk.card>
+
+        <x-mk.card :href="route('akun.dokumen')" interactive>
+            <div class="flex items-start gap-4">
+                <x-mk.icon-medallion icon="document-text" />
+                <div>
+                    <h2 class="text-lg font-semibold text-neutral-900">
+                        Dokumen
+                        <x-mk.badge intent="neutral">Segera hadir</x-mk.badge>
+                    </h2>
+                    <p class="mt-1 text-sm text-neutral-600">
+                        Unggah dokumen pelanggan belum tersedia
                     </p>
                 </div>
             </div>

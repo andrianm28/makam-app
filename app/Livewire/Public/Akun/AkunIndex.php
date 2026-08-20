@@ -19,12 +19,13 @@ use Livewire\Component;
  * its own row set), never a raw `BookingDraft::query()->count()` — one
  * definition of "open draft" for both screens.
  *
- * Only ONE tile (`/akun/draft`) renders: `routes/web.php`'s `akun.*` group
- * registers no other sub-route yet (renewal/document routes are Task 3),
- * and design-system.md §6.4 / this task's own brief forbid linking to a
- * route that doesn't exist in the same PR merge state. Task 3 adds its own
- * two tiles to this same view once `akun.perpanjangan`/`akun.dokumen`
- * exist.
+ * Three tiles render: `/akun/draft`, `/akun/perpanjangan`, and
+ * `/akun/dokumen` — all now registered in `routes/web.php`'s `akun.*`
+ * group (Task 3). The renewal and document tiles still link through (never
+ * omitted, per design-system.md §6.4 and the IA's own "closed but
+ * explained" requirement) but carry a `<x-mk.badge>` "Segera hadir" marker
+ * since both routes render `<x-mk.gate-closed-page>` rather than real
+ * account-scoped data — see `RenewalList`/`DocumentList`'s own doc blocks.
  */
 final class AkunIndex extends Component
 {
