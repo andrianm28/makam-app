@@ -399,6 +399,13 @@ jobs:
 
       - name: Serve the app and run the browser smoke test
         env:
+          # APP_ENV=testing exempts this run from the public-guest rate
+          # limiter (app/Providers/AppServiceProvider.php) -- the browser and
+          # `php artisan serve` share one IP here, so the whole suite's
+          # traffic previously hit one guest bucket and produced real 429s.
+          # Production is untouched: this only overrides the value for this
+          # one CI step's server process.
+          APP_ENV: testing
           DB_CONNECTION: pgsql
           DB_HOST: 127.0.0.1
           DB_PORT: 5432
