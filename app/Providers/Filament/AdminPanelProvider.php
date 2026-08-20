@@ -9,6 +9,11 @@ use App\Filament\Admin\Pages\FinanceReports;
 use App\Filament\Admin\Pages\InAppNotifications;
 use App\Filament\Admin\Pages\MfaChallenge;
 use App\Filament\Admin\Pages\MfaSettings;
+use App\Filament\Admin\Pages\OrdersReport;
+use App\Filament\Admin\Pages\OutgoingPaymentsReport;
+use App\Filament\Admin\Pages\ReceiptsReport;
+use App\Filament\Admin\Pages\RenewalPeriodReport;
+use App\Filament\Admin\Pages\VendorPerformanceReport;
 use App\Filament\Admin\Widgets\FailedPaymentExceptionQueueWidget;
 use App\Filament\Admin\Widgets\FinancialOverviewWidget;
 use App\Filament\Admin\Widgets\OrderStatusOverviewWidget;
@@ -163,6 +168,11 @@ class AdminPanelProvider extends PanelProvider
                 Pages\Dashboard::class,
                 FeatureGateAdmin::class,
                 FinanceReports::class,
+                OrdersReport::class,
+                ReceiptsReport::class,
+                OutgoingPaymentsReport::class,
+                VendorPerformanceReport::class,
+                RenewalPeriodReport::class,
                 MfaChallenge::class,
                 MfaSettings::class,
                 InAppNotifications::class,
