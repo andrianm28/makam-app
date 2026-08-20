@@ -188,7 +188,7 @@ else
     /^\|/ {
       if (NF < 5) next
       id = $2;        gsub(/^[[:space:]]+|[[:space:]]+$/, "", id)
-      if (id !~ /^[A-Z]+-[0-9]+$/) next
+      if (id !~ /^[A-Z]+(-[A-Z]+)*-[0-9]+$/) next
       st = $(NF - 1); gsub(/^[[:space:]]+|[[:space:]]+$/, "", st)
       if (st !~ /^Covered/) next
       ev = $(NF - 2); gsub(/^[[:space:]]+|[[:space:]]+$/, "", ev)
