@@ -110,18 +110,11 @@ class AppServiceProvider extends ServiceProvider
         // load test has been run; `performance-and-capacity.md`'s profiles
         // remain unexecuted).
         RateLimiter::for('public-guest', static function (Request $request): array|Limit {
-            // CI's Playwright job serves the app and drives the browser from
-            // the SAME host, so every one of a suite's tests shares one
-            // IP/guest bucket — confirmed 20 Aug 2026: 26 tests' combined
-            // page loads and Livewire round trips blew through 60/minute
-            // within the run, producing real 429s that read as broad,
-            // unrelated test failures (nav links "not found", a draft
-            // article's 404 check receiving 429 instead) until traced back
-            // here. `environment('testing')` is Laravel's own name for
-            // exactly this non-production context (ci.yml's browser-test job
-            // now sets APP_ENV=testing for its `php artisan serve` step) —
-            // exempting it changes nothing about the production limit below.
-            if (app()->environment('testing')) {
+            // See config/rate_limiting.php's doc block for why this exists
+            // and why it is NOT gated on environment('testing') (that value
+            // is also what every ordinary PHPUnit run uses, which would
+            // silently defeat PublicGuestThrottleTest).
+            if (config('rate_limiting.public_guest_disabled')) {
                 return Limit::none();
             }
 
