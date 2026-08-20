@@ -110,6 +110,30 @@ final class BookingWizardDraftBindingTest extends TestCase
             ->assertSet('city', LaunchCityCode::JAKARTA);
     }
 
+    /**
+     * `currentOrNewDraft()` ends with `return (new StartBookingDraft)
+     * (auth()->id());` — attributing a newly-started draft to the current
+     * actor so it later appears on `/akun/draft`. No other test in this file
+     * exercises that attribution for an AUTHENTICATED user through the
+     * wizard's own creation path: `victimDraftWithCustomerData()` and its
+     * siblings all start from a guest session, and the ownership-rescue
+     * tests below create their fixture rows directly via `BookingDraft::
+     * create()`, bypassing `saveStep1()`/`StartBookingDraft` entirely.
+     */
+    public function test_an_authenticated_user_starting_a_new_booking_gets_an_attributed_draft(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        Livewire::test(BookingWizard::class)
+            ->call('saveStep1', LaunchCityCode::JAKARTA)
+            ->assertHasNoErrors();
+
+        $draft = BookingDraft::query()->sole();
+
+        $this->assertSame($user->id, $draft->user_id);
+    }
+
     public function test_a_stranger_holding_the_draft_id_cannot_read_the_pii_on_it(): void
     {
         $draftId = $this->victimDraftWithCustomerData();

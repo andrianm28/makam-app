@@ -28,7 +28,12 @@ use Illuminate\Support\Str;
  * ALONE and performs no access check; it exists for callers that have
  * already established the caller's right to the draft. Every request-facing
  * caller must use `findBound()`, which additionally requires the session to
- * hold the draft's issued secret. See `BookingDraftBinding`.
+ * hold the draft's issued secret. See `BookingDraftBinding`. The one
+ * exception is `App\Livewire\Public\Booking\BookingWizard::
+ * resolveDraftById()`'s ownership rescue: it calls `find()` directly, by
+ * design, because it establishes the caller's right itself — proven
+ * authenticated ownership (`$candidate->user_id === auth()->id()`) — before
+ * using what `find()` returns.
  */
 final class BookingDraftQuery
 {

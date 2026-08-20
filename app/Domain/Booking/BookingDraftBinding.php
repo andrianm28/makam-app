@@ -48,8 +48,11 @@ final class BookingDraftBinding
     private const SESSION_KEY = 'booking_draft_secrets';
 
     /**
-     * Issue a fresh secret for a newly created draft and persist its hash.
-     * Called once, by the Action that creates the draft.
+     * Issue a fresh secret for a draft and persist its hash. Two call sites:
+     * the Action that creates the draft, and
+     * `App\Livewire\Public\Booking\BookingWizard::resolveDraftById()`, which
+     * calls this again on every successful ownership rescue to re-establish
+     * the session binding for the rest of that visit.
      */
     public static function issue(BookingDraft $draft): void
     {
