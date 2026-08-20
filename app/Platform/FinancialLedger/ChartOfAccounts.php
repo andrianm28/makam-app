@@ -24,6 +24,20 @@ final class ChartOfAccounts
     ];
 
     /**
+     * The cash/bank account a receipt (money actually received) debits and an
+     * outgoing payment credits. Named so `CashReceiptsReport` can identify a
+     * "money received" journal leg without a bare `'7000'` literal — the same
+     * reason `VENDOR_LIABILITY_ACCOUNT` is named rather than inlined.
+     *
+     * @var array{code: string, name: string, normal_balance: string}
+     */
+    public const array CASH_BANK_ACCOUNT = [
+        'code' => '7000',
+        'name' => 'Rekening Kas/Bank',
+        'normal_balance' => 'DR',
+    ];
+
+    /**
      * @var list<array{code: string, name: string, normal_balance: string}>
      */
     public const array MINIMAL_INITIAL_ACCOUNTS = [
