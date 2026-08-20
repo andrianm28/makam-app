@@ -129,6 +129,14 @@ final class LoginPageTest extends TestCase
      * `login($user, $remember)` actually does when `$remember` is true: queue
      * the `remember_web_...` recaller cookie (`createRememberTokenIfDoesntExist`
      * + `queueRecallerCookie`) — the brief's own named alternative.
+     *
+     * Reads the queue via `getQueuedCookies()` rather than `Cookie::hasQueued()`
+     * — CI caught a real landmine in this Laravel version's
+     * `CookieJar::queued()`: when nothing at all has been queued for a key,
+     * it calls `Arr::last(null, ...)`, which throws `InvalidArgumentException`
+     * ("Items cannot be represented by a scalar value") instead of returning
+     * `null`. `getQueuedCookies()` returns the real, always-array cookie list
+     * with no such landmine.
      */
     public function test_the_remember_checkbox_queues_the_remember_cookie(): void
     {
@@ -143,7 +151,7 @@ final class LoginPageTest extends TestCase
             ->assertRedirect('/');
 
         $this->assertTrue(auth()->check());
-        $this->assertTrue(Cookie::hasQueued($recallerName));
+        $this->assertTrue($this->recallerCookieIsQueued($recallerName));
     }
 
     public function test_without_the_remember_checkbox_no_remember_cookie_is_queued(): void
@@ -159,7 +167,13 @@ final class LoginPageTest extends TestCase
             ->assertRedirect('/');
 
         $this->assertTrue(auth()->check());
-        $this->assertFalse(Cookie::hasQueued($recallerName));
+        $this->assertFalse($this->recallerCookieIsQueued($recallerName));
+    }
+
+    private function recallerCookieIsQueued(string $recallerName): bool
+    {
+        return collect(Cookie::getQueuedCookies())
+            ->contains(fn ($cookie) => $cookie->getName() === $recallerName);
     }
 
     /**
