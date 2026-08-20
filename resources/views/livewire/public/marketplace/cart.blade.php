@@ -11,6 +11,37 @@
 --}}
 @php
     use App\Domain\Marketplace\Models\CartItem;
+
+    // Built here, not inline in <x-mk.table :rows="...">, on purpose:
+    // Blade's component-tag compiler finds the end of a double-quote-
+    // delimited attribute (:rows="...") by scanning the raw template text
+    // for the next literal `"` — it has no knowledge of PHP string
+    // nesting. The 'actions' cell's HtmlString is a single-quoted PHP
+    // string containing double quotes (`type="button"` etc.), which is
+    // completely safe PHP but broke the Blade compiler: it treated the
+    // FIRST `"` inside that HTML literal as the end of :rows, corrupting
+    // the whole component tag. Confirmed live 20 Aug 2026 (Playwright
+    // E2E-MKT suite): once the cart held any item, page.content() showed
+    // the raw uncompiled Blade source leaking onto the page as literal
+    // text instead of a real <table> — no product rows, no remove
+    // control, cart unusable. Computing $rows in its own @php block (the
+    // same pattern modal.blade.php already uses for $baseId/$titleId)
+    // means the HTML-with-double-quotes string never has to live inside a
+    // double-quote-delimited Blade attribute value again.
+    $rows = $items->map(function (CartItem $item) use ($cart): array {
+        $listing = $item->listing;
+
+        return [
+            'id' => $item->id,
+            'product' => $listing->product->name.' — '.$listing->vendor->name,
+            'price' => (new \App\Platform\FinancialLedger\Money((int) $item->unit_price_minor))->format(),
+            'quantity' => $item->quantity,
+            'lineTotal' => $item->lineTotal()->format(),
+            'actions' => new \Illuminate\Support\HtmlString(
+                '<button type="button" wire:click="removeItem('.$item->id.')" class="touch-target inline-flex items-center text-base text-danger-700 underline underline-offset-2 hover:text-danger-800">Hapus</button>'
+            ),
+        ];
+    })->all();
 @endphp
 
 <div class="py-8 md:py-12">
@@ -64,20 +95,7 @@
                     ['key' => 'lineTotal', 'label' => 'Subtotal', 'numeric' => true],
                     ['key' => 'actions', 'label' => ''],
                 ]"
-                :rows="$items->map(function (CartItem $item) use ($cart): array {
-                    $listing = $item->listing;
-
-                    return [
-                        'id' => $item->id,
-                        'product' => $listing->product->name.' — '.$listing->vendor->name,
-                        'price' => (new \App\Platform\FinancialLedger\Money((int) $item->unit_price_minor))->format(),
-                        'quantity' => $item->quantity,
-                        'lineTotal' => $item->lineTotal()->format(),
-                        'actions' => new \Illuminate\Support\HtmlString(
-                            '<button type="button" wire:click="removeItem('.$item->id.')" class="touch-target inline-flex items-center text-base text-danger-700 underline underline-offset-2 hover:text-danger-800">Hapus</button>'
-                        ),
-                    ];
-                })->all()"
+                :rows="$rows"
             />
 
             <div class="mt-6 flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
