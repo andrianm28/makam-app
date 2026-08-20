@@ -66,6 +66,19 @@ and unclaimed by any row here — `/akun/pesanan` (AKUN-06) is a *list*, and its
 explicitly asserts no "Lihat detail" link exists, rather than silently implying PUB-050 is
 superseded. The v0.14 note above is kept verbatim.
 
+**v0.16 — 20 August 2026, three admin capabilities made honest instead of silently folded.**
+ADMIN-01's own evidence trail (v0.10, v0.11) already said in prose that reports (ADM-090) and
+the audit-review surface (ADM-100) remain unbuilt and are not claimed by that row's `Covered`
+status — but neither ever got its own row, so a reader scanning section B's table alone would
+not see the gap. A third capability, ADM-070 (payment/transaction/manual verification —
+`admin-operations` AC5, also required by `docs/product/mvp-scope.md` §6), had no disclaimer
+anywhere: it was silently folded into ADMIN-01 with no exclusion note at all, which is worse
+than the other two. **Three rows are added, all `Specified` with no test evidence** —
+ADM-070, ADM-090, ADM-100 — matching what `docs/product/screen-inventory.md` already records
+these screens as (unshipped) and what `.kiro/specs/admin-operations/tasks.md` already scopes
+them as (Tasks 5–7 of that spec's plan). None is raised to `Covered`; none has a test file.
+The v0.15 note above is kept verbatim.
+
 ## A. RKS authority
 
 | RKS | Capability | Spec | Gate/control |
@@ -120,6 +133,9 @@ The **Test evidence** column holds repo-relative paths to the tests backing a ro
 | FAQ-05 | Pembayaran gagal | FAQ catalog/spec | PUB-040/041 | E2E-FAQ | `tests/Feature/Livewire/Public/Faq/FaqIndexRouteTest.php`<br>`tests/Feature/Domain/Faq/FaqCategorySeedTest.php` | Covered |
 | FAQ-06 | Customer service | FAQ catalog/spec | PUB-040/041 | E2E-FAQ | `tests/Feature/Livewire/Public/Faq/FaqIndexRouteTest.php`<br>`tests/Feature/Domain/Faq/FaqCategorySeedTest.php` | Covered |
 | ADMIN-01 | Admin dashboard modules | `admin-operations` | ADM-* | E2E-ADMIN | `tests/Unit/Domain/OrderWorkflow/OrderTransitionAuthorizerTest.php`<br>`tests/Unit/Platform/ReauthenticationGuardTest.php`<br>`tests/Feature/OrderWorkflow/AdminOperatorActionsTest.php`<br>`tests/Feature/OrderWorkflow/AdminMoneyActionsTest.php`<br>`tests/Feature/Filament/BookingOrderResourceAccessTest.php`<br>`tests/Feature/Filament/BookingOrderTransitionActionTest.php`<br>`tests/Feature/Filament/MarketplaceOrderResourceTest.php`<br>`tests/Feature/Renewal/AdminRenewalActionsTest.php`<br>`tests/Feature/Filament/RenewalOrderResourceTest.php`<br>`tests/Feature/SiteSettings/SettingsServiceTest.php`<br>`tests/Feature/Filament/SiteSettingsResourceTest.php`<br>`tests/Feature/Filament/FeatureGateAdminTest.php`<br>`tests/Feature/Domain/CemeteryDirectory/LaunchCityTest.php`<br>`tests/Feature/Domain/Booking/Actions/SaveBookingDraftStepTest.php`<br>`tests/Feature/Filament/LaunchCityResourceTest.php`<br>`tests/Feature/Filament/ServicePackageResourceTest.php`<br>`tests/Feature/Filament/ProductVariantRelationManagerTest.php`<br>`tests/Feature/Filament/VendorResourceTest.php` | Covered |
+| ADM-070 | Payment/transaction/manual verification | `admin-operations` | ADM-070 | E2E-ADMIN | — | Specified |
+| ADM-090 | Reports | `admin-operations` | ADM-090 | E2E-ADMIN | — | Specified |
+| ADM-100 | Audit and sensitive-action review | `admin-operations` | ADM-100 | E2E-ADMIN | — | Specified |
 | VENDOR-01 | Vendor dashboard modules | marketplace/vendor spec | VND-* | E2E-VENDOR | `tests/Feature/Filament/Vendor/VendorPanelAccessTest.php`<br>`tests/Feature/Filament/Vendor/VendorPanelScopingTest.php`<br>`tests/Feature/Filament/Vendor/VendorOrderStatusTransitionActionsTest.php` | Covered |
 | PLOT-01 | Authoritative plot inventory — cemetery blocks + bulk-generated plots with per-plot state and audited state overrides | `plot-inventory-and-reservation`; P3 design §4.1 | ADM-170, ADM-180 | E2E-ADMIN | `tests/Feature/Domain/PlotInventory/CreateCemeteryBlockTest.php`<br>`tests/Unit/Domain/PlotInventory/CemeteryBlockModelTest.php`<br>`tests/Feature/Filament/PlotInventoryAdminTest.php` | Covered |
 | PLOT-02 | Atomic plot reservation — one active hold per plot (plot-row lock + `plot_state` aggregate), order idempotency, append-only lifecycle | `plot-inventory-and-reservation`; P3 design §4.2 | ADM-190 | E2E-ADMIN | `tests/Feature/Domain/PlotReservation/ReservePlotTest.php`<br>`tests/Feature/Domain/PlotReservation/ReservePlotTwoConnectionTest.php`<br>`tests/Feature/Domain/PlotReservation/PlotReservationLifecycleTest.php`<br>`tests/Feature/Domain/PlotReservation/PlotReservationQueryTest.php` | Covered |
