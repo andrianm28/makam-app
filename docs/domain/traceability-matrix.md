@@ -41,6 +41,31 @@ H-3's blanket downgrade of all 31 rows was correct in July and became wrong in t
 
 **Addition — finding T-H, 08 August 2026.** Screen PUB-060 (`/bantuan`) shipped the same day as a fix for a real defect — see [`.kiro/specs/help-centre-missing-route/`](../../.kiro/specs/help-centre-missing-route/), this repository's first Bugfix Spec. It does not fit section B's table, which is scoped to RKS-derived Stakeholder Workflow expectations (section A); PUB-060 answers `product-brief.md` §5.10 and `information-architecture.md` §2 instead, a cross-cutting UX principle with no RKS item behind it. Rather than force an ill-fitting RKS mapping, it is recorded in new **section E** below.
 
+**v0.15 — 20 August 2026, `/akun` customer account area (PRs #112/#113/#114).** The `/akun` account
+area — login, registration, logout, password reset (PR #112, `lane/akun-auth-foundation`), the
+account shell + header wiring + draft-resume list (PR #113, `lane/akun-shell-and-drafts`), and the
+order list (PR #114, `lane/akun-pesanan`) — merged into `docs/design-system-and-planning` on
+20 Aug 2026, all three CI-green on first push after PR #112's own follow-up round found (and
+fixed) four real bugs no local check or code review had caught. **Eight new rows are added as
+`Covered`, in section E rather than section B** — AKUN-01…AKUN-08 — each read against its test
+file first, per the "read against the claim, not the filename" rule; section D carries the
+method-level trail. Section E, not B, because — same reasoning `SUPPORT-01` above already
+establishes — this work has **no owning RKS item or kiro spec**: it began from a plan-mode
+session, not a spec batch, and section A's RKS K23–K35 table has no capability these rows would
+attach to. This closes a gap this file's own §1 already names the general shape of ("browser
+tests cover... admin, and vendor" — not satisfied by any row in this file; the same is now true
+one level further for `/akun`, and stays true — no `E2E-*` browser suite covers these screens
+either, only server-side HTTP/Livewire feature tests, exactly like every other row in this file).
+**Two decisions worth recording explicitly, not silently folded into the table:** first,
+`BookingWizard`'s draft-resume mechanism (AKUN-05) is a **deliberate, narrow reversal** of a prior
+security ruling in `BookingDraftBinding`'s own doc block (session-only resume, written before
+customer accounts existed) — the reversal was raised to and decided by the user directly during
+PR #113's whole-branch review, not decided silently in code, and AKUN-05's evidence trail below
+says so. Second, `PUB-050` (the still-unbuilt per-order detail/timeline screen) remains untouched
+and unclaimed by any row here — `/akun/pesanan` (AKUN-06) is a *list*, and its own test file
+explicitly asserts no "Lihat detail" link exists, rather than silently implying PUB-050 is
+superseded. The v0.14 note above is kept verbatim.
+
 ## A. RKS authority
 
 | RKS | Capability | Spec | Gate/control |
@@ -139,6 +164,56 @@ Screens required by a cross-cutting UX principle rather than a stakeholder-workf
 **Evidence, read against the claim, not the filename.** `HelpCentreRouteTest` asserts: the route resolves at the expected name/URI; `GET /bantuan` returns 200; the page states the `ContactInfo` channels, the operating hours, and the emergency disclaimer *above* the channel list (a safety-ordering assertion); it does not claim 24/7 availability or an SLA; it admits the channels are placeholders, not a live line; it renders without any `wire:*` binding or `<form>`, satisfying §6.10's "must work with JS disabled"; and it links onward to `/faq` and `/`. `FooterLegalLinksRouteTest`'s companion method confirms `/privasi` still links `/bantuan` and that following the link now reaches this page rather than a 404. Both files ran and passed together in CI: GitHub Actions run `31237318086`, job **PHP (validate, lint, analyse, test)** (id `93052168835`), commit `97dfbbf`.
 
 **Ownership, not coverage, is what remains open.** No feature spec's `requirements.md` claims PUB-060 — see `.kiro/specs/help-centre-missing-route/design.md`'s closing note. That is a spec-authoring decision for a human, not a defect this row can resolve by itself.
+
+| AKUN-01 | Login (`/masuk`) — no-enumeration error, rate limit + `Lockout` event, remember-me cookie, `ActorContextResolver::forget()` after guard mutation | plan-mode session (no owning spec); PR #112 | PUB-097 | `tests/Feature/Livewire/Public/Auth/LoginPageTest.php` | Covered |
+| AKUN-02 | Registration (`/daftar`) — auto-authenticates, rate limit, zero `ActorRole` grants on the new account (no panel access) | plan-mode session; PR #112 | PUB-098 | `tests/Feature/Livewire/Public/Auth/RegisterPageTest.php` | Covered |
+| AKUN-03 | Password reset (`/lupa-password`, `/reset-password/{token}`) — identical confirmation for known/unknown email, no auto-login after reset, `remember_token` rotated on reset | plan-mode session; PR #112 | PUB-099, PUB-100 | `tests/Feature/Livewire/Public/Auth/PasswordResetTest.php` | Covered |
+| AKUN-04 | Account shell (`/akun`) — guest redirected with intended URL preserved, four tiles with per-user-scoped counts | plan-mode session; PR #113, PR #114 | PUB-101 | `tests/Feature/Livewire/Public/Akun/AkunIndexRouteTest.php`<br>`tests/Feature/Livewire/Public/Akun/AkunIndexTest.php` | Covered |
+| AKUN-05 | Draft resume (`/akun/draft`) — own open drafts only, submitted drafts excluded, most-recent-first; resume by session binding **or** proven authenticated ownership | plan-mode session; PR #113 | PUB-102 | `tests/Feature/Livewire/Public/Akun/DraftListTest.php`<br>`tests/Feature/Livewire/Public/Booking/BookingWizardDraftBindingTest.php` | Covered |
+| AKUN-06 | Order list (`/akun/pesanan`) — own orders only via `order_parties.user_id`, most-recent-first, status badge resolved through `StatusIntent` (not a hardcoded label) | plan-mode session; PR #114 | PUB-103 | `tests/Feature/Livewire/Public/Akun/OrderListTest.php`<br>`tests/Feature/Domain/OrderWorkflow/OrderForUserScopeTest.php` | Covered |
+| AKUN-07 | Renewal (akun) gate-closed page — honest "not yet available" over `<x-mk.gate-closed-page>`, never a raw 403/404 | plan-mode session; PR #113 | PUB-104 | `tests/Feature/Livewire/Public/Akun/DeferredSubPagesTest.php` | Covered |
+| AKUN-08 | Document (akun) gate-closed page — same honest pattern as AKUN-07 | plan-mode session; PR #113 | PUB-105 | `tests/Feature/Livewire/Public/Akun/DeferredSubPagesTest.php` | Covered |
+
+**Evidence, read against the claim, not the filename — all eight verified by reading each named
+test file's method list directly on 20 Aug 2026, not trusted from a prior summary.**
+`LoginPageTest`'s `test_unknown_email_shows_the_exact_same_generic_error_as_a_wrong_password` is
+the no-enumeration proof for AKUN-01; `test_a_stale_cached_actor_context_is_forgotten_after_a_successful_login`
+is the regression test for the exact `ActorContextResolver::forget()` gotcha that class's own doc
+block had flagged as future work. `PasswordResetTest`'s
+`test_unknown_email_shows_the_identical_generic_confirmation_and_sends_nothing` does a
+byte-for-byte HTML comparison, not a message-text check, and
+`test_a_successful_reset_rotates_the_remember_token` proves a stolen remember-me cookie stops
+working the moment an account holder resets their password — the actual security property, not
+just "the form submitted." `RegisterPageTest`'s `test_newly_registered_user_has_no_panel_access`
+confirms zero `ActorRole` grants on a fresh account, not merely that a row was inserted.
+`AkunIndexTest`'s `test_the_open_draft_count_is_scoped_to_the_viewing_user_only` and
+`test_the_order_tile_count_is_scoped_to_the_viewing_user_only` are the discriminating tests —
+each creates a *second* user's data and asserts it is excluded, not just that the viewing user's
+own data appears. `BookingWizardDraftBindingTest`'s
+`test_an_authenticated_owner_resumes_their_own_draft_via_mount_after_losing_the_session_secret`
+and its `..._via_save_step_one_...` sibling exercise the two distinct call sites
+(`BookingWizard::mount()` vs `currentOrNewDraft()`) separately, and
+`test_an_authenticated_non_owner_cannot_resume_someone_elses_draft_via_mount` (+ its
+`..._via_save_step_one` sibling) prove the ownership rescue fails closed for a real, different
+authenticated user, not just a guest. `OrderForUserScopeTest`'s
+`test_an_order_belonging_to_a_different_user_is_not_returned` is the equivalent discriminating
+test for the order scope, and `OrderListTest`'s
+`test_a_real_booking_submission_by_an_authenticated_customer_is_visible_on_the_order_list` is a
+genuine end-to-end proof through the real `StartBookingDraft` → `SubmitBookingDraft` pipeline, not
+a hand-built fixture row — the only test of that shape in this file so far.
+`DeferredSubPagesTest`'s four methods confirm both gate-closed pages return 200 with a working
+fallback link for an authenticated user and redirect guests to login, covering AKUN-07/08
+together (one test file, two screens, same pattern).
+
+**What these rows do NOT claim.** None of the eight cite an `E2E-*` browser suite as anything
+more than an aspirational label — the same caveat this file's §1 states for every other row: all
+evidence here is server-side HTTP/Livewire feature tests, never a real browser walking the actual
+rendered page. AKUN-06 does not claim a "Lihat detail" per-order link exists — its own test file
+and component doc block name `PUB-050` explicitly and say why the link is deliberately absent
+(the detail route doesn't exist; `/marketplace/pesanan/{orderNumber}` is a different order
+concept entirely). AKUN-05's ownership-rescue behavior is a genuine, recorded reversal of a prior
+security ruling — see `BookingDraftBinding`'s own doc block, updated in the same PR that added
+this capability, and the v0.15 revision note above — not a silent widening of access.
 
 ## D. Evidence trail for the `Covered` rows
 
