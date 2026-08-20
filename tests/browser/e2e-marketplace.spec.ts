@@ -156,7 +156,7 @@ test.describe('E2E-MKT — cart', () => {
 
         const table = page.getByRole('table', { name: 'Isi keranjang' });
         await expect(table).toBeVisible();
-        await expect(page.getByText(/^Total /)).toBeVisible();
+        await expect(page.locator('p.text-lg')).toContainText('Total');
         await expect(page.getByRole('link', { name: 'Lanjut ke pembayaran' })).toBeVisible();
 
         await page.getByRole('button', { name: 'Hapus' }).click();
