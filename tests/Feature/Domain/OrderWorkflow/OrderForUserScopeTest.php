@@ -8,6 +8,7 @@ use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\Models\OrderParty;
 use App\Domain\OrderWorkflow\OrderPartyRole;
 use App\Domain\OrderWorkflow\OrderStatus;
+use App\Domain\OrderWorkflow\ProductType;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -57,6 +58,27 @@ final class OrderForUserScopeTest extends TestCase
         self::assertCount(0, $results);
     }
 
+    /**
+     * `Order::forUser()` bakes in `->orderByDesc('created_at')` — a mutation
+     * check confirmed deleting that clause left every other test in this
+     * file green, so this test pins the ordering directly.
+     */
+    public function test_orders_are_returned_most_recently_created_first(): void
+    {
+        $user = User::factory()->create();
+
+        $olderOrder = $this->makeOrder();
+        $this->makeParty($olderOrder, $user->getKey());
+        Order::query()->where('id', $olderOrder->getKey())->update(['created_at' => now()->subDay()]);
+
+        $newerOrder = $this->makeOrder();
+        $this->makeParty($newerOrder, $user->getKey());
+
+        $references = Order::forUser($user->getKey())->get()->pluck('reference')->all();
+
+        self::assertSame([$newerOrder->reference, $olderOrder->reference], $references);
+    }
+
     public function test_parties_relation_returns_the_correct_order_party_rows(): void
     {
         $user = User::factory()->create();
@@ -76,7 +98,7 @@ final class OrderForUserScopeTest extends TestCase
     {
         return Order::query()->create([
             'reference' => 'MK-2026-TEST-'.uniqid(),
-            'product_type' => 'AT_NEED_SERVICE_ORDER',
+            'product_type' => ProductType::AT_NEED_SERVICE_ORDER->value,
             'status' => OrderStatus::MASUK->value,
         ]);
     }

@@ -312,6 +312,17 @@ final class Order extends Model
      * Every order the given user has a `order_parties` row on, most recent
      * first — the filter behind `/akun/pesanan`, matching `/akun/draft`'s
      * own most-recent-first convention from PR 2.
+     *
+     * `$userId` is deliberately `int`, not `?int`. Stated rather than
+     * assumed closed, same as the write-guard reasoning above: Laravel's
+     * query builder silently rewrites `where('user_id', null)` into
+     * `whereNull('user_id')`
+     * (`vendor/laravel/framework/src/Illuminate/Database/Query/Builder.php`),
+     * so if this parameter were ever widened to `?int` and called with
+     * `null` — e.g. for a guest — the scope would not throw or return
+     * nothing, it would silently become "list every ANONYMOUS order", a
+     * real cross-customer-adjacent data-exposure risk this signature closes
+     * off at the type level instead.
      */
     #[Scope]
     protected function forUser(Builder $query, int $userId): void

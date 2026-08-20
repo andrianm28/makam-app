@@ -61,14 +61,20 @@ final class AkunIndexTest extends TestCase
         $response->assertSee('Belum ada draft pemesanan');
     }
 
-    public function test_the_fourth_tile_links_to_the_order_list_route(): void
+    public function test_the_order_tile_links_to_the_order_list_route(): void
     {
         $user = User::factory()->create();
 
-        $response = $this->actingAs($user)->get('/akun');
+        $html = $this->actingAs($user)->get('/akun')->assertOk()->getContent();
 
-        $response->assertOk();
-        $response->assertSee('href="'.route('akun.pesanan').'"', false);
+        // Not just "both strings appear somewhere on the page" — the href
+        // must belong to the SAME anchor that wraps the "Pesanan" tile's own
+        // heading text (card.blade.php: an interactive card's root <a>
+        // wraps its entire slot, so href always precedes the tile's text).
+        self::assertMatchesRegularExpression(
+            '#<a\s+href="'.preg_quote(route('akun.pesanan'), '#').'"[^>]*>.*?Pesanan.*?</a>#s',
+            $html,
+        );
     }
 
     public function test_the_order_tile_count_is_scoped_to_the_viewing_user_only(): void

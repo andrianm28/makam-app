@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Livewire\Public\Akun;
 
+use App\Domain\Booking\Actions\StartBookingDraft;
+use App\Domain\Booking\BookingServiceType;
+use App\Domain\CemeteryDirectory\LaunchCityCode;
+use App\Domain\OrderWorkflow\Actions\SubmitBookingDraft;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\Models\OrderParty;
 use App\Domain\OrderWorkflow\OrderPartyRole;
@@ -61,6 +65,33 @@ final class OrderListTest extends TestCase
         $response->assertSee('MK-2026-OWNONE01');
         $response->assertDontSee('MK-2026-OTHERONE');
         $response->assertDontSee('Belum ada pesanan.');
+    }
+
+    /**
+     * The first true end-to-end proof of the attribution chain anywhere in
+     * this 3-PR series: `StartBookingDraft` (PR 2) sets `booking_drafts.
+     * user_id` from the authenticated actor, `SubmitBookingDraft` (trunk,
+     * unchanged by this PR) reads it back onto `order_parties.user_id`, and
+     * `Order::forUser()` (Task 1 of this PR) filters on that column — this
+     * test goes through all three rather than hand-building an `OrderParty`
+     * row the way `makeOrder()`/`makeParty()` do above.
+     */
+    public function test_a_real_booking_submission_by_an_authenticated_customer_is_visible_on_the_order_list(): void
+    {
+        $user = User::factory()->create();
+
+        $draft = app(StartBookingDraft::class)($user->getKey());
+        $draft->forceFill([
+            'city_code' => LaunchCityCode::JAKARTA,
+            'service_type' => BookingServiceType::NEW_GRAVE,
+        ])->save();
+
+        $order = app(SubmitBookingDraft::class)($draft, 'idem-e2e-order-list-1');
+
+        $response = $this->actingAs($user)->get('/akun/pesanan');
+
+        $response->assertOk();
+        $response->assertSee($order->reference);
     }
 
     public function test_row_shows_reference_humanized_product_type_and_status_badge_for_masuk(): void
