@@ -96,6 +96,14 @@ Required modules:
 
 ## 8. Explicitly not required for MVP acceptance
 
+> **Status note, 20 Aug 2026.** Three items below have since been built and shipped, and are
+> `Covered` (test-backed, CI-passing) in `docs/domain/traceability-matrix.md`: **Paid Pre-Need**
+> (PREN-01…PREN-04, P5a, 16 Aug 2026), **Memorial/QR** (MEM-01…MEM-06, P4, 16 Aug 2026), and
+> **Visitation booking** (VISIT-01…VISIT-04, P4, 16 Aug 2026). This list is not rewritten because
+> it recorded a real scope decision at the time it was written; it is no longer an accurate
+> boundary of what exists, and it should not be read as one. `docs/domain/traceability-matrix.md`
+> is the current source of truth for what's built.
+
 - Public specific-plot selection
 - GIS plot map
 - Paid Pre-Need
