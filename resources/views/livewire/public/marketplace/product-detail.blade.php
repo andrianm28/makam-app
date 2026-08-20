@@ -118,7 +118,7 @@
                     <p class="text-2xl font-semibold tabular-nums text-neutral-900">
                         {{ $listing->priceMoney()->format() }}
                     </p>
-                    <p class="text-sm text-neutral-500">
+                    <p class="text-sm text-neutral-600">
                         Ditawarkan oleh {{ $listing->vendor->name }}
                     </p>
                 @else
@@ -134,7 +134,7 @@
                     </p>
 
                     @if ($price !== null)
-                        <p class="text-sm text-neutral-500">{{ $price['source'] }}</p>
+                        <p class="text-sm text-neutral-600">{{ $price['source'] }}</p>
                     @endif
                 @endif
 
@@ -159,7 +159,7 @@
                         >
                             Tambah ke Keranjang
                         </x-mk.button>
-                        <p class="text-sm text-neutral-500">
+                        <p class="text-sm text-neutral-600">
                             Item ditambahkan sebagai penawaran dari {{ $listing->vendor->name }}.
                             Satu checkout hanya dapat memuat produk dari satu vendor.
                         </p>
