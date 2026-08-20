@@ -2,6 +2,7 @@
 
 use App\Domain\Faq\Providers\FaqServiceProvider;
 use App\Domain\OrderWorkflow\Providers\OrderWorkflowServiceProvider;
+use App\Platform\Audit\Providers\AuditServiceProvider;
 use App\Platform\Correlation\Providers\CorrelationServiceProvider;
 use App\Platform\DocumentVault\Providers\DocumentVaultServiceProvider;
 use App\Platform\FeatureGate\Providers\FeatureGateServiceProvider;
@@ -100,4 +101,11 @@ return [
     // `BindingResolutionException` on the first consumer — see
     // `SiteSettingsServiceProvider`'s own class-level comment.
     SiteSettingsServiceProvider::class,
+    // ADM-100 (admin-audit-review lane) — binds `Audit\Contracts
+    // \AuditReadAuthorizer`, the seam the new audit-review admin resource's
+    // authorization runs through. Same precedent as every provider above:
+    // without it `app(AuditReadAuthorizer::class)` raises
+    // `BindingResolutionException` on the first request to that resource —
+    // see `AuditServiceProvider`'s own class-level comment.
+    AuditServiceProvider::class,
 ];
