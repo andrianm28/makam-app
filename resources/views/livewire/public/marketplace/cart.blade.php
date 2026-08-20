@@ -62,7 +62,7 @@
                     ['key' => 'price', 'label' => 'Harga satuan', 'numeric' => true],
                     ['key' => 'quantity', 'label' => 'Jumlah'],
                     ['key' => 'lineTotal', 'label' => 'Subtotal', 'numeric' => true],
-                    ['key' => 'actions', 'label' => ''],
+                    ['key' => 'actions', 'label' => '', 'srLabel' => 'Aksi'],
                 ]"
                 :rows="$items->map(function (CartItem $item) use ($cart): array {
                     $listing = $item->listing;

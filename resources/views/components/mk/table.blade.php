@@ -24,6 +24,16 @@
       headers   (array) — one entry per column:
                   'key'      => string, matches a key in each $rows entry
                   'label'    => string, visible header text
+                  'srLabel'  => string, optional — a screen-reader-only
+                                accessible name for a column whose 'label'
+                                is deliberately empty visually (e.g. a
+                                trailing actions column). Ignored when
+                                'label' is non-empty. A `<th>` with neither
+                                is a real WCAG failure (axe `empty-table-
+                                header`) — found live 20 Aug 2026 via a new
+                                Playwright a11y scan on cart.blade.php's
+                                actions column, which had 'label' => ''
+                                and nothing else.
                   'numeric'  => bool (default false) — right-aligned,
                                 tabular-nums, font-mono, per §3.5
                   'sortable' => bool (default false) — header renders as a
@@ -137,8 +147,10 @@
                             >
                                 {{ $header['label'] }}
                             </button>
-                        @else
+                        @elseif (($header['label'] ?? '') !== '')
                             {{ $header['label'] }}
+                        @elseif (($header['srLabel'] ?? '') !== '')
+                            <span class="sr-only">{{ $header['srLabel'] }}</span>
                         @endif
                     </th>
                 @endforeach
