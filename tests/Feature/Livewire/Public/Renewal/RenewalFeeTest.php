@@ -223,6 +223,30 @@ final class RenewalFeeTest extends TestCase
     }
 
     /**
+     * `grave_records.id` is a `uuid` column. `$makam` is a public,
+     * `#[Url]`-bound, attacker-controlled string with no format validation of
+     * its own — passing a non-UUID value straight to `find()` previously
+     * threw an uncaught PDOException ("invalid input syntax for type uuid"),
+     * a 500 instead of the same honest not-found state a well-formed but
+     * nonexistent UUID already gets. Found by the E2E-REN browser suite.
+     */
+    public function test_a_malformed_makam_parameter_reports_not_found_rather_than_crashing(): void
+    {
+        $this->openTheDataGate();
+
+        Livewire::test(RenewalFee::class, ['makam' => 'not-a-uuid'])
+            ->assertOk()
+            ->assertSee('tidak ditemukan')
+            ->assertDontSee('Sumber tarif');
+
+        Livewire::test(RenewalFee::class, ['makam' => 'not-a-uuid'])
+            ->call('terimaDanLanjutkan')
+            ->assertNoRedirect();
+
+        $this->assertDatabaseCount('renewals', 0);
+    }
+
+    /**
      * `grave_records.due_date` is nullable, so a published grave with no due
      * date reaches this screen. There is no period to renew and no quote to
      * accept — the screen must show the quote-unavailable state and acceptance
