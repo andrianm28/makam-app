@@ -7,6 +7,7 @@ namespace App\Providers\Filament;
 use App\Filament\Vendor\Pages\Dashboard;
 use App\Filament\Vendor\Pages\EvidenceList;
 use App\Filament\Vendor\Pages\PayoutStatus;
+use App\Filament\Vendor\Pages\Profile;
 use App\Filament\Vendor\Pages\TransactionHistory;
 use App\Http\Middleware\AssignCorrelationId;
 use Filament\Http\Middleware\Authenticate;
@@ -68,6 +69,7 @@ final class VendorPanelProvider extends PanelProvider
                 TransactionHistory::class,
                 PayoutStatus::class,
                 EvidenceList::class,
+                Profile::class,
             ])
             ->widgets([
                 Widgets\AccountWidget::class,
