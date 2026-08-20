@@ -139,14 +139,14 @@
     $dotClasses = [
         'complete' => 'bg-primary-600 text-neutral-0',
         'current'  => 'bg-neutral-0 border-2 border-primary-600 text-primary-700',
-        'upcoming' => 'bg-neutral-100 border border-neutral-300 text-neutral-500',
+        'upcoming' => 'bg-neutral-100 border border-neutral-300 text-neutral-600',
         'error'    => 'bg-danger-50 border-2 border-danger-600 text-danger-700',
     ];
 
     $labelClasses = [
         'complete' => 'text-neutral-700',
         'current'  => 'text-neutral-900 font-semibold',
-        'upcoming' => 'text-neutral-500',
+        'upcoming' => 'text-neutral-600',
         'error'    => 'text-danger-700',
     ];
 
@@ -168,6 +168,7 @@
     <div
         class="sr-only"
         role="progressbar"
+        aria-label="Progres pemesanan"
         aria-valuenow="{{ $step }}"
         aria-valuemin="1"
         aria-valuemax="{{ $totalSteps }}"
