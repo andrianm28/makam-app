@@ -22,7 +22,17 @@ secrets/
 *_token*.txt
 
 # Dependencies (future app code)
-vendor/
+#
+# Anchored to repo root (`/vendor/`, not bare `vendor/`) — an unanchored
+# pattern matches a directory named `vendor` ANYWHERE in the tree, which
+# silently swallowed `resources/views/filament/vendor/` (the `/vendor`
+# panel's own Blade view namespace, named after the panel itself, nothing to
+# do with Composer) the moment that panel's first custom view landed. Found
+# via `git check-ignore -v` when `resources/views/filament/vendor/pages/
+# profile.blade.php` refused to show up in `git status`. Confirmed no other
+# directory in the tracked tree is named `vendor` before narrowing this, so
+# nothing else was relying on the unanchored form.
+/vendor/
 node_modules/
 
 # Build artifacts
