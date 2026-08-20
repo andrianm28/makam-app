@@ -29,7 +29,6 @@ use App\Platform\Payment\Exceptions\PaymentSessionMerchantMismatchException;
 use App\Platform\Payment\Exceptions\PaymentSessionOpeningDeniedException;
 use App\Platform\Payment\Exceptions\PaymentSessionOrderAlreadyPaidException;
 use App\Platform\Payment\Exceptions\PaymentSessionOrderNotFoundException;
-use App\Platform\Payment\Exceptions\PaymentSessionOrderTypeNotSupportedException;
 use App\Platform\Payment\Models\PaymentIntent;
 use App\Platform\Payment\Models\PaymentSession;
 use App\Platform\Payment\OrderType;
@@ -370,23 +369,13 @@ final class OpenPaymentSessionTest extends TestCase
         $this->assertSame('badan-usaha-db', $session->badan_usaha_ref);
     }
 
-    public function test_a_marketplace_order_is_refused_until_the_follow_up(): void
-    {
-        $this->guardWithPaymentGate(open: true);
-        $this->fullySatisfiedOrder();
-        Http::fake();
-
-        try {
-            app(OpenPaymentSession::class)($this->command(['orderType' => OrderType::Marketplace]));
-            $this->fail('Expected PaymentSessionOrderTypeNotSupportedException to be thrown.');
-        } catch (PaymentSessionOrderTypeNotSupportedException $exception) {
-            $this->assertStringContainsString('marketplace', $exception->getMessage());
-        }
-
-        $this->assertSame(0, PaymentSession::query()->count());
-        $this->assertSame(0, PaymentIntent::query()->count());
-        Http::assertNothingSent();
-    }
+    /**
+     * Marketplace order-type coverage lives in
+     * `tests/Feature/Payment/OpenPaymentSessionMarketplaceTest.php` — the
+     * marketplace follow-up ended the permanent refusal this test used to
+     * assert (`OrderType::Marketplace` is now a fully supported opening
+     * path through `GuardMarketplacePaymentOpening`).
+     */
 
     /**
      * Whole-branch review finding I-1 regression: a DIBAYAR order satisfies

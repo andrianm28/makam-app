@@ -184,12 +184,15 @@ final class PaymentAuditActions
 
     /**
      * Whole-branch review fix wave (15 Aug 2026) — written by
-     * `Actions\OpenPaymentSession` with `AuditOutcome::Denied`, subject = the
-     * `Order`, when a session opening is refused because the order is already
-     * paid (`DIBAYAR`). A DIBAYAR order satisfies all six guard conditions,
-     * so the refusal is a session-level precondition, not a guard denial;
-     * this row is what lets an operator see that a second payment was
-     * attempted for an already-paid order.
+     * `Actions\OpenPaymentSession` with `AuditOutcome::Denied` when a session
+     * opening is refused because the order is already paid. Subject = the
+     * `Order` (booking, `DIBAYAR`) or, since the marketplace follow-up
+     * landed, the `MarketplaceOrder` (`PaymentState::DIBAYAR`) — same
+     * concept for both: the guard would have evaluated all its other
+     * conditions as satisfiable, so the refusal is a session-level
+     * precondition ahead of the guard, not a guard denial; this row is what
+     * lets an operator see that a second payment was attempted for an
+     * already-paid order, for either order type.
      *
      * Not on `SensitiveActions::ACTIONS`, for the same reason as
      * `GUARD_DENIED`: machine-decided, structured subject, closed-list

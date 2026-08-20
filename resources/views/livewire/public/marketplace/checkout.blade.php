@@ -44,21 +44,38 @@
                         </p>
                     </div>
 
-                    @if ($onlinePaymentUnavailable)
-                        {{-- The documented marketplace-online deferral: the
-                             session service refuses Marketplace order types,
-                             and the screen says so honestly instead of failing
-                             with a 500. --}}
+                    {{-- ADR-0035 item 1's mitigation — mirrors
+                         `wizard.blade.php`'s identical booking-side warning:
+                         unmissable labelling before any redirect to the
+                         sandbox, on the button's own card, not only in a
+                         dismissible site-wide banner. --}}
+                    @if ($isSandboxPayment)
+                        <x-mk.alert
+                            intent="urgent"
+                            icon="exclamation-triangle"
+                            title="ANDA TIDAK AKAN MENGIRIM UANG SUNGGUHAN"
+                            live="off"
+                            class="mt-3"
+                        >
+                            <p class="text-sm">
+                                Makam.co.id masih dalam masa uji coba publik (beta). Halaman pembayaran
+                                di bawah ini adalah <strong>simulasi (sandbox)</strong> milik penyedia
+                                pembayaran &mdash; tidak ada transaksi finansial nyata yang terjadi,
+                                berapa pun nominal yang tertera. Pesanan Anda tetap tercatat, dan tim
+                                kami akan menghubungi Anda secara langsung untuk menyelesaikan
+                                pembayaran sesungguhnya secara manual.
+                            </p>
+                        </x-mk.alert>
+                    @endif
+
+                    @if ($onlinePaymentError !== null)
                         <x-mk.alert
                             intent="danger"
-                            title="Pembayaran online belum tersedia untuk pesanan marketplace"
+                            title="Pembayaran online belum dapat diproses"
                             live="assertive"
                             class="mt-3"
                         >
-                            <p class="text-base">
-                                Pembayaran online untuk pesanan marketplace belum tersedia untuk saat ini.
-                                Silakan gunakan transfer manual di bawah ini untuk melanjutkan pembayaran.
-                            </p>
+                            <p class="text-base">{{ $onlinePaymentError }}</p>
                             <x-slot name="action">
                                 <x-mk.button
                                     variant="secondary"
@@ -69,42 +86,22 @@
                                 </x-mk.button>
                             </x-slot>
                         </x-mk.alert>
-                    @else
-                        @if ($onlinePaymentError !== null)
-                            <x-mk.alert
-                                intent="danger"
-                                title="Pembayaran online belum dapat diproses"
-                                live="assertive"
-                                class="mt-3"
-                            >
-                                <p class="text-base">{{ $onlinePaymentError }}</p>
-                                <x-slot name="action">
-                                    <x-mk.button
-                                        variant="secondary"
-                                        size="sm"
-                                        href="{{ route('bantuan.index') }}"
-                                    >
-                                        Butuh bantuan?
-                                    </x-mk.button>
-                                </x-slot>
-                            </x-mk.alert>
-                        @endif
-
-                        <div class="mt-3 flex flex-wrap items-center gap-3">
-                            <x-mk.button
-                                variant="primary"
-                                wire:click="payOnline"
-                                wire:loading.attr="disabled"
-                                wire:target="payOnline"
-                            >
-                                Bayar Online
-                            </x-mk.button>
-                            <span wire:loading wire:target="payOnline" role="status" class="flex items-center gap-2 text-sm text-neutral-600">
-                                <x-mk.spinner class="size-4" aria-hidden="true" />
-                                Membuka halaman pembayaran&hellip;
-                            </span>
-                        </div>
                     @endif
+
+                    <div class="mt-3 flex flex-wrap items-center gap-3">
+                        <x-mk.button
+                            variant="primary"
+                            wire:click="payOnline"
+                            wire:loading.attr="disabled"
+                            wire:target="payOnline"
+                        >
+                            Bayar Online
+                        </x-mk.button>
+                        <span wire:loading wire:target="payOnline" role="status" class="flex items-center gap-2 text-sm text-neutral-600">
+                            <x-mk.spinner class="size-4" aria-hidden="true" />
+                            Membuka halaman pembayaran&hellip;
+                        </span>
+                    </div>
                 </x-mk.card>
             @endif
         @endif
