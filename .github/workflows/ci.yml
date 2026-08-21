@@ -409,6 +409,25 @@ jobs:
       - name: Build assets
         run: npm run build
 
+      - name: Publish Filament panel assets
+        # Root cause of a deterministic E2E-ADMIN/VENDOR Playwright failure
+        # (tests/browser/e2e-admin-vendor.spec.ts): without this, /admin and
+        # /vendor request /js/filament/*, /css/filament/*, /fonts/filament/*
+        # that 404 -- exactly the same class of bug the Dockerfile's own
+        # `filament:assets` step (Dockerfile, this comment predates this
+        # one) was added to fix for the built image on 13 Aug 2026, but that
+        # fix was never carried over to this job's own separate
+        # `php artisan serve` setup. Confirmed live: a captured Playwright
+        # trace showed 8 real 404s for exactly these paths (app.js,
+        # actions.js, tables.js, etc.) -- with Alpine/Livewire's runtime
+        # never loading, `wire:submit` never wires up and the login
+        # button's accessible name and click both silently fail, timing
+        # out `getByRole('button', { name: 'Masuk' })` for the full test
+        # timeout on every attempt. No prior E2E suite (booking,
+        # marketplace, faq, home, renewal) exercises a Filament panel's
+        # interactive JS, so this gap was never exposed before.
+        run: php artisan filament:assets --ansi
+
       - name: Install Playwright browser binaries
         run: npx playwright install --with-deps chromium
 
