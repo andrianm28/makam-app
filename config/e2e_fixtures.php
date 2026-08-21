@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 /**
  * `seed_admin_vendor_users` exists for exactly one caller:
- * `database/migrations/2026_08_22_100000_seed_e2e_admin_vendor_test_users.php`,
+ * `database/migrations/2026_08_22_110000_seed_e2e_admin_vendor_test_users.php`,
  * which `RefreshDatabase` applies once per PHPUnit process for EVERY Feature
  * test, not just the E2E-ADMIN/VENDOR browser suite it exists for. Left
  * unconditional, that migration's real `GrantActorRole`/`GrantScopeAssignment`

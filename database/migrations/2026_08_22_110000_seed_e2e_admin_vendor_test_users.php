@@ -69,8 +69,14 @@ declare(strict_types=1);
  * migration queries the real, current first `vendors` row at migration
  * time instead of assuming an id.
  *
- * Migration timestamp slot: `2026_08_22_100000`, after every existing
- * identity/vendor migration.
+ * Migration timestamp slot: `2026_08_22_110000`, after every existing
+ * identity/vendor migration and after
+ * `2026_08_22_100000_fix_customer_and_uploader_identity_columns` (merged to
+ * trunk via PR #130 while this suite's PR was open — bumped from this
+ * file's original `2026_08_22_100000` slot to resolve the collision; this
+ * migration does not touch any of the four columns that fix re-types, so
+ * there is no ordering dependency between them, only a filename clash to
+ * avoid).
  *
  * ---------------------------------------------------------------------------
  * Task 4 addition — two `vendor_orders` fixture rows for a real scoping proof
@@ -129,8 +135,8 @@ declare(strict_types=1);
 
 use App\Domain\Marketplace\VendorProcessingStatus;
 use App\Models\User;
-use App\Platform\IdentityAccess\Roles\ActorRole;
 use App\Platform\IdentityAccess\Roles\Actions\GrantActorRole;
+use App\Platform\IdentityAccess\Roles\ActorRole;
 use App\Platform\IdentityAccess\Scopes\Actions\GrantScopeAssignment;
 use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use App\Platform\IdentityAccess\Scopes\ScopeGrantLevel;

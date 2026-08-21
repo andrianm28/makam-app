@@ -30,7 +30,7 @@ final class SeedE2eAdminVendorTestUsersTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const string MIGRATION_PATH = 'migrations/2026_08_22_100000_seed_e2e_admin_vendor_test_users.php';
+    private const string MIGRATION_PATH = 'migrations/2026_08_22_110000_seed_e2e_admin_vendor_test_users.php';
 
     public function test_it_seeds_a_logged_in_able_admin_user(): void
     {

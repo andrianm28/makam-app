@@ -67,14 +67,24 @@ const VENDOR = {
     password: 'E2eVendorPassword!1',
 };
 
-// Filament's default login page wraps the password field's label ("Password")
-// and its required-marker ("*") in a `<superscript>`, so the accessible name
-// is "Password*" — and the field itself sits alongside "Show password"/"Hide
-// password" reveal-toggle buttons whose aria-labels also contain the
-// substring "password". `getByLabel('Password')` therefore resolves to 3
-// elements (verified live against the real rendered login page for both
-// panels). Scoping to role `textbox` excludes both buttons and keeps this a
-// real-markup locator, not a raw CSS selector.
+// CI (and this repo's default runtime) renders the app with
+// APP_LOCALE=id (`config/app.php`), and Filament ships its own `id`
+// translations (`vendor/filament/filament/resources/lang/id/auth/pages/
+// login.php`) — the login form's real accessible names are the Indonesian
+// strings below ("Alamat email" / "Kata sandi" / "Masuk"), not the English
+// defaults. Confirmed live against a failing CI run: `getByLabel('Email
+// address')` never resolved and the test timed out, because that English
+// label is never rendered under this app's configured locale.
+//
+// Filament's default login page wraps the password field's label ("Kata
+// sandi") and its required-marker ("*") in a `<superscript>`, so the
+// accessible name is "Kata sandi*" — and the field itself sits alongside
+// "Sembunyikan kata sandi"/"Tampilkan kata sandi" reveal-toggle buttons
+// whose aria-labels also contain the substring "kata sandi"
+// (`vendor/filament/forms/resources/lang/id/components.php`).
+// `getByLabel('Kata sandi')` therefore resolves to 3 elements. Scoping to
+// role `textbox` excludes both buttons and keeps this a real-markup
+// locator, not a raw CSS selector.
 //
 // The trailing `waitForLoadState('networkidle')` is deliberate, not
 // decorative: Filament's login redirect is a Livewire-driven client-side
@@ -85,18 +95,18 @@ const VENDOR = {
 // caller's next navigation is real, not a race.
 async function adminLogin(page: Page): Promise<void> {
     await page.goto('/admin/login');
-    await page.getByLabel('Email address').fill(ADMIN.email);
-    await page.getByRole('textbox', { name: 'Password' }).fill(ADMIN.password);
-    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.getByLabel('Alamat email').fill(ADMIN.email);
+    await page.getByRole('textbox', { name: 'Kata sandi' }).fill(ADMIN.password);
+    await page.getByRole('button', { name: 'Masuk' }).click();
     await page.waitForURL(/\/admin\/?$/);
     await page.waitForLoadState('networkidle');
 }
 
 async function vendorLogin(page: Page): Promise<void> {
     await page.goto('/vendor/login');
-    await page.getByLabel('Email address').fill(VENDOR.email);
-    await page.getByRole('textbox', { name: 'Password' }).fill(VENDOR.password);
-    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.getByLabel('Alamat email').fill(VENDOR.email);
+    await page.getByRole('textbox', { name: 'Kata sandi' }).fill(VENDOR.password);
+    await page.getByRole('button', { name: 'Masuk' }).click();
     await page.waitForURL(/\/vendor\/?$/);
     await page.waitForLoadState('networkidle');
 }

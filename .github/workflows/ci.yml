@@ -391,7 +391,7 @@ jobs:
           DB_USERNAME: makam_test
           DB_PASSWORD: makam_test
           # Opts the E2E-ADMIN/VENDOR seed migration
-          # (database/migrations/2026_08_22_100000_seed_e2e_admin_vendor_test_users.php)
+          # (database/migrations/2026_08_22_110000_seed_e2e_admin_vendor_test_users.php)
           # into actually writing its two throwaway login accounts --
           # config/e2e_fixtures.php defaults this to false everywhere else
           # (including ordinary PHPUnit runs, which also set APP_ENV=testing
