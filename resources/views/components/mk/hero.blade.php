@@ -23,10 +23,22 @@
     font-display (Poppins 600) and tracking-tight, matching
     design-system.md §1.4's typography scale table verbatim ("text-4xl |
     h1, hero (mobile)", "text-5xl | Hero (desktop, lg:)") and the
-    font-display row ("h1/h2, hero, header wordmark only") -- not the
-    smaller text-2xl/md:text-3xl a plain page <h1> elsewhere in this repo
-    uses, because none of those existing h1s are actually a hero (they're
-    page titles in wizard/detail screens that predate this primitive).
+    font-display row ("h1/h2, hero, header wordmark only") -- larger than
+    the text-2xl/md:text-3xl a plain page <h1> uses elsewhere (wizard/
+    detail screens that are not heroes).
+
+    NOTE (flagged in Task 4 review, 21 Aug 2026): home-page.blade.php's
+    existing "Section 2: Hero" (id="hero-heading") already uses this same
+    text-4xl/lg:text-5xl size scale but deliberately omits font-display --
+    that section predates this primitive and was never updated to use it.
+    This component adds font-display because §1.4's family table names it
+    for heroes; that is a real, unresolved divergence from the one other
+    hero in the codebase, not an absence of precedent. Reconciling the two
+    (apply font-display to the existing section, or drop it here) is a
+    Phase 2 decision when <x-mk.hero> is actually wired into the homepage
+    -- left as-is here since this component is not yet used on any real
+    page in this phase.
+
     tracking-tight and text-neutral-900 mirror every other <h1> in the
     codebase (e.g. faq/index.blade.php, booking/wizard.blade.php).
 
