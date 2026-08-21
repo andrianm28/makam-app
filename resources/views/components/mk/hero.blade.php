@@ -27,17 +27,18 @@
     the text-2xl/md:text-3xl a plain page <h1> uses elsewhere (wizard/
     detail screens that are not heroes).
 
-    NOTE (flagged in Task 4 review, 21 Aug 2026): home-page.blade.php's
-    existing "Section 2: Hero" (id="hero-heading") already uses this same
-    text-4xl/lg:text-5xl size scale but deliberately omits font-display --
-    that section predates this primitive and was never updated to use it.
-    This component adds font-display because §1.4's family table names it
-    for heroes; that is a real, unresolved divergence from the one other
-    hero in the codebase, not an absence of precedent. Reconciling the two
-    (apply font-display to the existing section, or drop it here) is a
-    Phase 2 decision when <x-mk.hero> is actually wired into the homepage
-    -- left as-is here since this component is not yet used on any real
-    page in this phase.
+    NOTE (corrected post Task 4 review, 21 Aug 2026): resources/css/app.css's
+    base layer already applies font-display, tracking-tight, and the strong
+    text colour to every <h1> in the codebase globally (the `h1, h2 {
+    font-family: var(--font-display); letter-spacing: var(--tracking-tight);
+    }` and `h1, h2, h3, h4 { color: var(--mk-text-strong); ... }` rules), so
+    home-page.blade.php's existing "Section 2: Hero" <h1> already renders
+    with font-display -- there is no divergence to reconcile. The only thing
+    $headingClasses adds beyond the base layer is the text-4xl/lg:text-5xl
+    size scale (design-system.md §1.4's hero typography row). font-display,
+    font-semibold, tracking-tight, and text-neutral-900 are restated
+    explicitly here anyway for this component's own self-containment/
+    clarity, even though the base <h1> rule already applies them.
 
     tracking-tight and text-neutral-900 mirror every other <h1> in the
     codebase (e.g. faq/index.blade.php, booking/wizard.blade.php).

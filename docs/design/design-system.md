@@ -36,7 +36,7 @@ This document is the **single source of truth for visual design decisions**. It 
 
 ### 0.3 Status of this version
 
-`v0.1 PROPOSED`. The **token values are verified for accessibility** (§7.1, 46/46 pairs pass) but **no brand approval, no user testing, and no rendered build has occurred**. See §12 NOT TESTED and §11 OPEN QUESTIONS. Per `AGENTS.md`, nothing in this document may be reported as `PASS` beyond what §7.1 explicitly measured.
+`v0.1 PROPOSED`. The **token values are verified for accessibility** (§7.1, 49/49 pairs pass) but **no brand approval, no user testing, and no rendered build has occurred**. See §12 NOT TESTED and §11 OPEN QUESTIONS. Per `AGENTS.md`, nothing in this document may be reported as `PASS` beyond what §7.1 explicitly measured.
 
 `v0.2` (17 Aug 2026): the official Makam.co.id brand identity was adopted per [ADR-0034](../adr/0034-adopt-makam-brand-identity.md). Earth brown replaces the provisional Petrol teal as `primary`, Leaf green replaces Sandstone as the caged `secondary`, and Poppins joins as the `--font-display` face (§1.4). **OQ-01** (brand primary) and **OQ-02** (existing identity) are resolved (§11). At this point every adopted brand hex was still **PROVISIONAL** pending **OQ-12** (official brand values, vector source, horizontal lockup) — see §11.
 
@@ -89,7 +89,7 @@ doc comment for the method). No value here is an estimate any longer.
 
 **(a) Primary is Earth brown, not teal — OQ-01 resolved.** v0.1 chose Petrol teal as a deliberately *provisional* primary, made only because [OQ-02](#11-open-questions) had no prior identity to defer to, and deliberately "not green" so a brand CTA could never be confused with a `success` badge. On 17 Aug 2026 the stakeholder supplied the official Makam.co.id brand identity — a render plus the *Filosofi Logo Makam.co.id* philosophy text — which **reverses** that choice: *"dark brown = earth, calm, stability, warmth, respect, humanist (deliberately 'not too tech')."* [ADR-0034](../adr/0034-adopt-makam-brand-identity.md) records the decision. The old green-CTA-vs-success-badge ambiguity that justified avoiding green as primary no longer needs a hue-avoidance answer — it is now avoided **structurally**: brand fills are Earth brown, and `secondary` (Leaf, below) is caged so it never fills a button, badge, or alert regardless of how close its hue sits to `success`. **OQ-01, OQ-02, and OQ-12 are all resolved** — see the note above the palette table.
 
-**(b) Secondary is constrained, not equal — Sandstone retired, Leaf inherits the cage.** The philosophy text reads the mark's eight radial leaves as "life, growth, renewal," so `secondary` becomes **Leaf** green (`#336B3E`, hue ≈132°, sampled from the official logo per the OQ-12 note above), replacing Sandstone. The restricted-usage cage is unchanged and, if anything, matters *more* now: Leaf sits only ≈14° from `success` (≈146°) — closer than Sandstone ever sat to `warning` (was ≈6.5°) — so any Leaf fill would misread as a status success. Secondary stays **restricted by usage**: shades 50–200 as surface tint, 700–900 as text on those tints, 300–400 as decorative rules/icons. It is **never** a filled badge, alert, or button. A restrained palette is also correct for this domain: one brand colour, one accent, four semantics, neutrals.
+**(b) Secondary is constrained, not equal — Sandstone retired, Leaf inherits the cage.** The philosophy text reads the mark's eight radial leaves as "life, growth, renewal," so `secondary` becomes **Leaf** green (`#336B3E`, hue ≈132°, sampled from the official logo per the OQ-12 note above), replacing Sandstone. The restricted-usage cage is unchanged and, if anything, matters *more* now: Leaf sits only ≈14° from `success` (≈146°) — a comparable-magnitude collision to the one Sandstone previously had with `warning` (≈6.5°), not a smaller one — so any Leaf fill would misread as a status success. Secondary stays **restricted by usage**: shades 50–200 as surface tint, 700–900 as text on those tints, 300–400 as decorative rules/icons. It is **never** a filled badge, alert, or button. A restrained palette is also correct for this domain: one brand colour, one accent, four semantics, neutrals.
 
 A `secondary-100` tile carrying a `secondary-800` icon (`<x-mk.icon-medallion tone="leaf">`, added 19 Aug 2026) is a surface-tint-plus-text usage, not a fill — it stays inside the cage, not an exception to it. It is `aria-hidden`, decorative only, and never appears adjacent to order/payment/availability data where a status reading could attach to it.
 
@@ -404,7 +404,7 @@ Checkbox/radio: 20 px box inside a **44 px** clickable row; the whole row is the
 **Padding:** mobile `p-4`, `md:p-6`.
 **Interactive** (whole card is a link — TPU/TPS card, product card): add `hover:border-primary-300 hover:shadow-md focus-within:ring-2 focus-within:ring-primary-600 focus-within:ring-offset-2 transition-[border-color,box-shadow,background-color] duration-fast`. A card with no `intent` set also gets `hover:bg-primary-50` (added 19 Aug 2026, homepage visual refresh) — an intent card keeps its own `$intentSurfaces` background instead, never competing with it. Colour-only; no transform (§5's interaction table: hover Transform is `none`).
 
-Interactive cards must contain **exactly one** focusable anchor covering the title, with the rest of the card as a pseudo-element overlay — never nest multiple links inside a clickable card (keyboard trap + confusing tab order).
+Interactive cards must contain **exactly one** focusable anchor; the standard technique (§3.3b) is to make the card's **root element** the `<a>` itself (`as="a"` + `interactive` + `:href`), not an overlay trick — never nest multiple links inside a clickable card (keyboard trap + confusing tab order).
 
 **Variant — Cemetery card (Booking Step 2, PUB-011).** Must show: type badge (TPU/TPS), name, primary photo, address, facilities, price range **with source**, availability status, and the `"Perlu konfirmasi"` label when indicative. Availability uses §3.7 intent mapping; an indicative price is `neutral`, **never** `success`.
 
@@ -467,7 +467,7 @@ A **whole-card-is-the-link** pattern for building primary navigation and service
 
 **Where it's used**
 
-- **Existing:** `App\Livewire\Public\Marketplace\MarketplaceIndex`'s product grid (PUB-020, `resources/views/livewire/public/marketplace/index.blade.php` lines 205–260) — each product card links to its detail page via `as="a" :href="route('marketplace.product', ...)"`, using the real photo-`media` shape above.
+- **Existing:** `App\Livewire\Public\Marketplace\MarketplaceIndex`'s product grid (PUB-020, `resources/views/livewire/public/marketplace/index.blade.php`, the product grid `<ul aria-label="Daftar produk">`) — each product card links to its detail page via `as="a" :href="route('marketplace.product', ...)"`, using the real photo-`media` shape above.
 - **Planned (Phase 2):** Homepage's four primary navigation items (`Pemesanan Makam`, `Layanan Pemakaman`, `Perpanjangan Makam`, `FAQ`) as an interactive card grid, matching the `kamboja.co.id` benchmark's "service cards" layout referenced in the brand refresh spec (§4.2). These have no product photo, so they use §3.3a's `<x-mk.icon-medallion>` in place of the `media` slot — icon-medallion is already documented as the device for exactly this "service cards" use case; a nav card is not required to have a photo.
 
 **Usage rules**
@@ -491,6 +491,38 @@ A **whole-card-is-the-link** pattern for building primary navigation and service
     @endforeach
 </ul>
 ```
+
+### 3.3c Hero — `<x-mk.hero>` (added Task 4, brand visual refresh)
+
+Pairs a real photo (§2.2: cemeteries/gardens, daylight, no people in grief) with the page's
+primary heading and one CTA. Not yet wired into any real page in this phase — Phase 2 applies it
+to the homepage.
+
+**Props:** `image` (string) · `heading` (string, **required**) · `cta` (array,
+`['label' => string, 'href' => string]`).
+
+**Behaviour:** omitting `heading` throws `InvalidArgumentException` at render time —
+`<x-mk.hero>` has no sensible fallback for a hero with no heading, so it fails loudly rather than
+rendering a blank one.
+
+**Base:** root `<div>` is `relative overflow-hidden rounded-lg`. When `image` is given, an `<img>`
+(`h-64 md:h-96 w-full object-cover`) renders above a `bg-primary-50` content surface holding the
+heading, an optional slot, and the CTA (`flex flex-col gap-4 p-6 md:p-8`).
+
+**Heading typography:** `font-display text-4xl font-semibold tracking-tight text-neutral-900
+lg:text-5xl`, matching §1.4's hero row (`text-4xl` mobile / `lg:text-5xl` desktop) verbatim. These
+classes are restated explicitly in the component even though `app.css`'s base `h1` rule already
+applies `font-display`, `tracking-tight`, and the strong text colour globally — the size scale is
+the one thing `<x-mk.hero>` adds beyond the base layer; the rest is restated for the component's
+own self-containment, not because of any conflict with other `<h1>`s in the codebase.
+
+**CTA:** rendered as a single `<x-mk.button variant="primary" size="lg" :href="$cta['href']">` —
+§2.3's DO of exactly one primary action per view. `<x-mk.hero>` does not support more than one CTA.
+
+**A11y:** the image is deliberately decorative — `alt=""` always, matching this repo's existing
+decorative-image convention (the heading already carries the information the image would). The
+heading renders as a real `<h1>`, so it participates in the page's normal heading outline like any
+other page.
 
 ### 3.4 Modal and Bottom Sheet — `<x-mk.modal>`
 
@@ -1063,7 +1095,7 @@ Selected measured ratios (full output above):
 
 Single global treatment — `--mk-focus-ring`: 2 px `primary-600` ring at 2 px offset. `focus-visible` only (no ring on mouse click), but **`:focus-visible` must never be replaced by removing focus entirely.** `outline: none` without a replacement ring is a lint failure.
 
-On brand-filled surfaces use `--mk-focus-color-inverse` (`primary-300`, 3.94:1 against `primary-600`).
+On brand-filled surfaces use `--mk-focus-color-inverse` (`primary-300`, 4.42:1 against `primary-600`).
 
 Focus order follows DOM order. Modals trap focus and restore it to the trigger. The skip link is the first focusable element.
 
@@ -1571,7 +1603,7 @@ Per `AGENTS.md`: *"Never report `PASS` for a check that was not executed; use `B
 
 | Item | Result | Evidence |
 |---|---|---|
-| WCAG 2.1 AA contrast, 46 documented pairs | **PASS** | `python3 docs/design/verify-contrast.py` → exit 0, 79 tokens parsed, 46/46 pass (§7.1) |
+| WCAG 2.1 AA contrast, 49 documented pairs | **PASS** | `python3 docs/design/verify-contrast.py` → exit 0, 79 tokens parsed, 49/49 pass (§7.1) |
 | Semantic hue separation ≥ 30° for primary/success/info/danger | **PASS** | Same script: 26.2° / 145.5° / 227.6° / 352.0° |
 | Two real AA failures found and fixed during v0.1 authoring | **PASS** | `warning-600` 4.44 → 5.05; `neutral-300`/`400` borders 1.71/2.67 → `neutral-450` 3.67 |
 | `tokens.css` parses as CSS token declarations | **PASS** | Verifier extracted all 79 `--color-*-<shade>` tokens |

@@ -51,12 +51,12 @@
   --color-primary-950: #1B120C;
 
   /* ---------------------------------------------------------------------------
-   * 1.2 COLOUR — SECONDARY "Leaf" (hue ~123°, green)
+   * 1.2 COLOUR — SECONDARY "Leaf" (hue ~132°, green)
    * ADR-0034: replaces "Sandstone". The *Filosofi Logo* reads the mark's
    * eight leaves as life/sustainability/growth — Leaf is the palette's
    * expression of that. SURFACE & RESTRICTED ACCENT ONLY — the cage is
-   * UNCHANGED, only its rationale moves: hue ~123° now sits close to
-   * `success` (146°, Δ≈23°) rather than `warning` (39°). Therefore
+   * UNCHANGED, only its rationale moves: hue ~132° now sits close to
+   * `success` (146°, Δ≈14°) rather than `warning` (39°). Therefore
    * secondary is NEVER a filled status chip, alert, or button — a status
    * fill in this hue would be misread as "success". Allowed: 50–200 as
    * surface tint, 700–900 as text on those tints, 300–400 as decorative
@@ -297,7 +297,7 @@
 
   /* 2.4 FOCUS — single global treatment, never removed, never outline:none */
   --mk-focus-color: var(--color-primary-600);
-  --mk-focus-color-inverse: var(--color-primary-300); /* on brand fills, 3.94:1 */
+  --mk-focus-color-inverse: var(--color-primary-300); /* on brand fills, 4.42:1 */
   --mk-focus-width: 2px;
   --mk-focus-offset: 2px;
   --mk-focus-ring: 0 0 0 var(--mk-focus-offset) var(--mk-surface-raised),
