@@ -473,6 +473,23 @@ jobs:
             || { echo "app did not come up"; cat /tmp/artisan-serve.log; exit 1; }
           npm run test:browser
 
+      # TEMPORARY diagnostic step -- debugging a deterministic
+      # locator.click timeout on the E2E-ADMIN/VENDOR suite's "Masuk"
+      # login button (tests/browser/e2e-admin-vendor.spec.ts:100) that
+      # survives 3/3 attempts across 2 separate CI runs, despite the
+      # button existing with correct markup in a direct server-rendered
+      # check. playwright.config.ts's trace: 'on-first-retry' already
+      # captures a trace on retry #1 -- this just uploads it (and any
+      # screenshots) so it's actually inspectable instead of discarded
+      # when the job ends. Remove once root-caused.
+      - name: Upload Playwright test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: test-results/
+          retention-days: 3
+
   # ---------------------------------------------------------------------------
   # Build the immutable artifact/image and push it to GHCR (ci-cd-and-release.md
   # §2 "build immutable artifact/image", §10 combined dev/staging profile: "The

@@ -25,6 +25,11 @@ export default defineConfig({
     use: {
         baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8080',
         trace: 'on-first-retry',
+        // TEMPORARY, alongside the diagnostic artifact-upload CI step --
+        // see that step's comment in .github/workflows/ci.yml. Gives a
+        // plain PNG for a failing action without needing to parse the
+        // trace zip. Remove once root-caused.
+        screenshot: 'only-on-failure',
     },
     projects: [
         {
