@@ -410,64 +410,6 @@ Interactive cards must contain **exactly one** focusable anchor covering the tit
 
 **Variant — Service/add-on row (Step 4, PUB-013).** Name, description, **fulfillment owner** (platform / operator / vendor — required by `service-catalog.md`), price, availability, quantity/variant control. An unavailable item stays visible only with a reason and an alternative; render it `bg-neutral-50 border-neutral-200` with a `neutral` badge — **not** `danger` (it is not an error).
 
-### 3.3b Card as navigation — primary service grids
-
-A **whole-card-is-the-link** pattern for building primary navigation and service-choice grids, reusing `<x-mk.card interactive as="a">` rather than inventing a new primitive.
-
-**Pattern**
-
-```blade
-<x-mk.card
-    as="a"
-    interactive
-    :href="route('service.show', ['slug' => $service->slug])"
-    class="h-full"
->
-    @if ($service->image_path)
-        <x-slot:media>
-            <img
-                src="{{ asset($service->image_path) }}"
-                alt=""
-                class="h-40 w-full object-cover"
-                loading="lazy"
-            >
-        </x-slot:media>
-    @endif
-
-    <x-mk.badge intent="neutral">{{ $service->category }}</x-mk.badge>
-
-    <h2 class="text-lg font-semibold text-neutral-900">{{ $service->name }}</h2>
-
-    <p class="text-base text-neutral-600">{{ $service->description }}</p>
-</x-mk.card>
-```
-
-**Where it's used**
-
-- **Existing:** `App\Livewire\Public\Marketplace\MarketplaceIndex`'s product grid (PUB-020, `resources/views/livewire/public/marketplace/index.blade.php` lines 205–260) — each product card links to its detail page via `as="a" :href="route('marketplace.product', ...)"`.
-- **Planned (Phase 2):** Homepage's four primary navigation items (`Pemesanan Makam`, `Layanan Pemakaman`, `Perpanjangan Makam`, `FAQ`) as an interactive card grid, matching the `kamboja.co.id` benchmark's "service cards" layout referenced in the brand refresh spec (§4.2).
-
-**Usage rules**
-
-- The **root element** is `<a>` (controlled by `as="a"` + `interactive` + `:href`). The whole card is one focusable link; never nest another `<a>` or `<button>` inside the card's default slot.
-- **Media slot** (optional) — full-bleed image clipped to the card's rounded corners. Use `alt=""` if decorative (the adjacent heading carries the text), or a real `alt` only if the image conveys unique information.
-- **Content** — badge, heading, description, or other text. Icon or image badges are typical; a category badge is a common choice. Avoid multiple competing links; the card itself is the single navigation target.
-- **Intent** — leave blank (`intent` prop omitted) so the `interactive` hover includes the `hover:bg-primary-50` tint, reinforcing the clickability. If an intent is needed (e.g. to show availability status), the `hover:bg-primary-50` suppresses automatically; see §3.3 `interactive` rules.
-
-**Grid layout** — use the established card-grid pattern from §4.3:
-
-```blade
-<ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 md:gap-6" aria-label="Daftar layanan">
-    @foreach ($services as $service)
-        <li>
-            <x-mk.card as="a" interactive :href="...">
-                {{-- card content --}}
-            </x-mk.card>
-        </li>
-    @endforeach
-</ul>
-```
-
 ### 3.3a Icon Medallion — `<x-mk.icon-medallion>` (added 19 Aug 2026, homepage visual refresh)
 
 A decorative icon-or-numeral-on-a-tinted-tile figure — the "livelier" device the homepage visual
@@ -485,6 +427,70 @@ text-secondary-800` — a surface-tint usage already inside the Leaf cage (§1.2
 Always `aria-hidden="true"` — decorative only, never a substitute for a real text label (same
 rule `<x-mk.badge>`'s `dot` prop follows). Never placed adjacent to order/payment/availability
 data, so it never carries a status reading despite `leaf` sitting near the `success` hue.
+
+Icon-medallion is the sanctioned content device for §3.3b's nav-card pattern when the card has no
+real photo — see §3.3b's "Content" rule.
+
+### 3.3b Card as navigation — primary service grids
+
+A **whole-card-is-the-link** pattern for building primary navigation and service-choice grids, reusing `<x-mk.card interactive as="a">` rather than inventing a new primitive.
+
+**Pattern**
+
+```blade
+<x-mk.card
+    as="a"
+    interactive
+    :href="route('service.show', ['slug' => $service->slug])"
+    class="h-full touch-target"
+>
+    @if ($service->image_path)
+        <x-slot:media>
+            <img
+                src="{{ asset($service->image_path) }}"
+                alt=""
+                class="h-40 w-full object-cover"
+                loading="lazy"
+            >
+        </x-slot:media>
+    @endif
+
+    <div>
+        <x-mk.badge intent="neutral">{{ $service->category }}</x-mk.badge>
+    </div>
+
+    <h2 class="text-lg font-semibold text-neutral-900">{{ $service->name }}</h2>
+
+    <p class="text-base text-neutral-600">{{ $service->description }}</p>
+</x-mk.card>
+```
+
+**Where it's used**
+
+- **Existing:** `App\Livewire\Public\Marketplace\MarketplaceIndex`'s product grid (PUB-020, `resources/views/livewire/public/marketplace/index.blade.php` lines 205–260) — each product card links to its detail page via `as="a" :href="route('marketplace.product', ...)"`, using the real photo-`media` shape above.
+- **Planned (Phase 2):** Homepage's four primary navigation items (`Pemesanan Makam`, `Layanan Pemakaman`, `Perpanjangan Makam`, `FAQ`) as an interactive card grid, matching the `kamboja.co.id` benchmark's "service cards" layout referenced in the brand refresh spec (§4.2). These have no product photo, so they use §3.3a's `<x-mk.icon-medallion>` in place of the `media` slot — icon-medallion is already documented as the device for exactly this "service cards" use case; a nav card is not required to have a photo.
+
+**Usage rules**
+
+- The **root element** is `<a>` (controlled by `as="a"` + `interactive` + `:href`). The whole card is one focusable link; never nest another `<a>` or `<button>` inside the card's default slot.
+- **Content, with a photo** — `media` slot: full-bleed image clipped to the card's rounded corners. Use `alt=""` if decorative (the adjacent heading carries the text), or a real `alt` only if the image conveys unique information.
+- **Content, without a photo** — use §3.3a's `<x-mk.icon-medallion>` in the default slot instead of a `media` slot (the homepage nav-card use case).
+- Either way: badge, heading, description, or other text follows. Avoid multiple competing links; the card itself is the single navigation target.
+- **Intent** — leave blank (`intent` prop omitted) so the `interactive` hover includes the `hover:bg-primary-50` tint, reinforcing the clickability. If an intent is needed (e.g. to show availability status), the `hover:bg-primary-50` suppresses automatically; see §3.3 `interactive` rules.
+
+**Grid layout** — use the established card-grid pattern from §4.3:
+
+```blade
+<ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 md:gap-6" aria-label="Daftar layanan">
+    @foreach ($services as $service)
+        <li>
+            <x-mk.card as="a" interactive :href="...">
+                {{-- card content --}}
+            </x-mk.card>
+        </li>
+    @endforeach
+</ul>
+```
 
 ### 3.4 Modal and Bottom Sheet — `<x-mk.modal>`
 
