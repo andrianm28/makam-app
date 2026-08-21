@@ -385,7 +385,9 @@ final class BookingWizardOnlinePaymentTest extends TestCase
     public function test_the_sandbox_warning_does_not_show_for_a_non_sandbox_provider(): void
     {
         $this->withPaymentGate(open: true);
-        config(['payment.default' => 'some-future-production-provider']);
+        // ADR-0036: the real production provider slug, no longer a
+        // placeholder now that one exists.
+        config(['payment.default' => PaymentProviders::SUMOPOD_LIVE]);
 
         $this->journeyToStepEight()
             ->assertSee('Bayar Sekarang')

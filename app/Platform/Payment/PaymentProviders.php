@@ -34,8 +34,19 @@ namespace App\Platform\Payment;
 final class PaymentProviders
 {
     /**
-     * ADR-0033's dev/staging provider. Production activation is a separate
-     * decision (`G-PAY-01` stays closed there), so no production slug exists.
+     * ADR-0033's dev/staging provider.
      */
     public const string SUMOPOD_SANDBOX = 'sumopod-sandbox';
+
+    /**
+     * ADR-0036's production provider — same vendor, same API contract as
+     * {@see self::SUMOPOD_SANDBOX} (`POST /api/v1/payments`, `X-Api-Key`
+     * header, identical webhook envelope/signature scheme), only the base
+     * URL and credentials differ. Selecting this slug (`payment.default` /
+     * `PAYMENT_PROVIDER`) makes real production credentials configurable —
+     * it does NOT itself open `G-PAY-01`. That gate stays closed in
+     * production until an admin records real activation evidence through
+     * the Feature Gate admin panel; see ADR-0036 §Scope boundary.
+     */
+    public const string SUMOPOD_LIVE = 'sumopod-live';
 }
