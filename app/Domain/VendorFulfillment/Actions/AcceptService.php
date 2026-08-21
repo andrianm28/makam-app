@@ -22,7 +22,7 @@ final readonly class AcceptService
 {
     public function __invoke(
         WorkOrder $workOrder,
-        string $customerId,
+        int $customerId,
         ?int $rating,
         ?string $notes,
     ): ServiceAcceptance {

@@ -36,6 +36,7 @@ final class ServiceAcceptance extends Model
     protected function casts(): array
     {
         return [
+            'customer_id' => 'integer',
             'accepted_at' => 'immutable_datetime',
             'rating' => 'integer',
         ];

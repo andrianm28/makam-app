@@ -10,6 +10,7 @@ use App\Domain\CareSubscription\CareSubscriptionAuditActions;
 use App\Domain\CareSubscription\Models\CarePlan;
 use App\Domain\CareSubscription\Models\SubscriptionCycle;
 use App\Domain\CareSubscription\SubscriptionStatus;
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -42,7 +43,7 @@ final class CreateSubscriptionTest extends TestCase
         $subscription = app(CreateSubscription::class)(
             $plan,
             (string) Str::uuid(),
-            (string) Str::uuid(),
+            User::factory()->create()->id,
             CarePlanFrequency::Monthly,
             'user:1',
             'admin',
@@ -78,7 +79,7 @@ final class CreateSubscriptionTest extends TestCase
         $subscription = app(CreateSubscription::class)(
             $plan,
             (string) Str::uuid(),
-            (string) Str::uuid(),
+            User::factory()->create()->id,
             CarePlanFrequency::Quarterly,
             'user:1',
             'admin',
@@ -101,7 +102,7 @@ final class CreateSubscriptionTest extends TestCase
         $subscription = app(CreateSubscription::class)(
             $plan,
             (string) Str::uuid(),
-            (string) Str::uuid(),
+            User::factory()->create()->id,
             CarePlanFrequency::Annual,
             'user:1',
             'admin',

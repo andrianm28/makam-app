@@ -10,6 +10,7 @@ use App\Domain\VendorFulfillment\Models\ServiceAcceptance;
 use App\Domain\VendorFulfillment\Models\WorkOrder;
 use App\Domain\VendorFulfillment\VendorFulfillmentAuditActions;
 use App\Domain\VendorFulfillment\WorkOrderStatus;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
@@ -46,7 +47,7 @@ final class AcceptServiceTest extends TestCase
     public function test_accepts_a_completed_work_order_with_a_rating(): void
     {
         $workOrder = $this->makeCompletedWorkOrder();
-        $customerId = (string) Str::uuid();
+        $customerId = User::factory()->create()->id;
 
         $acceptance = app(AcceptService::class)($workOrder, $customerId, 5, 'Great service, thank you.');
 
@@ -76,7 +77,7 @@ final class AcceptServiceTest extends TestCase
     public function test_accepts_a_completed_work_order_with_no_rating_or_notes(): void
     {
         $workOrder = $this->makeCompletedWorkOrder();
-        $customerId = (string) Str::uuid();
+        $customerId = User::factory()->create()->id;
 
         $acceptance = app(AcceptService::class)($workOrder, $customerId, null, null);
 
@@ -95,7 +96,7 @@ final class AcceptServiceTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
 
-        app(AcceptService::class)($workOrder, (string) Str::uuid(), 0, null);
+        app(AcceptService::class)($workOrder, User::factory()->create()->id, 0, null);
     }
 
     public function test_rejects_a_rating_above_the_maximum(): void
@@ -104,7 +105,7 @@ final class AcceptServiceTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
 
-        app(AcceptService::class)($workOrder, (string) Str::uuid(), 6, null);
+        app(AcceptService::class)($workOrder, User::factory()->create()->id, 6, null);
     }
 
     public function test_an_invalid_rating_writes_no_acceptance_or_audit_row(): void
@@ -112,7 +113,7 @@ final class AcceptServiceTest extends TestCase
         $workOrder = $this->makeCompletedWorkOrder();
 
         try {
-            app(AcceptService::class)($workOrder, (string) Str::uuid(), 7, null);
+            app(AcceptService::class)($workOrder, User::factory()->create()->id, 7, null);
             $this->fail('Expected InvalidArgumentException');
         } catch (InvalidArgumentException) {
             // expected
@@ -132,7 +133,7 @@ final class AcceptServiceTest extends TestCase
         // resubmitted form, a retry) is not rejected here. Documented via
         // this test rather than assumed.
         $workOrder = $this->makeCompletedWorkOrder();
-        $customerId = (string) Str::uuid();
+        $customerId = User::factory()->create()->id;
 
         app(AcceptService::class)($workOrder, $customerId, 4, 'first');
         app(AcceptService::class)($workOrder, $customerId, 5, 'second');

@@ -168,7 +168,7 @@ final class CareHistoryPage extends Component
         try {
             app(AcceptService::class)(
                 $workOrder,
-                $this->customerId,
+                (int) $this->customerId,
                 $rating,
                 filled($this->acceptanceNotes) ? trim($this->acceptanceNotes) : null,
             );
@@ -214,7 +214,7 @@ final class CareHistoryPage extends Component
             return;
         }
 
-        app(FileComplaint::class)($workOrder, $this->customerId, trim($this->complaintText));
+        app(FileComplaint::class)($workOrder, (int) $this->customerId, trim($this->complaintText));
 
         $this->actionMessage = 'Komplain Anda telah dikirim. Tim kami akan meninjau dan menghubungi Anda.';
         $this->actionIntent = 'success';
@@ -239,36 +239,24 @@ final class CareHistoryPage extends Component
     }
 
     /**
-     * A second, deeper gap this comparison exposes but cannot itself close:
-     * `subscriptions.customer_id` (and `work_evidence.uploaded_by`) are
-     * schema-typed as Postgres `uuid` columns, while `ActorContext
-     * ::identityReference` (what `auth()->id()` ultimately is) is the
-     * `users.id` BIGINT — never a UUID shape. The two can only be compared
-     * as opaque strings, and in a real Postgres environment they can never
-     * legitimately match: nothing in this codebase mints a UUID "customer"
-     * identity tied to an authenticated user. This is pre-existing —
-     * `App\Filament\Admin\Resources\Subscriptions\Actions
-     * \CreateSubscriptionAction` already writes
-     * `(string) $actor->identityReference` (the ADMIN's own bigint id, not
-     * even a customer selection) into this same uuid column today.
-     *
-     * CONFIRMED SEVERE, not just theoretical: a real CI run against Postgres
-     * (this class's own route test, `CareHistoryPageRouteTest`) showed this
-     * mismatch is not merely "the equality never succeeds" — a bigint-shaped
-     * `$customerId` passed straight into a `uuid`-column `WHERE` clause
-     * throws an uncaught "invalid input syntax for type uuid" (a 500) on
-     * Postgres, which SQLite's looser column typing had been silently
-     * masking in every local run. `resolveWorkOrders()`/`ownedWorkOrder()`
-     * below now guard with `Str::isUuid()` before querying, so a
-     * non-UUID-shaped `$customerId` degrades to the honest "no history"
-     * empty state this codebase's own conventions already establish
-     * elsewhere, rather than crashing — this stops the production-breaking
-     * failure. It does NOT fix the underlying gap: a real customer still has
-     * no way to ever see a genuinely non-empty history, because nothing
-     * mints them a UUID identity to match against `customer_id` in the first
-     * place. That is a real product/architecture decision (how does an
-     * authenticated user's identity link to `subscriptions.customer_id`?),
-     * flagged for a human, not decided here.
+     * RESOLVED 22 Aug 2026 (`2026_08_22_100000_fix_customer_and_uploader_
+     * identity_columns`): `subscriptions.customer_id` (and
+     * `work_evidence.uploaded_by`, `service_acceptances.customer_id`,
+     * `service_complaints.customer_id`) were schema-typed as Postgres
+     * `uuid` columns, while `ActorContext::identityReference` (what
+     * `auth()->id()` ultimately is) is the `users.id` BIGINT — an
+     * unreviewed schema mistake, not a deliberate identity-architecture
+     * decision (no `Customer` model exists anywhere in this codebase, none
+     * of the four columns carried a foreign key or a design-rationale
+     * comment). Fixed by re-typing all four columns to a real
+     * `foreignId(...)->constrained('users')`, matching this codebase's own
+     * established convention elsewhere (`booking_drafts.user_id`,
+     * `order_parties.user_id`). `$this->customerId` is still a plain route
+     * string (Livewire binds it that way), so `isNumericCustomerId()`
+     * below validates it looks like a real bigint id before any query —
+     * the honest "no history" empty state for a malformed segment, same
+     * shape as the old `Str::isUuid()` guard this replaces, just checking
+     * against the real column type now.
      */
     private function isAuthorizedCustomer(): bool
     {
@@ -276,13 +264,28 @@ final class CareHistoryPage extends Component
     }
 
     /**
+     * `$this->customerId` is a route segment (always a string) that must
+     * look like a real `users.id` bigint before it's safe to use in a
+     * `subscriptions.customer_id` query — `ctype_digit()` accepts only
+     * non-negative integer strings, refusing anything else (including a
+     * negative sign or a decimal point) before it ever reaches the
+     * database.
+     */
+    private function isNumericCustomerId(): bool
+    {
+        return $this->customerId !== '' && ctype_digit($this->customerId);
+    }
+
+    /**
      * Re-checks ownership through the same subscription → cycle join
      * `resolveWorkOrders()` uses, independent of `$workOrderId`'s origin —
-     * see class doc block's IDOR note.
+     * see class doc block's IDOR note. `work_orders.id` is a real uuid
+     * primary key (unaffected by the customer_id/uploaded_by fix above),
+     * so `$workOrderId` is still checked with `Str::isUuid()`.
      */
     private function ownedWorkOrder(string $workOrderId): ?WorkOrder
     {
-        if ($workOrderId === '' || ! Str::isUuid($workOrderId) || ! Str::isUuid($this->customerId)) {
+        if ($workOrderId === '' || ! Str::isUuid($workOrderId) || ! $this->isNumericCustomerId()) {
             return null;
         }
 
@@ -306,15 +309,15 @@ final class CareHistoryPage extends Component
      * a per-row acceptance/complaint state so the view can decide which
      * actions to offer without an N+1 query per row.
      *
-     * A non-UUID-shaped `$customerId` (see class doc block) returns an empty
-     * collection rather than querying — the honest "no history" state, not
-     * a crash.
+     * A non-numeric `$customerId` (see class doc block / `isNumericCustomerId()`)
+     * returns an empty collection rather than querying — the honest "no
+     * history" state, not a crash.
      *
      * @return Collection<int, object>
      */
     private function resolveWorkOrders(): Collection
     {
-        if (! Str::isUuid($this->customerId)) {
+        if (! $this->isNumericCustomerId()) {
             return new Collection;
         }
 

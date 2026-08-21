@@ -11,6 +11,7 @@ use App\Domain\CareSubscription\Models\Subscription;
 use App\Domain\CareSubscription\Models\SubscriptionCycle;
 use App\Domain\CareSubscription\SubscriptionCycleStatus;
 use App\Domain\CareSubscription\SubscriptionStatus;
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -40,7 +41,7 @@ final class CycleSchedulerTest extends TestCase
             'reference' => 'SUB-'.Str::upper(Str::random(8)),
             'grave_id' => (string) Str::uuid(),
             'care_plan_id' => $this->makeCarePlan()->getKey(),
-            'customer_id' => (string) Str::uuid(),
+            'customer_id' => User::factory()->create()->id,
             'status' => SubscriptionStatus::Active->value,
             'frequency' => CarePlanFrequency::Monthly->value,
             'price_minor' => 150000,
@@ -98,7 +99,7 @@ final class CycleSchedulerTest extends TestCase
             'reference' => 'SUB-'.Str::upper(Str::random(8)),
             'grave_id' => (string) Str::uuid(),
             'care_plan_id' => $this->makeCarePlan()->getKey(),
-            'customer_id' => (string) Str::uuid(),
+            'customer_id' => User::factory()->create()->id,
             'status' => SubscriptionStatus::Draft->value,
             'frequency' => CarePlanFrequency::Monthly->value,
             'price_minor' => 150000,

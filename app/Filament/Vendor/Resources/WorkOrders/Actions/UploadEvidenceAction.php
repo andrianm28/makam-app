@@ -104,7 +104,7 @@ final class UploadEvidenceAction
                 $record,
                 $document->getKey(),
                 (string) ($data['evidence_type'] ?? ''),
-                (string) $actor->identityReference,
+                (int) $actor->identityReference,
                 (string) $actor->identityReference,
             );
 

@@ -28,45 +28,18 @@ use Tests\TestCase;
  * customer even when supplied directly via a wire call.
  */
 /**
- * BLOCKED on PostgreSQL, not just theoretically: `subscriptions.customer_id`
- * is a `uuid`-typed column, and every test below builds its fixture via
- * `makeSubscriptionAndCycle((string) $customer->id)` — a `users.id` BIGINT.
- * That INSERT throws `SQLSTATE[22P02]: invalid input syntax for type uuid`
- * on real Postgres (confirmed directly against a disposable Postgres 18
- * container matching CI's own service config, 20 Aug 2026) — this is not a
- * SQLite-vs-Postgres flakiness difference, the fixture cannot be built at
- * all on the database this app actually runs on in every real environment.
- * `CareHistoryPage`'s own doc block (see `isAuthorizedCustomer()`) already
- * names the root cause: nothing in this codebase mints a UUID customer
- * identity tied to a real authenticated user, so there is no way to build a
- * fixture representing "the owning customer" without inventing a
- * PRODUCTION identity-linkage fix first — not a test-only workaround, a
- * real schema/architecture decision for a human, per `AGENTS.md`
- * §Infrastructure-agent execution.
- *
- * `CareHistoryPage.php`'s read-side guard (`Str::isUuid()` before every
- * `customer_id` query) already stops the resulting production 500 — see
- * that file's own doc block — but does not and cannot make this write
- * surface reachable by a real customer. Until the identity-linkage
- * decision lands, every test in this class is skipped rather than left
- * red or forced to "pass" against a fixture that cannot represent a real
- * user.
+ * UNBLOCKED 22 Aug 2026 (`2026_08_22_100000_fix_customer_and_uploader_
+ * identity_columns`): `subscriptions.customer_id` was re-typed from `uuid`
+ * to a real `foreignId(...)->constrained('users')`, matching
+ * `App\Domain\CareSubscription\Actions\CreateSubscription`'s corrected
+ * `int $customerId` signature. `makeSubscriptionAndCycle((string) $customer->id)`
+ * below now builds a genuinely valid fixture — a real bigint FK to a real
+ * `users` row — on both SQLite and real Postgres, so this class no longer
+ * needs to skip.
  */
 final class CareHistoryPageActionsTest extends TestCase
 {
     use RefreshDatabase;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        $this->markTestSkipped(
-            'Blocked on subscriptions.customer_id (uuid) vs. users.id (bigint) '.
-            'identity mismatch -- see this class\'s own doc block. The fixture '.
-            'this file needs cannot be built on real Postgres until a human '.
-            'decides how a customer\'s identity links to subscriptions.customer_id.',
-        );
-    }
 
     private function makeSubscriptionAndCycle(string $customerId, string $cycleStatus = 'PAID'): SubscriptionCycle
     {

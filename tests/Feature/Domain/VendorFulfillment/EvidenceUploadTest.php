@@ -10,6 +10,7 @@ use App\Domain\CareSubscription\Models\SubscriptionCycle;
 use App\Domain\VendorFulfillment\Actions\CreateWorkOrderFromCycle;
 use App\Domain\VendorFulfillment\Actions\UploadEvidence;
 use App\Domain\VendorFulfillment\Models\WorkOrder;
+use App\Models\User;
 use App\Platform\DocumentVault\DocumentKind;
 use App\Platform\DocumentVault\DocumentState;
 use App\Platform\DocumentVault\Models\Document;
@@ -41,7 +42,7 @@ final class EvidenceUploadTest extends TestCase
             'reference' => 'SUB-'.Str::upper(Str::random(8)),
             'grave_id' => (string) Str::uuid(),
             'care_plan_id' => $carePlan->getKey(),
-            'customer_id' => (string) Str::uuid(),
+            'customer_id' => User::factory()->create()->id,
             'status' => 'active',
             'frequency' => 'monthly',
             'price_minor' => 150000,
@@ -89,7 +90,7 @@ final class EvidenceUploadTest extends TestCase
             $workOrder,
             (string) $document->getKey(),
             'after',
-            (string) Str::uuid(),
+            User::factory()->create()->id,
         );
 
         $this->assertSame((string) $workOrder->getKey(), $evidence->work_order_id);
@@ -114,7 +115,7 @@ final class EvidenceUploadTest extends TestCase
             $workOrder,
             (string) $document->getKey(),
             'before',
-            (string) Str::uuid(),
+            User::factory()->create()->id,
         );
     }
 
@@ -130,7 +131,7 @@ final class EvidenceUploadTest extends TestCase
             $workOrder,
             (string) $document->getKey(),
             'invalid',
-            (string) Str::uuid(),
+            User::factory()->create()->id,
         );
     }
 
@@ -144,7 +145,7 @@ final class EvidenceUploadTest extends TestCase
             $workOrder,
             (string) $doc1->getKey(),
             'before',
-            (string) Str::uuid(),
+            User::factory()->create()->id,
         );
 
         $this->assertSame('before', $before->evidence_type);
@@ -153,7 +154,7 @@ final class EvidenceUploadTest extends TestCase
             $workOrder,
             (string) $doc2->getKey(),
             'after',
-            (string) Str::uuid(),
+            User::factory()->create()->id,
         );
 
         $this->assertSame('after', $after->evidence_type);

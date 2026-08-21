@@ -9,6 +9,7 @@ use App\Domain\CareSubscription\Models\CarePlan;
 use App\Domain\CareSubscription\Models\Subscription;
 use App\Domain\CareSubscription\Models\SubscriptionCycle;
 use App\Livewire\Public\CareSubscription\SubscriptionStatusPage;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
@@ -45,7 +46,7 @@ final class SubscriptionStatusPageTest extends TestCase
             'reference' => 'SUB-'.Str::upper(Str::random(8)),
             'grave_id' => (string) Str::uuid(),
             'care_plan_id' => $carePlan->getKey(),
-            'customer_id' => (string) Str::uuid(),
+            'customer_id' => User::factory()->create()->id,
             'status' => $status,
             'frequency' => CarePlanFrequency::Monthly->value,
             'price_minor' => $carePlan->price_minor,

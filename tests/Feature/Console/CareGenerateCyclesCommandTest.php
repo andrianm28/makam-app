@@ -8,6 +8,7 @@ use App\Domain\CareSubscription\CarePlanFrequency;
 use App\Domain\CareSubscription\Models\CarePlan;
 use App\Domain\CareSubscription\Models\Subscription;
 use App\Domain\CareSubscription\SubscriptionStatus;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -46,7 +47,7 @@ final class CareGenerateCyclesCommandTest extends TestCase
             'reference' => 'SUB-'.Str::upper(Str::random(8)),
             'grave_id' => (string) Str::uuid(),
             'care_plan_id' => $carePlan->getKey(),
-            'customer_id' => (string) Str::uuid(),
+            'customer_id' => User::factory()->create()->id,
             'status' => SubscriptionStatus::Active->value,
             'frequency' => CarePlanFrequency::Monthly->value,
             'price_minor' => $carePlan->price_minor,
@@ -68,7 +69,7 @@ final class CareGenerateCyclesCommandTest extends TestCase
             'reference' => 'SUB-'.Str::upper(Str::random(8)),
             'grave_id' => (string) Str::uuid(),
             'care_plan_id' => $carePlan->getKey(),
-            'customer_id' => (string) Str::uuid(),
+            'customer_id' => User::factory()->create()->id,
             'status' => SubscriptionStatus::Paused->value,
             'frequency' => CarePlanFrequency::Monthly->value,
             'price_minor' => $carePlan->price_minor,
@@ -90,7 +91,7 @@ final class CareGenerateCyclesCommandTest extends TestCase
             'reference' => 'SUB-'.Str::upper(Str::random(8)),
             'grave_id' => (string) Str::uuid(),
             'care_plan_id' => $carePlan->getKey(),
-            'customer_id' => (string) Str::uuid(),
+            'customer_id' => User::factory()->create()->id,
             'status' => SubscriptionStatus::Active->value,
             'frequency' => CarePlanFrequency::Monthly->value,
             'price_minor' => $carePlan->price_minor,
@@ -114,7 +115,7 @@ final class CareGenerateCyclesCommandTest extends TestCase
             'reference' => 'SUB-'.Str::upper(Str::random(8)),
             'grave_id' => (string) Str::uuid(),
             'care_plan_id' => $carePlan->getKey(),
-            'customer_id' => (string) Str::uuid(),
+            'customer_id' => User::factory()->create()->id,
             'status' => SubscriptionStatus::Active->value,
             'frequency' => CarePlanFrequency::Monthly->value,
             'price_minor' => $carePlan->price_minor,
