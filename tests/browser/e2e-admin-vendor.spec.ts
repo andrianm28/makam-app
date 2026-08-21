@@ -192,17 +192,23 @@ function parallelSlot(): string {
     // `TEST_PARALLEL_INDEX` identifies this test's logical concurrent slot
     // (0..workers-1) and — unlike `process.pid` or `TEST_WORKER_INDEX` — is
     // stable across a Playwright retry, which is exactly why it's used to
-    // key the storage-state cache below. Falls back to '0' for a non-CI
-    // local run, where Playwright doesn't set it at all.
+    // key the storage-state cache below. Playwright's worker process sets
+    // this unconditionally (CI or not); the `?? '0'` is just a defensive
+    // fallback, not a real CI/local distinction.
     return process.env.TEST_PARALLEL_INDEX ?? '0';
 }
 
-// No cleanup step deletes these files: `workers: 2` bounds `parallelSlot()`
-// to only ever '0' or '1', so this suite creates at most 4 files, ever
-// (admin/vendor × 2 slots) — not the unbounded-growth risk an earlier
-// `process.pid`-keyed version of this path would have had, where every
-// worker process across every run got its own permanent file. A file past
-// `STORAGE_STATE_FRESHNESS_MS` is simply treated as absent by
+// No cleanup step deletes these files: `playwright.config.ts` only forces
+// `workers: 2` under `CI` — the real environment this suite runs in — which
+// bounds `parallelSlot()` to '0' or '1' there, so at most 4 files
+// (admin/vendor × 2 slots) ever accumulate in CI. A non-CI local run without
+// an explicit `--workers` flag falls back to Playwright's own default
+// (a fraction of host CPU cores), which could exceed 2 slots on a larger
+// box — still bounded, just not fixed at 4 outside CI. Either way, this is
+// not the unbounded-growth risk an earlier `process.pid`-keyed version of
+// this path would have had, where every worker process across every run got
+// its own permanent file. A file past `STORAGE_STATE_FRESHNESS_MS` is
+// simply treated as absent by
 // `hasFreshStorageState()` below and overwritten on the next real login, so
 // nothing here accumulates or goes stale unboundedly on a long-lived dev
 // box.
