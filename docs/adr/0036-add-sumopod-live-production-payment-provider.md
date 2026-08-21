@@ -1,12 +1,12 @@
 # ADR-0036: Add SumoPod's Production/Live Tier as a Second Configurable Provider
 
-- **Status:** Accepted (user-approved 22 Aug 2026, bounded-path brainstorming)
+- **Status:** Accepted (user-approved 21 Aug 2026, bounded-path brainstorming)
 
 ## Context
 
 ADR-0033 chose SumoPod's sandbox as the dev/staging payment provider. Until this ADR, `PaymentProviders` named exactly one slug (`sumopod-sandbox`) and its own doc block said plainly: "Production activation is a separate decision... so no production slug exists." Nothing in this codebase — not a config stub, not a disabled code path — could ever route a payment through anything but SumoPod's test environment, regardless of `G-PAY-01`'s state.
 
-The user confirmed (22 Aug 2026) they intend to use SumoPod's own production/live tier for real production payments (not a different vendor), and that SumoPod's live API uses the **same contract** as its sandbox — same `POST /api/v1/payments` endpoint shape, same `X-Api-Key` auth header, same webhook envelope and signature scheme — differing only in base URL and credentials.
+The user confirmed (21 Aug 2026) they intend to use SumoPod's own production/live tier for real production payments (not a different vendor), and that SumoPod's live API uses the **same contract** as its sandbox — same `POST /api/v1/payments` endpoint shape, same `X-Api-Key` auth header, same webhook envelope and signature scheme — differing only in base URL and credentials.
 
 This was classified as a **bounded** task under `superpowers:brainstorming` (a well-scoped extension of an already-generic, already-provider-agnostic mechanism — `SumoPodPaymentClient::fromConfig()` and `SumoPodWebhookSignature::fromConfig()` both already resolved `payment.providers.{payment.default}` generically, with no code hardcoded to the sandbox slug), not a full architectural rebuild — confirmed by reading both `fromConfig()` implementations before deciding scope, not assumed.
 
