@@ -48,6 +48,30 @@ const RECIPIENT = {
     email: 'penerima.contoh@example.test',
 };
 
+async function addProductAToCart(page: Page): Promise<void> {
+    await page.goto(`/marketplace/produk/${PRODUCT_A.code}`);
+    await page.getByRole('button', { name: 'Tambah ke Keranjang' }).click();
+    await page.waitForURL(/\/marketplace\/keranjang$/);
+}
+
+/**
+ * Fill the recipient form, select a service area, submit, and wait for the
+ * order-placed banner. Covers the "fill recipient form → select area →
+ * click Buat pesanan → expect Pesanan diterima" sequence shared by every
+ * test that places a straight-through, valid order. Deliberately does NOT
+ * cover the phone-overflow validation-failure trick used by the manual
+ * payment test's first submission — that state never reaches "Pesanan
+ * diterima", so it stays hand-written at its own call site.
+ */
+async function placeOrder(page: Page, options: { areaLabel: string }): Promise<void> {
+    await page.getByLabel('Nama penerima').fill(RECIPIENT.name);
+    await page.getByLabel('Nomor HP penerima').fill(RECIPIENT.phone);
+    await page.getByLabel('Email penerima').fill(RECIPIENT.email);
+    await page.getByLabel('Area layanan').selectOption({ label: options.areaLabel });
+    await page.getByRole('button', { name: 'Buat pesanan' }).click();
+    await expect(page.getByText('Pesanan diterima')).toBeVisible();
+}
+
 test.describe('E2E-MKT — browse and category filter', () => {
     test('the catalogue lists real products and category chips filter it', async ({ page }) => {
         await page.goto('/marketplace');
@@ -84,7 +108,16 @@ test.describe('E2E-MKT — browse and category filter', () => {
     test('the browse and unknown-category pages are accessible', async ({ page }) => {
         await page.goto('/marketplace');
         await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-        const results = await new AxeBuilder({ page }).analyze();
+        let results = await new AxeBuilder({ page }).analyze();
+        expect(results.violations).toEqual([]);
+
+        // The unknown-category fallback renders an <x-mk.alert> (its own
+        // role/contrast surface, not shared with the plain catalogue page
+        // scanned above) — it needs its own scan, not just its own heading
+        // assertion.
+        await page.goto('/marketplace?kategori=NOT_A_REAL_CATEGORY');
+        await expect(page.getByText('Kategori tidak dikenali')).toBeVisible();
+        results = await new AxeBuilder({ page }).analyze();
         expect(results.violations).toEqual([]);
     });
 });
@@ -96,11 +129,9 @@ test.describe('E2E-MKT — product detail', () => {
         await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
         await expect(page.getByText(`Ditawarkan oleh ${PRODUCT_A.vendorName}`)).toBeVisible();
 
-        const addButton = page.getByRole('button', { name: 'Tambah ke Keranjang' });
-        await expect(addButton).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Tambah ke Keranjang' })).toBeVisible();
 
-        await addButton.click();
-        await page.waitForURL(/\/marketplace\/keranjang$/);
+        await addProductAToCart(page);
         await expect(page.getByRole('heading', { level: 1, name: 'Keranjang' })).toBeVisible();
     });
 
@@ -153,12 +184,15 @@ test.describe('E2E-MKT — cart', () => {
     });
 
     test('an added item appears in the cart with a working remove control', async ({ page }) => {
-        await page.goto(`/marketplace/produk/${PRODUCT_A.code}`);
-        await page.getByRole('button', { name: 'Tambah ke Keranjang' }).click();
-        await page.waitForURL(/\/marketplace\/keranjang$/);
+        await addProductAToCart(page);
 
         const table = page.getByRole('table', { name: 'Isi keranjang' });
         await expect(table).toBeVisible();
+        // `p.text-lg` matches exactly one element here: cart.blade.php's
+        // empty-cart message and its Total line both carry this class, but
+        // they sit in mutually exclusive @if/@else branches today, so the
+        // locator is unambiguous now — it would become ambiguous if those
+        // branches were ever merged.
         await expect(page.locator('p.text-lg')).toContainText('Total');
         await expect(page.getByRole('link', { name: 'Lanjut ke pembayaran' })).toBeVisible();
 
@@ -169,9 +203,7 @@ test.describe('E2E-MKT — cart', () => {
 
 test.describe('E2E-MKT — single-vendor conflict', () => {
     test('adding a second vendor\'s product offers replace-or-finish, and replacing works', async ({ page }) => {
-        await page.goto(`/marketplace/produk/${PRODUCT_A.code}`);
-        await page.getByRole('button', { name: 'Tambah ke Keranjang' }).click();
-        await page.waitForURL(/\/marketplace\/keranjang$/);
+        await addProductAToCart(page);
 
         await page.goto(`/marketplace/produk/${PRODUCT_B.code}`);
         await page.getByRole('button', { name: 'Tambah ke Keranjang' }).click();
@@ -195,11 +227,16 @@ test.describe('E2E-MKT — single-vendor conflict', () => {
     });
 
     test('choosing "finish this order first" leaves the original vendor\'s cart untouched', async ({ page }) => {
-        await page.goto(`/marketplace/produk/${PRODUCT_A.code}`);
-        await page.getByRole('button', { name: 'Tambah ke Keranjang' }).click();
-        await page.waitForURL(/\/marketplace\/keranjang$/);
+        await addProductAToCart(page);
 
-        const cartRowsBefore = await page.getByRole('table', { name: 'Isi keranjang' }).getByRole('row').count();
+        // `.count()` does not auto-wait — it reads whatever is in the DOM
+        // at that instant, so a rendering failure (cart table not there at
+        // all) would read 0 both before and after and pass vacuously.
+        // Assert the auto-waiting invariant instead: header row + one item
+        // row, both before and after the conflict flow, same locator style
+        // as the sibling "replace" test above.
+        const rowsBefore = page.getByRole('table', { name: 'Isi keranjang' }).getByRole('row');
+        await expect(rowsBefore).toHaveCount(2);
 
         await page.goto(`/marketplace/produk/${PRODUCT_B.code}`);
         await page.getByRole('button', { name: 'Tambah ke Keranjang' }).click();
@@ -211,17 +248,15 @@ test.describe('E2E-MKT — single-vendor conflict', () => {
 
         // Still on the product page, cart unchanged — go check it directly.
         await page.goto('/marketplace/keranjang');
-        const cartRowsAfter = await page.getByRole('table', { name: 'Isi keranjang' }).getByRole('row').count();
-        expect(cartRowsAfter).toBe(cartRowsBefore);
+        const rowsAfter = page.getByRole('table', { name: 'Isi keranjang' }).getByRole('row');
+        await expect(rowsAfter).toHaveCount(2);
 
         const results = await new AxeBuilder({ page }).analyze();
         expect(results.violations).toEqual([]);
     });
 
     test('the populated cart and conflict modal are accessible', async ({ page }) => {
-        await page.goto(`/marketplace/produk/${PRODUCT_A.code}`);
-        await page.getByRole('button', { name: 'Tambah ke Keranjang' }).click();
-        await page.waitForURL(/\/marketplace\/keranjang$/);
+        await addProductAToCart(page);
 
         let results = await new AxeBuilder({ page }).analyze();
         expect(results.violations).toEqual([]);
@@ -234,12 +269,6 @@ test.describe('E2E-MKT — single-vendor conflict', () => {
         expect(results.violations).toEqual([]);
     });
 });
-
-async function addProductAToCart(page: Page): Promise<void> {
-    await page.goto(`/marketplace/produk/${PRODUCT_A.code}`);
-    await page.getByRole('button', { name: 'Tambah ke Keranjang' }).click();
-    await page.waitForURL(/\/marketplace\/keranjang$/);
-}
 
 test.describe('E2E-MKT — checkout and manual payment', () => {
     test('a guest completes checkout and submits manual payment proof', async ({ page }) => {
@@ -281,7 +310,28 @@ test.describe('E2E-MKT — checkout and manual payment', () => {
         await page.getByLabel('Area layanan').selectOption({ label: 'Jakarta Selatan' });
 
         await page.getByRole('button', { name: 'Buat pesanan' }).click();
+
+        // Assert the validation error is actually on screen before moving
+        // on. If a future client-side `maxlength="32"` were ever added to
+        // the phone field, `fill()` would silently truncate, validation
+        // would pass, and the order would be placed on THIS click instead
+        // of failing — this test would then fail later at the fee-line
+        // assertion below with a confusing error pointing at the wrong
+        // feature. Checking the validation error here first makes that
+        // future failure self-explaining instead of misleading.
+        // recipientPhone's `max:32` rule has no custom attribute name or
+        // message (verified against Checkout.php and lang/id/validation.php)
+        // — the substring below is stable across Laravel's own attribute
+        // formatting of "recipientPhone".
+        await expect(page.getByText('tidak boleh lebih dari 32 karakter')).toBeVisible();
         await expect(page.getByText('Ongkos kirim (Jakarta Selatan)')).toBeVisible();
+
+        // This validation-error state (recipient/area fields intact,
+        // phone error visible, fee line rendered) is a distinct DOM state
+        // from the empty checkout form and the post-order success state —
+        // it needs its own accessibility scan.
+        const validationErrorResults = await new AxeBuilder({ page }).analyze();
+        expect(validationErrorResults.violations).toEqual([]);
 
         // Correct the phone number to the real fixture value before the
         // actual submit.
@@ -420,12 +470,7 @@ test.describe('E2E-MKT — checkout and manual payment', () => {
         let results = await new AxeBuilder({ page }).analyze();
         expect(results.violations).toEqual([]);
 
-        await page.getByLabel('Nama penerima').fill(RECIPIENT.name);
-        await page.getByLabel('Nomor HP penerima').fill(RECIPIENT.phone);
-        await page.getByLabel('Email penerima').fill(RECIPIENT.email);
-        await page.getByLabel('Area layanan').selectOption({ label: 'Jakarta Selatan' });
-        await page.getByRole('button', { name: 'Buat pesanan' }).click();
-        await expect(page.getByText('Pesanan diterima')).toBeVisible();
+        await placeOrder(page, { areaLabel: 'Jakarta Selatan' });
 
         results = await new AxeBuilder({ page }).analyze();
         expect(results.violations).toEqual([]);
@@ -443,12 +488,7 @@ test.describe('E2E-MKT — online payment path (honest failure or closed gate)',
         await page.getByRole('link', { name: 'Lanjut ke pembayaran' }).click();
         await page.waitForURL(/\/marketplace\/checkout$/);
 
-        await page.getByLabel('Nama penerima').fill(RECIPIENT.name);
-        await page.getByLabel('Nomor HP penerima').fill(RECIPIENT.phone);
-        await page.getByLabel('Email penerima').fill(RECIPIENT.email);
-        await page.getByLabel('Area layanan').selectOption({ label: 'Jakarta Timur' });
-        await page.getByRole('button', { name: 'Buat pesanan' }).click();
-        await expect(page.getByText('Pesanan diterima')).toBeVisible();
+        await placeOrder(page, { areaLabel: 'Jakarta Timur' });
 
         const onlineButton = page.getByRole('button', { name: 'Bayar Online' });
         const gateClosedBanner = page.getByText('Pembayaran online belum tersedia. Gunakan');
