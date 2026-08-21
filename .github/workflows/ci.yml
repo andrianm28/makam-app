@@ -424,6 +424,23 @@ jobs:
           # already sets for identical reasons -- an established, accepted
           # test-only convention in this codebase, not a new one.
           MARKETPLACE_BADAN_USAHA_REF: "badan-usaha-test"
+          # config/app.php's locale default became 'id' (public-beta
+          # readiness, lang/id/validation.php's own doc block), but
+          # .env.example still pins APP_LOCALE=en explicitly -- so this
+          # step's "cp .env.example .env" hands every request the English
+          # fallback instead of the real, intended Indonesian default.
+          # phpunit.xml already pins APP_LOCALE=id for exactly this reason
+          # (see its own comment on this exact line) -- that fix was never
+          # carried over to this job. Found live 21 Aug 2026: a Playwright
+          # test asserting a real Laravel-generated validation message
+          # (not hardcoded Blade copy, which stays Indonesian regardless)
+          # got "The recipient phone field must not be greater than 32
+          # characters" instead of the Indonesian text every real user on
+          # dev.makam.co.id actually sees (confirmed live: that host's own
+          # container has APP_LOCALE=id). Scoped to this one step's server
+          # process only, same as every other env override here.
+          APP_LOCALE: "id"
+          APP_FALLBACK_LOCALE: "id"
           DB_CONNECTION: pgsql
           DB_HOST: 127.0.0.1
           DB_PORT: 5432
