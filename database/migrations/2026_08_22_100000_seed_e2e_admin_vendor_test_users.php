@@ -171,6 +171,16 @@ return new class extends Migration
             return;
         }
 
+        if (app()->isProduction()) {
+            // Defence-in-depth, independent of the config flag above: this
+            // migration seeds a privileged admin+finance login with a
+            // password published in this repo, so a second, unconditional
+            // guard refuses to run in production even if
+            // SEED_E2E_ADMIN_VENDOR_USERS were ever mistakenly set true on a
+            // production deploy.
+            return;
+        }
+
         $admin = User::query()->firstOrCreate(
             ['email' => self::ADMIN_EMAIL],
             [
@@ -316,6 +326,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        // Deliberately does NOT delete the `audit_events` rows GrantActorRole/
+        // GrantScopeAssignment wrote above — an audit log is intentionally
+        // not erasable by a migration rollback, the same as it isn't erasable
+        // by any other actor in this codebase.
         DB::table('vendor_orders')->whereIn('customer_email', [
             self::OWN_VENDOR_ORDER_CUSTOMER_EMAIL,
             self::OTHER_VENDOR_ORDER_CUSTOMER_EMAIL,

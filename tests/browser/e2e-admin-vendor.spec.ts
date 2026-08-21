@@ -1,7 +1,8 @@
+import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Browser, type Page } from '@playwright/test';
 
 /**
  * E2E-ADMIN/VENDOR — the last of the six planned durable Playwright
@@ -108,21 +109,105 @@ async function vendorLogin(page: Page): Promise<void> {
 // panels resolve to the SAME class (`Filament\Auth\Pages\Login`) — meaning
 // admin and vendor logins share one rate-limit bucket, keyed only by IP.
 // Every test in this suite runs from the same container's single IP.
-// Logging in fresh per test (as every test below originally did) burns that
-// budget fast: verified live, the 6th `authenticate()` call inside a 60s
-// window is silently rate-limited (the login form submits, gets no
-// notification, and simply never redirects), which surfaces as a
-// `waitForURL` timeout indistinguishable at first glance from a real login
-// bug. Each `test.describe` below that needs an authenticated admin session
-// therefore logs in exactly ONCE via `beforeAll`, saves that session's
-// `storageState`, and every test in the block reuses it — keeping this
-// suite's real login-attempt count per worker at 3 (the canary login test,
-// once per authenticated admin block below), not 9.
+//
+// This file has exactly 5 real, unguarded login call-sites: the admin
+// canary test, the admin-authenticated describe's `beforeAll`, the
+// reconciliation describe's `beforeAll`, the vendor canary test, and the
+// vendor-authenticated describe's `beforeAll` — 5 logins, every single
+// clean run, sitting exactly on the shared 5-attempts/60s budget with zero
+// headroom (an earlier version of this comment said "3", which undercounted
+// the reconciliation describe's own `beforeAll` as sharing the admin
+// block's login for free — it does not, since nothing before this fix ever
+// checked whether a session was already saved). Verified live: the 6th
+// `authenticate()` call inside a 60s window is silently rate-limited (the
+// login form submits, gets no notification, and simply never redirects),
+// which surfaces as a `waitForURL` timeout indistinguishable at first
+// glance from a real login bug — and CI's `retries: 2` (`playwright.config.ts`)
+// means ANY retry of a test inside one of these `beforeAll`-guarded
+// describes re-runs that `beforeAll`, becoming exactly that 6th call.
+//
+// The two canary tests are deliberately NOT covered by the guard below —
+// each exists specifically to prove a real, from-scratch login works, so it
+// must always perform a real `authenticate()` call. The fix instead targets
+// the 3 `beforeAll` hooks: each now skips its login entirely when a
+// still-fresh `storageState` file from a prior attempt in this run already
+// exists (see `loginOnceUnlessFreshSession()` below), so a Playwright retry
+// costs 0 additional login attempts, not 1.
+//
+// Verified live (spinning up a throwaway retry-triggering spec): a
+// Playwright retry runs in a NEW worker process — `process.pid` changes
+// across the retry — but keeps the SAME `process.env.TEST_PARALLEL_INDEX`
+// for that logical concurrent slot (`TEST_WORKER_INDEX` changes;
+// `TEST_PARALLEL_INDEX` does not). The storage-state paths below are
+// therefore keyed by `TEST_PARALLEL_INDEX`, not `process.pid` — a retry's
+// `beforeAll` can then find and reuse the ORIGINAL attempt's saved session
+// instead of spending another one of the shared budget's 5 attempts.
+// Distinct concurrent slots (0 and 1 under this suite's `workers: 2`) still
+// get distinct files, so two slots logging in around the same moment never
+// race on the same file.
+//
+// Also verified live: `fullyParallel` (`playwright.config.ts`) can split a
+// SINGLE describe's own tests across both worker slots, triggering that
+// describe's `beforeAll` — and therefore a real login — once per slot it
+// lands on, and separately leaves it to scheduling luck whether the
+// admin-authenticated describe and the reconciliation describe (both
+// keying the same `adminStorageStatePath()`) land on the same slot to
+// share one real login. `test.describe.configure({ mode: 'serial' })`
+// below removes both effects by keeping this whole file on one worker, in
+// declaration order — a single clean run then costs exactly 4 real logins,
+// deterministically: 2 canary + 1 admin (reused by the reconciliation
+// describe) + 1 vendor.
+//
+// That leaves exactly 1 attempt of headroom inside a single run, which is
+// what makes a Playwright retry of any one test free. It does NOT
+// necessarily leave enough for two full, separate `npx playwright test`
+// invocations run back-to-back with no gap: the 2 canary logins in each
+// invocation are irreducible by design (see above), so two invocations cost
+// at least 2+2 = 4 real canary logins alone, plus at least 1 real admin and
+// 1 real vendor login the very first time either account has never logged
+// in this run — a floor of 6 against a budget of 5, one over, REGARDLESS of
+// caching, if both invocations' logins land inside the same 60s window.
+// `STORAGE_STATE_FRESHNESS_MS` below is deliberately long enough to let a
+// second invocation reuse the first invocation's still-fresh admin/vendor
+// sessions (dropping its own beforeAll cost to 0), which is what keeps that
+// floor at 6 rather than 8 — but the 1-over-budget canary collision itself
+// is a hard mathematical floor, not a bug in this fix: verified live
+// (running the full suite twice, back-to-back, in the same window,
+// repeatedly) it costs at most one retried test, which that retry always
+// recovers — a world apart from the original bug's guaranteed, unrecoverable
+// failure with zero headroom at all.
+const STORAGE_STATE_FRESHNESS_MS = 10 * 60 * 1000; // Generous enough to
+// cover this suite's own run plus any retries, and a manual same-window
+// re-run of the whole file (deliberately reused across separate `npx
+// playwright test` invocations too, not just within one — a fresh
+// invocation's very first canary login already costs 2 of the shared
+// budget's 5 attempts before any `beforeAll` runs at all, so letting a
+// still-fresh session from a moments-ago invocation carry over is what
+// keeps a same-window re-run survivable, not just a same-invocation retry).
+// Short enough that a long-abandoned file from a much earlier session on a
+// long-lived dev box is never mistaken for "this run's" login and reused
+// blindly.
+
+function parallelSlot(): string {
+    // `TEST_PARALLEL_INDEX` identifies this test's logical concurrent slot
+    // (0..workers-1) and — unlike `process.pid` or `TEST_WORKER_INDEX` — is
+    // stable across a Playwright retry, which is exactly why it's used to
+    // key the storage-state cache below. Falls back to '0' for a non-CI
+    // local run, where Playwright doesn't set it at all.
+    return process.env.TEST_PARALLEL_INDEX ?? '0';
+}
+
+// No cleanup step deletes these files: `workers: 2` bounds `parallelSlot()`
+// to only ever '0' or '1', so this suite creates at most 4 files, ever
+// (admin/vendor × 2 slots) — not the unbounded-growth risk an earlier
+// `process.pid`-keyed version of this path would have had, where every
+// worker process across every run got its own permanent file. A file past
+// `STORAGE_STATE_FRESHNESS_MS` is simply treated as absent by
+// `hasFreshStorageState()` below and overwritten on the next real login, so
+// nothing here accumulates or goes stale unboundedly on a long-lived dev
+// box.
 function adminStorageStatePath(): string {
-    // `process.pid` is stable per Playwright worker process (each worker
-    // loads this module independently) and distinct across workers, so this
-    // never collides between parallel workers without needing `testInfo`.
-    return path.join(os.tmpdir(), `e2e-admin-vendor-admin-storage-state-${process.pid}.json`);
+    return path.join(os.tmpdir(), `e2e-admin-vendor-admin-storage-state-${parallelSlot()}.json`);
 }
 
 // Same reasoning as adminStorageStatePath() above, for the vendor panel's
@@ -131,8 +216,67 @@ function adminStorageStatePath(): string {
 // saved session, even though Playwright serializes describe blocks within
 // one worker.
 function vendorStorageStatePath(): string {
-    return path.join(os.tmpdir(), `e2e-admin-vendor-vendor-storage-state-${process.pid}.json`);
+    return path.join(os.tmpdir(), `e2e-admin-vendor-vendor-storage-state-${parallelSlot()}.json`);
 }
+
+function hasFreshStorageState(storageStatePath: string): boolean {
+    try {
+        return Date.now() - fs.statSync(storageStatePath).mtimeMs < STORAGE_STATE_FRESHNESS_MS;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Logs in and saves `storageState` to `storageStatePath` — UNLESS a
+ * still-fresh file is already there from a prior attempt in this same run
+ * (the original attempt of a test a retry is re-running, or a sibling
+ * describe block sharing this slot's storage path), in which case this is a
+ * no-op that costs zero real login attempts. This is the guard that turns a
+ * retried `beforeAll` into a free reuse instead of the 6th call against
+ * Filament's shared 5-attempts/60s login rate limit (see this file's
+ * rate-limit comment above).
+ */
+async function loginOnceUnlessFreshSession(
+    browser: Browser,
+    storageStatePath: string,
+    login: (page: Page) => Promise<void>,
+): Promise<void> {
+    if (hasFreshStorageState(storageStatePath)) {
+        return;
+    }
+
+    // `browser.newPage()` would inherit this describe block's
+    // `test.use({ storageState: storageStatePath })` context option
+    // (verified live: it otherwise tries to READ that same not-yet-written
+    // file and throws ENOENT), so this context is created explicitly with
+    // no storage state instead.
+    const context = await browser.newContext({ storageState: undefined });
+    const page = await context.newPage();
+    await login(page);
+    await context.storageState({ path: storageStatePath });
+    await context.close();
+}
+
+// This whole file runs as one serial group, on one worker, in declaration
+// order — not the `fullyParallel` default `playwright.config.ts` sets.
+// Verified live: without this, `fullyParallel` can split a single describe
+// block's own tests across BOTH of this suite's `workers: 2`, triggering
+// that describe's `beforeAll` — and therefore a real login — once per
+// worker it lands on, not once total; and separately, which of the two
+// admin-needing describes below (the authenticated-dashboard one and the
+// audit/query-scope one) happens to land on the SAME worker slot as the
+// other, sharing one real login via the skip-if-fresh guard above, was left
+// entirely to Playwright's scheduling luck. Both effects could silently
+// push a single clean run's real login count above the minimum of 4 (2
+// canary + 1 admin + 1 vendor) this file needs, eating into — or entirely
+// consuming — the headroom the skip-if-fresh guard above is meant to buy
+// back from Filament's shared 5-attempts/60s login rate limit. Serial mode
+// makes that deterministic instead of scheduler-dependent: every run, the
+// admin-authenticated describe's `beforeAll` logs in once, and the
+// audit/query-scope describe's `beforeAll` always finds and reuses that
+// same fresh session.
+test.describe.configure({ mode: 'serial' });
 
 test.describe('E2E-ADMIN/VENDOR — admin dashboard and reports', () => {
     test('admin can log in and reach the dashboard', async ({ page }) => {
@@ -146,16 +290,7 @@ test.describe('E2E-ADMIN/VENDOR — admin dashboard and reports', () => {
         test.use({ storageState: storageStatePath });
 
         test.beforeAll(async ({ browser }) => {
-            // `browser.newPage()` inherits this describe block's
-            // `test.use({ storageState: storageStatePath })` context option
-            // (verified live: it otherwise tries to READ that same not-yet-
-            // written file and throws ENOENT), so this context is created
-            // explicitly with no storage state instead.
-            const context = await browser.newContext({ storageState: undefined });
-            const page = await context.newPage();
-            await adminLogin(page);
-            await context.storageState({ path: storageStatePath });
-            await context.close();
+            await loginOnceUnlessFreshSession(browser, storageStatePath, adminLogin);
         });
 
         test('dashboard shows the master-data widget available to every back-office role', async ({ page }) => {
@@ -295,14 +430,7 @@ test.describe('E2E-ADMIN/VENDOR — sensitive-action audit and query scope', () 
     test.use({ storageState: storageStatePath });
 
     test.beforeAll(async ({ browser }) => {
-        // See the matching comment on the other `beforeAll` above: this
-        // context is created explicitly with no storage state so it doesn't
-        // try to read the file this block itself is about to write.
-        const context = await browser.newContext({ storageState: undefined });
-        const page = await context.newPage();
-        await adminLogin(page);
-        await context.storageState({ path: storageStatePath });
-        await context.close();
+        await loginOnceUnlessFreshSession(browser, storageStatePath, adminLogin);
     });
 
     test('audit trail review shows the required columns and is read-only', async ({ page }) => {
@@ -397,21 +525,28 @@ test.describe('E2E-ADMIN/VENDOR — sensitive-action audit and query scope', () 
     // (likely affecting every Filament resource list page's breadcrumbs
     // site-wide, not just these two resources), which is outside a
     // test-authoring task's scope and needs its own design-system-reviewed
-    // change, not a same-PR fix bundled into this suite. `test.fixme` here
-    // records the real finding rather than silently disabling axe's
-    // `color-contrast` rule (which would mask this AND any other future
-    // contrast regression on these pages) or asserting a pass that isn't
-    // true.
-    test.fixme(
-        'audit and reconciliation pages have zero accessibility violations',
-        async ({ page }) => {
-            await page.goto('/admin/audit-events');
-            expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    // change, not a same-PR fix bundled into this suite.
+    //
+    // `.exclude('.fi-breadcrumbs-item-label')` narrows out ONLY that one
+    // known, out-of-scope node from the scan below — every other axe rule,
+    // including `color-contrast` itself against every other element on
+    // these two pages, still runs and is asserted zero-violations. This is
+    // deliberately not a full-page `test.fixme`: that would have silently
+    // disabled `color-contrast` (and every other rule) across both pages
+    // entirely, masking this AND any future, unrelated contrast regression
+    // here — verified live that excluding just this one selector leaves
+    // zero violations on both pages.
+    test('audit and reconciliation pages have zero accessibility violations outside the known Filament breadcrumb finding', async ({ page }) => {
+        await page.goto('/admin/audit-events');
+        expect(
+            (await new AxeBuilder({ page }).exclude('.fi-breadcrumbs-item-label').analyze()).violations,
+        ).toEqual([]);
 
-            await page.goto('/admin/reconciliations');
-            expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-        },
-    );
+        await page.goto('/admin/reconciliations');
+        expect(
+            (await new AxeBuilder({ page }).exclude('.fi-breadcrumbs-item-label').analyze()).violations,
+        ).toEqual([]);
+    });
 });
 
 /**
@@ -479,15 +614,7 @@ test.describe('E2E-ADMIN/VENDOR — vendor profile, transactions, and payouts', 
         test.use({ storageState: storageStatePath });
 
         test.beforeAll(async ({ browser }) => {
-            // See the matching comment on the admin blocks' `beforeAll` above:
-            // this context is created explicitly with no storage state so it
-            // doesn't try to read the file this block itself is about to
-            // write.
-            const context = await browser.newContext({ storageState: undefined });
-            const page = await context.newPage();
-            await vendorLogin(page);
-            await context.storageState({ path: storageStatePath });
-            await context.close();
+            await loginOnceUnlessFreshSession(browser, storageStatePath, vendorLogin);
         });
 
         test('vendor profile/account page is reachable and editable', async ({ page }) => {
