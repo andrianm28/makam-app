@@ -73,6 +73,45 @@ declare(strict_types=1);
  * identity/vendor migration.
  *
  * ---------------------------------------------------------------------------
+ * Task 4 addition — two `vendor_orders` fixture rows for a real scoping proof
+ * ---------------------------------------------------------------------------
+ * `/vendor/transactions` (`App\Filament\Vendor\Pages\TransactionHistory`)
+ * scopes its query to `CurrentVendorScope::grantedVendorIds()` — already
+ * proven correct at the query level for two vendors by
+ * `tests/Feature/Filament/Vendor/VendorPanelScopingTest`. But `vendor_orders`
+ * has ZERO seed rows anywhere in this codebase before this addition (checked:
+ * no factory exists for `VendorOrder`, and `VendorListingExampleData` seeds
+ * only `vendors`/`vendor_listings`/`service_areas`, never orders) — so a
+ * fresh `migrate:fresh` left the browser suite's own vendor with nothing to
+ * assert scoping against beyond "the empty state renders", which is exactly
+ * the vacuous 0-vs-0 comparison this suite already declined to fake for
+ * `/admin/reconciliations` (see the second `test.describe` block's header
+ * comment in `tests/browser/e2e-admin-vendor.spec.ts`).
+ *
+ * Unlike that Reconciliation case, a `VendorOrder` row is cheap and safe to
+ * fixture — no complex domain Action is required, `VendorPanelScopingTest`'s
+ * own `makeVendorWithRecords()` helper already creates one with a plain
+ * `DB::table('vendor_orders')->insert()`-shaped write, and every vendor this
+ * migration could pick already has at least one real `vendor_listings` row
+ * (`VendorListingExampleData::VENDOR_COUNT = 5`, every vendor index gets ≥1
+ * listing). So this migration adds exactly two throwaway orders, each
+ * against a real existing listing, real existing vendor:
+ *
+ *   - one for `$firstVendorId` (the same vendor `e2e-vendor` is granted,
+ *     looked up the same way that grant already is, immediately above);
+ *   - one for a DIFFERENT, ungranted vendor (`orderBy('id')` excluding
+ *     `$firstVendorId`, so it is deterministic within a single migration run
+ *     without assuming which of the 5 seeded vendors ends up "first" — see
+ *     the note above on why that id is looked up rather than assumed).
+ *
+ * Each order carries a distinct, unmistakable `customer_name` marker so the
+ * browser suite can assert the granted vendor's order is visible and the
+ * OTHER vendor's order is NOT — a real presence/absence proof on the page's
+ * own rendered "Pelanggan" column, not an invented row count. Both are
+ * additive, config-gated the same as everything else in this file, and
+ * idempotency-guarded on their own `customer_email` marker.
+ *
+ * ---------------------------------------------------------------------------
  * Gated behind `config('e2e_fixtures.seed_admin_vendor_users')`, default false
  * ---------------------------------------------------------------------------
  * `RefreshDatabase` applies EVERY migration once per PHPUnit process, not
@@ -88,6 +127,7 @@ declare(strict_types=1);
  * (`config/rate_limiting.php`) already hit and solved.
  */
 
+use App\Domain\Marketplace\VendorProcessingStatus;
 use App\Models\User;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use App\Platform\IdentityAccess\Roles\Actions\GrantActorRole;
@@ -97,6 +137,7 @@ use App\Platform\IdentityAccess\Scopes\ScopeGrantLevel;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 return new class extends Migration
 {
@@ -105,6 +146,21 @@ return new class extends Migration
     private const string VENDOR_EMAIL = 'e2e-vendor@example.test';
 
     private const string ADMIN_FINANCE_ENTITY_REF = 'e2e-admin-vendor-fixture-entity';
+
+    /**
+     * Distinct markers for the two Task 4 `vendor_orders` fixture rows — see
+     * this file's "Task 4 addition" doc block above. Names carry the "E2E"
+     * and "Contoh" fabricated-data markers this repo's fixtures already use
+     * (`VendorListingExampleData`'s own doc block); emails double as the
+     * idempotency guard so a re-run never inserts a duplicate.
+     */
+    private const string OWN_VENDOR_ORDER_CUSTOMER_NAME = 'Pelanggan Contoh E2E (Vendor Tertaut)';
+
+    private const string OWN_VENDOR_ORDER_CUSTOMER_EMAIL = 'e2e-vendor-scope-own@example.test';
+
+    private const string OTHER_VENDOR_ORDER_CUSTOMER_NAME = 'Pelanggan Contoh E2E (Vendor Lain)';
+
+    private const string OTHER_VENDOR_ORDER_CUSTOMER_EMAIL = 'e2e-vendor-scope-other@example.test';
 
     public function up(): void
     {
@@ -194,10 +250,77 @@ return new class extends Migration
                 grantedBy: null,
             );
         }
+
+        // See this file's "Task 4 addition" doc block above: two throwaway
+        // vendor_orders rows so /vendor/transactions has something real to
+        // assert scoping against, instead of an empty-state-only page.
+        if ($firstVendorId !== null) {
+            $this->seedVendorOrderFixture(
+                vendorId: (string) $firstVendorId,
+                customerName: self::OWN_VENDOR_ORDER_CUSTOMER_NAME,
+                customerEmail: self::OWN_VENDOR_ORDER_CUSTOMER_EMAIL,
+            );
+
+            $otherVendorId = DB::table('vendors')
+                ->where('id', '!=', $firstVendorId)
+                ->orderBy('id')
+                ->value('id');
+
+            if ($otherVendorId !== null) {
+                $this->seedVendorOrderFixture(
+                    vendorId: (string) $otherVendorId,
+                    customerName: self::OTHER_VENDOR_ORDER_CUSTOMER_NAME,
+                    customerEmail: self::OTHER_VENDOR_ORDER_CUSTOMER_EMAIL,
+                );
+            }
+        }
+    }
+
+    /**
+     * Inserts one throwaway `vendor_orders` row against a real listing that
+     * already belongs to `$vendorId` — skipped (never failing) if that vendor
+     * has no listing, matching this file's existing "skip rather than block a
+     * real deployment" convention for fixture data (see
+     * `VendorListingExampleData::seed()`'s identical guard). A raw
+     * `DB::table()->insert()`, not `VendorOrder::create()`: this is ordinary
+     * fixture business data, not an audited identity/scope grant, so it does
+     * not go through a sanctioned Action the way the role/scope grants above
+     * do — the same distinction this file's own "why GrantActorRole, not a
+     * raw create()" doc block draws.
+     */
+    private function seedVendorOrderFixture(string $vendorId, string $customerName, string $customerEmail): void
+    {
+        if (DB::table('vendor_orders')->where('customer_email', $customerEmail)->exists()) {
+            return;
+        }
+
+        $listingId = DB::table('vendor_listings')->where('vendor_id', $vendorId)->value('id');
+
+        if ($listingId === null) {
+            return;
+        }
+
+        DB::table('vendor_orders')->insert([
+            'uuid' => (string) Str::uuid(),
+            'vendor_id' => $vendorId,
+            'listing_id' => $listingId,
+            'customer_name' => $customerName,
+            'customer_phone' => '081200000000',
+            'customer_email' => $customerEmail,
+            'status' => VendorProcessingStatus::MENUNGGU_VENDOR,
+            'notes' => 'E2E-ADMIN/VENDOR suite seed — throwaway fixture order for the transaction-history scoping test, not a real order.',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     public function down(): void
     {
+        DB::table('vendor_orders')->whereIn('customer_email', [
+            self::OWN_VENDOR_ORDER_CUSTOMER_EMAIL,
+            self::OTHER_VENDOR_ORDER_CUSTOMER_EMAIL,
+        ])->delete();
+
         $admin = User::query()->where('email', self::ADMIN_EMAIL)->first();
         $vendor = User::query()->where('email', self::VENDOR_EMAIL)->first();
 

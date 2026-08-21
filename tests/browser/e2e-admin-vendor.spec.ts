@@ -125,6 +125,15 @@ function adminStorageStatePath(): string {
     return path.join(os.tmpdir(), `e2e-admin-vendor-admin-storage-state-${process.pid}.json`);
 }
 
+// Same reasoning as adminStorageStatePath() above, for the vendor panel's
+// describe block below — a distinct path (not reused with the admin one)
+// so both blocks' beforeAll hooks can run without clobbering each other's
+// saved session, even though Playwright serializes describe blocks within
+// one worker.
+function vendorStorageStatePath(): string {
+    return path.join(os.tmpdir(), `e2e-admin-vendor-vendor-storage-state-${process.pid}.json`);
+}
+
 test.describe('E2E-ADMIN/VENDOR — admin dashboard and reports', () => {
     test('admin can log in and reach the dashboard', async ({ page }) => {
         await adminLogin(page);
@@ -403,4 +412,137 @@ test.describe('E2E-ADMIN/VENDOR — sensitive-action audit and query scope', () 
             expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
         },
     );
+});
+
+/**
+ * ---------------------------------------------------------------------------
+ * Vendor page routes — verified against each Page class's real `$slug`, not
+ * the plan draft's guessed paths
+ * ---------------------------------------------------------------------------
+ * `App\Filament\Vendor\Pages\TransactionHistory::$slug` is `'transactions'`
+ * and `App\Filament\Vendor\Pages\PayoutStatus::$slug` is `'payouts'` (both
+ * read directly from source) — so their real routes are `/vendor/transactions`
+ * and `/vendor/payouts`, not `/vendor/transaction-history`/`/vendor/payout-status`
+ * as this suite's plan draft guessed. `App\Filament\Vendor\Pages\Profile::$slug`
+ * (`'profile'`) does match the draft.
+ *
+ * ---------------------------------------------------------------------------
+ * Transaction-history scoping: a real presence/absence proof, not a row count
+ * ---------------------------------------------------------------------------
+ * `TransactionHistory::vendorScopedQuery()` filters `VendorOrder` on
+ * `vendor_id` against `CurrentVendorScope::grantedVendorIds()` — already
+ * proven correct at the query level, with two vendors' rows in play, by
+ * `tests/Feature/Filament/Vendor/VendorPanelScopingTest`. That table renders
+ * no vendor-identifying column (it is already scoped to exactly one vendor,
+ * so a "Vendor" column would be redundant) — the closest thing to a
+ * cross-vendor identifier the page actually shows is the `customer_name`
+ * ("Pelanggan") column.
+ *
+ * Investigated for real, not assumed: before this task, `vendor_orders` had
+ * ZERO seed rows anywhere in this codebase (no factory, and
+ * `VendorListingExampleData` seeds only `vendors`/`vendor_listings`/
+ * `service_areas`, never orders) — so a fresh `migrate:fresh` left this page
+ * with nothing to assert scoping against beyond its empty state, which would
+ * have been exactly the vacuous 0-vs-0 comparison this suite already declined
+ * to fake for `/admin/reconciliations` above. Unlike that case, a
+ * `VendorOrder` row is cheap to fixture (no complex domain Action required —
+ * `VendorPanelScopingTest`'s own fixture helper already does this with a
+ * plain insert), so
+ * `database/migrations/2026_08_22_100000_seed_e2e_admin_vendor_test_users.php`
+ * was extended (Task 4 addition, see that file's own doc block) to seed
+ * exactly two throwaway orders: one against the vendor `e2e-vendor` is
+ * actually granted, one against a different, ungranted vendor — each with an
+ * unmistakable, distinct `customer_name` marker. The test below asserts the
+ * granted vendor's marker IS visible and the other vendor's marker is NOT —
+ * a real, concrete scoping proof on the page's own rendered data, not an
+ * invented row count.
+ */
+const VENDOR_OWN_ORDER_CUSTOMER_NAME = 'Pelanggan Contoh E2E (Vendor Tertaut)';
+const VENDOR_OTHER_ORDER_CUSTOMER_NAME = 'Pelanggan Contoh E2E (Vendor Lain)';
+
+test.describe('E2E-ADMIN/VENDOR — vendor profile, transactions, and payouts', () => {
+    // See the `adminStorageStatePath()`/`vendorStorageStatePath()` doc blocks
+    // above for why every authenticated test in this file logs in once per
+    // describe block via `beforeAll` + `storageState` reuse rather than
+    // calling `vendorLogin(page)` fresh in every test — both panels share
+    // Filament's stock Login page class and therefore one rate-limit bucket
+    // keyed only by IP (5 attempts/60s).
+    test('vendor can log in and reach their own dashboard', async ({ page }) => {
+        await vendorLogin(page);
+
+        await expect(page).toHaveURL(/\/vendor\/?$/);
+        await expect(page.getByRole('heading', { name: 'Dashboard Vendor' })).toBeVisible();
+    });
+
+    test.describe('with an authenticated vendor session', () => {
+        const storageStatePath = vendorStorageStatePath();
+        test.use({ storageState: storageStatePath });
+
+        test.beforeAll(async ({ browser }) => {
+            // See the matching comment on the admin blocks' `beforeAll` above:
+            // this context is created explicitly with no storage state so it
+            // doesn't try to read the file this block itself is about to
+            // write.
+            const context = await browser.newContext({ storageState: undefined });
+            const page = await context.newPage();
+            await vendorLogin(page);
+            await context.storageState({ path: storageStatePath });
+            await context.close();
+        });
+
+        test('vendor profile/account page is reachable and editable', async ({ page }) => {
+            await page.goto('/vendor/profile');
+
+            await expect(page.getByRole('heading', { name: 'Profil Akun' })).toBeVisible();
+
+            // "editable" per this test's own name — the account/password
+            // form fields Profile::form() actually declares, not just the
+            // heading.
+            await expect(page.getByLabel('Nama')).toBeEditable();
+            await expect(page.getByLabel('Email')).toBeEditable();
+        });
+
+        test('vendor transaction history is reachable and scoped to this vendor only', async ({ page }) => {
+            await page.goto('/vendor/transactions');
+
+            await expect(page.getByRole('heading', { name: 'Riwayat Transaksi', exact: true })).toBeVisible();
+
+            // See this file's header comment above this describe block for
+            // the full investigation. The granted vendor's fixture order must
+            // be visible; the other, ungranted vendor's fixture order must
+            // not be — a real cross-vendor leakage check on the page's own
+            // rendered "Pelanggan" column.
+            await expect(page.getByText(VENDOR_OWN_ORDER_CUSTOMER_NAME, { exact: true })).toBeVisible();
+            await expect(page.getByText(VENDOR_OTHER_ORDER_CUSTOMER_NAME, { exact: true })).not.toBeVisible();
+        });
+
+        test('vendor payout status/reference is visible and scoped', async ({ page }) => {
+            await page.goto('/vendor/payouts');
+
+            await expect(page.getByRole('heading', { name: 'Status Pencairan' })).toBeVisible();
+        });
+
+        test('vendor panel pages have zero accessibility violations', async ({ page }) => {
+            for (const path of ['/vendor', '/vendor/profile', '/vendor/transactions', '/vendor/payouts']) {
+                await page.goto(path);
+                const results = await new AxeBuilder({ page }).analyze();
+                expect(results.violations).toEqual([]);
+            }
+        });
+
+        test('vendor cannot reach the admin panel', async ({ page }) => {
+            const response = await page.goto('/admin');
+
+            // `App\Models\User::canAccessPanel()` delegates to
+            // `AdminPanelAccessPolicy`, which denies an actor holding only
+            // `ActorRole::VENDOR` — verified live (see this test's own run
+            // output) rather than assumed: Filament renders a 403 response
+            // for an authenticated user its FilamentUser::canAccessPanel()
+            // implementation refuses, it does not redirect back to a login
+            // page (the vendor session IS authenticated — just not for this
+            // panel).
+            expect(response?.status()).toBe(403);
+            await expect(page.getByRole('heading', { name: 'Jejak Audit' })).not.toBeVisible();
+        });
+    });
 });
