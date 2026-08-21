@@ -390,6 +390,21 @@ jobs:
           DB_DATABASE: makam_test
           DB_USERNAME: makam_test
           DB_PASSWORD: makam_test
+          # Opts the E2E-ADMIN/VENDOR seed migration
+          # (database/migrations/2026_08_22_100000_seed_e2e_admin_vendor_test_users.php)
+          # into actually writing its two throwaway login accounts --
+          # config/e2e_fixtures.php defaults this to false everywhere else
+          # (including ordinary PHPUnit runs, which also set APP_ENV=testing
+          # via phpunit.xml, so an environment('testing') gate would have
+          # silently seeded these rows there too -- the same collision
+          # THROTTLE_PUBLIC_GUEST_DISABLED below already hit and solved).
+          # Deliberately set on THIS step, not "Serve the app and run the
+          # browser smoke test" below: `php artisan migrate --force` is what
+          # actually executes the migration's up() (and therefore reads this
+          # config), not the later serve step, which never re-migrates.
+          # Scoped to nothing but this one step's process; production is
+          # untouched.
+          SEED_E2E_ADMIN_VENDOR_USERS: "true"
 
       - name: Build assets
         run: npm run build

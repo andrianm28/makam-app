@@ -1,0 +1,119 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Feature\Migrations;
+
+use App\Models\User;
+use App\Platform\IdentityAccess\Roles\ActorRole;
+use App\Platform\IdentityAccess\Scopes\Models\ScopeAssignment;
+use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Tests\TestCase;
+
+/**
+ * `RefreshDatabase` applies every migration once per PHPUnit process,
+ * including this one — so the migration itself is gated behind
+ * `config('e2e_fixtures.seed_admin_vendor_users')` (default false; see
+ * `config/e2e_fixtures.php`) and is a no-op during the ambient migrate that
+ * happens in `setUp()`. Every positive-path test here therefore sets the
+ * flag explicitly and invokes `up()` directly — mirroring how
+ * `Tests\Feature\RateLimiting\PublicGuestThrottleTest` verifies
+ * `THROTTLE_PUBLIC_GUEST_DISABLED` explicitly rather than relying on
+ * ambient environment state — instead of relying on the implicit full-suite
+ * migrate to have seeded anything.
+ */
+final class SeedE2eAdminVendorTestUsersTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private const string MIGRATION_PATH = 'migrations/2026_08_22_100000_seed_e2e_admin_vendor_test_users.php';
+
+    public function test_it_seeds_a_logged_in_able_admin_user(): void
+    {
+        config(['e2e_fixtures.seed_admin_vendor_users' => true]);
+        (require database_path(self::MIGRATION_PATH))->up();
+
+        $admin = User::query()->where('email', 'e2e-admin@example.test')->first();
+
+        $this->assertNotNull($admin, 'expected the E2E-seeded admin user to exist after migration');
+        $this->assertTrue(Hash::check('E2eAdminPassword!1', $admin->password));
+
+        $this->assertDatabaseHas('actor_role_assignments', [
+            'actor_identifier' => (string) $admin->id,
+            'role' => ActorRole::ADMIN,
+        ]);
+    }
+
+    public function test_it_seeds_a_logged_in_able_vendor_user_scoped_to_a_real_vendor(): void
+    {
+        config(['e2e_fixtures.seed_admin_vendor_users' => true]);
+        (require database_path(self::MIGRATION_PATH))->up();
+
+        $vendor = User::query()->where('email', 'e2e-vendor@example.test')->first();
+
+        $this->assertNotNull($vendor, 'expected the E2E-seeded vendor user to exist after migration');
+        $this->assertTrue(Hash::check('E2eVendorPassword!1', $vendor->password));
+
+        $this->assertDatabaseHas('actor_role_assignments', [
+            'actor_identifier' => (string) $vendor->id,
+            'role' => ActorRole::VENDOR,
+        ]);
+
+        $scope = ScopeAssignment::query()
+            ->where('actor_identifier', (string) $vendor->id)
+            ->where('entity_type', ScopeEntityType::VENDOR)
+            ->first();
+
+        $this->assertNotNull($scope, 'expected the E2E-seeded vendor user to hold a vendor-entity scope assignment');
+        $this->assertNotNull(
+            DB::table('vendors')->where('id', $scope->entity_id)->first(),
+            'the scope assignment must point at a real, existing vendor row'
+        );
+    }
+
+    public function test_it_is_idempotent_on_a_re_run(): void
+    {
+        config(['e2e_fixtures.seed_admin_vendor_users' => true]);
+
+        // Re-running up() a second time (the real thing that happens if a CI
+        // runner ever re-migrates without a fresh database) must not throw a
+        // duplicate-key error.
+        $migration = require database_path(self::MIGRATION_PATH);
+
+        $migration->up();
+        $migration->up();
+
+        $this->assertSame(
+            1,
+            User::query()->where('email', 'e2e-admin@example.test')->count(),
+            're-running the migration must not create a duplicate admin user'
+        );
+    }
+
+    /**
+     * This is the test that actually protects the pre-existing suite
+     * (`PurgeStaleBookingDraftsTest`, `ServiceCatalogAuditIntegrationTest`,
+     * and others that assert exact/zero counts on
+     * `actor_role_assignments`/`scope_assignments`/`audit_events`) going
+     * forward: with the flag left at its real default (unset — false),
+     * `up()` must write nothing at all.
+     */
+    public function test_it_is_a_no_op_when_the_flag_is_left_at_its_default(): void
+    {
+        $this->assertFalse(
+            config('e2e_fixtures.seed_admin_vendor_users'),
+            'this test only proves anything if the flag is genuinely at its default-false value'
+        );
+
+        (require database_path(self::MIGRATION_PATH))->up();
+
+        $this->assertDatabaseMissing('users', ['email' => 'e2e-admin@example.test']);
+        $this->assertDatabaseMissing('users', ['email' => 'e2e-vendor@example.test']);
+        $this->assertDatabaseMissing('actor_role_assignments', ['role' => ActorRole::ADMIN]);
+        $this->assertDatabaseMissing('actor_role_assignments', ['role' => ActorRole::VENDOR]);
+        $this->assertDatabaseCount('scope_assignments', 0);
+    }
+}
