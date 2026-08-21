@@ -48,6 +48,14 @@ use Illuminate\Support\Facades\Schema;
  * `?string $uploadedBy = null` signature allowing null in code -- that
  * pre-existing code/schema mismatch is unrelated to this fix and is left
  * as-is rather than silently widened here).
+ *
+ * No `->after(...)` column-position calls: `after()` is a MySQL-only
+ * modifier, silently ignored on Postgres (the real target database, and
+ * every environment this migration actually runs against) -- verified
+ * live during review that including it left the columns at the end of
+ * each table rather than their original position anyway, so it would
+ * have been a false impression of preserved ordering, not a real one.
+ * Nothing in this codebase depends on column ordinal position.
  */
 return new class extends Migration
 {
@@ -59,7 +67,7 @@ return new class extends Migration
         });
 
         Schema::table('subscriptions', function (Blueprint $table) {
-            $table->foreignId('customer_id')->after('care_plan_id')->constrained('users');
+            $table->foreignId('customer_id')->constrained('users');
             $table->index(['customer_id'], 'subscriptions_customer_index');
         });
 
@@ -68,7 +76,7 @@ return new class extends Migration
         });
 
         Schema::table('service_acceptances', function (Blueprint $table) {
-            $table->foreignId('customer_id')->after('work_order_id')->constrained('users');
+            $table->foreignId('customer_id')->constrained('users');
         });
 
         Schema::table('service_complaints', function (Blueprint $table) {
@@ -76,7 +84,7 @@ return new class extends Migration
         });
 
         Schema::table('service_complaints', function (Blueprint $table) {
-            $table->foreignId('customer_id')->after('work_order_id')->constrained('users');
+            $table->foreignId('customer_id')->constrained('users');
         });
 
         Schema::table('work_evidence', function (Blueprint $table) {
@@ -84,7 +92,7 @@ return new class extends Migration
         });
 
         Schema::table('work_evidence', function (Blueprint $table) {
-            $table->foreignId('uploaded_by')->after('evidence_type')->constrained('users');
+            $table->foreignId('uploaded_by')->constrained('users');
         });
     }
 
@@ -95,7 +103,7 @@ return new class extends Migration
         });
 
         Schema::table('subscriptions', function (Blueprint $table) {
-            $table->uuid('customer_id')->after('care_plan_id');
+            $table->uuid('customer_id');
             $table->index(['customer_id'], 'subscriptions_customer_index');
         });
 
@@ -104,7 +112,7 @@ return new class extends Migration
         });
 
         Schema::table('service_acceptances', function (Blueprint $table) {
-            $table->uuid('customer_id')->after('work_order_id');
+            $table->uuid('customer_id');
         });
 
         Schema::table('service_complaints', function (Blueprint $table) {
@@ -112,7 +120,7 @@ return new class extends Migration
         });
 
         Schema::table('service_complaints', function (Blueprint $table) {
-            $table->uuid('customer_id')->after('work_order_id');
+            $table->uuid('customer_id');
         });
 
         Schema::table('work_evidence', function (Blueprint $table) {
@@ -120,7 +128,7 @@ return new class extends Migration
         });
 
         Schema::table('work_evidence', function (Blueprint $table) {
-            $table->uuid('uploaded_by')->after('evidence_type');
+            $table->uuid('uploaded_by');
         });
     }
 };

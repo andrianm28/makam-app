@@ -11,6 +11,7 @@ use App\Domain\VendorFulfillment\Models\WorkOrder;
 use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -25,13 +26,21 @@ final class FixCustomerAndUploaderIdentityColumnsTest extends TestCase
     use RefreshDatabase;
 
     /**
-     * Postgres reports its own internal bigint type name (`int8`) via
-     * `Schema::getColumnType()`, not the Laravel-facing `bigint` alias --
-     * asserted against the driver's real reported name, not guessed.
+     * `Schema::getColumnType()` reports each driver's own internal type
+     * name, not a portable Laravel-facing alias -- Postgres reports
+     * `int8` (confirmed live), SQLite (this repo's default PHPUnit driver,
+     * `phpunit.xml`) reports `integer` regardless of the declared bigint
+     * width, since SQLite has no native bigint type. Branching here
+     * matches the same `DB::connection()->getDriverName() === 'pgsql'`
+     * pattern this migration's own `up()` already uses for its CHECK
+     * constraints -- without it, this test can only ever be run under CI's
+     * real Postgres config, never via a bare `vendor/bin/phpunit` locally.
      */
     private function assertRealBigintColumn(string $table, string $column): void
     {
-        $this->assertSame('int8', Schema::getColumnType($table, $column));
+        $expected = DB::connection()->getDriverName() === 'pgsql' ? 'int8' : 'integer';
+
+        $this->assertSame($expected, Schema::getColumnType($table, $column));
     }
 
     public function test_subscriptions_customer_id_is_a_real_bigint_column(): void

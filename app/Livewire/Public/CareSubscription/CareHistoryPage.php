@@ -266,14 +266,21 @@ final class CareHistoryPage extends Component
     /**
      * `$this->customerId` is a route segment (always a string) that must
      * look like a real `users.id` bigint before it's safe to use in a
-     * `subscriptions.customer_id` query — `ctype_digit()` accepts only
-     * non-negative integer strings, refusing anything else (including a
-     * negative sign or a decimal point) before it ever reaches the
-     * database.
+     * `subscriptions.customer_id` query. `ctype_digit()` alone is not
+     * enough — it accepts a digit string of ANY length, and a value that
+     * overflows Postgres's `bigint` range reaches the database and throws
+     * `SQLSTATE[22003]: Numeric value out of range` (confirmed live,
+     * `GET /riwayat-perawatan/99999999999999999999` — the same failure
+     * *class*, an unvalidated route segment reaching a typed Postgres
+     * column, that this class's own `Str::isUuid()` predecessor guard was
+     * written to stop). `FILTER_VALIDATE_INT` additionally refuses
+     * anything PHP's own int range can't represent, closing that gap.
      */
     private function isNumericCustomerId(): bool
     {
-        return $this->customerId !== '' && ctype_digit($this->customerId);
+        return $this->customerId !== ''
+            && ctype_digit($this->customerId)
+            && filter_var($this->customerId, FILTER_VALIDATE_INT) !== false;
     }
 
     /**

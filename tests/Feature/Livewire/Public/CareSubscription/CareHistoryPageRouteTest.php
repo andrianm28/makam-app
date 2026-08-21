@@ -43,4 +43,25 @@ final class CareHistoryPageRouteTest extends TestCase
 
         $response->assertOk();
     }
+
+    /**
+     * `customer_id` is a real bigint column (fixed 22 Aug 2026,
+     * `2026_08_22_100000_fix_customer_and_uploader_identity_columns`).
+     * `CareHistoryPage::isNumericCustomerId()`'s `ctype_digit()` check alone
+     * accepts a digit string of any length, and a value that overflows
+     * Postgres's bigint range would otherwise reach the database and throw
+     * `SQLSTATE[22003]: Numeric value out of range` (confirmed live during
+     * review) -- the same failure class ($customerId reaching a typed
+     * Postgres column unvalidated) this route's own auth-guard history
+     * already names. The honest "no history" empty state, not a 500.
+     */
+    public function test_an_authenticated_user_visiting_a_bigint_overflowing_id_gets_the_honest_empty_state_not_a_500(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get('/riwayat-perawatan/99999999999999999999');
+
+        $response->assertOk();
+        $response->assertSee('Belum ada riwayat perawatan');
+    }
 }
