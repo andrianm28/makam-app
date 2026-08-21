@@ -9,6 +9,7 @@ use App\Domain\CareSubscription\Models\CarePlan;
 use App\Domain\CareSubscription\Models\Subscription;
 use App\Domain\CareSubscription\Models\SubscriptionCycle;
 use App\Livewire\Public\CareSubscription\SubscriptionStatusPage;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
@@ -45,7 +46,7 @@ final class SubscriptionStatusPageTest extends TestCase
             'reference' => 'SUB-'.Str::upper(Str::random(8)),
             'grave_id' => (string) Str::uuid(),
             'care_plan_id' => $carePlan->getKey(),
-            'customer_id' => (string) Str::uuid(),
+            'customer_id' => User::factory()->create()->id,
             'status' => $status,
             'frequency' => CarePlanFrequency::Monthly->value,
             'price_minor' => $carePlan->price_minor,
@@ -112,7 +113,30 @@ final class SubscriptionStatusPageTest extends TestCase
     public function test_the_subscription_status_page_does_not_reveal_vault_references(): void
     {
         $carePlan = $this->createCarePlan();
-        $subscription = $this->createSubscription($carePlan);
+
+        // A deliberately distinctive, improbable user id -- now that
+        // customer_id is a small sequential bigint (fixed 22 Aug 2026;
+        // previously a random uuid, which was distinctive by construction),
+        // a real customer's actual id could otherwise coincidentally match
+        // a substring of ordinary page content (a price digit, a date), and
+        // this test would fail to catch a genuine leak or pass on an
+        // accidental digit collision. 987654321 is chosen to fall well
+        // outside any value this page's own rendered content (references,
+        // prices, dates, cycle counts) could plausibly produce.
+        $customer = User::factory()->state(['id' => 987654321])->create();
+
+        $subscription = Subscription::query()->create([
+            'reference' => 'SUB-'.Str::upper(Str::random(8)),
+            'grave_id' => (string) Str::uuid(),
+            'care_plan_id' => $carePlan->getKey(),
+            'customer_id' => $customer->id,
+            'status' => 'active',
+            'frequency' => CarePlanFrequency::Monthly->value,
+            'price_minor' => $carePlan->price_minor,
+            'currency' => 'IDR',
+            'current_cycle_number' => 2,
+            'started_at' => now()->subMonths(2),
+        ]);
 
         $html = Livewire::test(SubscriptionStatusPage::class, [
             'subscriptionReference' => $subscription->reference,

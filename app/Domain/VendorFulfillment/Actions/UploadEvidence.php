@@ -32,7 +32,7 @@ final readonly class UploadEvidence
         WorkOrder $workOrder,
         string $documentId,
         string $evidenceType,
-        ?string $uploadedBy = null,
+        ?int $uploadedBy = null,
         string $actorRef = 'system',
         string $actorRole = 'vendor',
         AuditSource $auditSource = AuditSource::Panel,

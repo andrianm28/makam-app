@@ -25,7 +25,7 @@ final readonly class FileComplaint
 {
     public function __invoke(
         WorkOrder $workOrder,
-        string $customerId,
+        int $customerId,
         string $complaintText,
     ): ServiceComplaint {
         return Audit::wrap(

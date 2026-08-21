@@ -10,6 +10,7 @@ use App\Domain\CareSubscription\Models\SubscriptionCycle;
 use App\Domain\VendorFulfillment\Actions\CreateWorkOrderFromCycle;
 use App\Domain\VendorFulfillment\Models\WorkOrder;
 use App\Domain\VendorFulfillment\Models\WorkOrderTask;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -41,7 +42,7 @@ final class CreateWorkOrderTest extends TestCase
             'reference' => 'SUB-'.Str::upper(Str::random(8)),
             'grave_id' => (string) Str::uuid(),
             'care_plan_id' => $carePlan->getKey(),
-            'customer_id' => (string) Str::uuid(),
+            'customer_id' => User::factory()->create()->id,
             'status' => 'active',
             'frequency' => 'monthly',
             'price_minor' => 150000,

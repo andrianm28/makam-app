@@ -51,6 +51,7 @@ final class Subscription extends Model
     protected function casts(): array
     {
         return [
+            'customer_id' => 'integer',
             'price_minor' => 'integer',
             'current_cycle_number' => 'integer',
             'started_at' => 'datetime',

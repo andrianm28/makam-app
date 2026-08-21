@@ -8,10 +8,16 @@
     Billing status + work order status = TWO separate indicators, never
     collapsed. Missed/failed service shows an honest operational state,
     never styled as a customer error (AC6). Server-confirmed state only (AC4).
+
+    Accept/complaint actions only render when `$canAct` is true (the
+    authenticated visitor IS this customer — see CareHistoryPage's own
+    `isAuthorizedCustomer()`); everyone else sees the same history read-only,
+    with a note pointing at login instead of a button that would just deny.
 --}}
 
 @php
     use App\Support\Design\StatusIntent;
+    use App\Domain\VendorFulfillment\WorkOrderStatus;
 @endphp
 
 <div class="mx-auto w-full max-w-3xl px-4 py-10">
@@ -21,6 +27,20 @@
         ditampilkan secara terpisah.
     </p>
 
+    @if ($actionMessage)
+        <x-mk.alert :intent="$actionIntent" title="{{ $actionMessage }}" class="mt-6" live="polite" />
+    @endif
+
+    @if (! $canAct && $workOrders->isNotEmpty())
+        <x-mk.alert intent="info" title="Masuk untuk mengelola riwayat ini." class="mt-6" live="off">
+            <p class="text-sm">
+                Untuk menerima layanan atau mengajukan komplain,
+                <a href="{{ route('login') }}" class="font-medium underline underline-offset-2">masuk ke akun Anda</a>
+                sebagai pelanggan ini.
+            </p>
+        </x-mk.alert>
+    @endif
+
     <div class="mt-6">
         @forelse ($workOrders as $wo)
             @php
@@ -29,6 +49,10 @@
 
                 $workIntent = StatusIntent::intent($wo->work_status, StatusIntent::FAMILY_CARE_WORK_ORDER);
                 $workLabel = StatusIntent::label($wo->work_status, StatusIntent::FAMILY_CARE_WORK_ORDER);
+
+                $isExpanded = $expandedWorkOrderId === $wo->id;
+                $hasAccepted = $wo->acceptance_count > 0;
+                $hasComplaint = $wo->complaint_status !== null;
             @endphp
 
             <x-mk.card class="mb-3">
@@ -79,10 +103,29 @@
                                 </dd>
                             </div>
                         @endif
+
+                        @if ($hasComplaint)
+                            @php
+                                $complaintIntent = StatusIntent::intent($wo->complaint_status, StatusIntent::FAMILY_CARE_COMPLAINT);
+                                $complaintLabel = StatusIntent::label($wo->complaint_status, StatusIntent::FAMILY_CARE_COMPLAINT);
+                            @endphp
+                            <div>
+                                <dt class="font-medium text-neutral-500">Status Komplain</dt>
+                                <dd class="mt-1">
+                                    <x-mk.badge :intent="$complaintIntent" dot>{{ $complaintLabel }}</x-mk.badge>
+                                </dd>
+                            </div>
+                        @endif
                     </dl>
 
                     @if ($wo->work_status === 'missed')
-                        <x-mk.alert intent="warning" title="Pekerjaan belum terselesaikan.">
+                        {{-- intent="pending" — <x-mk.alert> has no "warning" intent (it exposes
+                             neutral/info/pending/success/danger/urgent; "pending"/"urgent" both
+                             map to the same warning-600/50/800 triad). The original read-only
+                             version of this view passed "warning" here, which silently fell back
+                             to the "info" intent's blue styling via the component's `?? $intents['info']`
+                             default — corrected while this file was already being touched. --}}
+                        <x-mk.alert intent="pending" title="Pekerjaan belum terselesaikan.">
                             <p class="text-sm">
                                 Pekerjaan perawatan ini belum dapat diselesaikan. Tim kami akan
                                 menghubungi Anda untuk penjadwalan ulang. Hubungi
@@ -90,6 +133,93 @@
                                 jika Anda memiliki pertanyaan.
                             </p>
                         </x-mk.alert>
+                    @endif
+
+                    @if ($hasAccepted)
+                        <p class="text-sm font-medium text-success-800">Layanan ini telah Anda terima.</p>
+                    @endif
+
+                    @if ($canAct)
+                        <div class="flex flex-wrap gap-3">
+                            @if ($wo->work_status === WorkOrderStatus::Completed->value && ! $hasAccepted)
+                                <x-mk.button
+                                    size="sm"
+                                    variant="primary"
+                                    wire:click="showAcceptForm('{{ $wo->id }}')"
+                                >
+                                    Terima Layanan
+                                </x-mk.button>
+                            @endif
+
+                            @if (! $hasComplaint)
+                                <x-mk.button
+                                    size="sm"
+                                    variant="secondary"
+                                    wire:click="showComplaintForm('{{ $wo->id }}')"
+                                >
+                                    Ajukan Komplain
+                                </x-mk.button>
+                            @endif
+                        </div>
+
+                        @if ($isExpanded && $expandedMode === 'accept')
+                            <form wire:submit.prevent="acceptService" class="flex flex-col gap-4 border-t border-neutral-200 pt-4">
+                                @error('action')
+                                    <p class="text-sm text-danger-800">{{ $message }}</p>
+                                @enderror
+
+                                <x-mk.field
+                                    type="select"
+                                    label="Nilai kepuasan"
+                                    name="rating"
+                                    :optional="true"
+                                    :error="$errors->first('rating')"
+                                    wire:model="rating"
+                                >
+                                    <option value="">Tidak dinilai</option>
+                                    @foreach ([1, 2, 3, 4, 5] as $value)
+                                        <option value="{{ $value }}">{{ $value }} / 5</option>
+                                    @endforeach
+                                </x-mk.field>
+
+                                <x-mk.field
+                                    type="textarea"
+                                    label="Catatan (opsional)"
+                                    name="acceptance_notes"
+                                    :rows="3"
+                                    :optional="true"
+                                    wire:model="acceptanceNotes"
+                                />
+
+                                <div class="flex gap-3">
+                                    <x-mk.button type="submit" size="sm" variant="primary">Kirim Penerimaan</x-mk.button>
+                                    <x-mk.button type="button" size="sm" variant="ghost" wire:click="cancelAction">Batal</x-mk.button>
+                                </div>
+                            </form>
+                        @endif
+
+                        @if ($isExpanded && $expandedMode === 'complain')
+                            <form wire:submit.prevent="fileComplaint" class="flex flex-col gap-4 border-t border-neutral-200 pt-4">
+                                @error('action')
+                                    <p class="text-sm text-danger-800">{{ $message }}</p>
+                                @enderror
+
+                                <x-mk.field
+                                    type="textarea"
+                                    label="Uraikan komplain Anda"
+                                    name="complaint_text"
+                                    :rows="4"
+                                    :required="true"
+                                    :error="$errors->first('complaintText')"
+                                    wire:model="complaintText"
+                                />
+
+                                <div class="flex gap-3">
+                                    <x-mk.button type="submit" size="sm" variant="primary">Kirim Komplain</x-mk.button>
+                                    <x-mk.button type="button" size="sm" variant="ghost" wire:click="cancelAction">Batal</x-mk.button>
+                                </div>
+                            </form>
+                        @endif
                     @endif
                 </div>
             </x-mk.card>

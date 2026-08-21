@@ -13,6 +13,7 @@ use App\Domain\CareSubscription\SubscriptionCycleStatus;
 use App\Domain\CareSubscription\SubscriptionStatus;
 use App\Domain\VendorFulfillment\Models\WorkOrder;
 use App\Domain\VendorFulfillment\Models\WorkOrderTask;
+use App\Models\User;
 use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\FeatureGate\Models\FeatureGate;
 use App\Platform\Payment\Exceptions\SettlementTargetUnresolvableException;
@@ -357,7 +358,7 @@ final class CareSubscriptionWebhookSettlementTest extends TestCase
             'reference' => 'SUB-'.Str::upper(Str::random(8)),
             'grave_id' => (string) Str::uuid(),
             'care_plan_id' => $carePlan->getKey(),
-            'customer_id' => (string) Str::uuid(),
+            'customer_id' => User::factory()->create()->id,
             'status' => SubscriptionStatus::Draft->value,
             'frequency' => 'monthly',
             'price_minor' => self::AMOUNT_MINOR,

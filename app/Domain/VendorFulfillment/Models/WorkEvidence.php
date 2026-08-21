@@ -38,4 +38,14 @@ final class WorkEvidence extends Model
     {
         return $this->belongsTo(WorkOrder::class, 'work_order_id');
     }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'uploaded_by' => 'integer',
+        ];
+    }
 }

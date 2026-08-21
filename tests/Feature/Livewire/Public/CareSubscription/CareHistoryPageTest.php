@@ -10,6 +10,7 @@ use App\Domain\CareSubscription\Models\Subscription;
 use App\Domain\CareSubscription\Models\SubscriptionCycle;
 use App\Domain\VendorFulfillment\Models\WorkOrder;
 use App\Livewire\Public\CareSubscription\CareHistoryPage;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
@@ -32,7 +33,9 @@ final class CareHistoryPageTest extends TestCase
     {
         parent::setUp();
 
-        $this->customerId = (string) Str::uuid();
+        // `subscriptions.customer_id` is a real bigint FK to `users` (fixed
+        // 22 Aug 2026) -- a random uuid is no longer a valid fixture value.
+        $this->customerId = (string) User::factory()->create()->id;
     }
 
     private function createCarePlan(): CarePlan

@@ -29,7 +29,7 @@ final readonly class CreateSubscription
     public function __invoke(
         CarePlan $carePlan,
         string $graveId,
-        string $customerId,
+        int $customerId,
         CarePlanFrequency $frequency,
         string $actorReference,
         string $actorRole,

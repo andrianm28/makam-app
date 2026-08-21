@@ -39,6 +39,7 @@ final class ServiceComplaint extends Model
     protected function casts(): array
     {
         return [
+            'customer_id' => 'integer',
             'resolved_at' => 'immutable_datetime',
             'filed_at' => 'immutable_datetime',
         ];
