@@ -482,6 +482,27 @@ test.describe('E2E-ADMIN/VENDOR — sensitive-action audit and query scope', () 
         // must appear here. This is the strongest possible proof the
         // "sensitive action audit" AC is real: the suite's own setup step is
         // itself an audited event.
+        //
+        // Must search rather than rely on the table's default
+        // `occurred_at desc` sort + page-1-only visibility: this suite's
+        // `fullyParallel` run shares one server and one database with every
+        // OTHER spec file (e2e-booking.spec.ts in particular), which writes
+        // many BOOKING_DRAFT_* audit rows throughout the whole run —
+        // confirmed live (a failing screenshot showed page 1 entirely full
+        // of concurrent booking-draft events), so by the time this test
+        // runs the seed migration's handful of rows are long since pushed
+        // past page 1. `reason` itself isn't a `->searchable()` column
+        // (`AuditEventsTable`), but `action` is, and
+        // `RoleAuditActions::GRANT` ('ROLE_GRANT') is a distinct action
+        // string nothing else in this suite writes — filtering to it
+        // narrows the table to just this migration's 3 real role-grant
+        // rows (admin: ADMIN + FINANCE, vendor: VENDOR), regardless of
+        // concurrent traffic. The search field's real accessible name is
+        // "Cari" via its own `<label>` (`search-field.blade.php`) — the
+        // page also has a SEPARATE global-search field whose real label is
+        // "Pencarian global" despite sharing the same "Cari" placeholder
+        // text, so this does not collide with it.
+        await page.getByLabel('Cari', { exact: true }).fill('ROLE_GRANT');
         await expect(page.getByText(/E2E-ADMIN\/VENDOR suite seed/).first()).toBeVisible();
     });
 
