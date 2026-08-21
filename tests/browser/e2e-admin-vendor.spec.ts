@@ -30,42 +30,28 @@ import { expect, test, type Page } from '@playwright/test';
  * re-confirms it against the live rendered page before asserting on it.
  *
  * ---------------------------------------------------------------------------
- * e2e-admin is plain `ActorRole::ADMIN`, NOT `finance` — verified live, not
- * assumed
+ * e2e-admin also holds `finance` + a privileged BUSINESS_ENTITY grant —
+ * verified live, not assumed
  * ---------------------------------------------------------------------------
- * The seed migration's own doc block (and the plan this suite was built
- * from) frames `e2e-admin` as "unscoped — sees every entity". That is true
- * for the four-role `MasterDataAdminAuthorizerContract` gate (admin,
- * restricted_admin, operator, finance all pass), which is what guards
- * `PlatformOverviewWidget` and three of the six report pages (Orders,
- * RenewalPeriod, VendorPerformance).
+ * `FinancialOverviewWidget` and `FailedPaymentExceptionQueueWidget`, plus 3
+ * of the 6 admin report pages (`finance-reports`, `receipts-report`,
+ * `outgoing-payments-report`), gate on `FinanceLedgerReadAuthorizer`
+ * (`app/Platform/FinancialLedger/FinanceLedgerReadAuthorizer.php`) — a
+ * strictly narrower gate than the four-role `MasterDataAdminAuthorizerContract`
+ * that guards `PlatformOverviewWidget` and the other three report pages
+ * (Orders, RenewalPeriod, VendorPerformance): it requires the actor to hold
+ * the real `finance` role specifically (its own doc block: "Same role
+ * (finance only, not restricted_admin)") PLUS at least one active
+ * privileged `BUSINESS_ENTITY` scope grant.
  *
- * It is NOT true for `FinanceLedgerReadAuthorizer`
- * (`app/Platform/FinancialLedger/FinanceLedgerReadAuthorizer.php`), which
- * requires the actor to hold the real `finance` role specifically (its own
- * doc block: "Same role (finance only, not restricted_admin)") PLUS at
- * least one active privileged `BUSINESS_ENTITY` scope grant. `e2e-admin`
- * has neither — the seed migration only grants `ActorRole::ADMIN`, no
- * `finance` role, no `BUSINESS_ENTITY` scope assignment at all. Confirmed
- * live against the pinned CI image + a real Postgres/Redis pair, migrated
- * with `SEED_E2E_ADMIN_VENDOR_USERS=true`: `FinancialOverviewWidget` and
- * `FailedPaymentExceptionQueueWidget` both correctly do not render for this
- * account (`canView()` false), and `/admin/finance-reports`,
- * `/admin/receipts-report`, `/admin/outgoing-payments-report` all return a
- * real HTTP 403 (`FinanceReports`/`ReceiptsReport`/`OutgoingPaymentsReport`
- * `canAccess()` false, `Filament\Pages\Concerns\CanAuthorizeAccess::
- * mountCanAuthorizeAccess()` -> `abort_unless(false, 403)`).
- *
- * This is real least-privilege enforcement working as designed, not a bug —
- * so this suite asserts BOTH directions honestly: the three master-data
- * report pages and the master-data widget are reachable (below), and the
- * three finance-gated report pages plus the two finance-gated widgets are
- * correctly refused/hidden for this account, rather than either skipping
- * that coverage silently or asserting a "visible"/"200" outcome that does
- * not happen. Extending the fixture with a `finance`-role,
- * `BUSINESS_ENTITY`-scoped account (to cover the finance-authorized path
- * too) is a fixture change outside this task's file scope — see this
- * task's own report for the recommendation.
+ * The seed migration
+ * (`database/migrations/2026_08_22_100000_seed_e2e_admin_vendor_test_users.php`)
+ * grants `e2e-admin` `ActorRole::ADMIN`, `ActorRole::FINANCE`, and a
+ * privileged `BUSINESS_ENTITY` scope against a clearly-fake reference
+ * (`'e2e-admin-vendor-fixture-entity'`) specifically so this suite can prove
+ * every required dashboard module actually renders, matching this suite's
+ * own AC ("all required dashboard modules") rather than documenting a
+ * finance-gated subset as correctly denied.
  */
 
 const ADMIN = {
@@ -134,17 +120,28 @@ test.describe('E2E-ADMIN/VENDOR — admin dashboard and reports', () => {
         await expect(page.getByText('FAQ Dipublikasikan')).toBeVisible();
     });
 
-    test('the finance-gated widgets correctly do not render for an admin without ledger-read access', async ({ page }) => {
+    test('the finance-gated widgets render for the admin holding finance-ledger read access', async ({ page }) => {
         await adminLogin(page);
 
         // FinancialOverviewWidget and FailedPaymentExceptionQueueWidget both
         // gate on FinanceLedgerReadAuthorizer (`finance` role + a privileged
-        // BUSINESS_ENTITY scope grant) — e2e-admin holds neither, so
-        // canView() is false and neither widget renders at all.
-        await expect(page.getByText('Pembayaran Berhasil')).not.toBeVisible();
-        await expect(page.getByText('Pembayaran Bermasalah')).not.toBeVisible();
-        await expect(page.getByText('Laporan Rekonsiliasi')).not.toBeVisible();
-        await expect(page.getByText('Antrian Pembayaran Gagal')).not.toBeVisible();
+        // BUSINESS_ENTITY scope grant) — e2e-admin holds both (seed
+        // migration), so canView() is true and both widgets render.
+        await expect(page.getByText('Pembayaran Berhasil')).toBeVisible();
+        await expect(page.getByText('Pembayaran Bermasalah')).toBeVisible();
+        await expect(page.getByText('Laporan Rekonsiliasi')).toBeVisible();
+
+        // FailedPaymentExceptionQueueWidget (a TableWidget) is further down
+        // the dashboard than the viewport's initial fold and mounts its
+        // Livewire component lazily on scroll-into-view (verified live: the
+        // "Antrian Pembayaran Gagal" heading never appears — the request for
+        // this widget's own Livewire component is simply never sent — until
+        // the page is scrolled), unlike the StatsOverviewWidget widgets
+        // above, which lazy-load unconditionally on mount. Scrolling to the
+        // bottom of the page before asserting matches how a real operator
+        // would actually reach this widget.
+        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+        await expect(page.getByText('Antrian Pembayaran Gagal')).toBeVisible();
     });
 
     test('dashboard has zero accessibility violations', async ({ page }) => {
@@ -174,12 +171,14 @@ test.describe('E2E-ADMIN/VENDOR — admin dashboard and reports', () => {
         }
     });
 
-    test('the three finance-gated report pages correctly refuse an admin without ledger-read access', async ({ page }) => {
+    test('the three finance-gated report pages are reachable and titled correctly for the admin holding ledger-read access', async ({ page }) => {
         await adminLogin(page);
 
         // FinanceReports, ReceiptsReport, OutgoingPaymentsReport all gate on
         // FinanceLedgerReadAuthorizer (see this file's header comment) —
-        // e2e-admin is refused with a real 403, not silently redirected.
+        // e2e-admin holds the finance role plus a privileged BUSINESS_ENTITY
+        // grant (seed migration), so canAccess() is true and each page
+        // returns a real 200.
         const reports: Array<{ path: string; title: string }> = [
             { path: '/admin/finance-reports', title: 'Laporan Keuangan' },
             { path: '/admin/receipts-report', title: 'Laporan Penerimaan' },
@@ -188,8 +187,8 @@ test.describe('E2E-ADMIN/VENDOR — admin dashboard and reports', () => {
 
         for (const report of reports) {
             const response = await page.goto(report.path);
-            expect(response?.status()).toBe(403);
-            await expect(page.getByRole('heading', { name: report.title })).not.toBeVisible();
+            expect(response?.status()).toBe(200);
+            await expect(page.getByRole('heading', { name: report.title })).toBeVisible();
         }
     });
 });

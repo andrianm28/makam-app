@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use App\Platform\IdentityAccess\Scopes\Models\ScopeAssignment;
 use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
+use App\Platform\IdentityAccess\Scopes\ScopeGrantLevel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -44,6 +45,37 @@ final class SeedE2eAdminVendorTestUsersTest extends TestCase
         $this->assertDatabaseHas('actor_role_assignments', [
             'actor_identifier' => (string) $admin->id,
             'role' => ActorRole::ADMIN,
+        ]);
+    }
+
+    /**
+     * `FinanceLedgerReadAuthorizer` gates `FinancialOverviewWidget`,
+     * `FailedPaymentExceptionQueueWidget`, and 3 of 6 admin report pages
+     * behind the real `finance` role PLUS a non-revoked
+     * `ScopeGrantLevel::PRIVILEGED` `BUSINESS_ENTITY`-scoped grant — a
+     * strictly narrower gate than the four-role master-data authorizer
+     * plain `ActorRole::ADMIN` satisfies. Without both, this suite could
+     * only prove those modules are correctly denied, not that they render.
+     */
+    public function test_it_grants_the_admin_user_finance_ledger_read_access(): void
+    {
+        config(['e2e_fixtures.seed_admin_vendor_users' => true]);
+        (require database_path(self::MIGRATION_PATH))->up();
+
+        $admin = User::query()->where('email', 'e2e-admin@example.test')->first();
+
+        $this->assertNotNull($admin);
+
+        $this->assertDatabaseHas('actor_role_assignments', [
+            'actor_identifier' => (string) $admin->id,
+            'role' => ActorRole::FINANCE,
+        ]);
+
+        $this->assertDatabaseHas('scope_assignments', [
+            'actor_identifier' => (string) $admin->id,
+            'entity_type' => ScopeEntityType::BUSINESS_ENTITY,
+            'entity_id' => 'e2e-admin-vendor-fixture-entity',
+            'grant_level' => ScopeGrantLevel::PRIVILEGED,
         ]);
     }
 
@@ -114,6 +146,7 @@ final class SeedE2eAdminVendorTestUsersTest extends TestCase
         $this->assertDatabaseMissing('users', ['email' => 'e2e-vendor@example.test']);
         $this->assertDatabaseMissing('actor_role_assignments', ['role' => ActorRole::ADMIN]);
         $this->assertDatabaseMissing('actor_role_assignments', ['role' => ActorRole::VENDOR]);
+        $this->assertDatabaseMissing('actor_role_assignments', ['role' => ActorRole::FINANCE]);
         $this->assertDatabaseCount('scope_assignments', 0);
     }
 }

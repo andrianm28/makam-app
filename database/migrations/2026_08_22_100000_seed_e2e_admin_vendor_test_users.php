@@ -36,6 +36,30 @@ declare(strict_types=1);
  * this case).
  *
  * ---------------------------------------------------------------------------
+ * `e2e-admin` also holds `finance` + a privileged BUSINESS_ENTITY grant
+ * ---------------------------------------------------------------------------
+ * Task 2 of this suite's plan discovered, live, that plain `ActorRole::ADMIN`
+ * is not enough to exercise every "required dashboard module": `FinanceLedgerReadAuthorizer`
+ * (`app/Platform/FinancialLedger/FinanceLedgerReadAuthorizer.php`) gates
+ * `FinancialOverviewWidget`, `FailedPaymentExceptionQueueWidget`, and 3 of 6
+ * admin report pages (`finance-reports`, `receipts-report`,
+ * `outgoing-payments-report`) behind the real `finance` role PLUS a
+ * non-revoked `ScopeGrantLevel::PRIVILEGED` `BUSINESS_ENTITY`-scoped grant —
+ * a strictly narrower gate than the four-role master-data authorizer the
+ * rest of the dashboard uses. Without both, this suite could only prove
+ * those modules are correctly DENIED, not that they render, which falls
+ * short of the suite's own "all required dashboard modules" AC. `e2e-admin`
+ * is therefore also granted `ActorRole::FINANCE` and a privileged
+ * `BUSINESS_ENTITY` scope against a clearly-fake reference
+ * (`'e2e-admin-vendor-fixture-entity'` — no `business_entities` table exists
+ * in this codebase; the entity_id is a free-form reference string, matching
+ * `FinancialOverviewWidgetTest`'s own `grant()` helper and the
+ * `MARKETPLACE_BADAN_USAHA_REF` fake-reference convention already used
+ * elsewhere in this repo's CI). This is a throwaway fixture login with no
+ * real separation-of-duties concern, not a change to any real authorization
+ * policy.
+ *
+ * ---------------------------------------------------------------------------
  * The vendor scope's `entity_id` is looked up, never hardcoded
  * ---------------------------------------------------------------------------
  * `2026_08_14_100000_seed_vendors_and_listings.php` seeds vendor rows with
@@ -69,6 +93,7 @@ use App\Platform\IdentityAccess\Roles\ActorRole;
 use App\Platform\IdentityAccess\Roles\Actions\GrantActorRole;
 use App\Platform\IdentityAccess\Scopes\Actions\GrantScopeAssignment;
 use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
+use App\Platform\IdentityAccess\Scopes\ScopeGrantLevel;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -78,6 +103,8 @@ return new class extends Migration
     private const string ADMIN_EMAIL = 'e2e-admin@example.test';
 
     private const string VENDOR_EMAIL = 'e2e-vendor@example.test';
+
+    private const string ADMIN_FINANCE_ENTITY_REF = 'e2e-admin-vendor-fixture-entity';
 
     public function up(): void
     {
@@ -102,6 +129,31 @@ return new class extends Migration
                 actorIdentifier: $admin->id,
                 role: ActorRole::ADMIN,
                 reason: 'E2E-ADMIN/VENDOR suite seed — throwaway CI/dev login, not a real operator grant.',
+                grantedBy: null,
+            );
+        }
+
+        if (! DB::table('actor_role_assignments')->where('actor_identifier', (string) $admin->id)->where('role', ActorRole::FINANCE)->exists()) {
+            app(GrantActorRole::class)(
+                actorIdentifier: $admin->id,
+                role: ActorRole::FINANCE,
+                reason: 'E2E-ADMIN/VENDOR suite seed — grants finance-ledger read access so all required dashboard modules/reports are testable.',
+                grantedBy: null,
+            );
+        }
+
+        if (! DB::table('scope_assignments')
+            ->where('actor_identifier', (string) $admin->id)
+            ->where('entity_type', ScopeEntityType::BUSINESS_ENTITY)
+            ->where('entity_id', self::ADMIN_FINANCE_ENTITY_REF)
+            ->exists()
+        ) {
+            app(GrantScopeAssignment::class)(
+                actorIdentifier: $admin->id,
+                entityType: ScopeEntityType::BUSINESS_ENTITY,
+                entityId: self::ADMIN_FINANCE_ENTITY_REF,
+                grantLevel: ScopeGrantLevel::PRIVILEGED,
+                reason: 'E2E-ADMIN/VENDOR suite seed — grants finance-ledger read access so all required dashboard modules/reports are testable.',
                 grantedBy: null,
             );
         }
