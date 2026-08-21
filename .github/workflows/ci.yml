@@ -390,9 +390,43 @@ jobs:
           DB_DATABASE: makam_test
           DB_USERNAME: makam_test
           DB_PASSWORD: makam_test
+          # Opts the E2E-ADMIN/VENDOR seed migration
+          # (database/migrations/2026_08_22_110000_seed_e2e_admin_vendor_test_users.php)
+          # into actually writing its two throwaway login accounts --
+          # config/e2e_fixtures.php defaults this to false everywhere else
+          # (including ordinary PHPUnit runs, which also set APP_ENV=testing
+          # via phpunit.xml, so an environment('testing') gate would have
+          # silently seeded these rows there too -- the same collision
+          # THROTTLE_PUBLIC_GUEST_DISABLED below already hit and solved).
+          # Deliberately set on THIS step, not "Serve the app and run the
+          # browser smoke test" below: `php artisan migrate --force` is what
+          # actually executes the migration's up() (and therefore reads this
+          # config), not the later serve step, which never re-migrates.
+          # Scoped to nothing but this one step's process; production is
+          # untouched.
+          SEED_E2E_ADMIN_VENDOR_USERS: "true"
 
       - name: Build assets
         run: npm run build
+
+      - name: Publish Filament panel assets
+        # Root cause of a deterministic E2E-ADMIN/VENDOR Playwright failure
+        # (tests/browser/e2e-admin-vendor.spec.ts): without this, /admin and
+        # /vendor request /js/filament/*, /css/filament/*, /fonts/filament/*
+        # that 404 -- exactly the same class of bug the Dockerfile's own
+        # `filament:assets` step (Dockerfile, this comment predates this
+        # one) was added to fix for the built image on 13 Aug 2026, but that
+        # fix was never carried over to this job's own separate
+        # `php artisan serve` setup. Confirmed live: a captured Playwright
+        # trace showed 8 real 404s for exactly these paths (app.js,
+        # actions.js, tables.js, etc.) -- with Alpine/Livewire's runtime
+        # never loading, `wire:submit` never wires up and the login
+        # button's accessible name and click both silently fail, timing
+        # out `getByRole('button', { name: 'Masuk' })` for the full test
+        # timeout on every attempt. No prior E2E suite (booking,
+        # marketplace, faq, home, renewal) exercises a Filament panel's
+        # interactive JS, so this gap was never exposed before.
+        run: php artisan filament:assets --ansi
 
       - name: Install Playwright browser binaries
         run: npx playwright install --with-deps chromium
@@ -457,6 +491,14 @@ jobs:
           curl -sf http://127.0.0.1:8080/ > /dev/null \
             || { echo "app did not come up"; cat /tmp/artisan-serve.log; exit 1; }
           npm run test:browser
+
+      - name: Upload Playwright test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: test-results/
+          retention-days: 3
 
   # ---------------------------------------------------------------------------
   # Build the immutable artifact/image and push it to GHCR (ci-cd-and-release.md

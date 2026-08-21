@@ -20,3 +20,17 @@ secret:
     # IDs 35950911, 35950912, 35950913.
     - name: phpunit.xml fixed test-only APP_KEY
       match: 'base64:RKxTuGlM4MNUB65volwGUsTfCiDumShAS0GGdu5zXn4='
+    # E2E-ADMIN/VENDOR suite's two throwaway login passwords: fixed,
+    # committed, test-only credentials for the `@example.test` accounts
+    # `database/migrations/2026_08_22_100000_seed_e2e_admin_vendor_test_users.php`
+    # seeds (also referenced by `tests/browser/e2e-admin-vendor.spec.ts` and
+    # `tests/Feature/Migrations/SeedE2eAdminVendorTestUsersTest.php`). They
+    # protect nothing — a production-run of that migration is independently
+    # blocked by both `config('e2e_fixtures.seed_admin_vendor_users')`
+    # (default false) and an `app()->isProduction()` guard — and exist only
+    # so the suite is a real, reproducible login against a throwaway fixture
+    # account, matching the phpunit.xml APP_KEY precedent immediately above.
+    - name: E2E-ADMIN/VENDOR suite fixed test-only admin password
+      match: 'E2eAdminPassword!1'
+    - name: E2E-ADMIN/VENDOR suite fixed test-only vendor password
+      match: 'E2eVendorPassword!1'

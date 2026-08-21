@@ -25,6 +25,15 @@ export default defineConfig({
     use: {
         baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8080',
         trace: 'on-first-retry',
+        // Paired with .github/workflows/ci.yml's "Upload Playwright test
+        // results on failure" step -- a plain PNG for a failing action,
+        // downloadable straight from a CI run instead of needing to parse
+        // trace.zip. This pairing is what actually diagnosed two real bugs
+        // 21 Aug 2026 (missing Filament panel assets in CI; the audit-trail
+        // test's page-1 sort assumption under concurrent test traffic) that
+        // would otherwise have only ever shown up as an opaque locator
+        // timeout.
+        screenshot: 'only-on-failure',
     },
     projects: [
         {
