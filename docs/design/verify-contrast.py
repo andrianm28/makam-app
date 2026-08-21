@@ -149,11 +149,13 @@ HUE_MIN_SEPARATION = 30.0
 HUE_FAMILIES = ["primary", "success", "info", "danger"]
 
 # The Sandstone/warning hue exception retired with Sandstone (ADR-0034):
-# `secondary` is now "Leaf" (hue ~123°). Leaf is caged — never a fill, badge,
-# button, or status chip (see tokens.css §1.2 and design-system.md §2.2) — so
-# it needs no hue exception even though it now sits closer to `success` (146°)
-# than the old Sandstone ever sat to `warning`. The ≥30° rule stands unchanged
-# for the actual status families: primary/success/info/danger.
+# `secondary` is now "Leaf" (hue ~132°, re-anchored to the real logo 21 Aug
+# 2026). Leaf is caged — never a fill, badge, button, or status chip (see
+# tokens.css §1.2 and design-system.md §2.2) — so it needs no hue exception
+# even though it sits only ~14° from `success` (146°), a comparable-magnitude
+# collision to the one the old Sandstone had with `warning`, not a smaller
+# one. The ≥30° rule stands unchanged for the actual status families:
+# primary/success/info/danger.
 HUE_EXCEPTIONS: set[tuple[str, str]] = set()
 
 
