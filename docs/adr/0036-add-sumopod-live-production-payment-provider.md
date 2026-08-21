@@ -29,7 +29,7 @@ This was classified as a **bounded** task under `superpowers:brainstorming` (a w
 What this unblocks:
 
 - A real business decision to go live is no longer blocked on "there is nowhere to put production credentials" — that configuration surface now exists, mirroring the sandbox block's exact shape so no downstream code (guard, checkout client, webhook receiver) needs to know which tier is active.
-- `docs/testing/test-strategy.md`'s booking-wizard sandbox-warning test (`BookingWizardOnlinePaymentTest::test_the_sandbox_warning_does_not_show_for_a_non_sandbox_provider`) now exercises a real production slug instead of a placeholder string (`'some-future-production-provider'`), closing a forward-looking gap that test's own comment already anticipated.
+- `BookingWizardOnlinePaymentTest::test_the_sandbox_warning_does_not_show_for_a_non_sandbox_provider` now exercises a real production slug instead of a placeholder string (`'some-future-production-provider'`), closing a forward-looking gap that test's own comment already anticipated.
 
 What this does **not** change:
 
