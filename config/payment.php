@@ -106,6 +106,34 @@ return [
             // effective payment configuration in the meantime.
             'webhook_tokens' => [],
         ],
+
+        /*
+         | ADR-0036: SumoPod's production/live tier. Same vendor, same API
+         | contract as the sandbox block above (POST /api/v1/payments,
+         | X-Api-Key header, identical webhook envelope/signature scheme) --
+         | only the base URL and credentials differ, so this block mirrors
+         | the sandbox block's shape exactly. No sandbox typo to preserve
+         | here (unlike SUMODOP_SANDBOX_API_KEY, ADR-0033 §Credential) --
+         | these are brand-new variable names with no prior host injection
+         | to stay byte-compatible with, so they are spelled correctly.
+         |
+         | Selecting this provider (PAYMENT_PROVIDER=sumopod-live) makes
+         | real production credentials configurable -- it does NOT itself
+         | open G-PAY-01. See PaymentProviders::SUMOPOD_LIVE's doc block.
+         */
+        PaymentProviders::SUMOPOD_LIVE => [
+
+            'base_url' => env('SUMOPOD_LIVE_BASE_URL', ''),
+
+            'api_key' => env('SUMOPOD_LIVE_API_KEY', ''),
+
+            'webhook_signing_secrets' => array_values(array_filter(
+                array_map('trim', explode(',', (string) env('SUMOPOD_LIVE_WEBHOOK_SECRET', ''))),
+                static fn (string $secret): bool => $secret !== '',
+            )),
+
+            'webhook_tokens' => [],
+        ],
     ],
 
     'webhook' => [
