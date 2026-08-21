@@ -90,16 +90,14 @@ use Illuminate\Support\Facades\Route;
 | Every MVP entry point above now serves a real route. A stub route is
 | expected to be REPLACED wholesale by its owning spec's real routes, not
 | extended in place — `/pemesanan-makam`, `/marketplace`, and `/perpanjangan`
-| have now all gone through that replacement; `BookingWizardComingSoon`,
-| `MarketplaceComingSoon`, and `RenewalComingSoon`
-| (app/Livewire/Public/ComingSoon/) are now dead code, deliberately left in
-| place rather than deleted in this same change (no test depends on either;
-| removing them is separable cleanup). The stub pattern itself (a real
-| Livewire full-page component rendering an honest "coming soon" state —
-| 200 OK, header + footer intact, never Laravel's default 404 — per
-| requirements.md AC6 read expansively) is still documented in
-| resources/views/livewire/public/coming-soon.blade.php's own doc block,
-| including why it is deliberately NOT <x-mk.gate-closed-page>.
+| have now all gone through that replacement. `BookingWizardComingSoon`,
+| `MarketplaceComingSoon`, `RenewalComingSoon`, and their shared
+| `resources/views/livewire/public/coming-soon.blade.php` view — flagged here
+| for a while as dead code deliberately left in place pending "separable
+| cleanup" — were removed 21 Aug 2026 (no test depended on any of the three;
+| `git log` has the deleted files and their doc blocks, including the
+| now-superseded rationale for why the stub pattern was deliberately NOT
+| `<x-mk.gate-closed-page>`, if that pattern is ever needed again).
 */
 
 // ci-cd-and-release.md §8's liveness/readiness pair — see the two
