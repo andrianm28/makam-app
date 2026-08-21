@@ -22,8 +22,9 @@ declare(strict_types=1);
  * `THROTTLE_PUBLIC_GUEST_DISABLED` (`config/rate_limiting.php`) already hit
  * and solved with a dedicated, default-false env flag — same fix shape
  * applied here. This flag is scoped to nothing but the one CI step
- * (`.github/workflows/ci.yml`'s browser-test job, "Serve the app and run the
- * browser smoke test") that explicitly opts in.
+ * (`.github/workflows/ci.yml`'s browser-test job, "Migrate the application
+ * database" — the step that actually runs `php artisan migrate --force`,
+ * where this migration's `up()` executes) that explicitly opts in.
  */
 return [
     'seed_admin_vendor_users' => (bool) env('SEED_E2E_ADMIN_VENDOR_USERS', false),
