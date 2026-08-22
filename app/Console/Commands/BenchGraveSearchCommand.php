@@ -26,6 +26,15 @@ use Illuminate\Support\Facades\DB;
  * doc block), not a synthetic term — this measures the real query shape
  * the app runs, including cache-cold Postgres query planning on the first
  * iteration.
+ *
+ * The measured numbers are only as representative as the corpus behind
+ * them: `bench:generate-grave-dataset` derives each row's name/typo
+ * components via a CRC32 hash of the row index (`GenerateGraveRegistry
+ * LoadDatasetCommand::mixedIndex()`), specifically so a single cemetery's
+ * rows span dozens of distinct `deceased_name` values instead of the
+ * handful a naive `$i % N` derivation collapses to — this command's own
+ * timing reflects that real name-cardinality, not a degenerate corpus a
+ * query planner or cache could exploit.
  */
 final class BenchGraveSearchCommand extends Command
 {

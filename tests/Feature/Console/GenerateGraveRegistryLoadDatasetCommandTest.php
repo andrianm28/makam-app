@@ -46,6 +46,34 @@ final class GenerateGraveRegistryLoadDatasetCommandTest extends TestCase
         $this->assertSame(5, $distinctCemeteries);
     }
 
+    public function test_a_single_cemeterys_records_are_not_a_degenerate_handful_of_names(): void
+    {
+        // Regression test for a real bug: naive `$i % N` index arithmetic
+        // for name components correlated with `$i % $cemeteryCount`
+        // (10 cemeteries here), collapsing every cemetery's rows to a
+        // handful of distinct names. Verified directly (see this fix
+        // wave's report): at 10 cemeteries / 1000 records (100 rows per
+        // cemetery), the real distinct count is 70 — this asserts a
+        // threshold well below that observed number, not an invented one.
+        Artisan::call('bench:generate-grave-dataset', [
+            '--cemeteries' => 10,
+            '--records' => 1000,
+            '--chunk' => 200,
+        ]);
+
+        $firstCemeteryId = Cemetery::query()
+            ->where('name', 'like', 'Contoh TPU Beban %')
+            ->orderBy('name')
+            ->value('id');
+
+        $distinctNames = GraveRecord::query()
+            ->where('cemetery_id', $firstCemeteryId)
+            ->distinct('deceased_name')
+            ->count('deceased_name');
+
+        $this->assertGreaterThan(30, $distinctNames);
+    }
+
     public function test_it_is_re_runnable_and_replaces_rather_than_accumulates(): void
     {
         Artisan::call('bench:generate-grave-dataset', ['--cemeteries' => 3, '--records' => 30, '--chunk' => 10]);

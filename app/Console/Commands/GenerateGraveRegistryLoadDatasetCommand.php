@@ -35,6 +35,16 @@ use Illuminate\Support\Str;
  * making its own rows (and only its own rows) identifiable for deletion
  * before regenerating — this command never touches a cemetery it did not
  * itself create.
+ *
+ * `deceased_name` deliberately does NOT carry the "Contoh " prefix
+ * `CEMETERY_NAME_PREFIX` uses: an identical leading token on every row would
+ * make the search-term prefix identical across the whole corpus, destroying
+ * the query-discrimination `BenchGraveSearchCommand` needs. Disclosure is
+ * already handled by a stronger mechanism — `source = GraveRecordSource::
+ * CONTOH` drives `GraveRecord::isExampleData()`, which renders a real "data
+ * contoh" banner on the search page — and names like "Budi Santoso" are the
+ * app's own canonical placeholder example name already shown in
+ * `grave-search.blade.php`, not an invented deviation from convention.
  */
 final class GenerateGraveRegistryLoadDatasetCommand extends Command
 {
@@ -125,6 +135,25 @@ final class GenerateGraveRegistryLoadDatasetCommand extends Command
     }
 
     /**
+     * Decorrelates a per-row component index from `$i % $cemeteryCount`
+     * (the arithmetic that assigns row `$i` to its cemetery). A plain
+     * `$i % N` here is NOT safe for any `$N` that shares factors with
+     * `$cemeteryCount`: e.g. at the default 100 cemeteries, `$i % 16` and
+     * `($i * 7) % 10` both turn out to be CONSTANT (or near-constant) for
+     * every row of a single cemetery, because stepping `$i` by 100 (the
+     * distance between two rows of the same cemetery) is itself a multiple
+     * of 4, 10, and 5 — collapsing each cemetery's 1000 rows to at most 4
+     * distinct `deceased_name` values and an all-or-nothing typo flag. CRC32
+     * hashing `$i` before reducing it breaks that alignment for any
+     * `$cemeteryCount`, not just 100, without needing to reason about which
+     * moduli happen to divide it.
+     */
+    private static function mixedIndex(int $i, string $salt, int $modulus): int
+    {
+        return crc32($salt.':'.$i) % $modulus;
+    }
+
+    /**
      * @param  list<string>  $cemeteryIds
      */
     private function generateGraveRecords(array $cemeteryIds, int $totalRecords, int $chunkSize): void
@@ -136,15 +165,18 @@ final class GenerateGraveRegistryLoadDatasetCommand extends Command
 
         for ($i = 0; $i < $totalRecords; $i++) {
             $cemeteryId = $cemeteryIds[$i % count($cemeteryIds)];
-            $given = self::GIVEN_NAMES[$i % count(self::GIVEN_NAMES)];
-            $family = self::FAMILY_NAMES[($i * 7) % count(self::FAMILY_NAMES)];
+            $given = self::GIVEN_NAMES[self::mixedIndex($i, 'given', count(self::GIVEN_NAMES))];
+            $family = self::FAMILY_NAMES[self::mixedIndex($i, 'family', count(self::FAMILY_NAMES))];
 
             // Deterministic "spelling variation" for roughly one in five
             // rows — performance-and-capacity.md §5 asks for these
             // explicitly, and a fuzzy-search benchmark that never
             // exercises the similarity() branch at all would be
-            // measuring the wrong query shape.
-            $name = $i % 5 === 0
+            // measuring the wrong query shape. Hashed via `mixedIndex()`
+            // (salted independently of `given`/`family`) rather than
+            // `$i % 5` directly, so the typo flag isn't all-or-nothing per
+            // cemetery either — see that method's doc block.
+            $name = self::mixedIndex($i, 'typo', 5) === 0
                 ? $given.' '.$family.'h' // a trailing-letter typo variant
                 : $given.' '.$family;
 
