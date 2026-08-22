@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Payment;
 
+use App\Platform\Audit\Models\AuditEvent;
+use App\Platform\Payment\Jobs\ProcessProviderEventJob;
 use App\Platform\Payment\Models\ProviderEvent;
+use App\Platform\Payment\PaymentAuditActions;
 use App\Platform\Payment\PaymentProviders;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Artisan;
@@ -120,6 +123,34 @@ final class WebhookReplayTwoConnectionTest extends TestCase
                 ->where('provider_event_id', $id)
                 ->count(),
         );
+
+        // The weaker row-count assertion above also passes if the second
+        // connection's request were wrongly REJECTED (a digest mismatch or
+        // header-validation failure) rather than correctly recognized as a
+        // duplicate — these assertions prove the real RESOLUTION path
+        // instead, matching WebhookReceiverTest's single-connection
+        // duplicate test.
+        $this->assertSame($statuses[0]['reference'], $statuses[1]['reference']);
+
+        $this->assertSame(
+            1,
+            AuditEvent::query()->where('action', PaymentAuditActions::WEBHOOK_DUPLICATE)->count(),
+        );
+
+        // No `payment_sessions` row exists for this synthetic payload — the
+        // same deny-only-guard constraint `WebhookReceiverTest::
+        // test_a_correctly_signed_delivery_with_no_payment_session_is_rejected_and_recorded`
+        // documents — so the FIRST delivery itself is REJECTED (verified
+        // directly: `provider_events.status` = `REJECTED_SESSION`), never
+        // reaching `ReceiveWebhook::finishValidation()`'s dispatch call.
+        // `ProcessProviderEventJob` is therefore never pushed by either
+        // connection, and this still pins a real invariant: a duplicate
+        // delivery must never cause a SECOND (or first) spurious dispatch
+        // via the exception-handling path. If this test is later extended
+        // with a real `PaymentSession` fixture (`WebhookPaidEffectsTest`'s
+        // pattern) so the delivery actually validates, this assertion
+        // should become `Queue::assertPushed(ProcessProviderEventJob::class, 1)`.
+        Queue::assertNotPushed(ProcessProviderEventJob::class);
 
         // Wipe the committed rows so later RefreshDatabase test classes in
         // this same process start from an empty, migrated schema — see
