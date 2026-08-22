@@ -21,7 +21,7 @@ use Tests\TestCase;
  * `Mfa\MfaChallengeService`/`Mfa\MfaRecoveryService`, and the rate limiter
  * that bounds write volume (see the service's own class-level doc block for
  * why that reasoning differs from MFA's own use of the same
- * `MfaRateLimiter` class).
+ * `ReauthenticationRateLimiter` class).
  */
 final class ReauthenticationServiceTest extends TestCase
 {
@@ -93,7 +93,7 @@ final class ReauthenticationServiceTest extends TestCase
         $service = new ReauthenticationService;
         $ip = '198.51.100.30';
 
-        // MfaRateLimiter's documented 5-attempts-per-60-seconds threshold,
+        // ReauthenticationRateLimiter's documented 5-attempts-per-60-seconds threshold,
         // reused as-is by this service under its own
         // 'reauthentication-challenge' context.
         for ($i = 0; $i < 5; $i++) {

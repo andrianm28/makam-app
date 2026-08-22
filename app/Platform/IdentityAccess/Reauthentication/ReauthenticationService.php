@@ -8,7 +8,6 @@ use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\AuditSubject;
-use App\Platform\IdentityAccess\Mfa\MfaRateLimiter;
 use App\Platform\IdentityAccess\Reauthentication\Models\ReauthenticationEvent;
 use Carbon\CarbonImmutable;
 
@@ -59,10 +58,10 @@ use Carbon\CarbonImmutable;
  * mechanism was used.
  *
  * ---------------------------------------------------------------------------
- * Rate limiting — reuses `Mfa\MfaRateLimiter` directly, but for a different
- * reason than MFA uses it for
+ * Rate limiting — reuses `ReauthenticationRateLimiter` directly, but for a
+ * different reason than MFA uses it for
  * ---------------------------------------------------------------------------
- * `MfaRateLimiter`'s public API (`tooManyAttempts()`/`hit()`/`clear()`,
+ * `ReauthenticationRateLimiter`'s public API (`tooManyAttempts()`/`hit()`/`clear()`,
  * keyed by a `$context` string + actor + IP) fits this module's keying
  * needs exactly, so it is reused as-is rather than duplicated — same
  * threshold/decay (5 attempts / 60 seconds) via the same class, under its
@@ -110,11 +109,11 @@ final class ReauthenticationService
     ): ReauthenticationChallengeResult {
         $rateLimitKey = $actorRef ?? 'guest';
 
-        if (MfaRateLimiter::tooManyAttempts(self::RATE_LIMIT_CONTEXT, $rateLimitKey, $ip)) {
+        if (ReauthenticationRateLimiter::tooManyAttempts(self::RATE_LIMIT_CONTEXT, $rateLimitKey, $ip)) {
             return ReauthenticationChallengeResult::rateLimited();
         }
 
-        MfaRateLimiter::hit(self::RATE_LIMIT_CONTEXT, $rateLimitKey, $ip);
+        ReauthenticationRateLimiter::hit(self::RATE_LIMIT_CONTEXT, $rateLimitKey, $ip);
 
         $event = Audit::wrap(
             mutation: fn (): ReauthenticationEvent => ReauthenticationEvent::create([
@@ -147,7 +146,7 @@ final class ReauthenticationService
      * password-recheck form's own successful check — see this class's
      * top-level doc block). Writes the matching `outcome = satisfied` pair
      * and clears this module's own rate-limit counter for the actor+IP, the
-     * same "success clears the counter" courtesy `MfaRateLimiter::clear()`
+     * same "success clears the counter" courtesy `ReauthenticationRateLimiter::clear()`
      * already gives a legitimate actor elsewhere in this codebase.
      */
     public function satisfy(
@@ -175,7 +174,7 @@ final class ReauthenticationService
             metadata: ['note' => $reason],
         );
 
-        MfaRateLimiter::clear(self::RATE_LIMIT_CONTEXT, $actorRef ?? 'guest', $ip);
+        ReauthenticationRateLimiter::clear(self::RATE_LIMIT_CONTEXT, $actorRef ?? 'guest', $ip);
 
         return $event;
     }
