@@ -11,6 +11,25 @@ documented load profiles using [k6](https://k6.io/).
   and `docs/superpowers/plans/2026-08-22-phase2-regression-gap-closing.md`
   Task 5 for exactly why this is reduced and what the reduction costs.
 
+## What gates CI pass/fail, and what doesn't
+
+Only `http_req_failed: ['rate<0.01']` is declared as a k6 threshold, so
+that's the only thing that fails this CI job's `load-test` step.
+`http_req_duration` (p50/p90/p95/p99 per route) is NOT a declared threshold
+— k6 still measures and prints those numbers unconditionally in its summary
+output (under "TOTAL RESULTS"), but a slow response here does not fail CI.
+This is deliberate, not an oversight: the CI job serves the app via
+`php artisan serve`, an explicitly non-production PHP CLI dev server, so a
+duration result from it is not production-capacity evidence either way (see
+`performance-and-capacity.md` §9, quoted below). This job's actual purpose
+is proving the k6 tooling, dataset, and CI wiring genuinely connect and
+complete end-to-end at a real (if reduced) scale — which 100% successful
+connections against real 200 responses on all three routes is proof of. See
+`profile-a-normal-launch.js`'s own header comment for the real numbers from
+the CI run that established this (durations well over the documented
+500ms target, against the dev server — a legitimate result of the serving
+stack, not something to quietly tune the threshold to pass).
+
 ## What's NOT here yet, deliberately
 
 Full-scale Profile A (50 VUs), Profile B (150 VUs, campaign/burst),
