@@ -42,7 +42,7 @@ Never remove a stakeholder MVP item merely because an external gate is closed. I
 
 ## Authentication and uploads
 
-- Use same-origin session auth for MVP and mandatory TOTP MFA for privileged roles.
+- Use same-origin session auth for MVP, with password-based recent re-authentication (`App\Http\Middleware\RequireRecentAuthentication`) required for financial, gate, bank-detail, certificate, plot-override, and bulk-export actions. TOTP MFA was built, then removed entirely — see `docs/adr/0024-use-session-auth-and-mfa.md`'s superseding note.
 - Require recent re-authentication for financial, gate, bank-detail, certificate, plot-override, and bulk-export actions.
 - Every untrusted file enters private quarantine and cannot be used/downloaded before validation and malware scan acceptance.
 

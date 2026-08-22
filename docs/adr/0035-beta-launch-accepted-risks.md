@@ -153,21 +153,15 @@ rather than presented with unreviewed text as if it were binding.
 **Reversal:** none needed — this is a state the platform can remain in indefinitely; enter a real review note
 via Site Settings whenever a review eventually happens.
 
-### 10. No MFA enforcement on beta admin accounts (opts out of Lane D4's recommended, non-required hardening step)
+### 10. MFA removed entirely (supersedes the original self-service framing below)
 
-Per the user's explicit 19 Aug 2026 decision, beta admin accounts will not be enrolled in MFA. This required
-no code change: `App\Http\Middleware\EnforceMfaChallenge` only ever challenges an actor whose `MfaEnrolment`
-is already confirmed (`ActorContext::MFA_STATE_ENROLLED`) — an actor who never enrols is never touched by it.
-The plan's Lane D4 recommended enrolling MFA on every beta admin account as a hardening step for money-route
-access; that recommendation is explicitly declined here, not overridden by any config flag (none exists —
-enrolment is the only lever).
+Per the user's explicit 22 Aug 2026 decision, the MFA feature built for Lane D4 was removed entirely, not merely left unenforced — see `docs/adr/0024-use-session-auth-and-mfa.md`'s superseding note and `docs/superpowers/plans/2026-08-22-mfa-removal-and-reauth.md`. Discovered during that work: the money-route re-authentication challenge page hard-required a confirmed MFA enrolment, and none existed (per this item's original 19 Aug 2026 framing below), so it crashed for every admin the moment `RequireRecentAuthentication`'s 15-minute freshness window lapsed — a live, independent bug, not a consequence of the "no MFA enforcement" choice itself. Recent re-authentication for sensitive actions now uses a password-only challenge page instead.
 
-**Mitigation:** none. Beta admin panel access is single-factor (password only) for the duration of this
-decision.
+**Original 19 Aug 2026 framing, kept for the historical record:** per the user's explicit decision, beta admin accounts would not be enrolled in MFA. This required no code change at the time: `App\Http\Middleware\EnforceMfaChallenge` only ever challenged an actor whose `MfaEnrolment` was already confirmed — an actor who never enrolled was never touched by it. The plan's Lane D4 recommended enrolling MFA on every beta admin account as a hardening step for money-route access; that recommendation was explicitly declined here, not overridden by any config flag.
 
-**Reversal:** cheap and fully backward-compatible — MFA enrolment is a self-service, per-account action any
-admin can take at any time without a deploy or a config change; this ADR item simply records that none have
-been asked to.
+**Mitigation:** password-based recent re-authentication (`RequireRecentAuthentication` + `PasswordReauthentication`), which every admin can already satisfy — no enrolment step of any kind.
+
+**Reversal:** would require building MFA again from scratch — the module was deleted, not disabled.
 
 ## What this ADR does not decide
 
