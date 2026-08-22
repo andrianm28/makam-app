@@ -23,11 +23,6 @@ final class ActorContextTest extends TestCase
         $this->assertFalse($guest->isAuthenticated());
     }
 
-    public function test_guest_mfa_state_is_not_applicable(): void
-    {
-        $this->assertSame(ActorContext::MFA_STATE_NOT_APPLICABLE, ActorContext::guest()->mfaState);
-    }
-
     public function test_guest_has_empty_roles_and_scopes(): void
     {
         $guest = ActorContext::guest();
@@ -53,17 +48,6 @@ final class ActorContextTest extends TestCase
 
         $this->assertSame('k1-external-id-abc123', $actor->identityReference);
         $this->assertTrue($actor->isAuthenticated());
-    }
-
-    public function test_default_mfa_state_for_an_explicitly_constructed_actor_is_not_applicable_unless_overridden(): void
-    {
-        // Documents the constructor default explicitly — callers that
-        // build an ActorContext without stating mfaState (only the
-        // adapter should do this in practice) get the safest possible
-        // default, never an implicit "satisfied" state.
-        $actor = new ActorContext(identityReference: 1);
-
-        $this->assertSame(ActorContext::MFA_STATE_NOT_APPLICABLE, $actor->mfaState);
     }
 
     public function test_has_role_never_reports_a_role_that_was_not_explicitly_supplied(): void
@@ -110,7 +94,7 @@ final class ActorContextTest extends TestCase
         // instead of only being caught by a live mutation attempt.
         $reflection = new \ReflectionClass(ActorContext::class);
 
-        foreach (['identityReference', 'roles', 'scopes', 'mfaState', 'lastAuthenticatedAt'] as $property) {
+        foreach (['identityReference', 'roles', 'scopes', 'lastAuthenticatedAt'] as $property) {
             $this->assertTrue(
                 $reflection->getProperty($property)->isReadOnly(),
                 "ActorContext::\${$property} must be readonly."

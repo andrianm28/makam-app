@@ -6,8 +6,6 @@ namespace App\Platform\IdentityAccess\Adapters;
 
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\Contracts\IdentityAccessAdapter;
-use App\Platform\IdentityAccess\Mfa\MfaEnrolmentStatus;
-use App\Platform\IdentityAccess\Mfa\Models\MfaEnrolment;
 use App\Platform\IdentityAccess\Models\ActorSession;
 use App\Platform\IdentityAccess\Roles\ActorRoleReader;
 use App\Platform\IdentityAccess\Scopes\ScopeAssignmentReader;
@@ -50,12 +48,6 @@ use Illuminate\Contracts\Auth\Authenticatable;
  * \ScopeAssignmentResolver` is NOT usable here for exactly that reason — it
  * takes an `ActorContext`.
  *
- * `mfaState` (S3-T2 addition, `resolveMfaState()` below) IS now real,
- * queried from `Mfa\Models\MfaEnrolment` — the one field this class no
- * longer hardcodes. See `ActorContext`'s class-level doc block for the
- * exact vocabulary and, just as importantly, for what this field still
- * does NOT claim (enrolment status, not per-session verification).
- *
  * When a real K1/K2 contract exists, replace the container binding for
  * `IdentityAccessAdapter` in `Providers\IdentityAccessServiceProvider` with
  * a new implementation. Every consumer that depends on the interface (not
@@ -80,41 +72,8 @@ final class LocalUsersTableIdentityAccessAdapter implements IdentityAccessAdapte
             identityReference: $identifier,
             roles: $this->roles->rolesForActor($identifier),
             scopes: $this->scopes->scopeStringsForActor($identifier),
-            mfaState: $this->resolveMfaState($identity),
             lastAuthenticatedAt: $this->resolveLastAuthenticatedAt($identity),
         );
-    }
-
-    /**
-     * S3-T2 addition: the most recent NON-REVOKED `mfa_enrolments` row for
-     * this identity determines the reported state — `ActorContext`'s own
-     * class-level doc block has the full vocabulary and, importantly, what
-     * it does NOT claim (enrolment status only, never "verified this
-     * session"). `Mfa\MfaEnrolmentService::startEnrolment()` guarantees at
-     * most one non-revoked row per user at a time (it revokes any prior
-     * one before creating a new pending row), so `latest('id')->first()`
-     * here is a defensive tie-breaker, not load-bearing for correctness.
-     *
-     * This method ONLY reads; it never creates, confirms, or revokes an
-     * enrolment, and nothing here changes what `canAccessPanel()` or any
-     * other authorization decision does today — see this batch's own
-     * safety constraint.
-     */
-    private function resolveMfaState(Authenticatable $identity): string
-    {
-        $enrolment = MfaEnrolment::query()
-            ->where('user_id', $identity->getAuthIdentifier())
-            ->where('status', '!=', MfaEnrolmentStatus::REVOKED)
-            ->latest('id')
-            ->first();
-
-        if ($enrolment === null) {
-            return ActorContext::MFA_STATE_NOT_ENROLLED;
-        }
-
-        return $enrolment->isConfirmed()
-            ? ActorContext::MFA_STATE_ENROLLED
-            : ActorContext::MFA_STATE_ENROLMENT_PENDING;
     }
 
     private function normalizeIdentifier(mixed $identifier): int|string

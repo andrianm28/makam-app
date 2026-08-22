@@ -7,8 +7,6 @@ namespace App\Providers\Filament;
 use App\Filament\Admin\Pages\FeatureGateAdmin;
 use App\Filament\Admin\Pages\FinanceReports;
 use App\Filament\Admin\Pages\InAppNotifications;
-use App\Filament\Admin\Pages\MfaChallenge;
-use App\Filament\Admin\Pages\MfaSettings;
 use App\Filament\Admin\Pages\OrdersReport;
 use App\Filament\Admin\Pages\OutgoingPaymentsReport;
 use App\Filament\Admin\Pages\PasswordReauthentication;
@@ -20,7 +18,6 @@ use App\Filament\Admin\Widgets\FinancialOverviewWidget;
 use App\Filament\Admin\Widgets\OrderStatusOverviewWidget;
 use App\Filament\Admin\Widgets\PlatformOverviewWidget;
 use App\Http\Middleware\AssignCorrelationId;
-use App\Http\Middleware\EnforceMfaChallenge;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -174,9 +171,7 @@ class AdminPanelProvider extends PanelProvider
                 OutgoingPaymentsReport::class,
                 VendorPerformanceReport::class,
                 RenewalPeriodReport::class,
-                MfaChallenge::class,
                 PasswordReauthentication::class,
-                MfaSettings::class,
                 InAppNotifications::class,
             ])
             ->widgets([
@@ -209,7 +204,6 @@ class AdminPanelProvider extends PanelProvider
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,
                 AuthenticateSession::class,
-                EnforceMfaChallenge::class,
                 ShareErrorsFromSession::class,
                 VerifyCsrfToken::class,
                 SubstituteBindings::class,

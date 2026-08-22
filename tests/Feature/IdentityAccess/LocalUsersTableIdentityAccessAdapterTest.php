@@ -8,8 +8,6 @@ use App\Models\User;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\Adapters\LocalUsersTableIdentityAccessAdapter;
 use App\Platform\IdentityAccess\Contracts\IdentityAccessAdapter;
-use App\Platform\IdentityAccess\Mfa\MfaEnrolmentStatus;
-use App\Platform\IdentityAccess\Mfa\Models\MfaEnrolment;
 use App\Platform\IdentityAccess\Models\ActorSession;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use App\Platform\IdentityAccess\Roles\Models\ActorRoleAssignment;
@@ -37,7 +35,6 @@ final class LocalUsersTableIdentityAccessAdapterTest extends TestCase
         $context = $adapter->resolveActorContext(null);
 
         $this->assertFalse($context->isAuthenticated());
-        $this->assertSame(ActorContext::MFA_STATE_NOT_APPLICABLE, $context->mfaState);
     }
 
     public function test_authenticated_identity_resolves_with_identity_reference_set(): void
@@ -176,100 +173,5 @@ final class LocalUsersTableIdentityAccessAdapterTest extends TestCase
         $context = app(IdentityAccessAdapter::class)->resolveActorContext($user);
 
         $this->assertSame([], $context->roles);
-    }
-
-    /**
-     * S3-T2: `mfaState` is no longer the permanent NOT_IMPLEMENTED
-     * placeholder — this test is RENAMED (from
-     * `test_authenticated_identity_mfa_state_is_not_implemented_not_satisfied`)
-     * and its assertion FIXED to match, per this batch's explicit
-     * instruction not to leave a now-incorrect test green by accident. An
-     * authenticated actor with no `mfa_enrolments` row at all (the
-     * everyday case for every actor until they enrol) reports
-     * `MFA_STATE_NOT_ENROLLED` — still never "satisfied", just an honest,
-     * queryable reason instead of "the subsystem does not exist."
-     */
-    public function test_authenticated_identity_with_no_mfa_enrolment_reports_not_enrolled(): void
-    {
-        $user = User::factory()->create();
-        $adapter = new LocalUsersTableIdentityAccessAdapter;
-
-        $context = $adapter->resolveActorContext($user);
-
-        $this->assertSame(ActorContext::MFA_STATE_NOT_ENROLLED, $context->mfaState);
-    }
-
-    public function test_authenticated_identity_with_pending_enrolment_reports_enrolment_pending(): void
-    {
-        $user = User::factory()->create();
-        MfaEnrolment::query()->create([
-            'user_id' => $user->id,
-            'secret' => 'JBSWY3DPEHPK3PXP',
-            'status' => MfaEnrolmentStatus::PENDING,
-        ]);
-
-        $adapter = new LocalUsersTableIdentityAccessAdapter;
-        $context = $adapter->resolveActorContext($user);
-
-        $this->assertSame(ActorContext::MFA_STATE_ENROLMENT_PENDING, $context->mfaState);
-    }
-
-    public function test_authenticated_identity_with_confirmed_enrolment_reports_enrolled(): void
-    {
-        $user = User::factory()->create();
-        MfaEnrolment::query()->create([
-            'user_id' => $user->id,
-            'secret' => 'JBSWY3DPEHPK3PXP',
-            'status' => MfaEnrolmentStatus::CONFIRMED,
-            'confirmed_at' => CarbonImmutable::now(),
-        ]);
-
-        $adapter = new LocalUsersTableIdentityAccessAdapter;
-        $context = $adapter->resolveActorContext($user);
-
-        $this->assertSame(ActorContext::MFA_STATE_ENROLLED, $context->mfaState);
-    }
-
-    public function test_authenticated_identity_with_only_a_revoked_enrolment_reports_not_enrolled(): void
-    {
-        // A revoked-only history must not be mistaken for an active
-        // enrolment of any kind.
-        $user = User::factory()->create();
-        MfaEnrolment::query()->create([
-            'user_id' => $user->id,
-            'secret' => 'JBSWY3DPEHPK3PXP',
-            'status' => MfaEnrolmentStatus::REVOKED,
-            'revoked_at' => CarbonImmutable::now(),
-        ]);
-
-        $adapter = new LocalUsersTableIdentityAccessAdapter;
-        $context = $adapter->resolveActorContext($user);
-
-        $this->assertSame(ActorContext::MFA_STATE_NOT_ENROLLED, $context->mfaState);
-    }
-
-    public function test_authenticated_identity_with_revoked_then_confirmed_enrolment_reports_enrolled(): void
-    {
-        // Mirrors MfaEnrolmentService::startEnrolment()'s real supersede
-        // history: an old revoked row plus a newer confirmed one must
-        // resolve to the newer, active row — never the older, dead one.
-        $user = User::factory()->create();
-        MfaEnrolment::query()->create([
-            'user_id' => $user->id,
-            'secret' => 'JBSWY3DPEHPK3PXQ',
-            'status' => MfaEnrolmentStatus::REVOKED,
-            'revoked_at' => CarbonImmutable::now(),
-        ]);
-        MfaEnrolment::query()->create([
-            'user_id' => $user->id,
-            'secret' => 'JBSWY3DPEHPK3PXP',
-            'status' => MfaEnrolmentStatus::CONFIRMED,
-            'confirmed_at' => CarbonImmutable::now(),
-        ]);
-
-        $adapter = new LocalUsersTableIdentityAccessAdapter;
-        $context = $adapter->resolveActorContext($user);
-
-        $this->assertSame(ActorContext::MFA_STATE_ENROLLED, $context->mfaState);
     }
 }

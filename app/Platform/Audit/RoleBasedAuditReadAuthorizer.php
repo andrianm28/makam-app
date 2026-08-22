@@ -7,7 +7,6 @@ namespace App\Platform\Audit;
 use App\Platform\Audit\Contracts\AuditReadAuthorizer;
 use App\Platform\Audit\Exceptions\AuditReadNotAuthorisedException;
 use App\Platform\IdentityAccess\ActorContext;
-use App\Platform\IdentityAccess\Mfa\MfaAuditActions;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use App\Platform\IdentityAccess\Roles\RoleAuditActions;
 use App\Platform\IdentityAccess\Scopes\ScopeAuditActions;
@@ -112,7 +111,12 @@ final class RoleBasedAuditReadAuthorizer implements AuditReadAuthorizer
         RoleAuditActions::REVOKE,
         ScopeAuditActions::GRANT,
         ScopeAuditActions::REVOKE,
-        MfaAuditActions::RESET,
+        // Literal, not a class constant — mfa-removal-and-reauth Task 4
+        // deleted `Mfa\MfaAuditActions` along with the rest of the MFA
+        // module, but historical `MFA_RESET` rows remain in `audit_events`
+        // (that table was never dropped) and must stay excluded from
+        // `restricted_admin`'s read scope exactly as before.
+        'MFA_RESET',
     ];
 
     public function authorize(ActorContext $actor): AuditReadScope
