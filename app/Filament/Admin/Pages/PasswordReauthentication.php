@@ -93,6 +93,7 @@ final class PasswordReauthentication extends Page
         $rateLimitKey = $actorContext->identityReference ?? 'guest';
 
         if (ReauthenticationRateLimiter::tooManyAttempts(self::RATE_LIMIT_CONTEXT, $rateLimitKey, $ip)) {
+            $this->password = '';
             $this->addError('password', 'Terlalu banyak percobaan. Coba lagi nanti.');
 
             return;

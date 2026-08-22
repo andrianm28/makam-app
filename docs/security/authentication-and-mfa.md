@@ -55,7 +55,7 @@ Require recent password confirmation (`App\Http\Middleware\RequireRecentAuthenti
 - restricted retention/deletion action;
 - creation/use of break-glass access.
 
-The recent-auth window is configuration-backed and security-approved (`config('reauthentication.freshness_seconds')`, 900 seconds by default). Submissions against the password challenge (`App\Filament\Admin\Pages\PasswordReauthentication::submit()`) are rate-limited by `App\Platform\IdentityAccess\Reauthentication\ReauthenticationRateLimiter` under their own `'password-reauthentication'` context (5 attempts/60 seconds, distinct from the middleware's own `'reauthentication-challenge'` context so the two never share a budget), and each wrong-password submission writes an `audit_events` row (`App\Platform\IdentityAccess\Reauthentication\ReauthenticationAuditActions::FAILED`) with no submitted credential value in its metadata.
+The recent-auth window is configuration-backed and security-approved (`config('reauthentication.freshness_seconds')`, 900 seconds by default). Submissions against the password challenge (`App\Filament\Admin\Pages\PasswordReauthentication::submit()`) are rate-limited by `App\Platform\IdentityAccess\Reauthentication\ReauthenticationRateLimiter` under their own `'password-reauthentication'` context (5 attempts/60 seconds, distinct from the middleware's own `'reauthentication-challenge'` context so the two never share a budget), and each wrong-password submission up to the rate limit writes an `audit_events` row (`App\Platform\IdentityAccess\Reauthentication\ReauthenticationAuditActions::FAILED`) with no submitted credential value in its metadata — a submission rejected by the rate limiter itself never reaches the password check, so it writes no row.
 
 ## 6. Sessions
 
