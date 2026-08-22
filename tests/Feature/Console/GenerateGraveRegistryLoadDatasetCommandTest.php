@@ -23,8 +23,10 @@ final class GenerateGraveRegistryLoadDatasetCommandTest extends TestCase
         ]);
 
         $this->assertSame(0, $exitCode);
-        $this->assertSame(5, Cemetery::query()->where('name', 'like', 'Contoh TPU Beban %')->count());
-        $generatedCount = GraveRecord::query()->where('source', 'bench-generator')->count();
+        $benchmarkCemeteries = Cemetery::query()->where('name', 'like', 'Contoh TPU Beban %')->count();
+        $this->assertSame(5, $benchmarkCemeteries);
+        $benchmarkCemeteryIds = Cemetery::query()->where('name', 'like', 'Contoh TPU Beban %')->pluck('id');
+        $generatedCount = GraveRecord::query()->whereIn('cemetery_id', $benchmarkCemeteryIds)->count();
         $this->assertSame(50, $generatedCount);
     }
 
@@ -36,10 +38,11 @@ final class GenerateGraveRegistryLoadDatasetCommandTest extends TestCase
             '--chunk' => 10,
         ]);
 
-        $record = GraveRecord::query()->where('source', 'bench-generator')->first();
+        $benchmarkCemeteryIds = Cemetery::query()->where('name', 'like', 'Contoh TPU Beban %')->pluck('id');
+        $record = GraveRecord::query()->whereIn('cemetery_id', $benchmarkCemeteryIds)->first();
         $this->assertNotNull($record);
         $this->assertNotSame('', $record->deceased_name_normalized);
-        $distinctCemeteries = GraveRecord::query()->where('source', 'bench-generator')->distinct('cemetery_id')->count('cemetery_id');
+        $distinctCemeteries = GraveRecord::query()->whereIn('cemetery_id', $benchmarkCemeteryIds)->distinct('cemetery_id')->count('cemetery_id');
         $this->assertSame(5, $distinctCemeteries);
     }
 
@@ -49,7 +52,8 @@ final class GenerateGraveRegistryLoadDatasetCommandTest extends TestCase
         Artisan::call('bench:generate-grave-dataset', ['--cemeteries' => 3, '--records' => 30, '--chunk' => 10]);
 
         $this->assertSame(3, Cemetery::query()->where('name', 'like', 'Contoh TPU Beban %')->count());
-        $generatedCount = GraveRecord::query()->where('source', 'bench-generator')->count();
+        $benchmarkCemeteryIds = Cemetery::query()->where('name', 'like', 'Contoh TPU Beban %')->pluck('id');
+        $generatedCount = GraveRecord::query()->whereIn('cemetery_id', $benchmarkCemeteryIds)->count();
         $this->assertSame(30, $generatedCount);
     }
 }

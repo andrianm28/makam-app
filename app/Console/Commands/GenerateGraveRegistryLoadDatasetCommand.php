@@ -9,6 +9,7 @@ use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\GraveRegistry\GraveNameNormalizer;
 use App\Domain\GraveRegistry\GraveRecordAccessMode;
+use App\Domain\GraveRegistry\GraveRecordSource;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -162,7 +163,7 @@ final class GenerateGraveRegistryLoadDatasetCommand extends Command
                 'death_date' => sprintf('%d-%02d-%02d', $year, $month, $day),
                 'due_date' => sprintf('%d-%02d-%02d', $year + 10, $month, $day),
                 'access_mode' => GraveRecordAccessMode::OPEN,
-                'source' => 'bench-generator',
+                'source' => GraveRecordSource::CONTOH,
                 'source_updated_at' => $now,
                 'created_at' => $now,
                 'updated_at' => $now,
