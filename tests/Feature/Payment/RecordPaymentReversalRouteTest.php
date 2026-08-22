@@ -188,7 +188,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
                 'reference' => 'TRX-route-1',
                 'reason' => 'Customer requested a refund',
             ])
-            ->assertRedirect(route('filament.admin.pages.mfa-challenge'));
+            ->assertRedirect(route('filament.admin.pages.password-reauthentication'));
 
         $this->assertSame(0, PaymentReversal::query()->count());
         $this->assertSame(0, AuditEvent::query()->where('action', PaymentAuditActions::REFUND)->count());
@@ -656,7 +656,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
                     'reference' => 'TRX-route-throttle',
                     'reason' => 'Customer requested a refund',
                 ])
-                ->assertRedirect(route('filament.admin.pages.mfa-challenge'));
+                ->assertRedirect(route('filament.admin.pages.password-reauthentication'));
         }
 
         $this->actingAs($user)

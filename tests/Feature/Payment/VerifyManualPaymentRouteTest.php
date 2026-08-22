@@ -223,7 +223,7 @@ final class VerifyManualPaymentRouteTest extends TestCase
                 'decision' => 'approve',
                 'reason' => 'Proof matched provider statement',
             ])
-            ->assertRedirect(route('filament.admin.pages.mfa-challenge'));
+            ->assertRedirect(route('filament.admin.pages.password-reauthentication'));
 
         $verification->refresh();
         $this->assertSame(PaymentVerificationStatus::Submitted, $verification->status());
@@ -675,7 +675,7 @@ final class VerifyManualPaymentRouteTest extends TestCase
                     'decision' => 'approve',
                     'reason' => 'Proof matched provider statement',
                 ])
-                ->assertRedirect(route('filament.admin.pages.mfa-challenge'));
+                ->assertRedirect(route('filament.admin.pages.password-reauthentication'));
         }
 
         $this->actingAs($user)

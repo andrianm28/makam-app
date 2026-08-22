@@ -8,6 +8,7 @@ use App\Domain\OrderWorkflow\Authorization\Contracts\OrderTransitionAuthorizerCo
 use App\Domain\Renewal\Actions\MarkRenewalPaidExternally;
 use App\Domain\Renewal\Models\Renewal;
 use App\Domain\Renewal\RenewalStatus;
+use App\Filament\Admin\Pages\PasswordReauthentication;
 use App\Filament\Admin\Resources\RenewalOrders\RenewalOrderResource;
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Platform\IdentityAccess\ActorContext;
@@ -75,7 +76,7 @@ final class RecordExternalRenewalPaymentAction
 
                     session()->put(RequireRecentAuthentication::REASON_SESSION_KEY, 'money_action');
                     session()->put('url.intended', route('filament.admin.resources.renewal-orders.view', ['record' => $renewal->getKey()]));
-                    redirect()->route('filament.admin.pages.mfa-challenge');
+                    redirect()->route(PasswordReauthentication::ROUTE_NAME);
 
                     return;
                 } catch (\Throwable $exception) {

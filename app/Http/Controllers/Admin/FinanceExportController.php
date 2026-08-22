@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Filament\Admin\Pages\PasswordReauthentication;
 use App\Http\Controllers\Controller;
 use App\Platform\FinancialLedger\Actions\BulkFinancialExport;
 use App\Platform\FinancialLedger\Exceptions\BulkFinancialExportReauthenticationRequiredException;
@@ -83,7 +84,7 @@ final class FinanceExportController extends Controller
             // surfacing a 500 for a control that fired exactly as intended.
             $request->session()->put('url.intended', $request->fullUrl());
 
-            return redirect()->route('filament.admin.pages.mfa-challenge');
+            return redirect()->route(PasswordReauthentication::ROUTE_NAME);
         }
 
         return response()->streamDownload(
