@@ -53,7 +53,7 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * `$challengeRouteName` — the name of the route a future controller
  * registers to actually run the re-authentication challenge (password form
- * or `Mfa\MfaChallengeService`). This class does NOT guess, hardcode, or
+ * or code-based challenge). This class does NOT guess, hardcode, or
  * register that route itself (`routes/web.php` is not owned by this
  * batch) — a future caller supplies its own real route name when it
  * attaches this middleware, e.g.:

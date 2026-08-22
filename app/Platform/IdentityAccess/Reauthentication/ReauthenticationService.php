@@ -21,8 +21,8 @@ use Carbon\CarbonImmutable;
  *   `App\Http\Middleware\RequireRecentAuthentication` the moment it detects
  *   a stale (or absent) `lastAuthenticatedAt` for a sensitive action. Writes
  *   one `reauthentication_events` row (`outcome = challenged`) AND one
- *   `audit_events` row via `Audit::record()` — the same dual-write pattern
- *   `Mfa\MfaChallengeService`/`Mfa\MfaRecoveryService` already established.
+ *   `audit_events` row via `Audit::record()` — the established dual-write
+ *   pattern for recording both domain-specific events and security audit trails.
  * - `satisfy()` — the method a FUTURE controller calls once the actor has
  *   actually re-proved their identity, whichever mechanism it used. Writes
  *   the matching `outcome = satisfied` pair.
@@ -38,22 +38,17 @@ use Carbon\CarbonImmutable;
  * How a future controller decides WHICH re-proof mechanism satisfies a
  * challenge (MFA vs. password), and why this service does not decide it
  * ---------------------------------------------------------------------------
- * This service deliberately does NOT call
- * `Mfa\MfaChallengeService::challenge()` or `Mfa\MfaRecoveryService::redeem()`
- * itself. The batch brief's own framing is the reason: whether an actor
- * proves freshness via a TOTP/recovery-code challenge or via a password
- * re-entry form depends on `ActorContext::$mfaState` at the moment the
- * challenge page is shown — `MFA_STATE_ENROLLED` should prefer routing to
- * `Mfa\MfaChallengeService`, anything else falls back to password
- * re-confirmation (a UI this batch does not build; no login/password
- * form exists anywhere in this repo yet). That branch is a presentation
+ * This service deliberately does NOT decide which re-proof mechanism
+ * (TOTP/recovery-code challenge or password re-entry) a controller should
+ * use. The batch brief's own framing is the reason: whether an actor
+ * proves freshness depends on the actor's enrollment state and preferences
+ * at the moment the challenge page is shown. That branch is a presentation
  * decision a real challenge controller needs to make with the actual HTTP
  * request/session in hand, not something this platform-level service can
  * or should decide on its own. What this service DOES guarantee is a
  * single, natural landing point for either path's success: a future
- * controller's `MfaChallengeService::challenge()` call returning
- * `$result->valid === true`, OR a future password-recheck form's own
- * successful `Hash::check()`, should both end by calling THIS class's
+ * controller's challenge attempt (TOTP, recovery code, or password)
+ * returning success, should end by calling THIS class's
  * `satisfy()` — one place, one audit shape, regardless of which proof
  * mechanism was used.
  *
@@ -68,12 +63,8 @@ use Carbon\CarbonImmutable;
  * own `'reauthentication-challenge'` context so it shares no bucket with
  * MFA's own `'mfa-challenge'`/`'mfa-recovery'` contexts.
  *
- * The REASON for throttling is different from MFA's, though, and worth
- * spelling out: an MFA challenge attempt is a discrete, deliberate action
- * (a user submitting a 6-digit code), so `MfaChallengeService` logs every
- * attempt, including rate-limited ones — each attempt is itself meaningful
- * security signal. A re-authentication CHALLENGE, by contrast, is raised
- * automatically by middleware on every single inbound request while a
+ * The REASON for throttling is distinct: a re-authentication CHALLENGE is
+ * raised automatically by middleware on every single inbound request while a
  * session is stale — an actor who is simply browsing (not attacking
  * anything) while stale would otherwise generate a new
  * `reauthentication_events` row AND a new `audit_events` row on every page
@@ -127,8 +118,7 @@ final class ReauthenticationService
             action: ReauthenticationAuditActions::CHALLENGED,
             subject: fn (ReauthenticationEvent $event): AuditSubject => new AuditSubject('reauthentication_event', $event->id),
             // Denied: the sensitive action itself is being refused until a
-            // fresh re-proof happens — the same "access refused for now"
-            // semantics `Mfa\MfaAuditActions::CHALLENGE_FAILED` uses.
+            // fresh re-proof happens — marking the access gate as denied for now.
             outcome: AuditOutcome::Denied,
             actorRef: $actorRef,
             actorRole: $actorRole,
@@ -141,13 +131,12 @@ final class ReauthenticationService
 
     /**
      * Called once a future controller has confirmed the actor re-proved
-     * their identity (an `Mfa\MfaChallengeService::challenge()` success, an
-     * `Mfa\MfaRecoveryService::redeem()` success, or a future
-     * password-recheck form's own successful check — see this class's
-     * top-level doc block). Writes the matching `outcome = satisfied` pair
-     * and clears this module's own rate-limit counter for the actor+IP, the
-     * same "success clears the counter" courtesy `ReauthenticationRateLimiter::clear()`
-     * already gives a legitimate actor elsewhere in this codebase.
+     * their identity (TOTP, recovery code, password, or other proof method
+     * — see this class's top-level doc block). Writes the matching
+     * `outcome = satisfied` pair and clears this module's own rate-limit
+     * counter for the actor+IP, the same "success clears the counter"
+     * courtesy `ReauthenticationRateLimiter::clear()` already gives a
+     * legitimate actor elsewhere in this codebase.
      */
     public function satisfy(
         int|string|null $actorRef,

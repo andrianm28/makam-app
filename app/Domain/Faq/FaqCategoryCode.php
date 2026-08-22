@@ -12,7 +12,7 @@ use InvalidArgumentException;
  * document's own order. Plain string column with application-layer
  * validation, not a Postgres enum type — matching this codebase's
  * established convention for closed-list string columns
- * (`App\Platform\IdentityAccess\Mfa\MfaEnrolmentStatus`,
+ * (`App\Domain\Marketplace\ProductCode`,
  * `App\Platform\IdentityAccess\Reauthentication\ReauthenticationOutcome`,
  * `App\Platform\IdentityAccess\Scopes\ScopeEntityType`).
  *

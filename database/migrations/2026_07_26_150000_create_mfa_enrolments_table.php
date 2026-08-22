@@ -8,10 +8,10 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * `mfa_enrolments` — `platform-identity-and-access` design.md's data list.
- * S3-T2 (HUMAN-GATED — see `app/Platform/IdentityAccess/Mfa/**`'s own doc
- * blocks and `docs/planning/agent-execution-plan.md`'s "HUMAN — S3-T2 MFA,
- * S3-T3 re-authentication" note). This migration only creates the
- * mechanism; nothing in this batch enforces MFA anywhere.
+ * S3-T2 (HUMAN-GATED — see `docs/planning/agent-execution-plan.md`'s
+ * "HUMAN — S3-T2 MFA, S3-T3 re-authentication" note). This table has since
+ * been deleted; this migration documents its historical schema. See Task 1
+ * of the MFA removal plan for context on the removal.
  *
  * ---------------------------------------------------------------------------
  * Column shape
@@ -28,10 +28,9 @@ use Illuminate\Support\Facades\Schema;
  * - `secret` is `text`, not `string`, because Laravel's `encrypted` cast
  *   (AES-256-CBC + base64 + MAC framing) produces ciphertext well over 255
  *   characters even for a 20-byte Base32 secret.
- * - `status` is a plain string validated against
- *   `Mfa\MfaEnrolmentStatus::KNOWN_STATUSES` at the application layer, not
- *   a Postgres enum — mirrors `scope_assignments.entity_type`'s established
- *   pattern in this same module.
+ * - `status` is a plain string validated at the application layer, not
+ *   a Postgres enum — mirrors the established pattern used in other
+ *   identity-access tables like `scope_assignments.entity_type`.
  * - `digits`/`period_seconds` are stored per-row (not read from a single
  *   global config value) so a historical enrolment's parameters remain
  *   self-describing even if this module's own defaults ever change.
@@ -45,9 +44,9 @@ use Illuminate\Support\Facades\Schema;
  *   .revoked_at` in this same module — history is kept, never deleted.
  *
  * No uniqueness constraint enforces "one active enrolment per actor" at
- * the database level (deliberately — see `Mfa\MfaEnrolmentService
- * ::startEnrolment()`'s own doc block for why that invariant is enforced
- * in application code, inside a transaction with a row lock, instead).
+ * the database level (deliberately — the invariant was enforced
+ * in application code, inside a transaction with a row lock, rather than
+ * at the schema level).
  *
  * Migration timestamp slot for this batch: `2026_07_26_150000` through
  * `2026_07_26_159999` (agent-execution-plan.md's next free range after
