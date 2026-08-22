@@ -33,7 +33,12 @@ import { check } from 'k6';
  * every route's real p50/p90/p95/p99 in its summary output unconditionally
  * (see "TOTAL RESULTS") regardless of what's declared as a threshold here
  * — only what gates this CI job's exit code changes. What DOES gate CI is
- * `http_req_failed`: this script's actual job (this plan's Task 5) is
+ * BOTH `http_req_failed` and `checks`: `http_req_failed` alone treats any
+ * 2xx/3xx as success (via k6's `expected_response` default), so a route
+ * silently regressing to a redirect would not fail it even though the
+ * `check()` calls below already assert `status === 200` — `checks` is
+ * declared as a threshold too so that assertion is actually gating, not
+ * just informational. This script's actual job (this plan's Task 5) is
  * proving the k6 tooling, dataset, and CI wiring genuinely connect and
  * complete end-to-end at a real (if reduced) scale — which 100% successful
  * connections against real 200 responses on all three routes IS proof of.
@@ -51,6 +56,7 @@ export const options = {
     },
     thresholds: {
         http_req_failed: ['rate<0.01'],
+        checks: ['rate>0.99'],
     },
 };
 
