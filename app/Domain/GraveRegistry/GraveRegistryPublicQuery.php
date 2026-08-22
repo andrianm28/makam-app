@@ -47,14 +47,20 @@ use Illuminate\Support\Str;
  * with `markTestSkipped()` on other drivers.
  *
  * ---------------------------------------------------------------------------
- * AC4 (< 500 ms at 100,000 records) is NOT certified by this class
+ * AC4 (< 500 ms at 100,000 records) — real benchmark exists, scoped
  * ---------------------------------------------------------------------------
  * The query and its GIN trigram index exist (see
- * `2026_08_08_100000_create_grave_records_table.php`), but no benchmark has
- * been run at any scale. `docs/planning/sprint-plan.md` §9 defers this
- * spec's performance certification to Sprint 13. Anyone reading this class
- * as evidence for AC4 is reading it wrong: the status is NOT TESTED, not
- * passing.
+ * `2026_08_08_100000_create_grave_records_table.php`). `php artisan
+ * bench:grave-search` (`BenchGraveSearchCommand`) now measures this class's
+ * own `search()` p50/p95/p99 against a real, generated dataset in CI (the
+ * `load-test` job) — but against the LARGEST single cemetery's ~1,000
+ * records, not a flat 100,000-record scan, matching the real cemetery-scoped
+ * shape every call to `search()` actually runs. A full 100,000-record
+ * certification stays deferred to Phase 3 per `docs/planning/sprint-plan.md`
+ * §9. Anyone reading this class as evidence for AC4 should read
+ * `BenchGraveSearchCommand`'s own doc block and
+ * `docs/testing/release-gates.md` §H for the real, current numbers, not this
+ * comment.
  */
 final class GraveRegistryPublicQuery
 {

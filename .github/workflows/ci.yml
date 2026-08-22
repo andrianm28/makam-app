@@ -501,6 +501,162 @@ jobs:
           retention-days: 3
 
   # ---------------------------------------------------------------------------
+  # Load testing (k6) — docs/operations/performance-and-capacity.md's Profile
+  # A, run at a documented reduced scale (see tests/load/README.md for why).
+  # Runs the real AC4 grave-search benchmark against a real 100k-row dataset
+  # first — that part is NOT reduced, since it is a single-connection query
+  # benchmark, not concurrent load generation, and this CI runner genuinely is
+  # "a separate machine" from the shared dev/staging host per
+  # performance-and-capacity.md §9.
+  # ---------------------------------------------------------------------------
+  load-test:
+    name: Load and performance benchmarks (k6, AC4)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: makam_test
+          POSTGRES_PASSWORD: makam_test
+          POSTGRES_DB: makam_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U makam_test"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:8.2-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s --health-timeout 3s --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          extensions: pdo_pgsql, pgsql, redis, zip, intl, bcmath
+          tools: composer:v2
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install PHP dependencies from lockfile
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Install npm dependencies from lockfile
+        run: npm ci --no-audit --no-fund
+
+      - name: Create the extensions the application depends on
+        env:
+          PGPASSWORD: makam_test
+        run: |
+          psql -h 127.0.0.1 -U makam_test -d makam_test \
+            -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm;' \
+            -c 'CREATE EXTENSION IF NOT EXISTS unaccent;'
+
+      - name: Prepare test environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+        env:
+          DB_CONNECTION: pgsql
+
+      - name: Migrate the application database
+        run: php artisan migrate --force
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: makam_test
+          DB_USERNAME: makam_test
+          DB_PASSWORD: makam_test
+
+      - name: Generate the 100k-row benchmark dataset
+        run: php artisan bench:generate-grave-dataset
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: makam_test
+          DB_USERNAME: makam_test
+          DB_PASSWORD: makam_test
+
+      - name: AC4 — grave search p50/p95/p99 at 100k records
+        run: php artisan bench:grave-search
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: makam_test
+          DB_USERNAME: makam_test
+          DB_PASSWORD: makam_test
+
+      - name: Build assets
+        run: npm run build
+
+      - name: Serve the app for k6
+        run: |
+          PHP_CLI_SERVER_WORKERS=4 php artisan serve --host=127.0.0.1 --port=8080 > /tmp/artisan-serve.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8080/ > /dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8080/ > /dev/null \
+            || { echo "app did not come up"; cat /tmp/artisan-serve.log; exit 1; }
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: makam_test
+          DB_USERNAME: makam_test
+          DB_PASSWORD: makam_test
+          # Without this, the app's `public-guest` rate limiter
+          # (config/rate_limiting.php, app/Providers/AppServiceProvider.php)
+          # caps guest traffic at 60 requests/minute per IP. k6 and
+          # `php artisan serve` share one IP here (same host), and this
+          # job's own 10 VUs looping 3 GET requests each for 30s blow past
+          # that limit almost immediately, producing real 429s that would
+          # read as k6 threshold failures rather than a genuine capacity
+          # signal — the exact same problem the existing `browser-test`
+          # job already hit and fixed with this same flag (see that job's
+          # "Serve the app and run the browser smoke test" step for the
+          # precedent). Scoped to nothing but this one step's server
+          # process; production is untouched.
+          THROTTLE_PUBLIC_GUEST_DISABLED: "true"
+
+      - name: Install k6
+        # Deliberately a plain apt install on the runner itself, NOT
+        # grafana/k6-action — that action builds and runs k6 inside its own
+        # isolated Docker container, so K6_BASE_URL=http://127.0.0.1:8080
+        # resolves to the container's own loopback, not this runner's host
+        # network where `php artisan serve` (below) actually listens.
+        # Confirmed live: the first real CI run of this job using
+        # grafana/k6-action@v0.3.1 failed every one of 267,951 requests with
+        # "connect: connection refused" in ~26s -- an immediate-refusal
+        # signature, not real network latency. Installing the k6 binary
+        # directly and running it as a normal `run:` step avoids the nested
+        # container entirely, exactly the same reason `browser-test` (above)
+        # runs Playwright as a normal step rather than inside a containerized
+        # action -- both tools need to reach 127.0.0.1 on this same runner.
+        # Install steps match k6's own official Debian/Ubuntu instructions
+        # (https://grafana.com/docs/k6/latest/set-up/install-k6/) verbatim.
+        run: |
+          curl -fsSL https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      - name: Run k6 — Profile A (reduced scale)
+        run: k6 run tests/load/profile-a-normal-launch.js
+        env:
+          K6_BASE_URL: http://127.0.0.1:8080
+
+  # ---------------------------------------------------------------------------
   # Build the immutable artifact/image and push it to GHCR (ci-cd-and-release.md
   # §2 "build immutable artifact/image", §10 combined dev/staging profile: "The
   # Ubuntu 22.04 2/4 host receives a prebuilt immutable artifact/image" — the
