@@ -3,7 +3,7 @@
 
     View for App\Filament\Admin\Resources\SiteSettings\Pages\EditSiteSettings.
     Filament's own Blade component set, same as the other admin pages
-    (mfa-settings, finance-reports): `<x-filament-panels::page>` wrapper,
+    (password-reauthentication, finance-reports): `<x-filament-panels::page>` wrapper,
     `{{ $this->form }}` for the schema, and `<x-filament::button>` for the
     save action (wire:click drives the page's `save()` Livewire method).
 --}}

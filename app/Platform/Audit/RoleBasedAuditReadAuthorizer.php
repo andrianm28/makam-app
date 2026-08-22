@@ -7,7 +7,6 @@ namespace App\Platform\Audit;
 use App\Platform\Audit\Contracts\AuditReadAuthorizer;
 use App\Platform\Audit\Exceptions\AuditReadNotAuthorisedException;
 use App\Platform\IdentityAccess\ActorContext;
-use App\Platform\IdentityAccess\Mfa\MfaAuditActions;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use App\Platform\IdentityAccess\Roles\RoleAuditActions;
 use App\Platform\IdentityAccess\Scopes\ScopeAuditActions;
@@ -49,17 +48,16 @@ use App\Platform\IdentityAccess\Scopes\ScopeAuditActions;
  * ("admitting one while excluding the other on the same cell value").
  *
  * The exclusion list itself — `RoleAuditActions::GRANT`/`REVOKE`,
- * `ScopeAuditActions::GRANT`/`REVOKE`, `MfaAuditActions::RESET` — is every
- * action `SensitiveActions::ACTIONS`' own doc comments describe as
- * "privilege-escalation category" (that exact phrase, on `MFA_RESET`,
- * `ROLE_GRANT`/`ROLE_REVOKE`, and `SCOPE_GRANT`/`SCOPE_REVOKE`). Those rows
- * record who can grant or revoke the very authority this authorizer itself
- * is deciding — an actor one tier below `admin` reviewing the trail of who
- * has been granted admin-adjacent power is exactly the kind of visibility
- * that tier split exists to withhold. `restricted_admin` still sees every
- * other sensitive action: payment reversals, payouts, certificate
+ * `ScopeAuditActions::GRANT`/`REVOKE`, and equivalent privilege-escalation
+ * actions — is every action `SensitiveActions::ACTIONS` describes as
+ * "privilege-escalation category" (actions that change who holds authorization
+ * power). Those rows record who can grant or revoke the very authority this
+ * authorizer itself is deciding — an actor one tier below `admin` reviewing
+ * the trail of who has been granted admin-adjacent power is exactly the kind
+ * of visibility that tier split exists to withhold. `restricted_admin` still
+ * sees every other sensitive action: payment reversals, payouts, certificate
  * revocations, plot overrides, and so on — none of those change who holds
- * authorization power, only what a already-authorized actor did with it.
+ * authorization power, only what an already-authorized actor did with it.
  *
  * `finance`, `operator`, `case_manager`, `vendor`, `customer`, and `system`
  * are excluded. None has an affirmative grant in any existing rbac-matrix
@@ -112,7 +110,11 @@ final class RoleBasedAuditReadAuthorizer implements AuditReadAuthorizer
         RoleAuditActions::REVOKE,
         ScopeAuditActions::GRANT,
         ScopeAuditActions::REVOKE,
-        MfaAuditActions::RESET,
+        // Literal string, not a class constant — historical `MFA_RESET`
+        // rows remain in `audit_events` (that table was never dropped) from
+        // before the MFA module was removed, and must stay excluded from
+        // `restricted_admin`'s read scope exactly as before.
+        'MFA_RESET',
     ];
 
     public function authorize(ActorContext $actor): AuditReadScope

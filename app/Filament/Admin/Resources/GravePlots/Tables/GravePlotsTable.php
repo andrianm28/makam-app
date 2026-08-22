@@ -7,6 +7,7 @@ namespace App\Filament\Admin\Resources\GravePlots\Tables;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotInventory\PlotInventoryAuditActions;
 use App\Domain\PlotInventory\PlotState;
+use App\Filament\Admin\Pages\PasswordReauthentication;
 use App\Filament\Admin\Resources\GravePlots\GravePlotsResource;
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Platform\Audit\Audit;
@@ -70,7 +71,8 @@ use InvalidArgumentException;
  *    wire-addressable.
  * 3. Inside the `->action()` closure, `ReauthenticationGuard::assertFresh()`
  *    — AGENTS.md requires recent re-authentication for plot-override
- *    actions; a stale actor is sent to the MFA challenge before any write.
+ *    actions; a stale actor is sent to the password re-authentication page
+ *    before any write.
  *    Layer 3 is the enforcement: a Livewire component method is addressable
  *    directly over the wire, so "the button was not rendered" is not a
  *    security property.
@@ -262,7 +264,7 @@ final class GravePlotsTable
     /**
      * The wire-level re-authentication enforcement for the state overrides
      * (AGENTS.md: plot-override actions). On refusal, a warning notification
-     * and a redirect into the MFA challenge — the exact
+     * and a redirect into the password re-authentication page — the exact
      * `MarkMarketplaceOrderPaidAction` shape — and `false` is returned so
      * the action closure stops before any write; the state is untouched.
      */
@@ -281,7 +283,7 @@ final class GravePlotsTable
 
             session()->put(RequireRecentAuthentication::REASON_SESSION_KEY, 'plot_override');
             session()->put('url.intended', GravePlotsResource::getUrl('index'));
-            redirect()->route('filament.admin.pages.mfa-challenge');
+            redirect()->route(PasswordReauthentication::ROUTE_NAME);
 
             return false;
         }

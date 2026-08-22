@@ -24,9 +24,8 @@ use Illuminate\Support\Facades\Schema;
  * ATTEMPT log (did a submitted code match). This table is a different
  * concept one layer up — a re-authentication CHALLENGE the freshness-window
  * middleware raised, which MAY later be satisfied by a password re-entry OR
- * an MFA challenge (`Mfa\MfaChallengeService::challenge()`), but is not
- * itself an MFA verification attempt. Batch brief: "do not reuse or extend
- * that table, this is a separate concept."
+ * a code-based challenge, but is not itself a verification attempt.
+ * Batch brief: "do not reuse or extend that table, this is a separate concept."
  *
  * ---------------------------------------------------------------------------
  * Column shape — mirrors `mfa_challenges`' own append-only-attempt-log
@@ -49,12 +48,10 @@ use Illuminate\Support\Facades\Schema;
  *   sensitive-action classes (`docs/security/authentication-and-mfa.md`
  *   §5) belong to whichever future domain module actually builds each
  *   action, not to this platform-identity-access table.
- * - `outcome` is `Reauthentication\ReauthenticationOutcome::KNOWN_OUTCOMES`
- *   ('challenged' | 'satisfied') — deliberately distinct vocabulary from
- *   both `App\Platform\Audit\AuditOutcome` (allowed/denied/failed) and
- *   `Mfa\MfaChallengeOutcome` (succeeded/failed), same reasoning as both of
- *   those: this table's own narrower, domain-specific pair for this one
- *   event type.
+ * - `outcome` is 'challenged' or 'satisfied' — deliberately distinct
+ *   vocabulary from `App\Platform\Audit\AuditOutcome` (allowed/denied/failed),
+ *   capturing this table's own narrower, domain-specific pair for
+ *   re-authentication challenge events.
  * - No credential, TOTP secret, recovery code, or password value ever has a
  *   column here — same Negative-criteria reasoning as `mfa_challenges`. This
  *   table only ever records THAT a challenge/satisfaction happened and why.

@@ -23,7 +23,6 @@ final class OrderTransitionAuthorizerTest extends TestCase
             identityReference: 'user:1',
             roles: $roles,
             scopes: [],
-            mfaState: ActorContext::MFA_STATE_NOT_APPLICABLE,
             lastAuthenticatedAt: $lastAuth === null ? null : CarbonImmutable::parse($lastAuth),
         );
     }

@@ -9,8 +9,7 @@ namespace App\Domain\Faq;
  * `App\Platform\Audit\Audit::record()`. Named constants (not inline string
  * literals scattered across the five Action classes) so tests and any future
  * caller reference the same values the Actions actually emit — mirrors
- * `App\Platform\IdentityAccess\Mfa\MfaAuditActions`'s own doc block and
- * naming shape.
+ * the established audit-action naming pattern used across this codebase.
  *
  * ---------------------------------------------------------------------------
  * Audited, but NONE of these are added to `App\Platform\Audit\
@@ -27,18 +26,18 @@ namespace App\Domain\Faq;
  * embarrassing or confusing, not fraud- or harm-shaped, and there is no
  * human-authored "reason" a mandatory-reason gate would meaningfully extract
  * (an admin publishing a finished article has nothing more to justify than
- * "it's ready," the same dead-end `MfaAuditActions`'s own doc block already
- * identified for routine MFA outcomes).
+ * "it's ready," the same assessment other routine audit contexts already
+ * make for machine-driven outcomes).
  *
- * This is the SAME reasoning `MfaAuditActions`/`SensitiveActions` already
- * apply to `MFA_ENROLMENT_CONFIRMED`/`MFA_CHALLENGE_SUCCEEDED`/
- * `MFA_CHALLENGE_FAILED`/`MFA_RECOVERY_USED` (routine, machine-driven
- * outcomes: audited for a complete history, but not sensitive-listed),
- * applied here to FAQ content management. Every one of the five Actions
- * still calls `Audit::record()` (not skipped) so a complete "who changed
- * what, when" history exists for FAQ content the same way it does for every
- * other admin-facing mutation in this codebase — `Audit::record()`'s own
- * reason requirement simply never triggers for these five action names,
+ * This is the SAME reasoning `SensitiveActions` applies to routine,
+ * machine-driven audit actions: they are audited for a complete history
+ * but not sensitive-listed because there is no human-authored "reason"
+ * a mandatory-reason gate would meaningfully extract. Applied here to FAQ
+ * content management. Every one of the five Actions still calls
+ * `Audit::record()` (not skipped) so a complete "who changed what, when"
+ * history exists for FAQ content the same way it does for every other
+ * admin-facing mutation in this codebase — `Audit::record()`'s own reason
+ * requirement simply never triggers for these five action names,
  * because none of them appear on `SensitiveActions::ACTIONS`.
  *
  * COUNT CORRECTED 09 Aug 2026 (retrofit-faq fix wave) — this analysis said

@@ -28,6 +28,7 @@ use App\Domain\PreNeed\Models\PreNeedCase;
 use App\Domain\PreNeed\Models\PreNeedPaymentScheduleItem;
 use App\Domain\PreNeed\PreNeedGate;
 use App\Domain\PreNeed\PreNeedInstallmentState;
+use App\Filament\Admin\Pages\PasswordReauthentication;
 use App\Filament\Admin\Resources\PreNeedCases\PreNeedCaseResource;
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Platform\Audit\AuditSource;
@@ -638,8 +639,9 @@ final class PreNeedCaseActions
     /**
      * Re-checks the role gate AND the money re-authentication freshness as
      * the run-time gate for a money step. On stale re-authentication the
-     * actor is bounced to the MFA challenge (the `FeatureGateAdmin` / P1
-     * money-action shape) with `url.intended` set so they return here.
+     * actor is bounced to the password re-authentication page (the
+     * `FeatureGateAdmin` / P1 money-action shape) with `url.intended` set so
+     * they return here.
      *
      * @param  list<string>  $roles
      */
@@ -665,7 +667,7 @@ final class PreNeedCaseActions
                 ->body('Lakukan verifikasi ulang untuk tindakan ini.')
                 ->send();
 
-            redirect()->route('filament.admin.pages.mfa-challenge');
+            redirect()->route(PasswordReauthentication::ROUTE_NAME);
 
             return false;
         }

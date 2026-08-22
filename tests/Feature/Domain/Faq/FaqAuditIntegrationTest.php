@@ -25,9 +25,8 @@ use Tests\TestCase;
  * codebase), but NONE of the five action names are on `SensitiveActions::
  * ACTIONS` (no mandatory reason) — the judgement call
  * `App\Domain\Faq\FaqAuditActions`'s own doc block documents, mirroring
- * `tests/Feature/IdentityAccess/Mfa/MfaAuditSafetyTest
- * ::test_only_mfa_reset_is_a_sensitive_action_requiring_a_reason`'s own
- * shape.
+ * `tests/Unit/Platform/Audit/SensitiveActionsTest.php`'s own shape for
+ * asserting exactly which action names require a reason and which do not.
  */
 final class FaqAuditIntegrationTest extends TestCase
 {

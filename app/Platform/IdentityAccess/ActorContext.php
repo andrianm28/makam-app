@@ -50,59 +50,9 @@ use Carbon\CarbonImmutable;
  *   `Scopes\ScopeAssignmentReader::scopeStringsForActor()`, formatted as
  *   `"entity_type:entity_id"` strings. Same "empty is legitimate, not an
  *   error" caveat as `$roles` above applies here too.
- * - `$mfaState` — S3-T2 (`app/Platform/IdentityAccess/Mfa/**`) wired this
- *   to a real value read from `Mfa\Models\MfaEnrolment`, replacing the
- *   permanent `MFA_STATE_NOT_IMPLEMENTED` placeholder this doc block used
- *   to describe. See the four `MFA_STATE_*` constants below for the exact
- *   vocabulary and `Adapters\LocalUsersTableIdentityAccessAdapter
- *   ::resolveMfaState()` for how it is derived.
- *
- *   IMPORTANT — what this field still does NOT mean, even now that it is
- *   real: it reports ENROLMENT STATUS ("does this actor have a confirmed
- *   TOTP enrolment on file"), never "has this actor completed a
- *   challenge THIS SESSION." Tracking a per-session verified-this-request
- *   marker would require a login-time challenge step wired into the
- *   authentication flow — exactly the enforcement mechanism S3-T2's own
- *   safety constraint forbids this batch from building (a human enables
- *   mandatory MFA and the challenge-at-login flow later). Reporting a
- *   fabricated "verified this session" value with no real mechanism behind
- *   it would be worse than not reporting it at all — the same reasoning
- *   this doc block already applied to `$roles`/`$scopes` above. A future
- *   batch that adds a real login-time challenge is expected to extend this
- *   vocabulary (or add a separate field) once that mechanism exists, not
- *   before.
  */
 final class ActorContext
 {
-    /**
-     * No identity reference at all — an unauthenticated (guest) request.
-     */
-    public const string MFA_STATE_NOT_APPLICABLE = 'not_applicable';
-
-    /**
-     * An authenticated actor with no non-revoked `mfa_enrolments` row at
-     * all. The honest default for every actor until they start enrolling —
-     * NEVER treat this as "MFA satisfied."
-     */
-    public const string MFA_STATE_NOT_ENROLLED = 'not_enrolled';
-
-    /**
-     * A pending `mfa_enrolments` row exists (a secret was generated) but
-     * the actor has not yet proven possession of it with one valid TOTP
-     * code (`Mfa\MfaEnrolmentService::confirm()`). Not yet a trusted
-     * enrolment — equivalent in spirit to the old NOT_IMPLEMENTED
-     * placeholder's "do not treat as satisfied" warning, but now backed by
-     * a real, queryable reason rather than "the subsystem does not exist."
-     */
-    public const string MFA_STATE_ENROLMENT_PENDING = 'enrolment_pending';
-
-    /**
-     * A confirmed `mfa_enrolments` row exists. See the class-level note
-     * above for exactly what this does and does not claim — it is
-     * enrolment status, not per-session verification.
-     */
-    public const string MFA_STATE_ENROLLED = 'enrolled';
-
     /**
      * @param  int|string|null  $identityReference  Reference to the actor's
      *                                              identity — the local `users.id` for this batch's MVP
@@ -124,7 +74,6 @@ final class ActorContext
         public readonly int|string|null $identityReference,
         public readonly array $roles = [],
         public readonly array $scopes = [],
-        public readonly string $mfaState = self::MFA_STATE_NOT_APPLICABLE,
         public readonly ?CarbonImmutable $lastAuthenticatedAt = null,
     ) {}
 

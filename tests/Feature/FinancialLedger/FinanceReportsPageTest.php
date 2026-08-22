@@ -19,8 +19,9 @@ use Tests\TestCase;
 
 /**
  * The `FinanceReports` admin page — the report's and the export's mount point.
- * `MfaSettingsPageTest` is the sibling precedent for the Filament page test
- * shape. Required states (§6) covered here: empty (the exact "Belum ada
+ * `PasswordReauthenticationPageTest` is the sibling precedent for the
+ * Filament page test shape. Required states (§6) covered here: empty (the
+ * exact "Belum ada
  * transaksi pada periode ini" copy), success (rows + metadata), validation
  * error (inline, malformed period), and the export button's link to the gated
  * route.

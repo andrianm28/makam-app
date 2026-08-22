@@ -10,7 +10,7 @@ use InvalidArgumentException;
  * The closed list of values `faq_articles.publish_state` may hold. Plain
  * string column with application-layer validation, not a Postgres enum
  * type — same established convention as
- * `App\Platform\IdentityAccess\Mfa\MfaEnrolmentStatus` et al. (see that
+ * `App\Domain\Marketplace\ProductCode` et al. (see that
  * class's own doc block for why).
  *
  * ---------------------------------------------------------------------------

@@ -33,13 +33,13 @@ use InvalidArgumentException;
  * Why this is not a native PHP enum
  * ---------------------------------------------------------------------------
  * Consistency with the closed lists this codebase already ships for exactly
- * this job — `ScopeEntityType`, `ScopeGrantLevel`, `ReauthenticationOutcome`,
- * `Mfa\MfaVerificationMethod` — all of which are string-constant classes with
- * `KNOWN_*` + `assertKnown()` because the value stored in the column is a
- * plain string validated on save, and a PostgreSQL CHECK constraint is the
- * real authority (see this table's migration). `AuditOutcome`/`AuditSource`
- * are enums because they are passed as arguments, never stored raw from
- * caller input. This one is stored, so it follows the stored-value precedent.
+ * this job — `ScopeEntityType`, `ScopeGrantLevel`, `ReauthenticationOutcome` —
+ * all of which are string-constant classes with `KNOWN_*` + `assertKnown()`
+ * because the value stored in the column is a plain string validated on save,
+ * and a PostgreSQL CHECK constraint is the real authority (see this table's
+ * migration). `AuditOutcome`/`AuditSource` are enums because they are passed
+ * as arguments, never stored raw from caller input. This one is stored, so it
+ * follows the stored-value precedent.
  */
 final class VendorPayableState
 {

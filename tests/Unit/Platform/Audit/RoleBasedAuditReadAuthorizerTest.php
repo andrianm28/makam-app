@@ -8,7 +8,6 @@ use App\Platform\Audit\Contracts\AuditReadAuthorizer;
 use App\Platform\Audit\Exceptions\AuditReadNotAuthorisedException;
 use App\Platform\Audit\RoleBasedAuditReadAuthorizer;
 use App\Platform\IdentityAccess\ActorContext;
-use App\Platform\IdentityAccess\Mfa\MfaAuditActions;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use App\Platform\IdentityAccess\Roles\RoleAuditActions;
 use App\Platform\IdentityAccess\Scopes\ScopeAuditActions;
@@ -121,7 +120,7 @@ final class RoleBasedAuditReadAuthorizerTest extends TestCase
         $this->assertSame(ActorRole::RESTRICTED_ADMIN, $scope->role);
         $this->assertSame(
             [
-                MfaAuditActions::RESET,
+                'MFA_RESET',
                 RoleAuditActions::GRANT,
                 RoleAuditActions::REVOKE,
                 ScopeAuditActions::GRANT,

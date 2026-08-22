@@ -18,7 +18,8 @@ use Tests\TestCase;
  * THE single most important test in this batch — requirements.md AC6: "THE
  * SYSTEM SHALL NOT display an unpublished article in any public view or
  * public search result." Mirrors the rigor
- * `tests/Feature/IdentityAccess/Mfa/MfaAuditSafetyTest.php` and
+ * `tests/Feature/IdentityAccess/Reauthentication/PasswordReauthenticationPageTest.php`
+ * (no submitted credential ever reaches audit metadata) and
  * `tests/Feature/Outbox/OutboxRecoveryTest.php` set for their own
  * single-most-important guarantees.
  *

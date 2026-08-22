@@ -56,7 +56,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * ---------------------------------------------------------------------------
  * Append-only shape — mirrors `faq_article_versions` / `AuditEvent` /
- * `MfaChallenge` / `ReauthenticationEvent`
+ * `ReauthenticationEvent` / other append-only event logs
  * ---------------------------------------------------------------------------
  * No `created_at`/`updated_at` — `effective_from` is the explicit,
  * server-set "when this version became current" column, and a row is never

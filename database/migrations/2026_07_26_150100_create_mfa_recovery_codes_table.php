@@ -30,11 +30,10 @@ use Illuminate\Support\Facades\Schema;
  * ---------------------------------------------------------------------------
  * - `code_hash` — the plaintext recovery code is NEVER stored. Hashed via
  *   Laravel's `Hash::make()` (bcrypt, matching this application's default
- *   hasher — see `config/hashing.php`) at generation time
- *   (`Mfa\MfaEnrolmentService::confirm()`), and verified with `Hash::check()`
- *   at redemption time (`Mfa\MfaRecoveryService::redeem()`). This matches
- *   `docs/security/authentication-and-mfa.md` §9: "Recovery codes are
- *   one-time and stored hashed where possible."
+ *   hasher — see `config/hashing.php`) at generation time, and verified with
+ *   `Hash::check()` at redemption time. This matches `docs/security/
+ *   authentication-and-mfa.md` §9: "Recovery codes are one-time and stored
+ *   hashed where possible."
  * - `used_at` — nullable; null means unused. Set exactly once, at
  *   redemption, never cleared — enforces single-use.
  *

@@ -20,6 +20,7 @@ use App\Domain\OrderWorkflow\Authorization\Contracts\OrderTransitionAuthorizerCo
 use App\Domain\OrderWorkflow\Exceptions\OrderActionNotAuthorisedException;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\OrderStatus;
+use App\Filament\Admin\Pages\PasswordReauthentication;
 use App\Filament\Admin\Resources\BookingOrders\BookingOrderResource;
 use App\Filament\Admin\Resources\BookingOrders\BookingOrderStatusBadge;
 use App\Http\Middleware\RequireRecentAuthentication;
@@ -61,8 +62,8 @@ use Filament\Support\Icons\Heroicon;
  * re-authentication freshness check: `isAuthorized()` must answer "may this
  * actor attempt this transition" (finance may attempt a money transition —
  * the test suite pins this), while the freshness requirement is a
- * run-time gate answered inside `run()` (redirect to the MFA challenge when
- * stale).
+ * run-time gate answered inside `run()` (redirect to the password
+ * re-authentication page when stale).
  *
  * ---------------------------------------------------------------------------
  * Signature note — the six Task-2 domain Actions land at merge time
@@ -197,7 +198,7 @@ final class TransitionOrderAction
                 ->body('Lakukan verifikasi ulang untuk tindakan ini.')
                 ->send();
 
-            redirect()->route('filament.admin.pages.mfa-challenge');
+            redirect()->route(PasswordReauthentication::ROUTE_NAME);
 
             return;
         } catch (OrderActionNotAuthorisedException $exception) {

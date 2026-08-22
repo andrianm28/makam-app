@@ -12,8 +12,8 @@ use InvalidArgumentException;
  * products" section names (L7-L30), in that document's own listed order.
  * Plain string column with application-layer validation, not a Postgres enum
  * type — matching this codebase's established convention for closed-list
- * string columns (`App\Domain\Faq\FaqCategoryCode`,
- * `App\Platform\IdentityAccess\Mfa\MfaEnrolmentStatus`,
+ * string columns (`App\Domain\Faq\FaqArticlePublishState`,
+ * `App\Platform\IdentityAccess\Reauthentication\ReauthenticationOutcome`,
  * `App\Platform\IdentityAccess\Scopes\ScopeEntityType`). Native PHP backed
  * enums exist elsewhere in this codebase (`App\Platform\FeatureGate\Modes\*`,
  * `App\Platform\Audit\AuditOutcome`) but every OTHER closed list that backs a

@@ -74,7 +74,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  *      against a real seeded draft row, that every helper in (2) excludes
  *      it and that `forAdmin()` (3) still includes it — the single most
  *      important test in this batch, mirroring the rigor
- *      `MfaAuditSafetyTest`/`OutboxRecoveryTest` set for their own
+ *      `OutboxRecoveryTest` and similar integration tests set for their own
  *      single-most-important guarantees.
  *
  * NEVER add a public-facing read path anywhere in this codebase that

@@ -12,7 +12,7 @@ declare(strict_types=1);
  * AC3's own text singles out as needing a real, env-overridable Laravel
  * config file rather than a PHP class constant — every other threshold
  * added so far (`App\Platform\Outbox\OutboxPublisher::STALE_CLAIM_SECONDS`,
- * `App\Platform\IdentityAccess\Mfa\MfaRateLimiter`'s 5 attempts / 60
+ * `App\Platform\IdentityAccess\Reauthentication\ReauthenticationRateLimiter`'s 5 attempts / 60
  * seconds) was fine as a constant because no cited spec text demanded
  * otherwise for those. AC3 explicitly does for this one.
  *

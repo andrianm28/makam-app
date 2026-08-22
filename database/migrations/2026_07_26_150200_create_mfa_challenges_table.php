@@ -10,24 +10,21 @@ use Illuminate\Support\Facades\Schema;
  * `mfa_challenges` — `platform-identity-and-access` design.md's data list.
  * One row per verification ATTEMPT (both TOTP challenges and recovery-code
  * redemptions — see `method` below), succeeded or failed. This is the
- * fine-grained, domain-local log this module reads for its own logic
+ * fine-grained, domain-local log this module read for its own logic
  * (nothing here reads `audit_events`, which is a separate, coarser-grained
  * cross-cutting log written via `App\Platform\Audit\Audit::record()` for
- * the same events — see `Mfa\MfaChallengeService`/`Mfa\MfaRecoveryService`
- * for both writes happening together).
+ * the same events — dual-write pattern established throughout the codebase).
  *
  * ---------------------------------------------------------------------------
  * Column shape
  * ---------------------------------------------------------------------------
  * - `method` distinguishes a TOTP challenge from a recovery-code redemption
- *   (`Mfa\MfaVerificationMethod::KNOWN_METHODS`) — one table serves both,
- *   rather than inventing a second undocumented table beyond
- *   `mfa_recovery_codes` (which IS separately justified — see that
- *   migration's own doc block).
- * - `outcome` is `Mfa\MfaChallengeOutcome::KNOWN_OUTCOMES`
- *   (succeeded/failed) — deliberately distinct from
- *   `App\Platform\Audit\AuditOutcome`'s three-way allowed/denied/failed;
- *   see `MfaChallengeOutcome`'s own doc block for why.
+ *   — one table serves both, rather than inventing a second undocumented
+ *   table beyond `mfa_recovery_codes` (which IS separately justified — see
+ *   that migration's own doc block).
+ * - `outcome` is succeeded/failed — deliberately distinct from
+ *   `App\Platform\Audit\AuditOutcome`'s three-way allowed/denied/failed,
+ *   capturing the specific domain semantics of verification attempts.
  * - NEITHER the submitted code NOR the TOTP secret NOR a recovery code
  *   ever has a column here — requirements.md's Negative criteria: "No
  *   credential, TOTP secret, or recovery code in logs, error trackers, or

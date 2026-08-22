@@ -34,7 +34,7 @@ Dashboard Vendor is covered by `funeral-marketplace-and-vendor-portal`.
 
 Cross-cutting foundations every feature spec depends on. Added 25 July 2026 — they were previously consumed by many specs and owned by none, which left booking Steps 8–9 unbuildable. See `docs/planning/kiro-specs-analysis.md` §2.2.
 
-- `platform-identity-and-access` — session auth, mandatory TOTP MFA, re-authentication, panel access, query scope (K1/K2)
+- `platform-identity-and-access` — session auth, password-only re-authentication, panel access, query scope (K1/K2). MFA was built in full and then removed entirely 22 Aug 2026 — see `docs/adr/0024-use-session-auth-and-mfa.md`'s superseding note and this spec's own `requirements.md`'s `## Superseded` section.
 - `platform-payment-adapter` — payment guard, hosted checkout, durable idempotent webhooks, manual fallback (K3–K5)
 - `platform-notifications` — notification matrix, recipient scope, per-channel delivery state (K7)
 - `platform-document-vault` — quarantine-first upload, fail-closed malware scan, 5-minute signed URLs, access audit (K6)
