@@ -103,11 +103,12 @@ use InvalidArgumentException;
  *    redemption appends another. Both tables are append-only by design, with
  *    no delete path, so unthrottled probing is a storage-amplification vector
  *    against exactly the evidence the vault depends on. Reuse
- *    `IdentityAccess\Reauthentication\ReauthenticationRateLimiter`'s established shape — Laravel's
- *    built-in `RateLimiter` facade, keyed by actor + IP, with a fixed attempt
- *    ceiling and decay window — rather than inventing a second throttle
- *    vocabulary; `IdentityAccess\Reauthentication\ReauthenticationService`
- *    already reuses it for a second context and is the precedent for doing so.
+ *    `IdentityAccess\Reauthentication\ReauthenticationRateLimiter`'s
+ *    established shape — Laravel's built-in `RateLimiter` facade, keyed by
+ *    actor + IP, with a fixed attempt ceiling and decay window — rather than
+ *    inventing a second throttle vocabulary;
+ *    `IdentityAccess\Reauthentication\ReauthenticationService` already
+ *    reuses it for a second context and is the precedent for doing so.
  *    A throttled request must refuse WITHOUT appending a row, or the throttle
  *    does not actually bound the writes it exists to bound.
  *

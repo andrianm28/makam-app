@@ -25,9 +25,8 @@ use SensitiveParameter;
 
 /**
  * Self-service account page for the CURRENTLY AUTHENTICATED `/vendor` user
- * — reads `Auth::user()` directly, never a route parameter, the same rule
- * `App\Filament\Admin\Pages\MfaSettings` (its `/admin` sibling) establishes:
- * a vendor can only ever see or edit their own account through this page.
+ * — reads `Auth::user()` directly, never a route parameter. A vendor can only
+ * ever see or edit their own account through this page.
  * Route name `filament.vendor.pages.profile`.
  *
  * ---------------------------------------------------------------------------
@@ -95,12 +94,10 @@ final class Profile extends Page implements HasForms
 
     /**
      * Deliberately NOT added to `App\Platform\Audit\SensitiveActions::ACTIONS`
-     * — same reasoning that file's own doc block gives for
-     * `MfaAuditActions::ENROLMENT_CONFIRMED`/`CHALLENGE_SUCCEEDED`: a routine,
-     * self-initiated action with no human-authored "reason" a user would ever
-     * type for changing their own password after proving they know the old
-     * one. Requiring one here would be a caller-facing dead end, not a real
-     * control.
+     * — same reasoning as other routine, self-initiated actions: a user
+     * changing their own password after proving they know the old one has no
+     * human-authored "reason" a mandatory-reason gate would meaningfully extract.
+     * Requiring one here would be a caller-facing dead end, not a real control.
      */
     private const string AUDIT_ACTION_PASSWORD_CHANGED = 'VENDOR_PASSWORD_CHANGED';
 

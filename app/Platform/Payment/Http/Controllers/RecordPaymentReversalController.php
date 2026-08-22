@@ -19,14 +19,12 @@ use Illuminate\Http\Request;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
- * `RequireRecentAuthentication`'s THIRD real attachment anywhere in this
- * repo — after `App\Http\Controllers\Admin\DisableMfaController` (first)
- * and `VerifyManualPaymentController` (second). Follows
- * `VerifyManualPaymentController`'s exact shape: authorize, then
- * `ReauthenticationService::satisfy()`, validate input, delegate to the
- * write API (`ReversalService` here, `VerifyManualPayment` there), redirect
- * to `filament.admin.pages.dashboard` — no admin UI screen exists for
- * reversals either, same honest "nothing to bounce back to yet" posture.
+ * `RequireRecentAuthentication`'s second real controller after
+ * `VerifyManualPaymentController`. Follows `VerifyManualPaymentController`'s
+ * exact shape: authorize, then `ReauthenticationService::satisfy()`, validate
+ * input, delegate to the write API (`ReversalService` here, `VerifyManualPayment`
+ * there), redirect to `filament.admin.pages.dashboard` — no admin UI screen
+ * exists for reversals either, same honest "nothing to bounce back to yet" posture.
  *
  * ---------------------------------------------------------------------------
  * Authorization, and why it is the FIRST thing this method does
@@ -34,22 +32,16 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  * This route ships `['web', 'auth', RequireRecentAuthentication::class...]`
  * and nothing else. `config/auth.php` defines exactly one guard — `web`,
  * provider `users` — and there is no separate admin guard, so `auth` alone
- * asserted only "some row exists in the shared users table." Any
- * authenticated user whose last login fell inside
- * `config('reauthentication.freshness_seconds')` (default 900 s) could POST
- * here and record a refund or a chargeback — that was the WHOLE precondition.
- * No MFA was involved: `EnforceMfaChallenge` is attached only to the Filament
- * panel's middleware array (`Providers\Filament\AdminPanelProvider`) and
- * inline on the standalone `/admin/finance/exports` route, and this is a plain
- * `Route::post` in neither place, so it carried no MFA gate at all.
- * `RequireRecentAuthentication` reads only `ActorContext::$lastAuthenticatedAt`
- * and never consults MFA state. The adjacent finance-export route DOES carry
- * `EnforceMfaChallenge`, which is what makes the omission on the two
- * money-moving routes conspicuous rather than merely uniform. Do not credit
- * this path with a compensating control it does not have.
- * `PaymentActionAuthorizer` closes the authority gap; a refusal becomes a 403,
- * following `Admin\FinanceExportController`'s convention, since this app has
- * no framework-level exception mapping.
+ * asserts only "some row exists in the shared users table." Any authenticated
+ * user whose last login fell inside `config('reauthentication.freshness_seconds')`
+ * (default 900 s) could POST here and record a refund or a chargeback — that is
+ * the full precondition. Additional proof mechanisms (code-based challenges) are
+ * attached only to other admin routes via the panel middleware. This route
+ * follows `RequireRecentAuthentication` only and reads only
+ * `ActorContext::$lastAuthenticatedAt`. `PaymentActionAuthorizer` closes the
+ * authority gap; a refusal becomes a 403, following
+ * `Admin\FinanceExportController`'s convention, since this app has no
+ * framework-level exception mapping.
  *
  * The check runs before `ReauthenticationService::satisfy()` deliberately.
  * `satisfy()` verifies nothing — it unconditionally writes a `satisfied`

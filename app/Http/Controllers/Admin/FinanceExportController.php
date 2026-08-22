@@ -31,17 +31,16 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * What this controller deliberately no longer does
  * ---------------------------------------------------------------------------
  * It used to call `ReauthenticationService::satisfy()` on every request, before
- * invoking the Action, copying `DisableMfaController`'s shape. `satisfy()`
- * verifies nothing — it unconditionally writes a `satisfied`
- * `reauthentication_events` row plus a `REAUTHENTICATION_SATISFIED` audit row
- * and clears the MFA rate-limit bucket. Doing that here had two consequences:
- * the Action's own gate could never fail over HTTP, because this controller had
- * just minted the exact row it looks for; and every export wrote an audit
- * record claiming the actor had re-proved their identity when in the normal
- * case they had merely logged in recently. In the module whose entire premise
- * is a trustworthy financial audit trail, a fabricated proof is worse than a
- * refusal. `satisfy()` belongs to whatever actually verifies a re-proof —
- * `MfaChallenge::submit()` — not to the action being protected.
+ * invoking the Action. `satisfy()` verifies nothing — it unconditionally writes
+ * a `satisfied` `reauthentication_events` row plus a `REAUTHENTICATION_SATISFIED`
+ * audit row and clears the reauthentication rate-limit bucket. Doing that here
+ * had two consequences: the Action's own gate could never fail over HTTP, because
+ * this controller had just minted the exact row it looks for; and every export
+ * wrote an audit record claiming the actor had re-proved their identity when in
+ * the normal case they had merely logged in recently. In the module whose entire
+ * premise is a trustworthy financial audit trail, a fabricated proof is worse
+ * than a refusal. `satisfy()` belongs to whatever actually verifies a re-proof
+ * (a real reauthentication controller), not to the action being protected.
  */
 final class FinanceExportController extends Controller
 {

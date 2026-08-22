@@ -9,9 +9,8 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * Eloquent model for `reauthentication_events` — see the migration
- * (`2026_07_26_160000_create_reauthentication_events_table.php`) for schema
- * and exactly why this is a separate table/concept from
- * `App\Platform\IdentityAccess\Mfa\Models\MfaChallenge`.
+ * (`2026_07_26_160000_create_reauthentication_events_table.php`) for schema.
+ * This is a separate table/concept from MFA verification attempts.
  *
  * Rows are written ONLY through
  * `App\Platform\IdentityAccess\Reauthentication\ReauthenticationService` —
@@ -26,9 +25,8 @@ final class ReauthenticationEvent extends Model
     /**
      * Neither `created_at` nor `updated_at` exists on this table — only
      * `occurred_at` (an explicit, server-set fillable column) — matching
-     * `App\Platform\Audit\Models\AuditEvent` and
-     * `App\Platform\IdentityAccess\Mfa\Models\MfaChallenge`'s identical
-     * choice for the identical reason: this is an append-only event log,
+     * other append-only event logs like `App\Platform\Audit\Models\AuditEvent`
+     * for the identical reason: this is an append-only event log,
      * not a record meant to look editable.
      */
     public $timestamps = false;

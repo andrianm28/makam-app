@@ -9,13 +9,12 @@ namespace App\Platform\IdentityAccess\Roles;
  * write — the `platform-identity-seam` design doc's decision 5. Named
  * constants, not inline string literals, so `SensitiveActions::ACTIONS` and
  * every call site reference the same values — same convention as
- * `App\Platform\IdentityAccess\Mfa\MfaAuditActions` and
- * `App\Platform\Payment\PaymentAuditActions`.
+ * `App\Platform\Payment\PaymentAuditActions` and other audit-action classes.
  *
  * Both values are on `SensitiveActions::ACTIONS` (see that file's own
- * updated doc comment) — granting or revoking a role is the same
- * privilege-escalation category as `MFA_RESET`/`CERTIFICATE_REVOKE`, so a
- * mandatory reason is not optional here.
+ * doc comment) — granting or revoking a role is a privilege-escalation
+ * category that requires a mandatory reason, similar to other sensitive
+ * security-critical actions.
  */
 final class RoleAuditActions
 {

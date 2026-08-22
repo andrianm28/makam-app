@@ -22,7 +22,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * NEXT version for the same priceable is recorded — mirrors this
  * codebase's established append-only-log pattern
  * (`App\Domain\Faq\Models\FaqArticleVersion`, `App\Platform\Audit\Models\
- * AuditEvent`, `App\Platform\IdentityAccess\Mfa\Models\MfaChallenge`).
+ * AuditEvent`, `App\Platform\IdentityAccess\Reauthentication\Models\ReauthenticationEvent`).
  * `$timestamps = false` — `effective_from` is the explicit, server-set
  * "recorded at" column, same choice `FaqArticleVersion` makes for the
  * identical reason.

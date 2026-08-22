@@ -116,10 +116,9 @@ final readonly class DocumentAccessPolicy
 
     /**
      * `document_access_events.actor_role`/`audit_events.actor_role` value for
-     * an authenticated actor carrying no role this module recognises. Reuses
-     * the string `Http\Controllers\Admin\DisableMfaController` already
-     * established for the same "authenticated, role not otherwise known"
-     * situation.
+     * an authenticated actor carrying no role this module recognises.
+     * Follows the pattern of using 'authenticated_actor' for the "authenticated,
+     * role not otherwise known" situation.
      */
     private const string ROLE_AUTHENTICATED_ACTOR = 'authenticated_actor';
 

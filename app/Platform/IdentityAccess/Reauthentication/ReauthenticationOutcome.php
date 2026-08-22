@@ -8,14 +8,12 @@ use InvalidArgumentException;
 
 /**
  * The closed list of values `reauthentication_events.outcome` may hold.
- * Deliberately separate from both `App\Platform\Audit\AuditOutcome`
- * (allowed/denied/failed) and `App\Platform\IdentityAccess\Mfa\
- * MfaChallengeOutcome` (succeeded/failed) — this one is this module's own
- * narrower, domain-specific pair for a single re-authentication-challenge
- * lifecycle event: the middleware raised a challenge, or a future
- * controller reported it satisfied. Same plain-string +
- * app-layer-validation convention as `MfaChallengeOutcome` /
- * `MfaVerificationMethod`.
+ * Deliberately separate from `App\Platform\Audit\AuditOutcome`
+ * (allowed/denied/failed) — this one is this module's own narrower,
+ * domain-specific pair for a single re-authentication-challenge lifecycle
+ * event: the middleware raised a challenge, or a future controller reported
+ * it satisfied. Same plain-string + app-layer-validation convention as other
+ * closed-list string-enum classes across this codebase.
  */
 final class ReauthenticationOutcome
 {
