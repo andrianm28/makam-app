@@ -5,9 +5,14 @@ declare(strict_types=1);
 namespace App\Filament\Admin\Pages;
 
 use App\Http\Middleware\RequireRecentAuthentication;
+use App\Platform\Audit\Audit;
+use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
+use App\Platform\Audit\AuditSubject;
 use App\Platform\IdentityAccess\Actions\RecordActorSessionAuthentication;
 use App\Platform\IdentityAccess\ActorContext;
+use App\Platform\IdentityAccess\Reauthentication\ReauthenticationAuditActions;
+use App\Platform\IdentityAccess\Reauthentication\ReauthenticationRateLimiter;
 use App\Platform\IdentityAccess\Reauthentication\ReauthenticationService;
 use Filament\Facades\Filament;
 use Filament\Pages\Page;
@@ -31,6 +36,22 @@ use Illuminate\Support\Facades\Hash;
  * already known from the session — asking for it again would only let a
  * wrong-email submission fail in a way this page would then have to
  * explain, for no real security benefit.
+ *
+ * ---------------------------------------------------------------------------
+ * Rate limiting and failure audit — own context, distinct from
+ * `ReauthenticationService`'s challenge-raising bucket
+ * ---------------------------------------------------------------------------
+ * Uses `ReauthenticationRateLimiter` directly under this page's own
+ * `RATE_LIMIT_CONTEXT`, deliberately different from
+ * `ReauthenticationService::RATE_LIMIT_CONTEXT` ('reauthentication-challenge')
+ * — that context is hit by the middleware on every stale-session request,
+ * a different rate to bound than this page's actual password-guessing
+ * attempts. Sharing one bucket would mean the middleware's own
+ * challenge-raising traffic and this page's submissions burned the same
+ * budget, which is wrong. A failed submission also writes a
+ * `REAUTHENTICATION_FAILED` audit row (never the submitted password
+ * itself) so a brute-force attempt against this page leaves the same
+ * kind of trail the removed MFA challenge page did.
  */
 final class PasswordReauthentication extends Page
 {
@@ -43,6 +64,12 @@ final class PasswordReauthentication extends Page
      * one exists).
      */
     public const string REAUTHENTICATION_REASON = 'password_reauthentication';
+
+    /**
+     * Distinct from `ReauthenticationService::RATE_LIMIT_CONTEXT`
+     * ('reauthentication-challenge') — see this class's own doc block.
+     */
+    private const string RATE_LIMIT_CONTEXT = 'password-reauthentication';
 
     protected static ?string $slug = 'password-reauthentication';
 
@@ -61,11 +88,35 @@ final class PasswordReauthentication extends Page
     {
         $user = Auth::user();
 
+        $actorContext = app(ActorContext::class);
+        $ip = request()->ip() ?? '0.0.0.0';
+        $rateLimitKey = $actorContext->identityReference ?? 'guest';
+
+        if (ReauthenticationRateLimiter::tooManyAttempts(self::RATE_LIMIT_CONTEXT, $rateLimitKey, $ip)) {
+            $this->addError('password', 'Terlalu banyak percobaan. Coba lagi nanti.');
+
+            return;
+        }
+
+        ReauthenticationRateLimiter::hit(self::RATE_LIMIT_CONTEXT, $rateLimitKey, $ip);
+
         if (! Hash::check($this->password, $user->password)) {
+            Audit::record(
+                action: ReauthenticationAuditActions::FAILED,
+                subject: new AuditSubject('password_reauthentication', $rateLimitKey),
+                outcome: AuditOutcome::Failed,
+                actorRef: $actorContext->identityReference,
+                actorRole: 'authenticated_actor',
+                source: AuditSource::Panel,
+            );
+
+            $this->password = '';
             $this->addError('password', 'Kata sandi salah. Silakan coba lagi.');
 
             return;
         }
+
+        ReauthenticationRateLimiter::clear(self::RATE_LIMIT_CONTEXT, $rateLimitKey, $ip);
 
         $this->password = '';
 
@@ -82,8 +133,6 @@ final class PasswordReauthentication extends Page
             request(),
         );
 
-        $actorContext = app(ActorContext::class);
-
         // Writes the `satisfied` half of the pair `RequireRecentAuthentication`
         // already wrote the `challenged` half of. Never given the submitted
         // password or any other restricted value; this service takes none.
@@ -92,7 +141,7 @@ final class PasswordReauthentication extends Page
             actorRole: 'authenticated_actor',
             reason: $this->reasonForThisChallenge(),
             source: AuditSource::Panel,
-            ip: request()->ip() ?? '0.0.0.0',
+            ip: $ip,
         );
 
         $this->redirectIntended(route('filament.admin.pages.dashboard'));
