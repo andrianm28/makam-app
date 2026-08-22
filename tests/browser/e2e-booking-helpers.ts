@@ -103,9 +103,7 @@ export async function completeStep7(page: Page): Promise<void> {
  * seeds every gate closed; verified directly rather than assumed). The
  * manual card is rendered unconditionally regardless of gate state, so this
  * path is the one guaranteed to be exercisable in every environment this
- * suite runs in — see `e2e-booking.spec.ts`'s own end-of-file report note
- * about this gate's live state diverging on the shared dev host this suite
- * was verified against.
+ * suite runs in.
  */
 export async function completeStep8Manual(page: Page, reference: string): Promise<void> {
     await page.locator('#payment-reference').fill(reference);

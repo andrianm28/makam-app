@@ -40,32 +40,59 @@ import {
  */
 test.describe('E2E-BOOK-MOBILE — full journey at a real mobile viewport', () => {
     test('a visitor completes all 9 steps end to end on a mobile viewport', async ({ page }) => {
-        await startAtStep1(page);
-        await completeStep1(page, 'Jakarta');
-        await completeStep2NoPackage(page, 'TPS Jakarta 2');
-        await completeStep3(page, 'Makam Baru');
-        await completeStep4(page, 'AMBULANCE');
+        // Each step wrapped in its own `test.step()`, matching
+        // `e2e-booking.spec.ts`'s desktop full-journey test — same step
+        // names, so a failure's location is just as legible on mobile as it
+        // is on desktop. Purely structural (no behavior change).
+        await test.step('Step 1 — location', async () => {
+            await startAtStep1(page);
+            await completeStep1(page, 'Jakarta');
+        });
 
-        // Step 5 (quote summary) -> Step 6 (customer data): the button here
-        // is "Lanjut ke Data Pemesan" (wizard.blade.php), not "Lanjutkan" —
-        // "Lanjutkan" is Step 4's own button, already clicked inside
-        // completeStep4() above. Matches e2e-booking.spec.ts's own Step 5
-        // test.step block.
-        await page.getByRole('button', { name: 'Lanjut ke Data Pemesan' }).click();
-        await expect(page.locator('#booking-step-6-heading')).toBeVisible();
+        await test.step('Step 2 — TPU/TPS (no package cemetery)', async () => {
+            await completeStep2NoPackage(page, 'TPS Jakarta 2');
+        });
 
-        const axeResults = await new AxeBuilder({ page }).analyze();
-        expect(axeResults.violations).toEqual([]);
+        await test.step('Step 3 — service type (Makam Baru / NEW_GRAVE)', async () => {
+            await completeStep3(page, 'Makam Baru');
+        });
 
-        await completeStep6(page);
-        await completeStep7(page);
-        await completeStep8Manual(page, 'BCA-TRF-000123-MOBILE');
+        await test.step('Step 4 — real service catalog, mandatory + one additional', async () => {
+            await completeStep4(page, 'AMBULANCE');
+        });
 
-        await expect(page.getByText('Menunggu diproses', { exact: true })).toBeVisible();
-        await expect(page.getByText(CUSTOMER.fullName)).toBeVisible();
-        await expect(page.getByText(DECEASED.fullName)).toBeVisible();
+        await test.step('Step 5 — quote line items', async () => {
+            // Step 5 (quote summary) -> Step 6 (customer data): the button here
+            // is "Lanjut ke Data Pemesan" (wizard.blade.php), not "Lanjutkan" —
+            // "Lanjutkan" is Step 4's own button, already clicked inside
+            // completeStep4() above. Matches e2e-booking.spec.ts's own Step 5
+            // test.step block.
+            await page.getByRole('button', { name: 'Lanjut ke Data Pemesan' }).click();
+            await expect(page.locator('#booking-step-6-heading')).toBeVisible();
+        });
 
-        const finalAxeResults = await new AxeBuilder({ page }).analyze();
-        expect(finalAxeResults.violations).toEqual([]);
+        await test.step('Step 6 — customer form', async () => {
+            const axeResults = await new AxeBuilder({ page }).analyze();
+            expect(axeResults.violations).toEqual([]);
+
+            await completeStep6(page);
+        });
+
+        await test.step('Step 7 — deceased form, honest no-upload state', async () => {
+            await completeStep7(page);
+        });
+
+        await test.step('Step 8 — payment, manual fallback', async () => {
+            await completeStep8Manual(page, 'BCA-TRF-000123-MOBILE');
+        });
+
+        await test.step('Step 9 — confirmation, invoice-equivalent summary, next action', async () => {
+            await expect(page.getByText('Menunggu diproses', { exact: true })).toBeVisible();
+            await expect(page.getByText(CUSTOMER.fullName)).toBeVisible();
+            await expect(page.getByText(DECEASED.fullName)).toBeVisible();
+
+            const finalAxeResults = await new AxeBuilder({ page }).analyze();
+            expect(finalAxeResults.violations).toEqual([]);
+        });
     });
 });

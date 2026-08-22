@@ -686,20 +686,77 @@ test.describe('E2E-ADMIN/VENDOR — vendor profile, transactions, and payouts', 
             await expect(page.getByRole('heading', { name: 'Status Pencairan' })).toBeVisible();
         });
 
-        test('vendor can accept an incoming order through the one-click work-queue action', async ({ page }) => {
+        // Retry-safety: this fixture order is shared, mutable state — the
+        // action below actually writes its status via `UpdateVendorOrderStatus`
+        // (`EditVendorOrder.php`), so a naive "assert it starts at
+        // MENUNGGU_VENDOR, then transition it" test would only be safe to run
+        // ONCE per migration. This file sets `mode: 'serial'` above and
+        // `playwright.config.ts` sets `retries: process.env.CI ? 2 : 0` —
+        // Playwright retries a whole serial group as a unit, so if ANY later
+        // test in this group fails in real CI, a retry re-runs this
+        // already-passed test again against whatever status its own prior
+        // successful run left the fixture in. A fixed-starting-state
+        // assertion would then hard-fail deterministically — worse, the exact
+        // button this test clicks on the first pass (`accept`) is only
+        // `->visible()` while `$record->status !== VendorProcessingStatus::
+        // DITERIMA_VENDOR` (`EditVendorOrder.php`), so after one successful
+        // run that button is gone entirely, not just a failing assertion.
+        //
+        // Fix: read the fixture order's REAL current status first, then
+        // perform whichever one-click action is still a meaningful forward
+        // move from there — a genuine transition proof regardless of which
+        // attempt this is. `TRANSITION_CHAIN` below covers exactly the
+        // statuses this shared order can be in across this suite's configured
+        // retry budget (`retries: 2` ⇒ at most 3 total attempts of this test
+        // inside one CI invocation: attempt 1 finds 'Menunggu vendor', attempt
+        // 2 — the 1st retry — finds 'Diterima vendor' left by attempt 1's
+        // success, attempt 3 — the 2nd retry — finds 'Diproses' left by
+        // attempt 2's success). None of the three chosen actions
+        // (accept/process/sendSchedule) requires a confirmation modal —
+        // `EditVendorOrder.php`'s own doc block names those the forward
+        // progressions that don't, unlike reject/complete/complain. If the
+        // fixture is ever found outside this chain (nothing in this suite's
+        // own logic should be able to produce that), the test fails loudly
+        // with a clear message instead of silently asserting the wrong thing.
+        const TRANSITION_CHAIN: ReadonlyArray<{
+            from: string;
+            actionLabel: string;
+            to: string;
+            notificationTitle: string;
+        }> = [
+            { from: 'Menunggu vendor', actionLabel: 'Terima pesanan', to: 'Diterima vendor', notificationTitle: 'Pesanan diterima.' },
+            { from: 'Diterima vendor', actionLabel: 'Mulai proses', to: 'Diproses', notificationTitle: 'Pesanan sedang diproses.' },
+            { from: 'Diproses', actionLabel: 'Tandai dikirim / dijadwalkan', to: 'Dikirim / dijadwalkan', notificationTitle: 'Pesanan dikirim / dijadwalkan.' },
+        ];
+
+        test('vendor can advance an incoming order through a one-click work-queue action', async ({ page }) => {
             // Real UI accept/process coverage — the read-only transaction
             // history test above proves visibility/scoping; this proves the
             // vendor can actually act on an order. Uses the seed migration's
             // own fixture order (`2026_08_22_110000_seed_e2e_admin_vendor_
-            // test_users.php`'s OWN_VENDOR_ORDER_CUSTOMER_NAME/EMAIL), which
-            // starts at `VendorProcessingStatus::MENUNGGU_VENDOR` ("Menunggu
-            // vendor") — the same starting state every real customer order
-            // begins at.
+            // test_users.php`'s OWN_VENDOR_ORDER_CUSTOMER_NAME/EMAIL).
             await page.goto('/vendor/orders');
 
             const row = page.getByRole('row', { name: VENDOR_OWN_ORDER_CUSTOMER_NAME });
             await expect(row).toBeVisible();
-            await expect(row.getByText('Menunggu vendor')).toBeVisible();
+
+            let step: (typeof TRANSITION_CHAIN)[number] | undefined;
+            for (const candidate of TRANSITION_CHAIN) {
+                // `isVisible()` is a non-waiting check, which is fine here:
+                // the `row` locator above was already awaited into visibility,
+                // so its contents are already settled on the page.
+                if (await row.getByText(candidate.from).isVisible()) {
+                    step = candidate;
+                    break;
+                }
+            }
+            if (!step) {
+                throw new Error(
+                    `Fixture order '${VENDOR_OWN_ORDER_CUSTOMER_NAME}' is in a status outside this test's known retry chain (TRANSITION_CHAIN) — check tests/browser/e2e-admin-vendor.spec.ts.`,
+                );
+            }
+
+            await expect(row.getByText(step.from)).toBeVisible();
 
             // EditAction's real accessible name is Filament's own `id`
             // translation ('Ubah'), not the English default ('Edit') —
@@ -707,17 +764,13 @@ test.describe('E2E-ADMIN/VENDOR — vendor profile, transactions, and payouts', 
             // vendor/filament/actions/resources/lang/id/edit.php.
             await row.getByRole('link', { name: 'Ubah' }).click();
 
-            // 'accept' is the one header action with no confirmation modal —
-            // EditVendorOrder.php's own doc block names it the forward
-            // progression that doesn't require one, unlike reject/complete/
-            // complain.
-            await page.getByRole('button', { name: 'Terima pesanan' }).click();
+            await page.getByRole('button', { name: step.actionLabel }).click();
 
-            await expect(page.getByText('Pesanan diterima.')).toBeVisible();
+            await expect(page.getByText(step.notificationTitle)).toBeVisible();
 
             await page.goto('/vendor/orders');
             const updatedRow = page.getByRole('row', { name: VENDOR_OWN_ORDER_CUSTOMER_NAME });
-            await expect(updatedRow.getByText('Diterima vendor')).toBeVisible();
+            await expect(updatedRow.getByText(step.to)).toBeVisible();
         });
 
         test('vendor panel pages have zero accessibility violations', async ({ page }) => {
