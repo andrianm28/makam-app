@@ -219,13 +219,15 @@ return new class extends Migration
         //     GIN has no ordering support at all.
         //
         // This says NOTHING about whether AC4 (< 500 ms at 100,000 records)
-        // passes — that is separately and already ledgered as NOT TESTED,
-        // with no benchmark run at any scale and no load-testing harness in
-        // this repository. Whether the index shape or the query shape should
-        // change belongs to the batch that has a measurement. This comment
-        // is corrected only so nobody reads it as evidence AC4 needs no
-        // work, which is precisely what a reader would have concluded from
-        // the sentence it replaces.
+        // passes on its own — a real benchmark now exists
+        // (`BenchGraveSearchCommand`, the CI `load-test` job,
+        // `docs/testing/release-gates.md` §H) and measures this exact index
+        // and query shape, scoped to the largest single cemetery's ~1,000
+        // records rather than a flat 100,000-record scan. Whether the index
+        // shape or the query shape should change belongs to the batch that
+        // has a full-scale measurement. This comment is corrected only so
+        // nobody reads it as evidence AC4 needs no work, which is precisely
+        // what a reader would have concluded from the sentence it replaces.
         //
         // Raw statement, not $table->index(): Laravel's schema builder has
         // no expression for a GIN index with an operator class.
