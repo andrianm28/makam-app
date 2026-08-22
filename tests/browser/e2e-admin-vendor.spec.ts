@@ -686,6 +686,40 @@ test.describe('E2E-ADMIN/VENDOR — vendor profile, transactions, and payouts', 
             await expect(page.getByRole('heading', { name: 'Status Pencairan' })).toBeVisible();
         });
 
+        test('vendor can accept an incoming order through the one-click work-queue action', async ({ page }) => {
+            // Real UI accept/process coverage — the read-only transaction
+            // history test above proves visibility/scoping; this proves the
+            // vendor can actually act on an order. Uses the seed migration's
+            // own fixture order (`2026_08_22_110000_seed_e2e_admin_vendor_
+            // test_users.php`'s OWN_VENDOR_ORDER_CUSTOMER_NAME/EMAIL), which
+            // starts at `VendorProcessingStatus::MENUNGGU_VENDOR` ("Menunggu
+            // vendor") — the same starting state every real customer order
+            // begins at.
+            await page.goto('/vendor/orders');
+
+            const row = page.getByRole('row', { name: VENDOR_OWN_ORDER_CUSTOMER_NAME });
+            await expect(row).toBeVisible();
+            await expect(row.getByText('Menunggu vendor')).toBeVisible();
+
+            // EditAction's real accessible name is Filament's own `id`
+            // translation ('Ubah'), not the English default ('Edit') —
+            // verified directly against
+            // vendor/filament/actions/resources/lang/id/edit.php.
+            await row.getByRole('link', { name: 'Ubah' }).click();
+
+            // 'accept' is the one header action with no confirmation modal —
+            // EditVendorOrder.php's own doc block names it the forward
+            // progression that doesn't require one, unlike reject/complete/
+            // complain.
+            await page.getByRole('button', { name: 'Terima pesanan' }).click();
+
+            await expect(page.getByText('Pesanan diterima.')).toBeVisible();
+
+            await page.goto('/vendor/orders');
+            const updatedRow = page.getByRole('row', { name: VENDOR_OWN_ORDER_CUSTOMER_NAME });
+            await expect(updatedRow.getByText('Diterima vendor')).toBeVisible();
+        });
+
         test('vendor panel pages have zero accessibility violations', async ({ page }) => {
             for (const path of ['/vendor', '/vendor/profile', '/vendor/transactions', '/vendor/payouts']) {
                 await page.goto(path);
