@@ -99,6 +99,16 @@ final class OutboxPublisherClaimTwoConnectionTest extends TestCase
             DB::setDefaultConnection('pgsql');
             DB::commit();
         } finally {
+            // If an assertion above failed while A's transaction was still
+            // open, the happy-path commit never ran — leaving connection A's
+            // transaction open for whichever RefreshDatabase test class runs
+            // next in this same PHPUnit process, which would then fail with
+            // a confusing, unrelated error. Guarded so it's a no-op on the
+            // happy path, where the commit above already closed it.
+            if (DB::connection('pgsql')->transactionLevel() > 0) {
+                DB::connection('pgsql')->rollBack();
+            }
+
             DB::setDefaultConnection($originalDefault);
             DB::purge('pgsql_race');
         }
