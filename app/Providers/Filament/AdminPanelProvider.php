@@ -9,6 +9,7 @@ use App\Filament\Admin\Pages\FinanceReports;
 use App\Filament\Admin\Pages\InAppNotifications;
 use App\Filament\Admin\Pages\MfaChallenge;
 use App\Filament\Admin\Pages\MfaSettings;
+use App\Filament\Admin\Pages\PasswordReauthentication;
 use App\Filament\Admin\Pages\OrdersReport;
 use App\Filament\Admin\Pages\OutgoingPaymentsReport;
 use App\Filament\Admin\Pages\ReceiptsReport;
@@ -174,6 +175,7 @@ class AdminPanelProvider extends PanelProvider
                 VendorPerformanceReport::class,
                 RenewalPeriodReport::class,
                 MfaChallenge::class,
+                PasswordReauthentication::class,
                 MfaSettings::class,
                 InAppNotifications::class,
             ])
