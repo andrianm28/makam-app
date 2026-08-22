@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Schema;
  * `mfa_enrolments` — `platform-identity-and-access` design.md's data list.
  * S3-T2 (HUMAN-GATED — see `docs/planning/agent-execution-plan.md`'s
  * "HUMAN — S3-T2 MFA, S3-T3 re-authentication" note). This table has since
- * been deleted; this migration documents its historical schema. See Task 1
+ * been deleted; this migration documents its historical schema. See Task 4
  * of the MFA removal plan for context on the removal.
  *
  * ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 <?php
 
+use App\Filament\Admin\Pages\PasswordReauthentication;
 use App\Http\Controllers\Admin\FinanceExportController;
 use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\DocumentVault\DownloadDocumentController;
@@ -526,7 +527,7 @@ Route::get('/admin/finance/exports', FinanceExportController::class)
         'web',
         'auth',
         'throttle:financial-export',
-        RequireRecentAuthentication::class.':bulk_financial_export,filament.admin.pages.password-reauthentication',
+        RequireRecentAuthentication::class.':bulk_financial_export,'.PasswordReauthentication::ROUTE_NAME,
     ])
     ->name('admin.finance.exports');
 
@@ -597,7 +598,7 @@ Route::post('/admin/payments/manual-verifications/{paymentVerification}/verify',
         'web',
         'auth',
         'throttle:payment-manual-verification',
-        RequireRecentAuthentication::class.':payment_manual_verification,filament.admin.pages.password-reauthentication',
+        RequireRecentAuthentication::class.':payment_manual_verification,'.PasswordReauthentication::ROUTE_NAME,
     ])
     ->name('admin.payments.manual-verifications.verify');
 
@@ -637,7 +638,7 @@ Route::post('/admin/payments/reversals/{reversalType}', RecordPaymentReversalCon
         'web',
         'auth',
         'throttle:payment-reversal',
-        RequireRecentAuthentication::class.':payment_reversal,filament.admin.pages.password-reauthentication',
+        RequireRecentAuthentication::class.':payment_reversal,'.PasswordReauthentication::ROUTE_NAME,
     ])
     ->name('admin.payments.reversals.record');
 
