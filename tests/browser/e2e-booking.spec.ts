@@ -1,5 +1,17 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import {
+    CUSTOMER,
+    DECEASED,
+    completeStep1,
+    completeStep2NoPackage,
+    completeStep3,
+    completeStep4,
+    completeStep6,
+    completeStep7,
+    completeStep8Manual,
+    startAtStep1,
+} from './e2e-booking-helpers';
 
 /**
  * E2E-BOOK — the 9-step public booking wizard (`/pemesanan-makam`).
@@ -27,95 +39,14 @@ import { expect, test, type Page } from '@playwright/test';
  * (wizard.blade.php); every step transition is asserted against that id
  * rather than translated copy, the same discipline `smoke.spec.ts` uses for
  * the homepage heading.
+ *
+ * The step-completion helpers and fixture consts (`CUSTOMER`, `DECEASED`,
+ * `startAtStep1`, `completeStep1`, ...) live in `./e2e-booking-helpers.ts`
+ * and are imported here, not defined locally — `e2e-booking-mobile.spec.ts`
+ * imports the same module, so both viewports walk the identical real flow
+ * with one real source of truth. See that file's own header comment for why
+ * it isn't defined directly in this `.spec.ts` file.
  */
-
-const CUSTOMER = {
-    fullName: 'Contoh Pemesan Sejahtera',
-    // Matches SaveBookingDraftStep::validateCustomerData()'s mobile regex
-    // `^(\+62|62|0)[0-9]{9,13}$`.
-    mobile: '081234567890',
-    email: 'pemesan.contoh@example.test',
-    // >= 10 chars, per validateCustomerData().
-    address: 'Jl. Contoh Alamat Pemesan No. 12, Jakarta',
-    relationship: 'ANAK',
-    contactChannel: 'WHATSAPP',
-};
-
-const DECEASED = {
-    fullName: 'Contoh Almarhum Melati',
-    dob: '1950-05-10',
-    dod: '2026-08-01',
-    relationship: 'ORANG_TUA',
-};
-
-async function startAtStep1(page: Page): Promise<void> {
-    await page.goto('/pemesanan-makam');
-    await expect(page.locator('#booking-step-1-heading')).toBeVisible();
-}
-
-async function completeStep1(page: Page, cityLabel: string): Promise<void> {
-    await page.getByRole('button', { name: cityLabel, exact: true }).click();
-    await page.waitForURL(/\/pemesanan-makam\/draft\//);
-    await expect(page.locator('#booking-step-2-heading')).toBeVisible();
-}
-
-/** Selects a cemetery that has NO `cemetery_packages` rows (a single click). */
-async function completeStep2NoPackage(page: Page, cemeteryName: string): Promise<void> {
-    await page.getByRole('button', { name: cemeteryName }).click();
-    await expect(page.locator('#booking-step-3-heading')).toBeVisible();
-}
-
-async function completeStep3(page: Page, serviceTypeLabel: string): Promise<void> {
-    await page.getByRole('button', { name: serviceTypeLabel, exact: true }).click();
-    await expect(page.locator('#booking-step-4-heading')).toBeVisible();
-}
-
-async function completeStep4(page: Page, extraServiceCode?: string): Promise<void> {
-    if (extraServiceCode) {
-        await page.locator(`#service-${extraServiceCode}`).check();
-    }
-    await page.getByRole('button', { name: 'Lanjutkan' }).click();
-    await expect(page.locator('#booking-step-5-heading')).toBeVisible();
-}
-
-async function completeStep6(page: Page): Promise<void> {
-    await expect(page.locator('#booking-step-6-heading')).toBeVisible();
-    await page.locator('#customer-full-name').fill(CUSTOMER.fullName);
-    await page.locator('#customer-mobile').fill(CUSTOMER.mobile);
-    await page.locator('#customer-email').fill(CUSTOMER.email);
-    await page.locator('#customer-address').fill(CUSTOMER.address);
-    await page.locator('#customer-relationship').selectOption(CUSTOMER.relationship);
-    await page.locator('#customer-contact-channel').selectOption(CUSTOMER.contactChannel);
-    await page.locator('#privacy-notice-accepted').check();
-    await page.getByRole('button', { name: 'Lanjutkan' }).click();
-    await expect(page.locator('#booking-step-7-heading')).toBeVisible();
-}
-
-async function completeStep7(page: Page): Promise<void> {
-    await page.locator('#deceased-full-name').fill(DECEASED.fullName);
-    await page.locator('#deceased-date-of-birth').fill(DECEASED.dob);
-    await page.locator('#deceased-date-of-death').fill(DECEASED.dod);
-    await page.locator('#deceased-relationship').selectOption(DECEASED.relationship);
-    await page.getByRole('button', { name: 'Lanjutkan' }).click();
-    await expect(page.locator('#booking-step-8-heading')).toBeVisible();
-}
-
-/**
- * The MANUAL fallback path only — deliberate. `G-PAY-01` (online payment) is
- * closed by default on a fresh migration
- * (`database/migrations/2026_07_26_120400_seed_feature_gate_registry.php`
- * seeds every gate closed; verified directly rather than assumed). The
- * manual card is rendered unconditionally regardless of gate state, so this
- * path is the one guaranteed to be exercisable in every environment this
- * suite runs in — see this file's own end-of-file report note about this
- * gate's live state diverging on the shared dev host this suite was
- * verified against.
- */
-async function completeStep8Manual(page: Page, reference: string): Promise<void> {
-    await page.locator('#payment-reference').fill(reference);
-    await page.getByRole('button', { name: 'Saya Akan Bayar Manual' }).click();
-    await expect(page.locator('#booking-step-9-heading')).toBeVisible();
-}
 
 test.describe('E2E-BOOK — full journey (Makam Baru, standard branch)', () => {
     test('a visitor completes all 9 steps end to end with real fixture data', async ({ page }) => {
