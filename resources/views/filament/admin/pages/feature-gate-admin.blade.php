@@ -2,11 +2,11 @@
     resources/views/filament/admin/pages/feature-gate-admin.blade.php
 
     View for App\Filament\Admin\Pages\FeatureGateAdmin. Same component
-    choice as finance-reports.blade.php / mfa-settings.blade.php: Filament's
-    own Blade components and Tailwind classes rather than the public site's
-    `<x-mk.*>` primitives, for the identical reason those files record —
-    `<x-mk.*>` component files live outside this panel's own Tailwind
-    source scan.
+    choice as finance-reports.blade.php / password-reauthentication.blade.php:
+    Filament's own Blade components and Tailwind classes rather than the
+    public site's `<x-mk.*>` primitives, for the identical reason those
+    files record — `<x-mk.*>` component files live outside this panel's own
+    Tailwind source scan.
 
     Required states (§6): loading (none — the table is one query on a tiny
     registry), empty (the registry is seeded by migration, but the loop

@@ -54,14 +54,15 @@ use Carbon\CarbonImmutable;
  *
  * ---------------------------------------------------------------------------
  * Rate limiting — reuses `ReauthenticationRateLimiter` directly, but for a
- * different reason than MFA uses it for
+ * different reason than `PasswordReauthentication` uses it for
  * ---------------------------------------------------------------------------
  * `ReauthenticationRateLimiter`'s public API (`tooManyAttempts()`/`hit()`/`clear()`,
  * keyed by a `$context` string + actor + IP) fits this module's keying
  * needs exactly, so it is reused as-is rather than duplicated — same
  * threshold/decay (5 attempts / 60 seconds) via the same class, under its
  * own `'reauthentication-challenge'` context so it shares no bucket with
- * MFA's own `'mfa-challenge'`/`'mfa-recovery'` contexts.
+ * `App\Filament\Admin\Pages\PasswordReauthentication`'s own
+ * `'password-reauthentication'` context.
  *
  * The REASON for throttling is distinct: a re-authentication CHALLENGE is
  * raised automatically by middleware on every single inbound request while a

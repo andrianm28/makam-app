@@ -17,11 +17,11 @@ use Tests\TestCase;
 
 /**
  * `ReauthenticationService::challenge()`/`::satisfy()` — the dual-write
- * (`reauthentication_events` + `audit_events`) pattern mirrored from
- * `Mfa\MfaChallengeService`/`Mfa\MfaRecoveryService`, and the rate limiter
- * that bounds write volume (see the service's own class-level doc block for
- * why that reasoning differs from MFA's own use of the same
- * `ReauthenticationRateLimiter` class).
+ * (`reauthentication_events` + `audit_events`) pattern, and the rate
+ * limiter that bounds write volume (see the service's own class-level doc
+ * block for why that reasoning differs from
+ * `App\Filament\Admin\Pages\PasswordReauthentication`'s own use of the
+ * same `ReauthenticationRateLimiter` class under a distinct context).
  */
 final class ReauthenticationServiceTest extends TestCase
 {

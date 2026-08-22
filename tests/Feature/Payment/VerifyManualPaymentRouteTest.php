@@ -24,8 +24,9 @@ use Tests\TestCase;
 
 /**
  * The HTTP half of Task 5's AC9 — `RequireRecentAuthentication`'s SECOND
- * real attachment anywhere in this repo, following
- * `DisableMfaControllerTest`'s exact precedent (route name changes only).
+ * real attachment anywhere in this repo. Proves the middleware's own
+ * fail-closed-on-a-null-timestamp behaviour (see `RequireRecentAuthentication`'s
+ * own doc block) against a real route, not a test fixture route.
  * `VerifyManualPaymentTest` covers the action's own decision/audit/
  * structural behaviour; this file proves the route is genuinely gated by
  * the middleware, not merely that the underlying action works when called
@@ -214,8 +215,8 @@ final class VerifyManualPaymentRouteTest extends TestCase
 
         // Deliberately NOT creating an actor_sessions row with a recent
         // last_authenticated_at — RequireRecentAuthentication fails closed
-        // on a null timestamp, same as DisableMfaControllerTest's own
-        // precedent. The role IS granted so this still pins the middleware
+        // on a null timestamp, by design (see that middleware's own doc
+        // block). The role IS granted so this still pins the middleware
         // specifically: the redirect cannot be the authorization refusal
         // wearing the middleware's clothes.
         $this->actingAs($user)
