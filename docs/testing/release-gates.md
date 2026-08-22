@@ -77,7 +77,7 @@ Either mode must pass:
 - [ ] Search performance target passes.
 - [ ] Empty/manual assistance behavior passes.
 - [ ] Tariff source and last-updated display pass.
-- [ ] External renewal marking and duplicate prevention pass.
+- [ ] External renewal marking and duplicate prevention pass. — Investigated directly (22 Aug 2026): the admin-side UI is real and built — `App\Filament\Admin\Resources\RenewalOrders\RenewalOrderResource` (list + view pages) with a real `Actions\RecordExternalRenewalPaymentAction`, backed by the domain's `Actions\MarkExternalRenewal` (which, per its own doc block, shares the same `renewals_grave_period_unique` duplicate-prevention constraint `OpenRenewal` uses for the online path). No browser-level test exercises it, and — the actual blocker — no seed migration or fixture path anywhere in this codebase creates a real `renewals` row (confirmed: `e2e-renewal.spec.ts`'s own header comment already documents this same fact for the customer-facing journey: "No fixture ever creates a `renewals` row... the only writer, `OpenRenewal`, is unreachable from the public UI while `G-DATA-01` stays closed"). Closing this box for real needs a new, gated seed migration that constructs a fixture renewal through a real Action (matching this codebase's established "no raw Eloquent bypass" convention, e.g. `2026_08_22_110000_seed_e2e_admin_vendor_test_users.php`'s pattern) before a browser test can act on it — real, self-contained engineering work sized for its own task, out of this UAT pass's scope.
 
 ## G. Security/operations
 
