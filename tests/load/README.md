@@ -25,6 +25,17 @@ skipped.
 
 ## Running locally
 
+Needs the `k6` binary installed locally (see
+https://grafana.com/docs/k6/latest/set-up/install-k6/ for the current
+official install instructions per platform — the CI `load-test` job below
+installs it via k6's official apt repository on Ubuntu runners). k6 runs
+here as a plain local process, not inside a container — it needs to reach
+`php artisan serve` on `127.0.0.1`, and a containerized k6 (e.g.
+`grafana/k6-action`, which builds and runs k6 inside its own isolated
+Docker container) resolves `127.0.0.1` to its own loopback instead, not the
+host's — this is exactly the failure the CI job's own comment on its
+"Install k6" step documents hitting and fixing.
+
 ```bash
 K6_BASE_URL=http://127.0.0.1:8080 k6 run tests/load/profile-a-normal-launch.js
 ```

@@ -629,10 +629,30 @@ jobs:
           # process; production is untouched.
           THROTTLE_PUBLIC_GUEST_DISABLED: "true"
 
+      - name: Install k6
+        # Deliberately a plain apt install on the runner itself, NOT
+        # grafana/k6-action — that action builds and runs k6 inside its own
+        # isolated Docker container, so K6_BASE_URL=http://127.0.0.1:8080
+        # resolves to the container's own loopback, not this runner's host
+        # network where `php artisan serve` (below) actually listens.
+        # Confirmed live: the first real CI run of this job using
+        # grafana/k6-action@v0.3.1 failed every one of 267,951 requests with
+        # "connect: connection refused" in ~26s -- an immediate-refusal
+        # signature, not real network latency. Installing the k6 binary
+        # directly and running it as a normal `run:` step avoids the nested
+        # container entirely, exactly the same reason `browser-test` (above)
+        # runs Playwright as a normal step rather than inside a containerized
+        # action -- both tools need to reach 127.0.0.1 on this same runner.
+        # Install steps match k6's own official Debian/Ubuntu instructions
+        # (https://grafana.com/docs/k6/latest/set-up/install-k6/) verbatim.
+        run: |
+          curl -fsSL https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
       - name: Run k6 — Profile A (reduced scale)
-        uses: grafana/k6-action@v0.3.1
-        with:
-          filename: tests/load/profile-a-normal-launch.js
+        run: k6 run tests/load/profile-a-normal-launch.js
         env:
           K6_BASE_URL: http://127.0.0.1:8080
 
