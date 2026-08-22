@@ -57,7 +57,7 @@ Either mode must pass:
 
 ## D. Notifications
 
-- [ ] Notification matrix implemented.
+- [ ] Notification matrix implemented. — Investigated directly (22 Aug 2026): `App\Platform\Notification\Actions\DispatchNotification` exists as a real, built Action (with `RecordInAppNotification`, `NotificationDelivery`/`NotificationEvent`/`NotificationTemplate` models, and a `NotificationDeliveryWriteGuard`) but is never called from any `app/Domain/Booking` Action — grepped the whole `app/` tree for `DispatchNotification::class`, the only match outside its own guard class is the guard itself. This is not an untested feature; it is genuinely unwired. The booking wizard's own confirmation screen is honest about this: `e2e-booking.spec.ts`'s full-journey test already asserts the real "Belum dikirim" ("not yet sent") state renders on Step 9, matching `AGENTS.md`/`design-system.md` §6.8's rule against claiming a delivery that hasn't happened. Closing this box requires wiring `DispatchNotification` into the relevant Booking domain Actions (or an event listener) first — real engineering work, out of this UAT pass's scope; tracked as a Phase 2/3 item.
 - [ ] Email baseline passes.
 - [ ] WhatsApp enabled only with approved template/provider.
 - [ ] Admin/operator/vendor recipient scope passes.
