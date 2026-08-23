@@ -25,10 +25,10 @@
 | Application | Laravel 13 modular monolith |
 | Public UI | Blade + Livewire 4 + Tailwind CSS 4.1+; isolated Alpine/JS modules when necessary |
 | Admin/operator/vendor | Filament 5 panels with explicit panel access, policies, and query scoping |
-| Database | Managed PostgreSQL 18 current minor; `pg_trgm`, `unaccent`; PostGIS only when approved |
-| Queue/cache/locks | Managed Redis 8.2, Laravel Queue + Horizon, non-cluster topology |
+| Database | Self-managed PostgreSQL 18 current minor, shared `yiemvm` host; `pg_trgm`, `unaccent`; PostGIS only when approved |
+| Queue/cache/locks | Self-managed Redis 8.2, shared `yiemvm` host, Laravel Queue + Horizon, non-cluster topology |
 | Events | PostgreSQL transactional outbox plus versioned event envelope |
-| File storage | S3-compatible private quarantine and accepted storage |
+| File storage | Self-hosted private quarantine and accepted storage, shared `yiemvm` host |
 | API | OpenAPI 3.1 |
 | Payments | Hosted checkout via shared K3–K5 foundation |
 | Observability | Structured logs, error tracking, Horizon, Pulse, uptime, DB/Redis metrics, audit |
@@ -269,13 +269,13 @@ CDN/WAF
 Horizon workers and scheduler/outbox publisher run as separate processes
 
 Dependencies:
-- managed PostgreSQL 18 with PITR
-- managed Redis 8.2 primary/replica, non-cluster
-- private S3-compatible quarantine/accepted storage
+- self-managed PostgreSQL 18, no PITR (shared `yiemvm` host)
+- self-managed Redis 8.2, non-cluster (shared `yiemvm` host)
+- self-hosted quarantine/accepted storage (shared `yiemvm` host)
 - shared K1–K8/provider adapters
 ```
 
-The same modular-monolith artifact may scale horizontally. Kubernetes and Octane are deferred until measured need.
+Production runs on the same shared `yiemvm` host as development and staging, not a separate environment — see ADR-0027's "Production graduation — single-host decision" section. The same modular-monolith artifact may scale horizontally. Kubernetes and Octane are deferred until measured need.
 
 ## 18. Security/runtime boundaries
 
@@ -289,7 +289,7 @@ The same modular-monolith artifact may scale horizontally. Kubernetes and Octane
 
 - Lockfile-based immutable builds.
 - Expand/contract migrations.
-- Managed PostgreSQL backup/PITR and regular restore tests.
+- Self-managed PostgreSQL backup and regular restore tests; no PITR — see ADR-0027's single-host section for the accepted recovery-point risk.
 - Feature/payment kill switches for safe degradation.
 - Performance and concurrency evidence before production activation.
 
@@ -306,4 +306,4 @@ Ubuntu 22.04 LTS host — 2 vCPU / 4 GB
 └── external sandbox providers/object storage
 ```
 
-This topology is deliberately smaller than production. It validates functional integration and staging/UAT, but does not provide production HA, PITR, or formal production capacity evidence. Application versions remain pinned by immutable containers. See ADR-0027 and `operations/dev-staging-environment.md`.
+This topology is deliberately smaller than production, though as of ADR-0027's single-host decision both share the same `yiemvm` host; this section remains a distinct set of containers/namespaces within it and neither environment has HA or PITR. It validates functional integration and staging/UAT, but does not provide formal production capacity evidence. Application versions remain pinned by immutable containers. See ADR-0027 and `operations/dev-staging-environment.md`.
