@@ -120,7 +120,7 @@ aspirational only if that decision is ever reversed. This host does not provide 
 guarantees, for any environment including production.
 
 - Development data is disposable by default.
-- Staging receives daily encrypted logical backups to remote object storage, retained at least seven days.
+- Staging receives daily encrypted logical backups to self-hosted object storage, retained at least seven days.
 - **Production backup strategy:** the same mitigation `ADR-0035` item 2 established for beta and
   now extends to production — frequent (4–6 hourly) encrypted `pg_dump` snapshots, with a
   documented, tested restore into a scratch database. A backup is not considered valid until
