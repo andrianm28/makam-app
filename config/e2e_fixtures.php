@@ -25,7 +25,14 @@ declare(strict_types=1);
  * (`.github/workflows/ci.yml`'s browser-test job, "Migrate the application
  * database" — the step that actually runs `php artisan migrate --force`,
  * where this migration's `up()` executes) that explicitly opts in.
+ *
+ * `seed_external_renewal` follows the identical shape (23 Aug 2026) for
+ * `2026_08_23_120000_seed_external_renewal_fixture.php` — its real
+ * `MarkExternalRenewal` call writes a `renewals` row and audit events that
+ * would equally pollute unrelated tests asserting exact counts on those
+ * tables if left unconditional.
  */
 return [
     'seed_admin_vendor_users' => (bool) env('SEED_E2E_ADMIN_VENDOR_USERS', false),
+    'seed_external_renewal' => (bool) env('SEED_E2E_EXTERNAL_RENEWAL', false),
 ];

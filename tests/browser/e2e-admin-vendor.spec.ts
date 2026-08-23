@@ -2,7 +2,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Browser, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+import { ADMIN, adminLogin, adminStorageStatePath, loginOnceUnlessFreshSession } from './support/admin-session';
 
 /**
  * E2E-ADMIN/VENDOR — the last of the six planned durable Playwright
@@ -57,11 +58,6 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
  * finance-gated subset as correctly denied.
  */
 
-const ADMIN = {
-    email: 'e2e-admin@example.test',
-    password: 'E2eAdminPassword!1',
-};
-
 const VENDOR = {
     email: 'e2e-vendor@example.test',
     password: 'E2eVendorPassword!1',
@@ -93,15 +89,6 @@ const VENDOR = {
 // (observed live: an immediate follow-up `goto()` intermittently landed back
 // on a stale intermediate URL). Settling here before returning means every
 // caller's next navigation is real, not a race.
-async function adminLogin(page: Page): Promise<void> {
-    await page.goto('/admin/login');
-    await page.getByLabel('Alamat email').fill(ADMIN.email);
-    await page.getByRole('textbox', { name: 'Kata sandi' }).fill(ADMIN.password);
-    await page.getByRole('button', { name: 'Masuk' }).click();
-    await page.waitForURL(/\/admin\/?$/);
-    await page.waitForLoadState('networkidle');
-}
-
 async function vendorLogin(page: Page): Promise<void> {
     await page.goto('/vendor/login');
     await page.getByLabel('Alamat email').fill(VENDOR.email);
@@ -222,15 +209,12 @@ function parallelSlot(): string {
 // `hasFreshStorageState()` below and overwritten on the next real login, so
 // nothing here accumulates or goes stale unboundedly on a long-lived dev
 // box.
-function adminStorageStatePath(): string {
-    return path.join(os.tmpdir(), `e2e-admin-vendor-admin-storage-state-${parallelSlot()}.json`);
-}
 
-// Same reasoning as adminStorageStatePath() above, for the vendor panel's
-// describe block below — a distinct path (not reused with the admin one)
-// so both blocks' beforeAll hooks can run without clobbering each other's
-// saved session, even though Playwright serializes describe blocks within
-// one worker.
+// Same reasoning as `adminStorageStatePath()` (now imported from
+// `./support/admin-session`), for the vendor panel's describe block below —
+// a distinct path (not reused with the admin one) so both blocks' beforeAll
+// hooks can run without clobbering each other's saved session, even though
+// Playwright serializes describe blocks within one worker.
 function vendorStorageStatePath(): string {
     return path.join(os.tmpdir(), `e2e-admin-vendor-vendor-storage-state-${parallelSlot()}.json`);
 }
@@ -243,36 +227,11 @@ function hasFreshStorageState(storageStatePath: string): boolean {
     }
 }
 
-/**
- * Logs in and saves `storageState` to `storageStatePath` — UNLESS a
- * still-fresh file is already there from a prior attempt in this same run
- * (the original attempt of a test a retry is re-running, or a sibling
- * describe block sharing this slot's storage path), in which case this is a
- * no-op that costs zero real login attempts. This is the guard that turns a
- * retried `beforeAll` into a free reuse instead of the 6th call against
- * Filament's shared 5-attempts/60s login rate limit (see this file's
- * rate-limit comment above).
- */
-async function loginOnceUnlessFreshSession(
-    browser: Browser,
-    storageStatePath: string,
-    login: (page: Page) => Promise<void>,
-): Promise<void> {
-    if (hasFreshStorageState(storageStatePath)) {
-        return;
-    }
-
-    // `browser.newPage()` would inherit this describe block's
-    // `test.use({ storageState: storageStatePath })` context option
-    // (verified live: it otherwise tries to READ that same not-yet-written
-    // file and throws ENOENT), so this context is created explicitly with
-    // no storage state instead.
-    const context = await browser.newContext({ storageState: undefined });
-    const page = await context.newPage();
-    await login(page);
-    await context.storageState({ path: storageStatePath });
-    await context.close();
-}
+// `loginOnceUnlessFreshSession()` is now imported from
+// `./support/admin-session` (see this file's rate-limit comment above for
+// why it exists — the guard that turns a retried `beforeAll` into a free
+// reuse instead of the 6th call against Filament's shared 5-attempts/60s
+// login rate limit).
 
 // This whole file runs as one serial group, on one worker, in declaration
 // order — not the `fullyParallel` default `playwright.config.ts` sets.

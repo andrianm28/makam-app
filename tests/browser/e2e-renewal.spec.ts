@@ -220,15 +220,21 @@ test('fee step never leaks tariff data and always gives an honest reason it cann
 test('payment and confirmation steps show an honest not-found state without a renewal reference', async ({
     page,
 }) => {
-    // No fixture ever creates a `renewals` row (no seed migration touches
-    // that table), and the only writer, OpenRenewal, is unreachable from
-    // the public UI while G-DATA-01 stays closed — so a real 'manual' or
-    // 'online' payment state, and duplicate-prevention on re-submission,
-    // are NOT reachable from the public UI in this environment. Both
-    // screens' only reachable, honest state via direct navigation is
-    // "not found" — bearer-UUID access (RenewalPayment /
-    // RenewalConfirmation doc blocks) means an absent or unknown
-    // reference must read as not-found, never as an error.
+    // A fixture now DOES create a `renewals` row —
+    // `2026_08_23_120000_seed_external_renewal_fixture.php` (gated on
+    // `SEED_E2E_EXTERNAL_RENEWAL`, which the CI browser job sets true, so
+    // this spec file and `e2e-renewal-external.spec.ts` share one database
+    // in that job). That fixture's renewal carries a real UUID `reference`,
+    // but this test never passes any reference in — it navigates with no
+    // reference at all — so its own assertions below are unaffected: the
+    // only writer reachable via a real reference, OpenRenewal, is still
+    // unreachable from the public UI while G-DATA-01 stays closed, so a
+    // real 'manual' or 'online' payment state, and duplicate-prevention on
+    // re-submission, remain NOT reachable from the public UI in this
+    // environment. Both screens' only reachable, honest state via direct
+    // navigation with no reference is "not found" — bearer-UUID access
+    // (RenewalPayment / RenewalConfirmation doc blocks) means an absent or
+    // unknown reference must read as not-found, never as an error.
     for (const path of ['/perpanjangan/pembayaran', '/perpanjangan/konfirmasi']) {
         await page.goto(path);
         await expect(

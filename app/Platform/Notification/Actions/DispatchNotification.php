@@ -114,9 +114,10 @@ final class DispatchNotification
      * event that maps ambiguously to more than one matrix row is
      * discriminated by a caller that already resolved the mapping (the
      * order-lifecycle bridge `Listeners\DispatchOrderNotifications`, which
-     * routes the canonical `order.status_changed.v1` event to the "Order
-     * processing"/"Order completed" rows by `to_status`; see its doc block).
-     * When null, the classic `outbox_event_name` lookup applies unchanged.
+     * routes the canonical `order.status_changed.v1` event to the "Booking
+     * submitted"/"Order processing"/"Order completed" rows by `to_status`;
+     * see its doc block). When null, the classic `outbox_event_name` lookup
+     * applies unchanged.
      */
     public function consumeOutboxEvent(string $outboxEventId, ?string $matrixEventName = null): void
     {

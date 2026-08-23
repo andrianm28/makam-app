@@ -15,6 +15,8 @@ use App\Platform\Outbox\OutboxQueueName;
  * N-12: "Never invent an event name") — to the order-lifecycle matrix rows
  * that have no other producer:
  *
+ *   - Order is created at MASUK (SubmitBookingDraft's RecordOrderStatusChange::
+ *     initial() call) → "Booking submitted" template
  *   - Order transitions to DIPROSES → "Order processing" template
  *   - Order transitions to SELESAI  → "Order completed" template
  *
@@ -35,6 +37,18 @@ use App\Platform\Outbox\OutboxQueueName;
  * uses for the six outbox-mapped matrix rows. The generic consumer listener
  * does NOT fire for `order.status_changed.v1` (no template maps to it), so
  * this bridge is the sole notification entry point for order transitions.
+ *
+ * "Booking submitted"'s notification_templates row (seeded from the matrix)
+ * carries outbox_event_name = 'booking.draft_submitted.v2' — a catalogued
+ * event name no code in this repository emits (SubmitBookingDraft uses the
+ * same order.status_changed.v1 + status-discrimination pattern as DIPROSES/
+ * SELESAI, not a dedicated submission event). That column value is
+ * therefore dead/unused for this row: the lookup here is entirely by
+ * event_name via the explicit $matrixEventName argument (see
+ * ConsumeOutboxNotificationJob's own doc block), which never reads
+ * outbox_event_name. Left as-is rather than edited in the seed migration —
+ * changing already-applied seed data is a separate, higher-risk change this
+ * task does not need to make.
  *
  * Idempotency (queue delivery is at-least-once): the source
  * `order.status_changed.v1` row already carries the idempotency key
@@ -66,6 +80,7 @@ final class DispatchOrderNotifications
         $toStatus = $event->envelope['data']['to_status'] ?? null;
 
         $matrixEventName = match ($toStatus) {
+            OrderStatus::MASUK->value => 'Booking submitted',
             OrderStatus::DIPROSES->value => 'Order processing',
             OrderStatus::SELESAI->value => 'Order completed',
             default => null,

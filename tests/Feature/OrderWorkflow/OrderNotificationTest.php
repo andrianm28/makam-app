@@ -48,6 +48,22 @@ final class OrderNotificationTest extends TestCase
         $this->assertOutboxMissing('order.completed.v1');
     }
 
+    public function test_booking_submitted_notification_dispatched_when_order_is_created_at_masuk(): void
+    {
+        $order = $this->makeOrderAtStatus(OrderStatus::MASUK);
+
+        $event = app(RecordOrderStatusChange::class)->initial(
+            $order,
+            'actor:test',
+            'system',
+        );
+
+        $this->assertNotificationFor($event, 'Booking submitted');
+
+        $this->assertOutboxMissing('order.processing.v1');
+        $this->assertOutboxMissing('order.completed.v1');
+    }
+
     public function test_order_completed_notification_dispatched_when_order_enters_selesai(): void
     {
         $order = $this->makeOrderAtStatus(OrderStatus::DIPROSES);

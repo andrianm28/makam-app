@@ -31,10 +31,15 @@ use Illuminate\Queue\SerializesModels;
  * order-lifecycle bridge `App\Domain\OrderWorkflow\Listeners\
  * DispatchOrderNotifications` dispatches this job for the canonical
  * `order.status_changed.v1` event with the matrix label resolved from the
- * payload's `to_status` ("Order processing"/"Order completed") — the two
- * rows keep a NULL `outbox_event_name` (Wave-1a ruling 1 left the
- * status-discrimination question open; the bridge resolves it). Every
- * existing caller leaves it null and keeps the `outbox_event_name` lookup.
+ * payload's `to_status` ("Booking submitted"/"Order processing"/"Order
+ * completed") — "Order processing" and "Order completed" keep a NULL
+ * `outbox_event_name` (Wave-1a ruling 1 left the status-discrimination
+ * question open; the bridge resolves it); "Booking submitted" carries a
+ * non-null `outbox_event_name` that is simply unused for this row, since
+ * the lookup here is always by the explicit `$matrixEventName` argument
+ * (see `DispatchOrderNotifications`'s own doc block). Every existing
+ * caller outside that bridge leaves it null and keeps the
+ * `outbox_event_name` lookup.
  */
 final class ConsumeOutboxNotificationJob implements ShouldQueue
 {
