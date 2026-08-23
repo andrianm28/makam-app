@@ -136,7 +136,11 @@ host and the same shared Postgres/Redis instances (isolated by database/credenti
 **Mitigation:** beta gets its own database, user, and secret file — **built** (19 Aug 2026): `makam_beta`
 database, `makam_beta_user` role, `secrets/makam_beta_db_password.txt` (uid 999, mode 0400), never reusing
 `makam_dev`'s credentials. Lane D6 (broader credential hygiene — e.g. rotating anything else touched by the
-dev admin password's git-history exposure) remains not built.
+dev admin password's git-history exposure) has a prepared, not-yet-executed runbook (23 Aug 2026):
+[`docs/operations/runbooks/rotate-dev-stg-db-access.md`](../operations/runbooks/rotate-dev-stg-db-access.md)
+— rotates the three carried-over `postgres_admin`/`makam_dev`/`makam_stg` database access values, which the
+17 Aug 2026 host migration moved verbatim without rotating (per that migration's own §2 inventory). Requires a
+human operator with live host access; not something this document's own preparation closes on its own.
 
 ### 9. No real legal review before launch (deviates from Lane C2's own plan text and from H3, which named this the human decision gating de-DRAFT'ing the legal pages)
 
