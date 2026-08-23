@@ -71,9 +71,18 @@ return [
         'redis:'.OutboxQueueName::Urgent->value => 15,
         'redis:'.OutboxQueueName::Notifications->value => 60,
         'redis:'.OutboxQueueName::Default->value => 90,
-        'redis:'.OutboxQueueName::Imports->value => 300,
-        'redis:'.OutboxQueueName::Media->value => 300,
-        'redis:'.OutboxQueueName::Reports->value => 600,
+        // Final-review re-check (round 2): supervisor-batch/reports moved
+        // to the `redis_batch` connection (see the connection-choice
+        // comment above), but these three keys still said `redis:` —
+        // Horizon composes wait-time lookup keys as `connection:queue`
+        // (RedisSupervisorRepository) and does a direct config() lookup
+        // on that exact string (MonitorWaitTimes), so a mismatched
+        // connection prefix here means these three thresholds are
+        // silently dead and the `?? 60` default applies instead —
+        // exactly the alerting regression this comment now prevents.
+        'redis_batch:'.OutboxQueueName::Imports->value => 300,
+        'redis_batch:'.OutboxQueueName::Media->value => 300,
+        'redis_batch:'.OutboxQueueName::Reports->value => 600,
     ],
 
     /*

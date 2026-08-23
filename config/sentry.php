@@ -19,6 +19,19 @@ return [
 
     'release' => env('SENTRY_RELEASE'),
 
+    // Final-review re-check (round 2): SentryEventScrubber::scrub() used to
+    // call env('APP_IMAGE_DIGEST', ...) directly at runtime. Two problems
+    // with that: Laravel's LoadEnvironmentVariables bootstrapper skips
+    // parsing .env entirely once config is cached, so env() silently
+    // returns its default forever after `config:cache` — exactly the
+    // command this whole fix exists to make work again; and Larastan's
+    // noEnvCallsOutsideOfConfig rule (correctly) flags any env() call
+    // outside config/*.php. Reading it here, at config-build time, and
+    // having the scrubber read config('sentry.image_digest') instead,
+    // fixes both — the value is resolved once, correctly, whether or not
+    // the config is cached.
+    'image_digest' => env('APP_IMAGE_DIGEST', 'unknown'),
+
     /*
     |--------------------------------------------------------------------------
     | before_send scrubber

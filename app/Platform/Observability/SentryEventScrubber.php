@@ -49,7 +49,7 @@ final class SentryEventScrubber
             $event->setTag('correlation_id', $correlationId->value);
         }
 
-        $event->setTag('image_digest', (string) env('APP_IMAGE_DIGEST', 'unknown'));
+        $event->setTag('image_digest', (string) config('sentry.image_digest', 'unknown'));
 
         // NIK: 16 consecutive digits. KK: same format, same scrub — this
         // codebase does not distinguish the two at the string-pattern

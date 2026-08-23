@@ -7,8 +7,10 @@ namespace App\Platform\Observability\Providers;
 use App\Platform\IdentityAccess\Contracts\IdentityAccessAdapter;
 use App\Platform\IdentityAccess\Panel\AdminPanelAccessPolicy;
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Horizon\Horizon;
 
 /**
  * Registered in `bootstrap/providers.php`, following the same
@@ -35,6 +37,17 @@ use Illuminate\Support\ServiceProvider;
  * `/admin` (see `AdminPanelAccessPolicy`'s own class-level doc block for
  * the four PANEL_ROLES this admits) — operational dashboards are exactly
  * the same "can do back-office work" audience, not a separate concept.
+ *
+ * Final-review re-check (round 2): the first pass defined `viewHorizon`
+ * but never called `Horizon::auth()` — verified against
+ * `vendor/laravel/horizon/src/Horizon.php`, `Horizon::check()` only
+ * consults a callback registered via `Horizon::auth()`; with nothing
+ * registered it falls back to `app()->environment('local')` and the
+ * `viewHorizon` gate defined below was never consulted at all. Horizon's
+ * own `HorizonApplicationServiceProvider::authorization()` (the base
+ * class a host app is meant to subclass) shows the exact pairing this
+ * provider now replicates directly: define the gate, then call
+ * `Horizon::auth()` with a closure that checks it.
  */
 final class ObservabilityServiceProvider extends ServiceProvider
 {
@@ -60,5 +73,14 @@ final class ObservabilityServiceProvider extends ServiceProvider
         // document (`Gate::define('viewHorizon', ...)`), reusing the
         // identical admin-panel-access rule Pulse uses above.
         Gate::define('viewHorizon', $authorizeForAdminPanel);
+
+        // The gate alone has no effect until Horizon is told to consult
+        // it — `Horizon::check()` only runs a callback registered here,
+        // see this class's doc block. `$request->user()` is nullable for
+        // a guest, and `$authorizeForAdminPanel` already accepts a
+        // nullable `Authenticatable` and fails closed via
+        // `AdminPanelAccessPolicy::allows()`'s own `isAuthenticated()`
+        // check — no separate null guard needed here.
+        Horizon::auth(static fn (Request $request): bool => Gate::check('viewHorizon', [$request->user()]));
     }
 }
