@@ -130,6 +130,8 @@ The system assumes **at-least-once delivery**. Consumers must be idempotent usin
 
 Deployment must terminate Horizon gracefully so active jobs finish or are safely retried. Job timeout must be shorter than `retry_after`. Scheduler runs a single outbox publisher using overlap prevention or distributed lock.
 
+Resolved numbers (final-review I1, observability-and-adr-fixes): `critical`/`urgent`/`notifications`/`default` supervisors use the `redis` queue connection (`retry_after` 90s, `config/queue.php`) against 60–90s job timeouts (`config/horizon.php`). `supervisor-batch` (`imports`, `media`) and `supervisor-reports` run at a 900s job timeout, which exceeds 90s — those two supervisors use a separate `redis_batch` connection (`retry_after` 1000s by default, `REDIS_QUEUE_BATCH_RETRY_AFTER` env-overridable) so the invariant above holds for both groups without weakening retry semantics on the tight-timeout queues.
+
 ## 10. Combined dev/staging worker profile
 
 On the Ubuntu 22.04 2/4 non-production host:

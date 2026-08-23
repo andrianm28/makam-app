@@ -93,7 +93,16 @@ services:
   stg-batch-worker:
     image: ${APP_IMAGE:?APP_IMAGE is required}
     profiles: ["batch"]
-    command: ["php", "artisan", "queue:work", "--stop-when-empty", "--queue=imports,media,reports", "--timeout=900"]
+    # Final-review re-check (round 2): must run against the `redis_batch`
+    # queue connection (config/queue.php), not the default `redis`
+    # connection — `redis`'s retry_after (90s) is shorter than this
+    # worker's own --timeout (900s), which duplicate-executes any job
+    # that runs past 90s. `redis_batch`'s retry_after (1000s) is safely
+    # above the timeout, matching config/horizon.php's supervisor-batch/
+    # supervisor-reports, which this on-demand worker stands in for in
+    # staging (see ADR-0027 condition 4 / config/horizon.php's staging
+    # block, both batch/reports supervisors disabled there).
+    command: ["php", "artisan", "queue:work", "redis_batch", "--stop-when-empty", "--queue=imports,media,reports", "--timeout=900"]
     env_file: .env.stg
     depends_on:
       postgres: {condition: service_healthy}

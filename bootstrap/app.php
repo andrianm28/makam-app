@@ -10,6 +10,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Sentry\Laravel\Integration;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -104,4 +105,22 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*'),
         );
+
+        // Task 4 (observability-and-adr-fixes): registers Sentry's own
+        // exception-reporting hook. Prepared alongside config/sentry.php,
+        // whose send_default_pii=false + before_send scrubber govern what
+        // this hook is allowed to transmit — this line just wires the
+        // reporting path, it does not decide what leaves the app.
+        //
+        // Final-review C1: `sentry/sentry-laravel` is deliberately not
+        // installed yet (composer.lock untouched per host build
+        // restrictions — see CLAUDE.md), so `Integration` does not exist on
+        // this branch today. `withExceptions()`'s closure resolves on every
+        // HTTP request/console command, so an unguarded call fatal-errors
+        // the whole app right now. Guarding on class_exists() makes this
+        // self-activate the moment a human installs the package — no other
+        // code change needed at that point.
+        if (class_exists(Integration::class)) {
+            Integration::handles($exceptions);
+        }
     })->create();

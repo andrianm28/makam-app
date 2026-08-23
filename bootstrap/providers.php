@@ -9,6 +9,7 @@ use App\Platform\FeatureGate\Providers\FeatureGateServiceProvider;
 use App\Platform\FinancialLedger\Providers\FinancialLedgerServiceProvider;
 use App\Platform\IdentityAccess\Providers\IdentityAccessServiceProvider;
 use App\Platform\Notification\Providers\NotificationServiceProvider;
+use App\Platform\Observability\Providers\ObservabilityServiceProvider;
 use App\Platform\Payment\Providers\PaymentServiceProvider;
 use App\Platform\SiteSettings\Providers\SiteSettingsServiceProvider;
 use App\Providers\AppServiceProvider;
@@ -108,4 +109,12 @@ return [
     // `BindingResolutionException` on the first request to that resource —
     // see `AuditServiceProvider`'s own class-level comment.
     AuditServiceProvider::class,
+    // Final-review C2/I3 (observability-and-adr-fixes) — registers the
+    // `viewPulse`/`viewHorizon` gates. Same precedent as every provider
+    // above: without it, both dashboards would fall back to their
+    // packages' default deny-outside-local gate, and `config/pulse.php`'s
+    // former closure-based `authorize` key (removed here — see that
+    // file's own comment) would already have broken `config:cache` if the
+    // package were installed as-is.
+    ObservabilityServiceProvider::class,
 ];
