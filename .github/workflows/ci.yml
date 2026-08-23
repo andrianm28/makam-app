@@ -405,6 +405,13 @@ jobs:
           # Scoped to nothing but this one step's process; production is
           # untouched.
           SEED_E2E_ADMIN_VENDOR_USERS: "true"
+          # Opts the external-renewal seed migration
+          # (database/migrations/2026_08_23_120000_seed_external_renewal_fixture.php)
+          # into actually writing its one throwaway externally-marked
+          # renewal -- config/e2e_fixtures.php defaults this to false
+          # everywhere else, same reasoning as SEED_E2E_ADMIN_VENDOR_USERS
+          # immediately above.
+          SEED_E2E_EXTERNAL_RENEWAL: "true"
 
       - name: Build assets
         run: npm run build
