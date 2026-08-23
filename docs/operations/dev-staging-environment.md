@@ -87,7 +87,7 @@ Production credentials must never be copied to the host. Production data is proh
 - Both environments return `X-Robots-Tag: noindex, nofollow` and disallow crawler indexing.
 - SSH uses keys, no password login, least-privilege sudo, and restricted firewall rules.
 - PostgreSQL and Redis are not exposed publicly.
-- Admin/MFA flows remain enabled in staging to test production behavior.
+- Admin login flows remain enabled in staging to test production behavior — MFA itself was removed entirely (22-23 Aug 2026, PR #147; see `docs/adr/0024-use-session-auth-and-mfa.md`'s superseding note), so this now refers to the password-based recent re-authentication (`App\Filament\Admin\Pages\PasswordReauthentication`) that replaced it, not a TOTP/MFA flow.
 
 ## 6. Resource budget
 
