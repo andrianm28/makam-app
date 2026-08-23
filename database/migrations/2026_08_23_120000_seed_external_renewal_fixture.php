@@ -166,7 +166,6 @@ return new class extends Migration
         // log is intentionally not erasable by a migration rollback.
         $renewalIds = Renewal::query()
             ->where('target_due_period', self::TARGET_DUE_PERIOD)
-            ->whereHas('graveRecord', fn ($query) => $query->orderBy('id'))
             ->pluck('id');
 
         // `renewal_external_markings.renewal_id` is `restrictOnDelete()`
