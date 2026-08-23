@@ -36,7 +36,7 @@ Related documents:
 
 ## Step 1 — Identify the real artifact to promote
 
-The immutable reference is the image digest, not either moving tag (`.github/workflows/ci.yml`'s "Build and push image" job — see this runbook's own citation above). The digest is written to the run's step summary by the "Record image reference" step, not to the plain step log, so grep the whole log for the digest pattern itself rather than anchoring on one step name and a fixed line window (the same approach `rollback-deploy.md`'s preconditions already use for this exact lookup):
+The immutable reference is the image digest, not either moving tag (`.github/workflows/ci.yml`'s "Build and push image" job — see this runbook's own citation above). `.github/workflows/ci.yml`'s "Generate SBOM" step is the earliest point the digest (`steps.build.outputs.digest`) is used; the later "Record image reference" step only writes it to the job summary (`$GITHUB_STEP_SUMMARY`), not reliably to the plain step log — so grep for the `ghcr.io/...@sha256:...` pattern itself across the whole log rather than anchoring to one step name and a fixed line window (the same approach `rollback-deploy.md`'s preconditions already use for this exact lookup):
 
 ```bash
 gh run list --branch <base-branch> --status success --limit 5
@@ -82,7 +82,7 @@ docker compose -f <production-compose-file> exec <app-service> php artisan horiz
 docker compose -f <production-compose-file> restart <app-service> <horizon-service> <scheduler-service> <pulse-service>
 ```
 
-Omit `<pulse-service>` if this production environment does not run separate Pulse ingestion (`deployment.md` §3 lists it as "where configured", not mandatory). Horizon's graceful terminate (not a hard kill) lets in-flight jobs finish or safely retry, per this repo's own established Horizon deployment discipline (`docs/architecture/queue-and-outbox.md` §9, already cited elsewhere in this codebase).
+Omit `<pulse-service>` if this production environment does not run separate Pulse ingestion (`deployment.md` §3 lists it as "where configured", not mandatory). Horizon's graceful terminate (not a hard kill) lets in-flight jobs finish or safely retry, per this repo's own established Horizon deployment discipline (`docs/architecture/queue-and-outbox.md` §9, already cited elsewhere in this codebase). `<scheduler-service>` here is real (unlike dev/staging, which has no persistent scheduler service — see `rollback-deploy.md`'s Environment note — a real production environment per `deployment.md` §3 runs a genuine scheduler process to restart here).
 
 ## Step 6 — Run the deployment checks
 

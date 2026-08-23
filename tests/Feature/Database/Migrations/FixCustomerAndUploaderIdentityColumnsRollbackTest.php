@@ -7,19 +7,20 @@ namespace Tests\Feature\Database\Migrations;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
  * The one real, previously-uncovered gap `docs/testing/release-gates.md`
- * §H names directly: "migration (rollback-specific) — no dedicated
- * migration-rollback test found." Tests
+ * §G named before this test existed: "migration (rollback-specific) — no
+ * dedicated migration-rollback test found." Tests
  * `2026_08_22_100000_fix_customer_and_uploader_identity_columns.php`'s
- * `down()` in isolation — see this class's own doc block for why direct
- * instantiation is used instead of `Artisan::call('migrate:rollback')`
- * (dozens of later migrations would make `--step=1` undo the wrong one)
- * and why no row is seeded first (the migrated tables have never held
- * real data — confirmed in the migration's own doc block — so this test
- * proves the schema reversal, not data preservation).
+ * `down()` in isolation, using direct instantiation instead of
+ * `Artisan::call('migrate:rollback')` (dozens of later migrations would
+ * make `--step=1` undo the wrong one), and seeding no row first (the
+ * migrated tables have never held real data — confirmed in the
+ * migration's own doc block — so this test proves the schema reversal,
+ * not data preservation).
  *
  * Postgres DDL is transactional, and `RefreshDatabase` wraps each test in
  * a transaction — so `down()`'s real `dropConstrainedForeignId()`/
@@ -38,7 +39,7 @@ final class FixCustomerAndUploaderIdentityColumnsRollbackTest extends TestCase
     /**
      * @return array<int, array{string, string}>
      */
-    public static function columnProvider(): array
+    public static function identityColumns(): array
     {
         return [
             ['subscriptions', 'customer_id'],
@@ -48,47 +49,42 @@ final class FixCustomerAndUploaderIdentityColumnsRollbackTest extends TestCase
         ];
     }
 
-    public function test_down_reverts_all_four_columns_to_a_bare_uuid_with_no_foreign_key(): void
+    #[DataProvider('identityColumns')]
+    public function test_down_reverts_the_column_to_a_bare_uuid_with_no_foreign_key(string $table, string $column): void
     {
         $migration = $this->loadMigration();
 
-        foreach (self::columnProvider() as [$table, $column]) {
-            self::assertSame(
-                'bigint',
-                $this->columnDataType($table, $column),
-                "{$table}.{$column} should be bigint (the foreignId shape) before down() runs"
-            );
-            self::assertTrue(
-                $this->hasForeignKey($table, $column),
-                "{$table}.{$column} should have a foreign key constraint before down() runs"
-            );
-        }
+        self::assertSame(
+            'bigint',
+            $this->columnDataType($table, $column),
+            "{$table}.{$column} should be bigint (the foreignId shape) before down() runs"
+        );
+        self::assertTrue(
+            $this->hasForeignKey($table, $column),
+            "{$table}.{$column} should have a foreign key constraint before down() runs"
+        );
 
         $migration->down();
 
-        foreach (self::columnProvider() as [$table, $column]) {
-            self::assertSame(
-                'uuid',
-                $this->columnDataType($table, $column),
-                "{$table}.{$column} should revert to uuid after down()"
-            );
-            self::assertFalse(
-                $this->hasForeignKey($table, $column),
-                "{$table}.{$column} should have no foreign key constraint after down()"
-            );
-        }
+        self::assertSame(
+            'uuid',
+            $this->columnDataType($table, $column),
+            "{$table}.{$column} should revert to uuid after down()"
+        );
+        self::assertFalse(
+            $this->hasForeignKey($table, $column),
+            "{$table}.{$column} should have no foreign key constraint after down()"
+        );
 
         // Leave the schema as RefreshDatabase's next test expects it —
         // defensive, see this class's own doc block.
         $migration->up();
 
-        foreach (self::columnProvider() as [$table, $column]) {
-            self::assertSame(
-                'bigint',
-                $this->columnDataType($table, $column),
-                "{$table}.{$column} should be back to bigint after re-running up()"
-            );
-        }
+        self::assertSame(
+            'bigint',
+            $this->columnDataType($table, $column),
+            "{$table}.{$column} should be back to bigint after re-running up()"
+        );
     }
 
     private function loadMigration(): Migration

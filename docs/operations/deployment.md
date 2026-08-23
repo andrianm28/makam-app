@@ -77,3 +77,5 @@ The canonical process is `ci-cd-and-release.md`. Database recovery follows `data
 ## 7. Rollback
 
 Prefer application rollback with forward-compatible schema. Financial, reservation, certificate, outbox, and audit records are never deleted to simulate rollback. Close affected feature gates and reconcile durable external events before resuming.
+
+See `docs/operations/runbooks/rollback-deploy.md` for the concrete, executable procedure implementing these principles.

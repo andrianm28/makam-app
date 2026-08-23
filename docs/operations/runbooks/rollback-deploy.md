@@ -10,7 +10,7 @@ What to do when one of `ci-cd-and-release.md` §6's rollback triggers fires agai
 
 Related documents:
 - `docs/operations/ci-cd-and-release.md` (`../ci-cd-and-release.md` from this file's own real location) §1, §6, §7 — the approved principles this procedure instantiates
-- `deploy-production.md` — a separate task in this same plan; not yet written as of this document, so not linked here to avoid a dangling reference. Once it exists it uses the identical `APP_IMAGE` promotion mechanism Step 3 below describes. / [`deploy-stg-vhost.md`](deploy-stg-vhost.md) covers the staging nginx vhost, a different concern (routing, not artifact promotion) — not the deploy procedure this runbook reverses.
+- [`deploy-production.md`](deploy-production.md) — the deploy procedure this reverses, using the identical `APP_IMAGE` promotion mechanism Step 3 below describes / [`deploy-stg-vhost.md`](deploy-stg-vhost.md) covers the staging nginx vhost, a different concern (routing, not artifact promotion) — not the deploy procedure this runbook reverses.
 - [`../../architecture/queue-and-outbox.md`](../../architecture/queue-and-outbox.md) §7-8 — outbox retry/replay semantics referenced in Step 5 below
 
 **Environment note.** This procedure is parameterized by environment, but not every environment runs every component persistently. Per `docs/operations/dev-staging-environment.md` §9: only the staging profile runs a persistent Horizon process (`stg-horizon`) and a persistent scheduler (host cron invoking `schedule:run` once a minute); the development profile has no always-on Horizon or scheduler at all — both are run manually there. Where a step below references `<horizon-service>` or a scheduler restart, treat it as inapplicable to an environment that doesn't run that component persistently.
@@ -54,10 +54,14 @@ If the incident is scoped to a specific feature (payment, a specific journey), c
 Pause the specific queue(s) implicated, without losing already-enqueued work — applies to environments running a persistent Horizon process (see the Environment note above):
 
 ```bash
-docker compose -f <compose-file> exec <app-service> php artisan horizon:pause
+docker compose -f <compose-file> exec <app-service> php artisan horizon:pause-supervisor <supervisor-name>
+# e.g. supervisor-critical, supervisor-urgent — see config/horizon.php for the real names.
+# If the incident isn't scoped to one supervisor, php artisan horizon:pause stops
+# every supervisor — a real, sometimes-correct option, but a strictly bigger blast
+# radius than "the specific queue(s) implicated" above; use it deliberately, not by default.
 ```
 
-`horizon:pause` stops new job processing while leaving already-claimed and already-queued jobs intact (Horizon's own documented behavior) — this is deliberately NOT `horizon:terminate` (which would let in-flight jobs finish first) nor a hard container kill (which could leave a job claimed-but-unprocessed with no clean retry path).
+`horizon:pause-supervisor` stops new job processing on that supervisor while leaving already-claimed and already-queued jobs intact (Horizon's own documented behavior) — this is deliberately NOT `horizon:terminate` (which would let in-flight jobs finish first) nor a hard container kill (which could leave a job claimed-but-unprocessed with no clean retry path).
 
 ## Step 3 — Roll the application artifact back (§7 action 3)
 
@@ -68,7 +72,7 @@ export APP_IMAGE="ghcr.io/<repo-lowercased>@sha256:<known-good-digest-from-preco
 docker compose -f <compose-file> up -d <app-service> <horizon-service>
 ```
 
-This is the exact same promotion mechanism a forward deploy uses (the dev-stg compose file's own `APP_IMAGE` pattern, `docs/operations/examples/docker-compose.dev-stg.yml`; `deploy-production.md`, once it exists, uses the identical mechanism for production) — a rollback is a promotion to an OLDER digest, not a structurally different operation. Omit `<horizon-service>` for an environment with no persistent Horizon process (see the Environment note above).
+This is the exact same promotion mechanism a forward deploy uses (the dev-stg compose file's own `APP_IMAGE` pattern, `docs/operations/examples/docker-compose.dev-stg.yml`; `deploy-production.md` uses the identical mechanism for production) — a rollback is a promotion to an OLDER digest, not a structurally different operation. Omit `<horizon-service>` for an environment with no persistent Horizon process (see the Environment note above).
 
 There is no separate scheduler container to restart. Per `docs/operations/dev-staging-environment.md` §9, the staging scheduler runs as a host-cron-invoked `docker compose exec <app-service> php artisan schedule:run` against the already-running `<app-service>` container, not a standing compose service — once `<app-service>` above is recreated against the rolled-back digest, the next cron-triggered `schedule:run` picks it up automatically.
 
@@ -79,7 +83,8 @@ Per the precondition check above: if the rolled-back artifact's code no longer e
 ## Step 5 — Resume consumers, reprocess after idempotency review (§7 action 5)
 
 ```bash
-docker compose -f <compose-file> exec <app-service> php artisan horizon:continue
+docker compose -f <compose-file> exec <app-service> php artisan horizon:continue-supervisor <supervisor-name>
+# (or `horizon:continue` if Step 2 used the unscoped pause)
 ```
 
 Before resuming: confirm any job that was mid-processing when Step 2 paused the queue is safe to retry — per `docs/architecture/queue-and-outbox.md` §7's at-least-once delivery semantics, every real consumer in this codebase is already required to be idempotent on `event_id`/a domain idempotency key, so a resumed retry should be safe by construction; this step is a human sanity check on that assumption for the SPECIFIC incident, not a blanket skip.
