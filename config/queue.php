@@ -73,6 +73,29 @@ return [
             'after_commit' => false,
         ],
 
+        // Final-review I1: `config/horizon.php`'s `supervisor-batch`/
+        // `supervisor-reports` run jobs with `timeout => 900`, well above
+        // the `redis` connection's `retry_after` of 90 above.
+        // docs/architecture/queue-and-outbox.md §9's governing invariant
+        // ("Job timeout must be shorter than retry_after") means a batch
+        // job running past 90s gets released back onto the queue and
+        // picked up by a second worker while the first is still running
+        // it — duplicate execution. Rather than lowering the 900s batch
+        // timeout (real workload need) or raising `retry_after` globally
+        // (would weaken retry semantics for the tight-timeout
+        // critical/urgent/notifications/default queues), the batch/report
+        // supervisors get their own connection with a longer
+        // `retry_after`, safely above the 900s timeout. Same shape as
+        // `redis` above, same env-var pattern for its own `retry_after`.
+        'redis_batch' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => env('REDIS_QUEUE', 'default'),
+            'retry_after' => (int) env('REDIS_QUEUE_BATCH_RETRY_AFTER', 1000),
+            'block_for' => null,
+            'after_commit' => false,
+        ],
+
         'deferred' => [
             'driver' => 'deferred',
         ],

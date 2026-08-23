@@ -1,8 +1,7 @@
 <?php
 
 declare(strict_types=1);
-use App\Platform\Correlation\CorrelationContext;
-use Sentry\Event;
+use App\Platform\Observability\SentryEventScrubber;
 
 return [
     'dsn' => env('SENTRY_LARAVEL_DSN'),
@@ -34,42 +33,14 @@ return [
     | outbox event / journal entry via the same id used everywhere else in
     | this codebase's tracing (AssignCorrelationId middleware).
     |
+    | Final-review C2: an inline closure here breaks `php artisan
+    | config:cache` (var_export() can't serialize a Closure). An array
+    | callable is a plain string array, so it survives var_export() intact
+    | — this is also the exact pattern Sentry's own Laravel filtering docs
+    | use for before_send. See SentryEventScrubber's own class-level doc
+    | block for why this stayed a config-file callable reference rather
+    | than moving into a service provider's boot().
+    |
     */
-    'before_send' => static function (Event $event): ?Event {
-        $correlationId = app(CorrelationContext::class)->current();
-
-        if ($correlationId !== null) {
-            $event->setTag('correlation_id', $correlationId->value);
-        }
-
-        $event->setTag('image_digest', (string) env('APP_IMAGE_DIGEST', 'unknown'));
-
-        // NIK: 16 consecutive digits. KK: same format, same scrub — this
-        // codebase does not distinguish the two at the string-pattern
-        // level, matching how docs/operations/observability-stack.md §5
-        // itself does not either.
-        $nikKkPattern = '/\b\d{16}\b/';
-
-        // A DocumentVault signed URL — scrub the whole query string, not
-        // just the signature param, since the path + expiry + signature
-        // together are the sensitive artifact, not any one field alone.
-        $signedUrlPattern = '#(https?://[^\s]+/vault/[^\s?]+)\?[^\s]+#';
-
-        $scrub = static function (mixed $value) use ($nikKkPattern, $signedUrlPattern): mixed {
-            if (! is_string($value)) {
-                return $value;
-            }
-
-            $value = preg_replace($nikKkPattern, '[REDACTED-NIK-KK]', $value) ?? $value;
-            $value = preg_replace($signedUrlPattern, '$1?[REDACTED-SIGNATURE]', $value) ?? $value;
-
-            return $value;
-        };
-
-        if (($message = $event->getMessage()) !== null) {
-            $event->setMessage($scrub($message));
-        }
-
-        return $event;
-    },
+    'before_send' => [SentryEventScrubber::class, 'scrub'],
 ];

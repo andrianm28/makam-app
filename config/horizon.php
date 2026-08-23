@@ -201,7 +201,12 @@ return [
             'nice' => 0,
         ],
         'supervisor-batch' => [
-            'connection' => 'redis',
+            // Final-review I1: 'redis_batch', not 'redis' — see
+            // config/queue.php's own comment on that connection. This
+            // supervisor's 900s timeout exceeds the 'redis' connection's
+            // 90s retry_after, which would otherwise let a second worker
+            // pick up (and duplicate-execute) a still-running batch job.
+            'connection' => 'redis_batch',
             'queue' => [OutboxQueueName::Imports->value, OutboxQueueName::Media->value],
             'balance' => 'auto',
             'autoScalingStrategy' => 'time',
@@ -215,7 +220,9 @@ return [
             'nice' => 0,
         ],
         'supervisor-reports' => [
-            'connection' => 'redis',
+            // Final-review I1: 'redis_batch', not 'redis' — same reasoning
+            // as supervisor-batch above.
+            'connection' => 'redis_batch',
             'queue' => [OutboxQueueName::Reports->value],
             'balance' => 'auto',
             'autoScalingStrategy' => 'time',

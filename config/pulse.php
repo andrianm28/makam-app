@@ -2,9 +2,6 @@
 
 declare(strict_types=1);
 
-use App\Platform\IdentityAccess\Contracts\IdentityAccessAdapter;
-use App\Platform\IdentityAccess\Panel\AdminPanelAccessPolicy;
-use Illuminate\Contracts\Auth\Authenticatable;
 use Laravel\Pulse\Recorders\CacheInteractions;
 use Laravel\Pulse\Recorders\Queues;
 use Laravel\Pulse\Recorders\SlowJobs;
@@ -41,20 +38,17 @@ return [
         ],
     ],
 
-    // Per AGENTS.md §Observability's "access-controlled" requirement (also
-    // named directly by release-gates.md §H's Pulse box) — the dashboard
-    // route must stay behind real admin authorization, not Pulse's own
-    // default gate. This reuses the same panel-access rule the `/admin`
-    // Filament panel already enforces (`AdminPanelAccessPolicy`, checked via
-    // `User::canAccessPanel()`) rather than inventing a second, parallel
-    // "isAdmin" concept — the four PANEL_ROLES documented on that class
-    // (admin, restricted_admin, operator, finance) are exactly who should
-    // see operational metrics too.
-    'authorize' => static function (?Authenticatable $user): bool {
-        $actorContext = app(IdentityAccessAdapter::class)->resolveActorContext($user);
-
-        return app(AdminPanelAccessPolicy::class)->allows($actorContext);
-    },
+    // Final-review C2: `authorize` is NOT a real `laravel/pulse` config
+    // key — verified against the current Pulse docs. Pulse's dashboard
+    // authorization is a `Gate::define('viewPulse', ...)` call, the same
+    // convention Laravel's own Horizon package uses for `viewHorizon`. An
+    // inline closure here would also break `php artisan config:cache`
+    // regardless (var_export() can't serialize a Closure). Registered
+    // instead in `App\Platform\Observability\Providers\
+    // ObservabilityServiceProvider::boot()`, reusing the same
+    // `AdminPanelAccessPolicy` + `IdentityAccessAdapter::
+    // resolveActorContext()` logic verbatim (AGENTS.md §Observability's
+    // "access-controlled" requirement; release-gates.md §H's Pulse box).
 
     'servers' => [
         env('PULSE_SERVER_NAME', gethostname()),
