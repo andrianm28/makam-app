@@ -19,7 +19,6 @@ final class ReauthenticationGuardTest extends TestCase
             identityReference: 'user:1',
             roles: [ActorRole::FINANCE],
             scopes: [],
-            mfaState: ActorContext::MFA_STATE_ENROLLED,
             lastAuthenticatedAt: $lastAuth,
         );
     }

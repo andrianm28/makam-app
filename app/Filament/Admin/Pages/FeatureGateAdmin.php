@@ -54,12 +54,12 @@ use Illuminate\Support\Collection;
  * `GateActivationRecorder`'s doc block names ("Privileged action -> recent
  * re-authentication -> evidence reference required -> audited -> outbox
  * event emitted"): it asserts the actor's `lastAuthenticatedAt` is fresh via
- * `ReauthenticationGuard` FIRST, and when stale redirects to the
- * `filament.admin.pages.mfa-challenge` challenge page threading the pending
- * reason (`RequireRecentAuthentication::REASON_SESSION_KEY`) and the
- * intended return URL — the exact session-key/route pair the
+ * `ReauthenticationGuard` FIRST, and when stale redirects to
+ * `PasswordReauthentication` threading the pending reason
+ * (`RequireRecentAuthentication::REASON_SESSION_KEY`) and the intended
+ * return URL — the exact session-key/route pair the
  * `RequireRecentAuthentication` middleware uses, so a satisfied challenge
- * routes back here via `MfaChallenge`'s `redirectIntended()`. Only a fresh
+ * routes back here. Only a fresh
  * actor reaches `GateActivationRecorder::record()`, which enforces
  * non-blank evidence and reason and commits the activation row + audit
  * record + outbox event atomically. This page never enforces evidence
@@ -209,7 +209,7 @@ final class FeatureGateAdmin extends Page
             session()->put(RequireRecentAuthentication::REASON_SESSION_KEY, 'feature_gate');
             session()->put('url.intended', route('filament.admin.pages.feature-gates'));
             Notification::make()->warning()->title('Perlu verifikasi ulang')->send();
-            redirect()->route('filament.admin.pages.mfa-challenge');
+            redirect()->route(PasswordReauthentication::ROUTE_NAME);
 
             return;
         }

@@ -21,6 +21,10 @@ Documentation is **exceptionally complete** — 27 ADRs, 154 documents, 19 Kiro 
 What five sprints **does** deliver, and what this plan commits to:
 
 > **A production-shaped walking skeleton with four honest public entry points, a working CI pipeline, hardened non-production infrastructure, an enforced design system, Tier-0 platform foundations (identity + mandatory MFA, feature gates, append-only audit, minimum outbox), and one complete vertical slice (FAQ) proving the whole stack end to end.**
+>
+> Superseded 22 Aug 2026: "mandatory MFA" was built, then removed entirely — see
+> `docs/adr/0024-use-session-auth-and-mfa.md`'s superseding note. Tier-0's identity foundation now
+> stands on password-only recent re-authentication instead.
 
 That is a genuine, demonstrable, weekly-measurable outcome. §9 sets out the honest runway from there to MVP acceptance. Scaling the plan down or compressing it is a product decision, not an engineering one — this document states the cost so that decision is informed.
 
@@ -151,7 +155,7 @@ Note: `technology-baseline.md` pins `tailwindcss:^4.1`, which resolves to **4.3.
 | Marketplace — category/product browse from seeded canonical catalog | ⚠️ Skeleton (no cart, no checkout, no vendor portal) |
 | Browser tests E2E-HOME, E2E-FAQ; partial E2E-BOOK | ✅ Passing |
 | Accessibility: axe, keyboard, 200 % zoom, touch targets | ✅ On delivered screens |
-| **Tier-0 foundations** — identity + mandatory MFA, feature gates, append-only audit, minimum outbox | ✅ Implemented and tested (Sprint 3) |
+| **Tier-0 foundations** — identity + mandatory MFA, feature gates, append-only audit, minimum outbox | ✅ Implemented and tested (Sprint 3); MFA superseded 22 Aug 2026 (removed entirely — see `docs/adr/0024-use-session-auth-and-mfa.md`), replaced by password-only recent re-authentication |
 
 ### 2.2 Explicitly NOT in scope for Sprints 1–5
 
@@ -612,12 +616,12 @@ Design system enforced by CI. `dev.` and `stg.` reachable, TLS-terminated, `noin
 
 ### Deliverable
 
-Tier 0 implemented and tested. A privileged user must enrol MFA. A gated route returns an explanatory page. No state change can commit without its audit record. An event written inside a transaction is published exactly once.
+Tier 0 implemented and tested. ~~A privileged user must enrol MFA.~~ *(Superseded 22 Aug 2026 — MFA removed entirely; a privileged user re-authenticates with a password instead. See `docs/adr/0024-use-session-auth-and-mfa.md`'s superseding note.)* A gated route returns an explanatory page. No state change can commit without its audit record. An event written inside a transaction is published exactly once.
 
 ### Definition of Done
 
 - [ ] `ActorContext` is the single source consumers read for identity, roles, scopes
-- [ ] Every privileged role requires enrolled MFA; unenrolled access is refused
+- [ ] ~~Every privileged role requires enrolled MFA; unenrolled access is refused~~ **Superseded 22 Aug 2026** — MFA was removed entirely, not enforced; this item is permanently unsatisfiable as originally worded and is not a live gap. The current, correct requirement is password-only recent re-authentication for the sensitive action classes below, satisfied by `App\Filament\Admin\Pages\PasswordReauthentication` + `App\Http\Middleware\RequireRecentAuthentication`. See `docs/adr/0024-use-session-auth-and-mfa.md`'s superseding note and `.kiro/specs/platform-identity-and-access/requirements.md`'s own `## Superseded` section.
 - [ ] Re-authentication enforced on all six sensitive action classes
 - [ ] Query scopes mandatory; cross-scope read impossible by changing a URL identifier
 - [ ] All 17 gates and 18 flags modelled; unknown or misconfigured gate resolves **closed**
@@ -633,7 +637,7 @@ Tier 0 implemented and tested. A privileged user must enrol MFA. A gated route r
 | Risk | L | I | Mitigation |
 |---|---|---|---|
 | K1/K2 contract unseen; identity spec may not match reality | **High** | **High** | Time-boxed spike in S3-T1 before building; escalate to ADR if the baseline shifts |
-| Mandatory MFA locks out the only admin | Med | High | Enrol and verify recovery before enforcing; human gate |
+| ~~Mandatory MFA locks out the only admin~~ *(Superseded 22 Aug 2026 — moot: MFA was removed entirely, never enforced. Password-only re-authentication carries no enrolment step, so this risk does not apply to it.)* | Med | High | Enrol and verify recovery before enforcing; human gate |
 | Foundation sprint feels like "no visible progress" | **High** | Med | §Appendix B gives a demonstrable outcome each week; the alternative is three stubs torn out in Sprint 4 |
 | Scope creep into full outbox/notifications | Med | Med | Tier 1 is explicitly minimum; Tier 2 is Sprint 6 |
 
@@ -1113,7 +1117,7 @@ Because "every week has measurable progress" was an explicit goal. Sprint 3 is t
 | 2 | 1 | Laravel 13 boots; `migrate` succeeds; CI green on a PR; lockfiles committed |
 | 3 | 2 | Tailwind build emits token-driven CSS; contrast gate blocking merges; first `<x-mk.*>` primitives rendering |
 | 4 | 2 | `dev.`/`stg.` reachable over TLS with `noindex` (`stg.` allowlisted, `dev.` intentionally public per ADR-0031); Redis authenticated; restore evidence recorded |
-| 5 | **3** | A privileged user must enrol TOTP to reach a panel; cross-scope access denied by test |
+| 5 | **3** | ~~A privileged user must enrol TOTP to reach a panel~~ *(superseded 22 Aug 2026 — MFA removed entirely, see `docs/adr/0024-use-session-auth-and-mfa.md`)*; cross-scope access denied by test |
 | 6 | **3** | A closed gate returns an explanatory page; a mutation without its audit record fails a test; commit-then-crash still publishes its outbox event |
 | 7 | 4 | Seeds loaded from canonical catalogues; **FAQ complete** — public + admin CMS, browser-tested |
 | 8 | 4 | Homepage 4 cards in exact order + booking Steps 1–5 with working autosave/resume |

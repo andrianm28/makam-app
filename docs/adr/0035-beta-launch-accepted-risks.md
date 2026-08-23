@@ -153,21 +153,15 @@ rather than presented with unreviewed text as if it were binding.
 **Reversal:** none needed — this is a state the platform can remain in indefinitely; enter a real review note
 via Site Settings whenever a review eventually happens.
 
-### 10. No MFA enforcement on beta admin accounts (opts out of Lane D4's recommended, non-required hardening step)
+### 10. MFA removed entirely (supersedes the original self-service framing below)
 
-Per the user's explicit 19 Aug 2026 decision, beta admin accounts will not be enrolled in MFA. This required
-no code change: `App\Http\Middleware\EnforceMfaChallenge` only ever challenges an actor whose `MfaEnrolment`
-is already confirmed (`ActorContext::MFA_STATE_ENROLLED`) — an actor who never enrols is never touched by it.
-The plan's Lane D4 recommended enrolling MFA on every beta admin account as a hardening step for money-route
-access; that recommendation is explicitly declined here, not overridden by any config flag (none exists —
-enrolment is the only lever).
+Per the user's explicit 22 Aug 2026 decision, the MFA feature built for Lane D4 was removed entirely, not merely left unenforced — see `docs/adr/0024-use-session-auth-and-mfa.md`'s superseding note and `docs/superpowers/plans/2026-08-22-mfa-removal-and-reauth.md`. Discovered during that work: the money-route re-authentication challenge page hard-required a confirmed MFA enrolment, and none existed (per this item's original 19 Aug 2026 framing below), so it crashed for every admin the moment `RequireRecentAuthentication`'s 15-minute freshness window lapsed — a live, independent bug, not a consequence of the "no MFA enforcement" choice itself. Recent re-authentication for sensitive actions now uses a password-only challenge page instead.
 
-**Mitigation:** none. Beta admin panel access is single-factor (password only) for the duration of this
-decision.
+**Original 19 Aug 2026 framing, kept for the historical record:** per the user's explicit decision, beta admin accounts would not be enrolled in MFA. This required no code change at the time: `App\Http\Middleware\EnforceMfaChallenge` only ever challenged an actor whose `MfaEnrolment` was already confirmed — an actor who never enrolled was never touched by it. The plan's Lane D4 recommended enrolling MFA on every beta admin account as a hardening step for money-route access; that recommendation was explicitly declined here, not overridden by any config flag.
 
-**Reversal:** cheap and fully backward-compatible — MFA enrolment is a self-service, per-account action any
-admin can take at any time without a deploy or a config change; this ADR item simply records that none have
-been asked to.
+**Mitigation:** password-based recent re-authentication (`RequireRecentAuthentication` + `PasswordReauthentication`), which every admin can already satisfy — no enrolment step of any kind.
+
+**Reversal:** would require building MFA again from scratch — the module was deleted, not disabled.
 
 ## What this ADR does not decide
 
@@ -208,8 +202,10 @@ accepted-risk item is being opened here; this addendum exists so a reader of thi
 - Every deviation from an established ADR is now written down in one place, with its specific mitigation and
   reversal path, rather than being an implicit consequence of "use the existing host" discovered later during
   an incident.
-- Reversal paths are cheap for every item except 6 (UU PDP posture), which is a genuine, accepted-not-mitigated
-  gap for the duration of the beta.
+- Reversal paths are cheap for every item except 6 (UU PDP posture, a genuine, accepted-not-mitigated gap for
+  the duration of the beta) and 10 (MFA was removed entirely, not merely left unenforced — reversing it means
+  rebuilding the module from scratch, not a cheap flip; unlike item 6, item 10 does carry a real mitigation,
+  password-based recent re-authentication, so this is a reversal-cost exception, not a mitigation gap).
 
 ### Negative
 
@@ -218,12 +214,15 @@ accepted-risk item is being opened here; this addendum exists so a reader of thi
   (20 Aug 2026); the reconciliation process itself is still not built and remains a real, accepted gap.
 - Items 9 and 10 stack specifically on the admin/legal surface: unreviewed legal text stays live indefinitely,
   and the admin panel protecting money-route actions (payment reversals, marketplace order payout marking) has
-  no second factor for the duration of the beta. Neither has a mitigation beyond honest labelling (item 9) or
-  none at all (item 10) — both are accepted risk, not risk believed to be small.
+  no second factor for the duration of the beta. Item 9's mitigation is honest labelling; item 10's is
+  password-based recent re-authentication (`RequireRecentAuthentication` + `PasswordReauthentication`) — both
+  are real mitigations and both are still accepted risk, not risk believed to be small, since neither restores
+  a second factor for money-route admin access.
 
 ## Reversal
 
 Each item's reversal path is stated inline above. None of items 1–10 create a data migration or schema
-dependency that would block reversing them independently of one another. Items 9 and 10 are the cheapest to
-reverse of all ten — a Site Settings field and a self-service MFA enrolment, respectively, neither needing a
-deploy.
+dependency that would block reversing them independently of one another. Item 9 is the cheapest to reverse of
+all ten — a Site Settings field, no deploy needed. Item 10 is the most expensive: MFA was deleted, not
+disabled, so its reversal means rebuilding the module from scratch (see item 10's own Reversal line above),
+not a cheap flip like the others.

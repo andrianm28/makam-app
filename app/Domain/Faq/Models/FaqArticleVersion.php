@@ -27,7 +27,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * per successful publish, never updated or deleted afterward — mirrors this
  * codebase's established append-only-log pattern
  * (`App\Platform\Audit\Models\AuditEvent`,
- * `App\Platform\IdentityAccess\Mfa\Models\MfaChallenge`,
  * `App\Platform\IdentityAccess\Reauthentication\Models\ReauthenticationEvent`).
  * Neither `created_at` nor `updated_at` exists on this table — only
  * `published_at`, an explicit, server-set fillable column — the identical

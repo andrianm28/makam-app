@@ -18,7 +18,7 @@ use Illuminate\Support\Str;
  * write:
  *
  * - `Listeners\RecordActorSessionOnLogin`, on Laravel's `Login` event.
- * - `App\Filament\Admin\Pages\MfaChallenge`, once an actor has actually
+ * - A reauthentication challenge controller, once an actor has actually
  *   re-proved their identity on a step-up challenge.
  *
  * `session_id` best-effort, matching the migration's own column note: when

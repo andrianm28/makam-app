@@ -21,7 +21,7 @@ use InvalidArgumentException;
  * Plain string column with application-layer validation, not a Postgres
  * enum type — this codebase's established convention for closed-list
  * string columns (`App\Domain\Faq\FaqCategoryCode`,
- * `App\Platform\IdentityAccess\Mfa\MfaEnrolmentStatus`,
+ * `App\Platform\IdentityAccess\Reauthentication\ReauthenticationOutcome`,
  * `App\Platform\IdentityAccess\Scopes\ScopeEntityType`).
  */
 final class CemeteryType

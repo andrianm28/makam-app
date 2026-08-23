@@ -7,6 +7,7 @@ namespace App\Filament\Admin\Resources\MarketplaceOrders\Actions;
 use App\Domain\Marketplace\Actions\MarkMarketplaceOrderPaid;
 use App\Domain\Marketplace\Models\MarketplaceOrder;
 use App\Domain\OrderWorkflow\Authorization\Contracts\OrderTransitionAuthorizerContract;
+use App\Filament\Admin\Pages\PasswordReauthentication;
 use App\Filament\Admin\Resources\MarketplaceOrders\MarketplaceOrderResource;
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Platform\Audit\AuditSource;
@@ -42,10 +43,9 @@ use Filament\Support\Icons\Heroicon;
  * Reauthentication before a money move
  * ---------------------------------------------------------------------------
  * AGENTS.md: "Require recent re-authentication for financial ... actions."
- * A stale actor is bounced to the MFA challenge page (`filament.admin.pages.
- * mfa-challenge`, the route `EnforceMfaChallenge` uses) with `url.intended`
- * set so they return to this page — never left with a partially executed
- * transition.
+ * A stale actor is bounced to the password re-authentication page
+ * (`PasswordReauthentication::ROUTE_NAME`) with `url.intended` set so they
+ * return to this page — never left with a partially executed transition.
  *
  * ---------------------------------------------------------------------------
  * The Domain Action call
@@ -86,7 +86,7 @@ final class MarkMarketplaceOrderPaidAction
                     Notification::make()->warning()->title('Perlu verifikasi ulang')->send();
                     session()->put(RequireRecentAuthentication::REASON_SESSION_KEY, 'money_action');
                     session()->put('url.intended', route('filament.admin.resources.marketplace-orders.view', ['record' => $order->getKey()]));
-                    redirect()->route('filament.admin.pages.mfa-challenge');
+                    redirect()->route(PasswordReauthentication::ROUTE_NAME);
 
                     return;
                 } catch (\Throwable $exception) {

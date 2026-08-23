@@ -20,14 +20,11 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 /**
- * `RequireRecentAuthentication`'s SECOND real attachment anywhere in this
- * repo — `App\Http\Controllers\Admin\DisableMfaController` is the first and
- * this class follows its precedent exactly (see `routes/web.php` for the
- * route, which reuses `DisableMfaController`'s literal
- * `['web', 'auth', RequireRecentAuthentication::class.':...']` shape and its
- * `filament.admin.pages.mfa-challenge` challenge destination — no dedicated
- * challenge page exists for payment verification specifically, and
- * inventing one is outside this task's scope).
+ * `RequireRecentAuthentication` middleware controller, wired to challenge
+ * stale sessions before allowing payment verification (see `routes/web.php`
+ * for the route configuration). Routes using `RequireRecentAuthentication`
+ * reuse the platform-level reauthentication-challenge flow; no dedicated
+ * challenge page is needed per route.
  *
  * Reached only after that middleware's freshness check has already passed.
  * Authorizes first (below), then calls `ReauthenticationService::satisfy()`
@@ -40,21 +37,17 @@ use Illuminate\Validation\Rule;
  * ---------------------------------------------------------------------------
  * This route ships `['web', 'auth', RequireRecentAuthentication::class...]`
  * and nothing else. `config/auth.php` defines exactly one guard — `web`,
- * provider `users` — with no separate admin guard, so `auth` alone asserted
+ * provider `users` — with no separate admin guard, so `auth` alone asserts
  * only "some row exists in the shared users table": any authenticated user
  * whose last login fell inside
  * `config('reauthentication.freshness_seconds')` (default 900 s) could
- * approve or reject a manual payment. That was the WHOLE precondition — no
- * MFA was involved. `EnforceMfaChallenge` is attached only to the Filament
- * panel's middleware array (`Providers\Filament\AdminPanelProvider`) and
- * inline on the standalone `/admin/finance/exports` route; this is a plain
- * `Route::post` in neither place, and `RequireRecentAuthentication` reads
- * only `ActorContext::$lastAuthenticatedAt`, never MFA state. That the
- * adjacent finance-export route DOES carry `EnforceMfaChallenge` is what
- * makes the omission here conspicuous rather than merely uniform. Do not
- * credit this path with a compensating control it does not have.
- * `PaymentActionAuthorizer` closes the authority gap, and a refusal becomes
- * a 403 per `Admin\FinanceExportController`'s convention (this app has no
+ * approve or reject a manual payment. That is the precondition here.
+ * Additional proof mechanisms (such as code-based challenges) are attached
+ * only to other routes within the admin panel; this plain HTTP POST follows
+ * only `RequireRecentAuthentication` and reads only
+ * `ActorContext::$lastAuthenticatedAt`. `PaymentActionAuthorizer` provides
+ * the authorization gate, and a refusal becomes a 403 per
+ * `Admin\FinanceExportController`'s convention (this app has no
  * framework-level exception mapping).
  *
  * Ordering is load-bearing in three ways:

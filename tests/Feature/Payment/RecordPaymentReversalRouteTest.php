@@ -178,8 +178,8 @@ final class RecordPaymentReversalRouteTest extends TestCase
 
         // Deliberately NOT creating an actor_sessions row with a recent
         // last_authenticated_at — RequireRecentAuthentication fails closed
-        // on a null timestamp, same as DisableMfaControllerTest's and
-        // VerifyManualPaymentRouteTest's own precedent. The role IS granted
+        // on a null timestamp, same as VerifyManualPaymentRouteTest's own
+        // precedent. The role IS granted
         // so this still pins the middleware specifically: the redirect
         // cannot be the authorization refusal wearing the middleware's
         // clothes.
@@ -188,7 +188,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
                 'reference' => 'TRX-route-1',
                 'reason' => 'Customer requested a refund',
             ])
-            ->assertRedirect(route('filament.admin.pages.mfa-challenge'));
+            ->assertRedirect(route('filament.admin.pages.password-reauthentication'));
 
         $this->assertSame(0, PaymentReversal::query()->count());
         $this->assertSame(0, AuditEvent::query()->where('action', PaymentAuditActions::REFUND)->count());
@@ -656,7 +656,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
                     'reference' => 'TRX-route-throttle',
                     'reason' => 'Customer requested a refund',
                 ])
-                ->assertRedirect(route('filament.admin.pages.mfa-challenge'));
+                ->assertRedirect(route('filament.admin.pages.password-reauthentication'));
         }
 
         $this->actingAs($user)

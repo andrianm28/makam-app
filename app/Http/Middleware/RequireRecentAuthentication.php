@@ -53,7 +53,7 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * `$challengeRouteName` — the name of the route a future controller
  * registers to actually run the re-authentication challenge (password form
- * or `Mfa\MfaChallengeService`). This class does NOT guess, hardcode, or
+ * or code-based challenge). This class does NOT guess, hardcode, or
  * register that route itself (`routes/web.php` is not owned by this
  * batch) — a future caller supplies its own real route name when it
  * attaches this middleware, e.g.:
@@ -85,9 +85,7 @@ final class RequireRecentAuthentication
     /**
      * Carries `$reason` — the sensitive action that triggered THIS challenge
      * — to the challenge page, which otherwise has no way to know it: the
-     * page is a separate request, and is the redirect target of
-     * `EnforceMfaChallenge` too, whose challenges guard no sensitive action
-     * at all.
+     * page is a separate request and must preserve which action initiated it.
      *
      * It has to be threaded, not guessed, because the reason is load-bearing
      * for authorization, not just for audit prose: sensitive actions check
@@ -98,8 +96,8 @@ final class RequireRecentAuthentication
      *
      * Written on every challenge redirect, so the value always names the
      * most recent challenge rather than an older abandoned one, and consumed
-     * (`session()->pull()`) by `MfaChallenge` on success, so one challenge
-     * yields proof for exactly one action.
+     * (`session()->pull()`) by the challenge controller on success, so one
+     * challenge yields proof for exactly one action.
      *
      * ---------------------------------------------------------------------
      * KNOWN LIMIT — this reaches the STALE actor only
@@ -116,9 +114,9 @@ final class RequireRecentAuthentication
      * `BulkFinancialExport` both query for one) are two DIFFERENT gates that
      * this key only partly reconciles. A freshly-logged-in actor passes this
      * middleware and is then refused by the action's own check, with no way
-     * to satisfy it: visiting the challenge page voluntarily mints only the
-     * generic `MfaChallenge::REAUTHENTICATION_REASON`, never a per-action
-     * reason, because no challenge for that action was ever raised.
+     * to satisfy it: visiting the challenge page voluntarily mints only a
+     * generic reason, never a per-action reason, because no challenge for that
+     * action was ever raised.
      *
      * That refusal fails closed and is not a security hole, but it is a real
      * functional gap. Closing it means either having the sensitive action

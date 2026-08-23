@@ -13,11 +13,10 @@ use InvalidArgumentException;
  * rows), in that document's own table order. Plain string column with
  * application-layer validation, not a Postgres enum type — same
  * established convention as every other closed-list string column in this
- * codebase (see `App\Domain\Faq\FaqCategoryCode`'s own doc block for the
- * precedent this mirrors: `App\Platform\IdentityAccess\Mfa\
- * MfaEnrolmentStatus`, `App\Platform\IdentityAccess\Reauthentication\
+ * codebase (see `App\Domain\Marketplace\ProductCode`'s own doc block for the
+ * precedent this mirrors: `App\Platform\IdentityAccess\Reauthentication\
  * ReauthenticationOutcome`, `App\Platform\IdentityAccess\Scopes\
- * ScopeEntityType`).
+ * ScopeEntityType`, and `App\Domain\Faq\FaqArticlePublishState`).
  *
  * ---------------------------------------------------------------------------
  * 12 codes, not 13 — a discrepancy between this batch's own commissioning

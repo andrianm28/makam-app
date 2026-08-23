@@ -8,8 +8,8 @@ namespace App\Platform\Payment;
  * The audit action names this module writes, in one place, so no call site
  * spells one as a magic string — the same convention as
  * `App\Domain\Faq\FaqAuditActions`,
- * `App\Domain\ServiceCatalog\ServiceCatalogAuditActions`, and
- * `App\Platform\IdentityAccess\Mfa\MfaAuditActions`.
+ * `App\Domain\ServiceCatalog\ServiceCatalogAuditActions`, and other
+ * domain-layer audit-action classes across the codebase.
  *
  * ---------------------------------------------------------------------------
  * None of these is on `SensitiveActions::ACTIONS`, deliberately

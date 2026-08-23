@@ -2,11 +2,11 @@
     resources/views/filament/admin/pages/finance-reports.blade.php
 
     View for App\Filament\Admin\Pages\FinanceReports. Same component choice
-    as mfa-settings.blade.php / mfa-challenge.blade.php: Filament's own
-    Blade components rather than the public site's `<x-mk.*>` primitives, for
-    the identical reason those files record — `<x-mk.*>` component files live
-    outside this panel's own Tailwind `@source` scan, and design-system.md has
-    no Filament-specific form/field guidance.
+    as password-reauthentication.blade.php: Filament's own Blade components
+    rather than the public site's `<x-mk.*>` primitives, for the identical
+    reason that file records — `<x-mk.*>` component files live outside this
+    panel's own Tailwind `@source` scan, and design-system.md has no
+    Filament-specific form/field guidance.
 
     Design-system mapping (`.kiro/specs/platform-financial-ledger/tasks.md`
     §Design system):

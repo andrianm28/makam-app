@@ -1,12 +1,11 @@
 <?php
 
-use App\Http\Controllers\Admin\DisableMfaController;
+use App\Filament\Admin\Pages\PasswordReauthentication;
 use App\Http\Controllers\Admin\FinanceExportController;
 use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\DocumentVault\DownloadDocumentController;
 use App\Http\Controllers\Health\HealthLiveController;
 use App\Http\Controllers\Health\HealthReadyController;
-use App\Http\Middleware\EnforceMfaChallenge;
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Livewire\Public\Akun\AkunIndex;
 use App\Livewire\Public\Akun\DocumentList;
@@ -504,59 +503,20 @@ Route::middleware('auth')->prefix('akun')->name('akun.')->group(function (): voi
 
 /*
 |--------------------------------------------------------------------------
-| Admin — MFA disable (Task 6, mfa-reauthentication-integration)
-|--------------------------------------------------------------------------
-| Not a Filament panel page (those auto-register their own routes via
-| `->pages()` in `AdminPanelProvider`) — a plain controller route, matching
-| `RequireRecentAuthentication`'s own doc block's literal `Route::post(...)`
-| example. Lives here, in the standard `web` group, rather than inside the
-| `/admin` panel's own middleware group, so it needs its own explicit `auth`
-| guard.
-|
-| `RequireRecentAuthentication::class.':mfa_disable,filament.admin.pages.
-| mfa-challenge'` is this middleware's first real attachment anywhere in
-| this repo (S3-T3 built it fully audited and tested, but never wired) — a
-| stale or absent `ActorContext::$lastAuthenticatedAt` redirects here to
-| `MfaChallenge` instead of letting the disable through.
-|
-| `throttle:mfa-disable` and `EnforceMfaChallenge` added (public-beta-
-| release plan, Lane D4) — this route previously carried none. `throttle:
-| mfa-disable` only, deliberately NOT `EnforceMfaChallenge` (unlike
-| `/admin/finance/exports` below, which combines all three): this route is
-| itself the self-service escape valve out of MFA. An actor with a
-| confirmed enrolment reaching it has, by definition, not yet completed
-| this session's MFA challenge for anything else either — `EnforceMfaChallenge`
-| would redirect them to the challenge before they could ever reach the
-| disable action, a lockout paradox (you would need to pass an MFA
-| challenge to turn MFA off) that `DisableMfaControllerTest`'s own
-| "actually revokes" fixture does not (and should not) set up. Caught
-| before push by that exact regression while wiring this.
-*/
-Route::post('/admin/mfa/disable', DisableMfaController::class)
-    ->middleware([
-        'web',
-        'auth',
-        'throttle:mfa-disable',
-        RequireRecentAuthentication::class.':mfa_disable,filament.admin.pages.mfa-challenge',
-    ])
-    ->name('admin.mfa.disable');
-
-/*
-|--------------------------------------------------------------------------
 | Admin — bulk financial export (L4 Task 6, AC13)
 |--------------------------------------------------------------------------
 | Registered here rather than as a Filament page because the response is a
 | streamed file download, not a rendered page. That placement is what made
-| the route miss the panel's own middleware stack, so the two protections it
-| would have inherited are attached explicitly:
+| the route miss the panel's own middleware stack, so the protection it
+| would have inherited is attached explicitly:
 |
-|   - `EnforceMfaChallenge` — a no-op for an actor with no confirmed MFA
-|     enrolment, and for an enrolled actor the same per-session challenge the
-|     panel requires (`AdminPanelProvider`).
 |   - `RequireRecentAuthentication` — session-freshness only. It is NOT the
 |     authorization check: `Actions\BulkFinancialExport` owns the finance
 |     policy and the query-level badan-usaha scope, so a non-HTTP caller is
-|     gated identically and no route configuration can widen it.
+|     gated identically and no route configuration can widen it. A stale
+|     actor is sent to `PasswordReauthentication` rather than the old MFA
+|     challenge page (mfa-removal-and-reauth Task 3) — no admin was ever
+|     MFA-enrolled, so that page redirected every actor into a crash.
 |
 | `throttle:financial-export` mirrors `internal.documents.download` below: a
 | bulk export of a period's books deserves at least the rate limit a single
@@ -567,8 +527,7 @@ Route::get('/admin/finance/exports', FinanceExportController::class)
         'web',
         'auth',
         'throttle:financial-export',
-        EnforceMfaChallenge::class,
-        RequireRecentAuthentication::class.':bulk_financial_export,filament.admin.pages.mfa-challenge',
+        RequireRecentAuthentication::class.':bulk_financial_export,'.PasswordReauthentication::ROUTE_NAME,
     ])
     ->name('admin.finance.exports');
 
@@ -614,12 +573,14 @@ Route::get('/pembayaran/batal', PaymentCancelController::class)->name('payments.
 |--------------------------------------------------------------------------
 | AC8 ("Admin verification SHALL be a separate authorized action") and AC9
 | (recent re-authentication). `RequireRecentAuthentication`'s SECOND real
-| attachment anywhere in this repo — the first is `/admin/mfa/disable`
+| attachment anywhere in this repo — the first is `/admin/finance/exports`
 | above, and this route follows its exact precedent: a plain controller
 | route (not a Filament panel page) in the standard `web` group, its own
-| explicit `auth` guard, and the same `filament.admin.pages.mfa-challenge`
-| challenge destination (no dedicated payment-verification challenge page
-| exists, and this task does not invent one).
+| explicit `auth` guard, and the same `filament.admin.pages.
+| password-reauthentication` challenge destination — the old
+| `filament.admin.pages.mfa-challenge` destination redirected every admin
+| into a crash, since none was ever MFA-enrolled (mfa-removal-and-reauth
+| Task 3).
 |
 | Approves/rejects a `payment_verifications` row — a NEW, self-contained
 | table with no foreign key to `payment_sessions` or any order/booking
@@ -629,17 +590,15 @@ Route::get('/pembayaran/batal', PaymentCancelController::class)->name('payments.
 | for why those remain structurally absent under the current deny-only
 | payment guard (Wave 1b ruling 1b-L3-01).
 |
-| `throttle:payment-manual-verification` and `EnforceMfaChallenge` added
-| (public-beta-release plan, Lane D4) — same reasoning as `/admin/mfa/
-| disable`'s own comment above.
+| `throttle:payment-manual-verification` (public-beta-release plan, Lane
+| D4).
 */
 Route::post('/admin/payments/manual-verifications/{paymentVerification}/verify', VerifyManualPaymentController::class)
     ->middleware([
         'web',
         'auth',
         'throttle:payment-manual-verification',
-        EnforceMfaChallenge::class,
-        RequireRecentAuthentication::class.':payment_manual_verification,filament.admin.pages.mfa-challenge',
+        RequireRecentAuthentication::class.':payment_manual_verification,'.PasswordReauthentication::ROUTE_NAME,
     ])
     ->name('admin.payments.manual-verifications.verify');
 
@@ -648,11 +607,14 @@ Route::post('/admin/payments/manual-verifications/{paymentVerification}/verify',
 | Admin — payment reversals (Task 6, Wave 1d Append-Correction)
 |--------------------------------------------------------------------------
 | `RequireRecentAuthentication`'s THIRD real attachment anywhere in this
-| repo — after `/admin/mfa/disable` and
+| repo — after `/admin/finance/exports` and
 | `/admin/payments/manual-verifications/{id}/verify` above, following their
 | exact precedent: a plain controller route in the standard `web` group,
 | its own explicit `auth` guard, and the same
-| `filament.admin.pages.mfa-challenge` challenge destination.
+| `filament.admin.pages.password-reauthentication` challenge destination —
+| the old `filament.admin.pages.mfa-challenge` destination redirected every
+| admin into a crash, since none was ever MFA-enrolled
+| (mfa-removal-and-reauth Task 3).
 |
 | Records a `payment_reversals` row (`REFUND` or `CHARGEBACK`) — a NEW,
 | self-contained table decoupled from `Journal`, `payment_sessions`, any
@@ -668,9 +630,7 @@ Route::post('/admin/payments/manual-verifications/{paymentVerification}/verify',
 | `App\Platform\Payment\Http\Controllers\RecordPaymentReversalController`'s
 | own doc block for why.
 |
-| `throttle:payment-reversal` and `EnforceMfaChallenge` added (public-beta-
-| release plan, Lane D4) — same reasoning as `/admin/mfa/disable`'s own
-| comment above.
+| `throttle:payment-reversal` (public-beta-release plan, Lane D4).
 */
 Route::post('/admin/payments/reversals/{reversalType}', RecordPaymentReversalController::class)
     ->whereIn('reversalType', ['refund', 'chargeback'])
@@ -678,8 +638,7 @@ Route::post('/admin/payments/reversals/{reversalType}', RecordPaymentReversalCon
         'web',
         'auth',
         'throttle:payment-reversal',
-        EnforceMfaChallenge::class,
-        RequireRecentAuthentication::class.':payment_reversal,filament.admin.pages.mfa-challenge',
+        RequireRecentAuthentication::class.':payment_reversal,'.PasswordReauthentication::ROUTE_NAME,
     ])
     ->name('admin.payments.reversals.record');
 

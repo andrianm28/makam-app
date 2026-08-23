@@ -69,11 +69,11 @@ use InvalidArgumentException;
  * `ReauthenticationService::satisfy()` unconditionally on every request, which
  * verifies nothing, so it minted the very row this method then looked for. The
  * controller no longer does that. The consequence is honest and deliberate —
- * until a real step-up flow records a satisfied event for this reason (see the
- * carried-forward identity-lane gap: `MfaChallenge::submit()` does not call
- * `satisfy()` and does not refresh `last_authenticated_at`), this Action
- * refuses over HTTP. A refused financial export is the correct failure
- * direction; a fabricated proof is not.
+ * until a real step-up flow records a satisfied event for this reason (a
+ * controller handling code-based or password-based reauthentication must call
+ * `satisfy()` to mark the challenge complete), this Action refuses over HTTP.
+ * A refused financial export is the correct failure direction; a fabricated
+ * proof is not.
  *
  * The reason string is a deliberate free string, not an enum: the module that
  * owns re-authentication reasons documents them as free strings (see
