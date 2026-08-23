@@ -75,6 +75,8 @@ scratch database — a backup is not considered valid until restored, per
 **Reversal:** migrate to managed PostgreSQL with PITR before or shortly after launch if beta traction
 justifies it; no schema changes required, this is an infrastructure-only reversal.
 
+**Update (23 Aug 2026):** this reversal trigger is superseded — `ADR-0027`'s "Production graduation — single-host decision" section makes self-managed PostgreSQL (no PITR) the permanent production policy, not a temporary beta compromise. This item's own mitigation (frequent encrypted dumps, tested restore) remains the real, ongoing backup strategy for production too, not just beta.
+
 ### 3. Single host, no high availability (deviates from the production topology implied by [ADR-0027](0027-combine-dev-staging-on-ubuntu22-2v4g.md)'s "not accepted as production" framing)
 
 **Status: built, 19 Aug 2026.** Per the user's explicit decision, the beta stack runs on the SAME host as
@@ -108,6 +110,8 @@ scope decision (plan §"Scope decisions that shorten the path", D1), not an over
 object-storage dependency for uploads and the highest-severity slice of UU PDP exposure for this launch.
 Step 7 shows an honest "dokumen dikumpulkan oleh tim kami setelah pemesanan" state; collection happens
 offline.
+
+**Forward reference (23 Aug 2026):** this scope decision is specific to the current beta launch, not a permanent architecture. `ADR-0027`'s "Production graduation — single-host decision" section records that full production graduation does NOT inherit this protection — production will accept real document uploads to self-hosted storage on the same shared host. That is a real, explicitly-accepted risk recorded there, not a silent reopening of what this item avoided.
 
 ### 6. UU PDP compliance is minimum-viable, not audited
 
