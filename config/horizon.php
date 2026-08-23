@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Platform\Outbox\OutboxQueueName;
+use Illuminate\Support\Str;
 
 return [
 
