@@ -1122,4 +1122,4 @@ Because "every week has measurable progress" was an explicit goal. Sprint 3 is t
 | 7 | 4 | Seeds loaded from canonical catalogues; **FAQ complete** — public + admin CMS, browser-tested |
 | 8 | 4 | Homepage 4 cards in exact order + booking Steps 1–5 with working autosave/resume |
 | 9 | 5 | E2E-HOME/FAQ/BOOK(1–5) green; axe clean on delivered screens |
-| 10 | 5 | Release-gate report published; rollback rehearsed; Sprint 6+ backlog groomed |
+| 10 | 5 | Release-gate report published; rollback rehearsed *(done 24 Aug 2026 — real dev-only rehearsal against `dev-web` on `yiemvm`, see `docs/testing/release-gates.md` §H's CI/CD box)*; Sprint 6+ backlog groomed |
