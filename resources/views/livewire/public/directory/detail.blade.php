@@ -43,6 +43,7 @@
     $priceAttribution = CemeteryPresenter::priceAttribution($cemetery);
     $photoUrl = CemeteryPresenter::photoUrl($cemetery);
     $mapUrl = CemeteryPresenter::mapUrl($cemetery);
+    $embedMapUrl = CemeteryPresenter::embedMapUrl($cemetery);
     $facilities = CemeteryPresenter::facilities($cemetery);
 @endphp
 
@@ -118,6 +119,25 @@
                     <x-mk.button variant="secondary" :href="$mapUrl" target="_blank" rel="noopener noreferrer">
                         Buka di Google Maps
                     </x-mk.button>
+
+                    {{-- Enhancement, not a replacement for the link above --
+                         $embedMapUrl can independently be null even when
+                         $mapUrl is not (this codebase never fabricates a
+                         fallback pin), so this is its own conditional, and
+                         the address/link above render unconditionally on
+                         $mapUrl already, unaffected by this block being
+                         absent. --}}
+                    @if ($embedMapUrl)
+                        <div class="mt-3 overflow-hidden rounded-lg border border-neutral-200">
+                            <iframe
+                                src="{{ $embedMapUrl }}"
+                                title="Peta lokasi {{ $cemetery->name }}"
+                                loading="lazy"
+                                referrerpolicy="no-referrer-when-downgrade"
+                                class="h-64 w-full border-0"
+                            ></iframe>
+                        </div>
+                    @endif
                 @else
                     {{-- The map link is genuinely unavailable for this row (no
                          operator URL and no coordinates). Said plainly, so the

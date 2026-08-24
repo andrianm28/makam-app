@@ -120,6 +120,18 @@ final class CemeteryPresenter
     }
 
     /**
+     * The `<iframe>`-embeddable counterpart to {@see self::mapUrl()} — see
+     * `Cemetery::embedMapUrl()`'s own doc block for why this is a genuinely
+     * different URL, not a view-layer transform of the link URL. Rendered
+     * ALONGSIDE the existing link (never replacing it), so AC11's
+     * unconditional-address guarantee is untouched by this method existing.
+     */
+    public static function embedMapUrl(Cemetery $cemetery): ?string
+    {
+        return $cemetery->embedMapUrl();
+    }
+
+    /**
      * AC3's facilities, as a plain list of strings. The column is cast to
      * `array` by the model; a `null` or malformed value degrades to an
      * empty list rather than throwing inside a card render.

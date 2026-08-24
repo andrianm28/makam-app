@@ -177,6 +177,53 @@ final class CemeteryDetailRouteTest extends TestCase
     }
 
     /**
+     * The embedded map is a genuinely separate rendering decision from the
+     * link above — `Cemetery::embedMapUrl()` returns a DIFFERENT URL shape
+     * (`output=embed`), and only when real coordinates or a `query=`-shaped
+     * explicit URL exist. Real coordinates always resolve to an embed.
+     */
+    public function test_the_embedded_map_renders_when_the_cemetery_has_real_coordinates(): void
+    {
+        $cemetery = $this->exampleCemetery();
+
+        $cemetery->update(['latitude' => '-6.2033000', 'longitude' => '106.8153500']);
+
+        $response = $this->get(route('cemeteries.show', ['cemeterySlug' => $cemetery->slug]));
+
+        $response->assertSee('Buka di Google Maps');
+        $response->assertSee('output=embed', false);
+        $response->assertSee('-6.2033000,106.8153500', false);
+        // The address remains unconditional regardless of the embed's own
+        // presence — AC11's guarantee is not weakened by adding this.
+        $response->assertSee($cemetery->address);
+    }
+
+    /**
+     * The link and the embed are independently gated — an explicit
+     * `google_maps_url` that is not shaped as `/maps/search/?api=1&query=...`
+     * (this fixture uses a bare `?q=` shape, a real, legitimate URL a human
+     * could paste in) still produces a real outbound link (AC11's own
+     * guarantee), but `embedMapUrl()` cannot derive an embed from it and
+     * correctly returns null — the page must render the link without the
+     * iframe, not fail or silently fabricate an embed from a different
+     * value.
+     */
+    public function test_the_link_renders_without_an_embed_when_the_url_shape_cannot_be_embedded(): void
+    {
+        $cemetery = $this->exampleCemetery();
+
+        $cemetery->update(['google_maps_url' => 'https://maps.google.com/?q=contoh']);
+
+        $this->assertNull($cemetery->fresh()?->embedMapUrl());
+
+        $response = $this->get(route('cemeteries.show', ['cemeterySlug' => $cemetery->slug]));
+
+        $response->assertSee('Buka di Google Maps');
+        $response->assertSee($cemetery->address);
+        $response->assertDontSee('output=embed', false);
+    }
+
+    /**
      * AC12 + the negative criterion, asserted on the rendered HTML.
      */
     public function test_restricted_capability_modes_never_reach_the_rendered_detail_page(): void

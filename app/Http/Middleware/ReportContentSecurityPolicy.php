@@ -84,6 +84,13 @@ final class ReportContentSecurityPolicy
             "img-src 'self' data:",
             "font-src 'self'",
             "connect-src 'self'",
+            // Cemetery directory detail pages embed a Google Maps iframe
+            // (App\Domain\CemeteryDirectory\Models\Cemetery::embedMapUrl())
+            // where a cemetery has real coordinates or a verified address —
+            // without this, the embed would silently violate CSP under
+            // 'self''s default-src fallback the moment enforcement mode is
+            // ever turned on (currently Report-Only).
+            'frame-src https://www.google.com',
             "frame-ancestors 'none'",
             "base-uri 'self'",
             "form-action 'self'",

@@ -186,4 +186,79 @@ final class CemeterySeedTest extends TestCase
             $this->assertSame($cemetery->google_maps_url, $cemetery->googleMapsUrl());
         }
     }
+
+    /**
+     * `embedMapUrl()`'s three real cases, at the model seam rather than
+     * through a rendered route — see `Cemetery::embedMapUrl()`'s own doc
+     * block. Coordinates take precedence over an explicit URL when both are
+     * present, matching `googleMapsUrl()`'s own precedence for the
+     * coordinate-derivation branch (though `googleMapsUrl()` itself prefers
+     * the explicit URL first — these two methods intentionally differ here
+     * because a `query=`-shaped explicit URL's address text and a real
+     * coordinate both produce a VALID embed, and the coordinate is the more
+     * precise of the two when both exist).
+     */
+    public function test_embed_map_url_derives_from_real_coordinates(): void
+    {
+        $cemetery = new Cemetery([
+            'type' => CemeteryType::TPU,
+            'publication_status' => CemeteryPublicationStatus::PUBLISHED,
+            'name' => 'TPU Contoh Koordinat',
+            'slug' => 'tpu-contoh-koordinat',
+            'city' => LaunchCityCode::JAKARTA,
+            'address' => 'Jl. Contoh No. 1',
+            'latitude' => '-6.2033000',
+            'longitude' => '106.8153500',
+        ]);
+
+        $this->assertSame(
+            'https://www.google.com/maps?q=-6.2033000,106.8153500&output=embed',
+            $cemetery->embedMapUrl()
+        );
+    }
+
+    public function test_embed_map_url_derives_from_a_query_shaped_explicit_url_when_no_coordinates_exist(): void
+    {
+        $cemetery = new Cemetery([
+            'type' => CemeteryType::TPU,
+            'publication_status' => CemeteryPublicationStatus::PUBLISHED,
+            'name' => 'TPU Contoh URL',
+            'slug' => 'tpu-contoh-url',
+            'city' => LaunchCityCode::JAKARTA,
+            'address' => 'Jl. Contoh No. 1',
+            'google_maps_url' => 'https://www.google.com/maps/search/?api=1&query=Jl.+Contoh+No.+1',
+        ]);
+
+        $this->assertSame(
+            'https://www.google.com/maps?q=Jl.+Contoh+No.+1&output=embed',
+            $cemetery->embedMapUrl()
+        );
+    }
+
+    public function test_embed_map_url_is_null_when_neither_coordinates_nor_a_derivable_url_exist(): void
+    {
+        $noneAtAll = new Cemetery([
+            'type' => CemeteryType::TPU,
+            'publication_status' => CemeteryPublicationStatus::PUBLISHED,
+            'name' => 'TPU Contoh Kosong',
+            'slug' => 'tpu-contoh-kosong',
+            'city' => LaunchCityCode::JAKARTA,
+            'address' => 'Jl. Contoh No. 1',
+        ]);
+        $this->assertNull($noneAtAll->embedMapUrl());
+
+        // A real, legitimate explicit URL that just isn't shaped with a
+        // `query=` parameter this method can parse back out — must not
+        // throw, must not fabricate a fallback, must return null.
+        $nonDerivableUrl = new Cemetery([
+            'type' => CemeteryType::TPU,
+            'publication_status' => CemeteryPublicationStatus::PUBLISHED,
+            'name' => 'TPU Contoh URL Lain',
+            'slug' => 'tpu-contoh-url-lain',
+            'city' => LaunchCityCode::JAKARTA,
+            'address' => 'Jl. Contoh No. 1',
+            'google_maps_url' => 'https://maps.google.com/?q=contoh',
+        ]);
+        $this->assertNull($nonDerivableUrl->embedMapUrl());
+    }
 }

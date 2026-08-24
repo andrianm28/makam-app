@@ -235,4 +235,44 @@ final class Cemetery extends Model
 
         return null;
     }
+
+    /**
+     * A frame-embeddable variant of {@see self::googleMapsUrl()} — Google's
+     * keyless `output=embed` shape, not the `/maps/search/?api=1&query=...`
+     * shape `googleMapsUrl()` returns, which loads the full interactive
+     * Maps UI and is meant for a new tab, not an `<iframe>` `src`. This is a
+     * genuinely different URL, not a rendering of the same one, so it is a
+     * separate method rather than a view-layer string transform of
+     * `googleMapsUrl()`'s output.
+     *
+     * Same precedence as `googleMapsUrl()`: real coordinates first (a
+     * precise `q=<lat>,<lng>` point), an explicit `google_maps_url`'s own
+     * `query` parameter second (address-text-based, e.g. a cemetery with a
+     * verified street address but no surveyed coordinate — see
+     * `2026_08_24_100000_backfill_photo_and_maps_url_for_real_cemeteries.php`
+     * for TPU Petamburan's real example of this case), `null` when neither
+     * exists — the caller (the view) must never fabricate a fallback pin.
+     */
+    public function embedMapUrl(): ?string
+    {
+        if ($this->latitude !== null && $this->longitude !== null) {
+            return sprintf(
+                'https://www.google.com/maps?q=%s,%s&output=embed',
+                $this->latitude,
+                $this->longitude,
+            );
+        }
+
+        if ($this->google_maps_url !== null) {
+            $query = parse_url($this->google_maps_url, PHP_URL_QUERY);
+            parse_str((string) $query, $params);
+            $addressQuery = $params['query'] ?? null;
+
+            if (is_string($addressQuery) && $addressQuery !== '') {
+                return 'https://www.google.com/maps?q='.urlencode($addressQuery).'&output=embed';
+            }
+        }
+
+        return null;
+    }
 }
