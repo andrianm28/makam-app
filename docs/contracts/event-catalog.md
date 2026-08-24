@@ -17,6 +17,7 @@ Durable events use the transactional outbox and envelope in `outbox-event-contra
 | `quote.issued.v1` | Quotation | Customer notification | Immutable version |
 | `quote.accepted.v1` | Quotation | Payment gate | Exact version |
 | `payment.received.v1` | PaymentAdapter | Journal/order/invoice | Valid webhook only |
+| `payment.outcome_failed.v1` | PaymentAdapter | Notification | Carries `outcome` (Failed/Expired) — one event for one matrix row, not two |
 | `order.status_changed.v1` | OrderWorkflow | Notification/reporting | Forward-only commercial status |
 | `agreement.accepted.v1` | Agreement (AcceptAgreement) | PreNeed/operations | Exact version and evidence; emitted once on the `agreements` row — the pre-need case-level acceptance binds the same row without re-emitting |
 | `pre_need_case.activated.v1` | PreNeed | Operations | AC8: new At-Need FuneralCase linked; original contract history preserved |

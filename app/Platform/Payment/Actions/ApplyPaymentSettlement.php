@@ -20,6 +20,8 @@ use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\AuditSubject;
 use App\Platform\FinancialLedger\Money;
+use App\Platform\Outbox\Outbox;
+use App\Platform\Outbox\OutboxClassification;
 use App\Platform\Payment\Exceptions\SettlementTargetUnresolvableException;
 use App\Platform\Payment\Models\PaymentSession;
 use App\Platform\Payment\Models\ProviderEvent;
@@ -100,7 +102,12 @@ use Illuminate\Support\Str;
  * `payment.expired` to `EXPIRED`. The transition is guarded: `PAID` is the
  * strongest fact and is never regressed by a late out-of-order
  * `failed`/`expired` arrival, and `FAILED`/`EXPIRED` apply only to an open
- * (CREATED/AWAITING_PAYMENT) session.
+ * (CREATED/AWAITING_PAYMENT) session. The FIRST terminal transition a
+ * session actually makes into `FAILED`/`EXPIRED` (24 Aug 2026,
+ * notification-matrix-medium-rows batch) emits `payment.outcome_failed.v1`
+ * on the outbox, the matrix's single "Payment failed/exception" row: one
+ * catalogued event carrying the real outcome as `data.outcome`, not two
+ * event names (`recordOutcomeFailed()`'s doc block).
  *
  * ---------------------------------------------------------------------------
  * Marketplace: the domain Action owns the effects
@@ -220,9 +227,49 @@ final readonly class ApplyPaymentSettlement
             default => null,
         };
 
-        if ($state !== null) {
-            $this->transitionToTerminal($session, $state);
+        if ($state !== null && $this->transitionToTerminal($session, $state)) {
+            $this->recordOutcomeFailed($session, $event, $state);
         }
+    }
+
+    /**
+     * `payment.outcome_failed.v1` (`docs/contracts/event-catalog.md`) — one
+     * catalogued event for the matrix's single "Payment failed/exception"
+     * row, covering both real outcomes (`SessionState::Failed`/`Expired`) as
+     * a `data.outcome` field, the same "one event, outcome-as-data" shape
+     * `order.status_changed.v1` established (`Listeners\
+     * DispatchOrderNotifications`'s doc block) — not two event names, not a
+     * second listener-bridge class.
+     *
+     * Only reached when `transitionToTerminal()` actually applied the
+     * transition (guarded above), so a session can reach this at most once:
+     * the same terminal-state guard that stops `PAID` regressing also stops
+     * a second `FAILED`/`EXPIRED` arrival from re-entering here, which is
+     * what makes the outcome-scoped `idempotencyKey` below safe rather than
+     * a race with the outbox's own UNIQUE constraint.
+     *
+     * `data` is references only (`AGENTS.md` §Observability, AC7), the same
+     * discipline `IssueQuote`'s `quote.issued.v1` payload uses: no amount, no
+     * restricted data. `payment_sessions` carries no order reference column
+     * (this class's own doc block, "Booking: the webhook trigger" section),
+     * so the target reference here is the event's own `invoice_reference`,
+     * not a session column that does not exist.
+     */
+    private function recordOutcomeFailed(PaymentSession $session, ProviderEvent $event, SessionState $state): void
+    {
+        Outbox::record(
+            eventName: 'payment.outcome_failed.v1',
+            eventVersion: 1,
+            aggregateType: 'payment_session',
+            aggregateId: $session->getKey(),
+            data: [
+                'session_id' => $session->getKey(),
+                'invoice_reference' => (string) $event->invoice_reference,
+                'outcome' => $state->value,
+            ],
+            classification: OutboxClassification::Internal,
+            idempotencyKey: "payment_outcome:{$session->getKey()}:{$state->value}",
+        );
     }
 
     /**
@@ -254,24 +301,33 @@ final readonly class ApplyPaymentSettlement
      * `failed` arrival after a settled `completed` must not unset the paid
      * fact), and `FAILED`/`EXPIRED` apply only to an open session — a session
      * that already ended terminal stays where the winning event left it.
+     *
+     * @return bool true iff this call actually moved the session's state —
+     *              the signal `applyOutcome()` uses to emit
+     *              `payment.outcome_failed.v1` at most once per session (see
+     *              `recordOutcomeFailed()`'s doc block).
      */
-    private function transitionToTerminal(PaymentSession $session, SessionState $state): void
+    private function transitionToTerminal(PaymentSession $session, SessionState $state): bool
     {
         $current = SessionState::tryFrom((string) $session->state);
 
         if ($current === SessionState::Paid) {
-            return;
+            return false;
         }
 
         if ($state !== SessionState::Paid
             && $current !== SessionState::Created
             && $current !== SessionState::AwaitingPayment) {
-            return;
+            return false;
         }
 
-        if ($current !== $state) {
-            $session->forceFill(['state' => $state->value])->save();
+        if ($current === $state) {
+            return false;
         }
+
+        $session->forceFill(['state' => $state->value])->save();
+
+        return true;
     }
 
     private function settleBooking(Order $order, ProviderEvent $event, PaymentSession $session): void

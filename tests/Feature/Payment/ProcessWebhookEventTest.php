@@ -14,6 +14,8 @@ use App\Platform\FinancialLedger\Money;
 use App\Platform\FinancialLedger\VendorPayableAssessmentTrigger;
 use App\Platform\FinancialLedger\VendorPayableEligibility;
 use App\Platform\IdentityAccess\ActorContext;
+use App\Platform\Outbox\Models\OutboxEvent;
+use App\Platform\Outbox\OutboxClassification;
 use App\Platform\Payment\Exceptions\SettlementTargetUnresolvableException;
 use App\Platform\Payment\Jobs\ProcessProviderEventJob;
 use App\Platform\Payment\Models\PaymentIntent;
@@ -120,6 +122,78 @@ final class ProcessWebhookEventTest extends TestCase
 
         $session = PaymentSession::query()->where('provider_payment_id', 'pay_expired')->sole();
         $this->assertSame(SessionState::Expired->value, $session->state);
+    }
+
+    public function test_a_claimed_failed_event_emits_payment_outcome_failed_with_the_failed_outcome(): void
+    {
+        $session = $this->paymentSession('pay_outcome_failed', 250_000);
+        $event = $this->validatedEvent([
+            'event_type' => 'payment.failed',
+            'provider_transaction_id' => 'pay_outcome_failed',
+            'invoice_reference' => 'order_outcome_failed',
+        ]);
+
+        $this->assertSame(ProcessWebhookEventOutcome::Claimed, $this->claim($event));
+
+        $outbox = OutboxEvent::query()
+            ->where('event_name', 'payment.outcome_failed.v1')
+            ->where('aggregate_id', $session->getKey())
+            ->sole();
+
+        $this->assertSame(1, $outbox->event_version);
+        $this->assertSame('payment_session', $outbox->aggregate_type);
+        $this->assertSame(OutboxClassification::Internal->value, $outbox->classification);
+        $this->assertSame("payment_outcome:{$session->getKey()}:".SessionState::Failed->value, $outbox->idempotency_key);
+        // Order-insensitive: `payload` is a jsonb column and PostgreSQL is free
+        // to serialize key order however it likes (`ApplyPaidEffectsTest`'s
+        // own precedent). The contract is the payload CONTENT, never its
+        // storage ordering.
+        $this->assertEqualsCanonicalizing([
+            'session_id' => $session->getKey(),
+            'invoice_reference' => 'order_outcome_failed',
+            'outcome' => SessionState::Failed->value,
+        ], $outbox->payload);
+    }
+
+    public function test_a_claimed_expired_event_emits_payment_outcome_failed_with_the_expired_outcome(): void
+    {
+        $session = $this->paymentSession('pay_outcome_expired', 250_000);
+        $event = $this->validatedEvent([
+            'event_type' => 'payment.expired',
+            'provider_transaction_id' => 'pay_outcome_expired',
+            'invoice_reference' => 'order_outcome_expired',
+        ]);
+
+        $this->assertSame(ProcessWebhookEventOutcome::Claimed, $this->claim($event));
+
+        $outbox = OutboxEvent::query()
+            ->where('event_name', 'payment.outcome_failed.v1')
+            ->where('aggregate_id', $session->getKey())
+            ->sole();
+
+        $this->assertSame("payment_outcome:{$session->getKey()}:".SessionState::Expired->value, $outbox->idempotency_key);
+        $this->assertEqualsCanonicalizing([
+            'session_id' => $session->getKey(),
+            'invoice_reference' => 'order_outcome_expired',
+            'outcome' => SessionState::Expired->value,
+        ], $outbox->payload);
+    }
+
+    public function test_a_settling_event_does_not_emit_payment_outcome_failed(): void
+    {
+        $order = $this->marketplaceTarget('order_settled_no_outcome');
+        $event = $this->validatedEvent([
+            'provider_transaction_id' => 'pay_settled_no_outcome',
+            'invoice_reference' => 'order_settled_no_outcome',
+        ]);
+        $this->paymentSession('pay_settled_no_outcome', 250_000);
+
+        $this->assertSame(ProcessWebhookEventOutcome::Claimed, $this->claim($event));
+        $this->assertSame(PaymentState::DIBAYAR, $order->fresh()->payment_state);
+
+        $this->assertNull(
+            OutboxEvent::query()->where('event_name', 'payment.outcome_failed.v1')->first()
+        );
     }
 
     public function test_a_second_claim_of_the_same_row_is_refused_and_changes_nothing(): void
