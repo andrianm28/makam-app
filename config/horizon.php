@@ -219,7 +219,23 @@ return [
             'queue' => [OutboxQueueName::Imports->value, OutboxQueueName::Media->value],
             'balance' => 'auto',
             'autoScalingStrategy' => 'time',
-            'minProcesses' => 0,
+            // Release-gates Task 7 rehearsal (24 Aug 2026): this was
+            // `minProcesses => 0`, intended as true zero-idle capacity, but
+            // that value is invalid — Laravel\Horizon\ProvisioningPlan::
+            // convert() throws unconditionally when any environment's
+            // minProcesses is set below 1, and it validates EVERY
+            // environment block eagerly regardless of which one is being
+            // deployed — so `php artisan horizon` could not start in ANY
+            // of production/staging/local. Staging did not avoid this:
+            // its own supervisor-batch/supervisor-reports entries were
+            // `false` (see the 'supervisor-normal' comment below for why
+            // that also throws), so staging would have hit that crash
+            // instead, at the same shared construction step, the moment
+            // it was reached. SupervisorOptions itself already defaults
+            // minProcesses to 1 when unset, so true zero-idle was never
+            // achievable in this Horizon version regardless — 1 is the
+            // real floor, not a design compromise.
+            'minProcesses' => 1,
             'maxProcesses' => 3,
             'maxTime' => 0,
             'maxJobs' => 0,
@@ -235,7 +251,9 @@ return [
             'queue' => [OutboxQueueName::Reports->value],
             'balance' => 'auto',
             'autoScalingStrategy' => 'time',
-            'minProcesses' => 0,
+            // Same minProcesses correction as supervisor-batch above —
+            // see that comment for the full explanation.
+            'minProcesses' => 1,
             'maxProcesses' => 2,
             'maxTime' => 0,
             'maxJobs' => 0,
@@ -274,9 +292,33 @@ return [
             'supervisor-urgent' => ['minProcesses' => 1, 'maxProcesses' => 4],
             'supervisor-notify' => ['minProcesses' => 1, 'maxProcesses' => 4],
             'supervisor-default' => ['minProcesses' => 1, 'maxProcesses' => 4],
-            'supervisor-batch' => ['minProcesses' => 0, 'maxProcesses' => 3],
-            'supervisor-reports' => ['minProcesses' => 0, 'maxProcesses' => 2],
-            'supervisor-normal' => false,
+            // minProcesses corrected from 0 to 1 (24 Aug 2026) — see the
+            // matching 'defaults' comment above; 0 is invalid and would
+            // have crashed `php artisan horizon` in production the first
+            // time it was actually started.
+            'supervisor-batch' => ['minProcesses' => 1, 'maxProcesses' => 3],
+            'supervisor-reports' => ['minProcesses' => 1, 'maxProcesses' => 2],
+            // Release-gates Task 7 rehearsal (24 Aug 2026): this was
+            // `'supervisor-normal' => false`, meant to disable the
+            // supervisor entirely for this environment — but that also
+            // crashes `php artisan horizon` before it ever starts.
+            // Laravel\Horizon\ProvisioningPlan::toSupervisorOptions()
+            // eagerly calls convert() on EVERY supervisor entry of EVERY
+            // environment (not just the one actually being deployed), and
+            // convert() assumes its $options argument is an array;
+            // array_replace_recursive() replaces a nested default array
+            // with a bare scalar `false` rather than merging into it, so
+            // convert() ends up building an options array with no
+            // 'connection' key, and SupervisorOptions::fromArray()
+            // unconditionally reads $array['connection'] — an
+            // "Undefined array key" ErrorException. The real, working
+            // mechanism for "declared but not started" is
+            // `['maxProcesses' => 0]`: it merges cleanly with 'defaults'
+            // (stays a real array), and ProvisioningPlan::deploy()'s own
+            // gate (`if ($options->maxProcesses > 0)`) already skips
+            // spawning it. Do not reach for `false` here again — the same
+            // correction applies to every other `=> false` entry below.
+            'supervisor-normal' => ['maxProcesses' => 0],
         ],
 
         // ADR-0027 condition 4: "Staging runs a maximum of two normal
@@ -287,16 +329,18 @@ return [
         // across supervisors) — supervisor-normal (declared in 'defaults'
         // above) is that single supervisor. The 4 baseline supervisors
         // and both batch/report supervisors are disabled entirely in
-        // staging ('false') — batch/report work runs via the
-        // dev-worker/stg-batch-worker Compose services' on-demand
-        // profiles instead, not as Horizon-managed processes here.
+        // staging (`maxProcesses => 0` — see the 'production' block's
+        // comment above for why plain `false` cannot be used here) —
+        // batch/report work runs via the dev-worker/stg-batch-worker
+        // Compose services' on-demand profiles instead, not as
+        // Horizon-managed processes here.
         'staging' => [
-            'supervisor-critical' => false,
-            'supervisor-urgent' => false,
-            'supervisor-notify' => false,
-            'supervisor-default' => false,
-            'supervisor-batch' => false,
-            'supervisor-reports' => false,
+            'supervisor-critical' => ['maxProcesses' => 0],
+            'supervisor-urgent' => ['maxProcesses' => 0],
+            'supervisor-notify' => ['maxProcesses' => 0],
+            'supervisor-default' => ['maxProcesses' => 0],
+            'supervisor-batch' => ['maxProcesses' => 0],
+            'supervisor-reports' => ['maxProcesses' => 0],
             'supervisor-normal' => ['minProcesses' => 1, 'maxProcesses' => 2],
         ],
 
@@ -307,7 +351,7 @@ return [
             'supervisor-default' => ['maxProcesses' => 1],
             'supervisor-batch' => ['maxProcesses' => 1],
             'supervisor-reports' => ['maxProcesses' => 1],
-            'supervisor-normal' => false,
+            'supervisor-normal' => ['maxProcesses' => 0],
         ],
     ],
 

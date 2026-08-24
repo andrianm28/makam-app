@@ -114,7 +114,7 @@ final class ProductResourceTest extends TestCase
         $this->grantRoleTo($user, ActorRole::ADMIN);
         $this->actingAs($user);
 
-        $this->get('/admin/products')->assertOk();
+        $this->get('/admin/produk')->assertOk();
     }
 
     public function test_get_authorization_response_refuses_a_customer_and_allows_a_back_office_role(): void

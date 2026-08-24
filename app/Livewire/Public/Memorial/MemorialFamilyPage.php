@@ -26,7 +26,7 @@ use Livewire\Component;
 use Livewire\Features\SupportFileUploads\WithFileUploads;
 
 /**
- * `/memorial/{profileId}` — the family surface: a private, consent-gated
+ * `/kenangan/{profileId}` — the family surface: a private, consent-gated
  * page where active editors of a memorial manage it
  * (`.kiro/specs/memorial-and-qr/requirements.md` AC1/AC2/AC6; the plan's
  * Task 4 brief: "family content management — private, consent-gated").

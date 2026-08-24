@@ -23,6 +23,21 @@ this ADR by its exact path (`docs/adr/0031-make-dev-environment-public.md`,
 `docs/adr/0035-beta-launch-accepted-risks.md`), and renaming would need updating both without any
 real benefit; the filename is a historical label at this point, not a live claim.
 
+**Update (24 Aug 2026)**: re-verified directly against the live `yiemvm` host — still **Ubuntu
+24.04.4 LTS** (`cat /etc/os-release`), unchanged since the 23 Aug 2026 correction above. One more
+body-text reference to the original host's OS was found in the Context section below (the
+"Ubuntu 22.04 cannot be allowed to dictate an older application runtime" sentence) and is now
+annotated in place rather than silently rewritten — see the note there. Separately, the 5
+non-critical `apt` packages `docs/testing/release-gates.md`'s §I host-acceptance box had flagged
+as pending (`console-setup`, `console-setup-linux`, `keyboard-configuration`, `open-vm-tools`,
+`snapd`) were applied this pass after confirming neither `open-vm-tools` nor `snapd` was a running
+network service (`systemctl status` showed both `inactive (dead)` beforehand — `open-vm-tools` is
+skipped outright on this non-VMware host; `snapd` is socket-activated, not persistently running);
+`apt list --upgradable` shows none of the 5 pending afterward. This does not change anything in
+this ADR's own decision content — it is a host-maintenance action, recorded here only because
+`docs/testing/release-gates.md`'s box points back to this ADR for the OS-version half of its
+compound claim.
+
 ## Production graduation — single-host decision (23 Aug 2026)
 
 **This section reverses items 7-9 below and the "no local production-like HA/PITR" Negative consequence** — recorded here, not silently, per the user's own explicit decision this session (confirmed via two direct confirmations: first that production uses this host instead of external managed-Postgres/object-storage providers, second that this explicitly includes real document storage).
@@ -46,7 +61,7 @@ real benefit; the filename is a historical label at this point, not a live claim
 
 The project needs a low-cost development and stakeholder staging environment. Traffic is low, the team is small, and production is separately governed. Duplicating PostgreSQL, Redis, object storage, build tooling, and permanent background workers would exceed the practical memory budget of a 2 vCPU/4 GB host.
 
-Ubuntu 22.04 cannot be allowed to dictate an older application runtime. The application baseline remains PHP 8.5/Laravel 13/PostgreSQL 18/Redis 8.2.
+Ubuntu 22.04 cannot be allowed to dictate an older application runtime (**note, 24 Aug 2026**: this sentence describes the original retired `adrivm` host at the time this ADR was authored — see the "Host specification correction" section above; the current `yiemvm` host already runs Ubuntu 24.04.4, so this specific constraint is moot for the live host, though the underlying principle it states — the app runtime baseline is not dictated by the host OS's age — remains the reasoning basis for item 9 below). The application baseline remains PHP 8.5/Laravel 13/PostgreSQL 18/Redis 8.2.
 
 ## Decision
 

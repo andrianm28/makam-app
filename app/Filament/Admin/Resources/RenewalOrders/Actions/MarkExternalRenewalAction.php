@@ -121,7 +121,7 @@ final class MarkExternalRenewalAction
                         ->send();
 
                     session()->put(RequireRecentAuthentication::REASON_SESSION_KEY, 'money_action');
-                    session()->put('url.intended', route('filament.admin.resources.renewal-orders.index'));
+                    session()->put('url.intended', route('filament.admin.resources.pesanan-perpanjangan.index'));
                     redirect()->route(PasswordReauthentication::ROUTE_NAME);
 
                     return;

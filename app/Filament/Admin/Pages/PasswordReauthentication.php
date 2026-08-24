@@ -55,7 +55,7 @@ use Illuminate\Support\Facades\Hash;
  */
 final class PasswordReauthentication extends Page
 {
-    public const string ROUTE_NAME = 'filament.admin.pages.password-reauthentication';
+    public const string ROUTE_NAME = 'filament.admin.pages.verifikasi-ulang-kata-sandi';
 
     /**
      * The fallback `$reason` for a challenge that guards no specific
@@ -71,7 +71,7 @@ final class PasswordReauthentication extends Page
      */
     private const string RATE_LIMIT_CONTEXT = 'password-reauthentication';
 
-    protected static ?string $slug = 'password-reauthentication';
+    protected static ?string $slug = 'verifikasi-ulang-kata-sandi';
 
     protected static bool $shouldRegisterNavigation = false;
 

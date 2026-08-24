@@ -62,9 +62,9 @@ final class MasterDataNavigationTest extends TestCase
         $this->grantRoleTo($user, ActorRole::ADMIN);
 
         foreach ([
-            '/admin/cemeteries',
-            '/admin/products',
-            '/admin/service-definitions',
+            '/admin/pemakaman',
+            '/admin/produk',
+            '/admin/definisi-layanan',
         ] as $index) {
             $this->actingAs($user)
                 ->get($index)
@@ -75,9 +75,9 @@ final class MasterDataNavigationTest extends TestCase
     public function test_a_guest_is_redirected_from_each_master_data_resource_index(): void
     {
         foreach ([
-            '/admin/cemeteries',
-            '/admin/products',
-            '/admin/service-definitions',
+            '/admin/pemakaman',
+            '/admin/produk',
+            '/admin/definisi-layanan',
         ] as $index) {
             $this->get($index)
                 ->assertRedirect(route('filament.admin.auth.login'));

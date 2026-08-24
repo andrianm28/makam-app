@@ -31,6 +31,8 @@ final class SubscriptionsResource extends Resource
 {
     protected static ?string $model = Subscription::class;
 
+    protected static ?string $slug = 'langganan';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedArrowPathRoundedSquare;
 
     protected static ?string $recordTitleAttribute = 'reference';

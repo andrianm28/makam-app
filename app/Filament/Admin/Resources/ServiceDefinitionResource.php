@@ -83,6 +83,8 @@ final class ServiceDefinitionResource extends Resource
 {
     protected static ?string $model = ServiceDefinition::class;
 
+    protected static ?string $slug = 'definisi-layanan';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClipboardDocumentList;
 
     protected static ?string $recordTitleAttribute = 'name';

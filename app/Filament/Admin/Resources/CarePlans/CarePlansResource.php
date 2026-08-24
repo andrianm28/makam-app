@@ -34,6 +34,8 @@ final class CarePlansResource extends Resource
 {
     protected static ?string $model = CarePlan::class;
 
+    protected static ?string $slug = 'rencana-perawatan';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClipboardDocumentCheck;
 
     protected static ?string $recordTitleAttribute = 'reference';

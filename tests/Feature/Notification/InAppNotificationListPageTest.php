@@ -65,7 +65,7 @@ final class InAppNotificationListPageTest extends TestCase
 
     public function test_a_guest_is_redirected_away_from_the_inbox_page(): void
     {
-        $this->get('/admin/in-app-notifications')
+        $this->get('/admin/notifikasi-aplikasi')
             ->assertRedirect(route('filament.admin.auth.login'));
     }
 
@@ -82,7 +82,7 @@ final class InAppNotificationListPageTest extends TestCase
         $this->seedInAppNotification($actorB->id, ScopeEntityType::CEMETERY, 'cemetery-b', 'event-b', 'Pembaruan area B');
 
         $this->actingAs($actorA)
-            ->get('/admin/in-app-notifications')
+            ->get('/admin/notifikasi-aplikasi')
             ->assertOk()
             ->assertSee('Pembaruan area A')
             ->assertDontSee('Pembaruan area B');
@@ -94,7 +94,7 @@ final class InAppNotificationListPageTest extends TestCase
         $this->grantRoleTo($actor, ActorRole::OPERATOR);
 
         $this->actingAs($actor)
-            ->get('/admin/in-app-notifications')
+            ->get('/admin/notifikasi-aplikasi')
             ->assertOk()
             ->assertSee('Belum ada notifikasi');
     }
@@ -176,9 +176,9 @@ final class InAppNotificationListPageTest extends TestCase
         $this->assertSame(1, AuditEvent::query()->where('action', 'NOTIFICATION_READ')->count());
     }
 
-    public function test_the_inbox_page_slug_resolves_to_in_app_notifications(): void
+    public function test_the_inbox_page_slug_resolves_to_notifikasi_aplikasi(): void
     {
-        $this->assertSame('in-app-notifications', InAppNotifications::getSlug());
+        $this->assertSame('notifikasi-aplikasi', InAppNotifications::getSlug());
     }
 
     private function grant(int|string $actorRef, string $entityType, int|string $entityId): void

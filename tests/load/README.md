@@ -7,7 +7,7 @@ documented load profiles using [k6](https://k6.io/).
 
 - `profile-a-normal-launch.js` — Profile A (normal launch), run in CI at a
   reduced, CI-runner-safe scale (10 VUs/30s against 3 unauthenticated GET
-  routes: `/`, `/cemeteries`, `/faq`). See the script's own header comment
+  routes: `/`, `/pemakaman`, `/faq`). See the script's own header comment
   and `docs/superpowers/plans/2026-08-22-phase2-regression-gap-closing.md`
   Task 5 for exactly why this is reduced and what the reduction costs.
 

@@ -68,6 +68,6 @@ final class EditSiteSettingsSmokeTest extends TestCase
 
     public function test_resource_url_and_authorization_smoke(): void
     {
-        $this->assertSame('/admin/site-settings', parse_url(SiteSettingsResource::getUrl('edit'), PHP_URL_PATH));
+        $this->assertSame('/admin/pengaturan-situs', parse_url(SiteSettingsResource::getUrl('edit'), PHP_URL_PATH));
     }
 }

@@ -68,7 +68,7 @@ final class AcceptAgreementAction
             );
 
             Notification::make()->success()->title('Perjanjian diterima.')->send();
-            redirect()->route('filament.admin.resources.agreements.view', ['record' => $agreement->getKey()]);
+            redirect()->route('filament.admin.resources.persetujuan.view', ['record' => $agreement->getKey()]);
         } catch (Throwable $exception) {
             Notification::make()
                 ->danger()

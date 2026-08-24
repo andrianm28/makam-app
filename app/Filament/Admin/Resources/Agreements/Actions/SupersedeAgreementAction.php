@@ -58,7 +58,7 @@ final class SupersedeAgreementAction
             );
 
             Notification::make()->success()->title('Versi baru perjanjian dibuat.')->send();
-            redirect()->route('filament.admin.resources.agreements.view', [
+            redirect()->route('filament.admin.resources.persetujuan.view', [
                 'record' => $next->getKey(),
             ]);
         } catch (Throwable $exception) {

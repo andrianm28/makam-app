@@ -38,20 +38,20 @@ test.describe('E2E-RENEWAL-EXTERNAL — admin resource renders an externally-mar
     test.use({ storageState: adminStorageStatePath() });
 
     test('the renewal list shows the externally-marked fixture row and navigating to it reaches the view page', async ({ page }) => {
-        await page.goto('/admin/renewal-orders');
+        await page.goto('/admin/pesanan-perpanjangan');
 
         const row = page.getByRole('row', { name: /Dibayar/ }).first();
         await expect(row).toBeVisible();
         await expect(row.getByText('external')).toBeVisible();
 
         await row.getByRole('link', { name: 'Lihat' }).click();
-        await expect(page).toHaveURL(/\/admin\/renewal-orders\/[^/]+$/);
+        await expect(page).toHaveURL(/\/admin\/pesanan-perpanjangan\/[^/]+$/);
     });
 
     test('the renewal view page shows the real external-marking evidence', async ({ page }) => {
-        await page.goto('/admin/renewal-orders');
+        await page.goto('/admin/pesanan-perpanjangan');
         await page.getByRole('row', { name: /Dibayar/ }).first().getByRole('link', { name: 'Lihat' }).click();
-        await expect(page).toHaveURL(/\/admin\/renewal-orders\/[^/]+$/);
+        await expect(page).toHaveURL(/\/admin\/pesanan-perpanjangan\/[^/]+$/);
 
         await expect(page.getByText('Dibayar', { exact: true })).toBeVisible();
         await expect(page.getByText('external')).toBeVisible();

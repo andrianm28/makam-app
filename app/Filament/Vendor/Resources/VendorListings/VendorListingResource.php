@@ -18,7 +18,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 
 /**
- * `/vendor/products` — the vendor's own catalogue listings.
+ * `/vendor/produk` — the vendor's own catalogue listings.
  *
  * Directory layout, the `Schemas/`+`Tables/`+`Pages/` split, and the
  * `getPages()` route shape follow `App\Filament\Admin\Resources\FaqArticles\
@@ -38,11 +38,10 @@ final class VendorListingResource extends Resource
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShoppingBag;
 
     /**
-     * `information-architecture.md` §5 names this route `/vendor/products`.
      * Without this the slug would be derived from the model name
      * (`vendor-listings`), which is not the documented route.
      */
-    protected static ?string $slug = 'products';
+    protected static ?string $slug = 'produk';
 
     protected static ?int $navigationSort = 20;
 

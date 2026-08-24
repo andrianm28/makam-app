@@ -17,7 +17,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * `/vendor/evidence` — every evidence file uploaded against this vendor's own
+ * `/vendor/bukti` — every evidence file uploaded against this vendor's own
  * orders.
  *
  * ---------------------------------------------------------------------------
@@ -55,7 +55,7 @@ final class EvidenceList extends Page implements HasTable
 
     protected static ?string $title = 'Bukti Pekerjaan';
 
-    protected static ?string $slug = 'evidence';
+    protected static ?string $slug = 'bukti';
 
     protected static ?int $navigationSort = 40;
 

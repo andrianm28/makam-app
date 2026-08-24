@@ -9,11 +9,11 @@ import { check } from 'k6';
  * not "concurrent wizard saves" (Profile B) or authenticated admin
  * traffic.
  *
- * Route note: the cemetery directory's real route is `/cemeteries`
- * (routes/web.php, CemeteryDirectoryIndex) — NOT `/pemakaman`, which does
- * not exist in this codebase. Verified against routes/web.php before
- * writing this script; see tests/load/README.md and Task 5's report for
- * the correction.
+ * Route note: the cemetery directory's real route is `/pemakaman`
+ * (routes/web.php, CemeteryDirectoryIndex) — `/cemeteries` now 301-redirects
+ * there (docs/superpowers/plans/2026-08-24-url-indonesianization.md).
+ * Verified against routes/web.php before writing this script; see
+ * tests/load/README.md and Task 5's report for the original correction.
  *
  * Gating vs. reporting, deliberately different: `http_req_duration` is
  * NOT declared as a threshold below, even though
@@ -66,7 +66,7 @@ export default function () {
     const homepage = http.get(`${BASE_URL}/`, { tags: { route: 'homepage' } });
     check(homepage, { 'homepage is 200': (r) => r.status === 200 });
 
-    const directory = http.get(`${BASE_URL}/cemeteries`, { tags: { route: 'cemetery_directory' } });
+    const directory = http.get(`${BASE_URL}/pemakaman`, { tags: { route: 'cemetery_directory' } });
     check(directory, { 'cemetery directory is 200': (r) => r.status === 200 });
 
     const faq = http.get(`${BASE_URL}/faq`, { tags: { route: 'faq_index' } });

@@ -86,11 +86,11 @@ Mobile:
 
 ```text
 /admin
-├── /cemeteries
+├── /pemakaman
 ├── /services
 ├── /vendors
 ├── /orders
-├── /marketplace-orders
+├── /pesanan-marketplace
 ├── /renewals
 ├── /payments
 ├── /transactions
@@ -99,10 +99,10 @@ Mobile:
 └── /audit
 
 /vendor
-├── /products
-├── /orders
-├── /calendar
-├── /transactions
-├── /payouts
-└── /profile
+├── /produk
+├── /pesanan
+├── /kalender
+├── /transaksi
+├── /pencairan
+└── /profil
 ```

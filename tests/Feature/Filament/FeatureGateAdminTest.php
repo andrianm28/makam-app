@@ -212,7 +212,7 @@ final class FeatureGateAdminTest extends TestCase
             ->set('reason', 'Test fixture: stale actor must not reach the recorder.')
             ->call('transitionGate')
             ->assertNotified('Perlu verifikasi ulang')
-            ->assertRedirect(route('filament.admin.pages.password-reauthentication'));
+            ->assertRedirect(route('filament.admin.pages.verifikasi-ulang-kata-sandi'));
 
         $this->assertSame('closed', FeatureGate::query()->findOrFail('G-DATA-01')->state);
         $this->assertSame(0, GateActivation::query()->count());

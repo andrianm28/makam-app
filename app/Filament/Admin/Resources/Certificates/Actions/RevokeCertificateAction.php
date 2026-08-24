@@ -85,7 +85,7 @@ final class RevokeCertificateAction
             );
 
             Notification::make()->success()->title('Sertifikat dicabut.')->send();
-            redirect()->route('filament.admin.resources.certificates.view', ['record' => $certificate->getKey()]);
+            redirect()->route('filament.admin.resources.sertifikat.view', ['record' => $certificate->getKey()]);
         } catch (Throwable $exception) {
             Notification::make()
                 ->danger()

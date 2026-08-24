@@ -31,7 +31,7 @@ final class RenewalPeriodReport extends Page
 {
     use ExportsReportCsv;
 
-    protected static ?string $slug = 'renewal-period-report';
+    protected static ?string $slug = 'laporan-periode-perpanjangan';
 
     protected string $view = 'filament.admin.pages.renewal-period-report';
 

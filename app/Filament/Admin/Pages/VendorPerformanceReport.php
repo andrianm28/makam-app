@@ -33,7 +33,7 @@ final class VendorPerformanceReport extends Page
 {
     use ExportsReportCsv;
 
-    protected static ?string $slug = 'vendor-performance-report';
+    protected static ?string $slug = 'laporan-kinerja-vendor';
 
     protected string $view = 'filament.admin.pages.vendor-performance-report';
 

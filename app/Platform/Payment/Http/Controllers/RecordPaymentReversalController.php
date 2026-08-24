@@ -57,10 +57,10 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  * per the brief's own request
  * ---------------------------------------------------------------------------
  * The brief's item 5 offers both shapes ("`POST
- * /admin/payments/reversals/refund` and `POST
- * /admin/payments/reversals/chargeback` (or a single parameterized route if
+ * /admin/pembayaran/pembalikan/refund` and `POST
+ * /admin/pembayaran/pembalikan/chargeback` (or a single parameterized route if
  * you prefer — your call, flag which you chose)"). This picks the single
- * parameterized route, `POST /admin/payments/reversals/{reversalType}`
+ * parameterized route, `POST /admin/pembayaran/pembalikan/{reversalType}`
  * (`reversalType` constrained to `refund|chargeback` in `routes/web.php`),
  * for two reasons: (1) the brief's own literal middleware example for this
  * task uses one shared re-authentication reason for both types

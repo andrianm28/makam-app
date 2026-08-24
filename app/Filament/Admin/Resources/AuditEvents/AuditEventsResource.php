@@ -53,6 +53,8 @@ final class AuditEventsResource extends Resource
 {
     protected static ?string $model = AuditEvent::class;
 
+    protected static ?string $slug = 'log-audit';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClipboardDocumentList;
 
     protected static ?string $recordTitleAttribute = 'action';
