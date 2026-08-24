@@ -65,6 +65,8 @@ final class BookingOrderResource extends Resource
 {
     protected static ?string $model = Order::class;
 
+    protected static ?string $slug = 'pesanan-pemakaman';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShoppingBag;
 
     protected static ?string $recordTitleAttribute = 'reference';

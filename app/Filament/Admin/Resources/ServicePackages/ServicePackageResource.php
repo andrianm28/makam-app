@@ -63,6 +63,8 @@ final class ServicePackageResource extends Resource
 {
     protected static ?string $model = ServicePackage::class;
 
+    protected static ?string $slug = 'paket-layanan';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCube;
 
     protected static ?string $recordTitleAttribute = 'name';

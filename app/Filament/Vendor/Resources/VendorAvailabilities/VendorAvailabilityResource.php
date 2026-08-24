@@ -18,7 +18,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 
 /**
- * `/vendor/calendar` — the vendor's own per-day availability schedule.
+ * `/vendor/kalender` — the vendor's own per-day availability schedule.
  *
  * Directory layout, the `Schemas/`+`Tables/`+`Pages/` split, and the
  * `getPages()` route shape follow the sibling `VendorListings\
@@ -39,11 +39,10 @@ final class VendorAvailabilityResource extends Resource
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCalendar;
 
     /**
-     * `information-architecture.md` §5 names this route `/vendor/calendar`.
      * Without this the slug would be derived from the model name
      * (`vendor-availabilities`), which is not the documented route.
      */
-    protected static ?string $slug = 'calendar';
+    protected static ?string $slug = 'kalender';
 
     protected static ?int $navigationSort = 40;
 

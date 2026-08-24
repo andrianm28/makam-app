@@ -77,6 +77,8 @@ final class CemeteryVisitationPolicyResource extends Resource
 {
     protected static ?string $model = CemeteryVisitationPolicy::class;
 
+    protected static ?string $slug = 'kebijakan-kunjungan-pemakaman';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCalendarDays;
 
     protected static ?string $recordTitleAttribute = 'cemetery.name';

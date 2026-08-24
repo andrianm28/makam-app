@@ -78,8 +78,8 @@ final class PaymentServiceProvider extends ServiceProvider
             static fn (): SumoPodPaymentClient => SumoPodPaymentClient::fromConfig(),
         );
 
-        // The policy behind `POST /admin/payments/reversals/{reversalType}`
-        // and `POST /admin/payments/manual-verifications/{id}/verify`. Both
+        // The policy behind `POST /admin/pembayaran/pembalikan/{reversalType}`
+        // and `POST /admin/pembayaran/verifikasi-manual/{id}/verifikasi`. Both
         // routes previously carried only `['web', 'auth', ...]`, and
         // `config/auth.php` defines a single `web` guard over the shared
         // `users` table — so `auth` alone meant nothing more than "some user

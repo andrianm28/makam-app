@@ -57,6 +57,8 @@ final class MarketplaceOrderResource extends Resource
 {
     protected static ?string $model = MarketplaceOrder::class;
 
+    protected static ?string $slug = 'pesanan-marketplace';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBanknotes;
 
     protected static ?string $recordTitleAttribute = 'order_number';

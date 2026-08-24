@@ -46,6 +46,7 @@ use App\Platform\Payment\Http\Controllers\PaymentCancelController;
 use App\Platform\Payment\Http\Controllers\PaymentReturnController;
 use App\Platform\Payment\Http\Controllers\RecordPaymentReversalController;
 use App\Platform\Payment\Http\Controllers\VerifyManualPaymentController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -166,9 +167,12 @@ Route::get('/marketplace/pesanan/{orderNumber}', OrderTracking::class)->name('ma
 |
 | Path chosen (not fixed by information-architecture.md §1, which has no
 | directory entry at all — a real, separate documentation gap, tracked
-| rather than silently patched): `/cemeteries`, matching the noun
-| docs/contracts/openapi.yaml already uses for `GET /cemeteries` and
-| `GET /cemeteries/{cemeteryId}`, so this introduces no new vocabulary.
+| rather than silently patched): `/pemakaman`. This deliberately diverges
+| from `docs/contracts/openapi.yaml`'s noun for the same resource
+| (`GET /cemeteries`, `GET /cemeteries/{cemeteryId}`) — that API contract
+| is unbuilt (`routes/api.php` registers no such route), so there is no
+| live consumer to keep in vocabulary lockstep with yet; when a real JSON
+| API for this resource is built, its path is a separate decision.
 | Every internal link and every test resolves via `route('cemeteries.…')`,
 | never a literal path, so only the two NAMES below are load-bearing.
 |
@@ -180,8 +184,20 @@ Route::get('/marketplace/pesanan/{orderNumber}', OrderTracking::class)->name('ma
 | projection is structurally incapable of leaking `registry_mode` or
 | `certificate_mode` — see PublicCapabilityProjection's own doc block.
 */
-Route::get('/cemeteries', CemeteryDirectoryIndex::class)->name('cemeteries.index');
-Route::get('/cemeteries/{cemeterySlug}', CemeteryDetail::class)->name('cemeteries.show');
+Route::get('/pemakaman', CemeteryDirectoryIndex::class)->name('cemeteries.index');
+Route::get('/pemakaman/{cemeterySlug}', CemeteryDetail::class)->name('cemeteries.show');
+// A plain `Route::permanentRedirect` filters to path variables only
+// (`RedirectController::only($route->getCompiled()->getPathVariables())`)
+// and never reads the query string — but `/cemeteries` carries a real,
+// bookmarkable `?city=&type=` filter shape (CemeteryDirectoryIndex's
+// `#[Url(...)]` properties push it into browser history), so a bookmarked
+// filtered link must not silently lose its filters on redirect.
+Route::get('/cemeteries', function (Request $request) {
+    $query = $request->getQueryString();
+
+    return redirect('/pemakaman'.($query !== null ? '?'.$query : ''), 301);
+});
+Route::permanentRedirect('/cemeteries/{cemeterySlug}', '/pemakaman/{cemeterySlug}');
 
 /*
 |--------------------------------------------------------------------------
@@ -289,7 +305,7 @@ Route::get('/faq/{articleSlug}', FaqArticleDetail::class)->name('faq.show');
 | no existence leak). The gate (`G-MEM-01`) is re-checked on render.
 | Read-only: no POST surface exists on this route.
 |
-| `/memorial/{profileId}` — the family surface: consent-gated
+| `/kenangan/{profileId}` — the family surface: consent-gated
 | (an active `memorial_editors` row for the actor, else the uniform
 | not-visible state — AC1). All writes on this surface are Livewire
 | actions (i.e. POSTs) from `MemorialFamilyPage`: content submit (pending,
@@ -300,7 +316,8 @@ Route::get('/faq/{articleSlug}', FaqArticleDetail::class)->name('faq.show');
 | projections/actions — never a model in the route closure.
 */
 Route::get('/m/{token}', MemorialPublicPage::class)->name('memorial.show');
-Route::get('/memorial/{profileId}', MemorialFamilyPage::class)->name('memorial.family');
+Route::get('/kenangan/{profileId}', MemorialFamilyPage::class)->name('memorial.family');
+Route::permanentRedirect('/memorial/{profileId}', '/kenangan/{profileId}');
 
 /*
 |--------------------------------------------------------------------------
@@ -522,7 +539,7 @@ Route::middleware('auth')->prefix('akun')->name('akun.')->group(function (): voi
 | bulk export of a period's books deserves at least the rate limit a single
 | document download already carries.
 */
-Route::get('/admin/finance/exports', FinanceExportController::class)
+Route::get('/admin/laporan-keuangan/ekspor', FinanceExportController::class)
     ->middleware([
         'web',
         'auth',
@@ -573,11 +590,11 @@ Route::get('/pembayaran/batal', PaymentCancelController::class)->name('payments.
 |--------------------------------------------------------------------------
 | AC8 ("Admin verification SHALL be a separate authorized action") and AC9
 | (recent re-authentication). `RequireRecentAuthentication`'s SECOND real
-| attachment anywhere in this repo — the first is `/admin/finance/exports`
-| above, and this route follows its exact precedent: a plain controller
-| route (not a Filament panel page) in the standard `web` group, its own
-| explicit `auth` guard, and the same `filament.admin.pages.
-| password-reauthentication` challenge destination — the old
+| attachment anywhere in this repo — the first is `/admin/laporan-keuangan/
+| ekspor` above, and this route follows its exact precedent: a plain
+| controller route (not a Filament panel page) in the standard `web` group,
+| its own explicit `auth` guard, and the same `filament.admin.pages.
+| verifikasi-ulang-kata-sandi` challenge destination — the old
 | `filament.admin.pages.mfa-challenge` destination redirected every admin
 | into a crash, since none was ever MFA-enrolled (mfa-removal-and-reauth
 | Task 3).
@@ -593,7 +610,7 @@ Route::get('/pembayaran/batal', PaymentCancelController::class)->name('payments.
 | `throttle:payment-manual-verification` (public-beta-release plan, Lane
 | D4).
 */
-Route::post('/admin/payments/manual-verifications/{paymentVerification}/verify', VerifyManualPaymentController::class)
+Route::post('/admin/pembayaran/verifikasi-manual/{paymentVerification}/verifikasi', VerifyManualPaymentController::class)
     ->middleware([
         'web',
         'auth',
@@ -607,11 +624,11 @@ Route::post('/admin/payments/manual-verifications/{paymentVerification}/verify',
 | Admin — payment reversals (Task 6, Wave 1d Append-Correction)
 |--------------------------------------------------------------------------
 | `RequireRecentAuthentication`'s THIRD real attachment anywhere in this
-| repo — after `/admin/finance/exports` and
-| `/admin/payments/manual-verifications/{id}/verify` above, following their
-| exact precedent: a plain controller route in the standard `web` group,
-| its own explicit `auth` guard, and the same
-| `filament.admin.pages.password-reauthentication` challenge destination —
+| repo — after `/admin/laporan-keuangan/ekspor` and
+| `/admin/pembayaran/verifikasi-manual/{id}/verifikasi` above, following
+| their exact precedent: a plain controller route in the standard `web`
+| group, its own explicit `auth` guard, and the same
+| `filament.admin.pages.verifikasi-ulang-kata-sandi` challenge destination —
 | the old `filament.admin.pages.mfa-challenge` destination redirected every
 | admin into a crash, since none was ever MFA-enrolled
 | (mfa-removal-and-reauth Task 3).
@@ -632,7 +649,7 @@ Route::post('/admin/payments/manual-verifications/{paymentVerification}/verify',
 |
 | `throttle:payment-reversal` (public-beta-release plan, Lane D4).
 */
-Route::post('/admin/payments/reversals/{reversalType}', RecordPaymentReversalController::class)
+Route::post('/admin/pembayaran/pembalikan/{reversalType}', RecordPaymentReversalController::class)
     ->whereIn('reversalType', ['refund', 'chargeback'])
     ->middleware([
         'web',

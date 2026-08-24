@@ -57,6 +57,8 @@ final class ReconciliationsResource extends Resource
 {
     protected static ?string $model = Reconciliation::class;
 
+    protected static ?string $slug = 'rekonsiliasi';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedScale;
 
     protected static ?string $recordTitleAttribute = 'statement_reference';

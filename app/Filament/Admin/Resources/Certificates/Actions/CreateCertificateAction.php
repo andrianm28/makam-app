@@ -202,7 +202,7 @@ final class CreateCertificateAction
             );
 
             Notification::make()->success()->title('Sertifikat diterbitkan.')->send();
-            redirect()->route('filament.admin.resources.certificates.view', ['record' => $certificate->getKey()]);
+            redirect()->route('filament.admin.resources.sertifikat.view', ['record' => $certificate->getKey()]);
         } catch (CertificateIssuerNotAuthorisedException $exception) {
             self::deny($exception->getMessage());
         } catch (CertificateEligibilityNotMetException $exception) {

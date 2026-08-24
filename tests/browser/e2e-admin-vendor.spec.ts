@@ -320,9 +320,9 @@ test.describe('E2E-ADMIN/VENDOR — admin dashboard and reports', () => {
             // on the same four-role MasterDataAdminAuthorizerContract as
             // PlatformOverviewWidget above — admin passes.
             const reports: Array<{ path: string; title: string }> = [
-                { path: '/admin/orders-report', title: 'Laporan Pesanan' },
-                { path: '/admin/renewal-period-report', title: 'Laporan Perpanjangan' },
-                { path: '/admin/vendor-performance-report', title: 'Laporan Kinerja Vendor' },
+                { path: '/admin/laporan-pesanan', title: 'Laporan Pesanan' },
+                { path: '/admin/laporan-periode-perpanjangan', title: 'Laporan Perpanjangan' },
+                { path: '/admin/laporan-kinerja-vendor', title: 'Laporan Kinerja Vendor' },
             ];
 
             for (const report of reports) {
@@ -339,9 +339,9 @@ test.describe('E2E-ADMIN/VENDOR — admin dashboard and reports', () => {
             // grant (seed migration), so canAccess() is true and each page
             // returns a real 200.
             const reports: Array<{ path: string; title: string }> = [
-                { path: '/admin/finance-reports', title: 'Laporan Keuangan' },
-                { path: '/admin/receipts-report', title: 'Laporan Penerimaan' },
-                { path: '/admin/outgoing-payments-report', title: 'Laporan Pembayaran Keluar' },
+                { path: '/admin/laporan-keuangan', title: 'Laporan Keuangan' },
+                { path: '/admin/laporan-kwitansi', title: 'Laporan Penerimaan' },
+                { path: '/admin/laporan-pembayaran-keluar', title: 'Laporan Pembayaran Keluar' },
             ];
 
             for (const report of reports) {
@@ -409,7 +409,7 @@ test.describe('E2E-ADMIN/VENDOR — sensitive-action audit and query scope', () 
     });
 
     test('audit trail review shows the required columns and is read-only', async ({ page }) => {
-        await page.goto('/admin/audit-events');
+        await page.goto('/admin/log-audit');
 
         await expect(page.getByRole('heading', { name: 'Jejak Audit' })).toBeVisible();
 
@@ -433,7 +433,7 @@ test.describe('E2E-ADMIN/VENDOR — sensitive-action audit and query scope', () 
     });
 
     test('audit trail records this suite\'s own seeded grants', async ({ page }) => {
-        await page.goto('/admin/audit-events');
+        await page.goto('/admin/log-audit');
 
         // Task 1's migration granted ActorRole::VENDOR (and, after Task 2's
         // fix, ActorRole::FINANCE plus a BUSINESS_ENTITY scope) through
@@ -466,7 +466,7 @@ test.describe('E2E-ADMIN/VENDOR — sensitive-action audit and query scope', () 
     });
 
     test('reconciliation admin list renders for the admin holding finance-ledger read access', async ({ page }) => {
-        await page.goto('/admin/reconciliations');
+        await page.goto('/admin/rekonsiliasi');
 
         // Not an "unscoped admin" view — e2e-admin holds exactly one
         // BUSINESS_ENTITY grant (the fixture entity Task 2's fix added), and
@@ -509,8 +509,8 @@ test.describe('E2E-ADMIN/VENDOR — sensitive-action audit and query scope', () 
         },
     );
 
-    // A real, live finding, not a flaky assertion: both `/admin/audit-events`
-    // and `/admin/reconciliations` fail axe's `color-contrast` rule on
+    // A real, live finding, not a flaky assertion: both `/admin/log-audit`
+    // and `/admin/rekonsiliasi` fail axe's `color-contrast` rule on
     // `.fi-breadcrumbs-item-label` (foreground `#6f7878` on background
     // `#f7f8f8`, an actual contrast ratio of 4.25:1 against WCAG AA's
     // required 4.5:1 — verified live via AxeBuilder's own violation output,
@@ -533,12 +533,12 @@ test.describe('E2E-ADMIN/VENDOR — sensitive-action audit and query scope', () 
     // here — verified live that excluding just this one selector leaves
     // zero violations on both pages.
     test('audit and reconciliation pages have zero accessibility violations outside the known Filament breadcrumb finding', async ({ page }) => {
-        await page.goto('/admin/audit-events');
+        await page.goto('/admin/log-audit');
         expect(
             (await new AxeBuilder({ page }).exclude('.fi-breadcrumbs-item-label').analyze()).violations,
         ).toEqual([]);
 
-        await page.goto('/admin/reconciliations');
+        await page.goto('/admin/rekonsiliasi');
         expect(
             (await new AxeBuilder({ page }).exclude('.fi-breadcrumbs-item-label').analyze()).violations,
         ).toEqual([]);
@@ -550,12 +550,12 @@ test.describe('E2E-ADMIN/VENDOR — sensitive-action audit and query scope', () 
  * Vendor page routes — verified against each Page class's real `$slug`, not
  * the plan draft's guessed paths
  * ---------------------------------------------------------------------------
- * `App\Filament\Vendor\Pages\TransactionHistory::$slug` is `'transactions'`
- * and `App\Filament\Vendor\Pages\PayoutStatus::$slug` is `'payouts'` (both
- * read directly from source) — so their real routes are `/vendor/transactions`
- * and `/vendor/payouts`, not `/vendor/transaction-history`/`/vendor/payout-status`
+ * `App\Filament\Vendor\Pages\TransactionHistory::$slug` is `'transaksi'`
+ * and `App\Filament\Vendor\Pages\PayoutStatus::$slug` is `'pencairan'` (both
+ * read directly from source) — so their real routes are `/vendor/transaksi`
+ * and `/vendor/pencairan`, not `/vendor/transaction-history`/`/vendor/payout-status`
  * as this suite's plan draft guessed. `App\Filament\Vendor\Pages\Profile::$slug`
- * (`'profile'`) does match the draft.
+ * is `'profil'`.
  *
  * ---------------------------------------------------------------------------
  * Transaction-history scoping: a real presence/absence proof, not a row count
@@ -575,7 +575,7 @@ test.describe('E2E-ADMIN/VENDOR — sensitive-action audit and query scope', () 
  * `service_areas`, never orders) — so a fresh `migrate:fresh` left this page
  * with nothing to assert scoping against beyond its empty state, which would
  * have been exactly the vacuous 0-vs-0 comparison this suite already declined
- * to fake for `/admin/reconciliations` above. Unlike that case, a
+ * to fake for `/admin/rekonsiliasi` above. Unlike that case, a
  * `VendorOrder` row is cheap to fixture (no complex domain Action required —
  * `VendorPanelScopingTest`'s own fixture helper already does this with a
  * plain insert), so
@@ -614,7 +614,7 @@ test.describe('E2E-ADMIN/VENDOR — vendor profile, transactions, and payouts', 
         });
 
         test('vendor profile/account page is reachable and editable', async ({ page }) => {
-            await page.goto('/vendor/profile');
+            await page.goto('/vendor/profil');
 
             await expect(page.getByRole('heading', { name: 'Profil Akun' })).toBeVisible();
 
@@ -626,7 +626,7 @@ test.describe('E2E-ADMIN/VENDOR — vendor profile, transactions, and payouts', 
         });
 
         test('vendor transaction history is reachable and scoped to this vendor only', async ({ page }) => {
-            await page.goto('/vendor/transactions');
+            await page.goto('/vendor/transaksi');
 
             await expect(page.getByRole('heading', { name: 'Riwayat Transaksi', exact: true })).toBeVisible();
 
@@ -640,7 +640,7 @@ test.describe('E2E-ADMIN/VENDOR — vendor profile, transactions, and payouts', 
         });
 
         test('vendor payout status/reference is visible and scoped', async ({ page }) => {
-            await page.goto('/vendor/payouts');
+            await page.goto('/vendor/pencairan');
 
             await expect(page.getByRole('heading', { name: 'Status Pencairan' })).toBeVisible();
         });
@@ -694,7 +694,7 @@ test.describe('E2E-ADMIN/VENDOR — vendor profile, transactions, and payouts', 
             // vendor can actually act on an order. Uses the seed migration's
             // own fixture order (`2026_08_22_110000_seed_e2e_admin_vendor_
             // test_users.php`'s OWN_VENDOR_ORDER_CUSTOMER_NAME/EMAIL).
-            await page.goto('/vendor/orders');
+            await page.goto('/vendor/pesanan');
 
             const row = page.getByRole('row', { name: VENDOR_OWN_ORDER_CUSTOMER_NAME });
             await expect(row).toBeVisible();
@@ -727,13 +727,13 @@ test.describe('E2E-ADMIN/VENDOR — vendor profile, transactions, and payouts', 
 
             await expect(page.getByText(step.notificationTitle)).toBeVisible();
 
-            await page.goto('/vendor/orders');
+            await page.goto('/vendor/pesanan');
             const updatedRow = page.getByRole('row', { name: VENDOR_OWN_ORDER_CUSTOMER_NAME });
             await expect(updatedRow.getByText(step.to)).toBeVisible();
         });
 
         test('vendor panel pages have zero accessibility violations', async ({ page }) => {
-            for (const path of ['/vendor', '/vendor/profile', '/vendor/transactions', '/vendor/payouts']) {
+            for (const path of ['/vendor', '/vendor/profil', '/vendor/transaksi', '/vendor/pencairan']) {
                 await page.goto(path);
                 const results = await new AxeBuilder({ page }).analyze();
                 expect(results.violations).toEqual([]);

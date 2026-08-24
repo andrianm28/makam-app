@@ -43,6 +43,8 @@ final class GravePlotsResource extends Resource
 {
     protected static ?string $model = GravePlot::class;
 
+    protected static ?string $slug = 'petak-makam';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedSquares2x2;
 
     protected static ?string $recordTitleAttribute = 'slot';

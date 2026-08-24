@@ -188,7 +188,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
                 'reference' => 'TRX-route-1',
                 'reason' => 'Customer requested a refund',
             ])
-            ->assertRedirect(route('filament.admin.pages.password-reauthentication'));
+            ->assertRedirect(route('filament.admin.pages.verifikasi-ulang-kata-sandi'));
 
         $this->assertSame(0, PaymentReversal::query()->count());
         $this->assertSame(0, AuditEvent::query()->where('action', PaymentAuditActions::REFUND)->count());
@@ -559,7 +559,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
         $user = $this->freshlyAuthenticatedUser();
 
         $this->actingAs($user)
-            ->post('/admin/payments/reversals/reversal', [
+            ->post('/admin/pembayaran/pembalikan/reversal', [
                 'reference' => 'TRX-route-5',
                 'reason' => 'Some reason',
             ])
@@ -656,7 +656,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
                     'reference' => 'TRX-route-throttle',
                     'reason' => 'Customer requested a refund',
                 ])
-                ->assertRedirect(route('filament.admin.pages.password-reauthentication'));
+                ->assertRedirect(route('filament.admin.pages.verifikasi-ulang-kata-sandi'));
         }
 
         $this->actingAs($user)

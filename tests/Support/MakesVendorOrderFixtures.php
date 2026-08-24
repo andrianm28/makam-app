@@ -22,7 +22,7 @@ use Illuminate\Support\Str;
  * `scope_assignments`.
  *
  * The grant is load-bearing, not ceremony: `ScopesToCurrentVendor` closes the
- * `/vendor/orders` resource query to the granted vendor, so without it the
+ * `/vendor/pesanan` resource query to the granted vendor, so without it the
  * edit page cannot mount the record at all. `forgetScopedInstances()` discards
  * any actor-context/scope-resolver container instance resolved before the
  * grant (they are `scoped()` bindings — see `VendorPanelScopingTest`'s

@@ -27,7 +27,7 @@ use SensitiveParameter;
  * Self-service account page for the CURRENTLY AUTHENTICATED `/vendor` user
  * — reads `Auth::user()` directly, never a route parameter. A vendor can only
  * ever see or edit their own account through this page.
- * Route name `filament.vendor.pages.profile`.
+ * Route name `filament.vendor.pages.profil`.
  *
  * ---------------------------------------------------------------------------
  * Scope: `App\Models\User` fields only — no vendor-model fields exist to add
@@ -101,7 +101,7 @@ final class Profile extends Page implements HasForms
      */
     private const string AUDIT_ACTION_PASSWORD_CHANGED = 'VENDOR_PASSWORD_CHANGED';
 
-    protected static ?string $slug = 'profile';
+    protected static ?string $slug = 'profil';
 
     protected string $view = 'filament.vendor.pages.profile';
 

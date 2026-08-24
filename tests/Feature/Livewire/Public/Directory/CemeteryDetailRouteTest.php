@@ -15,7 +15,7 @@ use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
- * `/cemeteries/{cemeterySlug}` (route name `cemeteries.show`) — Sprint 4
+ * `/pemakaman/{cemeterySlug}` (route name `cemeteries.show`) — Sprint 4
  * S4-T6, AC3, AC4, AC5, AC6, AC11, AC12.
  *
  * `CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]` is used as the worked
@@ -412,6 +412,15 @@ final class CemeteryDetailRouteTest extends TestCase
         $this->get(route('cemeteries.show', ['cemeterySlug' => $cemetery->slug]))
             ->assertSee(route('cemeteries.index'))
             ->assertSee('Kembali ke direktori');
+    }
+
+    public function test_the_old_cemeteries_slug_path_redirects_permanently_to_pemakaman(): void
+    {
+        $cemetery = $this->exampleCemetery();
+
+        $this->get("/cemeteries/{$cemetery->slug}")
+            ->assertRedirect(route('cemeteries.show', ['cemeterySlug' => $cemetery->slug]))
+            ->assertStatus(301);
     }
 
     private function exampleCemetery(): Cemetery

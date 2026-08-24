@@ -48,6 +48,8 @@ final class PreNeedCaseResource extends Resource
 {
     protected static ?string $model = PreNeedCase::class;
 
+    protected static ?string $slug = 'kasus-preneed';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentText;
 
     protected static ?string $recordTitleAttribute = 'id';

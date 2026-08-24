@@ -197,7 +197,7 @@ final class FaqArticleAuthorizationCharacterizationTest extends TestCase
     {
         $this->rolelessUser();
 
-        $this->get('/admin/faq-articles')->assertForbidden();
+        $this->get('/admin/artikel-faq')->assertForbidden();
     }
 
     /**
@@ -210,14 +210,14 @@ final class FaqArticleAuthorizationCharacterizationTest extends TestCase
     {
         $this->userWithRole(ActorRole::OPERATOR);
 
-        $this->get('/admin/faq-articles')->assertForbidden();
+        $this->get('/admin/artikel-faq')->assertForbidden();
     }
 
     public function test_an_admin_can_open_the_faq_article_list(): void
     {
         $this->userWithRole(ActorRole::ADMIN);
 
-        $this->get('/admin/faq-articles')->assertOk();
+        $this->get('/admin/artikel-faq')->assertOk();
     }
 
     // -----------------------------------------------------------------------

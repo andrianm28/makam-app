@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * The ONLY path a vendor order's `status` (and `notes`) may be written
  * through, from any surface — the edit form's save hook and the six
- * one-click transition actions on `/vendor/orders/{id}/edit` both call this.
+ * one-click transition actions on `/vendor/pesanan/{id}/edit` both call this.
  * Mirrors `app/Domain/Faq/Actions/PublishFaqArticle`'s "domain logic lives
  * in Actions, one write path, audited in the same transaction" shape
  * (`app/Domain/README.md`'s binding rule).

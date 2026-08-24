@@ -56,7 +56,7 @@ final class WorkOrdersTable
             ->emptyStateDescription('Pekerjaan perawatan untuk klien Anda akan muncul di sini.')
             ->emptyStateIcon(Heroicon::OutlinedClipboardDocumentCheck)
             ->defaultSort('scheduled_at', 'asc')
-            ->recordUrl(fn (WorkOrder $record): string => route('filament.vendor.resources.work-orders.view', ['record' => $record->getKey()]));
+            ->recordUrl(fn (WorkOrder $record): string => route('filament.vendor.resources.order-kerja.view', ['record' => $record->getKey()]));
     }
 
     public static function statusLabel(string $status): string

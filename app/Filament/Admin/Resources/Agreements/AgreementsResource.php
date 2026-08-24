@@ -38,6 +38,8 @@ final class AgreementsResource extends Resource
 {
     protected static ?string $model = Agreement::class;
 
+    protected static ?string $slug = 'persetujuan';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClipboardDocumentCheck;
 
     protected static ?string $recordTitleAttribute = 'reference';

@@ -52,6 +52,8 @@ final class WorkOrdersResource extends Resource
 {
     protected static ?string $model = WorkOrder::class;
 
+    protected static ?string $slug = 'order-kerja';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClipboardDocumentCheck;
 
     protected static ?string $recordTitleAttribute = 'reference';

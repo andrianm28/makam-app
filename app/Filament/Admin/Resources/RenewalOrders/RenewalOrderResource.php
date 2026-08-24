@@ -41,6 +41,8 @@ final class RenewalOrderResource extends Resource
 {
     protected static ?string $model = Renewal::class;
 
+    protected static ?string $slug = 'pesanan-perpanjangan';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedArrowPath;
 
     protected static ?string $recordTitleAttribute = 'reference';

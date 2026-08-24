@@ -40,7 +40,7 @@ use Tests\TestCase;
 /**
  * The two public Livewire surfaces of the Memorial module — `MemorialPublicPage`
  * (`/m/{token}`, the QR resolve page) and `MemorialFamilyPage`
- * (`/memorial/{profileId}`, the consent-gated family surface).
+ * (`/kenangan/{profileId}`, the consent-gated family surface).
  *
  * `.kiro/specs/memorial-and-qr/requirements.md` AC2–AC5 plus design.md's
  * "Sequence — QR resolve, gate-checked" and Error handling sections.
@@ -310,6 +310,15 @@ final class MemorialPublicPageTest extends TestCase
     // =====================================================================
     // FAMILY PAGE — consent-gated (AC1)
     // =====================================================================
+
+    public function test_the_old_memorial_path_redirects_permanently_to_kenangan(): void
+    {
+        $profile = $this->profile();
+
+        $this->get("/memorial/{$profile->getKey()}")
+            ->assertRedirect(route('memorial.family', ['profileId' => $profile->getKey()]))
+            ->assertStatus(301);
+    }
 
     /**
      * An actor who is not an active editor of the profile gets the same

@@ -579,7 +579,7 @@ final class PreNeedCaseActions
             return;
         }
 
-        $returnUrl = route('filament.admin.resources.pre-need-cases.view', ['record' => $case->getKey()]);
+        $returnUrl = route('filament.admin.resources.kasus-preneed.view', ['record' => $case->getKey()]);
 
         try {
             $session = app(OpenPaymentSession::class)->__invoke(new OpenPaymentSessionCommand(
@@ -599,7 +599,7 @@ final class PreNeedCaseActions
                 ->body('Cicilan #'.$installment->installment_number.' kini memiliki sesi pembayaran ('.($session->payment_link_url ?? 'lihat sesi').').')
                 ->send();
 
-            redirect()->route('filament.admin.resources.pre-need-cases.view', ['record' => $case->getKey()]);
+            redirect()->route('filament.admin.resources.kasus-preneed.view', ['record' => $case->getKey()]);
         } catch (\Throwable $exception) {
             Notification::make()
                 ->danger()
@@ -659,7 +659,7 @@ final class PreNeedCaseActions
             return true;
         } catch (ReauthenticationRequiredException) {
             session()->put(RequireRecentAuthentication::REASON_SESSION_KEY, self::MONEY_CHECKPOINT_REASON);
-            session()->put('url.intended', route('filament.admin.resources.pre-need-cases.view', ['record' => $case->getKey()]));
+            session()->put('url.intended', route('filament.admin.resources.kasus-preneed.view', ['record' => $case->getKey()]));
 
             Notification::make()
                 ->warning()
@@ -696,7 +696,7 @@ final class PreNeedCaseActions
                 ->body('Layanan pembayaran pra-layanan masih ditutup (G-LEGAL-01). '.$exception->getMessage())
                 ->send();
 
-            redirect()->route('filament.admin.resources.pre-need-cases.view', ['record' => $case->getKey()]);
+            redirect()->route('filament.admin.resources.kasus-preneed.view', ['record' => $case->getKey()]);
 
             return false;
         } catch (\Throwable $exception) {
@@ -718,7 +718,7 @@ final class PreNeedCaseActions
     private static function done(string $title, PreNeedCase $case): void
     {
         Notification::make()->success()->title($title)->send();
-        redirect()->route('filament.admin.resources.pre-need-cases.view', ['record' => $case->getKey()]);
+        redirect()->route('filament.admin.resources.kasus-preneed.view', ['record' => $case->getKey()]);
     }
 
     private static function denied(string $what): void

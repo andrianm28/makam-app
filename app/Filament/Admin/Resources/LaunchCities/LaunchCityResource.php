@@ -53,6 +53,8 @@ final class LaunchCityResource extends Resource
 {
     protected static ?string $model = LaunchCity::class;
 
+    protected static ?string $slug = 'kota-peluncuran';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedMapPin;
 
     protected static ?string $recordTitleAttribute = 'label';

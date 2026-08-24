@@ -17,7 +17,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 
 /**
- * `/vendor/work-orders` — the vendor's care work order queue.
+ * `/vendor/order-kerja` — the vendor's care work order queue.
  * Scoped to the current vendor via `ScopesToCurrentVendor`.
  */
 final class WorkOrdersResource extends Resource
@@ -28,7 +28,7 @@ final class WorkOrdersResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClipboardDocumentCheck;
 
-    protected static ?string $slug = 'work-orders';
+    protected static ?string $slug = 'order-kerja';
 
     protected static ?int $navigationSort = 40;
 

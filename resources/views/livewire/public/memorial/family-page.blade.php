@@ -1,7 +1,7 @@
 {{--
     resources/views/livewire/public/memorial/family-page.blade.php
 
-    App\Livewire\Public\Memorial\MemorialFamilyPage's view — `/memorial/{profileId}`,
+    App\Livewire\Public\Memorial\MemorialFamilyPage's view — `/kenangan/{profileId}`,
     the consent-gated family surface. `.kiro/specs/memorial-and-qr/requirements.md`
     AC1/AC2/AC6 and kiro tasks.md's design-system section.
 

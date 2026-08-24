@@ -57,6 +57,8 @@ final class VisitationBookingsResource extends Resource
 {
     protected static ?string $model = VisitationBooking::class;
 
+    protected static ?string $slug = 'pemesanan-kunjungan';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClipboardDocumentList;
 
     protected static ?string $recordTitleAttribute = 'reference';

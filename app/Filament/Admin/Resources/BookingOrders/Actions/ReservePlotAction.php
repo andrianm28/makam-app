@@ -227,7 +227,7 @@ final class ReservePlotAction
             );
 
             Notification::make()->success()->title('Plot berhasil direservasi.')->send();
-            redirect()->route('filament.admin.resources.booking-orders.view', ['record' => $order->getKey()]);
+            redirect()->route('filament.admin.resources.pesanan-pemakaman.view', ['record' => $order->getKey()]);
         } catch (\Throwable $exception) {
             Notification::make()->danger()->title('Reservasi gagal')->body($exception->getMessage())->send();
         }

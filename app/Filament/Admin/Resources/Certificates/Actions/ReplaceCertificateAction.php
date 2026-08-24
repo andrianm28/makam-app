@@ -107,7 +107,7 @@ final class ReplaceCertificateAction
             );
 
             Notification::make()->success()->title('Sertifikat diganti.')->send();
-            redirect()->route('filament.admin.resources.certificates.view', [
+            redirect()->route('filament.admin.resources.sertifikat.view', [
                 'record' => $replacement->getKey(),
             ]);
         } catch (Throwable $exception) {

@@ -107,7 +107,7 @@ final class SeedE2eAdminVendorTestUsersTest extends TestCase
     }
 
     /**
-     * `/vendor/transactions` (`App\Filament\Vendor\Pages\TransactionHistory`)
+     * `/vendor/transaksi` (`App\Filament\Vendor\Pages\TransactionHistory`)
      * scopes its query to the vendor `e2e-vendor` is granted — this proves
      * the migration gives that test something real to assert against: one
      * order belonging to the granted vendor, and one belonging to a
