@@ -11,6 +11,8 @@ use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\AuditSubject;
+use App\Platform\Outbox\Outbox;
+use App\Platform\Outbox\OutboxClassification;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -62,6 +64,23 @@ use Illuminate\Support\Facades\DB;
  * ---------------------------------------------------------------------------
  * See `MarketplaceAuditActions`'s doc block — routine fulfilment-state
  * change, `previous_state`/`new_state` metadata, no mandatory reason.
+ *
+ * ---------------------------------------------------------------------------
+ * `vendor_order.decided.v1` — one matrix row, two real outcomes
+ * ---------------------------------------------------------------------------
+ * "Vendor accepted/rejected" (`docs/contracts/notification-matrix.md`) is
+ * ONE row for TWO real outcomes, the same "one event, outcome-as-data" shape
+ * `payment.outcome_failed.v1` established — not two event names. Emitted
+ * ONLY for the `MENUNGGU_VENDOR` → `DITERIMA_VENDOR`/`DITOLAK_VENDOR`
+ * transitions: `VendorProcessingStatus::KNOWN_STATUSES` names eight values
+ * and this Action accepts any known status as its target (see "No
+ * transition graph, deliberately" above), so `$previousStatus` genuinely
+ * needs checking, not just `$status` — the same "reachable from more than
+ * one source, only one of them is the real matrix event" reasoning
+ * `Listeners\DispatchOrderNotifications`'s `DITOLAK` arm documents (there:
+ * matching `to_status`/`from_status` off an outbox event's data; here:
+ * `$previousStatus`/`$status` are already local variables, so the check is
+ * inline).
  */
 final readonly class UpdateVendorOrderStatus
 {
@@ -113,6 +132,22 @@ final readonly class UpdateVendorOrderStatus
                         'new_state' => $status,
                     ],
                 );
+
+                if ($previousStatus === VendorProcessingStatus::MENUNGGU_VENDOR
+                    && in_array($status, [VendorProcessingStatus::DITERIMA_VENDOR, VendorProcessingStatus::DITOLAK_VENDOR], true)) {
+                    Outbox::record(
+                        eventName: 'vendor_order.decided.v1',
+                        eventVersion: 1,
+                        aggregateType: 'vendor_order',
+                        aggregateId: $order->getKey(),
+                        data: [
+                            'vendor_order_id' => $order->getKey(),
+                            'outcome' => $status,
+                        ],
+                        classification: OutboxClassification::Internal,
+                        idempotencyKey: "vendor_order_decided:{$order->getKey()}",
+                    );
+                }
             }
 
             return $order;

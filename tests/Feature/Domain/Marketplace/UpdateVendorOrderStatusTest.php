@@ -10,6 +10,8 @@ use App\Domain\Marketplace\Models\VendorOrder;
 use App\Domain\Marketplace\VendorProcessingStatus;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\Models\AuditEvent;
+use App\Platform\Outbox\Models\OutboxEvent;
+use App\Platform\Outbox\OutboxClassification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use InvalidArgumentException;
 use Tests\Support\MakesVendorOrderFixtures;
@@ -157,6 +159,94 @@ final class UpdateVendorOrderStatusTest extends TestCase
         $this->assertSame(
             VendorProcessingStatus::DITOLAK_VENDOR,
             AuditEvent::query()->sole()->metadata['new_state'],
+        );
+    }
+
+    public function test_waiting_to_accepted_emits_vendor_order_decided_with_the_accepted_outcome(): void
+    {
+        $order = $this->makeOrder(status: VendorProcessingStatus::MENUNGGU_VENDOR);
+
+        (new UpdateVendorOrderStatus)(
+            order: $order,
+            status: VendorProcessingStatus::DITERIMA_VENDOR,
+            actorReference: 42,
+            actorRole: 'vendor',
+        );
+
+        $outbox = OutboxEvent::query()
+            ->where('event_name', 'vendor_order.decided.v1')
+            ->where('aggregate_id', $order->getKey())
+            ->sole();
+
+        $this->assertSame(1, $outbox->event_version);
+        $this->assertSame('vendor_order', $outbox->aggregate_type);
+        $this->assertSame(OutboxClassification::Internal->value, $outbox->classification);
+        $this->assertSame("vendor_order_decided:{$order->getKey()}", $outbox->idempotency_key);
+        $this->assertEqualsCanonicalizing([
+            'vendor_order_id' => $order->getKey(),
+            'outcome' => VendorProcessingStatus::DITERIMA_VENDOR,
+        ], $outbox->payload);
+    }
+
+    public function test_waiting_to_rejected_emits_vendor_order_decided_with_the_rejected_outcome(): void
+    {
+        $order = $this->makeOrder(status: VendorProcessingStatus::MENUNGGU_VENDOR);
+
+        (new UpdateVendorOrderStatus)(
+            order: $order,
+            status: VendorProcessingStatus::DITOLAK_VENDOR,
+            actorReference: 42,
+            actorRole: 'vendor',
+        );
+
+        $outbox = OutboxEvent::query()
+            ->where('event_name', 'vendor_order.decided.v1')
+            ->where('aggregate_id', $order->getKey())
+            ->sole();
+
+        $this->assertSame("vendor_order_decided:{$order->getKey()}", $outbox->idempotency_key);
+        $this->assertEqualsCanonicalizing([
+            'vendor_order_id' => $order->getKey(),
+            'outcome' => VendorProcessingStatus::DITOLAK_VENDOR,
+        ], $outbox->payload);
+    }
+
+    public function test_waiting_to_in_progress_does_not_emit_vendor_order_decided(): void
+    {
+        $order = $this->makeOrder(status: VendorProcessingStatus::MENUNGGU_VENDOR);
+
+        (new UpdateVendorOrderStatus)(
+            order: $order,
+            status: VendorProcessingStatus::DIPROSES,
+            actorReference: 42,
+            actorRole: 'vendor',
+        );
+
+        $this->assertNull(
+            OutboxEvent::query()->where('event_name', 'vendor_order.decided.v1')->first()
+        );
+    }
+
+    public function test_in_progress_to_accepted_does_not_emit_vendor_order_decided(): void
+    {
+        // Discrimination is on `$previousStatus`, not only `$status`: this
+        // Action accepts any known target from any source (see the class
+        // doc block, "No transition graph, deliberately"), so an unrealistic
+        // DIPROSES -> DITERIMA_VENDOR call must still be gated on the real
+        // "waiting for vendor decision" source, exactly as
+        // `Listeners\DispatchOrderNotifications`'s `DITOLAK` arm gates on
+        // `from_status`, not `to_status` alone.
+        $order = $this->makeOrder(status: VendorProcessingStatus::DIPROSES);
+
+        (new UpdateVendorOrderStatus)(
+            order: $order,
+            status: VendorProcessingStatus::DITERIMA_VENDOR,
+            actorReference: 42,
+            actorRole: 'vendor',
+        );
+
+        $this->assertNull(
+            OutboxEvent::query()->where('event_name', 'vendor_order.decided.v1')->first()
         );
     }
 }
