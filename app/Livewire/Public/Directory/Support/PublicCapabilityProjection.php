@@ -52,7 +52,7 @@ use App\Domain\CemeteryDirectory\Models\Cemetery;
  * genuinely a boundary concern (it is defined by `openapi.yaml`'s public
  * schema, not by the domain's own invariants), so this placement is
  * defensible on its own merits — but it is worth flagging that if a future
- * batch adds a public JSON API for `/cemeteries`, THAT serializer and this
+ * batch adds a public JSON API for `/pemakaman`, THAT serializer and this
  * class must not drift into two competing definitions of "the four public
  * modes". At that point the right move is to promote this class into
  * `app/Domain/CemeteryCapability/` and have both read it, rather than

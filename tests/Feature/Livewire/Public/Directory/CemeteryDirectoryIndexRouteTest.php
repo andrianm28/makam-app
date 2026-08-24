@@ -17,7 +17,7 @@ use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
- * `/cemeteries` (route name `cemeteries.index`) — Sprint 4 S4-T6, AC1,
+ * `/pemakaman` (route name `cemeteries.index`) — Sprint 4 S4-T6, AC1,
  * AC2, AC3, AC5, AC11, AC12.
  *
  * Every URL here is built with `route('cemeteries.index')` rather than a

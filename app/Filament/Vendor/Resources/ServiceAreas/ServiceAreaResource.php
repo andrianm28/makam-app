@@ -18,7 +18,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 
 /**
- * `/vendor/service-areas` — the areas a vendor delivers to, and the delivery
+ * `/vendor/area-layanan` — the areas a vendor delivers to, and the delivery
  * fee for each.
  *
  * ---------------------------------------------------------------------------
@@ -51,8 +51,7 @@ final class ServiceAreaResource extends Resource
 
     /**
      * Without this the slug would be derived from the model name
-     * (`service-areas` happens to match here), so it is pinned explicitly to
-     * keep the route stable if the model is ever renamed.
+     * (`service-areas`), which is not the documented route.
      */
     protected static ?string $slug = 'area-layanan';
 

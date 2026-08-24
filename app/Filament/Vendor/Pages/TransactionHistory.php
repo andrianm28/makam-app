@@ -18,9 +18,9 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * `/vendor/transactions` — the vendor's own order history, newest first.
+ * `/vendor/transaksi` — the vendor's own order history, newest first.
  *
- * This is the same underlying rows as `/vendor/orders`, read with a different
+ * This is the same underlying rows as `/vendor/pesanan`, read with a different
  * intent: orders is a work queue the vendor acts on, this is a historical
  * record they read. Hence a read-only page with no row actions and no status
  * form, rather than a second set of pages on `VendorOrderResource`.

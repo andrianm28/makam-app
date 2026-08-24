@@ -40,7 +40,7 @@ use Tests\TestCase;
 /**
  * The two public Livewire surfaces of the Memorial module — `MemorialPublicPage`
  * (`/m/{token}`, the QR resolve page) and `MemorialFamilyPage`
- * (`/memorial/{profileId}`, the consent-gated family surface).
+ * (`/kenangan/{profileId}`, the consent-gated family surface).
  *
  * `.kiro/specs/memorial-and-qr/requirements.md` AC2–AC5 plus design.md's
  * "Sequence — QR resolve, gate-checked" and Error handling sections.

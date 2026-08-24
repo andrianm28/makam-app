@@ -136,7 +136,7 @@ return new class extends Migration
             // city" — see Cemetery::scopePublished()/::scopeInCity().
             $table->index(['city', 'publication_status'], 'cemeteries_city_status_idx');
 
-            // /cemeteries?type= filter (openapi.yaml).
+            // /pemakaman?type= filter (openapi.yaml).
             $table->index('type');
         });
     }

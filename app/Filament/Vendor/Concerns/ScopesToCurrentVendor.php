@@ -28,7 +28,7 @@ use Illuminate\Database\Eloquent\Builder;
  * It is the right seam because it is the ONLY query the resource's pages
  * share. The list table, the edit page's record resolution, and the delete
  * action all build from it — so scoping here also makes
- * `/vendor/products/{id}/edit` for another vendor's listing a 404 rather than
+ * `/vendor/produk/{id}/edit` for another vendor's listing a 404 rather than
  * an edit form. A table-level filter would have hidden the row from the list
  * and left that URL open, which is the "UI hiding, not query-level scope"
  * failure this lane exists to close.

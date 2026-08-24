@@ -18,7 +18,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 
 /**
- * `/vendor/products` — the vendor's own catalogue listings.
+ * `/vendor/produk` — the vendor's own catalogue listings.
  *
  * Directory layout, the `Schemas/`+`Tables/`+`Pages/` split, and the
  * `getPages()` route shape follow `App\Filament\Admin\Resources\FaqArticles\

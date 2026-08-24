@@ -17,7 +17,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * `/vendor/payouts` — what the platform owes this vendor, and whether it has
+ * `/vendor/pencairan` — what the platform owes this vendor, and whether it has
  * been paid.
  *
  * ---------------------------------------------------------------------------

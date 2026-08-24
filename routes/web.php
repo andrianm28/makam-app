@@ -166,9 +166,9 @@ Route::get('/marketplace/pesanan/{orderNumber}', OrderTracking::class)->name('ma
 |
 | Path chosen (not fixed by information-architecture.md §1, which has no
 | directory entry at all — a real, separate documentation gap, tracked
-| rather than silently patched): `/cemeteries`, matching the noun
-| docs/contracts/openapi.yaml already uses for `GET /cemeteries` and
-| `GET /cemeteries/{cemeteryId}`, so this introduces no new vocabulary.
+| rather than silently patched): `/pemakaman`, matching the noun
+| docs/contracts/openapi.yaml already uses for `GET /pemakaman` and
+| `GET /pemakaman/{cemeteryId}`, so this introduces no new vocabulary.
 | Every internal link and every test resolves via `route('cemeteries.…')`,
 | never a literal path, so only the two NAMES below are load-bearing.
 |
@@ -291,7 +291,7 @@ Route::get('/faq/{articleSlug}', FaqArticleDetail::class)->name('faq.show');
 | no existence leak). The gate (`G-MEM-01`) is re-checked on render.
 | Read-only: no POST surface exists on this route.
 |
-| `/memorial/{profileId}` — the family surface: consent-gated
+| `/kenangan/{profileId}` — the family surface: consent-gated
 | (an active `memorial_editors` row for the actor, else the uniform
 | not-visible state — AC1). All writes on this surface are Livewire
 | actions (i.e. POSTs) from `MemorialFamilyPage`: content submit (pending,

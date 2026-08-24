@@ -17,7 +17,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 
 /**
- * `/vendor/work-orders` — the vendor's care work order queue.
+ * `/vendor/order-kerja` — the vendor's care work order queue.
  * Scoped to the current vendor via `ScopesToCurrentVendor`.
  */
 final class WorkOrdersResource extends Resource

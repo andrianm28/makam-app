@@ -23,7 +23,7 @@ use Throwable;
  * with a `{cemeterySlug}` path parameter (this batch does not own that
  * file). The slug — not the UUID — is the public identifier, matching
  * `/faq/{articleSlug}`'s established shape; `docs/contracts/openapi.yaml`
- * fixes `format: uuid` for the JSON API's `/cemeteries/{cemeteryId}` path,
+ * fixes `format: uuid` for the JSON API's `/pemakaman/{cemeteryId}` path,
  * which is a separate contract for a separate consumer and is not changed
  * by this choice.
  *

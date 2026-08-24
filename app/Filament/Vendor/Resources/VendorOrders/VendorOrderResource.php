@@ -17,7 +17,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 
 /**
- * `/vendor/orders` — the vendor's incoming order work queue.
+ * `/vendor/pesanan` — the vendor's incoming order work queue.
  *
  * Directory layout, the `Schemas/`+`Tables/`+`Pages/` split, and the
  * `getPages()` route shape follow `VendorListingResource`, which documents them

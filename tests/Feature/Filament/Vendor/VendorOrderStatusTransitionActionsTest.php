@@ -33,7 +33,7 @@ use Tests\TestCase;
  * and that is not boilerplate: `ScopesToCurrentVendor` closes the resource
  * query to the granted vendor, so without the grant the edit page cannot
  * even mount the record (404). The grant also makes the test realistic —
- * this is the actor state a real vendor reaches `/vendor/orders/{id}/edit`
+ * this is the actor state a real vendor reaches `/vendor/pesanan/{id}/edit`
  * with. The denial side is already proven by `VendorPanelScopingTest`.
  */
 final class VendorOrderStatusTransitionActionsTest extends TestCase

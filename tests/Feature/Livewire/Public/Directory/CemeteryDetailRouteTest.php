@@ -15,7 +15,7 @@ use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
- * `/cemeteries/{cemeterySlug}` (route name `cemeteries.show`) — Sprint 4
+ * `/pemakaman/{cemeterySlug}` (route name `cemeteries.show`) — Sprint 4
  * S4-T6, AC3, AC4, AC5, AC6, AC11, AC12.
  *
  * `CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]` is used as the worked

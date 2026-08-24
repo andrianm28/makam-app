@@ -8,7 +8,7 @@ use App\Domain\Marketplace\VendorProcessingStatus;
 
 /**
  * Indonesian labels and badge colours for `VendorProcessingStatus`, in one
- * place so `/vendor/orders` and `/vendor/transactions` cannot render the same
+ * place so `/vendor/pesanan` and `/vendor/transaksi` cannot render the same
  * status differently.
  *
  * `options()` is built by walking `VendorProcessingStatus::KNOWN_STATUSES`

@@ -81,7 +81,7 @@ declare(strict_types=1);
  * ---------------------------------------------------------------------------
  * Task 4 addition — two `vendor_orders` fixture rows for a real scoping proof
  * ---------------------------------------------------------------------------
- * `/vendor/transactions` (`App\Filament\Vendor\Pages\TransactionHistory`)
+ * `/vendor/transaksi` (`App\Filament\Vendor\Pages\TransactionHistory`)
  * scopes its query to `CurrentVendorScope::grantedVendorIds()` — already
  * proven correct at the query level for two vendors by
  * `tests/Feature/Filament/Vendor/VendorPanelScopingTest`. But `vendor_orders`
@@ -91,7 +91,7 @@ declare(strict_types=1);
  * fresh `migrate:fresh` left the browser suite's own vendor with nothing to
  * assert scoping against beyond "the empty state renders", which is exactly
  * the vacuous 0-vs-0 comparison this suite already declined to fake for
- * `/admin/reconciliations` (see the second `test.describe` block's header
+ * `/admin/rekonsiliasi` (see the second `test.describe` block's header
  * comment in `tests/browser/e2e-admin-vendor.spec.ts`).
  *
  * Unlike that Reconciliation case, a `VendorOrder` row is cheap and safe to
@@ -268,7 +268,7 @@ return new class extends Migration
         }
 
         // See this file's "Task 4 addition" doc block above: two throwaway
-        // vendor_orders rows so /vendor/transactions has something real to
+        // vendor_orders rows so /vendor/transaksi has something real to
         // assert scoping against, instead of an empty-state-only page.
         if ($firstVendorId !== null) {
             $this->seedVendorOrderFixture(

@@ -38,7 +38,7 @@ use Throwable;
  * validation state, not an empty result
  * ---------------------------------------------------------------------------
  * `?city=` and `?type=` are the same two query parameters
- * `docs/contracts/openapi.yaml`'s `GET /cemeteries` operation already
+ * `docs/contracts/openapi.yaml`'s `GET /pemakaman` operation already
  * defines, reused verbatim so the web page and the API contract do not
  * grow two different filter vocabularies.
  *

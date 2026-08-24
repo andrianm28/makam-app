@@ -18,7 +18,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 
 /**
- * `/vendor/calendar` — the vendor's own per-day availability schedule.
+ * `/vendor/kalender` — the vendor's own per-day availability schedule.
  *
  * Directory layout, the `Schemas/`+`Tables/`+`Pages/` split, and the
  * `getPages()` route shape follow the sibling `VendorListings\

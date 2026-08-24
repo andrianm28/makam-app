@@ -17,7 +17,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * `/vendor/evidence` — every evidence file uploaded against this vendor's own
+ * `/vendor/bukti` — every evidence file uploaded against this vendor's own
  * orders.
  *
  * ---------------------------------------------------------------------------
