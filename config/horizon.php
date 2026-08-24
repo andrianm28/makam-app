@@ -223,13 +223,18 @@ return [
             // `minProcesses => 0`, intended as true zero-idle capacity, but
             // that value is invalid — Laravel\Horizon\ProvisioningPlan::
             // convert() throws unconditionally when any environment's
-            // minProcesses is set below 1, and it validates every
-            // environment block eagerly, so `php artisan horizon` could
-            // not start in ANY environment (staging only avoided this by
-            // disabling this supervisor outright). SupervisorOptions
-            // itself already defaults minProcesses to 1 when unset, so
-            // true zero-idle was never achievable in this Horizon version
-            // regardless — 1 is the real floor, not a design compromise.
+            // minProcesses is set below 1, and it validates EVERY
+            // environment block eagerly regardless of which one is being
+            // deployed — so `php artisan horizon` could not start in ANY
+            // of production/staging/local. Staging did not avoid this:
+            // its own supervisor-batch/supervisor-reports entries were
+            // `false` (see the 'supervisor-normal' comment below for why
+            // that also throws), so staging would have hit that crash
+            // instead, at the same shared construction step, the moment
+            // it was reached. SupervisorOptions itself already defaults
+            // minProcesses to 1 when unset, so true zero-idle was never
+            // achievable in this Horizon version regardless — 1 is the
+            // real floor, not a design compromise.
             'minProcesses' => 1,
             'maxProcesses' => 3,
             'maxTime' => 0,
