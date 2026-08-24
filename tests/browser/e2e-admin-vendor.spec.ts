@@ -550,12 +550,12 @@ test.describe('E2E-ADMIN/VENDOR — sensitive-action audit and query scope', () 
  * Vendor page routes — verified against each Page class's real `$slug`, not
  * the plan draft's guessed paths
  * ---------------------------------------------------------------------------
- * `App\Filament\Vendor\Pages\TransactionHistory::$slug` is `'transactions'`
- * and `App\Filament\Vendor\Pages\PayoutStatus::$slug` is `'payouts'` (both
- * read directly from source) — so their real routes are `/vendor/transactions`
- * and `/vendor/payouts`, not `/vendor/transaction-history`/`/vendor/payout-status`
+ * `App\Filament\Vendor\Pages\TransactionHistory::$slug` is `'transaksi'`
+ * and `App\Filament\Vendor\Pages\PayoutStatus::$slug` is `'pencairan'` (both
+ * read directly from source) — so their real routes are `/vendor/transaksi`
+ * and `/vendor/pencairan`, not `/vendor/transaction-history`/`/vendor/payout-status`
  * as this suite's plan draft guessed. `App\Filament\Vendor\Pages\Profile::$slug`
- * (`'profile'`) does match the draft.
+ * is `'profil'`.
  *
  * ---------------------------------------------------------------------------
  * Transaction-history scoping: a real presence/absence proof, not a row count
@@ -614,7 +614,7 @@ test.describe('E2E-ADMIN/VENDOR — vendor profile, transactions, and payouts', 
         });
 
         test('vendor profile/account page is reachable and editable', async ({ page }) => {
-            await page.goto('/vendor/profile');
+            await page.goto('/vendor/profil');
 
             await expect(page.getByRole('heading', { name: 'Profil Akun' })).toBeVisible();
 
@@ -626,7 +626,7 @@ test.describe('E2E-ADMIN/VENDOR — vendor profile, transactions, and payouts', 
         });
 
         test('vendor transaction history is reachable and scoped to this vendor only', async ({ page }) => {
-            await page.goto('/vendor/transactions');
+            await page.goto('/vendor/transaksi');
 
             await expect(page.getByRole('heading', { name: 'Riwayat Transaksi', exact: true })).toBeVisible();
 
@@ -640,7 +640,7 @@ test.describe('E2E-ADMIN/VENDOR — vendor profile, transactions, and payouts', 
         });
 
         test('vendor payout status/reference is visible and scoped', async ({ page }) => {
-            await page.goto('/vendor/payouts');
+            await page.goto('/vendor/pencairan');
 
             await expect(page.getByRole('heading', { name: 'Status Pencairan' })).toBeVisible();
         });
@@ -694,7 +694,7 @@ test.describe('E2E-ADMIN/VENDOR — vendor profile, transactions, and payouts', 
             // vendor can actually act on an order. Uses the seed migration's
             // own fixture order (`2026_08_22_110000_seed_e2e_admin_vendor_
             // test_users.php`'s OWN_VENDOR_ORDER_CUSTOMER_NAME/EMAIL).
-            await page.goto('/vendor/orders');
+            await page.goto('/vendor/pesanan');
 
             const row = page.getByRole('row', { name: VENDOR_OWN_ORDER_CUSTOMER_NAME });
             await expect(row).toBeVisible();
@@ -727,13 +727,13 @@ test.describe('E2E-ADMIN/VENDOR — vendor profile, transactions, and payouts', 
 
             await expect(page.getByText(step.notificationTitle)).toBeVisible();
 
-            await page.goto('/vendor/orders');
+            await page.goto('/vendor/pesanan');
             const updatedRow = page.getByRole('row', { name: VENDOR_OWN_ORDER_CUSTOMER_NAME });
             await expect(updatedRow.getByText(step.to)).toBeVisible();
         });
 
         test('vendor panel pages have zero accessibility violations', async ({ page }) => {
-            for (const path of ['/vendor', '/vendor/profile', '/vendor/transactions', '/vendor/payouts']) {
+            for (const path of ['/vendor', '/vendor/profil', '/vendor/transaksi', '/vendor/pencairan']) {
                 await page.goto(path);
                 const results = await new AxeBuilder({ page }).analyze();
                 expect(results.violations).toEqual([]);

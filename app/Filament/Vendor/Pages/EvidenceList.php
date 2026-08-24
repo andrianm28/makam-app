@@ -55,7 +55,7 @@ final class EvidenceList extends Page implements HasTable
 
     protected static ?string $title = 'Bukti Pekerjaan';
 
-    protected static ?string $slug = 'evidence';
+    protected static ?string $slug = 'bukti';
 
     protected static ?int $navigationSort = 40;
 

@@ -28,7 +28,7 @@ final class WorkOrdersResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClipboardDocumentCheck;
 
-    protected static ?string $slug = 'work-orders';
+    protected static ?string $slug = 'order-kerja';
 
     protected static ?int $navigationSort = 40;
 

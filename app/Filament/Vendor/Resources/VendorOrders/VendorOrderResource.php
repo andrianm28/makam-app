@@ -53,11 +53,10 @@ final class VendorOrderResource extends Resource
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShoppingCart;
 
     /**
-     * `information-architecture.md` §5 names this route `/vendor/orders`.
      * Without this the slug would be derived from the model name
      * (`vendor-orders`), which is not the documented route.
      */
-    protected static ?string $slug = 'orders';
+    protected static ?string $slug = 'pesanan';
 
     protected static ?int $navigationSort = 30;
 

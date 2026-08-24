@@ -51,7 +51,7 @@ final class PayoutStatus extends Page implements HasTable
 
     protected static ?string $title = 'Status Pencairan';
 
-    protected static ?string $slug = 'payouts';
+    protected static ?string $slug = 'pencairan';
 
     protected static ?int $navigationSort = 60;
 

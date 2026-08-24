@@ -82,7 +82,7 @@ final class VendorPanelAccessTest extends TestCase
         // though the dashboard was not.
         $this->actingAs($this->vendorUser(withRole: false, withGrant: false));
 
-        foreach (['/vendor', '/vendor/products', '/vendor/orders', '/vendor/calendar', '/vendor/service-areas', '/vendor/evidence', '/vendor/transactions', '/vendor/payouts'] as $route) {
+        foreach (['/vendor', '/vendor/produk', '/vendor/pesanan', '/vendor/kalender', '/vendor/area-layanan', '/vendor/bukti', '/vendor/transaksi', '/vendor/pencairan'] as $route) {
             $this->get($route)->assertForbidden();
         }
     }
@@ -95,7 +95,7 @@ final class VendorPanelAccessTest extends TestCase
         // real (empty) scoped query.
         $this->actingAs($this->vendorUser(withRole: true, withGrant: true));
 
-        foreach (['/vendor', '/vendor/products', '/vendor/orders', '/vendor/calendar', '/vendor/service-areas', '/vendor/evidence', '/vendor/transactions', '/vendor/payouts'] as $route) {
+        foreach (['/vendor', '/vendor/produk', '/vendor/pesanan', '/vendor/kalender', '/vendor/area-layanan', '/vendor/bukti', '/vendor/transaksi', '/vendor/pencairan'] as $route) {
             $this->get($route)->assertSuccessful();
         }
     }

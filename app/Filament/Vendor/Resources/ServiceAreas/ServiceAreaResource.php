@@ -54,7 +54,7 @@ final class ServiceAreaResource extends Resource
      * (`service-areas` happens to match here), so it is pinned explicitly to
      * keep the route stable if the model is ever renamed.
      */
-    protected static ?string $slug = 'service-areas';
+    protected static ?string $slug = 'area-layanan';
 
     protected static ?int $navigationSort = 70;
 

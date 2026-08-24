@@ -35,7 +35,7 @@ final class TransactionHistory extends Page implements HasTable
 
     protected static ?string $title = 'Riwayat Transaksi';
 
-    protected static ?string $slug = 'transactions';
+    protected static ?string $slug = 'transaksi';
 
     protected static ?int $navigationSort = 50;
 
