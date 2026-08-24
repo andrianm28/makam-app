@@ -203,6 +203,35 @@ per-user data scoping — the same bar items 1–10 hold sandbox payments and th
 accepted-risk item is being opened here; this addendum exists so a reader of this ADR is not left assuming
 `/akun` was reviewed under items 1–10 when it postdates them.
 
+### 12. `dev` and `beta` share `APP_KEY`, session/cache/Redis prefix, and provider sandbox credentials — accepted by explicit decision, not remediated
+
+`docs/testing/release-gates.md` §I's "Development and staging have different APP keys..." box (re-verified
+24 Aug 2026) found that on the one dev/beta pair actually running, isolation exists only for database
+identity (`DB_USERNAME`/`DB_PASSWORD`/`DB_DATABASE`) — `APP_KEY`, `REDIS_PREFIX`, `CACHE_PREFIX`,
+`SESSION_COOKIE`, `SESSION_DOMAIN`, `QUEUE_CONNECTION`, `FILESYSTEM_DISK`, and the
+`SUMODOP_SANDBOX_API_KEY`/`SUMODOP_SANDBOX_WEBHOOK_SECRET` pair are all identical between `.env.dev` and
+`.env.beta`, confirmed by hash comparison (no raw value ever printed or logged). The live consequence is
+real, not hypothetical: `beta-worker`, a genuine `restart: unless-stopped` container running
+`queue:work --queue=critical,urgent,notifications,default`, shares dev's Redis queue keyspace right now — a
+job dispatched from `dev-web` today is executable by `beta-worker` against beta's real database and real
+provider credentials.
+
+**Decision (24 Aug 2026):** per the user's explicit instruction — "its oke its intended to promote dev to
+beta" — this sharing is accepted, not remediated. The product intent is that dev is meant to be promotable
+straight into beta without a credential-regeneration step in between; the shared configuration is how that
+promotion path stays cheap, not an oversight left over from the 17 Aug 2026 host migration (item 8 above).
+
+**Mitigation:** none beyond database-identity separation (already real) and the ordering constraint recorded
+in `release-gates.md`'s Horizon box: persistent Horizon supervisors are not started on dev outside a
+disposable rehearsal, since that specific action would convert this already-accepted latent sharing into
+active, continuous cross-environment job consumption — a materially different question from the credential
+sharing itself, and one this decision does not pre-answer.
+
+**Reversal:** regenerating a distinct `APP_KEY`, `REDIS_PREFIX`/`CACHE_PREFIX`, session cookie/domain,
+`HORIZON_PREFIX`, and provider sandbox credentials for `.env.beta` — real engineering work, not a config
+flip, and not currently planned. Revisit if dev/beta promotion stops being the intended workflow, or before
+beta ever carries payment/customer data at a scale where this stops being an acceptable risk.
+
 ## Consequences
 
 ### Positive
