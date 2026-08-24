@@ -419,7 +419,7 @@ final class CemeteryDetailRouteTest extends TestCase
         $cemetery = $this->exampleCemetery();
 
         $this->get("/cemeteries/{$cemetery->slug}")
-            ->assertRedirect("/pemakaman/{$cemetery->slug}")
+            ->assertRedirect(route('cemeteries.show', ['cemeterySlug' => $cemetery->slug]))
             ->assertStatus(301);
     }
 

@@ -26,7 +26,7 @@ tags:
 - name: Admin
 - name: Vendor
 paths:
-  /pemakaman:
+  /cemeteries:
     get:
       tags:
       - Directory
@@ -52,7 +52,7 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/CemeterySummary'
-  /pemakaman/{cemeteryId}:
+  /cemeteries/{cemeteryId}:
     get:
       tags:
       - Directory

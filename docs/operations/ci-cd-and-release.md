@@ -90,7 +90,7 @@ Some releases need an operator action inside the same change window as the deplo
 
 **Payment admin authorization hotfix (`fix/payment-controller-authorization`) — role grants required in the same change window as the merge.**
 
-- **What changes.** `POST /admin/payments/reversals/{reversalType}` (record a refund or chargeback) and `POST /admin/payments/manual-verifications/{paymentVerification}/verify` (approve or reject a manual payment) now require the acting account to hold `finance` **or** `restricted_admin`. Before this release they required only an authenticated session with a recent login.
+- **What changes.** `POST /admin/pembayaran/pembalikan/{reversalType}` (record a refund or chargeback) and `POST /admin/pembayaran/verifikasi-manual/{paymentVerification}/verifikasi` (approve or reject a manual payment) now require the acting account to hold `finance` **or** `restricted_admin`. Before this release they required only an authenticated session with a recent login.
 - **Why a manual step exists.** Roles are granted only by the audited console command; no seeder grants any role. So on deploy **both endpoints refuse everyone, including existing admins**, until an operator grants the roles. That fail-closed outcome is deliberate and must not be softened in code.
 - **Who runs it.** The deploy operator, with the release approver naming the accounts. This is a privilege grant, so it needs the same sign-off as any other authorization change.
 - **What to run**, once per operator who legitimately performs these actions:

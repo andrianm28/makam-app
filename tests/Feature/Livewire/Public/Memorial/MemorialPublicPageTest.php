@@ -316,7 +316,7 @@ final class MemorialPublicPageTest extends TestCase
         $profile = $this->profile();
 
         $this->get("/memorial/{$profile->getKey()}")
-            ->assertRedirect("/kenangan/{$profile->getKey()}")
+            ->assertRedirect(route('memorial.family', ['profileId' => $profile->getKey()]))
             ->assertStatus(301);
     }
 

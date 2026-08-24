@@ -48,7 +48,24 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
     public function test_the_old_cemeteries_path_redirects_permanently_to_pemakaman(): void
     {
         $this->get('/cemeteries')
-            ->assertRedirect('/pemakaman')
+            ->assertRedirect(route('cemeteries.index'))
+            ->assertStatus(301);
+    }
+
+    /**
+     * The `/cemeteries` redirect is a plain closure (not
+     * `Route::permanentRedirect`), specifically because that helper filters
+     * to path variables only (`RedirectController::only($route->
+     * getCompiled()->getPathVariables())`) and never reads the query
+     * string — but `?city=&type=` is a real, bookmarkable filter shape
+     * (`CemeteryDirectoryIndex`'s `#[Url(...)]` properties push it into
+     * browser history). A bookmarked filtered link must not silently lose
+     * its filters on redirect.
+     */
+    public function test_the_old_cemeteries_path_with_query_params_preserves_them_through_the_redirect(): void
+    {
+        $this->get('/cemeteries?city='.LaunchCityCode::JAKARTA.'&type='.CemeteryType::TPU)
+            ->assertRedirect(route('cemeteries.index').'?city='.LaunchCityCode::JAKARTA.'&type='.CemeteryType::TPU)
             ->assertStatus(301);
     }
 

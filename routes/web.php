@@ -7,6 +7,7 @@ use App\Http\Controllers\DocumentVault\DownloadDocumentController;
 use App\Http\Controllers\Health\HealthLiveController;
 use App\Http\Controllers\Health\HealthReadyController;
 use App\Http\Middleware\RequireRecentAuthentication;
+use Illuminate\Http\Request;
 use App\Livewire\Public\Akun\AkunIndex;
 use App\Livewire\Public\Akun\DocumentList;
 use App\Livewire\Public\Akun\DraftList;
@@ -166,9 +167,12 @@ Route::get('/marketplace/pesanan/{orderNumber}', OrderTracking::class)->name('ma
 |
 | Path chosen (not fixed by information-architecture.md §1, which has no
 | directory entry at all — a real, separate documentation gap, tracked
-| rather than silently patched): `/pemakaman`, matching the noun
-| docs/contracts/openapi.yaml already uses for `GET /pemakaman` and
-| `GET /pemakaman/{cemeteryId}`, so this introduces no new vocabulary.
+| rather than silently patched): `/pemakaman`. This deliberately diverges
+| from `docs/contracts/openapi.yaml`'s noun for the same resource
+| (`GET /cemeteries`, `GET /cemeteries/{cemeteryId}`) — that API contract
+| is unbuilt (`routes/api.php` registers no such route), so there is no
+| live consumer to keep in vocabulary lockstep with yet; when a real JSON
+| API for this resource is built, its path is a separate decision.
 | Every internal link and every test resolves via `route('cemeteries.…')`,
 | never a literal path, so only the two NAMES below are load-bearing.
 |
@@ -182,7 +186,17 @@ Route::get('/marketplace/pesanan/{orderNumber}', OrderTracking::class)->name('ma
 */
 Route::get('/pemakaman', CemeteryDirectoryIndex::class)->name('cemeteries.index');
 Route::get('/pemakaman/{cemeterySlug}', CemeteryDetail::class)->name('cemeteries.show');
-Route::permanentRedirect('/cemeteries', '/pemakaman');
+// A plain `Route::permanentRedirect` filters to path variables only
+// (`RedirectController::only($route->getCompiled()->getPathVariables())`)
+// and never reads the query string — but `/cemeteries` carries a real,
+// bookmarkable `?city=&type=` filter shape (CemeteryDirectoryIndex's
+// `#[Url(...)]` properties push it into browser history), so a bookmarked
+// filtered link must not silently lose its filters on redirect.
+Route::get('/cemeteries', function (Request $request) {
+    $query = $request->getQueryString();
+
+    return redirect('/pemakaman'.($query !== null ? '?'.$query : ''), 301);
+});
 Route::permanentRedirect('/cemeteries/{cemeterySlug}', '/pemakaman/{cemeterySlug}');
 
 /*

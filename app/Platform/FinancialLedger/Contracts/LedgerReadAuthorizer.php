@@ -18,7 +18,7 @@ use App\Platform\IdentityAccess\ActorContext;
  * A bulk export is a read, and the two existing authorizers in this module
  * (`PayoutAuthorizer`, `ReconciliationAuthorizer`) both gate a WRITE. It would
  * have been easy to conclude a read needs no policy — that is exactly the
- * reasoning that left `GET /admin/finance/exports` reachable by any
+ * reasoning that left `GET /admin/laporan-keuangan/ekspor` reachable by any
  * authenticated account. One export returns every account total for every
  * badan usaha in the deployment; that is at least as sensitive as deciding a
  * single variance, which this module already gates hard.
