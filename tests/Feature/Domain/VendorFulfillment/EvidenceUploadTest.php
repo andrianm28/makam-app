@@ -101,6 +101,14 @@ final class EvidenceUploadTest extends TestCase
             'subject_type' => 'work_order',
             'subject_id' => (string) $workOrder->getKey(),
         ]);
+        $this->assertDatabaseHas('outbox_events', [
+            'event_name' => 'vendor.evidence_uploaded.v1',
+            'event_version' => 1,
+            'aggregate_type' => 'work_evidence',
+            'aggregate_id' => (string) $evidence->getKey(),
+            'classification' => 'INTERNAL',
+            'idempotency_key' => "vendor_evidence_uploaded:{$evidence->getKey()}",
+        ]);
     }
 
     public function test_upload_rejects_non_accepted_document(): void

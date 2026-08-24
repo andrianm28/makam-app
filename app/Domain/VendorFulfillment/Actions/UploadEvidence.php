@@ -14,6 +14,8 @@ use App\Platform\Audit\AuditSubject;
 use App\Platform\Correlation\CorrelationContext;
 use App\Platform\DocumentVault\DocumentState;
 use App\Platform\DocumentVault\Models\Document;
+use App\Platform\Outbox\Outbox;
+use App\Platform\Outbox\OutboxClassification;
 use InvalidArgumentException;
 
 /**
@@ -49,12 +51,27 @@ final readonly class UploadEvidence
 
         return Audit::wrap(
             mutation: function () use ($workOrder, $documentId, $evidenceType, $uploadedBy): WorkEvidence {
-                return WorkEvidence::query()->create([
+                $workEvidence = WorkEvidence::query()->create([
                     'work_order_id' => $workOrder->getKey(),
                     'document_id' => $documentId,
                     'evidence_type' => $evidenceType,
                     'uploaded_by' => $uploadedBy,
                 ]);
+
+                Outbox::record(
+                    eventName: 'vendor.evidence_uploaded.v1',
+                    eventVersion: 1,
+                    aggregateType: 'work_evidence',
+                    aggregateId: $workEvidence->getKey(),
+                    data: [
+                        'work_evidence_id' => $workEvidence->getKey(),
+                        'work_order_id' => $workOrder->getKey(),
+                    ],
+                    classification: OutboxClassification::Internal,
+                    idempotencyKey: "vendor_evidence_uploaded:{$workEvidence->getKey()}",
+                );
+
+                return $workEvidence;
             },
             action: VendorFulfillmentAuditActions::EVIDENCE_UPLOADED,
             subject: new AuditSubject('work_order', $workOrder->getKey()),

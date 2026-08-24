@@ -37,6 +37,7 @@ Durable events use the transactional outbox and envelope in `outbox-event-contra
 | `care.complaint_filed.v1` | VendorFulfillment | Case/customer/audit | Linked to work order; audited |
 | `care.make_good_created.v1` | VendorFulfillment | Case/customer | Replacement order linked to original |
 | `vendor.work_completed.v1` | VendorFulfillment | Case/customer | Evidence reference |
+| `vendor.evidence_uploaded.v1` | VendorFulfillment | Notification | References only — no document content or restricted data |
 | `memorial.unpublished.v1` | Memorial | Public read/QR | Privacy/moderation action |
 | `memorial.profile_created.v1` | Memorial | Read models, audit | Privacy default private; grave-record reference only (AC7) |
 | `memorial.published.v1` | Memorial | Public read/QR | Profile made public |
