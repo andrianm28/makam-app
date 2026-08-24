@@ -31,6 +31,7 @@ Durable events use the transactional outbox and envelope in `outbox-event-contra
 | `document.deleted.v1` | DocumentVault | Retention/audit | Emitted after approved deletion; no file contents |
 | `grave.import_completed.v1` | GraveRegistry | Admin notification | Success/error/dedup counts |
 | `renewal.marked_external.v1` | Renewal | Billing guard | Prevents duplicate period |
+| `renewal.submitted.v1` | Renewal | Notification | The online submission path — distinct from renewal.marked_external.v1's offline/admin path |
 | `grave.reminder_sent.v1` | GraveRegistry | Reporting | Idempotent window key |
 | `care.cycle_created.v1` | CareSubscription | Billing/work scheduling | One per cycle |
 | `care.work_order_created.v1` | VendorFulfillment | Case/customer | Evidence reference; one per paid cycle |
