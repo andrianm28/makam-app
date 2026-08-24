@@ -82,19 +82,27 @@ use Illuminate\Support\Facades\DB;
  * `$previousStatus`/`$status` are already local variables, so the check is
  * inline).
  *
- * The idempotency key is outcome-scoped
- * (`vendor_order_decided:{id}:{outcome}`), NOT bare `vendor_order_decided:
- * {id}` — unlike `ApplyPaymentSettlement::transitionToTerminal()`, which
- * guards its own outcome-scoped key by only ever reaching that terminal
- * state once per session, THIS Action has no terminal-state guard at all
- * (see "No transition graph, deliberately" above): a vendor order can
- * legitimately go `MENUNGGU_VENDOR` → `DITOLAK_VENDOR` → `MENUNGGU_VENDOR`
- * (a correction) → `DITERIMA_VENDOR`, which is two real, independent
- * decisions on the same aggregate. A bare `{id}`-only key would collide the
- * second decision's insert against the first's UNIQUE constraint and roll
- * back that second, legitimate status write; scoping by `{outcome}` keeps
- * the key's job — dropping a genuine retry of the SAME decision — without
- * blocking a second, different one.
+ * The idempotency key is `vendor_order_decided:{id}:{outcome}:{audit_id}` —
+ * neither bare `{id}` nor `{id}:{outcome}` is enough. Unlike
+ * `ApplyPaymentSettlement::transitionToTerminal()`, which guards its own
+ * outcome-scoped key by only ever reaching that terminal state once per
+ * session, THIS Action has no terminal-state guard at all (see "No
+ * transition graph, deliberately" above): a vendor order can legitimately
+ * go `MENUNGGU_VENDOR` → `DITOLAK_VENDOR` → `MENUNGGU_VENDOR` (a correction)
+ * → `DITERIMA_VENDOR`, which is two real, independent decisions on the same
+ * aggregate — `{id}`-only collides them. But outcome-scoping alone
+ * (`{id}:{outcome}`) is ALSO insufficient: the same correction can land on
+ * the SAME outcome twice (`MENUNGGU_VENDOR` → `DITERIMA_VENDOR` →
+ * `MENUNGGU_VENDOR` (correction) → `DITERIMA_VENDOR` again), and this
+ * Action, unlike `ApplyPaymentSettlement`, has no redelivery pathway either
+ * (it is only ever called synchronously from the panel's save hook or the
+ * six one-click actions) — so the key never needed content-determinism
+ * across calls, only a guarantee of one row per real decision. Folding in
+ * `$audit->id` — a fresh `audit_events` row created on every real
+ * transition, just above this call, in the same `if ($statusChanged)` block
+ * — gives every real decision a distinct key while the pre-existing
+ * `$statusChanged` guard still stops a literal duplicate submit of the
+ * exact same request from ever reaching this code at all.
  */
 final readonly class UpdateVendorOrderStatus
 {
@@ -134,7 +142,7 @@ final readonly class UpdateVendorOrderStatus
             ])->save();
 
             if ($statusChanged) {
-                Audit::record(
+                $audit = Audit::record(
                     action: MarketplaceAuditActions::ORDER_STATUS_CHANGED,
                     subject: new AuditSubject('vendor_order', $order->id, $order->uuid),
                     outcome: AuditOutcome::Allowed,
@@ -159,7 +167,7 @@ final readonly class UpdateVendorOrderStatus
                             'outcome' => $status,
                         ],
                         classification: OutboxClassification::Internal,
-                        idempotencyKey: "vendor_order_decided:{$order->getKey()}:{$status}",
+                        idempotencyKey: "vendor_order_decided:{$order->getKey()}:{$status}:{$audit->id}",
                     );
                 }
             }

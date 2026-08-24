@@ -181,8 +181,12 @@ final class UpdateVendorOrderStatusTest extends TestCase
         $this->assertSame(1, $outbox->event_version);
         $this->assertSame('vendor_order', $outbox->aggregate_type);
         $this->assertSame(OutboxClassification::Internal->value, $outbox->classification);
+        $audit = AuditEvent::query()
+            ->where('action', MarketplaceAuditActions::ORDER_STATUS_CHANGED)
+            ->where('subject_id', (string) $order->id)
+            ->sole();
         $this->assertSame(
-            "vendor_order_decided:{$order->getKey()}:".VendorProcessingStatus::DITERIMA_VENDOR,
+            "vendor_order_decided:{$order->getKey()}:".VendorProcessingStatus::DITERIMA_VENDOR.":{$audit->id}",
             $outbox->idempotency_key,
         );
         $this->assertEqualsCanonicalizing([
@@ -207,8 +211,12 @@ final class UpdateVendorOrderStatusTest extends TestCase
             ->where('aggregate_id', $order->getKey())
             ->sole();
 
+        $audit = AuditEvent::query()
+            ->where('action', MarketplaceAuditActions::ORDER_STATUS_CHANGED)
+            ->where('subject_id', (string) $order->id)
+            ->sole();
         $this->assertSame(
-            "vendor_order_decided:{$order->getKey()}:".VendorProcessingStatus::DITOLAK_VENDOR,
+            "vendor_order_decided:{$order->getKey()}:".VendorProcessingStatus::DITOLAK_VENDOR.":{$audit->id}",
             $outbox->idempotency_key,
         );
         $this->assertEqualsCanonicalizing([
@@ -253,6 +261,65 @@ final class UpdateVendorOrderStatusTest extends TestCase
 
         $this->assertNull(
             OutboxEvent::query()->where('event_name', 'vendor_order.decided.v1')->first()
+        );
+    }
+
+    public function test_a_correction_that_lands_on_the_same_outcome_twice_emits_two_distinct_events(): void
+    {
+        // Regression: a vendor can genuinely correct their decision back to
+        // MENUNGGU_VENDOR (VendorOrderForm's status Select offers all 8
+        // known statuses) and then re-decide the SAME outcome. An
+        // outcome-scoped-only idempotency key ("{id}:{outcome}") would
+        // collide the second decision's outbox insert against the first's
+        // UNIQUE constraint and, since Outbox::record() runs inside the same
+        // DB::transaction() as the status write, roll back the second
+        // decision's status change and audit row too — not just drop a
+        // notification. Folding the fresh audit row's id into the key
+        // (see the class doc block) must make both decisions distinct.
+        $order = $this->makeOrder(status: VendorProcessingStatus::MENUNGGU_VENDOR);
+
+        (new UpdateVendorOrderStatus)(
+            order: $order,
+            status: VendorProcessingStatus::DITERIMA_VENDOR,
+            actorReference: 42,
+            actorRole: 'vendor',
+        );
+
+        (new UpdateVendorOrderStatus)(
+            order: $order,
+            status: VendorProcessingStatus::MENUNGGU_VENDOR,
+            actorReference: 42,
+            actorRole: 'vendor',
+        );
+
+        $updated = (new UpdateVendorOrderStatus)(
+            order: $order,
+            status: VendorProcessingStatus::DITERIMA_VENDOR,
+            actorReference: 42,
+            actorRole: 'vendor',
+        );
+
+        $this->assertSame(VendorProcessingStatus::DITERIMA_VENDOR, $updated->status);
+        $this->assertSame(VendorProcessingStatus::DITERIMA_VENDOR, $order->refresh()->status);
+
+        $outboxRows = OutboxEvent::query()
+            ->where('event_name', 'vendor_order.decided.v1')
+            ->where('aggregate_id', $order->getKey())
+            ->orderBy('id')
+            ->get();
+
+        $this->assertCount(2, $outboxRows);
+        $this->assertNotSame($outboxRows[0]->idempotency_key, $outboxRows[1]->idempotency_key);
+        $this->assertSame(VendorProcessingStatus::DITERIMA_VENDOR, $outboxRows[0]->payload['outcome']);
+        $this->assertSame(VendorProcessingStatus::DITERIMA_VENDOR, $outboxRows[1]->payload['outcome']);
+
+        // All 3 real transitions (accept, correct back, accept again) audited.
+        $this->assertSame(
+            3,
+            AuditEvent::query()
+                ->where('action', MarketplaceAuditActions::ORDER_STATUS_CHANGED)
+                ->where('subject_id', (string) $order->id)
+                ->count(),
         );
     }
 }
