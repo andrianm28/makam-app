@@ -103,6 +103,23 @@ wiring itself, only the domain Action it calls. **CARE-SUB-02**'s prose wrongly 
 The clause is removed from CARE-SUB-02's expectation text; **the row's `Specified` status is
 unchanged** — only the factual claim about timing was wrong. The v0.16 note above is kept verbatim.
 
+**v0.18 — 24 Aug 2026, ADM-090/ADM-100 corrected from stale `Specified` to `Covered`.** The
+v0.10/v0.11/v0.16 notes above all said reports (ADM-090) and the audit-review surface (ADM-100)
+"remain unbuilt and are not claimed" — that was true when written and has since gone stale: both
+shipped and are browser-tested by `tests/browser/e2e-admin-vendor.spec.ts` (PR #142, merged 22 Aug
+2026), verified directly by reading the file rather than trusting
+`docs/testing/release-gates.md`'s own citation of it. **ADM-090 is raised to `Covered`** on
+`'the three master-data-gated report pages are reachable and titled correctly'` and `'the three
+finance-gated report pages are reachable and titled correctly for the admin holding ledger-read
+access'`, which together exercise all 6 report pages the `admin-operations` spec names. **ADM-100
+is raised to `Covered`** on `'audit trail review shows the required columns and is read-only'` and
+`'audit trail records this suite's own seeded grants'`, which assert the read-only audit-trail
+review's real column set and a real audited write actually appearing in it. See the section D
+entry below for the method-level trail. This correction is scoped narrowly: it does **not** touch,
+raise, or otherwise affect CARE-SUB-02 through CARE-SUB-07, which stay exactly as v0.16/v0.17 left
+them — `docs/testing/release-gates.md`'s §A-35 box separately names those as substantive, open
+evidence gaps, and this note changes nothing about them. The v0.17 note above is kept verbatim.
+
 ## A. RKS authority
 
 | RKS | Capability | Spec | Gate/control |
@@ -159,8 +176,8 @@ The **Test evidence** column holds repo-relative paths to the tests backing a ro
 | FAQ-06 | Customer service | FAQ catalog/spec | PUB-040/041 | E2E-FAQ | `tests/Feature/Livewire/Public/Faq/FaqIndexRouteTest.php`<br>`tests/Feature/Domain/Faq/FaqCategorySeedTest.php` | Covered |
 | ADMIN-01 | Admin dashboard modules | `admin-operations` | ADM-* | E2E-ADMIN | `tests/Unit/Domain/OrderWorkflow/OrderTransitionAuthorizerTest.php`<br>`tests/Unit/Platform/ReauthenticationGuardTest.php`<br>`tests/Feature/OrderWorkflow/AdminOperatorActionsTest.php`<br>`tests/Feature/OrderWorkflow/AdminMoneyActionsTest.php`<br>`tests/Feature/Filament/BookingOrderResourceAccessTest.php`<br>`tests/Feature/Filament/BookingOrderTransitionActionTest.php`<br>`tests/Feature/Filament/MarketplaceOrderResourceTest.php`<br>`tests/Feature/Renewal/AdminRenewalActionsTest.php`<br>`tests/Feature/Filament/RenewalOrderResourceTest.php`<br>`tests/Feature/SiteSettings/SettingsServiceTest.php`<br>`tests/Feature/Filament/SiteSettingsResourceTest.php`<br>`tests/Feature/Filament/FeatureGateAdminTest.php`<br>`tests/Feature/Domain/CemeteryDirectory/LaunchCityTest.php`<br>`tests/Feature/Domain/Booking/Actions/SaveBookingDraftStepTest.php`<br>`tests/Feature/Filament/LaunchCityResourceTest.php`<br>`tests/Feature/Filament/ServicePackageResourceTest.php`<br>`tests/Feature/Filament/ProductVariantRelationManagerTest.php`<br>`tests/Feature/Filament/VendorResourceTest.php` | Covered |
 | ADM-070 | Payment/transaction/manual verification | `admin-operations` | ADM-070 | E2E-ADMIN | — | Specified |
-| ADM-090 | Reports | `admin-operations` | ADM-090 | E2E-ADMIN | — | Specified |
-| ADM-100 | Audit and sensitive-action review | `admin-operations` | ADM-100 | E2E-ADMIN | — | Specified |
+| ADM-090 | Reports | `admin-operations` | ADM-090 | E2E-ADMIN | `tests/browser/e2e-admin-vendor.spec.ts` | Covered |
+| ADM-100 | Audit and sensitive-action review | `admin-operations` | ADM-100 | E2E-ADMIN | `tests/browser/e2e-admin-vendor.spec.ts` | Covered |
 | VENDOR-01 | Vendor dashboard modules | marketplace/vendor spec | VND-* | E2E-VENDOR | `tests/Feature/Filament/Vendor/VendorPanelAccessTest.php`<br>`tests/Feature/Filament/Vendor/VendorPanelScopingTest.php`<br>`tests/Feature/Filament/Vendor/VendorOrderStatusTransitionActionsTest.php` | Covered |
 | PLOT-01 | Authoritative plot inventory — cemetery blocks + bulk-generated plots with per-plot state and audited state overrides | `plot-inventory-and-reservation`; P3 design §4.1 | ADM-170, ADM-180 | E2E-ADMIN | `tests/Feature/Domain/PlotInventory/CreateCemeteryBlockTest.php`<br>`tests/Unit/Domain/PlotInventory/CemeteryBlockModelTest.php`<br>`tests/Feature/Filament/PlotInventoryAdminTest.php` | Covered |
 | PLOT-02 | Atomic plot reservation — one active hold per plot (plot-row lock + `plot_state` aggregate), order idempotency, append-only lifecycle | `plot-inventory-and-reservation`; P3 design §4.2 | ADM-190 | E2E-ADMIN | `tests/Feature/Domain/PlotReservation/ReservePlotTest.php`<br>`tests/Feature/Domain/PlotReservation/ReservePlotTwoConnectionTest.php`<br>`tests/Feature/Domain/PlotReservation/PlotReservationLifecycleTest.php`<br>`tests/Feature/Domain/PlotReservation/PlotReservationQueryTest.php` | Covered |
@@ -396,6 +413,15 @@ The admin order-management module set shipped 15 Aug 2026: the order transition 
 - **Vendor administration.** `VendorResourceTest` — `test_the_four_back_office_roles_can_access_the_vendor_resource` (+ guest / bare-customer denied), `test_an_authorized_admin_can_create_a_vendor_with_an_audit_trail` + update twin, `test_members_relation_manager_adds_a_member_with_an_audit_row` + `test_members_relation_manager_revokes_a_member_without_deleting_the_row` (add/revoke, no hard delete), `test_listings_relation_manager_creates_a_listing_with_real_closed_list_values` (AvailabilityMode/EvidenceRequirement from the closed lists), `test_availability_relation_manager_creates_a_schedule_day_with_an_audit_row`, `test_deleting_a_vendor_with_members_is_honest` + `test_deleting_a_vendor_without_members_or_listings_succeeds` (delete blocked while members/listings exist).
 
 **Scope of the claim.** *Corrected 16 Aug 2026 (v0.11):* the row now claims the admin dashboard's order-management **and data-management** module sets — the P1 order resources (list/view, transitions through domain Actions, money-adjacent re-auth, audit + append-only timeline) plus the P2 surfaces (site settings, feature-gate operations with evidence + re-auth, launch cities with seed/reorder/reference-blocked delete, service packages with versioned publish/revise, product variants, vendor administration). It does **not** claim reports (ADM-090) or the audit-review surface (ADM-100), which remain unbuilt; nor does it claim the master-data/FAQ module set beyond what the already-named master-data/FAQ tests evidence. Two-phase-journey scope qualifier: the row does not claim that a generic buyer passes the P0 payment guard — condition 4 (`AuthorizeOrderPaymentOpening`) requires the ADMIN role plus an ORDER-scope grant under the acting identity, so the re-click that passes it is the granted admin's own; a buyer/customer role cannot pass until a product decision admits one (deferred).
+
+### ADM-090, ADM-100 — raised to `Covered` 24 Aug 2026 (v0.18)
+
+Both rows were added `Specified`, no evidence, in v0.16 (20 Aug 2026) as an honesty correction — ADMIN-01's own `Covered` status never claimed them. PR #142 (merged 22 Aug 2026) closed the gap with real browser coverage in `tests/browser/e2e-admin-vendor.spec.ts`, confirmed by reading the file directly rather than trusting `docs/testing/release-gates.md`'s own citation of it.
+
+- **ADM-090 (Reports).** `'the three master-data-gated report pages are reachable and titled correctly'` asserts real 200 responses and headings for `/admin/orders-report`, `/admin/renewal-period-report`, `/admin/vendor-performance-report`. `'the three finance-gated report pages are reachable and titled correctly for the admin holding ledger-read access'` does the same for `/admin/finance-reports`, `/admin/receipts-report`, `/admin/outgoing-payments-report`. Together these are all 6 report pages the `admin-operations` spec names.
+- **ADM-100 (Audit and sensitive-action review).** `'audit trail review shows the required columns and is read-only'` asserts the real column set (`Waktu`, `Aksi`, `Hasil`, `Aktor`, `Peran aktor`, `Sumber`, `Subjek`, `Alasan`) and that no create/new action exists on the page. `'audit trail records this suite's own seeded grants'` proves the trail is real, not a stub, by asserting the suite's own seeded `ROLE_GRANT` audit rows actually appear in it.
+
+**Scope of the claim.** These two rows claim the reports and audit-review surfaces exist, are role-gated, and render their real data at the browser level. They do **not** claim Feature/Unit-level coverage of either surface — no such tests exist for these two surfaces specifically — and they do **not** claim anything about CARE-SUB-02 through CARE-SUB-07, which stay exactly as they were; `docs/testing/release-gates.md`'s §A-35 box separately names those as open, substantive evidence gaps, unaffected by this correction.
 
 ### PLOT-01, PLOT-02, PLOT-03 — raised to `Covered` 16 Aug 2026 (P3, PRs #77/#78/#79)
 
