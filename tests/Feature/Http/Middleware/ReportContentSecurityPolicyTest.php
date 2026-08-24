@@ -81,13 +81,32 @@ final class ReportContentSecurityPolicyTest extends TestCase
         $this->assertNotSame($a[1] ?? null, $b[1] ?? null, 'A stable/predictable nonce defeats its own purpose.');
     }
 
-    public function test_the_policy_declares_no_third_party_origin(): void
+    /**
+     * RENAMED from `test_the_policy_declares_no_third_party_origin`.
+     * `frame-src https://www.google.com` (added for the cemetery directory's
+     * embedded map — see `ReportContentSecurityPolicy`'s own comment) is now
+     * a deliberate, sole exception to the "no third party origin" rule this
+     * test used to assert absolutely. This test still proves the rule holds
+     * everywhere else — every OTHER directive must stay origin-free — while
+     * pinning the one exception to exactly the origin it is meant to be, not
+     * a broader wildcard that would silently permit more than intended.
+     */
+    public function test_the_policy_declares_no_third_party_origin_except_the_deliberate_maps_frame_src(): void
     {
         $response = $this->get('/');
 
         $policy = (string) $response->headers->get('Content-Security-Policy-Report-Only');
+        $directives = array_map('trim', explode(';', $policy));
 
-        $this->assertStringNotContainsString('http://', $policy);
-        $this->assertStringNotContainsString('https://', $policy);
+        foreach ($directives as $directive) {
+            if (str_starts_with($directive, 'frame-src')) {
+                $this->assertSame('frame-src https://www.google.com', $directive);
+
+                continue;
+            }
+
+            $this->assertStringNotContainsString('http://', $directive, "directive [{$directive}] must not carry a third-party origin");
+            $this->assertStringNotContainsString('https://', $directive, "directive [{$directive}] must not carry a third-party origin");
+        }
     }
 }
