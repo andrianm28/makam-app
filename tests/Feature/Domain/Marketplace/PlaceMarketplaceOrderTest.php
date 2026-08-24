@@ -21,6 +21,8 @@ use App\Domain\Marketplace\VendorProcessingStatus;
 use App\Platform\FinancialLedger\Actions\VendorPayable;
 use App\Platform\FinancialLedger\Money;
 use App\Platform\FinancialLedger\VendorPayableState;
+use App\Platform\Outbox\Models\OutboxEvent;
+use App\Platform\Outbox\OutboxClassification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -179,5 +181,24 @@ final class PlaceMarketplaceOrderTest extends TestCase
         $this->expectException(CartPricingChangedException::class);
 
         $this->place($cart->fresh(), 'idem-6');
+    }
+
+    public function test_placing_an_order_emits_marketplace_order_submitted(): void
+    {
+        $order = $this->place($this->cartWithTwo(), 'idem-7');
+
+        $outbox = OutboxEvent::query()
+            ->where('event_name', 'marketplace_order.submitted.v1')
+            ->where('aggregate_id', $order->getKey())
+            ->sole();
+
+        $this->assertSame(1, $outbox->event_version);
+        $this->assertSame('marketplace_order', $outbox->aggregate_type);
+        $this->assertSame(OutboxClassification::Internal->value, $outbox->classification);
+        $this->assertSame("marketplace_order_submitted:{$order->getKey()}", $outbox->idempotency_key);
+        $this->assertEqualsCanonicalizing([
+            'order_id' => $order->getKey(),
+            'customer_ref' => 'cust-1',
+        ], $outbox->payload);
     }
 }
