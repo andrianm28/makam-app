@@ -260,7 +260,11 @@ state this agent has no access to.
 ## What was explicitly NOT done
 
 - No `pg_dump`, `age`, or `aws s3` command was executed.
-- No backup exists yet, anywhere.
+- No backup exists yet, anywhere. *(True for this document's historical scope
+  — `makam_stg` has never been backed up or restored. Not true any more
+  platform-wide: a real, tested `pg_dump`/`age`/restore rehearsal now exists
+  for `beta`'s database, 24 Aug 2026 — see `docs/testing/release-gates.md`
+  §H's "Self-managed backup/restore evidence is current" box.)*
 - No restore was performed; every field in the evidence template above is
   blank.
 - No S3-compatible object storage provider was chosen — OQ-4 is instead
