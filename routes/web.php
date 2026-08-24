@@ -180,8 +180,10 @@ Route::get('/marketplace/pesanan/{orderNumber}', OrderTracking::class)->name('ma
 | projection is structurally incapable of leaking `registry_mode` or
 | `certificate_mode` — see PublicCapabilityProjection's own doc block.
 */
-Route::get('/cemeteries', CemeteryDirectoryIndex::class)->name('cemeteries.index');
-Route::get('/cemeteries/{cemeterySlug}', CemeteryDetail::class)->name('cemeteries.show');
+Route::get('/pemakaman', CemeteryDirectoryIndex::class)->name('cemeteries.index');
+Route::get('/pemakaman/{cemeterySlug}', CemeteryDetail::class)->name('cemeteries.show');
+Route::permanentRedirect('/cemeteries', '/pemakaman');
+Route::permanentRedirect('/cemeteries/{cemeterySlug}', '/pemakaman/{cemeterySlug}');
 
 /*
 |--------------------------------------------------------------------------
@@ -300,7 +302,8 @@ Route::get('/faq/{articleSlug}', FaqArticleDetail::class)->name('faq.show');
 | projections/actions — never a model in the route closure.
 */
 Route::get('/m/{token}', MemorialPublicPage::class)->name('memorial.show');
-Route::get('/memorial/{profileId}', MemorialFamilyPage::class)->name('memorial.family');
+Route::get('/kenangan/{profileId}', MemorialFamilyPage::class)->name('memorial.family');
+Route::permanentRedirect('/memorial/{profileId}', '/kenangan/{profileId}');
 
 /*
 |--------------------------------------------------------------------------

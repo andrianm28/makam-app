@@ -414,6 +414,15 @@ final class CemeteryDetailRouteTest extends TestCase
             ->assertSee('Kembali ke direktori');
     }
 
+    public function test_the_old_cemeteries_slug_path_redirects_permanently_to_pemakaman(): void
+    {
+        $cemetery = $this->exampleCemetery();
+
+        $this->get("/cemeteries/{$cemetery->slug}")
+            ->assertRedirect("/pemakaman/{$cemetery->slug}")
+            ->assertStatus(301);
+    }
+
     private function exampleCemetery(): Cemetery
     {
         return Cemetery::query()->published()->where('slug', self::EXAMPLE_SLUG)->firstOrFail();

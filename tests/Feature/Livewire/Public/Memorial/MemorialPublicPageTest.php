@@ -311,6 +311,15 @@ final class MemorialPublicPageTest extends TestCase
     // FAMILY PAGE — consent-gated (AC1)
     // =====================================================================
 
+    public function test_the_old_memorial_path_redirects_permanently_to_kenangan(): void
+    {
+        $profile = $this->profile();
+
+        $this->get("/memorial/{$profile->getKey()}")
+            ->assertRedirect("/kenangan/{$profile->getKey()}")
+            ->assertStatus(301);
+    }
+
     /**
      * An actor who is not an active editor of the profile gets the same
      * uniform not-visible state — cross-family access never reveals whether

@@ -45,6 +45,13 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
             ->assertSee('Direktori TPU dan TPS');
     }
 
+    public function test_the_old_cemeteries_path_redirects_permanently_to_pemakaman(): void
+    {
+        $this->get('/cemeteries')
+            ->assertRedirect('/pemakaman')
+            ->assertStatus(301);
+    }
+
     /**
      * AC1 + the negative criterion "No hidden omission of a required MVP
      * city". All five launch cities must appear as filter controls
