@@ -204,4 +204,30 @@ final class MarkExternalRenewalActionTest extends TestCase
 
         $this->assertSame(1, Renewal::query()->count());
     }
+
+    /**
+     * Regression lock: a malformed `target_due_period` (e.g. `'bukan-tanggal'`)
+     * previously reached `MarkExternalRenewal::__invoke()` unvalidated and blew
+     * up as an uncaught `Carbon\Exceptions\InvalidFormatException` when
+     * `Renewal::create()` cast it — an unhandled 500 instead of the clean
+     * "Gagal mencatat perpanjangan" refusal the sibling action shows for an
+     * equivalent bad-input case. The field's `date_format:Y-m-d` rule now
+     * refuses this at form validation, before the domain call ever runs.
+     */
+    public function test_a_malformed_target_due_period_is_refused_with_a_form_error_not_an_uncaught_exception(): void
+    {
+        $grave = GraveRecord::factory()->create();
+        $this->fullyAuthorizedAdminFor($grave);
+
+        Livewire::test(ListRenewalOrders::class)
+            ->callAction('mark_external_renewal', data: [
+                'grave_record_id' => $grave->id,
+                'target_due_period' => 'bukan-tanggal',
+                'evidence' => 'BUKTI-UI-006',
+                'reason' => 'Dibayar langsung di kantor TPU',
+            ])
+            ->assertHasActionErrors(['target_due_period' => 'date_format']);
+
+        $this->assertSame(0, Renewal::query()->count());
+    }
 }

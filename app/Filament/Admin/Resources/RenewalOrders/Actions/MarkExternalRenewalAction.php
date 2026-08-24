@@ -91,7 +91,18 @@ final class MarkExternalRenewalAction
 
                 TextInput::make('target_due_period')
                     ->label('Periode (YYYY-MM-DD)')
-                    ->required(),
+                    ->required()
+                    // A malformed value here would otherwise reach
+                    // `MarkExternalRenewal::__invoke()` and blow up as an
+                    // uncaught `Carbon\Exceptions\InvalidFormatException`
+                    // when `Renewal::create()` casts it — real validation at
+                    // the form layer, not just the \Throwable catch below,
+                    // is what turns that into a clean refusal instead of a
+                    // 500.
+                    ->rules(['date_format:Y-m-d'])
+                    ->validationMessages([
+                        'date_format' => 'Periode harus dalam format YYYY-MM-DD.',
+                    ]),
 
                 Textarea::make('evidence')->label('Bukti')->rows(2)->required(),
                 Textarea::make('reason')->label('Alasan')->rows(2)->required(),
@@ -128,7 +139,7 @@ final class MarkExternalRenewalAction
                     Notification::make()->success()->title('Perpanjangan eksternal dicatat.')->send();
                 } catch (DuplicateRenewalPeriodException $exception) {
                     Notification::make()->danger()->title('Periode ini sudah tercatat')->body($exception->getMessage())->send();
-                } catch (AuthorizationException $exception) {
+                } catch (AuthorizationException|\Throwable $exception) {
                     Notification::make()->danger()->title('Gagal mencatat perpanjangan')->body($exception->getMessage())->send();
                 }
             });
