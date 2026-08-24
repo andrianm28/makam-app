@@ -96,7 +96,7 @@ docker run -d --name t1-pg -e POSTGRES_USER=testuser -e POSTGRES_PASSWORD=testpa
 docker run -d --name t1-redis -p <free-port>:6379 redis:8.2-alpine
 sleep 5
 docker run --rm --network host --user 1000:1000 \
-  -e APP_ENV=testing -e APP_KEY=base64:RKxTuGlM4MNUB65volwGUsTfCiDumShAS0GGdu5zXn4= \
+  -e APP_ENV=testing -e APP_KEY=base64:$(openssl rand -base64 32) \
   -e DB_CONNECTION=pgsql -e DB_HOST=127.0.0.1 -e DB_PORT=<port> -e DB_DATABASE=testdb -e DB_USERNAME=testuser -e DB_PASSWORD=testpass \
   -e REDIS_HOST=127.0.0.1 -e REDIS_PORT=<port> \
   -e CACHE_STORE=array -e SESSION_DRIVER=array -e QUEUE_CONNECTION=sync -e MAIL_MAILER=array \
