@@ -124,81 +124,14 @@ evidence gaps, and this note changes nothing about them. The v0.17 note above is
 `—`).** Each of the five rows the v0.18 note above named as open was searched for real,
 already-existing test evidence that simply was never cited, not written fresh — per this file's own
 "read against the claim, not the filename" rule. **Four rows are raised to `Covered` — CARE-SUB-03,
-CARE-SUB-04, CARE-SUB-05, and (narrowed) CARE-SUB-07; ADM-070 stays a confirmed, genuine gap.**
-**CARE-SUB-03** on `tests/Feature/Payment/CareSubscriptionWebhookSettlementTest.php`, which proves
-the care-subscription leg of `Actions\ApplyPaymentSettlement`'s webhook resolution end to end
-against a real, subscription-cycle-scoped invoice reference — a correctly-signed
-`payment.completed` delivery pays the cycle, advances the subscription, and auto-creates its work
-order; a wrong-amount delivery is refused by `MarkCyclePaid`'s amount assert and changes nothing;
-an unresolvable invoice reference fails closed. The delivery itself runs through the same
-merchant-scoped (`/api/payments/webhook/{merchant}`), signed (real HMAC verification via the
-`svix-signature` header), durable (a `ProviderEvent` row persisted before validation), and
-replay-protected receiver pipeline `tests/Feature/Payment/WebhookReceiverTest.php` already proves
-generically (forged-signature, stale-delivery-replay, and unserved-merchant rejection) — this row's
-own evidence is the subscription-cycle-specific proof that pipeline is genuinely wired to
-`SubscriptionCycle`/`Subscription`, not a claim that this file re-proves the generic properties.
-Never browser-return: the endpoint is the JSON webhook API, not `payments.return`. **CARE-SUB-04**
-on `tests/Feature/Domain/VendorFulfillment/CreateWorkOrderTest.php` (note the real location —
-`CreateWorkOrderFromCycle` lives under `App\Domain\VendorFulfillment\Actions`, not
-`App\Domain\CareSubscription`), whose five tests prove checklist-template expansion into
-`work_order_tasks` (including the empty-template and multi-item cases), one-work-order-per-cycle
-idempotency, and the `care.work_order_created.v1` outbox emission (asserted directly against
-`outbox_events`, not inferred). **CARE-SUB-05** on
-`tests/Feature/Filament/Vendor/WorkOrderEvidenceUploadTest.php::test_a_vendor_uploads_evidence_through_the_resource_with_a_real_vault_upload`,
-which drives the vendor panel's real `unggahBukti` action with a real uploaded file through the
-actual quarantine → scan → promote pipeline (run synchronously, per the test's own doc block, since
-this host has no always-on media worker) and asserts the resulting `Document` is
-`DocumentState::Accepted` with `DocumentKind::VendorEvidence` before `WorkEvidence` is written; the
-domain-level `tests/Feature/Domain/VendorFulfillment/EvidenceUploadTest.php::test_upload_rejects_non_accepted_document`
-proves the companion refusal (evidence cannot be attached from a non-accepted document). The row's
-"never previewable before scan acceptance" half is not re-proved per-kind here — it is the
-document-vault's own generic, kind-agnostic guarantee, already covered by
-`tests/Feature/DocumentVault/DocumentStateViewTest.php::test_unaccepted_states_only_render_safe_file_metadata_and_never_preview_markup`
-(no `<img>`/preview/thumbnail markup for any unaccepted state) and
-`tests/Feature/DocumentVault/DownloadDocumentTest.php`'s quarantined-object denial tests, which this
-evidence flow inherits by using the same `Document` model and state machine as every other vault
-consumer.
-
-**CARE-SUB-07 is raised to `Covered`, narrowed.** Real evidence exists for vendor replacement with
-an audited, mandatory reason:
-`tests/Feature/Domain/VendorFulfillment/ReplaceVendorTest.php` (the domain Action — old/new vendor
-IDs recorded in `VENDOR_REPLACED` audit metadata) and
-`tests/Feature/Filament/Admin/WorkOrderVendorReplacementTest.php` (the admin `WorkOrdersResource`'s
-`gantiVendor` header action — role-gated access matrix, reason required, a real write through the
-resource). But the row's own prior text claimed two things the search found no evidence for and the
-code does not build: a **reschedule** capability (grepped across
-`app/Domain/VendorFulfillment` and `tests/` — no reschedule action, model, or test exists anywhere;
-`grave-care-fulfillment` AC7's text covers reschedule too, but only the replace half shipped), and a
-**"one replacement per original" constraint** (`App\Domain\VendorFulfillment\Actions\ReplaceVendor`
-has no such guard — it is called and re-called freely with no count limit, and no test asserts one).
-Both clauses are removed from the row's expectation text above rather than left to imply coverage
-that was never built; the row is scoped to what is real: vendor replacement, reason mandatory and
-audited.
-
-**ADM-070 stays `Specified`, evidence stays `—` — this is a genuine, confirmed gap, not an
-uncited one.** The task brief's own lead was investigated directly:
-`tests/Feature/Payment/VerifyManualPaymentTest.php` and
-`tests/Feature/Payment/VerifyManualPaymentRouteTest.php` are real, thoroughly tested (role
-authorization, mandatory audit reason, decide-once concurrency guard, re-authentication gating,
-rate limiting) — but they do **not** exercise the ADMIN-PANEL surface this row names. The route
-they cover (`admin.payments.manual-verifications.verify`,
-`routes/web.php`) carries its own doc comment stating exactly this: *"a plain controller route
-(not a Filament panel page) in the standard `web` group"* — confirmed by grepping
-`app/Filament` for `PaymentVerification`, which returns nothing. There is also no GET route or
-Filament resource anywhere to **view** payment/transaction references at all — only this
-POST-only decide endpoint — so `admin-operations` requirement 5's first half ("allow an admin to
-view payment/transaction references") has no surface whatsoever, built or tested. (Separately,
-`app/Domain/OrderWorkflow/Actions/ManualPaymentVerification.php`, wired into
-`BookingOrderResource`'s header actions and already claimed under ADMIN-01, is a different action
-entirely — it transitions a booking order to `MENUNGGU_VERIFIKASI_PEMBAYARAN`, not a decision
-against a `PaymentVerification` row, so it does not close this gap either.) Citing either test file
-here would overclaim a Filament admin surface that provably does not exist; the row is left exactly
-as v0.16 found it, with the specific reason now on record instead of unexplored. `PR #130` (merge
-commit `1a93938`, CI run
+CARE-SUB-04, CARE-SUB-05, and (narrowed) CARE-SUB-07; ADM-070 stays a confirmed, genuine gap** — the
+only route that exists (`admin.payments.manual-verifications.verify`) is a plain controller route,
+not a Filament panel page, and there is no GET/view surface for payment/transaction references at
+all. `PR #130` (merge commit `1a93938`, CI run
 [`32506685010`](https://github.com/andrianm28/makam-app/actions/runs/32506685010), success) is the
-real, already-merged commit behind the three raised rows' evidence — all four newly-cited test
-files were introduced or last touched there; nothing new was written for this pass. The v0.18 note
-above is kept verbatim.
+real, already-merged commit behind the four raised rows' evidence; nothing new was written for this
+pass. See the section D entry below for the method-level trail. The v0.18 note above is kept
+verbatim.
 
 ## A. RKS authority
 
@@ -563,6 +496,18 @@ MKT-04 was carried as `Specified`, evidence `—`, since 08 Aug 2026 — accurat
 **Scope of the claim — narrower than the row's full expectation text.** The expectation cell also names "status transitions" (plural). Only the creation transition (into `DRAFT`) is tested here; `App\Filament\Admin\Resources\Subscriptions\Actions\PauseSubscriptionAction` and `CancelSubscriptionAction` (and their domain Actions `PauseSubscription`/`CancelSubscription`) exist in the codebase — verified 20 Aug 2026 by reading `app/Filament/Admin/Resources/Subscriptions/Actions/` and `app/Domain/CareSubscription/Actions/` — but no test file in the repository references either action (`grep -rl "CancelSubscription\|PauseSubscription" tests/` returns nothing). Those transitions are real, wired code with zero test evidence, not claimed by this row's `Covered` status. Separately: `App\Filament\Admin\Resources\Subscriptions\Actions\CreateSubscriptionAction` (the header-action form that calls `CreateSubscription`) is also real and wired — verified by reading the file, which resolves grave and care plan, invokes the domain Action with the resolved actor, and redirects to the created record — but no Filament-level test exercises that header action the way `VendorOrderStatusTransitionActionsTest` exercises the vendor panel's transition actions. This row's `Covered` status rests on the domain Action's own test, not on any test of the admin UI wiring around it.
 
 **CARE-SUB-02 — factual correction, status unchanged.** The row previously read "...generates cycles with idempotent dedup via unique constraint, emits `care.cycle_created.v1`," attributing the outbox event to cycle *generation*. Verified false by reading the two actions directly: `App\Domain\CareSubscription\Actions\GenerateCycle` writes the cycle and its invoice and records a `CYCLE_GENERATED` **audit** event — it calls `Outbox::record()` nowhere. The `care.cycle_created.v1` **outbox** event is emitted by `App\Domain\CareSubscription\Actions\MarkCyclePaid`, on cycle *payment*, not generation — proved by `tests/Feature/Domain/CareSubscription/MarkCyclePaidTest.php::test_mark_paid_emits_outbox_event`, which asserts the `outbox_events` row only after `MarkCyclePaid` runs. The clause is removed from CARE-SUB-02's expectation text above; the event's true timing (payment) sits in CARE-SUB-03's territory (payment webhook validation), not CARE-SUB-02's. CARE-SUB-02 stays `Specified` — this correction touches only the prose, not the status, per the review brief that requested it.
+
+### CARE-SUB-03/04/05/07 raised, ADM-070 confirmed open — 24 Aug 2026 (v0.19)
+
+Each of the five rows the v0.18 note above left open (CARE-SUB-03, CARE-SUB-04, CARE-SUB-05, CARE-SUB-07, ADM-070; all carried evidence `—`) was searched for real, already-existing test evidence that simply was never cited, not written fresh — per this file's own "read against the claim, not the filename" rule. `PR #130` (merge commit `1a93938`, CI run [`32506685010`](https://github.com/andrianm28/makam-app/actions/runs/32506685010), success) is the real, already-merged commit behind the four raised rows' evidence — all four newly-cited test files were introduced or last touched there; nothing new was written for this pass.
+
+- **CARE-SUB-03 (payment webhook validation), raised.** `tests/Feature/Payment/CareSubscriptionWebhookSettlementTest.php` proves the care-subscription leg of `Actions\ApplyPaymentSettlement`'s webhook resolution end to end against a real, subscription-cycle-scoped invoice reference — a correctly-signed `payment.completed` delivery pays the cycle, advances the subscription, and auto-creates its work order; a wrong-amount delivery is refused by `MarkCyclePaid`'s amount assert and changes nothing; an unresolvable invoice reference fails closed. The delivery itself runs through the same merchant-scoped (`/api/payments/webhook/{merchant}`), signed (real HMAC verification via the `svix-signature` header), durable (a `ProviderEvent` row persisted before validation), and replay-protected receiver pipeline `tests/Feature/Payment/WebhookReceiverTest.php` already proves generically (forged-signature, stale-delivery-replay, and unserved-merchant rejection) — this row's own evidence is the subscription-cycle-specific proof that pipeline is genuinely wired to `SubscriptionCycle`/`Subscription`, not a claim that this file re-proves the generic properties. Never browser-return: the endpoint is the JSON webhook API, not `payments.return`.
+- **CARE-SUB-04 (work order creation from paid cycle), raised.** `tests/Feature/Domain/VendorFulfillment/CreateWorkOrderTest.php` (note the real location — `CreateWorkOrderFromCycle` lives under `App\Domain\VendorFulfillment\Actions`, not `App\Domain\CareSubscription`), whose five tests prove checklist-template expansion into `work_order_tasks` (including the empty-template and multi-item cases), one-work-order-per-cycle idempotency, and the `care.work_order_created.v1` outbox emission (asserted directly against `outbox_events`, not inferred).
+- **CARE-SUB-05 (evidence upload, vault-backed), raised.** `tests/Feature/Filament/Vendor/WorkOrderEvidenceUploadTest.php::test_a_vendor_uploads_evidence_through_the_resource_with_a_real_vault_upload` drives the vendor panel's real `unggahBukti` action with a real uploaded file through the actual quarantine → scan → promote pipeline (run synchronously, per the test's own doc block, since this host has no always-on media worker) and asserts the resulting `Document` is `DocumentState::Accepted` with `DocumentKind::VendorEvidence` before `WorkEvidence` is written; the domain-level `tests/Feature/Domain/VendorFulfillment/EvidenceUploadTest.php::test_upload_rejects_non_accepted_document` proves the companion refusal (evidence cannot be attached from a non-accepted document). The row's "never previewable before scan acceptance" half is not re-proved per-kind here — it is the document-vault's own generic, kind-agnostic guarantee, already covered by `tests/Feature/DocumentVault/DocumentStateViewTest.php::test_unaccepted_states_only_render_safe_file_metadata_and_never_preview_markup` (no `<img>`/preview/thumbnail markup for any unaccepted state) and `tests/Feature/DocumentVault/DownloadDocumentTest.php`'s quarantined-object denial tests, which this evidence flow inherits by using the same `Document` model and state machine as every other vault consumer.
+- **CARE-SUB-07 (vendor replacement audit), raised and narrowed.** Real evidence exists for vendor replacement with an audited, mandatory reason: `tests/Feature/Domain/VendorFulfillment/ReplaceVendorTest.php` (the domain Action — old/new vendor IDs recorded in `VENDOR_REPLACED` audit metadata) and `tests/Feature/Filament/Admin/WorkOrderVendorReplacementTest.php` (the admin `WorkOrdersResource`'s `gantiVendor` header action — role-gated access matrix, reason required, a real write through the resource). But the row's own prior text claimed two things the search found no evidence for and the code does not build: a **reschedule** capability (grepped across `app/Domain/VendorFulfillment` and `tests/` — no reschedule action, model, or test exists anywhere; `grave-care-fulfillment` AC7's text covers reschedule too, but only the replace half shipped), and a **"one replacement per original" constraint** (`App\Domain\VendorFulfillment\Actions\ReplaceVendor` has no such guard — it is called and re-called freely with no count limit, and no test asserts one). Both clauses are removed from the row's expectation text above rather than left to imply coverage that was never built; the row is scoped to what is real: vendor replacement, reason mandatory and audited.
+- **ADM-070 stays `Specified`, evidence stays `—` — this is a genuine, confirmed gap, not an uncited one.** The task brief's own lead was investigated directly: `tests/Feature/Payment/VerifyManualPaymentTest.php` and `tests/Feature/Payment/VerifyManualPaymentRouteTest.php` are real, thoroughly tested (role authorization, mandatory audit reason, decide-once concurrency guard, re-authentication gating, rate limiting) — but they do **not** exercise the ADMIN-PANEL surface this row names. The route they cover (`admin.payments.manual-verifications.verify`, `routes/web.php`) carries its own doc comment stating exactly this: *"a plain controller route (not a Filament panel page) in the standard `web` group"* — confirmed by grepping `app/Filament` for `PaymentVerification`, which returns nothing. There is also no GET route or Filament resource anywhere to **view** payment/transaction references at all — only this POST-only decide endpoint — so `admin-operations` requirement 5's first half ("allow an admin to view payment/transaction references") has no surface whatsoever, built or tested. (Separately, `app/Domain/OrderWorkflow/Actions/ManualPaymentVerification.php`, wired into `BookingOrderResource`'s header actions and already claimed under ADMIN-01, is a different action entirely — it transitions a booking order to `MENUNGGU_VERIFIKASI_PEMBAYARAN`, not a decision against a `PaymentVerification` row, so it does not close this gap either.) Citing either test file here would overclaim a Filament admin surface that provably does not exist; the row is left exactly as v0.16 found it, with the specific reason now on record instead of unexplored.
+
+**Scope of the claim.** This correction is scoped narrowly: it does **not** touch, raise, or otherwise affect ADM-090, ADM-100, or any row not named above.
 
 ### Rows deliberately left `Specified` despite nearby test files
 
