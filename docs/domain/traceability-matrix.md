@@ -120,6 +120,86 @@ raise, or otherwise affect CARE-SUB-02 through CARE-SUB-07, which stay exactly a
 them — `docs/testing/release-gates.md`'s §A-35 box separately names those as substantive, open
 evidence gaps, and this note changes nothing about them. The v0.17 note above is kept verbatim.
 
+**v0.19 — 24 Aug 2026, maintenance pass on ADM-070/CARE-SUB-03/04/05/07 (all five carried evidence
+`—`).** Each of the five rows the v0.18 note above named as open was searched for real,
+already-existing test evidence that simply was never cited, not written fresh — per this file's own
+"read against the claim, not the filename" rule. **Four rows are raised to `Covered` — CARE-SUB-03,
+CARE-SUB-04, CARE-SUB-05, and (narrowed) CARE-SUB-07; ADM-070 stays a confirmed, genuine gap.**
+**CARE-SUB-03** on `tests/Feature/Payment/CareSubscriptionWebhookSettlementTest.php`, which proves
+the care-subscription leg of `Actions\ApplyPaymentSettlement`'s webhook resolution end to end
+against a real, subscription-cycle-scoped invoice reference — a correctly-signed
+`payment.completed` delivery pays the cycle, advances the subscription, and auto-creates its work
+order; a wrong-amount delivery is refused by `MarkCyclePaid`'s amount assert and changes nothing;
+an unresolvable invoice reference fails closed. The delivery itself runs through the same
+merchant-scoped (`/api/payments/webhook/{merchant}`), signed (real HMAC verification via the
+`svix-signature` header), durable (a `ProviderEvent` row persisted before validation), and
+replay-protected receiver pipeline `tests/Feature/Payment/WebhookReceiverTest.php` already proves
+generically (forged-signature, stale-delivery-replay, and unserved-merchant rejection) — this row's
+own evidence is the subscription-cycle-specific proof that pipeline is genuinely wired to
+`SubscriptionCycle`/`Subscription`, not a claim that this file re-proves the generic properties.
+Never browser-return: the endpoint is the JSON webhook API, not `payments.return`. **CARE-SUB-04**
+on `tests/Feature/Domain/VendorFulfillment/CreateWorkOrderTest.php` (note the real location —
+`CreateWorkOrderFromCycle` lives under `App\Domain\VendorFulfillment\Actions`, not
+`App\Domain\CareSubscription`), whose five tests prove checklist-template expansion into
+`work_order_tasks` (including the empty-template and multi-item cases), one-work-order-per-cycle
+idempotency, and the `care.work_order_created.v1` outbox emission (asserted directly against
+`outbox_events`, not inferred). **CARE-SUB-05** on
+`tests/Feature/Filament/Vendor/WorkOrderEvidenceUploadTest.php::test_a_vendor_uploads_evidence_through_the_resource_with_a_real_vault_upload`,
+which drives the vendor panel's real `unggahBukti` action with a real uploaded file through the
+actual quarantine → scan → promote pipeline (run synchronously, per the test's own doc block, since
+this host has no always-on media worker) and asserts the resulting `Document` is
+`DocumentState::Accepted` with `DocumentKind::VendorEvidence` before `WorkEvidence` is written; the
+domain-level `tests/Feature/Domain/VendorFulfillment/EvidenceUploadTest.php::test_upload_rejects_non_accepted_document`
+proves the companion refusal (evidence cannot be attached from a non-accepted document). The row's
+"never previewable before scan acceptance" half is not re-proved per-kind here — it is the
+document-vault's own generic, kind-agnostic guarantee, already covered by
+`tests/Feature/DocumentVault/DocumentStateViewTest.php::test_unaccepted_states_only_render_safe_file_metadata_and_never_preview_markup`
+(no `<img>`/preview/thumbnail markup for any unaccepted state) and
+`tests/Feature/DocumentVault/DownloadDocumentTest.php`'s quarantined-object denial tests, which this
+evidence flow inherits by using the same `Document` model and state machine as every other vault
+consumer.
+
+**CARE-SUB-07 is raised to `Covered`, narrowed.** Real evidence exists for vendor replacement with
+an audited, mandatory reason:
+`tests/Feature/Domain/VendorFulfillment/ReplaceVendorTest.php` (the domain Action — old/new vendor
+IDs recorded in `VENDOR_REPLACED` audit metadata) and
+`tests/Feature/Filament/Admin/WorkOrderVendorReplacementTest.php` (the admin `WorkOrdersResource`'s
+`gantiVendor` header action — role-gated access matrix, reason required, a real write through the
+resource). But the row's own prior text claimed two things the search found no evidence for and the
+code does not build: a **reschedule** capability (grepped across
+`app/Domain/VendorFulfillment` and `tests/` — no reschedule action, model, or test exists anywhere;
+`grave-care-fulfillment` AC7's text covers reschedule too, but only the replace half shipped), and a
+**"one replacement per original" constraint** (`App\Domain\VendorFulfillment\Actions\ReplaceVendor`
+has no such guard — it is called and re-called freely with no count limit, and no test asserts one).
+Both clauses are removed from the row's expectation text above rather than left to imply coverage
+that was never built; the row is scoped to what is real: vendor replacement, reason mandatory and
+audited.
+
+**ADM-070 stays `Specified`, evidence stays `—` — this is a genuine, confirmed gap, not an
+uncited one.** The task brief's own lead was investigated directly:
+`tests/Feature/Payment/VerifyManualPaymentTest.php` and
+`tests/Feature/Payment/VerifyManualPaymentRouteTest.php` are real, thoroughly tested (role
+authorization, mandatory audit reason, decide-once concurrency guard, re-authentication gating,
+rate limiting) — but they do **not** exercise the ADMIN-PANEL surface this row names. The route
+they cover (`admin.payments.manual-verifications.verify`,
+`routes/web.php`) carries its own doc comment stating exactly this: *"a plain controller route
+(not a Filament panel page) in the standard `web` group"* — confirmed by grepping
+`app/Filament` for `PaymentVerification`, which returns nothing. There is also no GET route or
+Filament resource anywhere to **view** payment/transaction references at all — only this
+POST-only decide endpoint — so `admin-operations` requirement 5's first half ("allow an admin to
+view payment/transaction references") has no surface whatsoever, built or tested. (Separately,
+`app/Domain/OrderWorkflow/Actions/ManualPaymentVerification.php`, wired into
+`BookingOrderResource`'s header actions and already claimed under ADMIN-01, is a different action
+entirely — it transitions a booking order to `MENUNGGU_VERIFIKASI_PEMBAYARAN`, not a decision
+against a `PaymentVerification` row, so it does not close this gap either.) Citing either test file
+here would overclaim a Filament admin surface that provably does not exist; the row is left exactly
+as v0.16 found it, with the specific reason now on record instead of unexplored. `PR #130` (merge
+commit `1a93938`, CI run
+[`32506685010`](https://github.com/andrianm28/makam-app/actions/runs/32506685010), success) is the
+real, already-merged commit behind the three raised rows' evidence — all four newly-cited test
+files were introduced or last touched there; nothing new was written for this pass. The v0.18 note
+above is kept verbatim.
+
 ## A. RKS authority
 
 | RKS | Capability | Spec | Gate/control |
@@ -201,11 +281,11 @@ The **Test evidence** column holds repo-relative paths to the tests backing a ro
 | PREN-04 | Public pre-need surface — interest registration + consultation requests persist and audit with the gate closed (AC1), the non-dismissible InterestOnly banner while the gate is closed (absent when open, interest still registers), the certificate-status section state-only | `pre-need-contracting` AC1 | PUB-094 | E2E-PREN | `tests/Feature/Livewire/Public/PreNeed/PreNeedInterestPageTest.php`<br>`tests/Feature/Domain/PreNeed/RequestPreNeedConsultationTest.php` | Covered |
 | CARE-SUB-01 | Subscription creation (admin-managed) — subscription lifecycle with care plan reference, frequency, price, status transitions | `recurring-care-subscriptions` AC1/AC2 | ADM-250 | E2E-CARE | `tests/Feature/Domain/CareSubscription/CreateSubscriptionTest.php` | Covered |
 | CARE-SUB-02 | Cycle generation (scheduler) — `care:generate-cycles` command finds due ACTIVE subscriptions, generates cycles with idempotent dedup via unique constraint | `recurring-care-subscriptions` AC2/AC5 | — (CLI) | E2E-CARE | `tests/Feature/Console/CareGenerateCyclesCommandTest.php` | Specified |
-| CARE-SUB-03 | Payment webhook validation — webhook-driven payment state on subscription cycles, durable signed merchant-scoped replay-protected, never browser-return | `recurring-care-subscriptions` AC4 | — (webhook) | E2E-CARE | — | Specified |
-| CARE-SUB-04 | Work order creation from paid cycle — `CreateWorkOrderFromCycle` expands checklist template, emits `care.work_order_created.v1` | `grave-care-fulfillment` AC1/AC3 | — (domain) | E2E-CARE | — | Specified |
-| CARE-SUB-05 | Evidence upload (vault-backed) — before/after images through document-vault quarantine, never previewable before scan acceptance | `grave-care-fulfillment` AC4 | VND-050 | E2E-CARE | — | Specified |
+| CARE-SUB-03 | Payment webhook validation — webhook-driven payment state on subscription cycles, durable signed merchant-scoped replay-protected, never browser-return | `recurring-care-subscriptions` AC4 | — (webhook) | E2E-CARE | `tests/Feature/Payment/CareSubscriptionWebhookSettlementTest.php` | Covered |
+| CARE-SUB-04 | Work order creation from paid cycle — `CreateWorkOrderFromCycle` expands checklist template, emits `care.work_order_created.v1` | `grave-care-fulfillment` AC1/AC3 | — (domain) | E2E-CARE | `tests/Feature/Domain/VendorFulfillment/CreateWorkOrderTest.php` | Covered |
+| CARE-SUB-05 | Evidence upload (vault-backed) — before/after images through document-vault quarantine, never previewable before scan acceptance | `grave-care-fulfillment` AC4 | VND-050 | E2E-CARE | `tests/Feature/Filament/Vendor/WorkOrderEvidenceUploadTest.php` | Covered |
 | CARE-SUB-06 | Customer acceptance/complaint/make-good — acceptance confirms, complaint files with audit, make-good creates replacement linked to original cycle | `grave-care-fulfillment` AC5 | PUB-096 | E2E-CARE | `tests/Feature/Livewire/Public/CareSubscription/CareHistoryPageTest.php` | Specified |
-| CARE-SUB-07 | Vendor replacement audit — replace/reschedule with reason captured and audited, one replacement per original | `grave-care-fulfillment` AC7 | VND-050 | E2E-CARE | — | Specified |
+| CARE-SUB-07 | Vendor replacement audit — replace with reason captured and audited | `grave-care-fulfillment` AC7 | VND-050 | E2E-CARE | `tests/Feature/Filament/Admin/WorkOrderVendorReplacementTest.php` | Covered |
 
 ## C. Gate interpretation
 
