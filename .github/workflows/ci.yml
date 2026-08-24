@@ -310,7 +310,7 @@ jobs:
         with:
           node-version-file: .nvmrc
       - name: npm audit
-        run: npm audit --audit-level=high || true # TODO: fail once the baseline is clean
+        run: npm audit --audit-level=high
 
   # ---------------------------------------------------------------------------
   # Browser + accessibility smoke test (Playwright + @axe-core/playwright).
