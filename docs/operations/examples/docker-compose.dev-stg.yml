@@ -80,6 +80,11 @@ services:
     networks: [backend, egress]
 
   dev-worker:
+    # Development uses plain queue:work, not Horizon. If Horizon is ever run
+    # manually on dev for debugging, use --environment=local
+    # (not bare `php artisan horizon`, which deploys zero supervisors).
+    # Do not add a persistent development Horizon block — see
+    # config/horizon.php's comment and ADR-0035 item 12 for why.
     image: ${APP_IMAGE:?APP_IMAGE is required}
     profiles: ["dev-worker"]
     command: ["php", "artisan", "queue:work", "--stop-when-empty", "--queue=critical,urgent,notifications,default"]
