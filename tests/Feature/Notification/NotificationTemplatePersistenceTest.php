@@ -186,7 +186,7 @@ final class NotificationTemplatePersistenceTest extends TestCase
         );
     }
 
-    public function test_only_the_six_ruled_rows_carry_an_outbox_event_name(): void
+    public function test_only_the_eleven_ruled_rows_carry_an_outbox_event_name(): void
     {
         $mapped = [
             'Booking submitted' => 'booking.draft_submitted.v2',
@@ -195,6 +195,11 @@ final class NotificationTemplatePersistenceTest extends TestCase
             'Quote issued' => 'quote.issued.v1',
             'Quote accepted' => 'quote.accepted.v1',
             'Payment received' => 'payment.received.v1',
+            'Payment failed/exception' => 'payment.outcome_failed.v1',
+            'Marketplace order submitted' => 'marketplace_order.submitted.v1',
+            'Vendor accepted/rejected' => 'vendor_order.decided.v1',
+            'Vendor evidence uploaded' => 'vendor.evidence_uploaded.v1',
+            'Renewal submitted' => 'renewal.submitted.v1',
         ];
 
         foreach ($mapped as $eventName => $outboxEventName) {
@@ -208,13 +213,8 @@ final class NotificationTemplatePersistenceTest extends TestCase
         $unmapped = [
             'Booking draft created',
             'Payment opened',
-            'Payment failed/exception',
             'Order processing',
             'Order completed',
-            'Marketplace order submitted',
-            'Vendor accepted/rejected',
-            'Vendor evidence uploaded',
-            'Renewal submitted',
             'Renewal paid/verified',
             'Reminder due',
         ];
@@ -307,6 +307,11 @@ final class NotificationTemplatePersistenceTest extends TestCase
             'Quote issued' => 'quote.issued.v1',
             'Quote accepted' => 'quote.accepted.v1',
             'Payment received' => 'payment.received.v1',
+            'Payment failed/exception' => 'payment.outcome_failed.v1',
+            'Marketplace order submitted' => 'marketplace_order.submitted.v1',
+            'Vendor accepted/rejected' => 'vendor_order.decided.v1',
+            'Vendor evidence uploaded' => 'vendor.evidence_uploaded.v1',
+            'Renewal submitted' => 'renewal.submitted.v1',
             default => null,
         };
     }
