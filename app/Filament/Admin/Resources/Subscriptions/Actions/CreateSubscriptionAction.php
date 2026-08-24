@@ -83,7 +83,7 @@ final class CreateSubscriptionAction
             );
 
             Notification::make()->success()->title('Langganan perawatan dibuat.')->send();
-            redirect()->route('filament.admin.resources.subscriptions.view', ['record' => $subscription->getKey()]);
+            redirect()->route('filament.admin.resources.langganan.view', ['record' => $subscription->getKey()]);
         } catch (\Throwable $exception) {
             Notification::make()
                 ->danger()

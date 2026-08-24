@@ -525,7 +525,7 @@ Route::middleware('auth')->prefix('akun')->name('akun.')->group(function (): voi
 | bulk export of a period's books deserves at least the rate limit a single
 | document download already carries.
 */
-Route::get('/admin/finance/exports', FinanceExportController::class)
+Route::get('/admin/laporan-keuangan/ekspor', FinanceExportController::class)
     ->middleware([
         'web',
         'auth',
@@ -576,11 +576,11 @@ Route::get('/pembayaran/batal', PaymentCancelController::class)->name('payments.
 |--------------------------------------------------------------------------
 | AC8 ("Admin verification SHALL be a separate authorized action") and AC9
 | (recent re-authentication). `RequireRecentAuthentication`'s SECOND real
-| attachment anywhere in this repo — the first is `/admin/finance/exports`
-| above, and this route follows its exact precedent: a plain controller
-| route (not a Filament panel page) in the standard `web` group, its own
-| explicit `auth` guard, and the same `filament.admin.pages.
-| password-reauthentication` challenge destination — the old
+| attachment anywhere in this repo — the first is `/admin/laporan-keuangan/
+| ekspor` above, and this route follows its exact precedent: a plain
+| controller route (not a Filament panel page) in the standard `web` group,
+| its own explicit `auth` guard, and the same `filament.admin.pages.
+| verifikasi-ulang-kata-sandi` challenge destination — the old
 | `filament.admin.pages.mfa-challenge` destination redirected every admin
 | into a crash, since none was ever MFA-enrolled (mfa-removal-and-reauth
 | Task 3).
@@ -596,7 +596,7 @@ Route::get('/pembayaran/batal', PaymentCancelController::class)->name('payments.
 | `throttle:payment-manual-verification` (public-beta-release plan, Lane
 | D4).
 */
-Route::post('/admin/payments/manual-verifications/{paymentVerification}/verify', VerifyManualPaymentController::class)
+Route::post('/admin/pembayaran/verifikasi-manual/{paymentVerification}/verifikasi', VerifyManualPaymentController::class)
     ->middleware([
         'web',
         'auth',
@@ -610,11 +610,11 @@ Route::post('/admin/payments/manual-verifications/{paymentVerification}/verify',
 | Admin — payment reversals (Task 6, Wave 1d Append-Correction)
 |--------------------------------------------------------------------------
 | `RequireRecentAuthentication`'s THIRD real attachment anywhere in this
-| repo — after `/admin/finance/exports` and
-| `/admin/payments/manual-verifications/{id}/verify` above, following their
-| exact precedent: a plain controller route in the standard `web` group,
-| its own explicit `auth` guard, and the same
-| `filament.admin.pages.password-reauthentication` challenge destination —
+| repo — after `/admin/laporan-keuangan/ekspor` and
+| `/admin/pembayaran/verifikasi-manual/{id}/verifikasi` above, following
+| their exact precedent: a plain controller route in the standard `web`
+| group, its own explicit `auth` guard, and the same
+| `filament.admin.pages.verifikasi-ulang-kata-sandi` challenge destination —
 | the old `filament.admin.pages.mfa-challenge` destination redirected every
 | admin into a crash, since none was ever MFA-enrolled
 | (mfa-removal-and-reauth Task 3).
@@ -635,7 +635,7 @@ Route::post('/admin/payments/manual-verifications/{paymentVerification}/verify',
 |
 | `throttle:payment-reversal` (public-beta-release plan, Lane D4).
 */
-Route::post('/admin/payments/reversals/{reversalType}', RecordPaymentReversalController::class)
+Route::post('/admin/pembayaran/pembalikan/{reversalType}', RecordPaymentReversalController::class)
     ->whereIn('reversalType', ['refund', 'chargeback'])
     ->middleware([
         'web',

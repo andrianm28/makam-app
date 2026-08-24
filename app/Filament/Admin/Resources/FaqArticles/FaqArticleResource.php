@@ -80,6 +80,8 @@ final class FaqArticleResource extends Resource
 {
     protected static ?string $model = FaqArticle::class;
 
+    protected static ?string $slug = 'artikel-faq';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedQuestionMarkCircle;
 
     protected static ?string $recordTitleAttribute = 'title';

@@ -60,6 +60,8 @@ final class MemorialProfileResource extends Resource
 {
     protected static ?string $model = MemorialProfile::class;
 
+    protected static ?string $slug = 'profil-kenangan';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedHeart;
 
     protected static ?string $recordTitleAttribute = 'display_name';

@@ -85,7 +85,7 @@ final class MarkMarketplaceOrderPaidAction
                 } catch (ReauthenticationRequiredException) {
                     Notification::make()->warning()->title('Perlu verifikasi ulang')->send();
                     session()->put(RequireRecentAuthentication::REASON_SESSION_KEY, 'money_action');
-                    session()->put('url.intended', route('filament.admin.resources.marketplace-orders.view', ['record' => $order->getKey()]));
+                    session()->put('url.intended', route('filament.admin.resources.pesanan-marketplace.view', ['record' => $order->getKey()]));
                     redirect()->route(PasswordReauthentication::ROUTE_NAME);
 
                     return;

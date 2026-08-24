@@ -44,6 +44,8 @@ final class ModerationCaseResource extends Resource
 {
     protected static ?string $model = ModerationCase::class;
 
+    protected static ?string $slug = 'kasus-moderasi';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShieldExclamation;
 
     protected static ?string $recordTitleAttribute = 'id';

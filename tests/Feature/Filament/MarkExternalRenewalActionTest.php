@@ -170,11 +170,11 @@ final class MarkExternalRenewalActionTest extends TestCase
                 'reason' => 'Dibayar langsung di kantor TPU',
             ])
             ->assertNotified('Perlu verifikasi ulang')
-            ->assertRedirect(route('filament.admin.pages.password-reauthentication'));
+            ->assertRedirect(route('filament.admin.pages.verifikasi-ulang-kata-sandi'));
 
         $this->assertSame(0, Renewal::query()->count());
         $this->assertSame('money_action', session()->get(RequireRecentAuthentication::REASON_SESSION_KEY));
-        $this->assertSame(route('filament.admin.resources.renewal-orders.index'), session()->get('url.intended'));
+        $this->assertSame(route('filament.admin.resources.pesanan-perpanjangan.index'), session()->get('url.intended'));
     }
 
     public function test_a_duplicate_grave_and_period_surfaces_the_same_duplicate_exception_the_online_path_raises(): void

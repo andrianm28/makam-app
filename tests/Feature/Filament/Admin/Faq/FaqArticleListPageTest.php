@@ -19,7 +19,7 @@ use Tests\TestCase;
 
 /**
  * Proves `FaqArticleResource`'s list page (a) is reachable over real HTTP at
- * `/admin/faq-articles` for an authenticated user, and (b) renders a
+ * `/admin/artikel-faq` for an authenticated user, and (b) renders a
  * draft/unpublished article's `publish_state` badge visibly differently
  * from a published one.
  *
@@ -29,14 +29,9 @@ use Tests\TestCase;
  * `php` job has no prior frontend build. Reused verbatim here rather than
  * re-derived.
  *
- * `/admin/faq-articles` is not a hardcoded guess: `FaqArticleResource`'s
- * default slug was traced against the real installed `filament/filament`
- * v5.7.3 (`Resources\Resource\Concerns\HasRoutes::resolveDefaultSlug()`) —
- * for a resource class `App\Filament\Admin\Resources\FaqArticles\
- * FaqArticleResource` (directory basename `FaqArticles` matches the
- * pluralized model-basename-before-"Resource", so the "collapsed"
- * branch applies), the resolved slug is `kebab('FaqArticles')` =
- * `faq-articles`.
+ * `/admin/artikel-faq` is the explicit `$slug` set on `FaqArticleResource`
+ * (url-indonesianization Task 2) — before that it was Filament's derived
+ * default (`kebab('FaqArticles')` = `faq-articles`).
  *
  * ---------------------------------------------------------------------------
  * Every actor here is granted `ActorRole::ADMIN` first, and that is not
@@ -71,7 +66,7 @@ final class FaqArticleListPageTest extends TestCase
 
     public function test_a_guest_is_redirected_away_from_the_faq_article_list_page(): void
     {
-        $response = $this->get('/admin/faq-articles');
+        $response = $this->get('/admin/artikel-faq');
 
         $response->assertRedirect(route('filament.admin.auth.login'));
     }
@@ -90,7 +85,7 @@ final class FaqArticleListPageTest extends TestCase
         $user = User::factory()->create();
         $this->grantRoleTo($user, ActorRole::ADMIN);
 
-        $response = $this->actingAs($user)->get('/admin/faq-articles');
+        $response = $this->actingAs($user)->get('/admin/artikel-faq');
 
         $response->assertOk();
     }
@@ -142,8 +137,8 @@ final class FaqArticleListPageTest extends TestCase
             ->assertTableColumnFormattedStateSet('publish_state', 'Dipublikasikan', $published);
     }
 
-    public function test_faq_article_resource_slug_resolves_to_faq_articles(): void
+    public function test_faq_article_resource_slug_resolves_to_artikel_faq(): void
     {
-        $this->assertSame('faq-articles', FaqArticleResource::getSlug());
+        $this->assertSame('artikel-faq', FaqArticleResource::getSlug());
     }
 }

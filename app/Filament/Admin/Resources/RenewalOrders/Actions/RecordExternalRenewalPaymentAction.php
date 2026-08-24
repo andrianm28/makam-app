@@ -75,7 +75,7 @@ final class RecordExternalRenewalPaymentAction
                         ->send();
 
                     session()->put(RequireRecentAuthentication::REASON_SESSION_KEY, 'money_action');
-                    session()->put('url.intended', route('filament.admin.resources.renewal-orders.view', ['record' => $renewal->getKey()]));
+                    session()->put('url.intended', route('filament.admin.resources.pesanan-perpanjangan.view', ['record' => $renewal->getKey()]));
                     redirect()->route(PasswordReauthentication::ROUTE_NAME);
 
                     return;

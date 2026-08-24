@@ -82,7 +82,7 @@ final class ProductResource extends Resource
      * plan's Task 5 file list), and Filament's default slug derivation would
      * otherwise render `product-resource/products` as the route prefix.
      */
-    protected static ?string $slug = 'products';
+    protected static ?string $slug = 'produk';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShoppingBag;
 

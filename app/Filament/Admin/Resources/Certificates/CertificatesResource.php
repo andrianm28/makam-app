@@ -44,6 +44,8 @@ final class CertificatesResource extends Resource
 {
     protected static ?string $model = Certificate::class;
 
+    protected static ?string $slug = 'sertifikat';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentCheck;
 
     protected static ?string $recordTitleAttribute = 'reference';

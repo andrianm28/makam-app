@@ -66,6 +66,8 @@ final class CemeteryResource extends Resource
 {
     protected static ?string $model = Cemetery::class;
 
+    protected static ?string $slug = 'pemakaman';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBuildingLibrary;
 
     protected static ?string $recordTitleAttribute = 'name';

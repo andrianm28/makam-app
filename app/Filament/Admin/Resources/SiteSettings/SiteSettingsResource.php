@@ -44,6 +44,8 @@ final class SiteSettingsResource extends Resource
 {
     protected static ?string $model = SiteSetting::class;
 
+    protected static ?string $slug = 'pengaturan-situs';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCog6Tooth;
 
     protected static ?string $recordTitleAttribute = 'key';

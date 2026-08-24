@@ -455,7 +455,7 @@ final class BulkFinancialExportTest extends TestCase
         ));
 
         $this->actingAs($user)->get(route('admin.finance.exports'))
-            ->assertRedirect(route('filament.admin.pages.password-reauthentication'));
+            ->assertRedirect(route('filament.admin.pages.verifikasi-ulang-kata-sandi'));
 
         $this->assertDatabaseHas('reauthentication_events', [
             'actor_ref' => (string) $user->getAuthIdentifier(),
@@ -514,7 +514,7 @@ final class BulkFinancialExportTest extends TestCase
 
         $this->actingAs($user)
             ->get(route('admin.finance.exports', ['period' => '2026-08']))
-            ->assertRedirect(route('filament.admin.pages.password-reauthentication'));
+            ->assertRedirect(route('filament.admin.pages.verifikasi-ulang-kata-sandi'));
 
         $this->assertDatabaseMissing('reauthentication_events', [
             'actor_ref' => (string) $user->getAuthIdentifier(),

@@ -130,7 +130,7 @@ final class PlotReservationLifecycleActions
             };
 
             Notification::make()->success()->title($successTitle)->send();
-            redirect()->route('filament.admin.resources.booking-orders.view', ['record' => $order->getKey()]);
+            redirect()->route('filament.admin.resources.pesanan-pemakaman.view', ['record' => $order->getKey()]);
         } catch (\Throwable $exception) {
             Notification::make()->danger()->title('Pembaruan gagal')->body($exception->getMessage())->send();
         }

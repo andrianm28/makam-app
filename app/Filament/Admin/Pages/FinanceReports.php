@@ -51,7 +51,7 @@ use Filament\Pages\Page;
  */
 final class FinanceReports extends Page
 {
-    protected static ?string $slug = 'finance-reports';
+    protected static ?string $slug = 'laporan-keuangan';
 
     protected string $view = 'filament.admin.pages.finance-reports';
 

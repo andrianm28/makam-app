@@ -10,7 +10,7 @@ use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 
 /**
- * `/admin/in-app-notifications` — the admin panel's scoped in-app
+ * `/admin/notifikasi-aplikasi` — the admin panel's scoped in-app
  * notification inbox (task-5-brief.md Step 1).
  *
  * Shape choice — a plain `Filament\Pages\Page`, not a Resource, with the
@@ -36,7 +36,7 @@ class InAppNotifications extends Page
 
     protected static ?string $title = 'Notifikasi';
 
-    protected static ?string $slug = 'in-app-notifications';
+    protected static ?string $slug = 'notifikasi-aplikasi';
 
     protected string $view = 'filament.admin.pages.in-app-notifications';
 

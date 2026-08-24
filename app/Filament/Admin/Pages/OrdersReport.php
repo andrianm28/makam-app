@@ -55,7 +55,7 @@ final class OrdersReport extends Page
 {
     use ExportsReportCsv;
 
-    protected static ?string $slug = 'orders-report';
+    protected static ?string $slug = 'laporan-pesanan';
 
     protected string $view = 'filament.admin.pages.orders-report';
 

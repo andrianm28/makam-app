@@ -30,7 +30,7 @@ final class OutgoingPaymentsReport extends Page
 {
     use ExportsReportCsv;
 
-    protected static ?string $slug = 'outgoing-payments-report';
+    protected static ?string $slug = 'laporan-pembayaran-keluar';
 
     protected string $view = 'filament.admin.pages.outgoing-payments-report';
 

@@ -46,7 +46,7 @@ final class ReceiptsReport extends Page
 {
     use ExportsReportCsv;
 
-    protected static ?string $slug = 'receipts-report';
+    protected static ?string $slug = 'laporan-kwitansi';
 
     protected string $view = 'filament.admin.pages.receipts-report';
 

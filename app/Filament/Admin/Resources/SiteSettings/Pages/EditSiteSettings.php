@@ -48,7 +48,7 @@ final class EditSiteSettings extends Page implements HasForms
 
     protected static string $resource = SiteSettingsResource::class;
 
-    protected static ?string $slug = 'site-settings';
+    protected static ?string $slug = 'pengaturan-situs';
 
     protected string $view = 'filament.admin.resources.site-settings.edit-site-settings';
 
