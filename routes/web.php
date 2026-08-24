@@ -7,7 +7,6 @@ use App\Http\Controllers\DocumentVault\DownloadDocumentController;
 use App\Http\Controllers\Health\HealthLiveController;
 use App\Http\Controllers\Health\HealthReadyController;
 use App\Http\Middleware\RequireRecentAuthentication;
-use Illuminate\Http\Request;
 use App\Livewire\Public\Akun\AkunIndex;
 use App\Livewire\Public\Akun\DocumentList;
 use App\Livewire\Public\Akun\DraftList;
@@ -47,6 +46,7 @@ use App\Platform\Payment\Http\Controllers\PaymentCancelController;
 use App\Platform\Payment\Http\Controllers\PaymentReturnController;
 use App\Platform\Payment\Http\Controllers\RecordPaymentReversalController;
 use App\Platform\Payment\Http\Controllers\VerifyManualPaymentController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 /*
