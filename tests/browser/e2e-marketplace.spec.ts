@@ -356,6 +356,9 @@ test.describe('E2E-MKT — checkout and manual payment', () => {
 
         // Manual payment section appears in place, same page, no navigation.
         await expect(page.getByRole('heading', { name: 'Pembayaran transfer manual' })).toBeVisible();
+        await expect(
+            page.getByText('Transfer sejumlah total pesanan, lalu masukkan nomor referensi transfer Anda di bawah.'),
+        ).toBeVisible();
         await page.getByLabel('Nomor referensi transfer').fill('TRX-E2E-MKT-0001');
 
         const submitProofButton = page.getByRole('button', { name: 'Kirim bukti transfer' });
