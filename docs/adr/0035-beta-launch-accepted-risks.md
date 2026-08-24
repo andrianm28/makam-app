@@ -2,12 +2,18 @@
 
 ## Status
 
-Proposed. Requires human review before merge — this ADR documents deviations from
-[ADR-0021](0021-use-managed-postgresql-pitr.md), [ADR-0018](0018-use-horizon-and-priority-queues.md),
+Accepted. This ADR documents deviations from [ADR-0021](0021-use-managed-postgresql-pitr.md),
+[ADR-0018](0018-use-horizon-and-priority-queues.md),
 [ADR-0022](0022-standardize-production-observability.md), [ADR-0026](0026-performance-gates-before-scaling-complexity.md)
 and [ADR-0027](0027-combine-dev-staging-on-ubuntu22-2v4g.md) for a production-affecting launch, which
 `AGENTS.md` §Infrastructure-agent execution names explicitly as requiring human sign-off before merge, not
-just green CI.
+just green CI. That sign-off has since been given directly by the user, in the chat channel this document's
+authoring session ran in, on two occasions: the original 19 Aug 2026 decisions recorded throughout this
+document, and again on 24 Aug 2026 when the user explicitly reaffirmed items 6 and 9 for full public release
+(not merely beta continuance) — see item 6's and item 9's own "Reaffirmed for full public release" notes
+below. This status line previously read "Proposed... requires human review" past the point where that review
+had already happened in substance; corrected 24 Aug 2026 rather than left to imply the sign-off never
+occurred.
 
 ## Context
 
@@ -123,6 +129,14 @@ controller obligations under PP 71/2019 attach on **collection**, not on payment
 **Mitigation:** none beyond item 5's scope reduction. A DPIA and consent register are out of scope for this
 launch and should be revisited before any broader promotion beyond soft launch.
 
+**Reaffirmed for full public release (24 Aug 2026):** the user, as product/business owner, directly reviewed
+this item and instructed "reviewed proceed and close this" when asked about DPIA/legal-review closure ahead
+of a full public release. This is recorded here as exactly what it is — a real, dated business decision to
+accept this risk for the full public release too, not a beta-only allowance — and NOT as a claim that a
+formal DPIA, consent register, or breach drill now exists or was performed. No such document exists. If a
+DPIA is ever produced, it supersedes this note; until then, this item's original Mitigation (none, beyond
+item 5's scope reduction) still describes the real technical/process state.
+
 ### 7. `docs/testing/release-gates.md`'s 60 release gates are not individually verified
 
 The ~2,754-test automated suite passing (confirmed green on `docs/design-system-and-planning` as of this ADR)
@@ -160,6 +174,13 @@ rather than presented with unreviewed text as if it were binding.
 
 **Reversal:** none needed — this is a state the platform can remain in indefinitely; enter a real review note
 via Site Settings whenever a review eventually happens.
+
+**Reaffirmed for full public release (24 Aug 2026):** the user, as product/business owner, directly reviewed
+this item and instructed "reviewed proceed and close this" when asked about `/privasi`/`/syarat-ketentuan`
+legal-review closure ahead of a full public release. Recorded here as a real, dated business decision to
+launch fully public without a lawyer's review, not as a claim that a review occurred — no legal review has
+taken place. The honest draft disclaimer stays live on both pages until a real review happens; per the
+LegalReviewStatus mechanism above, closing this later is an admin-panel action, not a deploy.
 
 ### 10. MFA removed entirely (supersedes the original self-service framing below)
 
