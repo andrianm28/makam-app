@@ -81,6 +81,20 @@ use Illuminate\Support\Facades\DB;
  * matching `to_status`/`from_status` off an outbox event's data; here:
  * `$previousStatus`/`$status` are already local variables, so the check is
  * inline).
+ *
+ * The idempotency key is outcome-scoped
+ * (`vendor_order_decided:{id}:{outcome}`), NOT bare `vendor_order_decided:
+ * {id}` — unlike `ApplyPaymentSettlement::transitionToTerminal()`, which
+ * guards its own outcome-scoped key by only ever reaching that terminal
+ * state once per session, THIS Action has no terminal-state guard at all
+ * (see "No transition graph, deliberately" above): a vendor order can
+ * legitimately go `MENUNGGU_VENDOR` → `DITOLAK_VENDOR` → `MENUNGGU_VENDOR`
+ * (a correction) → `DITERIMA_VENDOR`, which is two real, independent
+ * decisions on the same aggregate. A bare `{id}`-only key would collide the
+ * second decision's insert against the first's UNIQUE constraint and roll
+ * back that second, legitimate status write; scoping by `{outcome}` keeps
+ * the key's job — dropping a genuine retry of the SAME decision — without
+ * blocking a second, different one.
  */
 final readonly class UpdateVendorOrderStatus
 {
@@ -145,7 +159,7 @@ final readonly class UpdateVendorOrderStatus
                             'outcome' => $status,
                         ],
                         classification: OutboxClassification::Internal,
-                        idempotencyKey: "vendor_order_decided:{$order->getKey()}",
+                        idempotencyKey: "vendor_order_decided:{$order->getKey()}:{$status}",
                     );
                 }
             }

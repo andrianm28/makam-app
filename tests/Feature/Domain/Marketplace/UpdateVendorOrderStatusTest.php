@@ -181,7 +181,10 @@ final class UpdateVendorOrderStatusTest extends TestCase
         $this->assertSame(1, $outbox->event_version);
         $this->assertSame('vendor_order', $outbox->aggregate_type);
         $this->assertSame(OutboxClassification::Internal->value, $outbox->classification);
-        $this->assertSame("vendor_order_decided:{$order->getKey()}", $outbox->idempotency_key);
+        $this->assertSame(
+            "vendor_order_decided:{$order->getKey()}:".VendorProcessingStatus::DITERIMA_VENDOR,
+            $outbox->idempotency_key,
+        );
         $this->assertEqualsCanonicalizing([
             'vendor_order_id' => $order->getKey(),
             'outcome' => VendorProcessingStatus::DITERIMA_VENDOR,
@@ -204,7 +207,10 @@ final class UpdateVendorOrderStatusTest extends TestCase
             ->where('aggregate_id', $order->getKey())
             ->sole();
 
-        $this->assertSame("vendor_order_decided:{$order->getKey()}", $outbox->idempotency_key);
+        $this->assertSame(
+            "vendor_order_decided:{$order->getKey()}:".VendorProcessingStatus::DITOLAK_VENDOR,
+            $outbox->idempotency_key,
+        );
         $this->assertEqualsCanonicalizing([
             'vendor_order_id' => $order->getKey(),
             'outcome' => VendorProcessingStatus::DITOLAK_VENDOR,
