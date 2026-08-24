@@ -17,18 +17,36 @@ use App\Platform\Outbox\OutboxQueueName;
  *
  *   - Order is created at MASUK (SubmitBookingDraft's RecordOrderStatusChange::
  *     initial() call) → "Booking submitted" template
+ *   - Order transitions to MENUNGGU_KETERSEDIAAN (RequestAvailability) →
+ *     "Availability requested" template
+ *   - Order transitions to PENAWARAN_TERKIRIM (IssueOrderQuote) →
+ *     "Availability confirmed/rejected" template — unambiguous by `to_status`
+ *     alone: `OrderTransition`'s own state table names `MENUNGGU_KETERSEDIAAN`
+ *     as the ONLY status that can transition here.
+ *   - Order transitions to DITOLAK (RejectOrder), but ONLY when the
+ *     transition's own `from_status` was MENUNGGU_KETERSEDIAAN → same
+ *     "Availability confirmed/rejected" template — `to_status` alone is
+ *     NOT enough to discriminate here, unlike the other arms: `DITOLAK` is
+ *     reachable from THREE statuses (`MASUK`, `DIVERIFIKASI`,
+ *     `MENUNGGU_KETERSEDIAAN`, per `OrderTransition`'s own state table), and
+ *     only the third one is an availability rejection — the other two are
+ *     earlier-stage order rejections with no corresponding matrix row, and
+ *     must NOT fire this template.
+ *   - Order transitions to MENUNGGU_PEMBAYARAN (GrantOrderPaymentOpening) →
+ *     "Payment opened" template — unambiguous by `to_status` alone: only
+ *     `DISETUJUI_PEMESAN` transitions here.
  *   - Order transitions to DIPROSES → "Order processing" template
  *   - Order transitions to SELESAI  → "Order completed" template
  *
- * No `order.processing.v1` and no `order.completed.v1` exist. Both matrix
- * rows keep a NULL `outbox_event_name` (they are deliberately absent from
- * the Wave-1a seeder's six-row `outboxEventName()` map — the ruling-1
- * ambiguity: both rows correspond to `order.status_changed.v1`, and the
- * status-discrimination question that ruling left open is resolved HERE, in
- * this bridge, not by inventing catalogue entries). This listener is the
- * status discriminator: it maps `to_status` to the matrix label and hands
- * the source event to the notification seam with that template explicitly
- * selected.
+ * No dedicated outbox event name exists for any of these seven rows — all
+ * seven notification_templates rows (seeded verbatim from
+ * `docs/contracts/notification-matrix.md`'s row labels) keep either a NULL
+ * or a dead/unused `outbox_event_name` column (see the "Booking submitted"
+ * paragraph below for why a non-null value there is still correctly unused).
+ * This listener is the status discriminator for all of them: it maps
+ * `to_status` (and, for the one genuinely ambiguous case, `from_status` too)
+ * to the matrix label and hands the source event to the notification seam
+ * with that template explicitly selected.
  *
  * The seam is the existing outbox-fed dispatch:
  * `ConsumeOutboxNotificationJob` + `Actions\DispatchNotification::
@@ -46,9 +64,14 @@ use App\Platform\Outbox\OutboxQueueName;
  * therefore dead/unused for this row: the lookup here is entirely by
  * event_name via the explicit $matrixEventName argument (see
  * ConsumeOutboxNotificationJob's own doc block), which never reads
- * outbox_event_name. Left as-is rather than edited in the seed migration —
- * changing already-applied seed data is a separate, higher-risk change this
- * task does not need to make.
+ * outbox_event_name. "Availability requested"/"Availability
+ * confirmed/rejected" carry the same shape — `availability.requested.v1`/
+ * `availability.confirmed.v2` are catalogued names (`docs/contracts/
+ * event-catalog.md`) that no code emits, for the identical reason: this
+ * bridge's own event_name lookup never reads them. "Payment opened" has no
+ * catalogued name at all. All are left as-is rather than edited in the seed
+ * migration — changing already-applied seed data is a separate, higher-risk
+ * change this task does not need to make.
  *
  * Idempotency (queue delivery is at-least-once): the source
  * `order.status_changed.v1` row already carries the idempotency key
@@ -62,8 +85,7 @@ use App\Platform\Outbox\OutboxQueueName;
  *
  * `quote.issued.v1`/`quote.accepted.v1` are emitted by IssueQuote and
  * AcceptQuote respectively and need no bridge here. `payment.received.v1`
- * is emitted by ApplyPaidEffects (Task 7). `payment.opened.v1` is deferred
- * to the payment lane that owns the payment-intent creation act.
+ * is emitted by ApplyPaidEffects (Task 7).
  *
  * Registered in NotificationServiceProvider via Event::listen() on
  * OutboxEventPublished — the same synchronous, in-process dispatch that
@@ -78,11 +100,17 @@ final class DispatchOrderNotifications
         }
 
         $toStatus = $event->envelope['data']['to_status'] ?? null;
+        $fromStatus = $event->envelope['data']['from_status'] ?? null;
 
-        $matrixEventName = match ($toStatus) {
-            OrderStatus::MASUK->value => 'Booking submitted',
-            OrderStatus::DIPROSES->value => 'Order processing',
-            OrderStatus::SELESAI->value => 'Order completed',
+        $matrixEventName = match (true) {
+            $toStatus === OrderStatus::MASUK->value => 'Booking submitted',
+            $toStatus === OrderStatus::MENUNGGU_KETERSEDIAAN->value => 'Availability requested',
+            $toStatus === OrderStatus::PENAWARAN_TERKIRIM->value => 'Availability confirmed/rejected',
+            $toStatus === OrderStatus::DITOLAK->value
+                && $fromStatus === OrderStatus::MENUNGGU_KETERSEDIAAN->value => 'Availability confirmed/rejected',
+            $toStatus === OrderStatus::MENUNGGU_PEMBAYARAN->value => 'Payment opened',
+            $toStatus === OrderStatus::DIPROSES->value => 'Order processing',
+            $toStatus === OrderStatus::SELESAI->value => 'Order completed',
             default => null,
         };
 

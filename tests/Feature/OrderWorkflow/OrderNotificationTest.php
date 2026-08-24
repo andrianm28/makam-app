@@ -39,7 +39,12 @@ final class OrderNotificationTest extends TestCase
     {
         $order = $this->makeOrderAtStatus(OrderStatus::DISETUJUI_PEMESAN);
 
-        $this->assertNoNotificationFor($this->transition($order, OrderStatus::MENUNGGU_PEMBAYARAN));
+        // MENUNGGU_PEMBAYARAN now correctly gets its own "Payment opened"
+        // notification (this pass's new coverage) — this test's own scope is
+        // DIPROSES specifically, so it asserts that one directly rather than
+        // re-asserting "Payment opened" as a side detail; DIBAYAR still gets
+        // nothing, same as before.
+        $this->transition($order, OrderStatus::MENUNGGU_PEMBAYARAN);
         $this->assertNoNotificationFor($this->transition($order, OrderStatus::DIBAYAR));
 
         $this->assertNotificationFor($this->transition($order, OrderStatus::DIPROSES), 'Order processing');
@@ -82,6 +87,57 @@ final class OrderNotificationTest extends TestCase
 
         $this->assertOutboxMissing('order.processing.v1');
         $this->assertOutboxMissing('order.completed.v1');
+    }
+
+    public function test_availability_requested_notification_dispatched_when_order_enters_menunggu_ketersediaan(): void
+    {
+        $order = $this->makeOrderAtStatus(OrderStatus::DIVERIFIKASI);
+
+        $this->assertNotificationFor($this->transition($order, OrderStatus::MENUNGGU_KETERSEDIAAN), 'Availability requested');
+    }
+
+    public function test_availability_confirmed_notification_dispatched_when_order_enters_penawaran_terkirim(): void
+    {
+        $order = $this->makeOrderAtStatus(OrderStatus::MENUNGGU_KETERSEDIAAN);
+
+        $this->assertNotificationFor($this->transition($order, OrderStatus::PENAWARAN_TERKIRIM), 'Availability confirmed/rejected');
+    }
+
+    public function test_availability_rejected_notification_dispatched_when_order_is_rejected_from_menunggu_ketersediaan(): void
+    {
+        $order = $this->makeOrderAtStatus(OrderStatus::MENUNGGU_KETERSEDIAAN);
+
+        $this->assertNotificationFor($this->transition($order, OrderStatus::DITOLAK, 'Tidak tersedia pada tanggal diminta'), 'Availability confirmed/rejected');
+    }
+
+    /**
+     * The load-bearing negative case for the `from_status` discrimination:
+     * `DITOLAK` is reachable from `MASUK`, `DIVERIFIKASI`, AND
+     * `MENUNGGU_KETERSEDIAAN` (`OrderTransition`'s own state table), but only
+     * the third one is an availability rejection. A `to_status`-only match
+     * would incorrectly fire "Availability confirmed/rejected" for THIS
+     * transition too — it must not.
+     */
+    public function test_no_availability_notification_when_order_is_rejected_from_masuk(): void
+    {
+        $order = $this->makeOrderAtStatus(OrderStatus::MASUK);
+
+        $this->assertNoNotificationFor($this->transition($order, OrderStatus::DITOLAK, 'Data pemesan tidak lengkap'));
+    }
+
+    /** Same discrimination, the other non-availability `DITOLAK` source. */
+    public function test_no_availability_notification_when_order_is_rejected_from_diverifikasi(): void
+    {
+        $order = $this->makeOrderAtStatus(OrderStatus::DIVERIFIKASI);
+
+        $this->assertNoNotificationFor($this->transition($order, OrderStatus::DITOLAK, 'Data pemesan tidak lengkap'));
+    }
+
+    public function test_payment_opened_notification_dispatched_when_order_enters_menunggu_pembayaran(): void
+    {
+        $order = $this->makeOrderAtStatus(OrderStatus::DISETUJUI_PEMESAN);
+
+        $this->assertNotificationFor($this->transition($order, OrderStatus::MENUNGGU_PEMBAYARAN), 'Payment opened');
     }
 
     public function test_channel_failure_does_not_change_business_state(): void
@@ -132,13 +188,14 @@ final class OrderNotificationTest extends TestCase
         self::assertOutboxMissing('order.completed.v1');
     }
 
-    private function transition(Order $order, OrderStatus $to): OrderStatusEvent
+    private function transition(Order $order, OrderStatus $to, ?string $reason = null): OrderStatusEvent
     {
         return app(RecordOrderStatusChange::class)(
             $order->fresh(),
             $to,
             'actor:system',
             'system',
+            $reason,
         );
     }
 
