@@ -10,6 +10,8 @@ use App\Domain\Renewal\Models\Renewal;
 use App\Domain\Renewal\Models\RenewalQuote;
 use App\Domain\Renewal\RenewalSource;
 use App\Domain\Renewal\RenewalStatus;
+use App\Platform\Outbox\Outbox;
+use App\Platform\Outbox\OutboxClassification;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -86,6 +88,24 @@ final readonly class OpenRenewal
                     'status' => RenewalStatus::MENUNGGU_PEMBAYARAN,
                     'source' => RenewalSource::ONLINE,
                 ]);
+
+                // `event-catalog.md` — the online submission path only;
+                // `Actions\MarkExternalRenewal`'s offline/admin path is the
+                // distinct `renewal.marked_external.v1` event and never
+                // reaches this line. References only: no amounts, no
+                // restricted data.
+                Outbox::record(
+                    eventName: 'renewal.submitted.v1',
+                    eventVersion: 1,
+                    aggregateType: 'renewal',
+                    aggregateId: $renewal->getKey(),
+                    data: [
+                        'renewal_id' => $renewal->getKey(),
+                        'grave_record_id' => $renewal->grave_record_id,
+                    ],
+                    classification: OutboxClassification::Internal,
+                    idempotencyKey: "renewal_submitted:{$renewal->getKey()}",
+                );
 
                 RenewalQuote::create([
                     'renewal_id' => $renewal->id,

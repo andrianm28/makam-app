@@ -11,6 +11,8 @@ use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\AuditSubject;
+use App\Platform\Outbox\Outbox;
+use App\Platform\Outbox\OutboxClassification;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -62,6 +64,45 @@ use Illuminate\Support\Facades\DB;
  * ---------------------------------------------------------------------------
  * See `MarketplaceAuditActions`'s doc block — routine fulfilment-state
  * change, `previous_state`/`new_state` metadata, no mandatory reason.
+ *
+ * ---------------------------------------------------------------------------
+ * `vendor_order.decided.v1` — one matrix row, two real outcomes
+ * ---------------------------------------------------------------------------
+ * "Vendor accepted/rejected" (`docs/contracts/notification-matrix.md`) is
+ * ONE row for TWO real outcomes, the same "one event, outcome-as-data" shape
+ * `payment.outcome_failed.v1` established — not two event names. Emitted
+ * ONLY for the `MENUNGGU_VENDOR` → `DITERIMA_VENDOR`/`DITOLAK_VENDOR`
+ * transitions: `VendorProcessingStatus::KNOWN_STATUSES` names eight values
+ * and this Action accepts any known status as its target (see "No
+ * transition graph, deliberately" above), so `$previousStatus` genuinely
+ * needs checking, not just `$status` — the same "reachable from more than
+ * one source, only one of them is the real matrix event" reasoning
+ * `Listeners\DispatchOrderNotifications`'s `DITOLAK` arm documents (there:
+ * matching `to_status`/`from_status` off an outbox event's data; here:
+ * `$previousStatus`/`$status` are already local variables, so the check is
+ * inline).
+ *
+ * The idempotency key is `vendor_order_decided:{id}:{outcome}:{audit_id}` —
+ * neither bare `{id}` nor `{id}:{outcome}` is enough. Unlike
+ * `ApplyPaymentSettlement::transitionToTerminal()`, which guards its own
+ * outcome-scoped key by only ever reaching that terminal state once per
+ * session, THIS Action has no terminal-state guard at all (see "No
+ * transition graph, deliberately" above): a vendor order can legitimately
+ * go `MENUNGGU_VENDOR` → `DITOLAK_VENDOR` → `MENUNGGU_VENDOR` (a correction)
+ * → `DITERIMA_VENDOR`, which is two real, independent decisions on the same
+ * aggregate — `{id}`-only collides them. But outcome-scoping alone
+ * (`{id}:{outcome}`) is ALSO insufficient: the same correction can land on
+ * the SAME outcome twice (`MENUNGGU_VENDOR` → `DITERIMA_VENDOR` →
+ * `MENUNGGU_VENDOR` (correction) → `DITERIMA_VENDOR` again), and this
+ * Action, unlike `ApplyPaymentSettlement`, has no redelivery pathway either
+ * (it is only ever called synchronously from the panel's save hook or the
+ * six one-click actions) — so the key never needed content-determinism
+ * across calls, only a guarantee of one row per real decision. Folding in
+ * `$audit->id` — a fresh `audit_events` row created on every real
+ * transition, just above this call, in the same `if ($statusChanged)` block
+ * — gives every real decision a distinct key while the pre-existing
+ * `$statusChanged` guard still stops a literal duplicate submit of the
+ * exact same request from ever reaching this code at all.
  */
 final readonly class UpdateVendorOrderStatus
 {
@@ -101,7 +142,7 @@ final readonly class UpdateVendorOrderStatus
             ])->save();
 
             if ($statusChanged) {
-                Audit::record(
+                $audit = Audit::record(
                     action: MarketplaceAuditActions::ORDER_STATUS_CHANGED,
                     subject: new AuditSubject('vendor_order', $order->id, $order->uuid),
                     outcome: AuditOutcome::Allowed,
@@ -113,6 +154,22 @@ final readonly class UpdateVendorOrderStatus
                         'new_state' => $status,
                     ],
                 );
+
+                if ($previousStatus === VendorProcessingStatus::MENUNGGU_VENDOR
+                    && in_array($status, [VendorProcessingStatus::DITERIMA_VENDOR, VendorProcessingStatus::DITOLAK_VENDOR], true)) {
+                    Outbox::record(
+                        eventName: 'vendor_order.decided.v1',
+                        eventVersion: 1,
+                        aggregateType: 'vendor_order',
+                        aggregateId: $order->getKey(),
+                        data: [
+                            'vendor_order_id' => $order->getKey(),
+                            'outcome' => $status,
+                        ],
+                        classification: OutboxClassification::Internal,
+                        idempotencyKey: "vendor_order_decided:{$order->getKey()}:{$status}:{$audit->id}",
+                    );
+                }
             }
 
             return $order;

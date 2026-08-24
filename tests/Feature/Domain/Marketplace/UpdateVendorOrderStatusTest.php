@@ -10,6 +10,8 @@ use App\Domain\Marketplace\Models\VendorOrder;
 use App\Domain\Marketplace\VendorProcessingStatus;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\Models\AuditEvent;
+use App\Platform\Outbox\Models\OutboxEvent;
+use App\Platform\Outbox\OutboxClassification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use InvalidArgumentException;
 use Tests\Support\MakesVendorOrderFixtures;
@@ -157,6 +159,167 @@ final class UpdateVendorOrderStatusTest extends TestCase
         $this->assertSame(
             VendorProcessingStatus::DITOLAK_VENDOR,
             AuditEvent::query()->sole()->metadata['new_state'],
+        );
+    }
+
+    public function test_waiting_to_accepted_emits_vendor_order_decided_with_the_accepted_outcome(): void
+    {
+        $order = $this->makeOrder(status: VendorProcessingStatus::MENUNGGU_VENDOR);
+
+        (new UpdateVendorOrderStatus)(
+            order: $order,
+            status: VendorProcessingStatus::DITERIMA_VENDOR,
+            actorReference: 42,
+            actorRole: 'vendor',
+        );
+
+        $outbox = OutboxEvent::query()
+            ->where('event_name', 'vendor_order.decided.v1')
+            ->where('aggregate_id', $order->getKey())
+            ->sole();
+
+        $this->assertSame(1, $outbox->event_version);
+        $this->assertSame('vendor_order', $outbox->aggregate_type);
+        $this->assertSame(OutboxClassification::Internal->value, $outbox->classification);
+        $audit = AuditEvent::query()
+            ->where('action', MarketplaceAuditActions::ORDER_STATUS_CHANGED)
+            ->where('subject_id', (string) $order->id)
+            ->sole();
+        $this->assertSame(
+            "vendor_order_decided:{$order->getKey()}:".VendorProcessingStatus::DITERIMA_VENDOR.":{$audit->id}",
+            $outbox->idempotency_key,
+        );
+        $this->assertEqualsCanonicalizing([
+            'vendor_order_id' => $order->getKey(),
+            'outcome' => VendorProcessingStatus::DITERIMA_VENDOR,
+        ], $outbox->payload);
+    }
+
+    public function test_waiting_to_rejected_emits_vendor_order_decided_with_the_rejected_outcome(): void
+    {
+        $order = $this->makeOrder(status: VendorProcessingStatus::MENUNGGU_VENDOR);
+
+        (new UpdateVendorOrderStatus)(
+            order: $order,
+            status: VendorProcessingStatus::DITOLAK_VENDOR,
+            actorReference: 42,
+            actorRole: 'vendor',
+        );
+
+        $outbox = OutboxEvent::query()
+            ->where('event_name', 'vendor_order.decided.v1')
+            ->where('aggregate_id', $order->getKey())
+            ->sole();
+
+        $audit = AuditEvent::query()
+            ->where('action', MarketplaceAuditActions::ORDER_STATUS_CHANGED)
+            ->where('subject_id', (string) $order->id)
+            ->sole();
+        $this->assertSame(
+            "vendor_order_decided:{$order->getKey()}:".VendorProcessingStatus::DITOLAK_VENDOR.":{$audit->id}",
+            $outbox->idempotency_key,
+        );
+        $this->assertEqualsCanonicalizing([
+            'vendor_order_id' => $order->getKey(),
+            'outcome' => VendorProcessingStatus::DITOLAK_VENDOR,
+        ], $outbox->payload);
+    }
+
+    public function test_waiting_to_in_progress_does_not_emit_vendor_order_decided(): void
+    {
+        $order = $this->makeOrder(status: VendorProcessingStatus::MENUNGGU_VENDOR);
+
+        (new UpdateVendorOrderStatus)(
+            order: $order,
+            status: VendorProcessingStatus::DIPROSES,
+            actorReference: 42,
+            actorRole: 'vendor',
+        );
+
+        $this->assertNull(
+            OutboxEvent::query()->where('event_name', 'vendor_order.decided.v1')->first()
+        );
+    }
+
+    public function test_in_progress_to_accepted_does_not_emit_vendor_order_decided(): void
+    {
+        // Discrimination is on `$previousStatus`, not only `$status`: this
+        // Action accepts any known target from any source (see the class
+        // doc block, "No transition graph, deliberately"), so an unrealistic
+        // DIPROSES -> DITERIMA_VENDOR call must still be gated on the real
+        // "waiting for vendor decision" source, exactly as
+        // `Listeners\DispatchOrderNotifications`'s `DITOLAK` arm gates on
+        // `from_status`, not `to_status` alone.
+        $order = $this->makeOrder(status: VendorProcessingStatus::DIPROSES);
+
+        (new UpdateVendorOrderStatus)(
+            order: $order,
+            status: VendorProcessingStatus::DITERIMA_VENDOR,
+            actorReference: 42,
+            actorRole: 'vendor',
+        );
+
+        $this->assertNull(
+            OutboxEvent::query()->where('event_name', 'vendor_order.decided.v1')->first()
+        );
+    }
+
+    public function test_a_correction_that_lands_on_the_same_outcome_twice_emits_two_distinct_events(): void
+    {
+        // Regression: a vendor can genuinely correct their decision back to
+        // MENUNGGU_VENDOR (VendorOrderForm's status Select offers all 8
+        // known statuses) and then re-decide the SAME outcome. An
+        // outcome-scoped-only idempotency key ("{id}:{outcome}") would
+        // collide the second decision's outbox insert against the first's
+        // UNIQUE constraint and, since Outbox::record() runs inside the same
+        // DB::transaction() as the status write, roll back the second
+        // decision's status change and audit row too — not just drop a
+        // notification. Folding the fresh audit row's id into the key
+        // (see the class doc block) must make both decisions distinct.
+        $order = $this->makeOrder(status: VendorProcessingStatus::MENUNGGU_VENDOR);
+
+        (new UpdateVendorOrderStatus)(
+            order: $order,
+            status: VendorProcessingStatus::DITERIMA_VENDOR,
+            actorReference: 42,
+            actorRole: 'vendor',
+        );
+
+        (new UpdateVendorOrderStatus)(
+            order: $order,
+            status: VendorProcessingStatus::MENUNGGU_VENDOR,
+            actorReference: 42,
+            actorRole: 'vendor',
+        );
+
+        $updated = (new UpdateVendorOrderStatus)(
+            order: $order,
+            status: VendorProcessingStatus::DITERIMA_VENDOR,
+            actorReference: 42,
+            actorRole: 'vendor',
+        );
+
+        $this->assertSame(VendorProcessingStatus::DITERIMA_VENDOR, $updated->status);
+        $this->assertSame(VendorProcessingStatus::DITERIMA_VENDOR, $order->refresh()->status);
+
+        $outboxRows = OutboxEvent::query()
+            ->where('event_name', 'vendor_order.decided.v1')
+            ->where('aggregate_id', $order->getKey())
+            ->orderBy('id')
+            ->get();
+
+        $this->assertCount(2, $outboxRows);
+        $this->assertNotSame($outboxRows[0]->idempotency_key, $outboxRows[1]->idempotency_key);
+        $this->assertSame(VendorProcessingStatus::DITERIMA_VENDOR, $outboxRows[0]->payload['outcome']);
+        $this->assertSame(VendorProcessingStatus::DITERIMA_VENDOR, $outboxRows[1]->payload['outcome']);
+
+        // All 3 real transitions (accept, correct back, accept again) audited.
+        $this->assertSame(
+            3,
+            AuditEvent::query()
+                ->where('action', MarketplaceAuditActions::ORDER_STATUS_CHANGED)
+                ->where('subject_id', (string) $order->id)
+                ->count(),
         );
     }
 }

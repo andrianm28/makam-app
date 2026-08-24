@@ -16,6 +16,8 @@ use App\Platform\FinancialLedger\Money;
 use App\Platform\FinancialLedger\VendorPayableAssessmentTrigger;
 use App\Platform\FinancialLedger\VendorPayableEligibility;
 use App\Platform\IdentityAccess\ActorContext;
+use App\Platform\Outbox\Outbox;
+use App\Platform\Outbox\OutboxClassification;
 use App\Platform\SiteSettings\Models\SiteSetting;
 use App\Platform\SiteSettings\SettingsService;
 use Carbon\CarbonImmutable;
@@ -179,6 +181,21 @@ final class PlaceMarketplaceOrder
 
             $cart->items()->delete();
             $cart->update(['vendor_id' => null]);
+
+            // `event-catalog.md:21` — a catalogued event, not invented here.
+            // References only: no amounts, no restricted data.
+            Outbox::record(
+                eventName: 'marketplace_order.submitted.v1',
+                eventVersion: 1,
+                aggregateType: 'marketplace_order',
+                aggregateId: $order->getKey(),
+                data: [
+                    'order_id' => $order->getKey(),
+                    'customer_ref' => $order->customer_ref,
+                ],
+                classification: OutboxClassification::Internal,
+                idempotencyKey: "marketplace_order_submitted:{$order->getKey()}",
+            );
 
             return $order->fresh();
         });

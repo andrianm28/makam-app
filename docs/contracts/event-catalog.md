@@ -17,6 +17,9 @@ Durable events use the transactional outbox and envelope in `outbox-event-contra
 | `quote.issued.v1` | Quotation | Customer notification | Immutable version |
 | `quote.accepted.v1` | Quotation | Payment gate | Exact version |
 | `payment.received.v1` | PaymentAdapter | Journal/order/invoice | Valid webhook only |
+| `payment.outcome_failed.v1` | PaymentAdapter | Notification | Carries `outcome` (Failed/Expired) — one event for one matrix row, not two |
+| `marketplace_order.submitted.v1` | Marketplace | Notification | Real customer order submission, one event, no discrimination needed |
+| `vendor_order.decided.v1` | Marketplace | Notification | Carries `outcome` (accepted/rejected) — one event for one matrix row, not two, same shape as payment.outcome_failed.v1 |
 | `order.status_changed.v1` | OrderWorkflow | Notification/reporting | Forward-only commercial status |
 | `agreement.accepted.v1` | Agreement (AcceptAgreement) | PreNeed/operations | Exact version and evidence; emitted once on the `agreements` row — the pre-need case-level acceptance binds the same row without re-emitting |
 | `pre_need_case.activated.v1` | PreNeed | Operations | AC8: new At-Need FuneralCase linked; original contract history preserved |
@@ -28,12 +31,14 @@ Durable events use the transactional outbox and envelope in `outbox-event-contra
 | `document.deleted.v1` | DocumentVault | Retention/audit | Emitted after approved deletion; no file contents |
 | `grave.import_completed.v1` | GraveRegistry | Admin notification | Success/error/dedup counts |
 | `renewal.marked_external.v1` | Renewal | Billing guard | Prevents duplicate period |
+| `renewal.submitted.v1` | Renewal | Notification | The online submission path — distinct from renewal.marked_external.v1's offline/admin path |
 | `grave.reminder_sent.v1` | GraveRegistry | Reporting | Idempotent window key |
 | `care.cycle_created.v1` | CareSubscription | Billing/work scheduling | One per cycle |
 | `care.work_order_created.v1` | VendorFulfillment | Case/customer | Evidence reference; one per paid cycle |
 | `care.complaint_filed.v1` | VendorFulfillment | Case/customer/audit | Linked to work order; audited |
 | `care.make_good_created.v1` | VendorFulfillment | Case/customer | Replacement order linked to original |
 | `vendor.work_completed.v1` | VendorFulfillment | Case/customer | Evidence reference |
+| `vendor.evidence_uploaded.v1` | VendorFulfillment | Notification | References only — no document content or restricted data |
 | `memorial.unpublished.v1` | Memorial | Public read/QR | Privacy/moderation action |
 | `memorial.profile_created.v1` | Memorial | Read models, audit | Privacy default private; grave-record reference only (AC7) |
 | `memorial.published.v1` | Memorial | Public read/QR | Profile made public |

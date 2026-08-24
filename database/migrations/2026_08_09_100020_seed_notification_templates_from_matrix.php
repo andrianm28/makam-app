@@ -115,14 +115,37 @@ return new class extends Migration
 
     /**
      * Ruling 1's approved refinement, `docs/superpowers/plans/2026-08-10-
-     * wave1a-notifications-decisions.md`. Only these 6 matrix rows have a
-     * clean, unambiguous catalogue counterpart in
-     * `docs/contracts/event-catalog.md`; every other row is NULL. See this
+     * wave1a-notifications-decisions.md`, plus the 24 Aug 2026
+     * notification-matrix-medium-rows batch's `payment.outcome_failed.v1`,
+     * `marketplace_order.submitted.v1`, `vendor_order.decided.v1`,
+     * `vendor.evidence_uploaded.v1`, and `renewal.submitted.v1` additions.
+     * Only these 11 matrix rows have a clean, unambiguous catalogue
+     * counterpart in `docs/contracts/event-catalog.md`; every other row is
+     * NULL. See this
      * migration file's own class doc block for why each excluded row is
      * excluded (ambiguous `order.status_changed.v1` mapping, the circular
      * `grave.reminder_sent.v1` case, and rows with no counterpart at all).
-     * Do not add to this list without verifying the counterpart against the
-     * catalogue and updating that doc block.
+     * "Payment failed/exception" maps to `payment.outcome_failed.v1`, a
+     * single catalogued event for both real outcomes (`SessionState::
+     * Failed`/`Expired`), emitted by
+     * `Platform\Payment\Actions\ApplyPaymentSettlement`. "Marketplace order
+     * submitted" maps to `marketplace_order.submitted.v1`, a single-emission
+     * event with no outcome discrimination, emitted by
+     * `Domain\Marketplace\Actions\PlaceMarketplaceOrder`. "Vendor
+     * accepted/rejected" maps to `vendor_order.decided.v1`, a single
+     * catalogued event for both real outcomes (`VendorProcessingStatus::
+     * DITERIMA_VENDOR`/`DITOLAK_VENDOR`), emitted by
+     * `Domain\Marketplace\Actions\UpdateVendorOrderStatus`. "Vendor evidence
+     * uploaded" maps to `vendor.evidence_uploaded.v1`, emitted by
+     * `Domain\VendorFulfillment\Actions\UploadEvidence` (a different domain
+     * from the marketplace vendor-order rows above; the shared "vendor"
+     * wording is coincidental). "Renewal submitted" maps to
+     * `renewal.submitted.v1`, a single-emission event with no outcome
+     * discrimination, emitted by `Domain\Renewal\Actions\OpenRenewal` (the
+     * only online write path — distinct from `renewal.marked_external.v1`,
+     * which is `Actions\MarkExternalRenewal`'s unrelated offline/admin
+     * path). Do not add to this list without verifying the counterpart
+     * against the catalogue and updating that doc block.
      */
     private function outboxEventName(string $eventName): ?string
     {
@@ -133,6 +156,11 @@ return new class extends Migration
             'Quote issued' => 'quote.issued.v1',
             'Quote accepted' => 'quote.accepted.v1',
             'Payment received' => 'payment.received.v1',
+            'Payment failed/exception' => 'payment.outcome_failed.v1',
+            'Marketplace order submitted' => 'marketplace_order.submitted.v1',
+            'Vendor accepted/rejected' => 'vendor_order.decided.v1',
+            'Vendor evidence uploaded' => 'vendor.evidence_uploaded.v1',
+            'Renewal submitted' => 'renewal.submitted.v1',
             default => null,
         };
     }
