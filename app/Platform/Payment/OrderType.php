@@ -44,4 +44,16 @@ enum OrderType: string
 
     /** A `SubscriptionCycle` (the recurring-care-subscriptions domain). Deferred — see above. */
     case CareSubscription = 'care_subscription';
+
+    /**
+     * A `Renewal` (the renewal domain), matched by `renewals.reference` —
+     * the same `PPJ-`-prefixed, independently-unique business-reference
+     * pattern `Booking`/`Marketplace` use (`renewals.id` is a bearer-UUID
+     * used only for anonymous-journey access, not for this match — see
+     * `Actions\OpenPaymentSession::authorizeRenewal()`). Implemented now,
+     * unlike `Marketplace`/`CareSubscription` above: no
+     * `PaymentSessionOrderTypeNotSupportedException` refusal applies to
+     * this case.
+     */
+    case Renewal = 'renewal';
 }

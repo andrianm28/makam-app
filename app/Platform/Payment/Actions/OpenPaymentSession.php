@@ -9,6 +9,9 @@ use App\Domain\Marketplace\Models\MarketplaceOrder;
 use App\Domain\Marketplace\PaymentState;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\OrderStatus;
+use App\Domain\Renewal\Actions\GuardRenewalPaymentOpening;
+use App\Domain\Renewal\Models\Renewal;
+use App\Domain\Renewal\RenewalStatus;
 use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
@@ -41,40 +44,51 @@ use Carbon\CarbonImmutable;
  * §Payment guard: "The guard is the only path to a payment session."
  *
  * ---------------------------------------------------------------------------
- * Two order types, two guards, one shared opening/provider/write path
+ * Three order types, three guards, one shared opening/provider/write path
  * ---------------------------------------------------------------------------
- * `OrderType::Booking` and `OrderType::Marketplace` are both supported since
- * the marketplace follow-up landed (`OrderType`'s own doc block names this as
- * the deferred work). Each order type resolves its aggregate, runs its own
- * precondition guard, and returns a bare order-reference string; everything
- * after that point — merchant binding, the provider call, and the atomic
- * `PaymentIntent`/`PaymentSession`/audit write — is one shared path that
- * does not branch on order type at all (see `authorizeBooking()`/
- * `authorizeMarketplace()` and the shared body below).
+ * `OrderType::Booking`, `OrderType::Marketplace`, and `OrderType::Renewal`
+ * are all supported (`OrderType`'s own doc block names `Marketplace`
+ * above's deferred-then-landed history; `Renewal` landed real from the
+ * start — no placeholder era). Each order type resolves its aggregate, runs
+ * its own precondition guard, and returns a bare order-reference string;
+ * everything after that point — merchant binding, the provider call, and
+ * the atomic `PaymentIntent`/`PaymentSession`/audit write — is one shared
+ * path that does not branch on order type at all (see `authorizeBooking()`/
+ * `authorizeMarketplace()`/`authorizeRenewal()` and the shared body below).
  *
  * Booking uses `GuardPaymentSession`, the `Order`/`Quote`-typed six-condition
  * guard. Marketplace uses `App\Domain\Marketplace\Actions\
  * GuardMarketplacePaymentOpening`, a marketplace-owned, four-condition guard
  * — read that class's own doc block for exactly which of booking's six
  * conditions carry over and why two do not (no `Quote`, no admin
- * authorization step in marketplace checkout). The two guards are
- * deliberately NOT unified into one type: `GuardCondition`/`GuardResult`/
+ * authorization step in marketplace checkout). Renewal uses
+ * `App\Domain\Renewal\Actions\GuardRenewalPaymentOpening`, a renewal-owned,
+ * four-condition guard whose "allowed" result additionally distinguishes
+ * `manualCoordinationRequired` (see `authorizeRenewal()`'s own doc block for
+ * why that state is refused here exactly like a denial). None of the three
+ * guards are unified into one type: `GuardCondition`/`GuardResult`/
  * `ConditionDenial` are documented as booking's own contract, tied to
- * `payment_intents`' documented column shapes, and forcing marketplace's
+ * `payment_intents`' documented column shapes, and forcing another domain's
  * different condition set through that contract would either invent
- * booking-shaped denial data for a marketplace fact or weaken the contract
- * for both.
+ * booking-shaped denial data for a foreign fact or weaken the contract for
+ * all three.
  *
- * Flow, in the plan's order (booking's original shape; marketplace mirrors
- * it through its own guard):
+ * Flow, in the plan's order (booking's original shape; marketplace and
+ * renewal mirror it through their own guards):
  *
  *   1. **Evaluate the precondition guard** (`GuardPaymentSession` for
- *      booking, `GuardMarketplacePaymentOpening` for marketplace). A
- *      denial throws `PaymentSessionOpeningDeniedException`; each guard has
- *      already recorded its own denial audit event before this exception
- *      exists — `PAYMENT_GUARD_DENIED` (+ a `payment_intents` row) for
- *      booking, `MARKETPLACE_PAYMENT_OPENING_DENIED` for marketplace.
- *      Nothing else happens — no provider call, no session.
+ *      booking, `GuardMarketplacePaymentOpening` for marketplace,
+ *      `GuardRenewalPaymentOpening` for renewal). A denial throws
+ *      `PaymentSessionOpeningDeniedException`; each guard has already
+ *      recorded its own denial audit event before this exception exists —
+ *      `PAYMENT_GUARD_DENIED` (+ a `payment_intents` row) for booking,
+ *      `MARKETPLACE_PAYMENT_OPENING_DENIED` for marketplace. (Renewal's
+ *      guard records no denial audit event of its own — see
+ *      `GuardRenewalPaymentOpening`'s class doc block; this action's shared
+ *      `PAYMENT_SESSION_OPENED` audit write only ever fires on the allowed
+ *      path, so a renewal denial is unaudited here exactly as it always was
+ *      before this action existed.) Nothing else happens — no provider
+ *      call, no session.
  *   2. **Verify the merchant claim.** `command.merchantRef` must equal the
  *      config-bound merchant (`config('payment.merchant_ref')`) or the
  *      opening fails closed — a session must never bind a merchant this
@@ -109,7 +123,7 @@ use Carbon\CarbonImmutable;
  *
  * ---------------------------------------------------------------------------
  * An already-paid order is refused BEFORE the guard (whole-branch review,
- * fix wave) — for BOTH order types
+ * fix wave) — for ALL THREE order types
  * ---------------------------------------------------------------------------
  * A DIBAYAR booking order satisfies all six guard conditions (its
  * confirmation is valid, its quote accepted), so the guard alone cannot stop
@@ -125,20 +139,33 @@ use Carbon\CarbonImmutable;
  * `GuardMarketplacePaymentOpening` ever runs — see
  * `assertMarketplaceOrderNotAlreadyPaid()`.
  *
+ * The renewal leg needs this refusal for the SAME reason, not a weaker one:
+ * `GuardRenewalPaymentOpening`'s four conditions (gate mode, grave published,
+ * quote accepted+unexpired, amount matches) never reference `renewals.status`
+ * or any settlement fact, and `RenewalQuote::isAcceptedAndUnexpired()` returns
+ * true forever once accepted whenever `expires_at` is null — which
+ * `OpenRenewal.php` always leaves null today (no expiry-window feature
+ * exists yet). So an already-`DIBAYAR` renewal with a published grave and an
+ * open gate would sail through the guard as a genuine `allowed()`, exactly
+ * like a DIBAYAR booking order sails through its six conditions. This action
+ * refuses it before the guard evaluation the same way, via
+ * `assertRenewalNotAlreadySettled()` — see that method.
+ *
  * This is the PAID half of the review's "no second session for an
  * already-paid order" protection. The OPEN half — an order still
- * `MENUNGGU_PEMBAYARAN` (booking) or `BELUM_DIBAYAR` (marketplace) whose
- * earlier checkout was never settled — is not expressible here:
+ * `MENUNGGU_PEMBAYARAN` (booking/renewal) or `BELUM_DIBAYAR` (marketplace)
+ * whose earlier checkout was never settled — is not expressible here:
  * `payment_sessions` deliberately carries no order reference (see
  * `SessionState`'s doc block; the order reference travels the provider round
  * trip), so an "open sessions for this order" query does not exist before
  * the provider echo. That race is caught at settlement time instead, by
  * `ApplyPaymentSettlement`'s audited duplicate-arrival record (booking leg;
  * the marketplace leg's `MarkMarketplaceOrderPaid` is idempotent on an exact
- * amount match instead — see that class's own doc block). The provider-side
- * duplicate record is also what protects the DIBAYAR case against the race
- * where a second payment was already created before this refusal could
- * land.
+ * amount match instead — see that class's own doc block; the renewal leg's
+ * `MarkRenewalPaidOnline`, per the online-payment gateway plan, refuses a
+ * second `DIBAYAR` transition the same way). The provider-side duplicate
+ * record is also what protects the DIBAYAR case against the race where a
+ * second payment was already created before this refusal could land.
  *
  * ---------------------------------------------------------------------------
  * Actor role label — deliberately the guard's derivation, not a role lookup
@@ -166,6 +193,7 @@ final readonly class OpenPaymentSession
         $orderReference = match ($command->orderType) {
             OrderType::Booking => $this->authorizeBooking($command),
             OrderType::Marketplace => $this->authorizeMarketplace($command),
+            OrderType::Renewal => $this->authorizeRenewal($command),
         };
 
         $this->assertMerchantBound($command);
@@ -279,6 +307,40 @@ final readonly class OpenPaymentSession
         return $order->order_number;
     }
 
+    /**
+     * The renewal leg: resolve the `Renewal` by its business reference,
+     * refuse it if already settled, run `GuardRenewalPaymentOpening`. Returns
+     * the reference (`renewals.reference`) the provider call uses. Mirrors
+     * `authorizeBooking()`'s/`authorizeMarketplace()`'s exact shape,
+     * including the pre-guard already-paid refusal — see the class doc
+     * block's "already-paid order is refused BEFORE the guard" section for
+     * why the renewal leg needs this every bit as much as the other two:
+     * `GuardRenewalPaymentOpening`'s conditions never look at `renewals.
+     * status`, so a settled renewal would otherwise sail through it.
+     *
+     * A `manualCoordinationRequired: true` result is refused exactly like a
+     * denial — never allowed through to `PaymentSession::create()`. This is
+     * the single most important branch in this method: the guard's "eligible
+     * but the gate is closed" state must never reach the provider call.
+     */
+    private function authorizeRenewal(OpenPaymentSessionCommand $command): string
+    {
+        $renewal = $this->resolveRenewal($command->orderRef);
+
+        $this->assertRenewalNotAlreadySettled($renewal);
+
+        $result = app(GuardRenewalPaymentOpening::class)($renewal, new Money($command->amountMinor));
+
+        if (! $result->isAllowed() || $result->isManualCoordinationRequired()) {
+            throw PaymentSessionOpeningDeniedException::forPublicMessage(
+                $result->denialReason()
+                    ?? 'Online payment is not currently available; payment is arranged manually.'
+            );
+        }
+
+        return $renewal->reference;
+    }
+
     private function resolveOrder(string $orderRef): Order
     {
         $order = Order::query()->where('reference', $orderRef)->first();
@@ -299,6 +361,28 @@ final readonly class OpenPaymentSession
         }
 
         return $order;
+    }
+
+    /**
+     * Looks up the `Renewal` by its independently-unique `reference` column
+     * (the `PPJ-`-prefixed business reference, `2026_08_12_100000_
+     * create_renewals_table.php`'s `->unique()` constraint) — NOT by
+     * `renewals.id`. The bearer-UUID primary key is the anonymous-journey
+     * access key the public Livewire screens use to load a specific
+     * renewal (see `GuardRenewalPaymentOpening`'s own doc block); it is a
+     * different identifier from the business reference this command's
+     * `orderRef` carries, matching `resolveOrder()`'s and
+     * `resolveMarketplaceOrder()`'s own reference-column lookups above.
+     */
+    private function resolveRenewal(string $orderRef): Renewal
+    {
+        $renewal = Renewal::query()->where('reference', $orderRef)->first();
+
+        if ($renewal === null) {
+            throw PaymentSessionOrderNotFoundException::forReference($orderRef);
+        }
+
+        return $renewal;
     }
 
     /**
@@ -369,6 +453,52 @@ final readonly class OpenPaymentSession
         );
 
         throw PaymentSessionOrderAlreadyPaidException::forReference($order->order_number);
+    }
+
+    /**
+     * The renewal leg of the "already paid" refusal — same reasoning as
+     * `assertOrderNotAlreadyPaid()`/`assertMarketplaceOrderNotAlreadyPaid()`,
+     * keyed off `Renewal::$status` instead of `Order::$status`/
+     * `MarketplaceOrder::$payment_state`, subject type `renewal` instead of
+     * `order`/`marketplace_order`.
+     *
+     * This check is NOT redundant with `GuardRenewalPaymentOpening`: that
+     * guard's four conditions (gate mode, grave published, quote
+     * accepted+unexpired, amount matches) never reference `renewals.status`
+     * or any settlement fact, and `RenewalQuote::isAcceptedAndUnexpired()`
+     * returns true indefinitely once accepted whenever `expires_at` is null
+     * — which `Actions\OpenRenewal` always leaves null today. A DIBAYAR
+     * renewal with a published grave and an open gate is therefore a
+     * genuine `allowed()` from the guard's own logic; only this pre-guard
+     * check stops a second real payment session (and a second live
+     * provider charge) from opening against it.
+     */
+    private function assertRenewalNotAlreadySettled(Renewal $renewal): void
+    {
+        if ($renewal->status !== RenewalStatus::DIBAYAR) {
+            return;
+        }
+
+        $actor = $this->actors->resolve();
+        $actorRole = $actor->isAuthenticated() ? 'customer' : 'guest';
+        $correlationId = $this->correlation->current();
+
+        Audit::record(
+            action: PaymentAuditActions::SESSION_OPENING_REFUSED,
+            subject: new AuditSubject('renewal', (string) $renewal->getKey()),
+            outcome: AuditOutcome::Denied,
+            actorRef: $actor->identityReference,
+            actorRole: $actorRole,
+            source: AuditSource::Api,
+            correlationId: $correlationId === null ? null : (string) $correlationId,
+            // `note` is an EXISTING `MetadataAllowlist::ALLOWED_KEYS` key —
+            // this lane adds none. A closed-list value only; the subject
+            // carries the renewal. No amount, no identifier, nothing
+            // restricted.
+            metadata: ['note' => 'session opening refused; renewal already settled'],
+        );
+
+        throw PaymentSessionOrderAlreadyPaidException::forReference($renewal->reference);
     }
 
     /**

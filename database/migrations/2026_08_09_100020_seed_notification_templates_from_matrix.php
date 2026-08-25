@@ -118,10 +118,11 @@ return new class extends Migration
      * wave1a-notifications-decisions.md`, plus the 24 Aug 2026
      * notification-matrix-medium-rows batch's `payment.outcome_failed.v1`,
      * `marketplace_order.submitted.v1`, `vendor_order.decided.v1`,
-     * `vendor.evidence_uploaded.v1`, and `renewal.submitted.v1` additions.
-     * Only these 11 matrix rows have a clean, unambiguous catalogue
-     * counterpart in `docs/contracts/event-catalog.md`; every other row is
-     * NULL. See this
+     * `vendor.evidence_uploaded.v1`, and `renewal.submitted.v1` additions,
+     * plus the 25 Aug 2026 `renewal-online-payment` lane's `renewal.paid_
+     * online.v1` addition (Task 4). Only these 12 matrix rows have a clean,
+     * unambiguous catalogue counterpart in `docs/contracts/event-catalog.md`;
+     * every other row is NULL. See this
      * migration file's own class doc block for why each excluded row is
      * excluded (ambiguous `order.status_changed.v1` mapping, the circular
      * `grave.reminder_sent.v1` case, and rows with no counterpart at all).
@@ -144,8 +145,13 @@ return new class extends Migration
      * discrimination, emitted by `Domain\Renewal\Actions\OpenRenewal` (the
      * only online write path — distinct from `renewal.marked_external.v1`,
      * which is `Actions\MarkExternalRenewal`'s unrelated offline/admin
-     * path). Do not add to this list without verifying the counterpart
-     * against the catalogue and updating that doc block.
+     * path). "Renewal paid/verified" maps to `renewal.paid_online.v1`, a
+     * single-emission event emitted by
+     * `Domain\Renewal\Actions\MarkRenewalPaidOnline` — the webhook-triggered
+     * settlement path for a renewal opened online, distinct from the
+     * offline/admin `Actions\MarkRenewalPaidExternally` path, which writes
+     * no outbox event of its own. Do not add to this list without verifying
+     * the counterpart against the catalogue and updating that doc block.
      */
     private function outboxEventName(string $eventName): ?string
     {
@@ -161,6 +167,7 @@ return new class extends Migration
             'Vendor accepted/rejected' => 'vendor_order.decided.v1',
             'Vendor evidence uploaded' => 'vendor.evidence_uploaded.v1',
             'Renewal submitted' => 'renewal.submitted.v1',
+            'Renewal paid/verified' => 'renewal.paid_online.v1',
             default => null,
         };
     }

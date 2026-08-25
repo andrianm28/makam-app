@@ -19,14 +19,19 @@ namespace App\Domain\Renewal\Actions;
  * online-payment gate (G-PAY-01) is closed, the result is "eligible; online
  * unavailable" — `isAllowed() = true`, `isManualCoordinationRequired() = true`.
  * AC8's wording is "online **or** explicit manual fallback"; both are
- * legitimate pass paths. The online path is BLOCKED upstream
- * (PaymentSession throws), so this lane implements only the manual path.
+ * legitimate pass paths.
  *
- * AC8's online half is recorded BLOCKED (upstream deny-only) with these
- * citations — never PASS:
- * - `PaymentSession.php:84-87` throws `PaymentSessionCreationUnavailableException`
- * - `GuardResult.php:49,63,79` — `isAllowed()` hardwired false, no allowed() factory
- * - `GuardPaymentSession.php:140` — the pass path is unreachable in the type
+ * AC8's online half is now real and reachable: when `G-PAY-01` is open and
+ * `GuardRenewalPaymentOpening` returns `isAllowed() && !isManualCoordinationRequired()`,
+ * `Actions\OpenPaymentSession::authorizeRenewal()` genuinely calls
+ * `PaymentSession::create()` — that method is what wires the online path,
+ * not this result type. The citations this doc block once carried
+ * (`PaymentSession.php:84-87` throwing unconditionally,
+ * `GuardResult.php:49,63,79`'s `isAllowed()` hardwired false,
+ * `GuardPaymentSession.php:140`'s pass path being unreachable) described
+ * PRE-online-payment-gateway-task code state and no longer hold: all three
+ * now have a genuine pass path, gated on `G-PAY-01` rather than absent
+ * outright.
  */
 final readonly class RenewalPaymentOpeningResult
 {

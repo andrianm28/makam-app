@@ -186,7 +186,7 @@ final class NotificationTemplatePersistenceTest extends TestCase
         );
     }
 
-    public function test_only_the_eleven_ruled_rows_carry_an_outbox_event_name(): void
+    public function test_only_the_twelve_ruled_rows_carry_an_outbox_event_name(): void
     {
         $mapped = [
             'Booking submitted' => 'booking.draft_submitted.v2',
@@ -200,6 +200,7 @@ final class NotificationTemplatePersistenceTest extends TestCase
             'Vendor accepted/rejected' => 'vendor_order.decided.v1',
             'Vendor evidence uploaded' => 'vendor.evidence_uploaded.v1',
             'Renewal submitted' => 'renewal.submitted.v1',
+            'Renewal paid/verified' => 'renewal.paid_online.v1',
         ];
 
         foreach ($mapped as $eventName => $outboxEventName) {
@@ -215,7 +216,6 @@ final class NotificationTemplatePersistenceTest extends TestCase
             'Payment opened',
             'Order processing',
             'Order completed',
-            'Renewal paid/verified',
             'Reminder due',
         ];
 
@@ -293,10 +293,12 @@ final class NotificationTemplatePersistenceTest extends TestCase
 
     /**
      * Ruling 1's approved refinement (`docs/superpowers/plans/2026-08-10-
-     * wave1a-notifications-decisions.md`): only these 6 matrix rows have a
-     * clean, non-ambiguous catalogue counterpart. Mirrors — does not
-     * duplicate as canonical data — the mapping the seed migration applies,
-     * so this test can independently confirm every other row stays NULL.
+     * wave1a-notifications-decisions.md`), extended by the 24 Aug 2026
+     * MEDIUM-row batch and the 25 Aug 2026 `renewal-online-payment` lane:
+     * only these 12 matrix rows have a clean, non-ambiguous catalogue
+     * counterpart. Mirrors — does not duplicate as canonical data — the
+     * mapping the seed migration applies, so this test can independently
+     * confirm every other row stays NULL.
      */
     private function matrixOutboxEventName(string $eventName): ?string
     {
@@ -312,6 +314,7 @@ final class NotificationTemplatePersistenceTest extends TestCase
             'Vendor accepted/rejected' => 'vendor_order.decided.v1',
             'Vendor evidence uploaded' => 'vendor.evidence_uploaded.v1',
             'Renewal submitted' => 'renewal.submitted.v1',
+            'Renewal paid/verified' => 'renewal.paid_online.v1',
             default => null,
         };
     }
