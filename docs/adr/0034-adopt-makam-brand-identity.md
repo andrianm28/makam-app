@@ -9,6 +9,13 @@ not yet executed. This ADR records the decision for the whole adoption, not
 only what has shipped so far — see [`docs/superpowers/plans/2026-08-17-brand-identity-adoption.md`](../superpowers/plans/2026-08-17-brand-identity-adoption.md)
 for per-task status.
 
+> **Superseded in part, 21 Aug 2026** — OQ-12 (real brand hex, resolved). The
+> PROVISIONAL colour values recorded throughout this ADR were derived from a
+> chat-reviewed render, not the official logo. They are now superseded by
+> real logo-sampled values; this historical record is kept as-is (ADRs are
+> not rewritten), but for the current, authoritative palette see
+> [`docs/design/design-system.md`](../design/design-system.md) §1.2.
+
 ## Context
 
 [`docs/design/design-system.md`](../design/design-system.md) v0.1 was written
@@ -39,6 +46,11 @@ candidate hex values derived from reviewing the render in chat
 `PROVISIONAL` and real pixel-sampling deferred to the new open question
 **OQ-12** (see Consequences).
 
+> **Superseded in part, 21 Aug 2026** — OQ-12 is now resolved: the logo
+> source PNG arrived and real hex values were sampled from it. The
+> `#5D3A1F`/`#2E7D32` values above are historical; see
+> `docs/design/design-system.md` §1.2 for the current, logo-sampled palette.
+
 ## Decision
 
 ### D1 — Reverse OQ-01: Earth brown replaces Petrol teal as `primary`
@@ -53,6 +65,10 @@ green (`secondary`) never fills anything (D3). `resources/css/tokens.css`
 §1.1 renames the family "Earth" and replaces every shade.
 
 ### D2 — Earth ramp values (PROVISIONAL — OQ-12)
+
+> **Superseded in part, 21 Aug 2026** — OQ-12 (real brand hex, resolved). The
+> table below is historical; see `docs/design/design-system.md` §1.2 for the
+> current, logo-sampled palette.
 
 | shade | hex | note |
 |---|---|---|
@@ -77,6 +93,10 @@ official brand values (OQ-12); the 600 comment carries the flag explicitly
 since it is the one value directly derived from the sampling step.
 
 ### D3 — Leaf green replaces Sandstone as the caged `secondary`
+
+> **Superseded in part, 21 Aug 2026** — OQ-12 (real brand hex, resolved). The
+> table below is historical; see `docs/design/design-system.md` §1.2 for the
+> current, logo-sampled palette.
 
 `secondary` keeps its existing restricted-usage cage unchanged (50–200
 surface tint, 300–400 decorative, 700–900 text-on-tint; **never** a fill,
@@ -174,6 +194,11 @@ decision is recorded here but implemented in Task 3, which is hard-blocked
 on the still-absent source PNG.
 
 ### D9 — Every PROVISIONAL flag, enumerated
+
+> **Superseded in part, 21 Aug 2026** — OQ-12 (real brand hex, resolved).
+> Every value flagged PROVISIONAL below has since been replaced with a real,
+> logo-sampled value; see `docs/design/design-system.md` §1.2. This list is
+> kept as a historical record of what was provisional and why.
 
 - `--color-primary-600` (`#5D3A1F`) — sampled brown, PROVISIONAL.
 - `--color-secondary-600` (`#2E7D32`) — sampled green, PROVISIONAL.

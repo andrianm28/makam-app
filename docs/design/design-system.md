@@ -36,9 +36,11 @@ This document is the **single source of truth for visual design decisions**. It 
 
 ### 0.3 Status of this version
 
-`v0.1 PROPOSED`. The **token values are verified for accessibility** (§7.1, 46/46 pairs pass) but **no brand approval, no user testing, and no rendered build has occurred**. See §12 NOT TESTED and §11 OPEN QUESTIONS. Per `AGENTS.md`, nothing in this document may be reported as `PASS` beyond what §7.1 explicitly measured.
+`v0.1 PROPOSED`. The **token values are verified for accessibility** (§7.1, 49/49 pairs pass) but **no brand approval, no user testing, and no rendered build has occurred**. See §12 NOT TESTED and §11 OPEN QUESTIONS. Per `AGENTS.md`, nothing in this document may be reported as `PASS` beyond what §7.1 explicitly measured.
 
-`v0.2` (17 Aug 2026): the official Makam.co.id brand identity was adopted per [ADR-0034](../adr/0034-adopt-makam-brand-identity.md). Earth brown replaces the provisional Petrol teal as `primary`, Leaf green replaces Sandstone as the caged `secondary`, and Poppins joins as the `--font-display` face (§1.4). **OQ-01** (brand primary) and **OQ-02** (existing identity) are resolved (§11). Every adopted brand hex remains **PROVISIONAL** pending **OQ-12** (official brand values, vector source, horizontal lockup) — see §11.
+`v0.2` (17 Aug 2026): the official Makam.co.id brand identity was adopted per [ADR-0034](../adr/0034-adopt-makam-brand-identity.md). Earth brown replaces the provisional Petrol teal as `primary`, Leaf green replaces Sandstone as the caged `secondary`, and Poppins joins as the `--font-display` face (§1.4). **OQ-01** (brand primary) and **OQ-02** (existing identity) are resolved (§11). At this point every adopted brand hex was still **PROVISIONAL** pending **OQ-12** (official brand values, vector source, horizontal lockup) — see §11.
+
+`v0.3` (21 Aug 2026): **OQ-12 resolved.** The real official logo (`docs/design/brand/source/logo.png`) replaced the earlier render-based estimate. Every Earth/Leaf hex in §1.2 is now sampled directly from that file (`docs/design/brand/sample-logo-colours.php`), and the full 50–950 ramp is derived from those anchors by `docs/design/brand/generate-ramp.php` (position-based lightness interpolation along the same curve the original ramp used, holding hue+saturation fixed — see that script's own doc comment for the method). No brand hex in this document is an estimate any longer. §7.1's contrast run was re-verified against the new values; see §11.
 
 ---
 
@@ -68,19 +70,26 @@ Why two layers: `--color-primary-600` says *what*, `--mk-text-link` says *why*. 
 
 | Family | Base (600) | Hue | Role |
 |---|---|---|---|
-| **Primary — "Earth"** | `#5D3A1F` (PROVISIONAL — OQ-12) | 26° | Brand, primary CTA, links, active nav, focus ring |
-| **Secondary — "Leaf"** | `#2E7D32` (PROVISIONAL — OQ-12) | 123° | Surface tint + accent **only** (never a fill, badge, button, or alert) |
+| **Primary — "Earth"** | `#563B26` | 26° | Brand, primary CTA, links, active nav, focus ring |
+| **Secondary — "Leaf"** | `#336B3E` | 132° | Surface tint + accent **only** (never a fill, badge, button, or alert) |
 | **Neutral** | `#576060` | — | Text, borders, surfaces, dividers |
 | **Success** | `#1C7A44` | 146° | `DIBAYAR`, `SELESAI`, upload accepted, autosave saved |
 | **Warning** | `#9A6300` | 39° | All `MENUNGGU_*`, quote expiring, scan pending, Urgent |
 | **Danger** | `#A32435` | 352° | `DITOLAK`, validation error, payment failed, file rejected — hue tuned **−11°** (was 3°) to restore ≥30° separation from Earth `primary` (ADR-0034 D4) |
 | **Info** | `#3A4E9B` | 228° | Gated-fallback mode banners, neutral system notices |
 
+**OQ-12 resolved 21 Aug 2026.** The real official logo (`docs/design/brand/source/logo.png`)
+replaced the earlier render-based estimate. Every Earth/Leaf hex above is sampled directly from
+that file (`docs/design/brand/sample-logo-colours.php`) and the full 50-950 ramp is derived from
+those anchors by `docs/design/brand/generate-ramp.php` (position-based lightness interpolation
+along the same curve the original ramp used, holding hue+saturation fixed — see that script's own
+doc comment for the method). No value here is an estimate any longer.
+
 **Three deliberate decisions worth stating, because they look wrong at first glance:**
 
-**(a) Primary is Earth brown, not teal — OQ-01 resolved.** v0.1 chose Petrol teal as a deliberately *provisional* primary, made only because [OQ-02](#11-open-questions) had no prior identity to defer to, and deliberately "not green" so a brand CTA could never be confused with a `success` badge. On 17 Aug 2026 the stakeholder supplied the official Makam.co.id brand identity — a render plus the *Filosofi Logo Makam.co.id* philosophy text — which **reverses** that choice: *"dark brown = earth, calm, stability, warmth, respect, humanist (deliberately 'not too tech')."* [ADR-0034](../adr/0034-adopt-makam-brand-identity.md) records the decision. The old green-CTA-vs-success-badge ambiguity that justified avoiding green as primary no longer needs a hue-avoidance answer — it is now avoided **structurally**: brand fills are Earth brown, and `secondary` (Leaf, below) is caged so it never fills a button, badge, or alert regardless of how close its hue sits to `success`. **OQ-01 and OQ-02 are resolved; every Earth value is PROVISIONAL pending OQ-12** (official brand hex, vector source, horizontal lockup).
+**(a) Primary is Earth brown, not teal — OQ-01 resolved.** v0.1 chose Petrol teal as a deliberately *provisional* primary, made only because [OQ-02](#11-open-questions) had no prior identity to defer to, and deliberately "not green" so a brand CTA could never be confused with a `success` badge. On 17 Aug 2026 the stakeholder supplied the official Makam.co.id brand identity — a render plus the *Filosofi Logo Makam.co.id* philosophy text — which **reverses** that choice: *"dark brown = earth, calm, stability, warmth, respect, humanist (deliberately 'not too tech')."* [ADR-0034](../adr/0034-adopt-makam-brand-identity.md) records the decision. The old green-CTA-vs-success-badge ambiguity that justified avoiding green as primary no longer needs a hue-avoidance answer — it is now avoided **structurally**: brand fills are Earth brown, and `secondary` (Leaf, below) is caged so it never fills a button, badge, or alert regardless of how close its hue sits to `success`. **OQ-01, OQ-02, and OQ-12 are all resolved** — see the note above the palette table.
 
-**(b) Secondary is constrained, not equal — Sandstone retired, Leaf inherits the cage.** The philosophy text reads the mark's eight radial leaves as "life, growth, renewal," so `secondary` becomes **Leaf** green (`#2E7D32`, hue ≈123°), replacing Sandstone. The restricted-usage cage is unchanged and, if anything, matters *more* now: Leaf sits only ≈23° from `success` (146°) — closer than Sandstone ever sat to `warning` (was ≈6.5°) — so any Leaf fill would misread as a status success. Secondary stays **restricted by usage**: shades 50–200 as surface tint, 700–900 as text on those tints, 300–400 as decorative rules/icons. It is **never** a filled badge, alert, or button. A restrained palette is also correct for this domain: one brand colour, one accent, four semantics, neutrals.
+**(b) Secondary is constrained, not equal — Sandstone retired, Leaf inherits the cage.** The philosophy text reads the mark's eight radial leaves as "life, growth, renewal," so `secondary` becomes **Leaf** green (`#336B3E`, hue ≈132°, sampled from the official logo per the OQ-12 note above), replacing Sandstone. The restricted-usage cage is unchanged and, if anything, matters *more* now: Leaf sits only ≈14° from `success` (≈146°) — a comparable-magnitude collision to the one Sandstone previously had with `warning` (≈6.5°), not a smaller one — so any Leaf fill would misread as a status success. Secondary stays **restricted by usage**: shades 50–200 as surface tint, 700–900 as text on those tints, 300–400 as decorative rules/icons. It is **never** a filled badge, alert, or button. A restrained palette is also correct for this domain: one brand colour, one accent, four semantics, neutrals.
 
 A `secondary-100` tile carrying a `secondary-800` icon (`<x-mk.icon-medallion tone="leaf">`, added 19 Aug 2026) is a surface-tint-plus-text usage, not a fill — it stays inside the cage, not an exception to it. It is `aria-hidden`, decorative only, and never appears adjacent to order/payment/availability data where a status reading could attach to it.
 
@@ -267,6 +276,8 @@ Blade components live in `resources/views/components/`; the Livewire-facing wrap
 | `danger` | `bg-danger-600 text-white` | `bg-danger-700` | `bg-danger-800` | Destructive, confirmed only |
 | `link` | `text-primary-600 underline` | `text-primary-700` | — | Inline in prose |
 
+> **Fill colour stays on `primary-600`, not `primary-500`.** Sampled from the official logo (§1.2 OQ-12 note), `primary-500` measures only **4.73:1** for white text — a thin AA margin (the 4.5:1 floor with almost no headroom, versus `primary-600`'s comfortable 10.25:1). Do not reach for `500` as a button/badge fill; it is a mid-ramp swatch for surfaces and larger decorative use, not a text-bearing fill. See §7.1 for the measured ratio.
+
 **Sizes** — `sm` `h-9` (36 px, **desktop admin tables only**) · `md` `h-11` (44 px, default) · `lg` `h-13` (52 px, primary CTA).
 
 > `sm` is below the 44 px floor and is therefore **forbidden on any public/mobile surface**. It exists solely for dense Filament table row actions on pointer devices.
@@ -393,7 +404,7 @@ Checkbox/radio: 20 px box inside a **44 px** clickable row; the whole row is the
 **Padding:** mobile `p-4`, `md:p-6`.
 **Interactive** (whole card is a link — TPU/TPS card, product card): add `hover:border-primary-300 hover:shadow-md focus-within:ring-2 focus-within:ring-primary-600 focus-within:ring-offset-2 transition-[border-color,box-shadow,background-color] duration-fast`. A card with no `intent` set also gets `hover:bg-primary-50` (added 19 Aug 2026, homepage visual refresh) — an intent card keeps its own `$intentSurfaces` background instead, never competing with it. Colour-only; no transform (§5's interaction table: hover Transform is `none`).
 
-Interactive cards must contain **exactly one** focusable anchor covering the title, with the rest of the card as a pseudo-element overlay — never nest multiple links inside a clickable card (keyboard trap + confusing tab order).
+Interactive cards must contain **exactly one** focusable anchor; the standard technique (§3.3b) is to make the card's **root element** the `<a>` itself (`as="a"` + `interactive` + `:href`), not an overlay trick — never nest multiple links inside a clickable card (keyboard trap + confusing tab order).
 
 **Variant — Cemetery card (Booking Step 2, PUB-011).** Must show: type badge (TPU/TPS), name, primary photo, address, facilities, price range **with source**, availability status, and the `"Perlu konfirmasi"` label when indicative. Availability uses §3.7 intent mapping; an indicative price is `neutral`, **never** `success`.
 
@@ -416,6 +427,102 @@ text-secondary-800` — a surface-tint usage already inside the Leaf cage (§1.2
 Always `aria-hidden="true"` — decorative only, never a substitute for a real text label (same
 rule `<x-mk.badge>`'s `dot` prop follows). Never placed adjacent to order/payment/availability
 data, so it never carries a status reading despite `leaf` sitting near the `success` hue.
+
+Icon-medallion is the sanctioned content device for §3.3b's nav-card pattern when the card has no
+real photo — see §3.3b's "Content" rule.
+
+### 3.3b Card as navigation — primary service grids
+
+A **whole-card-is-the-link** pattern for building primary navigation and service-choice grids, reusing `<x-mk.card interactive as="a">` rather than inventing a new primitive.
+
+**Pattern**
+
+```blade
+<x-mk.card
+    as="a"
+    interactive
+    :href="route('service.show', ['slug' => $service->slug])"
+    class="h-full touch-target"
+>
+    @if ($service->image_path)
+        <x-slot:media>
+            <img
+                src="{{ asset($service->image_path) }}"
+                alt=""
+                class="h-40 w-full object-cover"
+                loading="lazy"
+            >
+        </x-slot:media>
+    @endif
+
+    <div>
+        <x-mk.badge intent="neutral">{{ $service->category }}</x-mk.badge>
+    </div>
+
+    <h2 class="text-lg font-semibold text-neutral-900">{{ $service->name }}</h2>
+
+    <p class="text-base text-neutral-600">{{ $service->description }}</p>
+</x-mk.card>
+```
+
+**Where it's used**
+
+- **Existing:** `App\Livewire\Public\Marketplace\MarketplaceIndex`'s product grid (PUB-020, `resources/views/livewire/public/marketplace/index.blade.php`, the product grid `<ul aria-label="Daftar produk">`) — each product card links to its detail page via `as="a" :href="route('marketplace.product', ...)"`, using the real photo-`media` shape above.
+- **Planned (Phase 2):** Homepage's four primary navigation items (`Pemesanan Makam`, `Layanan Pemakaman`, `Perpanjangan Makam`, `FAQ`) as an interactive card grid, matching the `kamboja.co.id` benchmark's "service cards" layout referenced in the brand refresh spec (§4.2). These have no product photo, so they use §3.3a's `<x-mk.icon-medallion>` in place of the `media` slot — icon-medallion is already documented as the device for exactly this "service cards" use case; a nav card is not required to have a photo.
+
+**Usage rules**
+
+- The **root element** is `<a>` (controlled by `as="a"` + `interactive` + `:href`). The whole card is one focusable link; never nest another `<a>` or `<button>` inside the card's default slot.
+- **Content, with a photo** — `media` slot: full-bleed image clipped to the card's rounded corners. Use `alt=""` if decorative (the adjacent heading carries the text), or a real `alt` only if the image conveys unique information.
+- **Content, without a photo** — use §3.3a's `<x-mk.icon-medallion>` in the default slot instead of a `media` slot (the homepage nav-card use case).
+- Either way: badge, heading, description, or other text follows. Avoid multiple competing links; the card itself is the single navigation target.
+- **Intent** — leave blank (`intent` prop omitted) so the `interactive` hover includes the `hover:bg-primary-50` tint, reinforcing the clickability. If an intent is needed (e.g. to show availability status), the `hover:bg-primary-50` suppresses automatically; see §3.3 `interactive` rules.
+
+**Grid layout** — use the established card-grid pattern from §4.3:
+
+```blade
+<ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 md:gap-6" aria-label="Daftar layanan">
+    @foreach ($services as $service)
+        <li>
+            <x-mk.card as="a" interactive :href="...">
+                {{-- card content --}}
+            </x-mk.card>
+        </li>
+    @endforeach
+</ul>
+```
+
+### 3.3c Hero — `<x-mk.hero>` (added Task 4, brand visual refresh)
+
+Pairs a real photo (§2.2: cemeteries/gardens, daylight, no people in grief) with the page's
+primary heading and one CTA. Not yet wired into any real page in this phase — Phase 2 applies it
+to the homepage.
+
+**Props:** `image` (string) · `heading` (string, **required**) · `cta` (array,
+`['label' => string, 'href' => string]`).
+
+**Behaviour:** omitting `heading` throws `InvalidArgumentException` at render time —
+`<x-mk.hero>` has no sensible fallback for a hero with no heading, so it fails loudly rather than
+rendering a blank one.
+
+**Base:** root `<div>` is `relative overflow-hidden rounded-lg`. When `image` is given, an `<img>`
+(`h-64 md:h-96 w-full object-cover`) renders above a `bg-primary-50` content surface holding the
+heading, an optional slot, and the CTA (`flex flex-col gap-4 p-6 md:p-8`).
+
+**Heading typography:** `font-display text-4xl font-semibold tracking-tight text-neutral-900
+lg:text-5xl`, matching §1.4's hero row (`text-4xl` mobile / `lg:text-5xl` desktop) verbatim. These
+classes are restated explicitly in the component even though `app.css`'s base `h1` rule already
+applies `font-display`, `tracking-tight`, and the strong text colour globally — the size scale is
+the one thing `<x-mk.hero>` adds beyond the base layer; the rest is restated for the component's
+own self-containment, not because of any conflict with other `<h1>`s in the codebase.
+
+**CTA:** rendered as a single `<x-mk.button variant="primary" size="lg" :href="$cta['href']">` —
+§2.3's DO of exactly one primary action per view. `<x-mk.hero>` does not support more than one CTA.
+
+**A11y:** the image is deliberately decorative — `alt=""` always, matching this repo's existing
+decorative-image convention (the heading already carries the information the image would). The
+heading renders as a real `<h1>`, so it participates in the page's normal heading outline like any
+other page.
 
 ### 3.4 Modal and Bottom Sheet — `<x-mk.modal>`
 
@@ -885,8 +992,8 @@ Target: **WCAG 2.1 Level AA**. `lang="id"` on `<html>`.
 
 Verified by [`verify-contrast.py`](verify-contrast.py) against `resources/css/tokens.css`.
 
-Real output, re-run 19 Aug 2026 (homepage visual refresh added 3 pairs — text on `secondary-50`,
-text-strong on `secondary-50`, focus ring on `surface-warm`) against the shipped Earth/Leaf
+Real output, re-run 21 Aug 2026 (OQ-12 resolution — Earth/Leaf ramps regenerated from the real
+official logo, replacing the earlier render-based estimate; §1.2) against the shipped
 `tokens.css` (ADR-0034):
 
 ```
@@ -900,20 +1007,20 @@ PASS    8.92  (min 4.5)  text-default (body) on surface-raised  #444B4B on #FFFF
 PASS    6.47  (min 4.5)  text-muted on surface-raised  #576060 on #FFFFFF
 PASS    4.53  (min 4.5)  text-placeholder on surface-raised  #6F7878 on #FFFFFF
 PASS    8.39  (min 4.5)  text-default on surface-page  #444B4B on #F7F8F8
-PASS    8.23  (min 4.5)  text-default on surface-warm  #444B4B on #FAF5EF
-PASS   13.65  (min 4.5)  text-strong on secondary-100  #1A1F1F on #DCEDDD
-PASS    8.19  (min 4.5)  text-default on secondary-50  #444B4B on #F0F7F0
-PASS   15.30  (min 4.5)  text-strong on secondary-50  #1A1F1F on #F0F7F0
+PASS    8.17  (min 4.5)  text-default on surface-warm  #444B4B on #F9F4F0
+PASS   14.21  (min 4.5)  text-strong on secondary-100  #1A1F1F on #E1F1E4
+PASS    8.34  (min 4.5)  text-default on secondary-50  #444B4B on #F2F9F3
+PASS   15.58  (min 4.5)  text-strong on secondary-50  #1A1F1F on #F2F9F3
 PASS    3.96  (min 3.0)  text-disabled on surface-disabled  #6F7878 on #EEF0F0
-PASS   10.05  (min 4.5)  white on primary-600  #FFFFFF on #5D3A1F
-PASS   11.98  (min 4.5)  white on primary-700 (hover)  #FFFFFF on #4D3019
+PASS   10.25  (min 4.5)  white on primary-600  #FFFFFF on #563B26
+PASS   12.16  (min 4.5)  white on primary-700 (hover)  #FFFFFF on #47311F
 PASS    5.36  (min 4.5)  white on success-600  #FFFFFF on #1C7A44
 PASS    5.05  (min 4.5)  white on warning-600  #FFFFFF on #9A6300
 PASS    7.34  (min 4.5)  white on danger-600  #FFFFFF on #A32435
 PASS    9.37  (min 4.5)  white on danger-700 (hover)  #FFFFFF on #871D2C
 PASS    7.66  (min 4.5)  white on info-600  #FFFFFF on #3A4E9B
-PASS   11.05  (min 4.5)  primary-700 on primary-50  #4D3019 on #FAF5EF
-PASS   11.53  (min 4.5)  primary-800 on primary-100  #3E2713 on #F2E8DC
+PASS   11.13  (min 4.5)  primary-700 on primary-50  #47311F on #F9F4F0
+PASS   11.60  (min 4.5)  primary-800 on primary-100  #382719 on #F0E6DE
 PASS    6.82  (min 4.5)  success-700 on success-50  #166237 on #EEF8F1
 PASS    7.94  (min 4.5)  success-800 on success-100  #134E2D on #D5EEDD
 PASS    5.99  (min 4.5)  warning-700 on warning-50  #855400 on #FDF6EB
@@ -922,34 +1029,34 @@ PASS    8.49  (min 4.5)  danger-700 on danger-50  #871D2C on #FDF1F2
 PASS    9.01  (min 4.5)  danger-800 on danger-100  #6E1825 on #FBDCDF
 PASS    8.65  (min 4.5)  info-700 on info-50  #31417F on #F1F3FC
 PASS    9.28  (min 4.5)  info-800 on info-100  #293568 on #E0E5F8
-PASS    6.21  (min 4.5)  secondary-700 on secondary-50  #27682B on #F0F7F0
-PASS    7.31  (min 4.5)  secondary-800 on secondary-100  #205423 on #DCEDDD
-PASS   10.05  (min 4.5)  text-link on surface-raised  #5D3A1F on #FFFFFF
-PASS   11.98  (min 4.5)  text-link-hover on surface-raised  #4D3019 on #FFFFFF
-PASS   11.26  (min 4.5)  text-link on surface-page  #4D3019 on #F7F8F8
+PASS    7.72  (min 4.5)  secondary-700 on secondary-50  #2A5833 on #F2F9F3
+PASS    9.08  (min 4.5)  secondary-800 on secondary-100  #214629 on #E1F1E4
+PASS   10.25  (min 4.5)  text-link on surface-raised  #563B26 on #FFFFFF
+PASS   12.16  (min 4.5)  text-link-hover on surface-raised  #47311F on #FFFFFF
+PASS   11.43  (min 4.5)  text-link on surface-page  #47311F on #F7F8F8
 PASS    7.34  (min 4.5)  error text on surface-raised  #A32435 on #FFFFFF
 PASS    3.67  (min 3.0)  border-interactive on surface-raised  #7F8787 on #FFFFFF
 PASS    3.45  (min 3.0)  border-interactive on surface-page  #7F8787 on #F7F8F8
-PASS    3.39  (min 3.0)  border-interactive on surface-warm  #7F8787 on #FAF5EF
-PASS   10.05  (min 3.0)  focus ring on surface-raised  #5D3A1F on #FFFFFF
-PASS    9.44  (min 3.0)  focus ring on surface-page  #5D3A1F on #F7F8F8
-PASS    9.27  (min 3.0)  focus ring on surface-warm  #5D3A1F on #FAF5EF
-PASS    4.55  (min 3.0)  focus ring inverse on primary-600  #CDA882 on #5D3A1F
+PASS    3.36  (min 3.0)  border-interactive on surface-warm  #7F8787 on #F9F4F0
+PASS   10.25  (min 3.0)  focus ring on surface-raised  #563B26 on #FFFFFF
+PASS    9.63  (min 3.0)  focus ring on surface-page  #563B26 on #F7F8F8
+PASS    9.38  (min 3.0)  focus ring on surface-warm  #563B26 on #F9F4F0
+PASS    4.42  (min 3.0)  focus ring inverse on primary-600  #C9A386 on #563B26
 PASS    7.34  (min 3.0)  border-error on surface-raised  #A32435 on #FFFFFF
 PASS    4.70  (min 3.0)  urgent border on urgent bg  #9A6300 on #FDF6EB
-PASS   10.05  (min 3.0)  primary heading on surface-raised  #5D3A1F on #FFFFFF
-PASS    4.44  (min 3.0)  white on primary-500 (large only)  #FFFFFF on #9A6F42
-PASS   16.12  (min 4.5)  white on surface-inverse  #FFFFFF on #2F1D0E
-PASS   13.32  (min 4.5)  primary-100 on surface-inverse  #F2E8DC on #2F1D0E
-PASS   10.47  (min 4.5)  primary-200 on surface-inverse  #E2CDB6 on #2F1D0E
+PASS   10.25  (min 3.0)  primary heading on surface-raised  #563B26 on #FFFFFF
+PASS    4.73  (min 3.0)  white on primary-500 (large only)  #FFFFFF on #986943
+PASS   16.36  (min 4.5)  white on surface-inverse  #FFFFFF on #2A1D13
+PASS   13.31  (min 4.5)  primary-100 on surface-inverse  #F0E6DE on #2A1D13
+PASS   10.37  (min 4.5)  primary-200 on surface-inverse  #E0CAB8 on #2A1D13
 PASS   16.67  (min 4.5)  white on neutral-900  #FFFFFF on #1A1F1F
 
 Hue separation of semantic families (600 shade):
-  primary      26.1 deg
+  primary      26.2 deg
   success     145.5 deg
   info        227.6 deg
   danger      352.0 deg
-  secondary   123.0 deg
+  secondary   131.8 deg
   warning      38.6 deg
 
 RESULT: PASS — all 49 pairs meet WCAG 2.1 AA
@@ -962,24 +1069,25 @@ Selected measured ratios (full output above):
 | body text `neutral-700` on white | **8.92** | 4.5 |
 | muted `neutral-600` on white | **6.47** | 4.5 |
 | placeholder `neutral-500` on white | **4.53** | 4.5 |
-| white on `primary-600` (Earth, primary button) | **10.05** | 4.5 |
+| white on `primary-600` (Earth, primary button) | **10.25** | 4.5 |
 | white on `success-600` | **5.36** | 4.5 |
 | white on `warning-600` | **5.05** | 4.5 |
 | white on `danger-600` (tuned, ADR-0034) | **7.34** | 4.5 |
 | white on `info-600` | **7.66** | 4.5 |
-| badge `*-800` on `*-100` (all six families) | **7.25 – 11.53** | 4.5 |
-| link `primary-600` on white | **10.05** | 4.5 |
-| `border-interactive` on white / page / warm | **3.67 / 3.45 / 3.39** | 3.0 |
-| focus ring `primary-600` on white | **10.05** | 3.0 |
-| inverse focus ring `primary-300` on `primary-600` | **4.55** | 3.0 |
-| white on `surface-inverse` (footer) | **16.12** | 4.5 |
+| badge `*-800` on `*-100` (all six families) | **7.25 – 11.60** | 4.5 |
+| link `primary-600` on white | **10.25** | 4.5 |
+| `border-interactive` on white / page / warm | **3.67 / 3.45 / 3.36** | 3.0 |
+| focus ring `primary-600` on white | **10.25** | 3.0 |
+| inverse focus ring `primary-300` on `primary-600` | **4.42** | 3.0 |
+| white on `surface-inverse` (footer) | **16.36** | 4.5 |
 | disabled text `neutral-500` on `neutral-100` | **3.96** | 3.0 |
 
-**Three findings from that verification worth keeping visible:**
+**Four findings from that verification worth keeping visible:**
 
 1. `warning-600` was originally `#A66B00` and measured **4.44:1** — a real AA failure for a white label. Darkened to `#9A6300` → 5.05:1.
 2. `neutral-300` (1.71:1) and `neutral-400` (2.67:1) **both fail WCAG 1.4.11** as input borders. This is why `--color-neutral-450` (`#7F8787`, 3.67:1) exists and why `--mk-border-interactive` is mandatory for control boundaries. `neutral-200`/`300` remain valid for **decorative** dividers only, where 1.4.11 does not apply.
-3. **Danger's hue was tuned −11° when Earth replaced Petrol as `primary` (ADR-0034 D4).** Earth's hue (≈26°) sits only ≈24° from the pre-existing danger hue (≈3°) — below the verifier's `HUE_MIN_SEPARATION = 30.0°` for the `primary`/`success`/`info`/`danger` status families. Per §9.4 ("fix the token, never the assertion"), every danger shade's hue was rotated −11° (lightness/saturation held), moving 600 from `#A32A24` (hue 3°) to `#A32435` (measured hue **352.0°**). Measured primary/danger separation after the tune: **≈34.1°** (`|26.1 − 352.0| = 325.9`, `360 − 325.9 = 34.1`), clearing the 30° floor.
+3. **Danger's hue was tuned −11° when Earth replaced Petrol as `primary` (ADR-0034 D4).** Earth's hue (≈26°) sits only ≈24° from the pre-existing danger hue (≈3°) — below the verifier's `HUE_MIN_SEPARATION = 30.0°` for the `primary`/`success`/`info`/`danger` status families. Per §9.4 ("fix the token, never the assertion"), every danger shade's hue was rotated −11° (lightness/saturation held), moving 600 from `#A32A24` (hue 3°) to `#A32435` (measured hue **352.0°**). Measured primary/danger separation after the tune: **≈34.2°** (`|26.2 − 352.0| = 325.8`, `360 − 325.8 = 34.2`), clearing the 30° floor. The OQ-12 hue refresh moved primary from 26.1° to 26.2° — negligible drift, the 30° floor still clears by the same margin.
+4. **`primary-500` carries only a thin AA margin as a white-text fill — do not use it for that.** Measured **4.73:1**, barely above the 4.5:1 body-text floor (versus `primary-600`'s comfortable 10.25:1). The verifier only asserts the large-text 3.0 minimum for this pair (see `verify-contrast.py`'s own pairing), which is why it shows `(large only)` above — but the number is close enough to the normal-text floor that a slightly different rendering environment or sub-pixel AA could tip it under 4.5:1. Treat `500` as a mid-ramp surface/decorative swatch, not a button or badge fill; fills stay on `600` (§3.1).
 
 **Re-run this script in CI on every colour change** (§9.5).
 
@@ -987,7 +1095,7 @@ Selected measured ratios (full output above):
 
 Single global treatment — `--mk-focus-ring`: 2 px `primary-600` ring at 2 px offset. `focus-visible` only (no ring on mouse click), but **`:focus-visible` must never be replaced by removing focus entirely.** `outline: none` without a replacement ring is a lint failure.
 
-On brand-filled surfaces use `--mk-focus-color-inverse` (`primary-300`, 3.94:1 against `primary-600`).
+On brand-filled surfaces use `--mk-focus-color-inverse` (`primary-300`, 4.42:1 against `primary-600`).
 
 Focus order follows DOM order. Modals trap focus and restore it to the trigger. The skip link is the first focusable element.
 
@@ -1439,14 +1547,14 @@ Also recommended: `axe-core` in the browser-test suite, and a Lighthouse budget 
 ## 10. Quick reference
 
 ```
-COLOUR    primary-600 #5D3A1F  brand/CTA/link/focus (Earth — PROVISIONAL, OQ-12)
+COLOUR    primary-600 #563B26  brand/CTA/link/focus (Earth — logo-sampled, OQ-12 resolved)
           success-600 #1C7A44  DIBAYAR, SELESAI
           warning-600 #9A6300  MENUNGGU_*, Urgent, scan pending
           danger-600  #A32435  DITOLAK, error, failed (hue tuned −11°, ADR-0034)
           info-600    #3A4E9B  gated-fallback banners
           neutral-700 #444B4B  body text
           neutral-450 #7F8787  interactive borders  ← not 300
-          secondary   #2E7D32  Leaf — surface/accent ONLY, never a fill (PROVISIONAL, OQ-12)
+          secondary   #336B3E  Leaf — surface/accent ONLY, never a fill (logo-sampled, OQ-12 resolved)
 
 TEXT      16px floor on all inputs · text-base body · 500 UI · 600 headings
 SPACE     4px base · gutter p-4/md:p-6/lg:px-8 · section 40/64 · touch h-11
@@ -1472,10 +1580,10 @@ These require a decision from design, product, or brand. **Each is a real fork, 
 
 | ID | Question | Default in force | Blocks |
 |---|---|---|---|
-| **OQ-01** | Is **Petrol teal** the accepted brand primary? A green primary is culturally resonant for an Indonesian cemetery brand but collides with `success` (§1.2a). If green is mandated, `success` must move to teal and every §7.1 pair must be re-verified. | **Resolved (Earth, ADR-0034), 17 Aug 2026.** The official brand identity mandates Earth brown `#5D3A1F` as primary; Petrol is retired. The green-vs-success ambiguity this question worried about is now solved structurally, not by hue-avoidance: brand fills are brown, `secondary` (Leaf) never fills anything (§1.2b). **PROVISIONAL pending OQ-12.** | Whole palette — resolved |
+| **OQ-01** | Is **Petrol teal** the accepted brand primary? A green primary is culturally resonant for an Indonesian cemetery brand but collides with `success` (§1.2a). If green is mandated, `success` must move to teal and every §7.1 pair must be re-verified. | **Resolved (Earth, ADR-0034), 17 Aug 2026.** The official brand identity mandates Earth brown (`#563B26`, logo-sampled per OQ-12) as primary; Petrol is retired. The green-vs-success ambiguity this question worried about is now solved structurally, not by hue-avoidance: brand fills are brown, `secondary` (Leaf) never fills anything (§1.2b). | Whole palette — resolved |
 | **OQ-02** | Is there an existing Makam.co.id brand identity — logo, colour, typeface? The live site at `makam.co.id` is a static landing page (14 KB `index.html`) not derived from this repo; it was **not** treated as brand authority here. | **Resolved, 17 Aug 2026 (ADR-0034).** The stakeholder supplied an official identity render plus the *Filosofi Logo Makam.co.id* philosophy text in chat on 17 Aug 2026; it is now authoritative. See §1.2, §1.4. | §1.2, §1.4 — resolved |
 | **OQ-03** | Is **Inter + Source Serif 4** acceptable, and is there budget/licence for a commercial alternative? Both chosen are open-licence and self-hostable. | **Amended, 17 Aug 2026 (ADR-0034).** Poppins added as `--font-display` (`h1`/`h2`, hero, header wordmark; philosophy: "modern, clean, digital, friendly, professional"), self-hosted via `@fontsource/poppins`, latin subset, weight 600 only. Inter is retained for body/UI/`h3`/`h4`/Filament. Source Serif 4 is retained too, moved to the new `--font-document` token (documents only, §1.4) so it can never be silently replaced by Poppins. | §1.4, §4.6 |
-| **OQ-12** | Official brand hex values, a vector source for the mark, and a horizontal lockup are still outstanding. Every Earth/Leaf hex adopted in this pass was derived from a chat-reviewed render, not sampled from confirmed brand collateral (ADR-0034 D9), and every raster asset built from it (§8, Task 3 — `mark-96`, `mark-inverse-96`, `lockup-320`/`640`, `favicon.ico`, `apple-touch-icon.png`) is provisional for the same reason. | **Default in force: derived values.** `primary` Earth `#5D3A1F`, `secondary` Leaf `#2E7D32`, and the full raster asset set stay **PROVISIONAL** until official brand hex values, a vector logo source, and a horizontal lockup are supplied and sampled directly. | §1.2, §1.4, §8, all brand raster assets |
+| **OQ-12** | Official brand hex values, a vector source for the mark, and a horizontal lockup are still outstanding. Every Earth/Leaf hex adopted in this pass was derived from a chat-reviewed render, not sampled from confirmed brand collateral (ADR-0034 D9), and every raster asset built from it (§8, Task 3 — `mark-96`, `mark-inverse-96`, `lockup-320`/`640`, `favicon.ico`, `apple-touch-icon.png`) is provisional for the same reason. | **Resolved 21 Aug 2026.** The real official logo (`docs/design/brand/source/logo.png`) is now in hand. `primary` Earth `#563B26` and `secondary` Leaf `#336B3E` are sampled directly from it (`docs/design/brand/sample-logo-colours.php`), and the full 50–950 ramps are regenerated from those anchors (`docs/design/brand/generate-ramp.php`) — see the OQ-12 note in §1.2. `primary-500` was found to carry only a thin AA margin as a white-text fill (4.73:1, §7.1 finding 4) and is documented as fill-ineligible in §3.1. The vector logo source and horizontal lockup asset rebuild are tracked separately (§8, Task 3) and are **not** part of this resolution. | §1.2, §3.1, §7.1 — resolved (hex values); §1.4, §8 raster assets — still outstanding |
 | **OQ-04** | **Mobile bottom navigation** — approve or reject? IA §2 specifies hamburger + persistent Bantuan; a bottom nav would be a navigation change requiring product approval (§3.11). | IA-compliant header only; bottom nav **not shipped** | §3.11 |
 | **OQ-05** | Which **icon set**? An outline set at 1.5 px stroke is assumed (Heroicons/Lucide class). Affects the SVG sprite and §4.6 budget. | Outline, 1.5 px, inline sprite | §3, §4.6 |
 | **OQ-06** | Exact **Indonesian microcopy** for each state in §6. Strings here are illustrative; final copy needs a product/legal pass, especially payment, Urgent availability, and privacy notices (`faq-catalog.md` forbids publishing unsupported SLA or method). | Illustrative only | §6 |
@@ -1495,11 +1603,12 @@ Per `AGENTS.md`: *"Never report `PASS` for a check that was not executed; use `B
 
 | Item | Result | Evidence |
 |---|---|---|
-| WCAG 2.1 AA contrast, 46 documented pairs | **PASS** | `python3 docs/design/verify-contrast.py` → exit 0, 79 tokens parsed, 46/46 pass (§7.1) |
-| Semantic hue separation ≥ 30° for primary/success/info/danger | **PASS** | Same script: 26.1° / 145.5° / 227.6° / 352.0° |
+| WCAG 2.1 AA contrast, 49 documented pairs | **PASS** | `python3 docs/design/verify-contrast.py` → exit 0, 79 tokens parsed, 49/49 pass (§7.1) |
+| Semantic hue separation ≥ 30° for primary/success/info/danger | **PASS** | Same script: 26.2° / 145.5° / 227.6° / 352.0° |
 | Two real AA failures found and fixed during v0.1 authoring | **PASS** | `warning-600` 4.44 → 5.05; `neutral-300`/`400` borders 1.71/2.67 → `neutral-450` 3.67 |
 | `tokens.css` parses as CSS token declarations | **PASS** | Verifier extracted all 79 `--color-*-<shade>` tokens |
 | Re-verified 17 Aug 2026 against the shipped Earth/Leaf palette (ADR-0034) — all 46 pairs re-pass, including the danger-hue tune | **PASS** | `python3 docs/design/verify-contrast.py`, re-run for this document sync: 79 tokens parsed, 46/46 pass, `RESULT: PASS — all 46 pairs meet WCAG 2.1 AA` (full output §7.1); danger/primary separation ≈34.1° after the −11° hue tune (ADR-0034 D4), clearing the 30° floor |
+| Re-verified 21 Aug 2026 against the OQ-12-resolved, logo-sampled Earth/Leaf palette — all 49 pairs re-pass | **PASS** | `python3 docs/design/verify-contrast.py`, re-run for OQ-12 resolution: 79 tokens parsed, 49/49 pass, `RESULT: PASS — all 49 pairs meet WCAG 2.1 AA` (full output §7.1); primary/danger separation ≈34.2° holds; `primary-500` white-text fill measures 4.73:1, a thin AA margin (§7.1 finding 4, §3.1) |
 
 ### NOT TESTED — updated as items get verified; not a static snapshot
 
@@ -1538,7 +1647,7 @@ Illustration style, photography direction and sourcing, logo design, motion-grap
 
 Ordered, because some steps depend on earlier ones.
 
-1. [x] Resolve **OQ-01** (brand primary) and **OQ-02** (existing identity) — **resolved 17 Aug 2026, ADR-0034** (Earth brown primary, Leaf green secondary; every value PROVISIONAL pending OQ-12) — everything downstream depends on the palette
+1. [x] Resolve **OQ-01** (brand primary) and **OQ-02** (existing identity) — **resolved 17 Aug 2026, ADR-0034** (Earth brown primary, Leaf green secondary); **OQ-12** (official hex values) — **resolved 21 Aug 2026**, logo-sampled Earth/Leaf hex now in `tokens.css` — everything downstream depends on the palette
 2. [ ] Resolve **OQ-04** (bottom nav) — it is a navigation contract, not a style choice
 3. [ ] Record **ADR-0028 — Adopt token-driven design system** (§9.4)
 4. [x] Add `docs/design/design-system.md` to Kiro steering (**OQ-11**) so agents actually read it — done 25 Jul 2026, `.kiro/steering/design.md`
