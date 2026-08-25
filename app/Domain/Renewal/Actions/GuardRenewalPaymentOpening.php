@@ -20,9 +20,14 @@ use App\Platform\FinancialLedger\Money;
  * `allowed(manualCoordinationRequired: true)` — the "eligible; online
  * unavailable" state that renders the manual coordination screen.
  *
- * This guard never calls `PaymentSession::create()` — that path throws by
- * design (Wave 1b ruling 1b-L3-01), and Ruling A explicitly forbids
- * attempting it.
+ * This guard never calls `PaymentSession::create()` — that call now lives in
+ * `Actions\OpenPaymentSession::authorizeRenewal()`, which refuses to make it
+ * whenever this guard's result is denied OR `manualCoordinationRequired`.
+ * The online path is blocked only WHILE `G-PAY-01` is closed, matching the
+ * `$gateClosed` condition below exactly: when the gate is open and every
+ * other condition holds, `authorizeRenewal()` genuinely reaches
+ * `PaymentSession::create()` — this guard still never calls it directly,
+ * but it is no longer true that the online path is unreachable overall.
  *
  * ---------------------------------------------------------------------------
  * FOUR real conditions, not five — the plan's condition table was optimistic
