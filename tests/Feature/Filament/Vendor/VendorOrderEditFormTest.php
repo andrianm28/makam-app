@@ -8,6 +8,7 @@ use App\Domain\Marketplace\MarketplaceAuditActions;
 use App\Domain\Marketplace\VendorProcessingStatus;
 use App\Filament\Vendor\Resources\VendorOrders\Pages\EditVendorOrder;
 use App\Platform\Audit\Models\AuditEvent;
+use App\Platform\Outbox\Models\OutboxEvent;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -81,6 +82,47 @@ final class VendorOrderEditFormTest extends TestCase
                 'new_state' => VendorProcessingStatus::DIPROSES,
             ],
             $event->metadata,
+        );
+    }
+
+    public function test_a_vendor_can_cancel_an_order_through_the_form(): void
+    {
+        // DIBATALKAN has no dedicated one-click action
+        // (`VendorOrderStatusTransitionActionsTest`'s six actions are accept/
+        // reject/process/sendSchedule/complete/complain) — the form's status
+        // `Select` is the only surface that reaches it, per
+        // `VendorOrderForm`'s doc block ("No transition graph, deliberately").
+        [$user, $order] = $this->vendorOrderForGrantedVendor();
+
+        Livewire::test(EditVendorOrder::class, ['record' => $order->getRouteKey()])
+            ->fillForm(['status' => VendorProcessingStatus::DIBATALKAN])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $order->refresh();
+        $this->assertSame(VendorProcessingStatus::DIBATALKAN, $order->status);
+        $this->assertTrue($order->isCancelled());
+
+        $event = AuditEvent::query()
+            ->where('action', MarketplaceAuditActions::ORDER_STATUS_CHANGED)
+            ->where('subject_id', (string) $order->id)
+            ->sole();
+        $this->assertSame((string) $user->id, $event->actor_ref);
+        $this->assertSame(
+            [
+                'previous_state' => VendorProcessingStatus::MENUNGGU_VENDOR,
+                'new_state' => VendorProcessingStatus::DIBATALKAN,
+            ],
+            $event->metadata,
+        );
+
+        // `vendor_order.decided.v1` is scoped to the MENUNGGU_VENDOR ->
+        // DITERIMA_VENDOR/DITOLAK_VENDOR decision only (see
+        // `UpdateVendorOrderStatus`'s class doc block) — a cancellation is
+        // audited but genuinely produces no outbox event today. This is the
+        // documented behaviour, not an oversight this test papers over.
+        $this->assertNull(
+            OutboxEvent::query()->where('event_name', 'vendor_order.decided.v1')->first(),
         );
     }
 

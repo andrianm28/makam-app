@@ -264,6 +264,54 @@ final class UpdateVendorOrderStatusTest extends TestCase
         );
     }
 
+    public function test_waiting_to_cancelled_transitions_status_and_audits_but_emits_no_outbox_event(): void
+    {
+        // DIBATALKAN is not DITERIMA_VENDOR/DITOLAK_VENDOR, so it falls
+        // outside the `vendor_order.decided.v1` discrimination (see the
+        // class doc block) — a genuine, documented gap in the notification
+        // matrix (no "vendor cancelled" row exists in
+        // `docs/contracts/notification-matrix.md`), not a bug in this Action.
+        $order = $this->makeOrder(status: VendorProcessingStatus::MENUNGGU_VENDOR);
+
+        $updated = (new UpdateVendorOrderStatus)(
+            order: $order,
+            status: VendorProcessingStatus::DIBATALKAN,
+            actorReference: 42,
+            actorRole: 'vendor',
+        );
+
+        $this->assertSame(VendorProcessingStatus::DIBATALKAN, $updated->status);
+        $this->assertTrue($updated->isCancelled());
+        $this->assertSame(
+            VendorProcessingStatus::DIBATALKAN,
+            AuditEvent::query()->sole()->metadata['new_state'],
+        );
+        $this->assertNull(
+            OutboxEvent::query()->where('event_name', 'vendor_order.decided.v1')->first()
+        );
+    }
+
+    public function test_accepted_to_cancelled_transitions_status_and_audits_but_emits_no_outbox_event(): void
+    {
+        // A realistic later-cancellation path: the vendor already accepted
+        // the order, then cancels it. `$previousStatus` here is
+        // DITERIMA_VENDOR, not MENUNGGU_VENDOR, so the outbox guard's
+        // `from_status` check excludes this transition on that basis too.
+        $order = $this->makeOrder(status: VendorProcessingStatus::DITERIMA_VENDOR);
+
+        $updated = (new UpdateVendorOrderStatus)(
+            order: $order,
+            status: VendorProcessingStatus::DIBATALKAN,
+            actorReference: 42,
+            actorRole: 'vendor',
+        );
+
+        $this->assertTrue($updated->isCancelled());
+        $this->assertNull(
+            OutboxEvent::query()->where('event_name', 'vendor_order.decided.v1')->first()
+        );
+    }
+
     public function test_a_correction_that_lands_on_the_same_outcome_twice_emits_two_distinct_events(): void
     {
         // Regression: a vendor can genuinely correct their decision back to
