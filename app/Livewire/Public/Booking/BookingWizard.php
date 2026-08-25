@@ -18,6 +18,7 @@ use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\OrderWorkflow\Actions\SubmitBookingDraft;
 use App\Domain\OrderWorkflow\Exceptions\UnroutableProductTypeException;
+use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\Quotation\Actions\ComposeQuoteLinesFromBookingDraft;
 use App\Domain\Quotation\Actions\IssueQuote;
 use App\Domain\Quotation\Exceptions\UnpricedBookingServiceException;
@@ -407,12 +408,87 @@ final class BookingWizard extends Component
         ]);
     }
 
+    /**
+     * The MANUAL branch (always rendered; the only one available while
+     * `G-PAY-01` is closed). Unlike `openOnlinePayment()`, there is no
+     * payment-gateway round-trip to wait for, so the draft is submitted as
+     * an Order in the same request the step is saved — the customer's
+     * booking becomes real and staff-visible (`BookingOrderResource`)
+     * immediately, rather than waiting on a payment confirmation that, for
+     * this branch, has no online step to arrive from.
+     *
+     * Previously this only called `saveStepOrShowErrors()` and stopped: the
+     * draft was saved but no `Order` was ever created for a manual
+     * submission, so every manual booking — the only payment path live on
+     * production while `G-PAY-01` stays closed — was invisible to staff
+     * outside a direct database query. Fixed by mirroring
+     * `openOnlinePayment()`'s own submission chain (same idempotency key
+     * shape, same Action), stopping after order creation since the manual
+     * path has no quote/payment-session to open.
+     */
     public function saveStep8(string $paymentMethod): void
     {
-        $this->saveStepOrShowErrors(BookingWizardStep::PAYMENT, [
-            'payment_method' => $paymentMethod,
-            'payment_reference' => $this->paymentReference,
-        ]);
+        if ($this->draftId === null) {
+            $this->autosaveState = 'failed';
+            $this->addError('draft', 'Sesi pemesanan Anda telah berakhir. Silakan mulai ulang.');
+
+            return;
+        }
+
+        $draft = BookingDraftQuery::findBound($this->draftId);
+
+        if ($draft === null) {
+            $this->autosaveState = 'failed';
+            $this->addError('draft', 'Sesi pemesanan Anda telah berakhir. Silakan mulai ulang.');
+
+            return;
+        }
+
+        try {
+            $saved = (new SaveBookingDraftStep)(
+                $draft,
+                BookingWizardStep::PAYMENT,
+                [
+                    'payment_method' => $paymentMethod,
+                    'payment_reference' => $this->paymentReference,
+                ],
+                $this->idempotencyKeyFor(BookingWizardStep::PAYMENT, [
+                    'payment_method' => $paymentMethod,
+                    'payment_reference' => $this->paymentReference,
+                ]),
+                expectedVersion: $this->version,
+            );
+
+            $this->hydrateFrom($saved);
+            $this->autosaveState = 'saved';
+        } catch (BookingStepValidationException $e) {
+            $this->autosaveState = 'failed';
+
+            foreach ($e->getErrors() as $field => $messages) {
+                $this->addError($field, $messages[0]);
+            }
+
+            return;
+        } catch (BookingDraftVersionConflictException) {
+            $this->handleVersionConflict();
+
+            return;
+        }
+
+        // Same idempotency key `openOnlinePayment()` uses on this draft — a
+        // resumed or duplicate manual submission returns the SAME order
+        // rather than creating a second one (`SubmitBookingDraft`'s own
+        // unique-index-backed guarantee). A failure here is reported and
+        // swallowed rather than shown as a step error: the draft is already
+        // saved and Step 9 renders correctly either way — with the real
+        // order reference when this succeeded, or the honest "not yet
+        // processed" copy when it did not (`render()`'s `confirmationData`
+        // only carries an order reference when one really exists).
+        try {
+            app(SubmitBookingDraft::class)($saved, 'booking:'.$saved->id.':submit');
+        } catch (UnroutableProductTypeException|InvalidArgumentException $e) {
+            report($e);
+        }
     }
 
     /**
@@ -896,8 +972,17 @@ final class BookingWizard extends Component
         if ($this->currentStep === BookingWizardStep::CONFIRMATION && $this->draftId !== null) {
             $draft = BookingDraftQuery::findBound($this->draftId);
             if ($draft !== null) {
+                // Only set once `saveStep8()`'s submission chain has actually
+                // created the order (the normal case) — a rare mid-request
+                // failure there is reported and swallowed, not surfaced
+                // here, so this stays null and Step 9 falls back to its
+                // honest "not yet processed" copy rather than claiming an
+                // order that does not exist.
+                $order = Order::query()->where('booking_draft_id', $draft->id)->first();
+
                 $confirmationData = [
                     'draft_id' => $draft->id,
+                    'order_reference' => $order?->reference,
                     'summary' => BookingDraftQuery::summary($draft),
                     'customer_name' => $draft->customer_full_name,
                     'customer_mobile' => $draft->customer_mobile,
