@@ -949,62 +949,73 @@
                         @endif
                     @endif
 
-                    <x-mk.card>
-                        <div class="flex flex-col gap-2">
-                            <h3 class="text-base font-semibold text-neutral-900">Pembayaran Manual</h3>
-                            <p class="text-sm text-neutral-600">
-                                Transfer ke rekening yang akan diinformasikan setelah Anda melanjutkan.
-                                Mohon siapkan bukti transfer untuk verifikasi.
-                            </p>
-                        </div>
-
-                        <div class="flex max-w-form flex-col gap-1.5">
-                            <label for="payment-reference" class="text-base font-medium text-neutral-800">
-                                Referensi Pembayaran
-                                <span class="text-danger-600" aria-hidden="true">*</span>
-                                <span class="sr-only">(wajib diisi untuk pembayaran manual)</span>
-                            </label>
-                            <p id="payment-reference-hint" class="text-sm text-neutral-600">
-                                Nomor referensi transfer atau nama pengirim, agar tim kami dapat mencocokkan pembayaran Anda.
-                                Wajib diisi bila Anda memilih pembayaran manual.
-                            </p>
-                            <input
-                                type="text"
-                                id="payment-reference"
-                                wire:model="paymentReference"
-                                aria-describedby="payment-reference-hint{{ $errors->has('payment_reference') ? ' payment-reference-error' : '' }}"
-                                @if ($errors->has('payment_reference')) aria-invalid="true" @endif
-                                class="{{ $mkControl }} {{ $mkFieldState($errors->has('payment_reference')) }}"
-                            >
-                            @error('payment_reference')
-                                <p id="payment-reference-error" class="flex items-start gap-1.5 text-sm text-danger-700" role="alert">
-                                    <x-dynamic-component component="icon.alert-circle" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                                    <span>{{ $message }}</span>
+                    {{-- assumptions-and-gates.md §2 / `PaymentMode`'s own doc
+                         block: manual coordination is `G-PAY-01`'s FALLBACK,
+                         never a second option offered alongside a live or
+                         untried online path. `$showManualPayment` (computed
+                         in `BookingWizard::render()`) is true when the gate
+                         is closed, or once the online attempt has actually
+                         failed (`onlinePaymentError`, or a Failed/Expired
+                         session) — the honest recovery route, not a
+                         permanent alternative. --}}
+                    @if ($showManualPayment)
+                        <x-mk.card>
+                            <div class="flex flex-col gap-2">
+                                <h3 class="text-base font-semibold text-neutral-900">Pembayaran Manual</h3>
+                                <p class="text-sm text-neutral-600">
+                                    Transfer ke rekening yang akan diinformasikan setelah Anda melanjutkan.
+                                    Mohon siapkan bukti transfer untuk verifikasi.
                                 </p>
-                            @enderror
-                        </div>
+                            </div>
 
-                        <div class="flex flex-wrap items-center gap-3">
-                            <x-mk.button
-                                variant="secondary"
-                                wire:click="saveStep8('{{ \App\Domain\Booking\BookingPaymentMethod::MANUAL }}')"
-                                wire:loading.attr="disabled"
-                                wire:target="saveStep8"
-                            >
-                                Saya Akan Bayar Manual
-                            </x-mk.button>
-                        </div>
-                    </x-mk.card>
+                            <div class="flex max-w-form flex-col gap-1.5">
+                                <label for="payment-reference" class="text-base font-medium text-neutral-800">
+                                    Referensi Pembayaran
+                                    <span class="text-danger-600" aria-hidden="true">*</span>
+                                    <span class="sr-only">(wajib diisi untuk pembayaran manual)</span>
+                                </label>
+                                <p id="payment-reference-hint" class="text-sm text-neutral-600">
+                                    Nomor referensi transfer atau nama pengirim, agar tim kami dapat mencocokkan pembayaran Anda.
+                                    Wajib diisi bila Anda memilih pembayaran manual.
+                                </p>
+                                <input
+                                    type="text"
+                                    id="payment-reference"
+                                    wire:model="paymentReference"
+                                    aria-describedby="payment-reference-hint{{ $errors->has('payment_reference') ? ' payment-reference-error' : '' }}"
+                                    @if ($errors->has('payment_reference')) aria-invalid="true" @endif
+                                    class="{{ $mkControl }} {{ $mkFieldState($errors->has('payment_reference')) }}"
+                                >
+                                @error('payment_reference')
+                                    <p id="payment-reference-error" class="flex items-start gap-1.5 text-sm text-danger-700" role="alert">
+                                        <x-dynamic-component component="icon.alert-circle" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                                        <span>{{ $message }}</span>
+                                    </p>
+                                @enderror
+                            </div>
 
-                    {{-- One indicator for both buttons: they call the same
-                         method, and `wire:target="saveStep8"` is what keeps
-                         the disable attached to the request actually in
-                         flight — the double-submission guard that matters
-                         most on the payment step. --}}
-                    <span wire:loading wire:target="saveStep8" role="status" class="flex items-center gap-2 text-sm text-neutral-600">
-                        <x-mk.spinner class="size-4" aria-hidden="true" />
-                        Menyimpan pilihan pembayaran&hellip;
-                    </span>
+                            <div class="flex flex-wrap items-center gap-3">
+                                <x-mk.button
+                                    variant="secondary"
+                                    wire:click="saveStep8('{{ \App\Domain\Booking\BookingPaymentMethod::MANUAL }}')"
+                                    wire:loading.attr="disabled"
+                                    wire:target="saveStep8"
+                                >
+                                    Saya Akan Bayar Manual
+                                </x-mk.button>
+                            </div>
+                        </x-mk.card>
+
+                        {{-- One indicator for both buttons: they call the same
+                             method, and `wire:target="saveStep8"` is what keeps
+                             the disable attached to the request actually in
+                             flight — the double-submission guard that matters
+                             most on the payment step. --}}
+                        <span wire:loading wire:target="saveStep8" role="status" class="flex items-center gap-2 text-sm text-neutral-600">
+                            <x-mk.spinner class="size-4" aria-hidden="true" />
+                            Menyimpan pilihan pembayaran&hellip;
+                        </span>
+                    @endif
                 </div>
 
                 @error('payment_method')
