@@ -69,20 +69,52 @@ use Symfony\Component\HttpFoundation\Response;
  * which needs it too.
  *
  * ---------------------------------------------------------------------------
- * No `unsafe-eval` — this is why `config/livewire.php` exists
+ * `unsafe-eval` IS present — Filament's own Alpine usage genuinely needs it
  * ---------------------------------------------------------------------------
- * `script-src` here carries no `unsafe-eval`, deliberately. Livewire's
- * REGULAR JS bundle needs it (it parses `wire:click="method(args)"`-style
- * directive expressions, and the Alpine.js it bundles internally parses
- * `x-on:*`/`x-data`, both via `new Function()`), so this policy only works
- * because `config/livewire.php` sets `csp_safe => true` — Livewire's own
- * CSP-safe bundle, built without `eval`/`new Function`. See that file's own
- * doc block for the full incident this fixed (SEC-08's report-only-to-
- * enforcing switch broke every `wire:click` with an argument, masked in
- * report-only mode because report-only never blocks the eval it needed) and
- * for the directive-grammar audit that confirmed the CSP-safe build's more
- * restricted syntax is compatible with every `wire:*`/`x-*` directive this
- * codebase actually uses.
+ * The first attempt at this switch shipped `script-src` with no
+ * `unsafe-eval` at all, relying on Livewire's official CSP-safe bundle
+ * (`config('livewire.csp_safe', true)`, which serves `livewire.csp.js`
+ * instead of the regular `livewire.js` — built without `eval`/
+ * `new Function()`, at the cost of a restricted directive grammar: no
+ * arbitrary JS expressions, only plain method calls, literal arguments,
+ * simple assignments, and a fixed set of magics). A repo-wide grep of this
+ * app's OWN `resources/views/` confirmed every `wire:*`/`x-*` directive
+ * this codebase writes is within that restricted grammar — but that grep
+ * never covered `vendor/filament/**`, and Filament's own bundled views use
+ * expressions the restricted grammar cannot parse at all:
+ * `x-on:click="$store.sidebar.close()"`,
+ * `x-on:click="(theme = @js($theme)) && close()"`,
+ * `x-on:click="window.matchMedia(...).matches && $store.sidebar.close()"`.
+ * Livewire's JS asset is served from ONE fixed, shared, per-installation
+ * URL (`Mechanisms\HandleRequests\EndpointResolver::scriptPath()`, hashed
+ * from `APP_KEY`) with no route/panel context available to the request
+ * that fetches it — the public site and both Filament panels all reference
+ * the exact same script tag, so there is no way to serve the CSP-safe
+ * bundle to public pages while serving the regular bundle to `/admin` and
+ * `/vendor` without a session-based (or similarly indirect) cross-request
+ * signal, which is real additional infrastructure this change does not
+ * build. Confirmed the hard way, not theorised: the CSP-safe attempt's own
+ * PR pushed CI green on every check except the real browser suite, whose
+ * failures spanned admin login, vendor login, and Filament table-action
+ * clicks — an unparseable expression anywhere in Alpine's page-wide boot
+ * (present on every Filament page via the sidebar/theme-toggle markup)
+ * throws during initialization and silently takes every OTHER directive on
+ * that page down with it, not just the one with the complex expression.
+ *
+ * Given the shared-endpoint constraint, the real choice was `unsafe-eval`
+ * site-wide or a real per-panel asset-routing feature this fix does not
+ * warrant building blind. `unsafe-eval`'s actual exploitability here is
+ * narrower than it sounds: `script-src` stays nonce-scoped with no
+ * `unsafe-inline` and no third-party origin (besides the one deliberate
+ * Maps `frame-src`), so an attacker still cannot inject an arbitrary
+ * `<script>` tag or load a remote script — `unsafe-eval` alone only helps
+ * an attacker who has ALREADY found a way to route a string into an
+ * existing `eval`/`Function`/`setTimeout(string)` call already present in
+ * this app's or Filament's own legitimate code (a narrower "gadget" class
+ * of vulnerability), not "any injection becomes code execution." This is
+ * the standard, documented trade-off strict-CSP guidance describes for
+ * Alpine/Livewire-based admin UIs; it is not a step back to the pre-SEC-08
+ * report-only posture, which blocked nothing at all.
  */
 final class ReportContentSecurityPolicy
 {
@@ -101,7 +133,12 @@ final class ReportContentSecurityPolicy
     {
         $directives = [
             "default-src 'self'",
-            "script-src 'self' 'nonce-{$nonce}'",
+            // 'unsafe-eval' — see this class's own doc block for exactly
+            // why: Filament's bundled Alpine genuinely needs it, and
+            // Livewire's JS asset has no per-panel routing to avoid it
+            // selectively. Still nonce-scoped, still no 'unsafe-inline',
+            // still no third-party script origin.
+            "script-src 'self' 'nonce-{$nonce}' 'unsafe-eval'",
             "style-src 'self' 'nonce-{$nonce}'",
             "img-src 'self' data:",
             "font-src 'self'",

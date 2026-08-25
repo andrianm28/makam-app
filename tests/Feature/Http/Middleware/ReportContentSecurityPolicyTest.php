@@ -62,6 +62,43 @@ final class ReportContentSecurityPolicyTest extends TestCase
         $response->assertHeaderMissing('Content-Security-Policy-Report-Only');
     }
 
+    /**
+     * `unsafe-eval` in `script-src`, deliberately — see the middleware's own
+     * doc block for exactly why (Filament's bundled Alpine genuinely needs
+     * it; Livewire's JS asset has no per-panel routing to avoid it
+     * selectively). Pinned here so a future attempt to remove it doesn't
+     * silently reintroduce the real regression this fixed: a live CI
+     * Playwright run showed admin login, vendor login, and Filament
+     * table-action clicks all failing once `unsafe-eval` was ever removed.
+     */
+    public function test_the_policy_allows_unsafe_eval_for_filaments_alpine_usage(): void
+    {
+        $response = $this->get('/');
+
+        $policy = (string) $response->headers->get('Content-Security-Policy');
+
+        $this->assertMatchesRegularExpression("/script-src [^;]*'unsafe-eval'/", $policy);
+    }
+
+    /**
+     * `style-src` stays free of `unsafe-eval`/`unsafe-inline` — the
+     * eval-related gap is script-only (Alpine/Livewire directive parsing),
+     * not a blanket relaxation of the whole policy.
+     */
+    public function test_style_src_does_not_carry_unsafe_eval(): void
+    {
+        $response = $this->get('/');
+
+        $policy = (string) $response->headers->get('Content-Security-Policy');
+        $directives = array_map('trim', explode(';', $policy));
+
+        $styleSrc = collect($directives)->first(fn (string $d): bool => str_starts_with($d, 'style-src'));
+
+        $this->assertNotNull($styleSrc);
+        $this->assertStringNotContainsString('unsafe-eval', $styleSrc);
+        $this->assertStringNotContainsString('unsafe-inline', $styleSrc);
+    }
+
     public function test_the_policy_carries_a_nonce_shared_between_script_src_and_style_src(): void
     {
         $response = $this->get('/');
