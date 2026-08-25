@@ -154,6 +154,18 @@ return [
     | dev-worker/stg-batch-worker Compose services (profiles: ["dev-worker"]/
     | ["batch"]) are the on-demand mechanism, not Horizon-managed supervisors.
     |
+    | Dev environment convention: This array intentionally has no
+    | `development`/`dev*` key. Dev's real queue mechanism is a plain
+    | `queue:work` worker (Compose `dev-worker` profile), not Horizon. If
+    | Horizon is ever run manually on dev for debugging, it MUST be started
+    | with `php artisan horizon --environment=local` (never bare
+    | `php artisan horizon`, which silently deploys zero supervisors since
+    | APP_ENV=development matches no key in this array). Do NOT add a
+    | persistent `development` block here — dev and beta share a live Redis
+    | keyspace by explicit accepted decision (ADR-0035 item 12), and a real
+    | persistent `development` Horizon block would start supervisors that
+    | consume beta's live queues too.
+    |
     */
 
     'defaults' => [
