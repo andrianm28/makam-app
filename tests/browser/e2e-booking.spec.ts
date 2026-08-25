@@ -146,11 +146,14 @@ test.describe('E2E-BOOK — full journey (Makam Baru, standard branch)', () => {
         });
 
         await test.step('Step 9 — confirmation, invoice-equivalent summary, next action', async () => {
-            // Pending, never styled as success — no order/payment has actually
-            // been verified yet (design-system.md §6.7).
+            // Pending, never styled as success — the order now exists (fixed
+            // 25 Aug 2026: manual submission creates a real Order via
+            // SubmitBookingDraft, same as the online path), but payment has
+            // not been verified yet (design-system.md §6.7). The order
+            // reference is real and shown; only payment status is pending.
             await expect(page.getByText('Menunggu diproses', { exact: true })).toBeVisible();
             await expect(
-                page.getByText('Data pemesanan Anda telah tersimpan dan menunggu diproses'),
+                page.getByText(/Pesanan Anda diterima dengan nomor MK-/),
             ).toBeVisible();
 
             // Notification state — never claims a delivery that has not
@@ -168,8 +171,10 @@ test.describe('E2E-BOOK — full journey (Makam Baru, standard branch)', () => {
             await expect(page.getByText('Transfer Manual')).toBeVisible();
 
             // The "what happens next" list — the honest next-action state.
+            // The "nomor pesanan resmi diberikan setelah diproses" bullet is
+            // now conditional on no order existing yet; it does not appear
+            // here since this submission genuinely created one.
             await expect(page.getByText('Apa yang selanjutnya?')).toBeVisible();
-            await expect(page.getByText('Nomor pesanan resmi diberikan setelah pemesanan Anda diproses.')).toBeVisible();
 
             const axeResults = await new AxeBuilder({ page }).analyze();
             expect(axeResults.violations).toEqual([]);
