@@ -63,38 +63,62 @@ final class MarkRenewalPaidOnlineTest extends TestCase
     }
 
     /**
-     * The idempotency guard — mirrors `MarkRenewalPaidExternally`'s own
-     * existing test (`AdminRenewalActionsTest::test_mark_paid_refuses_settled_renewal`):
-     * a second settlement attempt against an already-`DIBAYAR` renewal
-     * refuses via `RenewalAlreadySettledException`, writes no second audit
-     * row and no second outbox row.
+     * The idempotency guard — corrected per task-2 review: a second
+     * settlement attempt against an already-`DIBAYAR` renewal, for the SAME
+     * amount, is a genuinely reachable duplicate-arrival race (see the
+     * class's own "Idempotency" doc-block section — `GuardRenewalPaymentOpening`
+     * has no check against two payment sessions being opened for the same
+     * still-unpaid renewal). It must be SWALLOWED — the same shape
+     * `MarkCyclePaid`/`MarkMarketplaceOrderPaid`/`ApplyPaidEffects` use for
+     * their own duplicate-arrival cases — not thrown: the second call returns
+     * the SAME renewal unchanged, with no second audit row and no second
+     * outbox row.
      */
-    public function test_a_second_invocation_against_an_already_paid_renewal_refuses(): void
+    public function test_a_second_invocation_with_a_matching_amount_against_an_already_paid_renewal_is_swallowed(): void
     {
         $renewal = $this->makeRenewal();
 
-        app(MarkRenewalPaidOnline::class)($renewal, self::AMOUNT_MINOR, 'pay_online_1', 'provider_event:test-1');
+        $first = app(MarkRenewalPaidOnline::class)($renewal, self::AMOUNT_MINOR, 'pay_online_1', 'provider_event:test-1');
+        $settledAtFirst = $first->settled_at;
+
+        $second = app(MarkRenewalPaidOnline::class)(
+            $renewal->fresh(),
+            self::AMOUNT_MINOR,
+            'pay_online_2',
+            'provider_event:test-2',
+        );
+
+        $this->assertSame(RenewalStatus::DIBAYAR, $second->status);
+        $this->assertSame($settledAtFirst?->toIso8601String(), $second->settled_at?->toIso8601String());
+
+        $this->assertSame(1, AuditEvent::query()
+            ->where('action', RenewalAuditActions::RENEWAL_PAID_ONLINE)
+            ->where('subject_id', (string) $renewal->getKey())
+            ->count());
+        $this->assertSame(1, OutboxEvent::query()
+            ->where('event_name', 'renewal.paid_online.v1')
+            ->where('aggregate_id', (string) $renewal->getKey())
+            ->count());
+
+        // The first settlement's audit row still names the FIRST provider
+        // event actor — the swallowed second call never overwrites it.
+        $audit = AuditEvent::query()->where('action', RenewalAuditActions::RENEWAL_PAID_ONLINE)->sole();
+        $this->assertSame('provider_event:test-1', (string) $audit->actor_ref);
+    }
+
+    /**
+     * The no-op above is scoped to exactly the state this call itself
+     * produces (`DIBAYAR`) — any OTHER non-open status is still a genuine
+     * anomaly and still throws `RenewalAlreadySettledException`, the same
+     * scoping `MarkCyclePaid`/`MarkMarketplaceOrderPaid` use.
+     */
+    public function test_a_settlement_attempt_against_a_kedaluwarsa_renewal_still_refuses(): void
+    {
+        $renewal = $this->makeRenewal(RenewalStatus::KEDALUWARSA);
 
         $this->expectException(RenewalAlreadySettledException::class);
 
-        try {
-            app(MarkRenewalPaidOnline::class)(
-                $renewal->fresh(),
-                self::AMOUNT_MINOR,
-                'pay_online_2',
-                'provider_event:test-2',
-            );
-        } finally {
-            $this->assertSame(RenewalStatus::DIBAYAR, $renewal->fresh()->status);
-            $this->assertSame(1, AuditEvent::query()
-                ->where('action', RenewalAuditActions::RENEWAL_PAID_ONLINE)
-                ->where('subject_id', (string) $renewal->getKey())
-                ->count());
-            $this->assertSame(1, OutboxEvent::query()
-                ->where('event_name', 'renewal.paid_online.v1')
-                ->where('aggregate_id', (string) $renewal->getKey())
-                ->count());
-        }
+        app(MarkRenewalPaidOnline::class)($renewal, self::AMOUNT_MINOR, 'pay_online_1', 'provider_event:test-1');
     }
 
     public function test_the_outbox_event_is_recorded_with_the_correct_subject_reference(): void

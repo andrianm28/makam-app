@@ -136,14 +136,16 @@ use Illuminate\Support\Str;
  * use, which is why this branch sits alongside them rather than the
  * UUID-keyed `SubscriptionCycle` lookup below. `Domain\Renewal\Actions\
  * MarkRenewalPaidOnline` owns the amount-match-assertion + row-lock +
- * refuse-if-already-settled shape `MarkMarketplaceOrderPaid`/`MarkCyclePaid`
- * establish above, adapted to REFUSE (throw `RenewalAlreadySettledException`)
- * rather than silently no-op on a second settlement attempt — the same
- * throwing shape `Actions\MarkRenewalPaidExternally` already uses for the
- * admin-triggered leg of the identical `MENUNGGU_PEMBAYARAN -> DIBAYAR`
- * transition. A renewal has no separate fulfilment step, so this leg
- * triggers no cross-domain orchestration comparable to the care-subscription
- * leg's work-order creation.
+ * idempotent-duplicate-arrival shape `MarkMarketplaceOrderPaid`/`MarkCyclePaid`
+ * establish above: a second settlement attempt that matches the renewal's
+ * already-`DIBAYAR` state and amount is swallowed (no second write, audit or
+ * outbox row) — a genuinely reachable race, since `GuardRenewalPaymentOpening`
+ * has no check against two payment sessions being opened for the same
+ * still-unpaid renewal. Only a genuine anomaly (an amount mismatch, or a
+ * status that is neither `MENUNGGU_PEMBAYARAN` nor `DIBAYAR`) still throws.
+ * A renewal has no separate fulfilment step, so this leg triggers no
+ * cross-domain orchestration comparable to the care-subscription leg's
+ * work-order creation.
  *
  * ---------------------------------------------------------------------------
  * Care subscription: a cycle keyed by its own id, plus auto work-order creation

@@ -8,7 +8,6 @@ use App\Domain\GraveRegistry\GraveRecordAccessMode;
 use App\Domain\GraveRegistry\Models\GraveRecord;
 use App\Domain\Marketplace\Models\MarketplaceOrder;
 use App\Domain\OrderWorkflow\Models\Order;
-use App\Domain\Renewal\Exceptions\RenewalAlreadySettledException;
 use App\Domain\Renewal\Exceptions\RenewalPaymentAmountMismatchException;
 use App\Domain\Renewal\Models\Renewal;
 use App\Domain\Renewal\Models\RenewalQuote;
@@ -122,14 +121,19 @@ final class RenewalWebhookSettlementTest extends TestCase
 
     /**
      * The renewal analogue of `CareSubscriptionWebhookSettlementTest`'s
-     * second-arrival test: a second, independent provider transaction
-     * resolving to the SAME renewal reference must not double-transition it
-     * — `MarkRenewalPaidOnline`'s idempotency guard refuses (throws), the
-     * claim transaction for the SECOND event rolls back, and that event's
-     * own `provider_events` row stays `VALIDATED` (never falsely
-     * `PROCESSED`) while the first settlement's effects are untouched.
+     * second-arrival test, and the booking/care-subscription duplicate-
+     * arrival analogue (`Domain\OrderWorkflow\Actions\ApplyPaidEffects`,
+     * `MarkCyclePaid`): a second, INDEPENDENT provider transaction resolving
+     * to the SAME renewal reference is a genuinely reachable race —
+     * `GuardRenewalPaymentOpening` has no check against two payment sessions
+     * being opened for the same still-unpaid renewal — and must be
+     * SWALLOWED, not thrown. Both webhook deliveries end `PROCESSED`; the
+     * renewal is not double-transitioned; the SECOND session is still marked
+     * `PAID` (money did arrive for it — that fact is not lost), but no
+     * second `RENEWAL_PAID_ONLINE` audit row or `renewal.paid_online.v1`
+     * outbox row is written.
      */
-    public function test_a_second_payment_arrival_for_an_already_settled_renewal_leaves_the_first_settlement_untouched(): void
+    public function test_a_second_payment_arrival_for_an_already_settled_renewal_changes_nothing_further(): void
     {
         $renewal = $this->makeRenewalWithAcceptedQuote(self::AMOUNT_MINOR);
         $this->paymentSession('pay_renewal_first', self::AMOUNT_MINOR);
@@ -145,37 +149,38 @@ final class RenewalWebhookSettlementTest extends TestCase
 
         $this->paymentSession('pay_renewal_second', self::AMOUNT_MINOR);
 
-        $this->withoutExceptionHandling();
+        $this->deliver(
+            id: 'msg_renewal_duplicate',
+            dataOverrides: [
+                'payment_id' => 'pay_renewal_second',
+                'order_id' => self::RENEWAL_REFERENCE,
+                'amount' => self::AMOUNT_DECIMAL,
+            ],
+        )->assertOk();
 
-        try {
-            $this->deliver(
-                id: 'msg_renewal_duplicate',
-                dataOverrides: [
-                    'payment_id' => 'pay_renewal_second',
-                    'order_id' => self::RENEWAL_REFERENCE,
-                    'amount' => self::AMOUNT_DECIMAL,
-                ],
-            )->assertOk();
-            $this->fail('Expected the second settlement attempt to throw.');
-        } catch (RenewalAlreadySettledException) {
-            // expected — see this test's own doc block.
-        }
-
-        // The first settlement's effects are untouched.
+        // Still DIBAYAR, still the FIRST settlement's timestamp — no
+        // re-transition from the second arrival.
         $this->assertSame(RenewalStatus::DIBAYAR, $renewal->fresh()->status);
         $this->assertSame($settledAtFirst?->toIso8601String(), $renewal->fresh()->settled_at?->toIso8601String());
 
-        // Exactly one RENEWAL_PAID_ONLINE audit row and one outbox row.
+        // Exactly one RENEWAL_PAID_ONLINE audit row and one outbox row —
+        // the swallowed second call writes neither.
         $this->assertSame(1, AuditEvent::query()->where('action', RenewalAuditActions::RENEWAL_PAID_ONLINE)
             ->where('subject_id', (string) $renewal->getKey())->count());
         $this->assertSame(1, OutboxEvent::query()->where('event_name', 'renewal.paid_online.v1')
             ->where('aggregate_id', (string) $renewal->getKey())->count());
 
-        // The second event's claim rolled back: it stays VALIDATED, never
-        // falsely PROCESSED.
+        // Both provider events claimed and completed processing —
+        // the second event's claim is NOT rolled back for a swallowed
+        // duplicate arrival.
         $secondEvent = ProviderEvent::query()
             ->where('provider_transaction_id', 'pay_renewal_second')->sole();
-        $this->assertSame(ProviderEventStatus::Validated->value, $secondEvent->status);
+        $this->assertSame(ProviderEventStatus::Processed->value, $secondEvent->status);
+
+        // Money DID arrive for the second transaction, so its own session is
+        // still marked PAID — the record of what was collected.
+        $secondSession = PaymentSession::query()->where('provider_payment_id', 'pay_renewal_second')->sole();
+        $this->assertSame(SessionState::Paid->value, $secondSession->state);
     }
 
     /**
