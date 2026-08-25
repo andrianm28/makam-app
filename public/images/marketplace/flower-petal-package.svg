@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" role="img" aria-label="Ilustrasi paket bunga tabur (placeholder)">
+  <title>Paket Bunga Tabur — placeholder</title>
+  <rect width="400" height="300" rx="16" fill="#F5EFF0"/>
+  <!-- shallow bowl holding petals -->
+  <path d="M130 170 Q200 210 270 170" fill="none" stroke="#8C8378" stroke-width="4" stroke-linecap="round"/>
+  <path d="M120 168 Q200 150 280 168" fill="none" stroke="#8C8378" stroke-width="4" stroke-linecap="round"/>
+  <!-- scattered petals -->
+  <g fill="none" stroke="#B98A93" stroke-width="3">
+    <ellipse cx="150" cy="150" rx="10" ry="6" transform="rotate(20 150 150)"/>
+    <ellipse cx="185" cy="140" rx="10" ry="6" transform="rotate(-15 185 140)"/>
+    <ellipse cx="220" cy="148" rx="10" ry="6" transform="rotate(30 220 148)"/>
+    <ellipse cx="250" cy="158" rx="10" ry="6" transform="rotate(-10 250 158)"/>
+    <ellipse cx="200" cy="100" rx="9" ry="5" transform="rotate(60 200 100)"/>
+    <ellipse cx="170" cy="115" rx="9" ry="5" transform="rotate(-40 170 115)"/>
+    <ellipse cx="235" cy="112" rx="9" ry="5" transform="rotate(15 235 112)"/>
+  </g>
+  <g fill="none" stroke="#6B8F71" stroke-width="2.5">
+    <path d="M160 128 q6 -10 12 0" />
+    <path d="M225 132 q6 -10 12 0" />
+  </g>
+</svg>

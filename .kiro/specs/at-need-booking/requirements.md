@@ -4,15 +4,17 @@
 
 ## Acceptance criteria
 
-1. Intake begins with minimum data: contact, deceased identity where available, current location, desired service area/time, and urgency.
-2. A human contact route is always visible for accepted service areas.
-3. Submission creates FuneralCase before asking for noncritical data.
-4. Required documents may be completed after service where approved by operational/legal policy.
-5. Availability/plot decision supports manual confirmation or authoritative reservation.
-6. Quote shows land/package, funeral service, add-ons, delivery/transport, and exclusions.
-7. Payment timing follows approved policy; no implicit DP/partial-payment assumptions.
-8. Service time/address and transport milestones are recorded.
-9. Completion delivers eligible receipt, evidence, and certificate status separately.
+EARS notation ([kiro.dev/docs/specs](https://kiro.dev/docs/specs/feature-specs/)), added 25 Jul 2026. Numbering is unchanged from the previous plain-list form, so every existing cross-reference elsewhere in this spec (`AC4`, `AC6`, `AC8` in `tasks.md`) and in other documents still points at the same requirement.
+
+1. WHEN a user begins at-need intake THE SYSTEM SHALL request only the minimum data: contact, deceased identity where available, current location, desired service area/time, and urgency.
+2. WHILE a service area is accepted THE SYSTEM SHALL keep a human contact route visible.
+3. WHEN intake is submitted THE SYSTEM SHALL create a FuneralCase before requesting noncritical data.
+4. WHILE operational/legal policy approves post-service document completion THE SYSTEM SHALL allow required documents to be completed after service.
+5. THE SYSTEM SHALL support availability/plot decisions through manual confirmation or authoritative reservation.
+6. WHEN a quote is generated THE SYSTEM SHALL display land/package, funeral service, add-ons, delivery/transport, and exclusions.
+7. THE SYSTEM SHALL follow approved policy for payment timing. THE SYSTEM SHALL NOT imply a down-payment or partial-payment requirement that is not part of that policy.
+8. WHEN a service time/address or transport milestone occurs THE SYSTEM SHALL record it.
+9. WHEN a case is completed THE SYSTEM SHALL deliver eligible receipt, evidence, and certificate status as separate items.
 
 ## Negative criteria
 

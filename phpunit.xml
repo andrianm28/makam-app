@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+>
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+        </testsuite>
+        <testsuite name="Contract">
+            <directory>tests/Contract</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>app</directory>
+        </include>
+    </source>
+    <php>
+        <env name="APP_ENV" value="testing"/>
+        <!--
+            A fixed, throwaway encryption key so the suite is hermetic: it runs
+            without a .env file present (a fresh git worktree has none), and
+            every run decrypts what the previous one encrypted.
+
+            This is NOT a credential. It protects nothing: it is committed in
+            the clear, it is used only under APP_ENV=testing against an
+            in-memory SQLite database, and no deployed environment reads it
+            (dev/staging/production each generate their own APP_KEY — CI does
+            `cp .env.example .env && php artisan key:generate`, and PHPUnit's
+            own env vars are set before Dotenv loads, which does not overwrite
+            them, so CI uses this value too and never its generated one).
+
+            Needed since `provider_events.raw_payload` became an `encrypted`
+            cast (2026_08_09_100200) — payment-webhook.md §Security, "Store raw
+            payload privately".
+        -->
+        <env name="APP_KEY" value="base64:RKxTuGlM4MNUB65volwGUsTfCiDumShAS0GGdu5zXn4="/>
+        <!--
+            config/app.php's locale default became 'id' (public-beta
+            readiness, lang/id/validation.php's own doc block) — but
+            PHPUnit's own env vars are set before Dotenv loads and are never
+            overwritten by it (see the APP_KEY comment above), so if
+            .env.example pins APP_LOCALE=en explicitly, that value — not
+            config/app.php's new default — is what CI's "cp .env.example
+            .env" step would otherwise hand every test. Pinned here so the
+            suite exercises the real intended default deterministically,
+            independent of whatever .env.example currently contains.
+        -->
+        <env name="APP_LOCALE" value="id"/>
+        <env name="APP_MAINTENANCE_DRIVER" value="file"/>
+        <env name="BCRYPT_ROUNDS" value="4"/>
+        <env name="BROADCAST_CONNECTION" value="null"/>
+        <env name="CACHE_STORE" value="array"/>
+        <env name="DB_CONNECTION" value="sqlite"/>
+        <env name="DB_DATABASE" value=":memory:"/>
+        <env name="DB_URL" value=""/>
+        <env name="MAIL_MAILER" value="array"/>
+        <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="SESSION_DRIVER" value="array"/>
+        <env name="PULSE_ENABLED" value="false"/>
+        <env name="TELESCOPE_ENABLED" value="false"/>
+        <env name="NIGHTWATCH_ENABLED" value="false"/>
+    </php>
+</phpunit>

@@ -29,9 +29,9 @@ The combined host is not a build server, production host, or full load-test envi
 CDN/WAF where available
   -> reverse proxy / load balancer
   -> Laravel PHP-FPM application
-       -> managed PostgreSQL 18
-       -> managed Redis 8.2, non-cluster for Horizon
-       -> private S3-compatible object storage
+       -> self-managed PostgreSQL 18 (shared `yiemvm` host)
+       -> self-managed Redis 8.2, non-cluster for Horizon (shared `yiemvm` host)
+       -> self-hosted object storage (shared `yiemvm` host)
        -> external K1–K8/providers
 
 separate processes:
@@ -41,7 +41,7 @@ separate processes:
 - Pulse ingestion where configured
 ```
 
-Production uses Ubuntu 24.04 LTS or managed equivalent. Kubernetes and Octane are not baseline requirements.
+Production runs on the same shared `yiemvm` host as development and staging (Ubuntu 24.04.4, 8 vCPU, 31 GB RAM) — not a separate production environment, not a managed PostgreSQL provider, and not an external S3-compatible storage provider. See ADR-0027's "Production graduation — single-host decision" section for the decision and its accepted risks. Kubernetes and Octane are not baseline requirements.
 
 ## 4. Required configuration classes
 
@@ -77,3 +77,5 @@ The canonical process is `ci-cd-and-release.md`. Database recovery follows `data
 ## 7. Rollback
 
 Prefer application rollback with forward-compatible schema. Financial, reservation, certificate, outbox, and audit records are never deleted to simulate rollback. Close affected feature gates and reconcile durable external events before resuming.
+
+See `docs/operations/runbooks/rollback-deploy.md` for the concrete, executable procedure implementing these principles.

@@ -15,7 +15,11 @@ services:
       - makam_dev_db_password
       - makam_stg_db_password
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # Mount the PARENT dir, not /data. postgres:18 sets
+      # PGDATA=/var/lib/postgresql/18/docker (verified on host), so mounting
+      # /var/lib/postgresql/data strands PGDATA outside the volume and the
+      # database is silently lost on recreate or `compose down -v`.
+      - postgres_data:/var/lib/postgresql
       - ./postgres-init:/docker-entrypoint-initdb.d:ro
     mem_limit: 768m
     healthcheck:
@@ -76,6 +80,11 @@ services:
     networks: [backend, egress]
 
   dev-worker:
+    # Development uses plain queue:work, not Horizon. If Horizon is ever run
+    # manually on dev for debugging, use --environment=local
+    # (not bare `php artisan horizon`, which deploys zero supervisors).
+    # Do not add a persistent development Horizon block — see
+    # config/horizon.php's comment and ADR-0035 item 12 for why.
     image: ${APP_IMAGE:?APP_IMAGE is required}
     profiles: ["dev-worker"]
     command: ["php", "artisan", "queue:work", "--stop-when-empty", "--queue=critical,urgent,notifications,default"]
@@ -89,7 +98,16 @@ services:
   stg-batch-worker:
     image: ${APP_IMAGE:?APP_IMAGE is required}
     profiles: ["batch"]
-    command: ["php", "artisan", "queue:work", "--stop-when-empty", "--queue=imports,media,reports", "--timeout=900"]
+    # Final-review re-check (round 2): must run against the `redis_batch`
+    # queue connection (config/queue.php), not the default `redis`
+    # connection — `redis`'s retry_after (90s) is shorter than this
+    # worker's own --timeout (900s), which duplicate-executes any job
+    # that runs past 90s. `redis_batch`'s retry_after (1000s) is safely
+    # above the timeout, matching config/horizon.php's supervisor-batch/
+    # supervisor-reports, which this on-demand worker stands in for in
+    # staging (see ADR-0027 condition 4 / config/horizon.php's staging
+    # block, both batch/reports supervisors disabled there).
+    command: ["php", "artisan", "queue:work", "redis_batch", "--stop-when-empty", "--queue=imports,media,reports", "--timeout=900"]
     env_file: .env.stg
     depends_on:
       postgres: {condition: service_healthy}
@@ -107,6 +125,12 @@ volumes:
   postgres_data:
   redis_data:
 
+# Host files must be owned by uid 999, mode 0400:
+#   sudo chown 999:999 ./secrets/*.txt && sudo chmod 0400 ./secrets/*.txt
+# The postgres entrypoint drops to uid 999 before running
+# /docker-entrypoint-initdb.d/, so root-owned 0400 files are unreadable there.
+# Compose long-syntax uid/gid/mode is NOT supported ("secrets uid, gid and mode
+# are not supported, they will be ignored" - verified on host 25 Jul 2026).
 secrets:
   postgres_admin_password:
     file: ./secrets/postgres_admin_password.txt

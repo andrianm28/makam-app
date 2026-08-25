@@ -1,12 +1,75 @@
 # Tasks — Renewal and Grave Registry
 
-- [ ] Enable/configure PostgreSQL trigram support.
-- [ ] Implement grave record model and access modes.
-- [ ] Implement fuzzy search with benchmark at 100k records.
-- [ ] Implement async 10k-row import and row error report.
-- [ ] Implement renewal quote with tariff source/effective time.
-- [ ] Implement manual entry/empty state.
-- [ ] Implement external marking and duplicate-period guard.
-- [ ] Integrate payment/invoice after gate.
-- [ ] Implement reminder scheduler and idempotency key.
-- [ ] Add privacy, authorization, performance, and duplicate tests.
+`_Requirements: N_` references the numbered acceptance criteria in [`requirements.md`](requirements.md), added 25 Jul 2026 to match Kiro's documented task-traceability convention.
+
+Status reviewed 08 Aug 2026 against the shipped S4-T7 code and CI run [`31248602859`](https://github.com/andrianm28/makam-app/actions/runs/31248602859) at commit `a150a3b`, and re-reviewed 13 Aug 2026 after `lane/l8-renewal-completion`. S4-T7 was scoped to the **renewal skeleton — steps 1–3 only** (`sprint-plan.md`); steps 4–6 (fee, payment, confirmation) shipped with lane L8 on 12 Aug 2026 (`/perpanjangan/biaya|pembayaran|konfirmasi`; `RenewalFee`/`RenewalPayment`/`RenewalConfirmation`).
+
+- [x] Implement the six visible journey steps (city, TPU/TPS, grave search, fee, payment, confirmation/invoice). _Requirements: 1_ — done 08 Aug 2026 (agent team, S4-T7), CI run `31248602859`; steps 4–6 completed 12 Aug 2026 (`lane/l8-renewal-completion`). Added 08 Aug 2026 (later the same day) — this AC had real shipped evidence but no `_Requirements: 1_`-tagged line in this list; the design-system Tasks section below already covered the stepper build itself. `App\Domain\Renewal\RenewalJourneyStep` names all six steps; `App\Livewire\Public\Renewal\RenewalStart` and `GraveSearch` render them via `<x-mk.stepper>`. **All six steps now have a screen behind them**: steps 1–3 (S4-T7), step 4 `RenewalFee`, step 5 `RenewalPayment`, step 6 `RenewalConfirmation` (L8) — the stepper shows all six, which is the correct product framing: `RenewalStartTest::test_the_stepper_shows_this_journeys_six_steps_not_the_nine_booking_ones`, `GraveSearchStatesTest::test_the_stepper_shows_this_journeys_six_steps_and_not_the_nine_booking_ones`
+- [x] Include all five MVP launch areas in city selection. _Requirements: 2_ — done 08 Aug 2026 (agent team, S4-T7), CI run `31248602859`. Added 08 Aug 2026 (later the same day) — same documentation gap as AC1 above: real shipped evidence, no tagged line. `App\Livewire\Public\Renewal\RenewalStart` reads `App\Domain\CemeteryDirectory\CemeteryPublicQuery::launchCities()`, which derives from all five `LaunchCityCode::KNOWN_CODES` unconditionally — never filtered to cities with published cemeteries (the negative criterion this spec's own design intent names). `RenewalStartTest::test_all_five_launch_cities_are_offered_in_the_canonical_order` and `::test_a_city_with_no_published_cemetery_is_still_offered`
+- [x] Enable/configure PostgreSQL trigram support. _Requirements: 3, 4_ — done 08 Aug 2026 (agent team, S4-T7), CI run `31248602859`. `2026_08_08_100000_create_grave_records_table.php` creates the `pg_trgm` extension and a GIN trigram index on the normalized-name column; both are asserted against the live database, not against the migration source: `GraveRecordTrigramSearchTest::test_the_pg_trgm_extension_is_installed_by_the_migration` and `::test_the_gin_trigram_index_exists_on_the_normalized_name_column`
+- [x] Implement grave record model and access modes. _Requirements: 12, 14_ — done 08 Aug 2026 (agent team, S4-T7), CI run `31248602859`. `App\Domain\GraveRegistry\Models\GraveRecord` plus the three AC14 modes in `GraveRecordAccessMode`, defaulting to the **most restrictive**, with an unknown mode rejected rather than falling open (`GraveRecordAccessModeTest`, 5 methods). AC12's field list is present in the schema, but note the deliberate divergence: **no seeded record stores an heir contact** and the public projection has no property that could carry one (`GraveRecordSeedTest::test_no_seeded_record_stores_an_heir_contact`, `GraveRegistryPublicQueryTest::test_no_access_mode_can_project_heir_contact_because_the_projection_has_no_such_property`)
+- [ ] Implement fuzzy search with benchmark at 100k records. _Requirements: 3, 4_ — **partial, and the split matters.** AC3 fuzzy search is done and CI-green: misspellings still match, unrelated names do not, short exact substrings survive a low similarity score, and name/block/death-date terms combine rather than alternate (`GraveRecordTrigramSearchTest`, `GraveRegistryPublicQueryTest`). **AC4 (< 500 ms at 100,000 records) is NOT TESTED and is not passing** — nothing in this batch measures latency and nothing loads 100k rows; `GraveRecordTrigramSearchTest` says so in its own header. The one `assertLessThan` in that file bounds a *similarity score*, not a duration. Do not read it as a benchmark
+- [ ] Implement async 10k-row import and row error report. _Requirements: 13_ — not started
+- [x] Implement renewal quote with tariff source/effective time. _Requirements: 6, 7_ — done 12 Aug 2026 (`lane/l8-renewal-completion`, Tasks 2–4): `QuoteRenewal` produces a quote with cemetery `price_min` as amount, `price_source`/`price_effective_at` as attribution; `G-RATE-01` closed = no late fine; atomic `Renewal`+`RenewalQuote` creation; step 4 screen renders tariff source and effective time. `QuoteRenewalTest` (5 tests), `OpenRenewalTest` (2 tests), `RenewalFeeTest` (6 tests). AC11 guard verified on PostgreSQL 18 (SQLSTATE 23505).
+- [x] Implement manual entry/empty state. _Requirements: 5_ — done 08 Aug 2026 (agent team, S4-T7), CI run `31248602859`. This is the spec's highest-stakes requirement and it shipped as **three genuinely distinct states**, not one message: no-result (three parts — what is empty, why the registry may be incomplete, what to do next), privacy-limited, and gate-closed. Held apart by assertions written as denials, which is what makes them load-bearing: `GraveSearchStatesTest::test_the_privacy_limited_state_never_says_the_record_was_not_found`, `::test_the_no_result_state_is_not_confused_with_the_other_two`, `::test_the_gate_closed_state_never_implies_the_record_does_not_exist`, `::test_a_search_backend_failure_is_never_reported_as_not_found`, and `::test_the_privacy_limited_state_discloses_no_withheld_name`
+- [x] Implement external marking and duplicate-period guard. _Requirements: 10, 11_ — done 12 Aug 2026 (`lane/l8-renewal-completion`, Tasks 1, 7): AC11 unique index on `(grave_record_id, target_due_period)` enforced at DB level; `MarkExternalRenewal` creates `Renewal`+`RenewalExternalMarking` in one audited transaction; admin-only (operator denied), role+scope grant required; AC10: admin marks external renewal, blocks later online renewal for same period. `RenewalSchemaTest` (6 tests), `MarkExternalRenewalTest` (5 tests). AC8 online half: BLOCKED (upstream deny-only, `GuardResult::isAllowed()` hardwired false, `PaymentSession::create()` throws unconditionally).
+- [x] Integrate payment/invoice after gate. _Requirements: 8, 9_ — done 12 Aug 2026 (`lane/l8-renewal-completion`, Tasks 5–6): step 5 (`RenewalPayment`) always renders manual coordination path; `GuardRenewalPaymentOpening` evaluates 5 conditions; online path BLOCKED upstream (Ruling A). Step 6 (`RenewalConfirmation`) renders reference (mono, copyable), status, invoice state, and due date when settled. AC8 online half: BLOCKED. `GuardRenewalPaymentOpeningTest` (11 tests), `RenewalPaymentTest`, `RenewalConfirmationTest` (6 tests).
+- [ ] Implement reminder scheduler and idempotency key. _Requirements: 15_ — not started
+- [ ] Add privacy, authorization, performance, and duplicate tests. _Requirements: 4, 11, 14, 16_ — **partial, 3 of 4.** Privacy (AC14), AC16 gate, and **AC11 duplicate-period** (renewal) are done and CI-green: `RenewalSchemaTest` (6 tests) proves the DB-level unique guard rejects both same-source and cross-source (external/online) duplicates; `MarkExternalRenewalTest::test_a_marked_external_renewal_blocks_a_later_online_renewal_for_that_period` confirms the blocking behavior in the application layer; mutation-verified on PostgreSQL 18. **Performance (AC4) is NOT TESTED** — see the fuzzy-search item above.
+
+## Design system
+
+Governed by [`docs/design/design-system.md`](../../../docs/design/design-system.md) (component contracts, state patterns) and [`resources/css/tokens.css`](../../../resources/css/tokens.css) (every design value).
+
+**Rule:** never hardcode a hex, px, ms, or shadow; never use Tailwind arbitrary values. See design-system.md §9.2.
+
+The empty state on this journey carries unusual weight: a family searching for a grave record and finding nothing must not conclude the grave does not exist.
+
+### Primitives and tokens
+
+| Element | Primitive | Tokens |
+|---|---|---|
+| Six-step progress | `<x-mk.stepper>` §3.9 | same primitive as the booking wizard, **six** steps; `--mk-progress-track`, `--mk-progress-fill` |
+| Search form | `<x-mk.field>` §3.2 | `--mk-border-interactive`, `--mk-control-h-md`, `--text-base` (16 px floor), `inputmode` hints for dates |
+| Result rows | `<x-mk.table>` §3.5 → cards below `--breakpoint-md` | `--mk-table-hover`, `--mk-table-stripe` |
+| Fee display | `<x-mk.card>` §3.3 | amount `--font-weight-bold` `--font-mono`; **source + last-updated mandatory** (AC6) in `--text-sm` `--mk-text-muted` |
+| Tariff mismatch warning | `<x-mk.alert intent=pending>` §3.8 | `--mk-intent-pending-*` — a mismatch is a caution, not an error |
+| Renewal status | `<x-mk.badge>` §3.6 + §3.7 | `MENUNGGU_PEMBAYARAN` → `pending`; `DIBAYAR` → `success`; `KEDALUWARSA` → `neutral` |
+| Payment step | §6.9 mode banner | manual fallback = `intent=info`; **never remove the payment step** |
+| Confirmation / invoice | `<x-mk.card>` | reference `--font-mono`, copyable; due date prominent |
+| Import (admin) | progress + row errors | `role="progressbar"`; row-level errors in `<x-mk.table>` |
+
+### Required UI states
+
+All ten states apply — design-system.md **§6**.
+
+| Screen | State notes |
+|---|---|
+| PUB-030 city/cemetery | loading §6.1 · empty §6.2 — never omit a required MVP city |
+| PUB-031 grave search — results | loading skeleton rows with `sr-only` announcement; reserve heights |
+| PUB-031 — **no result** | §6.2, three parts: *what is empty · why (the registry may be incomplete) · next action*. AC5 requires an honest manual-entry / customer-service path. **Do not imply the record does not exist.** |
+| PUB-031 — **privacy-limited** | §6.2 — **distinct from "not found"**. When `G-DATA-01` restricts the field projection, say so explicitly. Two different states, two different messages |
+| PUB-031 — data gate closed | §6.4 explanatory state (AC16), never a generic 404 |
+| PUB-032 fee | source + last-updated always visible · mismatch warning `pending` · **no invented late fine** (AC7) — if there is no written operator basis, show nothing rather than a computed figure |
+| PUB-033 payment | online · manual fallback §6.9 · `pending` · failed §6.5 with a live fallback |
+| PUB-034 confirmation | success §6.8 **quiet**; reference, status, invoice state, resulting due date |
+| duplicate/retry-safe | §6.6 — AC11 duplicate-period guard must surface as "sudah diperpanjang untuk periode ini", not a second invoice |
+| provider unavailable | §6.5 — search backend down → state it, offer manual assistance |
+| support | §6.10 on every step |
+| responsive | §4.3 — result tables become cards below `--breakpoint-md` |
+
+### Performance affects design
+
+AC4 targets < 500 ms at 100k records. Skeleton loading (§6.1) must reserve exact row heights to keep CLS < 0.1, and the search field should debounce rather than fire per keystroke. Weight budget: design-system.md §4.6.
+
+### Tasks
+
+Reviewed 08 Aug 2026 against the shipped S4-T7 code and CI run `31248602859` (commit `a150a3b`), re-reviewed 13 Aug 2026 after `lane/l8-renewal-completion` shipped steps 4–6 (`RenewalFee`/`RenewalPayment`/`RenewalConfirmation`); the items below marked with (L8) were re-scored against that code.
+
+- [x] Reference tokens for all colour/spacing/type; zero hardcoded values. — done 08 Aug 2026 (agent team, S4-T7), CI run `31248602859`, job **Docs and design gates**: `ci/verify-docs.sh` scans `resources/` and `app/` for hardcoded hex/px/ms/shadow and Tailwind arbitrary values, and passed with both renewal views in the tree
+- [x] Build the six-step stepper with `<x-mk.stepper>` (same primitive, six steps). — done 08 Aug 2026 (agent team, S4-T7), CI run `31248602859`. Both screens render `<x-mk.stepper>`, and the risk this task actually guards against — reusing the booking wizard's nine steps — is tested directly: `RenewalStartTest::test_the_stepper_shows_this_journeys_six_steps_not_the_nine_booking_ones`, `GraveSearchStatesTest::test_the_stepper_shows_this_journeys_six_steps_and_not_the_nine_booking_ones`, and `RenewalJourneyStepTest::test_the_renewal_labels_are_not_the_nine_booking_labels`. The stepper displays all six steps, which is the correct product framing; all six have screens behind them as of L8 (12 Aug 2026)
+- [x] Implement **three distinct empty states**: no-result, privacy-limited, and gate-closed. Do not collapse them into one message. — done 08 Aug 2026 (agent team, S4-T7), CI run `31248602859`. See the AC5 item above for the specific denial-shaped assertions that keep the three apart; `sprint-plan.md` flags collapsing them as *the* defect for this task, and they did not collapse
+- [x] Always render tariff source + last-updated; never display a computed fine without written basis. — done 12 Aug 2026 (L8): `RenewalFee` renders tariff source and last-updated always, and renders **no** late-fine figure while `G-RATE-01` is closed — `RenewalFeeTest::test_the_fee_screen_always_shows_the_tariff_source_and_last_update`, `::test_no_late_fine_figure_is_rendered_when_there_is_no_written_basis`. Corrected 13 Aug 2026: previously "not started; PUB-032 (the fee step) has no screen yet" — the screen shipped.
+- [x] Surface the duplicate-period guard as an informative state, not a failure. — done 12 Aug 2026 (L8): `RenewalFee` catches `DuplicateRenewalPeriodException` and renders "sudah tercatat untuk periode ini…" as an informative message with a human-contact route, never a second quote — `RenewalFeeTest::test_accepting_the_quote_creates_exactly_one_renewal_and_redirects` (second submit asserts `assertSee('sudah tercatat')` and `assertNoRedirect()`; `renewals` stays at 1). Corrected 13 Aug 2026: previously "not started; no renewal record exists to duplicate" — the guard and its UI surface shipped together.
+- [x] Implement all ten required states per the table above. — **done across the six screens.** Implemented and CI-green: §6.1 loading, §6.2 empty (all three distinct states on the search step), §6.3 validation error, §6.4 authorization failure (gate-closed; draft cemetery unreachable; privacy-limited states), §6.5 provider unavailable, §6.6 duplicate/retry-safe (L8 — duplicate-period message; reload never creates a second renewal: `RenewalConfirmationTest::test_reloading_the_confirmation_never_creates_a_second_renewal`), §6.7 pending (L8 — payment step's manual-coordination state and the renewal status `MENUNGGU_PEMBAYARAN` → `pending` via `StatusIntent`, never styled success), §6.8 success (L8 — quiet confirmation with reference/status/invoice state), §6.9 gated fallback banner (rendered without removing the payment step: `RenewalPaymentTest::test_the_payment_step_is_never_removed_when_gate_is_closed`), §6.10 support (asserted in *every* state). Corrected 13 Aug 2026: the previous note said §6.6/6.7/6.8 "belong to steps 4–6, which have no screen" — those steps shipped.
+- [ ] Verify accessibility (§7) and that skeletons reserve exact heights (CLS < 0.1). — **NOT TESTED.** Skeletons exist in both views, but no browser, Dusk, Playwright, or Cypress harness exists in this repository, so **no CLS figure was measured and no reserved height was verified**. Treat the CLS < 0.1 target as unverified, not met

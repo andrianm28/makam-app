@@ -9,7 +9,7 @@ included_items:
   - service_code: grave_digging
     quantity: 1
     unit: service
-    fulfillment_owner: cemetery
+    fulfillment_owner: cemetery_operator
 optional_items:
   - service_code: hearse
     fulfillment_owner: vendor

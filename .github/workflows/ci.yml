@@ -1,0 +1,755 @@
+name: CI
+
+# Implements the required pipeline in docs/operations/ci-cd-and-release.md §2.
+# Builds happen HERE, never on the combined 2 vCPU / 4 GB dev+staging host (§10).
+#
+# Verified green 25 Jul 2026 (run 30147031136, commit e8e8c23): the first six
+# jobs pass — docs gates, version assertion, PHP validate/lint/analyse/test,
+# frontend build, OpenAPI/YAML validation, dependency audit. It took two
+# fix cycles to get there; the first real run failed five of six jobs and
+# caught six genuine bugs (missing tests/Unit and tests/Feature directories,
+# a Bunny Fonts CDN import contradicting the self-hosted-font policy, a
+# broken link only visible on a clean checkout, missing PyYAML, and a
+# missing phpstan.neon). None of that was found by local checks alone.
+#
+# A seventh job, build-image, was added the same day to close §2's remaining
+# "build immutable artifact/image" and "generate SBOM" steps — see that job's
+# own comment. NOT TESTED as of this comment: it has not run yet.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Documentation and design gates. Runs first and needs no application code, so
+  # it gives a fast, always-available signal — and it is the guardrail that makes
+  # parallel agent fan-out safe (docs/planning/parallelization-analysis.md §6).
+  # ---------------------------------------------------------------------------
+  docs-gates:
+    name: Docs and design gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run the documentation gates
+        run: bash ci/verify-docs.sh
+
+  # ---------------------------------------------------------------------------
+  # Assert the running toolchain matches ci/version-matrix.yml, so the pipeline
+  # never silently drifts off the accepted baseline (technology-baseline.md §5).
+  # ---------------------------------------------------------------------------
+  verify-versions:
+    name: Verify pinned runtime versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          tools: composer:v2
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Assert versions against the matrix
+        run: |
+          php -r 'exit(version_compare(PHP_VERSION, "8.5.0", ">=") && version_compare(PHP_VERSION, "8.6.0", "<") ? 0 : 1);' \
+            || { echo "PHP $(php -r 'echo PHP_VERSION;') is outside ~8.5.0"; exit 1; }
+          node -e 'const M=+process.versions.node.split(".")[0]; if(M!==24){console.error(`Node ${process.versions.node} is not 24.x`);process.exit(1)}'
+          echo "PHP  $(php -r 'echo PHP_VERSION;')"
+          echo "Node $(node -v)"
+
+  # ---------------------------------------------------------------------------
+  # PHP: lockfile integrity, style, static analysis, tests.
+  # ---------------------------------------------------------------------------
+  php:
+    name: PHP (validate, lint, analyse, test)
+    runs-on: ubuntu-latest
+    needs: [verify-versions]
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: makam_test
+          POSTGRES_PASSWORD: makam_test
+          POSTGRES_DB: makam_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U makam_test"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:8.2-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s --health-timeout 3s --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          # gd: brand-asset builder tests (tests/Unit/Support/Design/BrandAssetBuilderTest.php)
+          # require ext-gd, including WebP support, to build/verify raster logo assets.
+          extensions: pdo_pgsql, pgsql, redis, zip, intl, bcmath, gd
+          tools: composer:v2
+          coverage: none
+
+      - name: Validate composer.json against composer.lock
+        run: composer validate --strict
+
+      # Install from the lockfile, never resolve. ci-cd-and-release.md §1:
+      # "Production installs lockfiles without dependency resolution."
+      - name: Install dependencies from lockfile
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Create the extensions the application depends on
+        env:
+          PGPASSWORD: makam_test
+        run: |
+          psql -h 127.0.0.1 -U makam_test -d makam_test \
+            -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm;' \
+            -c 'CREATE EXTENSION IF NOT EXISTS unaccent;'
+
+      - name: Pint (code style)
+        run: vendor/bin/pint --test
+
+      - name: Larastan (static analysis)
+        run: vendor/bin/phpstan analyse --no-progress
+
+      - name: Prepare test environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+        env:
+          DB_CONNECTION: pgsql
+
+      - name: Tests
+        run: php artisan test
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: makam_test
+          DB_USERNAME: makam_test
+          DB_PASSWORD: makam_test
+          REDIS_HOST: 127.0.0.1
+
+      # design-system.md §9.5 gate 6: the Filament PHP colour palette
+      # (app/Support/Design/generated/) must match resources/css/tokens.css.
+      # ci/verify-docs.sh cannot run this gate itself — it is a pure bash+python
+      # script with no vendor/ or bootstrapped Laravel app (see its own header
+      # comment) — so it runs here instead, in the one job that already has
+      # composer install and a working artisan environment (APP_KEY prepared
+      # by "Prepare test environment" above). Command built and verified
+      # working in this same job's environment in Batch 2.4 (commit f33cabe);
+      # see app/Console/Commands/VerifyFilamentPaletteCommand.php.
+      - name: Verify Filament palette matches tokens.css
+        run: php artisan design:verify-filament-palette
+
+      # design-system.md §9.5 gate 13: every Blade view must survive real
+      # compilation with no lost content — catches the N-14 doc-comment-
+      # corruption class, where a {{-- --}} comment merely mentioning the
+      # literal "@php" token pairs with a later real @endphp and silently
+      # swallows everything between. `php -l` on the compiled output cannot
+      # see this: the result is still syntactically valid PHP, just missing
+      # template content. Same reason as gate 6 above for running here rather
+      # than in ci/verify-docs.sh — needs a bootstrapped app with the real
+      # Blade compiler. Algorithm proven against this repo's own real,
+      # previously-live incident (faq/index.blade.php, 8 Aug 2026) before
+      # being wired in; see app/Console/Commands/VerifyBladeContentSurvivalCommand.php.
+      - name: Verify Blade views survive compilation (no lost content)
+        run: php artisan blade:verify-content-survival
+
+  # ---------------------------------------------------------------------------
+  # Frontend: lockfile install and production build. Also the point at which the
+  # design-system token wiring is proven to compile (sprint task S2-T1).
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    needs: [verify-versions]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install from lockfile
+        run: npm ci --no-audit --no-fund
+
+      # resources/css/filament/admin/theme.css imports Filament's own base
+      # theme from vendor/filament/filament/resources/css/theme.css — the
+      # standard, non-optional Filament v3+ custom-theme convention (it's
+      # what styles Filament's own components; without it @import fails, and
+      # Vite's Tailwind plugin needs the file present on disk to resolve it
+      # at build time). This job builds no PHP, so `vendor/` never existed
+      # here — the build failed on every push until this step was added.
+      # --no-dev because only the package's shipped files matter here, not
+      # dev tooling; no PHP extensions beyond the interpreter are needed
+      # since composer.json requires none for this install to succeed.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          tools: composer:v2
+          coverage: none
+      - name: Install PHP dependencies (vendor/filament/filament's theme.css is a real build-time asset)
+        run: composer install --no-interaction --prefer-dist --no-progress --no-dev
+
+      - name: Build
+        run: npm run build
+      - name: Assert the build emitted CSS
+        run: |
+          test -d public/build || { echo "no public/build produced"; exit 1; }
+          find public/build -name '*.css' | head -1 | grep -q . \
+            || { echo "no CSS emitted — token wiring may be broken"; exit 1; }
+      # Closes S2-T1 (sprint-plan.md): design-system.md §8.2 asserted every one
+      # of these compiles but this was never actually verified — see
+      # resources/views/design-system-smoke-test.blade.php for why a smoke
+      # file is needed (several of these have no real usage yet, so Tailwind's
+      # JIT scanner would never emit them without one). Where this fails,
+      # fix design-system.md/tokens.css, per S2-T1's own instruction — never
+      # work around it by weakening this check.
+      - name: Assert every §8.2 utility actually compiled
+        run: |
+          # Target app-*.css explicitly. The build emits a second stylesheet
+          # (theme-*.css, the Filament admin theme added as a Vite entry), so
+          # `find public/build -name '*.css' | head -1` is order-dependent and
+          # can return theme-*.css — which imports tokens.css but not app.css's
+          # @utility block (z-header, z-modal, duration-fast, touch-target), so
+          # the assertion would report 4 false MISSING classes even though the
+          # public site CSS compiled them all. The §8.2 utilities belong to the
+          # public entry (resources/css/app.css → app-*.css).
+          css=$(find public/build -name 'app-*.css' | head -1)
+          [ -n "$css" ] || { echo "no app-*.css emitted — token wiring may be broken"; exit 1; }
+          missing=0
+          for cls in max-w-form max-w-prose max-w-content duration-fast \
+                     z-modal z-header touch-target h-11 h-13 border-neutral-450 \
+                     ease-standard text-base font-display; do
+            grep -qF ".${cls}" "$css" || { echo "MISSING: .$cls"; missing=1; }
+          done
+          # xs: is a variant prefix, not a bare class — its presence shows up
+          # as an @media rule at the --breakpoint-xs value (22.5rem), not a
+          # literal ".xs" selector.
+          grep -qF '22.5rem' "$css" || { echo "MISSING: xs: breakpoint (22.5rem) not found in output"; missing=1; }
+          [ "$missing" -eq 0 ] || { echo "One or more design-system.md §8.2 utilities did not compile"; exit 1; }
+          echo "All asserted §8.2 utilities confirmed present in compiled CSS"
+
+  # ---------------------------------------------------------------------------
+  # Contract validation. OpenAPI 3.1 is contract-first per technology-baseline §2.
+  # ---------------------------------------------------------------------------
+  contracts:
+    name: OpenAPI and YAML validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: Validate YAML documents parse
+        run: |
+          python3 - <<'PY'
+          import glob, sys, yaml
+          bad = 0
+          for f in glob.glob('docs/**/*.y*ml', recursive=True) + glob.glob('ci/*.y*ml'):
+              try:
+                  yaml.safe_load(open(f))
+                  print(f"OK   {f}")
+              except Exception as e:
+                  print(f"FAIL {f}: {e}"); bad = 1
+          sys.exit(bad)
+          PY
+      - name: Validate OpenAPI 3.1 structure
+        run: |
+          python3 - <<'PY'
+          import sys, yaml
+          d = yaml.safe_load(open('docs/contracts/openapi.yaml'))
+          v = str(d.get('openapi', ''))
+          if not v.startswith('3.1'):
+              print(f"openapi version is {v!r}, expected 3.1.x"); sys.exit(1)
+          if not d.get('paths'):
+              print("no paths defined"); sys.exit(1)
+          print(f"OpenAPI {v}, {len(d['paths'])} paths, "
+                f"{len(d.get('components', {}).get('schemas', {}))} schemas")
+          PY
+
+  # ---------------------------------------------------------------------------
+  # Dependency vulnerability audit (ci-cd-and-release.md §2).
+  # ---------------------------------------------------------------------------
+  security-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    needs: [verify-versions]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          tools: composer:v2
+          coverage: none
+      - name: Composer audit
+        run: composer audit --locked
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: npm audit
+        run: npm audit --audit-level=high
+
+  # ---------------------------------------------------------------------------
+  # Browser + accessibility smoke test (Playwright + @axe-core/playwright).
+  # Proves the harness works end to end against the real homepage: a full
+  # dependency install, a migrated database in the postgres service container,
+  # a real asset build (the public layout's `@vite(...)` call throws without a
+  # manifest or a running dev server — see resources/views/layouts/app.blade.php),
+  # and `php artisan serve` in the background on :8080. Standalone: this job
+  # only depends on verify-versions and a failure here fails only itself, never
+  # the jobs build-image needs.
+  # ---------------------------------------------------------------------------
+  browser-test:
+    name: Browser + a11y smoke test (Playwright)
+    runs-on: ubuntu-latest
+    needs: [verify-versions]
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: makam_test
+          POSTGRES_PASSWORD: makam_test
+          POSTGRES_DB: makam_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U makam_test"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:8.2-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s --health-timeout 3s --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          extensions: pdo_pgsql, pgsql, redis, zip, intl, bcmath
+          tools: composer:v2
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install PHP dependencies from lockfile
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Install npm dependencies from lockfile
+        run: npm ci --no-audit --no-fund
+
+      - name: Create the extensions the application depends on
+        env:
+          PGPASSWORD: makam_test
+        run: |
+          psql -h 127.0.0.1 -U makam_test -d makam_test \
+            -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm;' \
+            -c 'CREATE EXTENSION IF NOT EXISTS unaccent;'
+
+      - name: Prepare test environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+        env:
+          DB_CONNECTION: pgsql
+
+      - name: Migrate the application database
+        run: php artisan migrate --force
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: makam_test
+          DB_USERNAME: makam_test
+          DB_PASSWORD: makam_test
+          # Opts the E2E-ADMIN/VENDOR seed migration
+          # (database/migrations/2026_08_22_110000_seed_e2e_admin_vendor_test_users.php)
+          # into actually writing its two throwaway login accounts --
+          # config/e2e_fixtures.php defaults this to false everywhere else
+          # (including ordinary PHPUnit runs, which also set APP_ENV=testing
+          # via phpunit.xml, so an environment('testing') gate would have
+          # silently seeded these rows there too -- the same collision
+          # THROTTLE_PUBLIC_GUEST_DISABLED below already hit and solved).
+          # Deliberately set on THIS step, not "Serve the app and run the
+          # browser smoke test" below: `php artisan migrate --force` is what
+          # actually executes the migration's up() (and therefore reads this
+          # config), not the later serve step, which never re-migrates.
+          # Scoped to nothing but this one step's process; production is
+          # untouched.
+          SEED_E2E_ADMIN_VENDOR_USERS: "true"
+          # Opts the external-renewal seed migration
+          # (database/migrations/2026_08_23_120000_seed_external_renewal_fixture.php)
+          # into actually writing its one throwaway externally-marked
+          # renewal -- config/e2e_fixtures.php defaults this to false
+          # everywhere else, same reasoning as SEED_E2E_ADMIN_VENDOR_USERS
+          # immediately above.
+          SEED_E2E_EXTERNAL_RENEWAL: "true"
+
+      - name: Build assets
+        run: npm run build
+
+      - name: Publish Filament panel assets
+        # Root cause of a deterministic E2E-ADMIN/VENDOR Playwright failure
+        # (tests/browser/e2e-admin-vendor.spec.ts): without this, /admin and
+        # /vendor request /js/filament/*, /css/filament/*, /fonts/filament/*
+        # that 404 -- exactly the same class of bug the Dockerfile's own
+        # `filament:assets` step (Dockerfile, this comment predates this
+        # one) was added to fix for the built image on 13 Aug 2026, but that
+        # fix was never carried over to this job's own separate
+        # `php artisan serve` setup. Confirmed live: a captured Playwright
+        # trace showed 8 real 404s for exactly these paths (app.js,
+        # actions.js, tables.js, etc.) -- with Alpine/Livewire's runtime
+        # never loading, `wire:submit` never wires up and the login
+        # button's accessible name and click both silently fail, timing
+        # out `getByRole('button', { name: 'Masuk' })` for the full test
+        # timeout on every attempt. No prior E2E suite (booking,
+        # marketplace, faq, home, renewal) exercises a Filament panel's
+        # interactive JS, so this gap was never exposed before.
+        run: php artisan filament:assets --ansi
+
+      - name: Install Playwright browser binaries
+        run: npx playwright install --with-deps chromium
+
+      - name: Serve the app and run the browser smoke test
+        env:
+          # Exempts this run from the public-guest rate limiter
+          # (config/rate_limiting.php, app/Providers/AppServiceProvider.php)
+          # -- the browser and `php artisan serve` share one IP here, so the
+          # whole suite's traffic previously hit one guest bucket and
+          # produced real 429s. Deliberately NOT APP_ENV=testing -- that
+          # value is also what PHPUnit itself runs under (phpunit.xml), which
+          # would silently defeat PublicGuestThrottleTest instead. This flag
+          # is scoped to nothing but this one step's server process;
+          # production is untouched.
+          THROTTLE_PUBLIC_GUEST_DISABLED: "true"
+          # Without this, EVERY marketplace order placement -- online AND
+          # manual, unlike G-PAY-01's online-only gate that booking's E2E
+          # suite routes around by testing the manual path -- throws
+          # BadanUsahaNotConfiguredException (config/marketplace.php's
+          # badan_usaha_ref, unset by .env.example on purpose: "Marketplace
+          # checkout fails closed while this is unset (requirement 10)").
+          # That is a real, intentional production/staging fail-closed
+          # gate confirming business-registration readiness -- NOT
+          # something to relax there. This value only exists in this one
+          # ephemeral CI step's server process, is discarded when the job
+          # ends, and is the exact same fake value
+          # tests/Feature/Livewire/Public/Marketplace/CheckoutScreenTest.php
+          # already sets for identical reasons -- an established, accepted
+          # test-only convention in this codebase, not a new one.
+          MARKETPLACE_BADAN_USAHA_REF: "badan-usaha-test"
+          # config/app.php's locale default became 'id' (public-beta
+          # readiness, lang/id/validation.php's own doc block), but
+          # .env.example still pins APP_LOCALE=en explicitly -- so this
+          # step's "cp .env.example .env" hands every request the English
+          # fallback instead of the real, intended Indonesian default.
+          # phpunit.xml already pins APP_LOCALE=id for exactly this reason
+          # (see its own comment on this exact line) -- that fix was never
+          # carried over to this job. Found live 21 Aug 2026: a Playwright
+          # test asserting a real Laravel-generated validation message
+          # (not hardcoded Blade copy, which stays Indonesian regardless)
+          # got "The recipient phone field must not be greater than 32
+          # characters" instead of the Indonesian text every real user on
+          # dev.makam.co.id actually sees (confirmed live: that host's own
+          # container has APP_LOCALE=id). Scoped to this one step's server
+          # process only, same as every other env override here.
+          APP_LOCALE: "id"
+          APP_FALLBACK_LOCALE: "id"
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: makam_test
+          DB_USERNAME: makam_test
+          DB_PASSWORD: makam_test
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:8080
+        run: |
+          PHP_CLI_SERVER_WORKERS=4 php artisan serve --host=127.0.0.1 --port=8080 > /tmp/artisan-serve.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8080/ > /dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8080/ > /dev/null \
+            || { echo "app did not come up"; cat /tmp/artisan-serve.log; exit 1; }
+          npm run test:browser
+
+      - name: Upload Playwright test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: test-results/
+          retention-days: 3
+
+  # ---------------------------------------------------------------------------
+  # Load testing (k6) — docs/operations/performance-and-capacity.md's Profile
+  # A, run at a documented reduced scale (see tests/load/README.md for why).
+  # Runs the real AC4 grave-search benchmark against a real 100k-row dataset
+  # first — that part is NOT reduced, since it is a single-connection query
+  # benchmark, not concurrent load generation, and this CI runner genuinely is
+  # "a separate machine" from the shared dev/staging host per
+  # performance-and-capacity.md §9.
+  # ---------------------------------------------------------------------------
+  load-test:
+    name: Load and performance benchmarks (k6, AC4)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: makam_test
+          POSTGRES_PASSWORD: makam_test
+          POSTGRES_DB: makam_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U makam_test"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:8.2-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s --health-timeout 3s --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          extensions: pdo_pgsql, pgsql, redis, zip, intl, bcmath
+          tools: composer:v2
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install PHP dependencies from lockfile
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Install npm dependencies from lockfile
+        run: npm ci --no-audit --no-fund
+
+      - name: Create the extensions the application depends on
+        env:
+          PGPASSWORD: makam_test
+        run: |
+          psql -h 127.0.0.1 -U makam_test -d makam_test \
+            -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm;' \
+            -c 'CREATE EXTENSION IF NOT EXISTS unaccent;'
+
+      - name: Prepare test environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+        env:
+          DB_CONNECTION: pgsql
+
+      - name: Migrate the application database
+        run: php artisan migrate --force
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: makam_test
+          DB_USERNAME: makam_test
+          DB_PASSWORD: makam_test
+
+      - name: Generate the 100k-row benchmark dataset
+        run: php artisan bench:generate-grave-dataset
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: makam_test
+          DB_USERNAME: makam_test
+          DB_PASSWORD: makam_test
+
+      - name: AC4 — grave search p50/p95/p99 at 100k records
+        run: php artisan bench:grave-search
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: makam_test
+          DB_USERNAME: makam_test
+          DB_PASSWORD: makam_test
+
+      - name: Build assets
+        run: npm run build
+
+      - name: Serve the app for k6
+        run: |
+          PHP_CLI_SERVER_WORKERS=4 php artisan serve --host=127.0.0.1 --port=8080 > /tmp/artisan-serve.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8080/ > /dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8080/ > /dev/null \
+            || { echo "app did not come up"; cat /tmp/artisan-serve.log; exit 1; }
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: makam_test
+          DB_USERNAME: makam_test
+          DB_PASSWORD: makam_test
+          # Without this, the app's `public-guest` rate limiter
+          # (config/rate_limiting.php, app/Providers/AppServiceProvider.php)
+          # caps guest traffic at 60 requests/minute per IP. k6 and
+          # `php artisan serve` share one IP here (same host), and this
+          # job's own 10 VUs looping 3 GET requests each for 30s blow past
+          # that limit almost immediately, producing real 429s that would
+          # read as k6 threshold failures rather than a genuine capacity
+          # signal — the exact same problem the existing `browser-test`
+          # job already hit and fixed with this same flag (see that job's
+          # "Serve the app and run the browser smoke test" step for the
+          # precedent). Scoped to nothing but this one step's server
+          # process; production is untouched.
+          THROTTLE_PUBLIC_GUEST_DISABLED: "true"
+
+      - name: Install k6
+        # Deliberately a plain apt install on the runner itself, NOT
+        # grafana/k6-action — that action builds and runs k6 inside its own
+        # isolated Docker container, so K6_BASE_URL=http://127.0.0.1:8080
+        # resolves to the container's own loopback, not this runner's host
+        # network where `php artisan serve` (below) actually listens.
+        # Confirmed live: the first real CI run of this job using
+        # grafana/k6-action@v0.3.1 failed every one of 267,951 requests with
+        # "connect: connection refused" in ~26s -- an immediate-refusal
+        # signature, not real network latency. Installing the k6 binary
+        # directly and running it as a normal `run:` step avoids the nested
+        # container entirely, exactly the same reason `browser-test` (above)
+        # runs Playwright as a normal step rather than inside a containerized
+        # action -- both tools need to reach 127.0.0.1 on this same runner.
+        # Install steps match k6's own official Debian/Ubuntu instructions
+        # (https://grafana.com/docs/k6/latest/set-up/install-k6/) verbatim.
+        run: |
+          curl -fsSL https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      - name: Run k6 — Profile A (reduced scale)
+        run: k6 run tests/load/profile-a-normal-launch.js
+        env:
+          K6_BASE_URL: http://127.0.0.1:8080
+
+  # ---------------------------------------------------------------------------
+  # Build the immutable artifact/image and push it to GHCR (ci-cd-and-release.md
+  # §2 "build immutable artifact/image", §10 combined dev/staging profile: "The
+  # Ubuntu 22.04 2/4 host receives a prebuilt immutable artifact/image" — the
+  # build happens here, never on that host). Only runs on `push` (not on the
+  # `pull_request` duplicate of the same commit) and only after every other job
+  # is green, so a broken build is never pushed and no commit is built twice.
+  #
+  # Uses this workflow's own short-lived GITHUB_TOKEN (packages: write below),
+  # not a personal access token — no local credential scope is needed for this.
+  #
+  # NOT TESTED: this is the first time this job has run. The Dockerfile itself
+  # had never been built before this job existed either (see its own header
+  # comment) — expect iteration.
+  # ---------------------------------------------------------------------------
+  build-image:
+    name: Build and push image
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    needs: [docs-gates, verify-versions, php, frontend, contracts, security-audit]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: meta
+        run: |
+          repo_lower=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          branch_slug=$(echo "${{ github.ref_name }}" | tr -c 'a-zA-Z0-9._-' '-')
+          {
+            echo "image=ghcr.io/${repo_lower}"
+            echo "sha_tag=sha-${GITHUB_SHA::12}"
+            echo "branch_tag=${branch_slug}"
+          } >> "$GITHUB_OUTPUT"
+
+      # "Build once, promote the same immutable artifact" (§1) — one build,
+      # tagged both by commit (the promotable, immutable reference the deploy
+      # step actually pins to) and by branch (a moving pointer for convenience,
+      # not what gets deployed).
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.branch_tag }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # §2 "generate SBOM and checksums where supported". The image digest
+      # (below) is the artifact's real checksum — content-addressed, verified
+      # by the registry itself, stronger than a separately-computed file hash.
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ steps.meta.outputs.sha_tag }}
+          path: sbom.spdx.json
+          retention-days: 90
+
+      - name: Record image reference
+        run: |
+          echo "### Image pushed" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

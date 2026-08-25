@@ -4,11 +4,13 @@
 
 ## Acceptance criteria
 
-1. One-off and recurring care create explicit care cycles/work orders.
-2. Billing state is separate from work order status.
-3. Work order has schedule, assignee/vendor, service checklist, and evidence requirements.
-4. Before/after evidence is private to authorized parties unless explicitly published.
-5. Customer can accept, complain, or request make-good according to policy.
-6. Failed/missed service does not alter payment history; it creates operational/financial exception.
-7. Vendor replacement and reschedule are audited.
-8. One care cycle cannot create duplicate invoice or work order under retries.
+EARS notation ([kiro.dev/docs/specs](https://kiro.dev/docs/specs/feature-specs/)), added 25 Jul 2026. Numbering is unchanged from the previous plain-list form, so every existing cross-reference elsewhere in this spec and in other documents still points at the same requirement.
+
+1. WHEN one-off or recurring care is scheduled THE SYSTEM SHALL create an explicit care cycle/work order.
+2. THE SYSTEM SHALL keep billing state separate from work order status.
+3. THE SYSTEM SHALL include in each work order a schedule, assignee/vendor, service checklist, and evidence requirements.
+4. THE SYSTEM SHALL keep before/after evidence private to authorized parties unless it is explicitly published.
+5. THE SYSTEM SHALL allow the customer to accept, complain, or request make-good, according to policy.
+6. WHEN a service is failed or missed THE SYSTEM SHALL NOT alter payment history, and THE SYSTEM SHALL create an operational/financial exception.
+7. WHEN a vendor is replaced or a service is rescheduled THE SYSTEM SHALL record an audit entry.
+8. THE SYSTEM SHALL NOT create a duplicate invoice or work order for one care cycle under retries.

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Placeholder illustration for Makam.co.id's CemeteryDirectory dummy/demo
+  data (dev environment only — see the seed-backfill migration's own doc
+  block for the authorization/reasoning). Deliberately abstract and
+  non-photorealistic: a generic stone-gate silhouette, a single tree, and a
+  path across a lawn. No specific religious iconography, no real place
+  depicted. Calm green/neutral palette only.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" role="img" aria-label="Ilustrasi gerbang taman pemakaman contoh">
+  <title>Ilustrasi contoh - gerbang taman pemakaman</title>
+  <rect x="0" y="0" width="400" height="300" fill="#eef2ea"/>
+  <rect x="0" y="0" width="400" height="190" fill="#dfe9dc"/>
+  <rect x="0" y="190" width="400" height="110" fill="#a9c9a5"/>
+  <path d="M0 190 Q 200 170 400 190 L400 210 Q200 195 0 210 Z" fill="#95bb90"/>
+  <!-- winding path -->
+  <path d="M200 300 C 190 260, 210 230, 200 200 C 192 185, 205 180, 200 170"
+        fill="none" stroke="#d8cdb8" stroke-width="18" stroke-linecap="round"/>
+  <!-- gate posts -->
+  <rect x="150" y="120" width="16" height="90" rx="3" fill="#8d8f86"/>
+  <rect x="234" y="120" width="16" height="90" rx="3" fill="#8d8f86"/>
+  <!-- gate arch -->
+  <path d="M150 120 Q 200 70 250 120" fill="none" stroke="#8d8f86" stroke-width="16" stroke-linecap="round"/>
+  <!-- simple tree, left of the gate -->
+  <rect x="86" y="150" width="12" height="55" rx="3" fill="#7a6a52"/>
+  <circle cx="92" cy="140" r="34" fill="#6f9e6a"/>
+  <circle cx="70" cy="155" r="24" fill="#7bab74"/>
+  <circle cx="114" cy="155" r="24" fill="#7bab74"/>
+  <!-- simple tree, right of the gate -->
+  <rect x="298" y="158" width="11" height="48" rx="3" fill="#7a6a52"/>
+  <circle cx="303" cy="150" r="28" fill="#6f9e6a"/>
+  <!-- low hedge line -->
+  <rect x="0" y="205" width="140" height="14" rx="7" fill="#7bab74"/>
+  <rect x="264" y="210" width="136" height="14" rx="7" fill="#7bab74"/>
+</svg>

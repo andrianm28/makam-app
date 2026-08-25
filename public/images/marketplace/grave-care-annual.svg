@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" role="img" aria-label="Ilustrasi perawatan makam tahunan (placeholder)">
+  <title>Perawatan Makam Tahunan — placeholder</title>
+  <rect width="400" height="300" rx="16" fill="#E8F0EE"/>
+  <path d="M130 220 Q200 195 270 220" fill="none" stroke="#3F6659" stroke-width="4" stroke-linecap="round"/>
+  <!-- seasonal cycle: four small leaves around a centre ring, standing for a full year -->
+  <circle cx="200" cy="150" r="14" fill="none" stroke="#3F6659" stroke-width="4"/>
+  <g fill="none" stroke="#6B8F71" stroke-width="3">
+    <path d="M200 122 q8 -12 16 0 q-8 12 -16 0 Z"/>
+    <path d="M200 178 q8 12 16 0 q-8 -12 -16 0 Z"/>
+    <path d="M172 150 q-12 -8 0 -16 q12 8 0 16 Z"/>
+    <path d="M228 150 q12 -8 0 -16 q-12 8 0 16 Z"/>
+  </g>
+</svg>

@@ -1,18 +1,44 @@
-# Combined Development and Staging Environment — Ubuntu 22.04, 2 vCPU / 4 GB — v0.5
+# Combined Development and Staging Environment — Ubuntu 24.04, 8 vCPU / 31 GB — v0.6
+
+> **Updated 17 Aug 2026 — host migration (adrivm → yiemvm).** The combined host
+> moved to yiemvm (`103.92.214.243`, Ubuntu 24.04.4, 8 vCPU / 31 GB / 93 GB free).
+> The migration (`docs/operations/2026-08-17-makam-migration-to-yiemvm.md`)
+> carried the compose stack, images, PostgreSQL data (verified row-count match),
+> the repo + all worktrees, credentials, and the nginx TLS front (Let's Encrypt,
+> carried) — `dev.makam.co.id` now resolves to yiemvm via Domainesia DNS.
+> adrivm (old host) was kept running as the 7-day rollback standby.
+
+> **Updated 25 Aug 2026 — production graduation supersedes this doc's "no
+> production" framing.** `docs/adr/0027-combine-dev-staging-on-ubuntu22-2v4g.md`'s
+> "Production graduation — single-host decision" section (23 Aug 2026,
+> reaffirmed directly by the user 24 Aug 2026) decided this host IS production
+> now, not a temporary non-production host awaiting a separate production
+> buildout. §1's "Production remains isolated" line below and §4's "Production
+> data is prohibited" line are both now false under that decision — kept
+> unedited below as the historical record this doc originally shipped with,
+> corrected here rather than silently rewritten. The real, current rule:
+> production data legitimately exists on this host (beta's real customer
+> bookings, etc.) — what §4's isolation list still correctly requires is
+> that **dev stays isolated from staging/beta**, which is a live, separate,
+> still-real requirement this correction does not touch.
 
 ## 1. Decision
 
 Use one temporary non-production host for both development and staging:
 
 ```text
-Host OS: Ubuntu 22.04 LTS
-Compute: 2 vCPU
-Memory: 4 GB RAM
+Host OS: Ubuntu 24.04 LTS
+Compute: 8 vCPU
+Memory: 31 GB RAM
 Swap: 2–4 GB emergency buffer
 Role: combined development + staging only
 ```
 
 Production remains isolated and follows the Ubuntu 24.04/managed production baseline.
+
+**Superseded 25 Aug 2026** — see the correction note at the top of this
+document. This host is now production, by explicit decision, not isolated
+from it.
 
 ## 2. Objectives
 
@@ -68,16 +94,18 @@ Development and staging must have different values for:
 - feature-gate state;
 - OAuth/API tokens if later added.
 
-Production credentials must never be copied to the host. Production data is prohibited. Staging uses synthetic data or a formally approved, irreversibly sanitized dataset.
+~~Production credentials must never be copied to the host. Production data is prohibited.~~ **Superseded 25 Aug 2026** — see the correction note at the top of this document: this host IS production now, by explicit decision, so production data legitimately exists here (e.g. beta's real customer bookings). Staging uses synthetic data or a formally approved, irreversibly sanitized dataset — that part is unchanged and still applies, since staging remains distinct from beta/production data.
 
 ## 5. Access controls
 
-- `dev.makam.co.id`: VPN, IP allowlist, or reverse-proxy authentication; not public.
-- `stg.makam.co.id`: limited stakeholder/UAT access; authentication required where appropriate.
+- `dev.makam.co.id`: **public, by explicit decision — see note below.** No VPN, IP allowlist, or reverse-proxy authentication as of 25 Jul 2026.
+- `stg.makam.co.id`: limited stakeholder/UAT access; authentication required where appropriate. **Unaffected by the note below** — this line still applies to staging as originally written.
+
+> **Updated 25 Jul 2026 (ADR-0031).** This line originally required `dev.makam.co.id` to refuse unauthenticated access, implemented as HTTP basic auth the same day. Hours later the user explicitly requested making dev public, was shown this exact conflict, and reaffirmed the request — see [ADR-0031](../adr/0031-make-dev-environment-public.md) for the full reasoning and consequences. `auth_basic` was removed from the nginx vhost; `ci/verify-infra.sh` GATE I9 was updated in the same change to expect `200` rather than `401`/`403`. The `X-Robots-Tag: noindex` requirement in the line below is unchanged and still enforced — dev is public but still asked not to be indexed/crawled. Because dev is now reachable by anyone, including scanners (already observed probing this host for `.env`/`.git`/backup files on unrelated vhosts), §4's synthetic-data-only rule and normal secret hygiene matter more here than before, not less.
 - Both environments return `X-Robots-Tag: noindex, nofollow` and disallow crawler indexing.
 - SSH uses keys, no password login, least-privilege sudo, and restricted firewall rules.
 - PostgreSQL and Redis are not exposed publicly.
-- Admin/MFA flows remain enabled in staging to test production behavior.
+- Admin login flows remain enabled in staging to test production behavior — MFA itself was removed entirely (22-23 Aug 2026, PR #147; see `docs/adr/0024-use-session-auth-and-mfa.md`'s superseding note), so this now refers to the password-based recent re-authentication (`App\Filament\Admin\Pages\PasswordReauthentication`) that replaced it, not a TOTP/MFA flow.
 
 ## 6. Resource budget
 

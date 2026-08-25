@@ -1,5 +1,21 @@
 # Design — Public Booking Wizard
 
+## Boundary with `booking-and-order-orchestration` (normative)
+
+Both specs describe the nine steps and share eight acceptance criteria. To stop the same behaviour being built twice — or each assuming the other did it:
+
+| This spec (presentation) owns | `booking-and-order-orchestration` (domain) owns |
+|---|---|
+| Step rendering, stepper, labels, progress | Product-type routing |
+| Draft UI, autosave affordance, resume UX | Draft persistence, versioning, idempotency |
+| Field components, client-side hints | Server-side step validation (authoritative) |
+| Rendering quote lines and totals | Quote issue, versioning, immutability |
+| Rendering payment mode and its states | Payment guard, gate evaluation, webhook effects |
+| Upload UI and progress | Document adapter, quarantine, signed URLs |
+| Step 9 layout and delivery indicators | Order state machine, notification dispatch |
+
+Where an acceptance criterion appears in both, this spec covers **what the user sees**; the other covers **what the server enforces**. Resolves `docs/planning/kiro-specs-analysis.md` §5.4.
+
 ## State
 
 `BookingDraft` stores `current_step`, `completed_steps`, `version`, data payload references, quote reference, and workflow branch.

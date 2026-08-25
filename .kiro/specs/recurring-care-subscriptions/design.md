@@ -7,9 +7,15 @@ subscriptions
 subscription_cycles
 subscription_invoices
 subscription_payment_references
-care_work_orders
-care_evidence
 ```
+
+## Table ownership (normative)
+
+This spec owns **billing only**: the four tables above. Work orders and evidence are **owned by `grave-care-fulfillment`** as `work_orders` / `work_evidence`; a paid cycle emits an intent that `grave-care-fulfillment` turns into a work order.
+
+`care_work_orders` and `care_evidence` were previously listed here and are **removed** — they duplicated `work_orders` / `work_evidence` under different names, and `care_cycles` duplicated `subscription_cycles`. One concept, one table, one owner. Resolves `docs/planning/kiro-specs-analysis.md` §5.3.
+
+This is what makes AC6 (billing, work scheduling, completion evidence, complaint, and make-good are separate states) enforceable rather than aspirational.
 
 ## Idempotency
 

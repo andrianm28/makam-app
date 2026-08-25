@@ -1,0 +1,222 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Platform\Payment;
+
+/**
+ * The audit action names this module writes, in one place, so no call site
+ * spells one as a magic string — the same convention as
+ * `App\Domain\Faq\FaqAuditActions`,
+ * `App\Domain\ServiceCatalog\ServiceCatalogAuditActions`, and other
+ * domain-layer audit-action classes across the codebase.
+ *
+ * ---------------------------------------------------------------------------
+ * None of these is on `SensitiveActions::ACTIONS`, deliberately
+ * ---------------------------------------------------------------------------
+ * `App\Platform\Audit\SensitiveActions::ACTIONS` already carries this
+ * module's two future sensitive actions (`PAYMENT_MANUAL_VERIFICATION`,
+ * `VENDOR_PAYOUT`), which make a `reason` mandatory at write time.
+ * `PAYMENT_GUARD_DENIED` is deliberately NOT among them: the plan's Global
+ * Constraints say "No new `SensitiveActions` entries in this lane beyond the
+ * two already present", and Wave 1b ruling 1b-L3-01 did not add one. A guard
+ * denial is a high-volume, automatic, machine-decided event; a mandatory
+ * free-text reason on it would be either boilerplate or a place for a
+ * careless caller to paste restricted data. The structured
+ * condition/reason/missing-upstream fields on `payment_intents` carry the
+ * explanation instead.
+ */
+final class PaymentAuditActions
+{
+    /**
+     * Written on every guard denial, with `AuditOutcome::Denied` and the
+     * `payment_intents` row as its subject. design.md §Observability names
+     * "blocked early-payment attempts, guard denial reasons" as things this
+     * module must make observable; this action is how.
+     */
+    public const string GUARD_DENIED = 'PAYMENT_GUARD_DENIED';
+
+    /**
+     * AC6: "WHEN validation fails THE SYSTEM SHALL record and reject the
+     * webhook, and SHALL NOT silently ignore it." Written by `ReceiveWebhook`
+     * with `AuditOutcome::Denied` on every rejected delivery, alongside the
+     * `provider_events.status = REJECTED_*` row. The row is the machine record;
+     * this is the trail an operator reads.
+     *
+     * Also used for the one rejection that has no row to point at — a body over
+     * `config('payment.webhook.max_body_bytes')`, which is refused before
+     * anything is stored.
+     *
+     * Not on `SensitiveActions::ACTIONS`, for the same reason as
+     * `GUARD_DENIED`: a mandatory free-text reason on a high-volume,
+     * machine-decided event would be boilerplate or a place to paste
+     * restricted data. The structured status and the closed-list `note` carry
+     * the explanation instead.
+     */
+    public const string WEBHOOK_REJECTED = 'PAYMENT_WEBHOOK_REJECTED';
+
+    /**
+     * A redelivery that collided with one of `provider_events`' unique guards.
+     *
+     * This one is not merely a convenience: the colliding row is the row the
+     * database refused to write, so an audit event is the ONLY durable record
+     * that a second delivery arrived at all. `payment-webhook.md` §Idempotency
+     * requires the duplicate to be acknowledged with the original processing
+     * reference and to repeat no effects — this records that it happened
+     * without touching the append-only original.
+     */
+    public const string WEBHOOK_DUPLICATE = 'PAYMENT_WEBHOOK_DUPLICATE';
+
+    /**
+     * A settling provider event refused at apply time because its provider
+     * transaction was already claimed by a different settling event —
+     * `payment-webhook.md` §Idempotency: "A secondary guard should prevent the
+     * same provider transaction from settling multiple invoices."
+     *
+     * Written by `ProcessWebhookEvent` with `AuditOutcome::Denied` alongside the
+     * `provider_events.status = MANUAL_REVIEW` row. The status is the machine
+     * record and the reason the event is never applied; this is the trail that
+     * tells an operator a human decision is owed, and which other row holds the
+     * claim.
+     *
+     * Not on `SensitiveActions::ACTIONS`, for the same reason as the two actions
+     * above and because the plan's Global Constraints say this lane adds no new
+     * entry beyond the two already present. Nothing here is a human-initiated
+     * action with a reason to state — it is a machine refusal, and the
+     * structured status plus the closed-list `note` carry the explanation.
+     */
+    public const string WEBHOOK_SETTLEMENT_CONFLICT = 'PAYMENT_WEBHOOK_SETTLEMENT_CONFLICT';
+
+    /**
+     * Task 5 (Wave 1c Append-Correction) — written by `SubmitManualPayment`
+     * with `AuditOutcome::Allowed`, subject = the new `PaymentVerification`
+     * row, on every manual payment submission (with or without a proof
+     * file).
+     *
+     * Not on `SensitiveActions::ACTIONS`, for the same category of reason as
+     * the three actions above: a customer submitting a manual payment
+     * reference is a routine, self-service action with no free-text
+     * "reason" to give — only evidence (the submitted fields and,
+     * optionally, a proof document reference).
+     */
+    public const string MANUAL_SUBMITTED = 'PAYMENT_MANUAL_SUBMITTED';
+
+    /**
+     * AC8/AC9 — written by `VerifyManualPayment` with `AuditOutcome::Allowed`
+     * (approve) or `AuditOutcome::Denied` (reject), subject = the
+     * `PaymentVerification` row.
+     *
+     * ALREADY on `SensitiveActions::ACTIONS` (added by an earlier task per
+     * the plan's own Files note: "SensitiveActions (already has
+     * `PAYMENT_MANUAL_VERIFICATION`)") — `Audit::record()`'s existing
+     * `SensitiveActions::requiresReason()` check enforces the mandatory
+     * reason; `VerifyManualPayment` does not re-implement that check.
+     */
+    public const string MANUAL_VERIFICATION = 'PAYMENT_MANUAL_VERIFICATION';
+
+    /**
+     * An admin payment action was refused for lack of authority — written by
+     * `RecordPaymentActionRefusal` with `AuditOutcome::Denied` whenever
+     * `Contracts\PaymentActionAuthorizer` refuses a caller at either admin
+     * route, immediately before the 403.
+     *
+     * ONE dedicated constant rather than reusing `MANUAL_VERIFICATION`,
+     * `REFUND` or `CHARGEBACK`, for two reasons:
+     *
+     * 1. Those three mean "this money movement happened". A refusal is the
+     *    opposite event, and an operator counting refunds must not have to
+     *    filter refusals out of the same action name.
+     * 2. In `Http\Controllers\RecordPaymentReversalController` authorization
+     *    deliberately runs BEFORE the `match` that decides refund vs
+     *    chargeback, so at refusal time there is no correct choice between
+     *    `REFUND` and `CHARGEBACK` to make. That ordering is the one that
+     *    cannot be got wrong by a later edit and must not be changed to suit
+     *    an audit label.
+     *
+     * Deliberately NOT on `SensitiveActions::ACTIONS`. A mandatory reason
+     * there is a prompt for a HUMAN justification, and there is no human on
+     * this path: the refusal is machine-decided and the caller is the party
+     * being refused, so the only text available would be theirs. The writer
+     * supplies a fixed server-side reason string instead, which is why
+     * nothing here reads the request body — authorization runs before
+     * validation, so that body is entirely unvalidated at this point.
+     */
+    public const string ADMIN_ACTION_DENIED = 'PAYMENT_ADMIN_ACTION_DENIED';
+
+    /**
+     * Task 6 (Wave 1d Append-Correction) — written by `Actions\RecordRefund`
+     * with `AuditOutcome::Allowed`, subject = the new `PaymentReversal` row.
+     *
+     * Added to `SensitiveActions::ACTIONS` by this task (the plan's own
+     * text names this as a financial action requiring a mandatory reason —
+     * "add to `SensitiveActions` as `PAYMENT_REFUND` and `PAYMENT_CHARGEBACK`
+     * with mandatory reason"). This string value matches the literal entry
+     * added to `SensitiveActions::ACTIONS`, exactly the same convention
+     * `MANUAL_VERIFICATION`'s value already follows.
+     */
+    public const string REFUND = 'PAYMENT_REFUND';
+
+    /**
+     * Task 6 (Wave 1d Append-Correction) — written by
+     * `Actions\RecordChargeback` with `AuditOutcome::Allowed`, subject = the
+     * new `PaymentReversal` row. Same mandatory-reason convention as
+     * `REFUND` above.
+     */
+    public const string CHARGEBACK = 'PAYMENT_CHARGEBACK';
+
+    /**
+     * Written by `Actions\OpenPaymentSession` with `AuditOutcome::Allowed`,
+     * subject = the new `PaymentSession` row, when a session opens through
+     * the six-condition guard. The Allowed `payment_intents` decision record
+     * the session links to is written in the same transaction; this event is
+     * the trail an operator reads for "a hosted checkout was opened".
+     *
+     * Deliberately NOT on `SensitiveActions::ACTIONS`, for the same reason
+     * as `GUARD_DENIED` (and the plan's Global Constraints: no new
+     * SensitiveActions entry in this lane beyond the two already present):
+     * an opening is guard-gated and machine-decided — every one of the six
+     * conditions was evaluated before this event can exist — so a mandatory
+     * free-text reason would be boilerplate or a place for a careless caller
+     * to paste restricted data. The structured session row and the
+     * closed-list `note` carry the explanation.
+     */
+    public const string SESSION_OPENED = 'PAYMENT_SESSION_OPENED';
+
+    /**
+     * Whole-branch review fix wave (15 Aug 2026) — written by
+     * `Actions\OpenPaymentSession` with `AuditOutcome::Denied` when a session
+     * opening is refused because the order is already paid. Subject = the
+     * `Order` (booking, `DIBAYAR`) or, since the marketplace follow-up
+     * landed, the `MarketplaceOrder` (`PaymentState::DIBAYAR`) — same
+     * concept for both: the guard would have evaluated all its other
+     * conditions as satisfiable, so the refusal is a session-level
+     * precondition ahead of the guard, not a guard denial; this row is what
+     * lets an operator see that a second payment was attempted for an
+     * already-paid order, for either order type.
+     *
+     * Not on `SensitiveActions::ACTIONS`, for the same reason as
+     * `GUARD_DENIED`: machine-decided, structured subject, closed-list
+     * `note`, no free-text reason for a careless caller to fill with
+     * restricted data.
+     */
+    public const string SESSION_OPENING_REFUSED = 'PAYMENT_SESSION_OPENING_REFUSED';
+
+    /**
+     * Whole-branch review fix wave (15 Aug 2026) — written by
+     * `Actions\ApplyPaymentSettlement` with `AuditOutcome::Denied`, subject =
+     * the `provider_events` row, when a claimed `payment.completed` settles an
+     * order that an earlier, DIFFERENT provider transaction already paid. The
+     * claim guarantees the (provider, transaction) pair is new, so an
+     * already-DIBAYAR order with a different `paid_source_ref` is a second,
+     * independent payment arrival — a double charge that surfaces here at
+     * reconciliation. The subject row carries the provider transaction id;
+     * the transaction id itself is a provider payload value and stays out of
+     * the audit row (AC14), exactly like `WEBHOOK_SETTLEMENT_CONFLICT`'s
+     * `note`.
+     *
+     * Not on `SensitiveActions::ACTIONS`, for the same reason as
+     * `GUARD_DENIED`: machine-decided, structured subject, closed-list
+     * `note`, no free-text reason.
+     */
+    public const string DUPLICATE_ARRIVAL = 'PAYMENT_DUPLICATE_ARRIVAL';
+}

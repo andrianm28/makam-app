@@ -4,6 +4,8 @@
 
 **Accepted engineering baseline, updated 23 July 2026.**
 
+Still v0.5: content unchanged since then. Last reviewed against documentation package baseline v0.6 on 25 July 2026 — see the versioning convention in `../specs/README.md`.
+
 This document pins the supported application technology line and separates production runtime requirements from the temporary combined development/staging host. Exact patch versions are recorded by lockfiles, runtime image digest, and deployment manifest.
 
 ## 2. Pinned application baseline

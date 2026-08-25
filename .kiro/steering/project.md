@@ -1,27 +1,13 @@
-# Makam.co.id Kiro Steering — v0.5
+# Makam.co.id Kiro Steering — index
 
-Read these canonical documents before planning or implementation:
+**Split 25 Jul 2026** into five domain files, matching Kiro's documented multi-file steering convention ([kiro.dev/docs/steering](https://kiro.dev/docs/steering/)) instead of one monolithic always-loaded list. This file is kept as an index only — every external reference to `.kiro/steering/project.md` (`CLAUDE.md`, `README.md`, `docs/planning/parallelization-analysis.md`, `docs/planning/kiro-specs-analysis.md`, `docs/design/design-system.md`) still resolves here rather than breaking.
 
-1. `../../docs/product/product-brief.md`
-2. `../../docs/product/mvp-scope.md`
-3. `../../docs/product/information-architecture.md`
-4. `../../docs/product/screen-inventory.md`
-5. `../../docs/product/booking-wizard-fields.md`
-6. `../../docs/product/service-catalog.md`
-7. `../../docs/product/marketplace-catalog.md`
-8. `../../docs/product/faq-catalog.md`
-9. `../../docs/domain/traceability-matrix.md`
-10. `../../docs/governance/assumptions-and-gates.md`
-11. `../../docs/architecture/overview.md`
-12. `../../docs/architecture/technology-baseline.md`
-13. `../../docs/architecture/queue-and-outbox.md`
-14. `../../docs/domain/financial-model.md`
-15. `../../docs/operations/dev-staging-environment.md`
-16. `../../docs/operations/ci-cd-and-release.md`
-17. `../../AGENTS.md`
+| File | Inclusion mode | Covers |
+|---|---|---|
+| [`product.md`](product.md) | `always` | Product brief, MVP scope, IA, screen inventory, booking wizard fields, service/marketplace/FAQ catalogues |
+| [`tech.md`](tech.md) | `always` | Architecture overview, technology baseline, queue/outbox, dev/staging environment, CI/CD |
+| [`governance.md`](governance.md) | `always` | Traceability matrix, assumptions/gates, financial model, `AGENTS.md` |
+| [`design.md`](design.md) | `fileMatch` (`resources/**`, `app/Filament/**`, `app/Livewire/**`, `docs/design/**`) | `design-system.md`, `tokens.css` |
+| [`planning.md`](planning.md) | `manual` | `kiro-specs-analysis.md` |
 
-Feature specs are canonical under `../specs/`.
-
-The Stakeholder Workflow MVP is a committed acceptance baseline. External gates may change the operating mode, but they must use the documented fallback rather than removing a required public flow.
-
-Benchmark-derived features not listed in `mvp-scope.md` remain `Proposed`, `Optional`, or `Gated`.
+Feature specs are canonical under `../specs/`. `design-system.md` (via `design.md`) is the single source of truth for component contracts and the ten required UI states; `tokens.css` is the single source of truth for every design value. Never hardcode a hex, px, ms, or shadow, and never use a Tailwind arbitrary value for a design decision.

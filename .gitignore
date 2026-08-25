@@ -2,6 +2,17 @@
 .env
 .env.*
 !.env.*.example
+# `.env.*` above also matches `.env.example`, and `!.env.*.example` does not
+# rescue it (that pattern needs a segment between the dots, e.g. .env.dev.example).
+# The template MUST be tracked — it is the only non-secret record of which
+# variables exist. Found 25 Jul 2026 when the Laravel scaffold landed and the
+# skeleton's .env.example silently disappeared from git's view.
+!.env.example
+
+# Laravel
+.phpunit.result.cache
+/.phpunit.cache
+auth.json
 
 # Secrets
 *.pem
@@ -11,7 +22,17 @@ secrets/
 *_token*.txt
 
 # Dependencies (future app code)
-vendor/
+#
+# Anchored to repo root (`/vendor/`, not bare `vendor/`) — an unanchored
+# pattern matches a directory named `vendor` ANYWHERE in the tree, which
+# silently swallowed `resources/views/filament/vendor/` (the `/vendor`
+# panel's own Blade view namespace, named after the panel itself, nothing to
+# do with Composer) the moment that panel's first custom view landed. Found
+# via `git check-ignore -v` when `resources/views/filament/vendor/pages/
+# profile.blade.php` refused to show up in `git status`. Confirmed no other
+# directory in the tracked tree is named `vendor` before narrowing this, so
+# nothing else was relying on the unanchored form.
+/vendor/
 node_modules/
 
 # Build artifacts
@@ -23,3 +44,58 @@ bootstrap/cache/*.php
 .DS_Store
 .idea/
 .vscode/
+
+# Project-specific expectations (stakeholder MVP, not code)
+ekspektasi-user
+
+# Agent config (per AGENTS.md M-3)
+# Trailing `/*` rather than `/` so git still descends into the directory and
+# the negation below can take effect — a blanket `.claude/` ignore makes any
+# `!.claude/...` rule unreachable. settings.json still matches this line and
+# stays ignored, which is the point of M-3.
+.claude/*
+
+# Un-ignored 8 Aug 2026, same reasoning as `!ekspektasi-user` below: these are
+# shared project knowledge, not local agent config. `.claude/skills/kiro-*`
+# encode this repository's Kiro spec workflow (kiro.dev/docs/specs) together
+# with the AGENTS.md rules that override it — useless to a teammate or to CI
+# if they live only on one machine. Kiro's own best practice is the same:
+# spec tooling belongs in the repository beside the specs it governs.
+!.claude/skills/
+
+# Un-ignored 8 Aug 2026, same reasoning as the skills above. Subagent role
+# definitions double as agent-team teammate types
+# (code.claude.com/docs/en/agent-teams), and Claude Code's own guidance is to
+# "check them into version control so your team can use and improve them
+# collaboratively". They are project knowledge, not machine-local config.
+# .claude/settings.json deliberately stays ignored (AGENTS.md M-3) — the
+# CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS flag lives there and is a per-machine
+# opt-in into an experimental feature, not a project decision.
+!.claude/agents/
+
+# Reversed 25 Jul 2026: this line un-ignores ekspektasi-user despite the
+# blanket ignore above. Reasoning recorded in the commit message and in
+# docs/planning/ekspektasi-vs-specs.md §4 D5 — it is the stakeholder-MVP
+# expectation document, authority rank 2 under AGENTS.md, and its being
+# untracked broke CI (GATE 4: a link to it 404s on a clean checkout).
+!ekspektasi-user
+
+# MCP config (may contain DB URLs)
+.mcp.json
+
+# Superpowers subagent-driven-development isolated workspaces (scratch git
+# worktrees, one branch per in-flight plan) — never committed.
+.worktrees/
+
+# Guard against a Superpowers execution ledger landing in trunk if one is
+# ever created outside an isolated worktree (should not normally happen —
+# the nested .superpowers/sdd/.gitignore inside each worktree already
+# covers the normal case). Does not touch docs/superpowers/plans/, which
+# is intentionally committed.
+/.superpowers/
+
+# Playwright browser/a11y harness outputs
+/test-results/
+/playwright-report/
+/blob-report/
+/public/hot

@@ -84,6 +84,25 @@ Production rollback must not depend on destructive `down()` migrations.
 9. Enable gates progressively where applicable.
 10. Observe defined release window and record outcome.
 
+### 5.1 Release-specific manual steps
+
+Some releases need an operator action inside the same change window as the deploy. These are listed here because they are invisible in the artifact and in the migration set — nothing fails, a flow simply stops working.
+
+**Payment admin authorization hotfix (`fix/payment-controller-authorization`) — role grants required in the same change window as the merge.**
+
+- **What changes.** `POST /admin/pembayaran/pembalikan/{reversalType}` (record a refund or chargeback) and `POST /admin/pembayaran/verifikasi-manual/{paymentVerification}/verifikasi` (approve or reject a manual payment) now require the acting account to hold `finance` **or** `restricted_admin`. Before this release they required only an authenticated session with a recent login.
+- **Why a manual step exists.** Roles are granted only by the audited console command; no seeder grants any role. So on deploy **both endpoints refuse everyone, including existing admins**, until an operator grants the roles. That fail-closed outcome is deliberate and must not be softened in code.
+- **Who runs it.** The deploy operator, with the release approver naming the accounts. This is a privilege grant, so it needs the same sign-off as any other authorization change.
+- **What to run**, once per operator who legitimately performs these actions:
+
+  ```
+  php artisan identity:grant-role {actor} finance --reason="<why this operator needs it>"
+  ```
+
+  `restricted_admin` may be granted instead; either role unblocks both flows, and there is no per-flow role. **Granting plain `admin` does NOT unblock either flow** — that is deliberate, not an oversight.
+- **Until it is run**, both flows stay dark and return 403 to every caller. Each refusal is recorded as an `AuditOutcome::Denied` audit row naming the actor and the role they actually held, so "this operator needs a grant" is distinguishable from "someone is probing this endpoint".
+- **Rationale and the authority basis for the role pair:** `docs/superpowers/plans/2026-08-12-payment-controller-auth-hotfix.md` §6.1. Not restated here.
+
 ## 6. Rollback triggers
 
 - elevated 5xx/error rate;
@@ -112,6 +131,7 @@ Production rollback must not depend on destructive `down()` migrations.
 - public homepage and booking draft check.
 - test outbox publisher and queue workers.
 - provider sandbox/synthetic webhook test in staging.
+- confirm every release-specific manual step in §5.1 that applies to this release was executed; for privileged-role grants, confirm the intended operator can still complete the flow rather than assuming the grant landed.
 
 ## 9. Dependency updates
 

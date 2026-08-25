@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" role="img" aria-label="Ilustrasi karangan bunga papan (placeholder)">
+  <title>Karangan Bunga Papan — placeholder</title>
+  <rect width="400" height="300" rx="16" fill="#F0F4EF"/>
+  <!-- stand board -->
+  <rect x="150" y="90" width="100" height="160" rx="6" fill="none" stroke="#6B8F71" stroke-width="4"/>
+  <line x1="150" y1="250" x2="120" y2="270" stroke="#6B8F71" stroke-width="4" stroke-linecap="round"/>
+  <line x1="250" y1="250" x2="280" y2="270" stroke="#6B8F71" stroke-width="4" stroke-linecap="round"/>
+  <!-- ribbon banner -->
+  <path d="M160 150 L240 150 L232 165 L240 180 L160 180 L168 165 Z" fill="none" stroke="#B98A93" stroke-width="3" stroke-linejoin="round"/>
+  <line x1="178" y1="160" x2="222" y2="160" stroke="#B98A93" stroke-width="2"/>
+  <line x1="178" y1="170" x2="222" y2="170" stroke="#B98A93" stroke-width="2"/>
+  <!-- simple flower wreath at top -->
+  <g transform="translate(200,70)">
+    <circle r="8" fill="none" stroke="#6B8F71" stroke-width="3"/>
+    <g stroke="#B98A93" stroke-width="3" fill="none">
+      <ellipse cx="0" cy="-18" rx="7" ry="12"/>
+      <ellipse cx="0" cy="18" rx="7" ry="12"/>
+      <ellipse cx="-18" cy="0" rx="12" ry="7"/>
+      <ellipse cx="18" cy="0" rx="12" ry="7"/>
+      <ellipse cx="-13" cy="-13" rx="10" ry="7" transform="rotate(45 -13 -13)"/>
+      <ellipse cx="13" cy="13" rx="10" ry="7" transform="rotate(45 13 13)"/>
+      <ellipse cx="-13" cy="13" rx="10" ry="7" transform="rotate(-45 -13 13)"/>
+      <ellipse cx="13" cy="-13" rx="10" ry="7" transform="rotate(-45 13 -13)"/>
+    </g>
+  </g>
+</svg>

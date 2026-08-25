@@ -25,9 +25,11 @@ supervisor-critical: critical          min 1, max 4, timeout 60s
 supervisor-urgent:   urgent            min 1, max 4, timeout 60s
 supervisor-notify:   notifications     min 1, max 4, timeout 90s
 supervisor-default:  default           min 1, max 4, timeout 90s
-supervisor-batch:    imports,media     min 0, max 3, timeout job-specific
-supervisor-reports:  reports           min 0, max 2, timeout job-specific
+supervisor-batch:    imports,media     min 1, max 3, timeout job-specific
+supervisor-reports:  reports           min 1, max 2, timeout job-specific
 ```
+
+> **Corrected 24 Aug 2026** (`docs/testing/release-gates.md` §H, Task 7): `supervisor-batch`/`supervisor-reports` originally said `min 0` here, intending true zero-idle capacity. That value is invalid for the Horizon version this project runs — `Laravel\Horizon\ProvisioningPlan::convert()` throws unconditionally when any environment's `minProcesses` is below 1 — and `config/horizon.php` was found, by actually running `php artisan horizon` for the first time since it was authored, to crash on startup in every environment because of it. `SupervisorOptions`'s own package default for `minProcesses` is already `1`, not `0`, so zero-idle scaling was never achievable here regardless; `min 1` above is the real floor, not a lowered target. Real capacity consequence: these 2 supervisors now hold at least 1 permanently-resident worker process each in production, not scale-to-zero, on the real production host — `yiemvm`, 8 vCPU/31 GB (per `ADR-0027`'s own 23 Aug 2026 correction of this same document's superseded "2 vCPU/4 GB" title/figure; production runs on this same shared host under that ADR's single-host decision, not a separate smaller one). If a future host resize makes this consequential, it needs a real capacity assessment, not a return to `min 0` — that value crashes Horizon outright, it does not save capacity.
 
 Exact process counts are capacity settings, not code constants. Production requires long-wait alerts per queue. Suggested initial thresholds:
 
@@ -129,6 +131,8 @@ The system assumes **at-least-once delivery**. Consumers must be idempotent usin
 ## 9. Deployment and shutdown
 
 Deployment must terminate Horizon gracefully so active jobs finish or are safely retried. Job timeout must be shorter than `retry_after`. Scheduler runs a single outbox publisher using overlap prevention or distributed lock.
+
+Resolved numbers (final-review I1, observability-and-adr-fixes): `critical`/`urgent`/`notifications`/`default` supervisors use the `redis` queue connection (`retry_after` 90s, `config/queue.php`) against 60–90s job timeouts (`config/horizon.php`). `supervisor-batch` (`imports`, `media`) and `supervisor-reports` run at a 900s job timeout, which exceeds 90s — those two supervisors use a separate `redis_batch` connection (`retry_after` 1000s by default, `REDIS_QUEUE_BATCH_RETRY_AFTER` env-overridable) so the invariant above holds for both groups without weakening retry semantics on the tight-timeout queues.
 
 ## 10. Combined dev/staging worker profile
 

@@ -1,0 +1,80 @@
+Workflow MVP – makam.co.id
+Indonesia End-of-Life Services Platform
+
+
+HOME PAGE
+Menu Utama:
+1. Pemesanan Makam
+2. Layanan Pemakaman (Funeral Marketplace)
+3. Perpanjangan Makam
+4. FAQ
+1. PEMESANAN MAKAM
+Step 1 – Pilih Lokasi: Kota/Kabupaten (Jakarta, Bogor, Depok, Tangerang, Bekasi)
+
+Step 2 – Pilih TPU/TPS
+- TPU atau TPS
+- Nama, Foto, Alamat, Google Maps, Fasilitas, Harga, Ketersediaan
+
+Step 3 – Pilih Jenis Layanan
+- Makam Baru
+- Makam Tumpang (jika tersedia)
+- Pemakaman Hari Ini (Urgent)
+- Pre-Need
+
+Step 4 – Pilih Layanan
+Layanan Dasar:
+- Pengurusan Dokumen
+- Penggalian Makam
+
+Layanan Tambahan:
+- Ambulans
+- Rumah Duka
+- Mobil Jenazah
+- Tenda & Kursi
+- Sound System
+- Karangan Bunga
+- Batu Nisan
+- Dokumentasi
+- Konsumsi
+- Live Streaming
+
+Step 5 – Ringkasan Pesanan
+Step 6 – Data Pemesan
+Step 7 – Data Almarhum + Upload Dokumen
+Step 8 – Pembayaran
+Step 9 – Konfirmasi (Invoice, Email, WhatsApp, Notifikasi Admin TPU/TPS)
+2. FUNERAL MARKETPLACE
+Karangan Bunga
+- Karangan Bunga Papan
+- Paket Bunga Tabur
+
+Batu Nisan
+- Granit
+- Marmer
+- Kaligrafi
+
+Perawatan Makam
+- Bulanan
+- 3 Bulan
+- 6 Bulan
+- Tahunan
+
+Flow: Pilih Produk/Paket → Checkout → Pembayaran → Vendor Memproses
+3. PERPANJANGAN MAKAM
+Step 1: Pilih Kota
+Step 2: Pilih TPU/TPS
+Step 3: Cari Data Makam
+Step 4: Sistem menampilkan biaya
+Step 5: Pembayaran
+Step 6: Konfirmasi & Invoice
+4. FAQ
+Cara memesan, dokumen, pembayaran, perpanjangan, pembayaran gagal, customer service.
+Dashboard Admin
+Kelola TPU/TPS, vendor, transaksi, pembayaran, status pesanan, FAQ, laporan.
+Dashboard Vendor
+Login, kelola produk, terima pesanan, update status, jadwal, riwayat transaksi.
+User Flow
+HOME → Pemesanan Makam / Funeral Marketplace / Perpanjangan Makam / FAQ
+
+
+

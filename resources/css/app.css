@@ -1,0 +1,123 @@
+/* =============================================================================
+ * makam-app — public site stylesheet entry point
+ * =============================================================================
+ * Wiring is specified in docs/design/design-system.md §8.2.
+ * Design VALUES belong in tokens.css and nowhere else. If you are about to type
+ * a hex, px, ms, or shadow here, stop: add or reference a token instead.
+ *
+ * S2-T1 closed 25 Jul 2026: every §8.2 utility is confirmed compiling, CI-
+ * enforced (ci.yml's frontend job, "Assert every §8.2 utility actually
+ * compiled" — see resources/views/design-system-smoke-test.blade.php for
+ * why a smoke file was needed). Where a future §8.2 addition disagrees with
+ * what actually compiles, correct design-system.md rather than working
+ * around it here — that instruction from S2-T1 still stands.
+ * ========================================================================== */
+
+@import "tailwindcss";
+
+/* Tokens MUST come after the Tailwind import. */
+@import "./tokens.css";
+
+/* Tailwind 4 replaces the JS `content` array with @source. */
+@source "../views/**/*.blade.php";
+@source "../js/**/*.js";
+@source "../../app/Livewire/**/*.php";
+@source "../../app/Filament/**/*.php";
+
+/* -----------------------------------------------------------------------------
+ * Custom utilities for semantic tokens with no Tailwind theme namespace.
+ * This is what makes `z-modal` and `duration-fast` legal instead of `z-[1400]`.
+ * -------------------------------------------------------------------------- */
+@utility z-raised     { z-index: var(--mk-z-raised); }
+@utility z-sticky-cta { z-index: var(--mk-z-sticky-cta); }
+@utility z-dropdown   { z-index: var(--mk-z-dropdown); }
+@utility z-bottomnav  { z-index: var(--mk-z-bottomnav); }
+@utility z-header     { z-index: var(--mk-z-header); }
+@utility z-backdrop   { z-index: var(--mk-z-backdrop); }
+@utility z-modal      { z-index: var(--mk-z-modal); }
+@utility z-popover    { z-index: var(--mk-z-popover); }
+@utility z-toast      { z-index: var(--mk-z-toast); }
+@utility z-tooltip    { z-index: var(--mk-z-tooltip); }
+@utility z-skiplink   { z-index: var(--mk-z-skiplink); }
+
+@utility duration-instant { transition-duration: var(--mk-duration-instant); }
+@utility duration-fast    { transition-duration: var(--mk-duration-fast); }
+@utility duration-base    { transition-duration: var(--mk-duration-base); }
+@utility duration-slow    { transition-duration: var(--mk-duration-slow); }
+@utility duration-slower  { transition-duration: var(--mk-duration-slower); }
+
+/* Enforces the 44 px touch floor without hand-written px anywhere. */
+@utility touch-target {
+  min-height: var(--mk-touch-min);
+  min-width: var(--mk-touch-min);
+}
+
+/* -----------------------------------------------------------------------------
+ * Base layer — global defaults so components need not repeat themselves.
+ * -------------------------------------------------------------------------- */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--mk-surface-page);
+    color: var(--mk-text-default);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--text-base--line-height);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4 {
+    color: var(--mk-text-strong);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  h1, h2 {
+    font-family: var(--font-display);
+    letter-spacing: var(--tracking-tight);
+  }
+
+  a {
+    color: var(--mk-text-link);
+  }
+
+  a:hover {
+    color: var(--mk-text-link-hover);
+  }
+
+  /* Inverse-surface links (the footer's bg-primary-900). The global `a`
+   * rule above paints links --mk-text-link (primary-600, 1.68:1 against
+   * primary-900 — a WCAG 1.4.3 fail the browser/a11y audit caught). The
+   * footer is an inverse surface, so its links use the inverse text token
+   * (--mk-text-inverse, neutral-0/white, 8.55:1 against primary-900 per
+   * tokens.css). Scoped to the footer, never global. */
+  footer a {
+    color: var(--mk-text-inverse);
+  }
+
+  footer a:hover {
+    color: var(--mk-text-on-brand);
+  }
+
+  /* Global focus. NEVER override this to `outline: none` without a replacement
+   * ring — design-system.md §7.2 and the ci/verify-docs.sh gate both enforce it. */
+  :focus-visible {
+    outline: var(--mk-focus-width) solid var(--mk-focus-color);
+    outline-offset: var(--mk-focus-offset);
+  }
+}
+
+/* -----------------------------------------------------------------------------
+ * Self-hosted fonts. No CDN: staging is noindex and access-restricted, and a
+ * third-party font request leaks the visitor's IP on a page where that visitor
+ * is arranging a funeral (design-system.md §1.4).
+ * Inter ships via the @fontsource-variable/inter package in package.json.
+ * -------------------------------------------------------------------------- */
+@import "@fontsource-variable/inter/index.css";
+
+/* Poppins — brand display face (ADR-0034): h1/h2, hero, logo wordmark.
+ * Self-hosted via npm package, same pattern as Inter above; latin subset,
+ * weight 600 only (headings are semibold; §4.6 weight budget). */
+@import "@fontsource/poppins/latin-600.css";

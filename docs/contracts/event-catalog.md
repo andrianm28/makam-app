@@ -1,4 +1,4 @@
-# Event Catalog — v0.4
+# Event Catalog — v0.6
 
 Durable events use the transactional outbox and envelope in `outbox-event-contract.md`. All events include `event_id`, `event_version`, `occurred_at`, actor/service identity, `trace_id`, aggregate reference, idempotency key, and data classification. Restricted documents or permanent file URLs are never embedded.
 
@@ -17,18 +17,41 @@ Durable events use the transactional outbox and envelope in `outbox-event-contra
 | `quote.issued.v1` | Quotation | Customer notification | Immutable version |
 | `quote.accepted.v1` | Quotation | Payment gate | Exact version |
 | `payment.received.v1` | PaymentAdapter | Journal/order/invoice | Valid webhook only |
+| `payment.outcome_failed.v1` | PaymentAdapter | Notification | Carries `outcome` (Failed/Expired) — one event for one matrix row, not two |
+| `marketplace_order.submitted.v1` | Marketplace | Notification | Real customer order submission, one event, no discrimination needed |
+| `vendor_order.decided.v1` | Marketplace | Notification | Carries `outcome` (accepted/rejected) — one event for one matrix row, not two, same shape as payment.outcome_failed.v1 |
 | `order.status_changed.v1` | OrderWorkflow | Notification/reporting | Forward-only commercial status |
-| `agreement.accepted.v1` | Agreement | PreNeed/operations | Exact version and evidence |
+| `agreement.accepted.v1` | Agreement (AcceptAgreement) | PreNeed/operations | Exact version and evidence; emitted once on the `agreements` row — the pre-need case-level acceptance binds the same row without re-emitting |
+| `pre_need_case.activated.v1` | PreNeed | Operations | AC8: new At-Need FuneralCase linked; original contract history preserved |
 | `certificate.issued.v1` | AgreementCertificate | Customer/audit | Unique issuer number |
 | `certificate.replaced.v1` | AgreementCertificate | Customer/audit | Preserves previous version |
+| `document.uploaded.v1` | DocumentVault | Scan workflow, audit | Private quarantine reference only |
+| `document.accepted.v1` | DocumentVault | Booking, audit | Emitted after clean scan and accepted transition |
 | `document.accessed.v1` | DocumentVaultAdapter | Audit/security | Sensitive event |
+| `document.deleted.v1` | DocumentVault | Retention/audit | Emitted after approved deletion; no file contents |
 | `grave.import_completed.v1` | GraveRegistry | Admin notification | Success/error/dedup counts |
 | `renewal.marked_external.v1` | Renewal | Billing guard | Prevents duplicate period |
+| `renewal.submitted.v1` | Renewal | Notification | The online submission path — distinct from renewal.marked_external.v1's offline/admin path |
+| `renewal.paid_online.v1` | Renewal | Notification | A validated webhook settled the renewal online — distinct from renewal.marked_external.v1's offline/admin settlement path |
 | `grave.reminder_sent.v1` | GraveRegistry | Reporting | Idempotent window key |
 | `care.cycle_created.v1` | CareSubscription | Billing/work scheduling | One per cycle |
+| `care.work_order_created.v1` | VendorFulfillment | Case/customer | Evidence reference; one per paid cycle |
+| `care.complaint_filed.v1` | VendorFulfillment | Case/customer/audit | Linked to work order; audited |
+| `care.make_good_created.v1` | VendorFulfillment | Case/customer | Replacement order linked to original |
 | `vendor.work_completed.v1` | VendorFulfillment | Case/customer | Evidence reference |
+| `vendor.evidence_uploaded.v1` | VendorFulfillment | Notification | References only — no document content or restricted data |
 | `memorial.unpublished.v1` | Memorial | Public read/QR | Privacy/moderation action |
+| `memorial.profile_created.v1` | Memorial | Read models, audit | Privacy default private; grave-record reference only (AC7) |
+| `memorial.published.v1` | Memorial | Public read/QR | Profile made public |
+| `memorial.qr_token_rotated.v1` | Memorial | Public read/QR | Old token invalidated; opaque random token (AC4) |
+| `memorial.content_moderated.v1` | Memorial | Public read/QR | Moderation action; approved-only render (AC6) |
 | `visit.booking_confirmed.v1` | Visitation | Customer/operator | Capacity reservation |
+| `visit.booking_requested.v1` | Visitation | Customer/operator | Booking request, idempotent per booking |
+| `plot_reservation.state_changed.v1` | PlotReservation | Order/case guard, audit | Authoritative hold; append-only, one active hold per plot |
+
+> **Note (16 Aug 2026):** `plot.reservation_acquired.v1` / `plot.reservation_expired.v1` / `plot.reservation_conflict.v1` above are superseded by `plot_reservation.state_changed.v1` — the shipped P3 module emits the underscore event and no producer exists for the dotted names; kept as history, not evidence of an active contract.
+
+> **Note (17 Aug 2026):** v0.6 — P5a whole-branch review: `agreement.accepted.v1` has exactly one producer, Lane 1's `AcceptAgreement`, emitting on the `agreements` row (UUID aggregate id, `{agreement_id, version_number, quote_id, accepted_by_ref}` payload); `AcceptPreNeedAgreement` records the case binding without a second emission.
 
 ## Compatibility
 

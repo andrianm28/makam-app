@@ -10,7 +10,7 @@
 │   └── /konfirmasi/{orderReference}
 ├── /marketplace
 │   ├── /kategori/{categorySlug}
-│   ├── /produk/{productSlug}
+│   ├── /produk/{productCode}
 │   ├── /keranjang
 │   ├── /checkout
 │   └── /pesanan/{orderReference}
@@ -18,17 +18,33 @@
 │   ├── /cari
 │   ├── /permohonan/{renewalReference}
 │   └── /konfirmasi/{renewalReference}
+├── /preneed
+├── /sertifikat/{subjectType}/{subjectId}
 ├── /faq
 │   ├── /kategori/{categorySlug}
 │   └── /{articleSlug}
 ├── /pesanan/{orderReference}
+├── /pembayaran
+│   ├── /kembali
+│   └── /batal
 ├── /akun
 │   ├── /draft
 │   ├── /pesanan
 │   ├── /perpanjangan
 │   └── /dokumen
+├── /masuk
+├── /daftar
+├── /keluar
+├── /lupa-password
+├── /reset-password/{token}
 └── /bantuan
 ```
+
+`/preneed` dan `/sertifikat/{subjectType}/{subjectId}` (ditambahkan 16 Agu 2026, P5a — `docs/superpowers/specs/2026-08-16-p5a-certificates-preneed-design.md`; dirujuk oleh komentar rute di `routes/web.php`). `/preneed` adalah permukaan Pra-Pesan publik: registrasi minat + permintaan konsultasi, **tidak pernah di-gate** oleh `G-LEGAL-01` — saat gate tertutup halaman merender banner info `PreNeedMode::InterestOnly` yang tidak bisa ditutup ("registers interest; no payment created"), dan alur minat/konsultasi tetap berjalan. `/sertifikat/{subjectType}/{subjectId}` adalah tampilan status sertifikat pelanggan (AC6, state-only): `{subjectType}` adalah nama kelas penuh subjek yang di-URL-encode (konvensi yang sama dengan kolom `certificates.subject_type`), diselesaikan terhadap allowlist tertutup — tipe tak dikenal dan id tak dikenal 404 yang tidak bisa dibedakan (tanpa enumerasi); referensi vault dokumen dan nomor dokumen tidak pernah meninggalkan server.
+
+`/pembayaran/kembali` dan `/pembayaran/batal` (ditambahkan 10 Agu 2026, `platform-payment-adapter` AC4) adalah tujuan redirect BROWSER dari penyedia pembayaran — `success_return_url`/`cancel_return_url` pada ADR-0033. Keduanya hanya merender halaman: tidak ada transisi status, tidak ada jurnal, tidak ada klaim "sudah dibayar". Callback penyedia yang sesungguhnya adalah `POST /api/payments/webhook/{merchant}` (`docs/contracts/payment-webhook.md`), bukan kedua rute ini. Lihat `AGENTS.md` §Domain and financial invariants: "Never mark paid from browser return URL."
+
+`/masuk`, `/daftar`, `/keluar` (`POST`), `/lupa-password`, dan `/reset-password/{token}` (ditambahkan 20 Agu 2026, `/akun` account area PR 1 — `.superpowers/sdd/2026-08-20-akun-auth-foundation/task-1-brief.md` s.d. `task-3-brief.md`) adalah permukaan same-origin session auth via guard `web` (AGENTS.md §Authentication). `/masuk`, `/daftar`, `/lupa-password`, dan `/reset-password/{token}` dibatasi middleware `guest`; `/keluar` (`POST`) dibatasi `auth`. Rute `/lupa-password` dan `/reset-password/{token}` selalu merender konfirmasi generik yang identik baik email terdaftar maupun tidak (tanpa enumerasi), dan reset kata sandi yang berhasil TIDAK melakukan auto-login. `<x-mk.header>`'s `akunHref` kini selalu resolve ke `route('akun.index')` untuk pengunjung yang sudah login (ditambahkan 20 Agu 2026, `/akun` account area PR 2 — `.superpowers/sdd/2026-08-20-akun-shell-and-drafts/task-2-brief.md` dan `task-3-brief.md`). Rute `/akun`, `/akun/draft`, `/akun/pesanan`, `/akun/perpanjangan`, dan `/akun/dokumen` kini terdaftar, semuanya di bawah middleware `auth` (pengunjung tamu diarahkan ke `route('login')`, dengan `redirectIntended(...)` mengembalikannya ke rute yang dituju setelah login). `/akun` adalah shell akun dengan empat ubin: draft pemesanan (`/akun/draft`), pesanan (`/akun/pesanan`, ditambahkan 20 Agu 2026, `/akun` account area PR 3 — `.superpowers/sdd/2026-08-20-akun-pesanan/task-2-brief.md`), perpanjangan, dan dokumen. `/akun/pesanan` merender daftar pesanan milik pengguna yang sedang login sendiri (`Order::forUser()`), terurut terbaru lebih dulu; `/akun/perpanjangan` dan `/akun/dokumen` merender `<x-mk.gate-closed-page>` "belum tersedia" karena keduanya belum memiliki infrastruktur kepemilikan pelanggan/unggah dokumen.
 
 ## 2. Global header
 
@@ -70,11 +86,11 @@ Mobile:
 
 ```text
 /admin
-├── /cemeteries
+├── /pemakaman
 ├── /services
 ├── /vendors
 ├── /orders
-├── /marketplace-orders
+├── /pesanan-marketplace
 ├── /renewals
 ├── /payments
 ├── /transactions
@@ -83,10 +99,10 @@ Mobile:
 └── /audit
 
 /vendor
-├── /products
-├── /orders
-├── /calendar
-├── /transactions
-├── /payouts
-└── /profile
+├── /produk
+├── /pesanan
+├── /kalender
+├── /transaksi
+├── /pencairan
+└── /profil
 ```

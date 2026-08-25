@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" role="img" aria-label="Ilustrasi perawatan makam 3 bulan (placeholder)">
+  <title>Perawatan Makam 3 Bulan — placeholder</title>
+  <rect width="400" height="300" rx="16" fill="#E8F0EE"/>
+  <path d="M130 220 Q200 195 270 220" fill="none" stroke="#3F6659" stroke-width="4" stroke-linecap="round"/>
+  <!-- watering can icon -->
+  <g stroke="#3F6659" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M160 195 L160 155 Q160 145 172 145 L215 145 Q225 145 225 155 L225 195 Z"/>
+    <path d="M225 160 L255 150 Q262 148 260 156 L250 170"/>
+    <line x1="245" y1="155" x2="252" y2="148"/>
+  </g>
+  <g fill="none" stroke="#6B8F71" stroke-width="2.5">
+    <path d="M240 178 q4 -6 8 0"/>
+    <path d="M250 186 q4 -6 8 0"/>
+  </g>
+</svg>
