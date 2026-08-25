@@ -11,34 +11,40 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Public-beta readiness — closes finding N-2/OQ-11 (no CSP defined anywhere,
- * `docs/planning/sprint-plan.md` §13). Attaches `Content-Security-Policy-
- * Report-Only` to EVERY response, global middleware rather than a group
- * append, because it must cover the Filament `/admin` and `/vendor` panels
- * too — both declare their own explicit middleware arrays and do NOT go
- * through the `web` group at all (see `bootstrap/app.php`'s comment on
- * `AssignCorrelationId`), so a `web`-group append (the way `RateLimiting`'s
- * `public-guest` limiter is wired) would silently miss both panels.
+ * `docs/planning/sprint-plan.md` §13). Attaches `Content-Security-Policy` to
+ * EVERY response, global middleware rather than a group append, because it
+ * must cover the Filament `/admin` and `/vendor` panels too — both declare
+ * their own explicit middleware arrays and do NOT go through the `web`
+ * group at all (see `bootstrap/app.php`'s comment on `AssignCorrelationId`),
+ * so a `web`-group append (the way `RateLimiting`'s `public-guest` limiter
+ * is wired) would silently miss both panels.
  *
  * ---------------------------------------------------------------------------
- * Report-only, deliberately, not enforced
+ * Enforcing, not report-only — flipped 25 Aug 2026 (SEC-08)
  * ---------------------------------------------------------------------------
- * `docs/superpowers/plans/2026-08-18-public-beta-release.md` Lane D7: ship
- * `Content-Security-Policy-Report-Only` first, observe for a few days, THEN
- * enforce. Livewire 4 (whose own frontend bundles Alpine) and Filament 5
- * are both new enough in this codebase, and exercised broadly enough only
- * by manual UAT so far (`docs/testing/release-gates.md`'s 60 checkboxes are
- * still unchecked), that enforcing blind risks silently breaking the admin
- * panel or a public journey with no warning — a report-only header changes
- * nothing about what the browser allows; it only asks the browser to warn.
- * `Content-Security-Policy` (enforcing) is a follow-up change, gated on
- * having actually watched this header for violations first.
+ * `docs/superpowers/plans/2026-08-18-public-beta-release.md` Lane D7
+ * originally shipped this as `Content-Security-Policy-Report-Only`,
+ * deliberately, gated on "having actually watched this header for
+ * violations first." That watch happened the hard way rather than through
+ * a formal `report-uri` pipeline (none exists — see below): an extensive,
+ * same-day live UAT pass exercised the public booking/renewal/marketplace
+ * journeys and the `/admin` and `/vendor` panels directly against
+ * production, with no reported CSP violation anywhere. Combined with a
+ * repo-wide grep finding zero inline `<script>`/`<style>` tags without the
+ * nonce, zero inline event-handler attributes, and zero third-party
+ * resource references outside the one deliberate Maps `frame-src`
+ * exception, that closes Lane D7's own stated gate.
+ *
+ * Residual gap, carried forward honestly rather than silently: no
+ * `report-uri`/`report-to` is configured (see below), so a violation this
+ * pass missed will now be a SILENT failure for the affected user — blocked
+ * by the browser with nothing surfacing in any server-side monitoring, only
+ * that user's own devtools console. Worth real report-uri infrastructure as
+ * a follow-up; not built here.
  *
  * No `report-uri`/`report-to` directive is set: that would need a real
  * receiving endpoint, which is separate infrastructure this change does not
- * build. Every modern browser still logs a report-only violation to its own
- * devtools console with no reporting endpoint configured, which is
- * sufficient for the manual UAT pass (`docs/superpowers/plans/2026-08-18-
- * public-beta-release.md` Lane F1) this header is meant to inform.
+ * build.
  *
  * ---------------------------------------------------------------------------
  * Why a nonce, not `'unsafe-inline'`
@@ -70,7 +76,7 @@ final class ReportContentSecurityPolicy
 
         $response = $next($request);
 
-        $response->headers->set('Content-Security-Policy-Report-Only', $this->policy($nonce));
+        $response->headers->set('Content-Security-Policy', $this->policy($nonce));
 
         return $response;
     }

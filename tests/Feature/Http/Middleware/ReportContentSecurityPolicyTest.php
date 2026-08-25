@@ -4,14 +4,17 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Http\Middleware;
 
+use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
+use App\Domain\CemeteryDirectory\Models\Cemetery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
  * `ReportContentSecurityPolicy` — see its own doc block for why this is
  * global middleware (must reach the Filament `/admin`/`/vendor` panels,
- * which do not go through the `web` group at all) and why it ships
- * report-only.
+ * which do not go through the `web` group at all) and why it now ships
+ * enforcing (flipped 25 Aug 2026, SEC-08 — see the middleware's own doc
+ * block for the gating criterion this closed).
  *
  * `RefreshDatabase`: every test here hits the real homepage, whose
  * `mount()` records a real `MenuInteractionEvent` row per primary menu
@@ -31,7 +34,7 @@ final class ReportContentSecurityPolicyTest extends TestCase
     {
         $response = $this->get('/');
 
-        $response->assertHeader('Content-Security-Policy-Report-Only');
+        $response->assertHeader('Content-Security-Policy');
     }
 
     /**
@@ -44,21 +47,26 @@ final class ReportContentSecurityPolicyTest extends TestCase
     {
         $response = $this->get('/admin/login');
 
-        $response->assertHeader('Content-Security-Policy-Report-Only');
+        $response->assertHeader('Content-Security-Policy');
     }
 
-    public function test_it_never_sets_the_enforcing_header(): void
+    /**
+     * RENAMED from `test_it_never_sets_the_enforcing_header` (SEC-08,
+     * 25 Aug 2026): the middleware now sets the enforcing header, never the
+     * report-only one — this pins the flip in both directions at once.
+     */
+    public function test_it_never_sets_the_report_only_header(): void
     {
         $response = $this->get('/');
 
-        $response->assertHeaderMissing('Content-Security-Policy');
+        $response->assertHeaderMissing('Content-Security-Policy-Report-Only');
     }
 
     public function test_the_policy_carries_a_nonce_shared_between_script_src_and_style_src(): void
     {
         $response = $this->get('/');
 
-        $policy = (string) $response->headers->get('Content-Security-Policy-Report-Only');
+        $policy = (string) $response->headers->get('Content-Security-Policy');
 
         $this->assertMatchesRegularExpression('/script-src [^;]*\'nonce-([A-Za-z0-9]{40})\'/', $policy);
 
@@ -75,8 +83,8 @@ final class ReportContentSecurityPolicyTest extends TestCase
         $first = $this->get('/');
         $second = $this->get('/');
 
-        preg_match('/nonce-([A-Za-z0-9]{40})/', (string) $first->headers->get('Content-Security-Policy-Report-Only'), $a);
-        preg_match('/nonce-([A-Za-z0-9]{40})/', (string) $second->headers->get('Content-Security-Policy-Report-Only'), $b);
+        preg_match('/nonce-([A-Za-z0-9]{40})/', (string) $first->headers->get('Content-Security-Policy'), $a);
+        preg_match('/nonce-([A-Za-z0-9]{40})/', (string) $second->headers->get('Content-Security-Policy'), $b);
 
         $this->assertNotSame($a[1] ?? null, $b[1] ?? null, 'A stable/predictable nonce defeats its own purpose.');
     }
@@ -95,7 +103,7 @@ final class ReportContentSecurityPolicyTest extends TestCase
     {
         $response = $this->get('/');
 
-        $policy = (string) $response->headers->get('Content-Security-Policy-Report-Only');
+        $policy = (string) $response->headers->get('Content-Security-Policy');
         $directives = array_map('trim', explode(';', $policy));
 
         foreach ($directives as $directive) {
@@ -108,5 +116,36 @@ final class ReportContentSecurityPolicyTest extends TestCase
             $this->assertStringNotContainsString('http://', $directive, "directive [{$directive}] must not carry a third-party origin");
             $this->assertStringNotContainsString('https://', $directive, "directive [{$directive}] must not carry a third-party origin");
         }
+    }
+
+    /**
+     * The Maps embed itself must actually render under the now-enforcing
+     * policy, not merely have the right frame-src directive text — a real
+     * request against a cemetery detail page with a real embeddable map
+     * proves the exception is genuinely sufficient, not just correctly
+     * worded. A factory-built cemetery with real coordinates, not a
+     * dependency on whatever happens to be seeded, so this assertion is
+     * deterministic.
+     */
+    public function test_a_cemetery_page_with_a_maps_embed_still_renders_under_enforcement(): void
+    {
+        $this->withoutVite();
+
+        $cemetery = Cemetery::factory()->create([
+            'publication_status' => CemeteryPublicationStatus::PUBLISHED,
+            'latitude' => -6.2088,
+            'longitude' => 106.8456,
+        ]);
+
+        $response = $this->get('/pemakaman/'.$cemetery->slug);
+
+        $response->assertOk();
+        $response->assertHeader('Content-Security-Policy');
+        // `assertSee($value, false)` — the raw URL contains `&`, which the
+        // view escapes to `&amp;`; matching a substring with escaping
+        // disabled is this codebase's own established pattern for this
+        // exact assertion (`CemeteryDetailRouteTest`).
+        $response->assertSee('output=embed', false);
+        $response->assertSee('-6.2088000,106.8456000', false);
     }
 }
