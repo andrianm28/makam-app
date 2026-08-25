@@ -68,8 +68,19 @@ test.describe('E2E-MKT-MOBILE — browse, add to cart, and checkout at a real mo
 
         await addProductAToCart(page);
 
-        const table = page.getByRole('table', { name: 'Isi keranjang' });
-        await expect(table).toBeVisible();
+        // <x-mk.table> (resources/views/components/mk/table.blade.php) is a
+        // deliberate, documented (design-system.md §3.5) mobile-first
+        // component: it renders a real `<table role="table">` ONLY at `md:`
+        // (768px) and above — below `md` it renders stacked `<dl>` cards
+        // instead, `md:hidden`, with no `table` role anywhere in the DOM.
+        // Pixel 5's viewport (393px) is well under `md`, so this mobile test
+        // asserts the real card markup rather than reusing
+        // e2e-marketplace.spec.ts's desktop `getByRole('table', ...)`
+        // locator, which found nothing here — confirmed live via this
+        // suite's own first CI run (25 Aug 2026), which failed on exactly
+        // this line before the assertion below replaced it.
+        await expect(page.getByText(PRODUCT_A.vendorName)).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Hapus' })).toBeVisible();
         await expect(page.getByRole('link', { name: 'Lanjut ke pembayaran' })).toBeVisible();
 
         const results = await new AxeBuilder({ page }).analyze();
