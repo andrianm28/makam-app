@@ -77,6 +77,45 @@ use Illuminate\Support\Facades\DB;
  * accepts a domain model directly); this class does not regress it.
  *
  * ---------------------------------------------------------------------------
+ * `renewal` — added 25 Aug 2026, closing the last gap this class's own
+ * "Partially live" section named
+ * ---------------------------------------------------------------------------
+ * `renewal.submitted.v1` (`Domain\Renewal\Actions\OpenRenewal`) and
+ * `renewal.paid_online.v1` (`Domain\Renewal\Actions\MarkRenewalPaidOnline`)
+ * both record `aggregate_type = 'renewal'`, which fell through this match's
+ * `default => null` arm exactly like `order`/`quote` did before 18 Aug
+ * 2026 — every renewal notification event was recorded onto
+ * `notification_events` with zero recipients resolved, ever.
+ *
+ * Owner reference: unlike `booking_draft`/`order`, a renewal genuinely has
+ * NO owner concept anywhere in this codebase to fall back on, guest or
+ * otherwise. `renewals` (`2026_08_12_100000_create_renewals_table.php`)
+ * carries only `grave_record_id`; `grave_records` carries no `user_id`, no
+ * `contact_email`, no `contact_phone` — its own model doc block notes that
+ * `heir_contact_reference` "has no write path anywhere" and is deliberately
+ * excluded from both `$fillable` and every `GraveRecordProjection` shape.
+ * Nothing else in the renewal journey (`RenewalQuote`,
+ * `RenewalExternalMarking`, the online payment session) captures a contact
+ * either. `renewalSubject()` therefore always returns `ownerRef: null` — not
+ * a bug in this wiring, a true statement about what the renewal journey
+ * collects today. The Customer column reads `EMAIL/WA` for both matrix rows
+ * (`docs/contracts/notification-matrix.md`), so that column stays
+ * unreachable in practice until a future change gives a renewal an actual
+ * contact to notify; that is separate product/engineering work, not this
+ * fix's scope.
+ *
+ * Scope entity: a renewal's cemetery is one hop further than a draft's —
+ * `renewals.grave_record_id` -> `grave_records.cemetery_id`, which is
+ * NOT NULL on every `grave_records` row
+ * (`2026_08_08_100000_create_grave_records_table.php`), so
+ * `hasScopeEntity()` is always `true` for a renewal with a real grave
+ * record. This is the part of the fix that is NOT a no-op: it makes the
+ * "Pengelola TPU/TPS" column (`IN_APP/EMAIL` for Renewal submitted,
+ * `IN_APP` for Renewal paid/verified) resolve real cemetery-operator
+ * recipients via `ScopeAssignmentResolver::actorsForEntity()`, where today
+ * it resolves none.
+ *
+ * ---------------------------------------------------------------------------
  * Partially live — read before assuming full end-to-end coverage
  * ---------------------------------------------------------------------------
  * Of the 6 outbox-mapped matrix events
@@ -122,6 +161,7 @@ final class ProvisionalAggregateNotificationSubjectSource implements Notificatio
             'booking_draft' => $this->bookingDraftSubject((string) $aggregateId),
             'order' => $this->orderSubject((string) $aggregateId),
             'quote' => $this->quoteSubject((string) $aggregateId),
+            'renewal' => $this->renewalSubject((string) $aggregateId),
             default => null,
         };
     }
@@ -174,6 +214,30 @@ final class ProvisionalAggregateNotificationSubjectSource implements Notificatio
         }
 
         return $this->orderSubject((string) $orderId);
+    }
+
+    /**
+     * `ownerRef` is always `null` here — see this class's own doc block's
+     * `renewal` section for why no customer contact exists to resolve. The
+     * scope entity (the grave record's cemetery) is what makes this method
+     * worth having: it is what lets a cemetery operator actually be
+     * notified where before nothing was.
+     */
+    private function renewalSubject(string $renewalId): ?RecipientResolutionSubject
+    {
+        $renewal = DB::table('renewals')->where('id', $renewalId)->first();
+
+        if ($renewal === null) {
+            return null;
+        }
+
+        $cemeteryId = DB::table('grave_records')->where('id', $renewal->grave_record_id)->value('cemetery_id');
+
+        return new RecipientResolutionSubject(
+            ownerRef: null,
+            scopeEntityType: $cemeteryId !== null ? ScopeEntityType::CEMETERY : null,
+            scopeEntityId: $cemeteryId,
+        );
     }
 
     /**
