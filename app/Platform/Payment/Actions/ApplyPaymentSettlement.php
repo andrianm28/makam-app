@@ -14,6 +14,8 @@ use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\OrderWorkflow\PaidTrigger;
 use App\Domain\OrderWorkflow\PaidTriggerSource;
+use App\Domain\Renewal\Actions\MarkRenewalPaidOnline;
+use App\Domain\Renewal\Models\Renewal;
 use App\Domain\VendorFulfillment\Actions\CreateWorkOrderFromCycle;
 use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
@@ -125,6 +127,25 @@ use Illuminate\Support\Str;
  * `ManualPayout::pay()` and never a `paid` state on this path.
  *
  * ---------------------------------------------------------------------------
+ * Renewal: matched by `renewals.reference`, like the two order legs above
+ * ---------------------------------------------------------------------------
+ * `renewals.reference` (the `PPJ-`-prefixed business key `Actions\OpenRenewal`
+ * sets — confirmed by direct code read, not `renewals.id`) is a real business
+ * reference, the same disjoint-namespace shape `orders.reference`
+ * (`MK-{year}-{8}`) and `MarketplaceOrder.order_number` (`MKT-{10}`) already
+ * use, which is why this branch sits alongside them rather than the
+ * UUID-keyed `SubscriptionCycle` lookup below. `Domain\Renewal\Actions\
+ * MarkRenewalPaidOnline` owns the amount-match-assertion + row-lock +
+ * refuse-if-already-settled shape `MarkMarketplaceOrderPaid`/`MarkCyclePaid`
+ * establish above, adapted to REFUSE (throw `RenewalAlreadySettledException`)
+ * rather than silently no-op on a second settlement attempt — the same
+ * throwing shape `Actions\MarkRenewalPaidExternally` already uses for the
+ * admin-triggered leg of the identical `MENUNGGU_PEMBAYARAN -> DIBAYAR`
+ * transition. A renewal has no separate fulfilment step, so this leg
+ * triggers no cross-domain orchestration comparable to the care-subscription
+ * leg's work-order creation.
+ *
+ * ---------------------------------------------------------------------------
  * Care subscription: a cycle keyed by its own id, plus auto work-order creation
  * ---------------------------------------------------------------------------
  * `subscription_invoices` carries no business reference column comparable to
@@ -191,6 +212,15 @@ final readonly class ApplyPaymentSettlement
 
         if ($marketplaceOrder instanceof MarketplaceOrder) {
             $this->settleMarketplace($marketplaceOrder, $event, $session);
+            $this->transitionToTerminal($session, SessionState::Paid);
+
+            return;
+        }
+
+        $renewal = Renewal::query()->where('reference', $invoiceReference)->first();
+
+        if ($renewal instanceof Renewal) {
+            $this->settleRenewal($renewal, $event, $session);
             $this->transitionToTerminal($session, SessionState::Paid);
 
             return;
@@ -414,6 +444,30 @@ final readonly class ApplyPaymentSettlement
             // `now` deliberately unset: ledger rows (payable assessments,
             // journal batches) are stamped with the system clock, never the
             // provider-controlled occurrence time.
+        );
+    }
+
+    /**
+     * Marks the renewal PAID (see `MarkRenewalPaidOnline`'s doc block for the
+     * amount-match + idempotency shape it owns). Unlike the care-subscription
+     * leg, settling a renewal triggers no cross-domain orchestration — a
+     * renewal has no separate fulfilment step (`RenewalStatus::DIBAYAR`'s own
+     * doc block), so this leg is a thin dispatch, the same shape
+     * `settleMarketplace()` has before its payable release.
+     */
+    private function settleRenewal(Renewal $renewal, ProviderEvent $event, PaymentSession $session): void
+    {
+        app(MarkRenewalPaidOnline::class)(
+            $renewal,
+            // The session snapshot, the same authority the other three legs
+            // use: `WebhookValidator` proved the payload amount equals it at
+            // VALIDATED time, and `MarkRenewalPaidOnline` asserts it against
+            // the renewal's latest quote before any write.
+            amountMinor: (int) $session->amount_minor,
+            providerTransactionRef: (string) $event->provider_transaction_id,
+            // The internal `provider_events` id, the same actor reference the
+            // other three legs pass: a webhook holds no credential of ours.
+            actorRef: (string) $event->getKey(),
         );
     }
 

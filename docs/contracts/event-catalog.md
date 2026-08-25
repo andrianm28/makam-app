@@ -32,6 +32,7 @@ Durable events use the transactional outbox and envelope in `outbox-event-contra
 | `grave.import_completed.v1` | GraveRegistry | Admin notification | Success/error/dedup counts |
 | `renewal.marked_external.v1` | Renewal | Billing guard | Prevents duplicate period |
 | `renewal.submitted.v1` | Renewal | Notification | The online submission path — distinct from renewal.marked_external.v1's offline/admin path |
+| `renewal.paid_online.v1` | Renewal | Notification | A validated webhook settled the renewal online — distinct from renewal.marked_external.v1's offline/admin settlement path |
 | `grave.reminder_sent.v1` | GraveRegistry | Reporting | Idempotent window key |
 | `care.cycle_created.v1` | CareSubscription | Billing/work scheduling | One per cycle |
 | `care.work_order_created.v1` | VendorFulfillment | Case/customer | Evidence reference; one per paid cycle |
