@@ -31,6 +31,18 @@ Schedule::command('care:generate-cycles')->dailyAt('03:30');
 // LOCKED, so concurrent publishers are already safe by construction.
 Schedule::command('outbox:publish')->everyMinute()->withoutOverlapping();
 
+// Read-model honesty for stale order quotes — the deferred half of Task 4's
+// ratified design (Q4/Q5) in
+// `docs/superpowers/plans/2026-08-12-platform-order-orchestration.md:592`:
+// "expiry is evaluated lazily and authoritatively at guard time... with a
+// scheduled job writing KEDALUWARSA only for read-model honesty." The guard
+// (`Quote::isAcceptedAndUnexpired()`) and `Quote::accept()` already refuse an
+// expired quote live, on every call, independent of this job — so no
+// financial decision depends on its frequency or on it running at all.
+// Hourly, because "expired 40 minutes ago and the screen still says quote
+// sent" is a cosmetic staleness window, not a correctness one.
+Schedule::command('orders:expire-stale-quotes')->hourly()->withoutOverlapping();
+
 // Detects a silently stalled outbox publisher or notification queue
 // worker — see SpineWatchdogCommand's own doc block for why this is the
 // highest-value alert available: every layer upstream of the async spine
