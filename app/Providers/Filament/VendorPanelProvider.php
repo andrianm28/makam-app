@@ -10,6 +10,7 @@ use App\Filament\Vendor\Pages\PayoutStatus;
 use App\Filament\Vendor\Pages\Profile;
 use App\Filament\Vendor\Pages\TransactionHistory;
 use App\Http\Middleware\AssignCorrelationId;
+use Filament\FontProviders\LocalFontProvider;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -101,10 +102,13 @@ final class VendorPanelProvider extends PanelProvider
             ->authMiddleware([
                 Authenticate::class,
             ])
-            // Self-hosted only, and the same theme file as /admin — see
-            // AdminPanelProvider's class-level note on why there is no
-            // `provider:` argument here.
-            ->font('Inter var')
+            // Self-hosted only, and the same theme file as /admin —
+            // `provider: LocalFontProvider::class` is REQUIRED here for the
+            // same reason as `AdminPanelProvider`'s identical fix: see its
+            // class-level doc-block note (SEC-08 CSP-enforcement follow-up)
+            // for why omitting it silently falls back to Filament's
+            // BunnyFontProvider once a custom family is set.
+            ->font('Inter var', provider: LocalFontProvider::class)
             ->viteTheme('resources/css/filament/admin/theme.css');
     }
 
