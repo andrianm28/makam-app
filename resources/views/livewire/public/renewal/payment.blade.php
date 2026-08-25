@@ -3,19 +3,21 @@
 
     App\Livewire\Public\Renewal\RenewalPayment's view — `/perpanjangan/pembayaran`,
     screen PUB-033 (`docs/product/screen-inventory.md`: "payment | manual
-    coordination or online payment"). L8 Task 5, AC8.
+    coordination or online payment"). L8 Task 5, AC8; online checkout landed
+    in the 2026-08-25 online-payment-gateway lane's Task 3.
 
     ===========================================================================
-    AC8 — NEVER the online path (BLOCKED upstream)
+    AC8 — both halves are real now
     ===========================================================================
-    `PaymentSession::create()` throws by design (Wave 1b ruling 1b-L3-01).
-    Ruling A (Option A): when all conditions hold, render the manual
-    coordination path. The online path is BLOCKED (upstream deny-only) and is
-    never claimed as PASS. The step is never removed — design-system.md §6.9:
-    "Step 8 is never removed." The renewal analogue is step 5.
-
-    The screen therefore always renders the manual coordination path when
-    allowed, and a denial message when denied.
+    `$paymentState` (computed server-side by `RenewalPayment::resolveState()`
+    from `GuardRenewalPaymentOpening`) drives three real branches below:
+    `'denied'` (a fixed refusal), `'manual'` (the coordination card — allowed,
+    but `G-PAY-01` is closed), and `'online'` (a real "Bayar Sekarang" button
+    that opens a hosted-checkout session via `RenewalPayment::payOnline()` ->
+    `App\Platform\Payment\Actions\OpenPaymentSession::authorizeRenewal()`).
+    The manual-coordination path is unchanged from before this lane and is
+    never removed when the gate is closed — design-system.md §6.9: "Step 8 is
+    never removed." The renewal analogue is step 5.
 --}}
 <div class="py-8 md:py-12">
     <div class="mx-auto max-w-content px-4">
@@ -69,45 +71,127 @@
             </div>
 
             <div class="mx-auto mb-8 max-w-prose">
-                <x-mk.card>
-                    <div class="flex flex-col gap-4">
-                        {{-- AC8: manual coordination path — step is never removed --}}
+                @if ($paymentState === 'online')
+                    {{--
+                        AC8's online half — a real hosted-checkout session,
+                        opened by `RenewalPayment::payOnline()`. Styled after
+                        `App\Livewire\Public\Booking\BookingWizard`'s own
+                        online-payment card (`resources/views/livewire/
+                        public/booking/wizard.blade.php`), trimmed to what
+                        this screen actually needs: no webhook-driven session
+                        state card, because this component does not persist
+                        an opened session's id across requests the way the
+                        booking wizard's PHP-session-bound draft does.
+                    --}}
+                    <x-mk.card>
                         <div class="flex flex-col gap-3">
-                            <div class="flex items-start gap-3">
-                                <x-dynamic-component
-                                    component="icon.alert-circle"
-                                    class="size-6 text-blue-600 flex-shrink-0 mt-0.5"
-                                    aria-hidden="true"
-                                />
-                                <div class="flex flex-col gap-1">
-                                    <p class="font-medium text-neutral-900">
-                                        Koordinasi manual diperlukan
-                                    </p>
-                                    <p class="text-sm text-neutral-600">
-                                        Pembayaran online untuk perpanjangan makam saat ini
-                                        belum tersedia. Silakan hubungi petugas kami untuk
-                                        koordinasi manual.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {{-- Proceed to confirmation --}}
-                        <div class="flex flex-col gap-2 border-t border-neutral-200 pt-4">
-                            <x-mk.button
-                                variant="primary"
-                                href="/perpanjangan/konfirmasi?perpanjangan={{ $perpanjangan }}"
-                                class="w-full justify-center"
-                            >
-                                Lanjutkan ke Konfirmasi
-                            </x-mk.button>
-                            <p class="text-center text-sm text-neutral-500">
-                                Dengan melanjutkan, Anda akan menyelesaikan proses
-                                perpanjangan setelah pembayaran dilakukan.
+                            <h3 class="text-base font-semibold text-neutral-900">
+                                Pembayaran Online
+                            </h3>
+                            <p class="text-sm text-neutral-600">
+                                Anda akan diarahkan ke halaman pembayaran untuk
+                                menyelesaikan perpanjangan masa sewa makam.
                             </p>
                         </div>
-                    </div>
-                </x-mk.card>
+
+                        {{--
+                            ADR-0035 item 1's mitigation: "unmissable
+                            payment-step labelling ... before any redirect to
+                            the sandbox," mirrored verbatim from the booking
+                            wizard's own card — the same sandbox provider
+                            settles this checkout too.
+                        --}}
+                        @if ($isSandboxPayment)
+                            <x-mk.alert
+                                intent="urgent"
+                                icon="exclamation-triangle"
+                                title="ANDA TIDAK AKAN MENGIRIM UANG SUNGGUHAN"
+                                live="off"
+                                class="mt-3"
+                            >
+                                <p class="text-sm">
+                                    Makam.co.id masih dalam masa uji coba publik (beta). Halaman
+                                    pembayaran di bawah ini adalah <strong>simulasi (sandbox)</strong>
+                                    milik penyedia pembayaran &mdash; tidak ada transaksi finansial
+                                    nyata yang terjadi, berapa pun nominal yang tertera. Perpanjangan
+                                    Anda tetap tercatat, dan tim kami akan menghubungi Anda secara
+                                    langsung apabila diperlukan.
+                                </p>
+                            </x-mk.alert>
+                        @endif
+
+                        @if ($checkoutError !== null)
+                            <x-mk.alert
+                                intent="danger"
+                                title="Pembayaran online belum dapat diproses"
+                                live="assertive"
+                                class="mt-3"
+                            >
+                                <p class="text-sm">{{ $checkoutError }}</p>
+                                <x-slot name="action">
+                                    <x-mk.button variant="secondary" size="sm" href="/bantuan">
+                                        Butuh bantuan?
+                                    </x-mk.button>
+                                </x-slot>
+                            </x-mk.alert>
+                        @endif
+
+                        <div class="mt-3 flex flex-wrap items-center gap-3">
+                            <x-mk.button
+                                variant="primary"
+                                wire:click="payOnline"
+                                wire:loading.attr="disabled"
+                                wire:target="payOnline"
+                            >
+                                Bayar Sekarang
+                            </x-mk.button>
+                            <span wire:loading wire:target="payOnline" role="status" class="flex items-center gap-2 text-sm text-neutral-600">
+                                <x-mk.spinner class="size-4" aria-hidden="true" />
+                                Membuka halaman pembayaran&hellip;
+                            </span>
+                        </div>
+                    </x-mk.card>
+                @else
+                    <x-mk.card>
+                        <div class="flex flex-col gap-4">
+                            {{-- AC8: manual coordination path — step is never removed --}}
+                            <div class="flex flex-col gap-3">
+                                <div class="flex items-start gap-3">
+                                    <x-dynamic-component
+                                        component="icon.alert-circle"
+                                        class="size-6 text-blue-600 flex-shrink-0 mt-0.5"
+                                        aria-hidden="true"
+                                    />
+                                    <div class="flex flex-col gap-1">
+                                        <p class="font-medium text-neutral-900">
+                                            Koordinasi manual diperlukan
+                                        </p>
+                                        <p class="text-sm text-neutral-600">
+                                            Pembayaran online untuk perpanjangan makam saat ini
+                                            belum tersedia. Silakan hubungi petugas kami untuk
+                                            koordinasi manual.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {{-- Proceed to confirmation --}}
+                            <div class="flex flex-col gap-2 border-t border-neutral-200 pt-4">
+                                <x-mk.button
+                                    variant="primary"
+                                    href="/perpanjangan/konfirmasi?perpanjangan={{ $perpanjangan }}"
+                                    class="w-full justify-center"
+                                >
+                                    Lanjutkan ke Konfirmasi
+                                </x-mk.button>
+                                <p class="text-center text-sm text-neutral-500">
+                                    Dengan melanjutkan, Anda akan menyelesaikan proses
+                                    perpanjangan setelah pembayaran dilakukan.
+                                </p>
+                            </div>
+                        </div>
+                    </x-mk.card>
+                @endif
             </div>
         @endif
 
