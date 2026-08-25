@@ -67,6 +67,22 @@ use Symfony\Component\HttpFoundation\Response;
  * `style-src` also carries the nonce, not just `script-src`: Livewire
  * injects an inline `<style>` tag of its own (same `FrontendAssets.php`),
  * which needs it too.
+ *
+ * ---------------------------------------------------------------------------
+ * No `unsafe-eval` — this is why `config/livewire.php` exists
+ * ---------------------------------------------------------------------------
+ * `script-src` here carries no `unsafe-eval`, deliberately. Livewire's
+ * REGULAR JS bundle needs it (it parses `wire:click="method(args)"`-style
+ * directive expressions, and the Alpine.js it bundles internally parses
+ * `x-on:*`/`x-data`, both via `new Function()`), so this policy only works
+ * because `config/livewire.php` sets `csp_safe => true` — Livewire's own
+ * CSP-safe bundle, built without `eval`/`new Function`. See that file's own
+ * doc block for the full incident this fixed (SEC-08's report-only-to-
+ * enforcing switch broke every `wire:click` with an argument, masked in
+ * report-only mode because report-only never blocks the eval it needed) and
+ * for the directive-grammar audit that confirmed the CSP-safe build's more
+ * restricted syntax is compatible with every `wire:*`/`x-*` directive this
+ * codebase actually uses.
  */
 final class ReportContentSecurityPolicy
 {
