@@ -14,8 +14,10 @@ use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutProviderException;
 use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutUnavailableException;
 use App\Platform\Payment\Exceptions\PaymentSessionOpeningDeniedException;
 use App\Platform\Payment\Exceptions\PaymentSessionOrderAlreadyPaidException;
+use App\Platform\Payment\Models\PaymentSession;
 use App\Platform\Payment\OrderType;
 use App\Platform\Payment\PaymentProviders;
+use App\Platform\Payment\SessionState;
 use App\Platform\SiteSettings\Models\SiteSetting;
 use App\Platform\SiteSettings\SettingsService;
 use Illuminate\Contracts\View\View;
@@ -43,6 +45,26 @@ use Throwable;
  * method's class doc block. This component's `payOnline()` mirrors
  * `App\Livewire\Public\Booking\BookingWizard::openOnlinePayment()`'s
  * try/catch shape and redirect mechanism.
+ *
+ * ---------------------------------------------------------------------------
+ * The re-click guard, the same session-remembering mechanism
+ * App\Livewire\Public\Marketplace\Checkout::payOnline() uses
+ * ---------------------------------------------------------------------------
+ * `#[Url]` makes this screen bookmarkable, so a customer who clicks "Bayar
+ * Sekarang", backs out of the hosted checkout, and returns (a stale tab, a
+ * reload, the browser back button) can trigger `payOnline()` a second time.
+ * Without a guard that unconditionally opens a SECOND real `PaymentSession`
+ * and a second live provider charge for the same still-unpaid renewal - a
+ * genuine double-charge reachable through ordinary user behaviour, not an
+ * edge case. `payOnline()` therefore stores `session_id`/`link_url` in the
+ * Laravel session, keyed `'renewal_online_payment.'.$renewal->getKey()` (the
+ * renewal's real UUID primary key). On a later call: a stored TERMINAL
+ * session (`Paid`/`Failed`/`Expired`) is never re-opened from here - the
+ * manual-coordination card and the eventual webhook-driven state govern
+ * recovery, exactly like `Checkout::payOnline()`'s own terminal branch; a
+ * stored still-open session redirects back to the SAME `link_url` instead of
+ * opening a new one; only when nothing valid is stored does a genuinely new
+ * session open.
  *
  * ---------------------------------------------------------------------------
  * The guard's denial reason is a server-side diagnostic, never page copy
@@ -149,6 +171,38 @@ final class RenewalPayment extends Component
             return;
         }
 
+        // The re-click guard — see this class's own doc block. Checked
+        // BEFORE opening a genuinely new session, mirroring
+        // `Checkout::payOnline()`'s structure exactly.
+        $sessionKey = 'renewal_online_payment.'.$renewal->getKey();
+        $stored = session($sessionKey);
+
+        if (is_array($stored) && isset($stored['session_id'])) {
+            $existing = PaymentSession::query()->find($stored['session_id']);
+
+            if ($existing instanceof PaymentSession) {
+                $state = SessionState::tryFrom((string) $existing->state);
+
+                if ($state === SessionState::Paid || $state === SessionState::Failed || $state === SessionState::Expired) {
+                    // A terminal session is never re-opened from here — the
+                    // manual-coordination card / webhook-driven state
+                    // governs; the manual path is the recovery route for
+                    // Failed/Expired.
+                    return;
+                }
+
+                $link = is_string($stored['link_url'] ?? null) ? $stored['link_url'] : '';
+
+                if ($link !== '') {
+                    $this->redirect($link);
+
+                    return;
+                }
+            }
+
+            session()->forget($sessionKey);
+        }
+
         $quote = $renewal->quotes()->latest()->first();
 
         if ($quote === null) {
@@ -195,6 +249,13 @@ final class RenewalPayment extends Component
 
             return;
         }
+
+        session([
+            $sessionKey => [
+                'session_id' => $session->id,
+                'link_url' => $session->payment_link_url,
+            ],
+        ]);
 
         $this->redirect($session->payment_link_url);
     }

@@ -73,17 +73,42 @@ use Illuminate\Support\Facades\DB;
  * outcome"), `MarkCyclePaid`, and `MarkMarketplaceOrderPaid` all independently
  * converge on: a second settlement for a target that is already in the exact
  * state this call would have produced (`DIBAYAR`, same amount — verified by
- * the assert above running unconditionally) is swallowed and returns the
- * SAME renewal unchanged, writing no second audit row and no second outbox
- * row. `Actions\MarkRenewalPaidExternally`'s own throwing shape is NOT the
- * right precedent here — it is a single-actor, human-triggered admin action
- * with no automated retry loop behind it, not a webhook-driven duplicate-
- * arrival race. Reaching a status that is neither `MENUNGGU_PEMBAYARAN` nor
- * `DIBAYAR` (only `KEDALUWARSA` today, not yet written by any producer) IS
- * still a genuine anomaly and still throws `RenewalAlreadySettledException` —
- * the no-op is scoped to exactly the state this call itself produces, the
- * same scoping `MarkCyclePaid`/`MarkMarketplaceOrderPaid` use (`status ===
- * Paid` / `payment_state === DIBAYAR`, not "any non-open status").
+ * the assert above running unconditionally) is swallowed — no second
+ * RENEWAL write and no second outbox row — and returns the SAME renewal
+ * unchanged. It is NOT silent, though (whole-branch review fix wave, 25 Aug
+ * 2026): `ProcessWebhookEvent`'s claim guarantees every arrival here is a
+ * DIFFERENT provider transaction than the one that settled the renewal
+ * first, so this is a genuine second collection, not a replayed delivery —
+ * see `recordDuplicateArrival()` below for the
+ * `RenewalAuditActions::RENEWAL_PAID_ONLINE_DUPLICATE_ARRIVAL` row this
+ * branch now writes, the same visibility `App\Platform\Payment\
+ * PaymentAuditActions::DUPLICATE_ARRIVAL` gives the booking leg.
+ * `Actions\MarkRenewalPaidExternally`'s own throwing shape is NOT the right
+ * precedent here — it is a single-actor, human-triggered admin action with
+ * no automated retry loop behind it, not a webhook-driven duplicate-arrival
+ * race.
+ *
+ * Reaching a status that is neither `MENUNGGU_PEMBAYARAN` nor `DIBAYAR` IS
+ * still a genuine anomaly and still throws `RenewalAlreadySettledException`
+ * — the no-op above is scoped to exactly the state this call itself
+ * produces, the same scoping `MarkCyclePaid`/`MarkMarketplaceOrderPaid` use
+ * (`status === Paid` / `payment_state === DIBAYAR`, not "any non-open
+ * status"). That third status is `KEDALUWARSA`, and it is NOT a
+ * hypothetical: `Actions\ExpireRenewal` is a real, live producer of it,
+ * wired to a real Filament admin action
+ * (`app/Filament/Admin/Resources/RenewalOrders/Actions/ExpireRenewalAction.php`,
+ * reachable from `ViewRenewalOrder`). An operator expiring a renewal while
+ * the customer's checkout is still live, followed by the customer
+ * completing that payment, is the concrete race this branch fails closed
+ * on — real money collected, no renewal record updated, the session left
+ * stuck, and (before this fix wave) no operator-facing audit row, only a
+ * failed background job. `RenewalAuditActions::RENEWAL_PAID_ONLINE_REFUSED`
+ * now gives an operator reviewing the audit trail visibility into this
+ * happening, rather than only discovering it via a stuck `failed_jobs`
+ * entry. That audit row is written OUTSIDE `DB::transaction()` — after it
+ * has rolled back — because a row written inside the same transaction that
+ * throws would be rolled back right along with it; see `__invoke()`'s own
+ * structure below.
  *
  * ---------------------------------------------------------------------------
  * `Audit::record()`, not `Audit::wrap()` — deliberately, for the same reason
@@ -104,80 +129,152 @@ final readonly class MarkRenewalPaidOnline
         string $providerTransactionRef,
         string $actorRef,
     ): Renewal {
-        return DB::transaction(function () use ($renewal, $amountMinor, $providerTransactionRef, $actorRef): Renewal {
-            /** @var Renewal $current */
-            $current = Renewal::query()->lockForUpdate()->findOrFail($renewal->getKey());
+        // The anomaly branch inside the transaction below throws, which rolls
+        // the transaction back — including anything written inside it. The
+        // audit row for that branch must survive the rollback, so it is
+        // written HERE, after `DB::transaction()` has already rolled back and
+        // rethrown, never inside the closure itself. The duplicate-arrival
+        // swallow branch has no such problem (it returns normally, so the
+        // transaction it runs in commits), and keeps its own audit write
+        // inside the closure, same as `Audit::record()`'s other real callers.
+        try {
+            return DB::transaction(function () use ($renewal, $amountMinor, $providerTransactionRef, $actorRef): Renewal {
+                /** @var Renewal $current */
+                $current = Renewal::query()->lockForUpdate()->findOrFail($renewal->getKey());
 
-            // Runs unconditionally, before the status branch below — a
-            // mismatched amount is refused even against an already-settled
-            // renewal (see this class's own doc block).
-            $this->assertAmountMatchesLatestQuote($current, $amountMinor);
+                // Runs unconditionally, before the status branch below — a
+                // mismatched amount is refused even against an already-settled
+                // renewal (see this class's own doc block).
+                $this->assertAmountMatchesLatestQuote($current, $amountMinor);
 
-            if ($current->status === RenewalStatus::DIBAYAR) {
-                // Swallowed duplicate arrival — see the class doc block's
-                // "Idempotency" section. The amount assert above already
-                // proved this settlement matches the renewal's quote, so this
-                // really is the same fact arriving twice, not a conflicting
-                // one. No second write, no second audit row, no second
-                // outbox row.
+                if ($current->status === RenewalStatus::DIBAYAR) {
+                    // Swallowed duplicate arrival — see the class doc block's
+                    // "Idempotency" section. The amount assert above already
+                    // proved this settlement matches the renewal's quote, so
+                    // this really is the same FACT arriving twice, not a
+                    // conflicting one — no state change, no second RENEWAL
+                    // write, no second outbox row. It still gets an audit
+                    // row: `ProcessWebhookEvent`'s claim guarantees this is a
+                    // genuinely different provider transaction, i.e. a real
+                    // second collection, and that must leave a trace an
+                    // operator can find to drive a refund decision.
+                    $this->recordDuplicateArrival($current, $actorRef);
+
+                    return $current;
+                }
+
+                if ($current->status !== RenewalStatus::MENUNGGU_PEMBAYARAN) {
+                    // A genuine anomaly — reachable today via `Actions\
+                    // ExpireRenewal` (see this class's own doc block). Not the
+                    // duplicate-arrival case above, so this still fails
+                    // closed; the audit row is written by the catch below,
+                    // AFTER this transaction has rolled back.
+                    throw RenewalAlreadySettledException::forRenewal((string) $current->getKey());
+                }
+
+                $current->update([
+                    'status' => RenewalStatus::DIBAYAR,
+                    'settled_at' => now(),
+                ]);
+
+                if ($renewal !== $current) {
+                    $renewal->setRawAttributes($current->getAttributes(), true);
+                }
+
+                // References only (`AGENTS.md` §Observability, AC7): no amount.
+                // `paid_source_ref` (the provider transaction id) matches
+                // `MarkCyclePaid`'s own `care.cycle_created.v1` payload
+                // convention exactly — it is not on
+                // `PayloadClassification::DENYLISTED_KEYS`, so it is permitted in
+                // an outbox payload even though the SAME value stays out of the
+                // audit row below (AC14's audit-specific rule, not a blanket
+                // outbox rule).
+                Outbox::record(
+                    eventName: 'renewal.paid_online.v1',
+                    eventVersion: 1,
+                    aggregateType: 'renewal',
+                    aggregateId: $current->getKey(),
+                    data: [
+                        'renewal_id' => $current->getKey(),
+                        'grave_record_id' => $current->grave_record_id,
+                        'paid_source_ref' => $providerTransactionRef,
+                    ],
+                    classification: OutboxClassification::Internal,
+                    idempotencyKey: "renewal_paid_online:{$current->getKey()}",
+                );
+
+                Audit::record(
+                    action: RenewalAuditActions::RENEWAL_PAID_ONLINE,
+                    subject: new AuditSubject('renewal', (string) $current->getKey()),
+                    outcome: AuditOutcome::Allowed,
+                    actorRef: $actorRef,
+                    actorRole: 'provider',
+                    // The webhook-triggered source, matching
+                    // `settleBooking`/`settleMarketplace`/`settleCareSubscription`'s
+                    // own `AuditSource::Api`/actor-role-'provider' shape — NOT
+                    // `AuditSource::Panel`, which is `MarkRenewalPaidExternally`'s
+                    // admin-initiated source.
+                    source: AuditSource::Api,
+                    correlationId: app(CorrelationContext::class)->current()?->value,
+                );
+
                 return $current;
-            }
+            });
+        } catch (RenewalAlreadySettledException $exception) {
+            // Reached only by the genuine-anomaly branch above — the
+            // duplicate-arrival branch returns normally and never throws
+            // this. `DB::transaction()` has already rolled back by the time
+            // this catch runs, so this write commits on its own and is not
+            // undone by the rollback it is reporting on.
+            $this->recordAnomalyRefused($renewal, $actorRef);
 
-            if ($current->status !== RenewalStatus::MENUNGGU_PEMBAYARAN) {
-                // A genuine anomaly — e.g. a payment arriving for a
-                // KEDALUWARSA (expired) renewal. Not the duplicate-arrival
-                // case above, so this still fails closed.
-                throw RenewalAlreadySettledException::forRenewal((string) $current->getKey());
-            }
+            throw $exception;
+        }
+    }
 
-            $current->update([
-                'status' => RenewalStatus::DIBAYAR,
-                'settled_at' => now(),
-            ]);
+    /**
+     * The duplicate-arrival branch's audit trail — see the class doc block's
+     * "Idempotency" section and `RenewalAuditActions::
+     * RENEWAL_PAID_ONLINE_DUPLICATE_ARRIVAL`'s own doc block. Runs INSIDE the
+     * caller's transaction (that transaction commits, it never rolls back on
+     * this branch), so this row commits atomically with the no-op it
+     * describes. `note` is always the SAME fixed literal below, never
+     * `$providerTransactionRef` or any other provider payload value (AC14).
+     */
+    private function recordDuplicateArrival(Renewal $renewal, string $actorRef): void
+    {
+        Audit::record(
+            action: RenewalAuditActions::RENEWAL_PAID_ONLINE_DUPLICATE_ARRIVAL,
+            subject: new AuditSubject('renewal', (string) $renewal->getKey()),
+            outcome: AuditOutcome::Denied,
+            actorRef: $actorRef,
+            actorRole: 'provider',
+            source: AuditSource::Api,
+            correlationId: app(CorrelationContext::class)->current()?->value,
+            metadata: ['note' => 'duplicate settlement arrival, no state change'],
+        );
+    }
 
-            if ($renewal !== $current) {
-                $renewal->setRawAttributes($current->getAttributes(), true);
-            }
-
-            // References only (`AGENTS.md` §Observability, AC7): no amount.
-            // `paid_source_ref` (the provider transaction id) matches
-            // `MarkCyclePaid`'s own `care.cycle_created.v1` payload
-            // convention exactly — it is not on
-            // `PayloadClassification::DENYLISTED_KEYS`, so it is permitted in
-            // an outbox payload even though the SAME value stays out of the
-            // audit row below (AC14's audit-specific rule, not a blanket
-            // outbox rule).
-            Outbox::record(
-                eventName: 'renewal.paid_online.v1',
-                eventVersion: 1,
-                aggregateType: 'renewal',
-                aggregateId: $current->getKey(),
-                data: [
-                    'renewal_id' => $current->getKey(),
-                    'grave_record_id' => $current->grave_record_id,
-                    'paid_source_ref' => $providerTransactionRef,
-                ],
-                classification: OutboxClassification::Internal,
-                idempotencyKey: "renewal_paid_online:{$current->getKey()}",
-            );
-
-            Audit::record(
-                action: RenewalAuditActions::RENEWAL_PAID_ONLINE,
-                subject: new AuditSubject('renewal', (string) $current->getKey()),
-                outcome: AuditOutcome::Allowed,
-                actorRef: $actorRef,
-                actorRole: 'provider',
-                // The webhook-triggered source, matching
-                // `settleBooking`/`settleMarketplace`/`settleCareSubscription`'s
-                // own `AuditSource::Api`/actor-role-'provider' shape — NOT
-                // `AuditSource::Panel`, which is `MarkRenewalPaidExternally`'s
-                // admin-initiated source.
-                source: AuditSource::Api,
-                correlationId: app(CorrelationContext::class)->current()?->value,
-            );
-
-            return $current;
-        });
+    /**
+     * The genuine-anomaly branch's audit trail — see the class doc block and
+     * `RenewalAuditActions::RENEWAL_PAID_ONLINE_REFUSED`'s own doc block.
+     * Deliberately called from `__invoke()`'s `catch`, never from inside the
+     * `DB::transaction()` closure: a row written there would be rolled back
+     * along with the rest of that transaction the moment it throws, leaving
+     * exactly the invisible failure this fix exists to close.
+     */
+    private function recordAnomalyRefused(Renewal $renewal, string $actorRef): void
+    {
+        Audit::record(
+            action: RenewalAuditActions::RENEWAL_PAID_ONLINE_REFUSED,
+            subject: new AuditSubject('renewal', (string) $renewal->getKey()),
+            outcome: AuditOutcome::Denied,
+            actorRef: $actorRef,
+            actorRole: 'provider',
+            source: AuditSource::Api,
+            correlationId: app(CorrelationContext::class)->current()?->value,
+            metadata: ['note' => 'settlement arrived for a renewal that is neither open nor already paid'],
+        );
     }
 
     /**

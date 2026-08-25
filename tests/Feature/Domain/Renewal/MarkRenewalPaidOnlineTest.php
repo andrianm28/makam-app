@@ -71,8 +71,14 @@ final class MarkRenewalPaidOnlineTest extends TestCase
      * still-unpaid renewal). It must be SWALLOWED — the same shape
      * `MarkCyclePaid`/`MarkMarketplaceOrderPaid`/`ApplyPaidEffects` use for
      * their own duplicate-arrival cases — not thrown: the second call returns
-     * the SAME renewal unchanged, with no second audit row and no second
-     * outbox row.
+     * the SAME renewal unchanged, with no second `RENEWAL_PAID_ONLINE` audit
+     * row and no second outbox row.
+     *
+     * Whole-branch review fix wave (25 Aug 2026): the swallow is no longer
+     * silent. It now writes exactly ONE `RENEWAL_PAID_ONLINE_DUPLICATE_ARRIVAL`
+     * row naming the SECOND provider event's own actor — the durable trace an
+     * operator needs to see a real second collection happened, even though
+     * neither the renewal row nor the outbox gained a second write.
      */
     public function test_a_second_invocation_with_a_matching_amount_against_an_already_paid_renewal_is_swallowed(): void
     {
@@ -104,21 +110,63 @@ final class MarkRenewalPaidOnlineTest extends TestCase
         // event actor — the swallowed second call never overwrites it.
         $audit = AuditEvent::query()->where('action', RenewalAuditActions::RENEWAL_PAID_ONLINE)->sole();
         $this->assertSame('provider_event:test-1', (string) $audit->actor_ref);
+
+        // The swallow itself now leaves exactly one trace of its own,
+        // naming the SECOND (genuinely different) provider event.
+        $duplicateAudit = AuditEvent::query()
+            ->where('action', RenewalAuditActions::RENEWAL_PAID_ONLINE_DUPLICATE_ARRIVAL)
+            ->where('subject_id', (string) $renewal->getKey())
+            ->sole();
+
+        $this->assertSame('denied', $duplicateAudit->outcome);
+        $this->assertSame('renewal', $duplicateAudit->subject_type);
+        $this->assertSame('provider', $duplicateAudit->actor_role);
+        $this->assertSame('provider_event:test-2', (string) $duplicateAudit->actor_ref);
+        $this->assertSame('duplicate settlement arrival, no state change', $duplicateAudit->metadata['note'] ?? null);
     }
 
     /**
      * The no-op above is scoped to exactly the state this call itself
      * produces (`DIBAYAR`) — any OTHER non-open status is still a genuine
      * anomaly and still throws `RenewalAlreadySettledException`, the same
-     * scoping `MarkCyclePaid`/`MarkMarketplaceOrderPaid` use.
+     * scoping `MarkCyclePaid`/`MarkMarketplaceOrderPaid` use. `KEDALUWARSA`
+     * is not hypothetical here — `Actions\ExpireRenewal` is a real, live
+     * producer, wired to a real Filament admin action.
+     *
+     * Whole-branch review fix wave (25 Aug 2026): this anomaly used to leave
+     * NO audit trace at all (the mutation's own transaction rolled back and
+     * took any row written inside it along with it). It must now leave
+     * exactly one `RENEWAL_PAID_ONLINE_REFUSED` row — proving that row
+     * survives the rollback rather than being written inside the same
+     * transaction that throws.
      */
     public function test_a_settlement_attempt_against_a_kedaluwarsa_renewal_still_refuses(): void
     {
         $renewal = $this->makeRenewal(RenewalStatus::KEDALUWARSA);
 
-        $this->expectException(RenewalAlreadySettledException::class);
+        try {
+            app(MarkRenewalPaidOnline::class)($renewal, self::AMOUNT_MINOR, 'pay_online_1', 'provider_event:test-1');
+            $this->fail('Expected RenewalAlreadySettledException to be thrown.');
+        } catch (RenewalAlreadySettledException) {
+            // expected
+        }
 
-        app(MarkRenewalPaidOnline::class)($renewal, self::AMOUNT_MINOR, 'pay_online_1', 'provider_event:test-1');
+        $this->assertSame(RenewalStatus::KEDALUWARSA, $renewal->fresh()->status);
+        $this->assertSame(0, OutboxEvent::query()->where('event_name', 'renewal.paid_online.v1')->count());
+
+        $refusedAudit = AuditEvent::query()
+            ->where('action', RenewalAuditActions::RENEWAL_PAID_ONLINE_REFUSED)
+            ->where('subject_id', (string) $renewal->getKey())
+            ->sole();
+
+        $this->assertSame('denied', $refusedAudit->outcome);
+        $this->assertSame('renewal', $refusedAudit->subject_type);
+        $this->assertSame('provider', $refusedAudit->actor_role);
+        $this->assertSame('provider_event:test-1', (string) $refusedAudit->actor_ref);
+        $this->assertSame(
+            'settlement arrived for a renewal that is neither open nor already paid',
+            $refusedAudit->metadata['note'] ?? null,
+        );
     }
 
     public function test_the_outbox_event_is_recorded_with_the_correct_subject_reference(): void

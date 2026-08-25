@@ -225,6 +225,61 @@ final class RenewalPaymentTest extends TestCase
     }
 
     /**
+     * The re-click guard (whole-branch review fix wave, 25 Aug 2026):
+     * clicking "Bayar Sekarang" twice — the ordinary "backed out of the
+     * hosted checkout and returned" flow `#[Url]` makes bookmarkable — must
+     * NOT open a second real `PaymentSession` and must NOT call the provider
+     * a second time. The second call re-points at the SAME stored session's
+     * `link_url` instead, mirroring `CheckoutOnlinePaymentTest::
+     * test_reclicking_bayar_online_is_idempotent()` exactly.
+     */
+    public function test_reclicking_bayar_sekarang_does_not_open_a_second_session(): void
+    {
+        $this->openThePaymentGate();
+        $this->configurePaymentProvider();
+        $this->fakeProviderSuccess();
+
+        $renewal = $this->createRenewalWithQuote();
+
+        $component = Livewire::test(RenewalPayment::class, ['perpanjangan' => $renewal->id]);
+
+        $component->call('payOnline')->assertRedirect('https://checkout.sumopod.com/renewal-x');
+        $component->call('payOnline')->assertRedirect('https://checkout.sumopod.com/renewal-x');
+
+        $this->assertSame(1, PaymentSession::query()->count());
+        Http::assertSentCount(1);
+    }
+
+    /**
+     * A stored session that has already reached a TERMINAL state (`Paid`
+     * here — settled by the webhook while the customer's tab sat idle) must
+     * never be re-opened or re-redirected-to from a stale click. The
+     * manual-coordination card / webhook-driven state governs recovery
+     * instead, mirroring `Checkout::payOnline()`'s own terminal branch.
+     */
+    public function test_reclicking_after_the_stored_session_is_already_paid_does_not_redirect_or_reopen(): void
+    {
+        $this->openThePaymentGate();
+        $this->configurePaymentProvider();
+        $this->fakeProviderSuccess();
+
+        $renewal = $this->createRenewalWithQuote();
+
+        $component = Livewire::test(RenewalPayment::class, ['perpanjangan' => $renewal->id]);
+        $component->call('payOnline')->assertRedirect('https://checkout.sumopod.com/renewal-x');
+
+        $session = PaymentSession::query()->sole();
+        $session->forceFill(['state' => SessionState::Paid->value])->save();
+
+        Http::fake();
+
+        $component->call('payOnline')->assertNoRedirect();
+
+        $this->assertSame(1, PaymentSession::query()->count());
+        Http::assertNothingSent();
+    }
+
+    /**
      * A renewal already `DIBAYAR` (a resumed/duplicate tab, or a race with a
      * webhook that just settled it) must be refused by `OpenPaymentSession::
      * authorizeRenewal()`'s pre-guard `assertRenewalNotAlreadySettled()`

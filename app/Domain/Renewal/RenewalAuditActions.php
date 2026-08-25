@@ -48,4 +48,48 @@ final class RenewalAuditActions
      * webhook settles a renewal opened through the online journey.
      */
     public const string RENEWAL_PAID_ONLINE = 'RENEWAL_PAID_ONLINE';
+
+    /**
+     * Whole-branch review fix wave (25 Aug 2026) — written by
+     * `Actions\MarkRenewalPaidOnline` with `AuditOutcome::Denied`, subject =
+     * the `Renewal` row, on the swallowed "duplicate arrival" branch: a
+     * second, independent settling provider transaction resolves to a
+     * renewal that is already `DIBAYAR` with the same (asserted) amount.
+     * `App\Platform\Payment\ProcessWebhookEvent`'s `(provider,
+     * provider_transaction_id)` claim already guarantees this is a
+     * DIFFERENT provider transaction than the one that settled the renewal
+     * first, so every arrival here is a genuine second collection, never a
+     * replay of the same webhook delivery. No state change and no second
+     * outbox row accompany this — see that Action's own "Idempotency"
+     * doc-block section for why the swallow itself is correct — but this
+     * audit row is the one durable trace an operator can find to drive a
+     * refund decision, mirroring `App\Platform\Payment\PaymentAuditActions::
+     * DUPLICATE_ARRIVAL`'s reasoning for the booking leg.
+     *
+     * Not on `SensitiveActions::ACTIONS`, for the same reason as
+     * `RENEWAL_PAID_ONLINE` above: machine-decided, closed-list `note`, no
+     * free-text reason for a careless caller to fill with restricted data.
+     */
+    public const string RENEWAL_PAID_ONLINE_DUPLICATE_ARRIVAL = 'RENEWAL_PAID_ONLINE_DUPLICATE_ARRIVAL';
+
+    /**
+     * Whole-branch review fix wave (25 Aug 2026) — written by
+     * `Actions\MarkRenewalPaidOnline` with `AuditOutcome::Denied`, subject =
+     * the `Renewal` row, immediately before it throws
+     * `RenewalAlreadySettledException` on the genuine-anomaly branch: a
+     * settlement arrived for a renewal whose status is neither
+     * `MENUNGGU_PEMBAYARAN` (open) nor `DIBAYAR` (already settled) — today
+     * that is only reachable at `KEDALUWARSA`, a REAL, live status written
+     * by `Actions\ExpireRenewal` (wired to a real Filament admin action). An
+     * operator expiring a renewal while the customer's checkout is still
+     * live, followed by the customer completing that payment, is the
+     * concrete race this branch fails closed on. Written OUTSIDE the
+     * transaction that throws (after it has already rolled back), so the
+     * audit row survives even though the mutation attempt does not — see
+     * that Action's own doc block.
+     *
+     * Not on `SensitiveActions::ACTIONS`, for the same reason as
+     * `RENEWAL_PAID_ONLINE_DUPLICATE_ARRIVAL` above.
+     */
+    public const string RENEWAL_PAID_ONLINE_REFUSED = 'RENEWAL_PAID_ONLINE_REFUSED';
 }
