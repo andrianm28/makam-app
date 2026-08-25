@@ -6,7 +6,6 @@ namespace App\Platform\Payment\Checkout\Contracts;
 
 use App\Platform\Payment\Checkout\CreatePaymentRequest;
 use App\Platform\Payment\Checkout\PaymentCheckoutResult;
-use App\Platform\Payment\Checkout\PaymentStatusResult;
 
 /**
  * The outbound payment-provider seam (ADR-0033).
@@ -24,13 +23,15 @@ use App\Platform\Payment\Checkout\PaymentStatusResult;
  * checkout cannot happen right now" and preserves the mandatory manual
  * fallback.
  *
- * `fetchStatus` is the reconciliation half added for
- * `Actions\ReconcilePaymentSession` — see `PaymentStatusResult`'s class doc
- * block for why it exists. Same failure contract as `createPayment`.
+ * No `fetchStatus` method: confirmed 25 Aug 2026 that SumoPod's Managed
+ * Payment product has no status-lookup endpoint at all (directly confirmed
+ * by the merchant, not merely undocumented) — a same-day reconciliation
+ * feature built against a guessed endpoint path was reverted after it
+ * returned real HTTP 404s in production. The webhook and the browser return
+ * URL (never trusted for state, see `PaymentReturnController`'s doc block)
+ * are the only two confirmation mechanisms this provider offers.
  */
 interface PaymentCheckoutClient
 {
     public function createPayment(CreatePaymentRequest $request): PaymentCheckoutResult;
-
-    public function fetchStatus(string $providerPaymentId): PaymentStatusResult;
 }

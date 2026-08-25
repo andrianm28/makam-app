@@ -5,7 +5,6 @@ use App\Http\Middleware\BetaNoindexTag;
 use App\Http\Middleware\ReportContentSecurityPolicy;
 use App\Platform\DocumentVault\Jobs\ReconcileDocumentStorageCleanupJob;
 use App\Platform\Outbox\OutboxQueueName;
-use App\Platform\Payment\Jobs\ReconcileStalePaymentSessionsJob;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -33,21 +32,6 @@ return Application::configure(basePath: dirname(__DIR__))
             OutboxQueueName::Media->value,
         )
             ->name('document-vault:reconcile-storage-cleanups')
-            ->everyFiveMinutes()
-            ->withoutOverlapping(10)
-            ->onOneServer();
-
-        // Payment settlement's safety net — see
-        // `Platform\Payment\Jobs\ReconcileStalePaymentSessionsJob`'s class doc
-        // block for why this exists (the on-return check in
-        // `BookingWizard` only fires when the customer's browser comes
-        // back; this catches every case that never does, including a
-        // provider webhook that never arrives at all).
-        $schedule->job(
-            new ReconcileStalePaymentSessionsJob,
-            OutboxQueueName::Critical->value,
-        )
-            ->name('payment:reconcile-stale-sessions')
             ->everyFiveMinutes()
             ->withoutOverlapping(10)
             ->onOneServer();
