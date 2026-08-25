@@ -1102,33 +1102,56 @@
 
                     {{-- §6.7: "Pending is the most common state in this product
                          and the easiest to get wrong… Never style a pending
-                         state as success." Nothing here has succeeded: no order
-                         record exists and no payment has been verified (a later
-                         lane owns both), so there is no reference to hand over
-                         and nothing to confirm. `pending` intent, clock icon,
-                         status badge — the §3.7 row for a wait, not the §6.8
-                         success pattern. --}}
+                         state as success." The order itself now exists as soon
+                         as a manual submission is saved (`saveStep8()`), but
+                         payment has not been verified — that stays a separate,
+                         later, staff-driven step — so this card keeps `pending`
+                         intent and a clock icon either way. Only the COPY
+                         branches on whether `order_reference` is set: the rare
+                         case where order creation itself failed mid-request
+                         (reported, not surfaced as an error) falls back to the
+                         original honest "not yet processed" wording rather than
+                         claiming a reference that does not exist. --}}
                     <x-mk.card intent="pending">
                         <div class="flex flex-col gap-3">
                             <x-mk.badge intent="pending" icon="clock" class="self-start">
                                 Menunggu diproses
                             </x-mk.badge>
 
-                            <h3 class="text-lg font-semibold text-neutral-900">
-                                Data pemesanan Anda telah tersimpan dan menunggu diproses
-                            </h3>
+                            @if ($confirmationData['order_reference'] !== null)
+                                <h3 class="text-lg font-semibold text-neutral-900">
+                                    Pesanan Anda diterima dengan nomor {{ $confirmationData['order_reference'] }}
+                                </h3>
 
-                            <p class="text-base text-neutral-800">
-                                Terima kasih. Tim kami akan menghubungi Anda melalui
-                                {{ $confirmationData['contact_channel_label'] }}
-                                untuk mengonfirmasi pesanan dan langkah pembayaran.
-                            </p>
+                                <p class="text-base text-neutral-800">
+                                    Terima kasih. Tim kami akan menghubungi Anda melalui
+                                    {{ $confirmationData['contact_channel_label'] }}
+                                    untuk mengonfirmasi pesanan dan langkah pembayaran.
+                                </p>
 
-                            <p class="text-sm text-neutral-700">
-                                Pesanan Anda belum dibuat secara resmi dan pembayaran belum diverifikasi.
-                                Nomor pesanan resmi akan kami berikan setelah tim kami memproses pemesanan ini.
-                                Anda tidak perlu melakukan apa pun sampai kami menghubungi Anda.
-                            </p>
+                                <p class="text-sm text-neutral-700">
+                                    Pembayaran Anda belum diverifikasi. Tim kami akan memverifikasi setelah
+                                    transfer Anda kami terima dan cocokkan dengan referensi pembayaran yang
+                                    Anda kirimkan. Anda tidak perlu melakukan apa pun sampai kami menghubungi
+                                    Anda.
+                                </p>
+                            @else
+                                <h3 class="text-lg font-semibold text-neutral-900">
+                                    Data pemesanan Anda telah tersimpan dan menunggu diproses
+                                </h3>
+
+                                <p class="text-base text-neutral-800">
+                                    Terima kasih. Tim kami akan menghubungi Anda melalui
+                                    {{ $confirmationData['contact_channel_label'] }}
+                                    untuk mengonfirmasi pesanan dan langkah pembayaran.
+                                </p>
+
+                                <p class="text-sm text-neutral-700">
+                                    Pesanan Anda belum dibuat secara resmi dan pembayaran belum diverifikasi.
+                                    Nomor pesanan resmi akan kami berikan setelah tim kami memproses pemesanan ini.
+                                    Anda tidak perlu melakukan apa pun sampai kami menghubungi Anda.
+                                </p>
+                            @endif
                         </div>
                     </x-mk.card>
 
@@ -1230,11 +1253,11 @@
                         {{-- The block that printed `draft_id` under the heading
                              "Nomor Referensi Sementara" is removed entirely.
                              That value is the draft's RESUME identifier, not an
-                             order number; presenting it as a reference invited
-                             users to pass it around, and no order number exists
-                             to show in its place. The honest statement about
-                             the real order number lives in the status card
-                             above; the id itself is printed nowhere. --}}
+                             order number, and presenting it as a reference
+                             invited users to pass it around — the real order
+                             reference (`confirmationData['order_reference']`),
+                             when one exists, is shown by the status card above
+                             instead; the draft id itself is printed nowhere. --}}
                         <x-mk.card>
                             <h3 class="text-base font-semibold text-neutral-900">Apa yang selanjutnya?</h3>
                             <ol class="flex list-inside list-decimal flex-col gap-1 text-sm text-neutral-600">
@@ -1244,7 +1267,9 @@
                                     {{ $confirmationData['contact_channel_label'] }}
                                     untuk mengonfirmasi detail dan langkah pembayaran.
                                 </li>
-                                <li>Nomor pesanan resmi diberikan setelah pemesanan Anda diproses.</li>
+                                @if ($confirmationData['order_reference'] === null)
+                                    <li>Nomor pesanan resmi diberikan setelah pemesanan Anda diproses.</li>
+                                @endif
                             </ol>
                             <p class="text-sm text-neutral-600">
                                 Ada yang ingin ditanyakan atau diubah?
