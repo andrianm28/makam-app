@@ -8,6 +8,7 @@ use App\Domain\GraveRegistry\GraveRecordAccessMode;
 use App\Domain\GraveRegistry\Models\GraveRecord;
 use App\Domain\Renewal\Models\Renewal;
 use App\Domain\Renewal\Models\RenewalQuote;
+use App\Domain\Renewal\RenewalStatus;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\FeatureGate\Contracts\GateRegistrySource;
@@ -20,6 +21,7 @@ use App\Platform\Payment\Actions\OpenPaymentSessionCommand;
 use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutProviderException;
 use App\Platform\Payment\Exceptions\PaymentSessionMerchantMismatchException;
 use App\Platform\Payment\Exceptions\PaymentSessionOpeningDeniedException;
+use App\Platform\Payment\Exceptions\PaymentSessionOrderAlreadyPaidException;
 use App\Platform\Payment\Exceptions\PaymentSessionOrderNotFoundException;
 use App\Platform\Payment\Models\PaymentIntent;
 use App\Platform\Payment\Models\PaymentSession;
@@ -39,12 +41,18 @@ use Tests\TestCase;
  * Mirrors those two files' fixture/assertion style so all three order
  * types' coverage stays comparable.
  *
- * The single most important test in this file is
- * `test_manual_coordination_required_refuses_without_creating_a_session` —
- * it is the one that proves the plan's own explicit Global Constraint
+ * Two tests in this file carry the most weight:
+ * `test_manual_coordination_required_refuses_without_creating_a_session`
+ * proves the plan's own explicit Global Constraint
  * ("`manualCoordinationRequired: true` must never reach
  * `PaymentSession::create()`") actually holds against a real guard
  * evaluation and a real (Postgres) database, not just in code review.
+ * `test_an_already_settled_renewal_cannot_open_a_new_session` proves the
+ * fix-wave "no second session for an already-paid order" protection (see
+ * `OpenPaymentSession`'s own class doc block) genuinely covers renewal too
+ * — `GuardRenewalPaymentOpening`'s own conditions do not, so without
+ * `assertRenewalNotAlreadySettled()` a settled renewal would open a second
+ * real session against a real provider.
  */
 final class OpenRenewalPaymentSessionTest extends TestCase
 {
@@ -205,6 +213,42 @@ final class OpenRenewalPaymentSessionTest extends TestCase
 
         $this->assertSame(0, PaymentSession::query()->count());
         Http::assertNothingSent();
+    }
+
+    /**
+     * The fix-wave negative test: a renewal already `DIBAYAR` must not be
+     * able to open a SECOND session, even though `GuardRenewalPaymentOpening`
+     * itself has no opinion on settlement state — its four conditions never
+     * reference `renewals.status`, and the eligible fixture's quote stays
+     * "accepted and unexpired" forever (`expires_at` is null), so the guard
+     * alone would genuinely return `allowed()` here. Only
+     * `assertRenewalNotAlreadySettled()` stops this. Mirrors
+     * `OpenPaymentSessionMarketplaceTest::
+     * test_an_already_paid_order_cannot_open_a_new_session`.
+     */
+    public function test_an_already_settled_renewal_cannot_open_a_new_session(): void
+    {
+        $this->guardWithPaymentGate(open: true);
+        $renewal = $this->makeEligibleRenewal();
+        $renewal->forceFill(['status' => RenewalStatus::DIBAYAR, 'settled_at' => now()])->save();
+        Http::fake();
+
+        try {
+            app(OpenPaymentSession::class)($this->command());
+            $this->fail('Expected PaymentSessionOrderAlreadyPaidException to be thrown.');
+        } catch (PaymentSessionOrderAlreadyPaidException $exception) {
+            $this->assertStringContainsString(self::RENEWAL_REFERENCE, $exception->getMessage());
+        }
+
+        $this->assertSame(0, PaymentSession::query()->count());
+        Http::assertNothingSent();
+
+        $audit = AuditEvent::query()
+            ->where('action', PaymentAuditActions::SESSION_OPENING_REFUSED)
+            ->sole();
+        $this->assertSame('renewal', $audit->subject_type);
+        $this->assertSame((string) $renewal->getKey(), $audit->subject_id);
+        $this->assertSame('denied', $audit->outcome);
     }
 
     public function test_a_grave_that_is_not_published_denies_without_creating_a_session(): void
