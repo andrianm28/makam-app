@@ -364,6 +364,46 @@ final class BookingWizardOnlinePaymentTest extends TestCase
     }
 
     /**
+     * Root cause of the live UAT bug (25 Aug 2026): assumptions-and-gates.md
+     * §2 lists "Manual coordination" as `G-PAY-01`'s FALLBACK column, and
+     * `PaymentMode::ManualCoordination`'s own doc block says Step 8 "renders
+     * manual coordination INSTEAD OF a payment form" while the gate is
+     * closed — never a second option shown alongside a live, untried online
+     * path. The Blade view used to render the "Pembayaran Manual" card
+     * unconditionally regardless of `$paymentMode`, so both methods appeared
+     * together whenever the gate was open. This is the regression test for
+     * that: a fresh Step 8 with the gate open shows ONLY the online option.
+     */
+    public function test_the_manual_option_does_not_render_when_the_gate_is_open_and_untried(): void
+    {
+        $this->withPaymentGate(open: true);
+
+        $this->journeyToStepEight()
+            ->assertSee('Pembayaran Online')
+            ->assertDontSee('Pembayaran Manual')
+            ->assertDontSee('Saya Akan Bayar Manual');
+    }
+
+    /**
+     * The manual card is the honest recovery route once the online attempt
+     * has actually failed closed (guard denial here) — never hidden in that
+     * case, matching `test_online_submit_creates_order_and_quote_but_fails_closed_without_calling_the_provider`'s
+     * fixture but asserting the view directly.
+     */
+    public function test_the_manual_option_renders_once_the_online_attempt_fails_closed(): void
+    {
+        $this->withPaymentGate(open: true);
+        Http::fake();
+
+        $draftId = $this->journeyToStepEight()->get('draftId');
+
+        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->call('openOnlinePayment')
+            ->assertSee('Pembayaran Manual')
+            ->assertSee('Saya Akan Bayar Manual');
+    }
+
+    /**
      * ADR-0035 item 1's mitigation: "unmissable payment-step labelling ...
      * before any redirect to the sandbox." `setUp()` never overrides
      * `payment.default`, so it stays on `PaymentProviders::SUMOPOD_SANDBOX`
@@ -606,6 +646,8 @@ final class BookingWizardOnlinePaymentTest extends TestCase
 
         $this->journeyToStepEight()
             ->assertDontSee('Bayar Sekarang')
+            ->assertDontSee('Pembayaran Online')
+            ->assertSee('Pembayaran Manual')
             ->call('saveStep8', BookingPaymentMethod::ONLINE)
             ->assertHasErrors(['payment_method']);
     }

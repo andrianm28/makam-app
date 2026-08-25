@@ -26,6 +26,7 @@ use App\Domain\Quotation\Models\Quote;
 use App\Domain\ServiceCatalog\ServiceCatalogQuery;
 use App\Domain\ServiceCatalog\ServiceCode;
 use App\Platform\FeatureGate\ModeResolver;
+use App\Platform\FeatureGate\Modes\PaymentMode;
 use App\Platform\IdentityAccess\ActorContextResolver;
 use App\Platform\Payment\Actions\OpenPaymentSession;
 use App\Platform\Payment\Actions\OpenPaymentSessionCommand;
@@ -1057,6 +1058,24 @@ final class BookingWizard extends Component
         // without this file changing.
         $isSandboxPayment = config('payment.default') === PaymentProviders::SUMOPOD_SANDBOX;
 
+        // assumptions-and-gates.md §2: manual coordination is `G-PAY-01`'s
+        // FALLBACK ("Manual coordination" column), not a second option
+        // offered alongside online payment — `PaymentMode::ManualCoordination`'s
+        // own doc block: Step 8 "renders manual coordination INSTEAD OF a
+        // payment form" while the gate is closed. So the manual card is
+        // shown whenever the gate is closed, and otherwise ONLY as the
+        // honest recovery route once the online path has actually failed —
+        // never simultaneously with a live/untried online option. That
+        // matches every existing fail-closed test in
+        // `BookingWizardOnlinePaymentTest` (`..._keeps_the_manual_path`
+        // asserts `Pembayaran Manual` is visible exactly when
+        // `onlinePaymentError` is set) and the Failed/Expired session copy
+        // above, which explicitly tells the customer to use it.
+        $showManualPayment = $paymentMode !== PaymentMode::Online
+            || $this->onlinePaymentError !== null
+            || $onlinePaymentState['state'] === SessionState::Failed
+            || $onlinePaymentState['state'] === SessionState::Expired;
+
         return view('livewire.public.booking.wizard', [
             'cities' => CemeteryPublicQuery::launchCities(),
             'cemeteries' => $cemeteries,
@@ -1070,6 +1089,7 @@ final class BookingWizard extends Component
             'onlineSessionState' => $onlinePaymentState['state'],
             'onlinePaymentLinkUrl' => $onlinePaymentState['link_url'],
             'isSandboxPayment' => $isSandboxPayment,
+            'showManualPayment' => $showManualPayment,
         ])->layout('layouts.app', [
             'title' => 'Pemesanan Makam - Makam.co.id',
             'active' => null,
