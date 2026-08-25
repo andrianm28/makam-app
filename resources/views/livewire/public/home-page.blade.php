@@ -138,12 +138,13 @@
          <x-mk.hero> has no slot for them and design-system.md's hero
          typography row does not call for an eyebrow.
 
-         `image` is a PLACEHOLDER path: public/images/hero/cemetery-garden-
-         daylight.jpg does not exist in this repo yet. The real file is a
-         deliberate follow-up once the project owner picks one of the sourced
-         candidate photos (see this change's PR description) — see
-         docs/design/design-system.md §2.2 (real cemetery/garden, daylight, no
-         people in grief) and the misattribution precedent in
+         `image` points to public/images/hero/cemetery-garden-daylight.jpg,
+         a real Indonesian cemetery photo the project owner picked from a
+         sourced/verified candidate set (aerial view, Tangerang, Banten;
+         Pexels, photographer Tom Fisk, Pexels License, no attribution
+         required — see this change's commit message for the source URL)
+         — see docs/design/design-system.md §2.2 (real cemetery/garden,
+         daylight, no people in grief) and the misattribution precedent in
          database/migrations/2026_08_24_100000_backfill_photo_and_maps_url_for_real_cemeteries.php's
          doc block (why the photo must not depict one specific, identifiable
          real cemetery). --}}
