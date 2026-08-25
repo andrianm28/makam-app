@@ -81,9 +81,16 @@ final class ReportContentSecurityPolicyTest extends TestCase
     }
 
     /**
-     * `style-src` stays free of `unsafe-eval`/`unsafe-inline` — the
-     * eval-related gap is script-only (Alpine/Livewire directive parsing),
-     * not a blanket relaxation of the whole policy.
+     * `style-src` stays free of `unsafe-eval` — that gap is script-only
+     * (Alpine/Livewire directive parsing), not a blanket relaxation of the
+     * whole policy. `style-src` DOES now carry `'unsafe-inline'` — see
+     * `test_the_policy_allows_unsafe_inline_style_for_filaments_attribute_level_style_mutation()`
+     * below and the middleware's own doc block (SEC-08 CSP-enforcement
+     * follow-up) for exactly why.
+     *
+     * RENAMED from `test_style_src_does_not_carry_unsafe_eval`, which also
+     * asserted `style-src` had no `unsafe-inline` — that assertion is now
+     * the opposite of correct and is pinned by the new test instead.
      */
     public function test_style_src_does_not_carry_unsafe_eval(): void
     {
@@ -96,7 +103,27 @@ final class ReportContentSecurityPolicyTest extends TestCase
 
         $this->assertNotNull($styleSrc);
         $this->assertStringNotContainsString('unsafe-eval', $styleSrc);
-        $this->assertStringNotContainsString('unsafe-inline', $styleSrc);
+    }
+
+    /**
+     * `unsafe-inline` in `style-src`, deliberately — see the middleware's
+     * own doc block for exactly why (Filament's bundled Alpine mutates the
+     * `style` ATTRIBUTE at runtime via `element.style.*`, which a nonce
+     * cannot cover — nonce-source has no attribute-level form in the CSP
+     * spec). Pinned here, mirroring
+     * `test_the_policy_allows_unsafe_eval_for_filaments_alpine_usage()`
+     * above, so a future attempt to remove it doesn't silently reintroduce
+     * the real regression this fixed: a live CI Playwright run
+     * (32871721430) showed the admin sidebar rendering as a broken
+     * full-viewport overlay once this was missing under enforcement.
+     */
+    public function test_the_policy_allows_unsafe_inline_style_for_filaments_attribute_level_style_mutation(): void
+    {
+        $response = $this->get('/');
+
+        $policy = (string) $response->headers->get('Content-Security-Policy');
+
+        $this->assertMatchesRegularExpression("/style-src [^;]*'unsafe-inline'/", $policy);
     }
 
     public function test_the_policy_carries_a_nonce_shared_between_script_src_and_style_src(): void
@@ -127,14 +154,20 @@ final class ReportContentSecurityPolicyTest extends TestCase
     }
 
     /**
-     * RENAMED from `test_the_policy_declares_no_third_party_origin`.
-     * `frame-src https://www.google.com` (added for the cemetery directory's
-     * embedded map — see `ReportContentSecurityPolicy`'s own comment) is now
-     * a deliberate, sole exception to the "no third party origin" rule this
-     * test used to assert absolutely. This test still proves the rule holds
-     * everywhere else — every OTHER directive must stay origin-free — while
-     * pinning the one exception to exactly the origin it is meant to be, not
-     * a broader wildcard that would silently permit more than intended.
+     * RENAMED from `test_the_policy_declares_no_third_party_origin`, then
+     * again from
+     * `test_the_policy_declares_no_third_party_origin_except_the_deliberate_maps_frame_src`
+     * (SEC-08 CSP-enforcement follow-up, 25 Aug 2026): `img-src` now carries
+     * a SECOND deliberate exception, `https://ui-avatars.com` — Filament's
+     * default `UiAvatarsProvider` (see `AdminPanelProvider`/
+     * `VendorPanelProvider`, neither configures a custom
+     * `->defaultAvatarProvider()`) fetches the signed-in user's initials
+     * avatar from this fixed origin on every admin/vendor page load; real
+     * enforcement blocks it outright otherwise. This test still proves the
+     * "no third party origin" rule holds everywhere else — every OTHER
+     * directive must stay origin-free — while pinning BOTH exceptions to
+     * exactly the origins they are meant to be, not a broader wildcard that
+     * would silently permit more than intended.
      */
     public function test_the_policy_declares_no_third_party_origin_except_the_deliberate_maps_frame_src(): void
     {
@@ -146,6 +179,12 @@ final class ReportContentSecurityPolicyTest extends TestCase
         foreach ($directives as $directive) {
             if (str_starts_with($directive, 'frame-src')) {
                 $this->assertSame('frame-src https://www.google.com', $directive);
+
+                continue;
+            }
+
+            if (str_starts_with($directive, 'img-src')) {
+                $this->assertSame("img-src 'self' data: https://ui-avatars.com", $directive);
 
                 continue;
             }

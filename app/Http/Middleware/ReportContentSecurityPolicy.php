@@ -115,6 +115,51 @@ use Symfony\Component\HttpFoundation\Response;
  * the standard, documented trade-off strict-CSP guidance describes for
  * Alpine/Livewire-based admin UIs; it is not a step back to the pre-SEC-08
  * report-only posture, which blocked nothing at all.
+ *
+ * ---------------------------------------------------------------------------
+ * `unsafe-inline` on `style-src` — Filament's own JS mutates the `style`
+ * ATTRIBUTE, which a nonce cannot cover at all
+ * ---------------------------------------------------------------------------
+ * Real enforcement (this file's own SEC-08 flip) surfaced a second,
+ * distinct Filament/Alpine breakage the report-only period never caught,
+ * for the same reason `unsafe-eval` above went undetected until enforcement
+ * was live: report-only logs a violation but never blocks it, and nothing
+ * here has a `report-uri` receiver (see above), so a report-only pass
+ * cannot demonstrate a directive is SUFFICIENT — only that nothing was
+ * observed missing it, which is not the same claim. Filament v5's bundled
+ * Alpine stores (concretely, the sidebar-collapse store reached from the
+ * same page-wide `x-on:click="$store.sidebar...`/`{ 'fi-collapsed':
+ * $store.sidebar.groupIsCollapsed(label) }` markup the `unsafe-eval` note
+ * above already covers) set CSS directly via `element.style.*`, i.e. they
+ * write the `style="..."` HTML ATTRIBUTE at runtime, not a `<style>`
+ * element or `<link rel=stylesheet>`. A nonce only has meaning for `<style>`
+ * elements and stylesheets the SERVER emits with a `nonce="..."` attribute
+ * attached — the CSP spec's nonce-source has no attribute-level form at
+ * all, so `'nonce-{$nonce}'` on `style-src` was NEVER able to cover this,
+ * with or without enforcement. Confirmed via a real CI browser-suite
+ * failure (run 32871721430, `e2e-renewal-external.spec.ts`, all 3 attempts,
+ * deterministic not flaky): the blocked mutation throws inside Alpine's
+ * page-wide boot (`Cannot read properties of null (reading 'includes')`),
+ * which — exactly like the `unsafe-eval`-less attempt described above —
+ * takes down every OTHER directive on the page too, not just style. The
+ * admin sidebar rendered as a broken full-viewport overlay, pushing real
+ * page content (e.g. the renewal-order list's "Lihat" link) outside the
+ * viewport.
+ *
+ * This does not add a third-party origin: `style-src` stays
+ * `'self' 'nonce-{$nonce}' 'unsafe-inline'` — same origin list as before,
+ * plus this one keyword. `'unsafe-inline'` for style only permits setting
+ * CSS property values through the DOM the page's own script already
+ * controls; it is not `script-src`'s `'unsafe-inline'` (which this policy
+ * still does NOT carry — see `script-src` above) and grants no script
+ * execution path of its own. Some browsers ignore a directive's
+ * `'unsafe-inline'` for actual `<style>` ELEMENTS when a nonce is also
+ * present (a CSP backward-compatibility fallback for older browsers) — but
+ * that fallback has no attribute-level analogue, since nonce-source was
+ * never attribute-addressable to begin with. So regardless of that
+ * elements-only fallback, this keyword's real, load-bearing effect here is
+ * exactly the one this fix needs: permitting `element.style.*` attribute
+ * mutation, which nothing else in this directive can express.
  */
 final class ReportContentSecurityPolicy
 {
@@ -139,8 +184,23 @@ final class ReportContentSecurityPolicy
             // selectively. Still nonce-scoped, still no 'unsafe-inline',
             // still no third-party script origin.
             "script-src 'self' 'nonce-{$nonce}' 'unsafe-eval'",
-            "style-src 'self' 'nonce-{$nonce}'",
-            "img-src 'self' data:",
+            // 'unsafe-inline' — see this class's own doc block for exactly
+            // why: Filament's bundled Alpine mutates the `style` ATTRIBUTE
+            // at runtime (`element.style.*`), which a nonce cannot cover —
+            // nonce-source has no attribute-level form in the CSP spec.
+            // Still no third-party style origin: 'self' plus the nonce plus
+            // this one keyword.
+            "style-src 'self' 'nonce-{$nonce}' 'unsafe-inline'",
+            // https://ui-avatars.com — Filament's default
+            // `AvatarProviders\UiAvatarsProvider` (no custom
+            // `->defaultAvatarProvider()` is configured on either panel)
+            // fetches the signed-in user's initials avatar from this fixed
+            // origin on every admin/vendor page load. Real enforcement
+            // blocks it outright (previously silent under report-only, same
+            // report-uri-less blind spot the style-src note above
+            // describes). Scoped to exactly this one image host, nothing
+            // wider — img-src stays otherwise 'self' plus inline `data:`.
+            "img-src 'self' data: https://ui-avatars.com",
             "font-src 'self'",
             "connect-src 'self'",
             // Cemetery directory detail pages embed a Google Maps iframe

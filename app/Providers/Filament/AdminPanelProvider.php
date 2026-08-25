@@ -18,6 +18,7 @@ use App\Filament\Admin\Widgets\FinancialOverviewWidget;
 use App\Filament\Admin\Widgets\OrderStatusOverviewWidget;
 use App\Filament\Admin\Widgets\PlatformOverviewWidget;
 use App\Http\Middleware\AssignCorrelationId;
+use Filament\FontProviders\LocalFontProvider;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -62,21 +63,31 @@ use RuntimeException;
  * resources/css/tokens.css) instead of the hand-copied hex array
  * design-system.md's §8.3 snippet showed as a known, called-out gap.
  *
- * ONE deliberate deviation from the §8.3 snippet, called out rather than
- * silently guessed: the snippet's `->font('Inter var',
- * provider: LocalFontProvider::class)` names a class with no `use`
- * statement and no confirmed namespace anywhere in this codebase or in
- * Filament's stable public API surface as far as this batch could
- * determine without an installed package to check against — i.e. specific
- * reason to doubt it, not just the section's general uncertainty flag.
- * Rather than write a `use` statement for a FQCN that might not resolve,
- * this file self-hosts the font the same way resources/css/app.css already
- * does for the public site (design-system.md §8.2's `@font-face` block):
- * theme.css below declares the `@font-face`, and `->font('Inter var')`
- * only needs to name the family Filament should apply — no provider class
- * required. If a real Filament 5 install's `LocalFontProvider` (or
- * equivalent) turns out to be the more idiomatic path, that is a one-line
- * change once verified; this repo has no path to verify it today.
+ * ONE deliberate deviation from the §8.3 snippet, ORIGINALLY written as a
+ * guess and now CORRECTED against the real installed package (SEC-08 CSP-
+ * enforcement follow-up, 25 Aug 2026): this batch first assumed
+ * `->font('Inter var')` with no `provider:` argument would self-host, on
+ * the theory that Filament only needed the family name and theme.css's own
+ * `@font-face` would supply the rest. That assumption was wrong.
+ * `vendor/filament/filament/src/Panel/Concerns/HasFont.php`'s
+ * `getFontProvider()` resolves to `BunnyFontProvider::class` — not
+ * `LocalFontProvider::class` — the moment a CUSTOM family is set (i.e.
+ * `hasCustomFontFamily()` is true) and no `provider:` argument overrides
+ * it; `LocalFontProvider` is only the default when the family itself is
+ * left null. So this panel was silently emitting a
+ * `<link href="https://fonts.bunny.net/css?family=inter-var...">` tag on
+ * every request — invisible under report-only, blocked outright once SEC-08
+ * flipped this app to enforcing CSP (`style-src` has no third-party origin,
+ * by design — see `ReportContentSecurityPolicy`'s own doc block). The fix
+ * is exactly the `provider: LocalFontProvider::class` argument this note
+ * previously talked itself out of: confirmed against the real installed
+ * `filament/filament` v5.7.3, `LocalFontProvider::getHtml()` returns empty
+ * HTML whenever no `$url` is passed (`vendor/filament/filament/src/
+ * FontProviders/LocalFontProvider.php`), so passing it here emits NO
+ * stylesheet link at all and relies entirely on theme.css's own
+ * `@font-face`, exactly as originally intended — self-hosted, no CDN
+ * request, no visitor-IP leak to a third party on a page that may be
+ * handling private case/order data.
  *
  * Status badges in Admin Resources should resolve colour/icon/label
  * through `App\Support\Design\StatusIntent` (design-system.md §3.7), e.g.:
@@ -238,13 +249,13 @@ class AdminPanelProvider extends PanelProvider
             // Self-hosted only — design-system.md §1.4: no CDN/Google Fonts
             // request. Staging is noindex/access-restricted and a
             // third-party font fetch leaks a visitor's IP on a page that
-            // may be handling private case/order data. No `provider:` here
-            // — the `@font-face` lives in theme.css (loaded via
-            // ->viteTheme() below), so Filament only needs the family name.
-            // See the class-level VERIFICATION STATUS note above for why
-            // this deviates from design-system.md §8.3's
-            // `provider: LocalFontProvider::class` snippet.
-            ->font('Inter var')
+            // may be handling private case/order data. `provider:
+            // LocalFontProvider::class` is REQUIRED here, not optional —
+            // see the class-level doc-block note above (SEC-08 CSP-
+            // enforcement follow-up) for why omitting it silently falls
+            // back to Filament's BunnyFontProvider once a custom family is
+            // set, confirmed against the real installed package.
+            ->font('Inter var', provider: LocalFontProvider::class)
             ->viteTheme('resources/css/filament/admin/theme.css');
     }
 
