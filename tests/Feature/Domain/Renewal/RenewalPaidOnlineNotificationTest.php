@@ -7,10 +7,14 @@ namespace Tests\Feature\Domain\Renewal;
 use App\Domain\GraveRegistry\Models\GraveRecord;
 use App\Domain\Renewal\Actions\MarkRenewalPaidOnline;
 use App\Domain\Renewal\Actions\OpenRenewal;
+use App\Platform\IdentityAccess\Scopes\Models\ScopeAssignment;
+use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use App\Platform\Notification\Jobs\ConsumeOutboxNotificationJob;
+use App\Platform\Notification\Models\InAppNotification;
 use App\Platform\Notification\Models\NotificationDelivery;
 use App\Platform\Notification\Models\NotificationEvent;
 use App\Platform\Notification\Models\NotificationRecipient;
+use App\Platform\Notification\RecipientRole;
 use App\Platform\Outbox\Models\OutboxEvent;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -28,17 +32,17 @@ use Tests\TestCase;
  * is `NotificationTemplatePersistenceTest::
  * test_only_the_twelve_ruled_rows_carry_an_outbox_event_name()`).
  *
- * `App\Platform\Notification\ProvisionalAggregateNotificationSubjectSource`'s
- * own doc block ("Partially live") states plainly that `subjectFor()` has no
- * `'renewal'` arm — the SAME gap `renewal.submitted.v1` already has (see
- * that class's doc block, unmodified by this task). This means the
- * `notification_events` row this test proves IS written and correctly
- * matched to the "Renewal paid/verified" template, but recipient resolution
- * legitimately returns zero recipients — `Actions\DispatchNotification::
- * recordRecipientsAndDeliveries()`'s own documented `$subject === null`
- * branch, not a bug this task introduces or is scoped to fix. Wiring a real
- * `'renewal'` subject source is separate engineering work, out of this
- * task's file list.
+ * `App\Platform\Notification\ProvisionalAggregateNotificationSubjectSource`
+ * now carries a real `'renewal'` arm (fixed 25 Aug 2026, closing the gap this
+ * class's doc block used to describe here). A renewal has no owner/contact
+ * reference anywhere in this codebase (see that class's own `renewal`
+ * doc-block section), so the Customer column — `EMAIL/WA + invoice` on the
+ * matrix — still resolves nobody; that part of the gap is a real product
+ * limitation, not a wiring bug, and stays open. What the fix DOES close: the
+ * renewal's grave record always carries a `cemetery_id`
+ * (`grave_records.cemetery_id` is NOT NULL), so the "Pengelola TPU/TPS"
+ * column now resolves a genuine cemetery-operator recipient where before it
+ * resolved none at all.
  */
 final class RenewalPaidOnlineNotificationTest extends TestCase
 {
@@ -49,6 +53,13 @@ final class RenewalPaidOnlineNotificationTest extends TestCase
     public function test_marking_a_renewal_paid_online_dispatches_a_matched_notification_event(): void
     {
         $grave = GraveRecord::factory()->create(['due_date' => '2027-03-01']);
+        $operatorRef = 'cemetery-operator-1';
+        ScopeAssignment::query()->create([
+            'actor_identifier' => $operatorRef,
+            'entity_type' => ScopeEntityType::CEMETERY,
+            'entity_id' => (string) $grave->cemetery_id,
+        ]);
+
         $renewal = app(OpenRenewal::class)($grave);
         $quote = $renewal->quotes()->sole();
 
@@ -74,13 +85,28 @@ final class RenewalPaidOnlineNotificationTest extends TestCase
         $this->assertSame((string) $renewal->getKey(), $notificationEvent->aggregate_id);
         $this->assertNotNull($notificationEvent->consumed_at);
 
-        // `'renewal'` is not yet a recognised aggregate type in
-        // `ProvisionalAggregateNotificationSubjectSource::subjectFor()` — the
-        // same documented gap `renewal.submitted.v1` has. No recipient is
-        // resolved and no delivery is queued; the event is still recorded
-        // (this is the class's own documented `$subject === null` handling,
-        // not a silent drop).
-        $this->assertSame(0, NotificationRecipient::query()->where('event_id', $outboxEvent->getKey())->count());
+        // `ProvisionalAggregateNotificationSubjectSource::renewalSubject()`
+        // now resolves the renewal's grave record's cemetery as a real scope
+        // entity, so the cemetery operator IS a real recipient — the fix
+        // this test proves. There is still no customer recipient: a renewal
+        // has no owner/contact reference anywhere in this codebase (see that
+        // class's `renewal` doc-block section), so `ownerRef` is always
+        // `null` and the Customer column, though targeted on the matrix,
+        // resolves nobody. This is the honest current end state, not a
+        // regression this fix introduces.
+        $recipient = NotificationRecipient::query()->where('event_id', $outboxEvent->getKey())->sole();
+        $this->assertSame($operatorRef, $recipient->recipient_ref);
+        $this->assertSame(RecipientRole::CEMETERY_OPERATOR, $recipient->actor_role);
+
+        // `CEMETERY_OPERATOR` is one of `DispatchNotification::
+        // UNCONDITIONAL_IN_APP_ROLES`, so an in-app record is always written
+        // for it. Matrix cell for "Pengelola TPU/TPS" on "Renewal
+        // paid/verified" is `IN_APP` only (no EMAIL/WA token), so no channel
+        // delivery row is queued alongside it.
+        $this->assertTrue(InAppNotification::query()
+            ->where('event_id', $outboxEvent->getKey())
+            ->where('recipient_ref', $operatorRef)
+            ->exists());
         $this->assertSame(0, NotificationDelivery::query()->where('event_id', $outboxEvent->getKey())->count());
     }
 
