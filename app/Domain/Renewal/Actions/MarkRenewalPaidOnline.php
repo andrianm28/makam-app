@@ -103,12 +103,41 @@ use Illuminate\Support\Facades\DB;
  * on — real money collected, no renewal record updated, the session left
  * stuck, and (before this fix wave) no operator-facing audit row, only a
  * failed background job. `RenewalAuditActions::RENEWAL_PAID_ONLINE_REFUSED`
- * now gives an operator reviewing the audit trail visibility into this
- * happening, rather than only discovering it via a stuck `failed_jobs`
- * entry. That audit row is written OUTSIDE `DB::transaction()` — after it
- * has rolled back — because a row written inside the same transaction that
- * throws would be rolled back right along with it; see `__invoke()`'s own
- * structure below.
+ * is intended to give an operator reviewing the audit trail visibility into
+ * this happening, rather than only discovering it via a stuck `failed_jobs`
+ * entry — but on the ONLY real production path, it currently does not
+ * survive to be visible.
+ *
+ * ---------------------------------------------------------------------------
+ * KNOWN GAP (24 Aug 2026 final-review re-check): the anomaly audit row does
+ * NOT reliably persist in production, despite this class's own `catch`
+ * placement outside its `DB::transaction()`
+ * ---------------------------------------------------------------------------
+ * This Action's own `DB::transaction()` is NOT the outermost one on the real
+ * call path. `ApplyPaymentSettlement::settleRenewal()` calls this Action
+ * from inside `ProcessWebhookEvent`'s own `DB::transaction()`
+ * (`ProcessWebhookEvent.php`), so this class's `DB::transaction()` opens a
+ * SAVEPOINT, not a real `BEGIN`. When this method throws, the `catch` below
+ * does run and does insert the audit row — but that INSERT lands inside the
+ * still-open OUTER transaction, and the exception then propagates out of
+ * `settleRenewal()`/`settle()` uncaught, causing `ProcessWebhookEvent` to
+ * roll back its own transaction — which erases this row along with
+ * everything else. The row only survives when this method is invoked
+ * directly, outside any enclosing transaction (exactly what
+ * `MarkRenewalPaidOnlineTest.php`'s unit test does, which is why that test
+ * is green without proving the production behavior).
+ *
+ * This was found during this branch's final-review re-check (24 Aug 2026)
+ * and deliberately NOT re-fixed in the same pass, per this repo's SDD
+ * process: the final whole-branch review gets exactly one fix wave and one
+ * scoped re-review, and a residual finding at that point is adjudicated
+ * (ruled on or parked), not looped again. This is a real, Important gap —
+ * NOT a financial-correctness issue (no double charge, no state corruption;
+ * the mutation still fails closed exactly as intended) — deferred as a
+ * follow-up: the fix needs to surface this anomaly at a layer that commits,
+ * the way `ProcessWebhookEvent::auditSettlementConflict()` already does for
+ * a sibling case (record-and-return-an-outcome rather than
+ * record-then-throw), not merely move where the `catch` sits.
  *
  * ---------------------------------------------------------------------------
  * `Audit::record()`, not `Audit::wrap()` — deliberately, for the same reason

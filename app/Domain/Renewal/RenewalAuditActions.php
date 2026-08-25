@@ -83,10 +83,14 @@ final class RenewalAuditActions
      * by `Actions\ExpireRenewal` (wired to a real Filament admin action). An
      * operator expiring a renewal while the customer's checkout is still
      * live, followed by the customer completing that payment, is the
-     * concrete race this branch fails closed on. Written OUTSIDE the
-     * transaction that throws (after it has already rolled back), so the
-     * audit row survives even though the mutation attempt does not — see
-     * that Action's own doc block.
+     * concrete race this branch fails closed on. **Known gap (24 Aug 2026
+     * final-review re-check)**: on the real production call path, this row
+     * is written inside a SAVEPOINT nested in `ProcessWebhookEvent`'s own
+     * outer transaction, and does NOT survive that outer transaction's
+     * rollback when the exception propagates — see `MarkRenewalPaidOnline`'s
+     * own doc block for the full trace and the deferred fix direction. The
+     * mutation still fails closed correctly either way; only this audit
+     * row's durability is the open gap.
      *
      * Not on `SensitiveActions::ACTIONS`, for the same reason as
      * `RENEWAL_PAID_ONLINE_DUPLICATE_ARRIVAL` above.
