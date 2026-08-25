@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { addProductAToCart, CATEGORY, PRODUCT_A, PRODUCT_B, placeOrder, RECIPIENT } from './e2e-marketplace-helpers';
 
 /**
  * E2E-MKT (customer half) — the guest marketplace journey: browse, product
@@ -10,67 +11,22 @@ import { expect, test, type Page } from '@playwright/test';
  * authenticated Filament vendor-panel session, a concern shared with the
  * not-yet-built `E2E-ADMIN/VENDOR` suite; see this plan's own header.
  *
- * Real fixture data only — no invented selectors or values:
- *   - Products/vendors/service areas: App\Support\ExampleData\VendorListingExampleData
- *     (seeded once by 2026_08_14_100000_seed_vendors_and_listings.php, present
- *     in every migrated environment — verified directly against the class,
- *     not guessed)
- *   - Product codes:    App\Domain\Marketplace\ProductCode::KNOWN_CODES
- *   - Category labels:  App\Domain\Marketplace\MarketplaceProductCategory::label()
- *   - Field labels/copy: app/Livewire/Public/Marketplace/*.php and their
- *     Blade views, cross-checked against existing Feature tests'
- *     assertSee() calls
+ * Runs under this project's desktop-Chrome viewport only. The mobile-viewport
+ * subset (browse, add-to-cart, checkout + manual payment) lives in
+ * `e2e-marketplace-mobile.spec.ts`, scoped to the `mobile-chromium` project
+ * in `playwright.config.ts` — see that file's own header for why it is a
+ * subset rather than this whole suite re-run under mobile emulation.
+ *
+ * Shared fixtures/helpers (`PRODUCT_A`, `PRODUCT_B`, `CATEGORY`, `RECIPIENT`,
+ * `addProductAToCart`, `placeOrder`) live in `./e2e-marketplace-helpers.ts`,
+ * imported by both this file and `e2e-marketplace-mobile.spec.ts` — see that
+ * module's header comment for why (Playwright forbids one spec file
+ * importing another).
  *
  * No stable DOM `id`s exist on this journey's form fields (unlike booking's
  * `#customer-full-name` etc.) — every locator below is `getByLabel()` or
  * `getByRole()`, matching what's actually in the markup.
  */
-
-const PRODUCT_A = {
-    code: 'FLOWER_BOARD',
-    vendorName: 'Toko Bunga Contoh 1',
-};
-
-const PRODUCT_B = {
-    code: 'FLOWER_PETAL_PACKAGE',
-    vendorName: 'Toko Bunga Contoh 2',
-};
-
-const CATEGORY = {
-    flowers: 'Karangan Bunga',
-    gravestones: 'Batu Nisan',
-    graveCare: 'Perawatan Makam',
-};
-
-const RECIPIENT = {
-    name: 'Contoh Penerima Karangan Bunga',
-    phone: '081298765432',
-    email: 'penerima.contoh@example.test',
-};
-
-async function addProductAToCart(page: Page): Promise<void> {
-    await page.goto(`/marketplace/produk/${PRODUCT_A.code}`);
-    await page.getByRole('button', { name: 'Tambah ke Keranjang' }).click();
-    await page.waitForURL(/\/marketplace\/keranjang$/);
-}
-
-/**
- * Fill the recipient form, select a service area, submit, and wait for the
- * order-placed banner. Covers the "fill recipient form → select area →
- * click Buat pesanan → expect Pesanan diterima" sequence shared by every
- * test that places a straight-through, valid order. Deliberately does NOT
- * cover the phone-overflow validation-failure trick used by the manual
- * payment test's first submission — that state never reaches "Pesanan
- * diterima", so it stays hand-written at its own call site.
- */
-async function placeOrder(page: Page, options: { areaLabel: string }): Promise<void> {
-    await page.getByLabel('Nama penerima').fill(RECIPIENT.name);
-    await page.getByLabel('Nomor HP penerima').fill(RECIPIENT.phone);
-    await page.getByLabel('Email penerima').fill(RECIPIENT.email);
-    await page.getByLabel('Area layanan').selectOption({ label: options.areaLabel });
-    await page.getByRole('button', { name: 'Buat pesanan' }).click();
-    await expect(page.getByText('Pesanan diterima')).toBeVisible();
-}
 
 test.describe('E2E-MKT — browse and category filter', () => {
     test('the catalogue lists real products and category chips filter it', async ({ page }) => {

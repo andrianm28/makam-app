@@ -39,23 +39,29 @@ export default defineConfig({
         {
             name: 'chromium',
             use: { ...devices['Desktop Chrome'] },
-            // Excludes the mobile-only booking spec, which otherwise
-            // matches this project's own default testMatch glob too and
-            // would run a second, desktop-viewport copy of it alongside the
-            // mobile-chromium run below — verified directly: without this
-            // testIgnore, `npx playwright test --list` reported 63 tests
-            // (61 pre-existing + 2 mobile-spec runs) instead of the
-            // expected 62 (61 + exactly 1).
-            testIgnore: /e2e-booking-mobile\.spec\.ts/,
+            // Excludes the mobile-only booking and marketplace specs, which
+            // otherwise match this project's own default testMatch glob too
+            // and would run a second, desktop-viewport copy of them
+            // alongside the mobile-chromium run below — verified directly
+            // for the booking case: without this testIgnore,
+            // `npx playwright test --list` reported 63 tests (61
+            // pre-existing + 2 mobile-spec runs) instead of the expected 62
+            // (61 + exactly 1). Same reasoning applies to
+            // e2e-marketplace-mobile.spec.ts, added 25 Aug 2026.
+            testIgnore: /e2e-(booking|marketplace)-mobile\.spec\.ts/,
         },
         {
-            // Scoped via testMatch so this project runs ONLY the mobile
-            // booking spec, not the entire tests/browser/ tree a second
-            // time — a bare second project here would double every
-            // existing test's CI runtime for no new coverage.
+            // Scoped via testMatch so this project runs ONLY the mobile-only
+            // specs, not the entire tests/browser/ tree a second time — a
+            // bare second project here would double every existing test's
+            // CI runtime for no new coverage. e2e-marketplace-mobile.spec.ts
+            // (added 25 Aug 2026) is itself a mobile-focused SUBSET of
+            // e2e-marketplace.spec.ts's scenarios (browse, add-to-cart,
+            // checkout + manual payment), not that whole suite re-run under
+            // mobile emulation — see that file's own header comment for why.
             name: 'mobile-chromium',
             use: { ...devices['Pixel 5'] },
-            testMatch: /e2e-booking-mobile\.spec\.ts/,
+            testMatch: /e2e-(booking|marketplace)-mobile\.spec\.ts/,
         },
     ],
 });
