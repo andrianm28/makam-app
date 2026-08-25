@@ -133,6 +133,8 @@ real, already-merged commit behind the four raised rows' evidence; nothing new w
 pass. See the section D entry below for the method-level trail. The v0.18 note above is kept
 verbatim.
 
+**v0.20 — 25 Aug 2026, ADM-070 raised.** `App\Filament\Admin\Resources\PaymentVerifications\PaymentVerificationsResource` (branch `feat/adm-070-payment-verifications-admin-view`, commit `01e2155`, not yet merged/no PR opened yet) closes the GET/view gap the v0.19 note above confirmed — a real, read-only Filament admin resource (index + view only, no create/edit) gated by the same `PaymentActionAuthorizer` contract the existing manual-verification write path already uses. **ADM-070 is raised to `Covered`** on `tests/Feature/Filament/Admin/PaymentVerifications/PaymentVerificationsResourceAccessTest.php` (10 test methods, 14 executions with its role data provider) and `PaymentVerificationsTableTest.php` (5 tests), both green against real Postgres 18 in Task 1's own local run (19/19, 44 assertions) — not yet an actual CI run, since this branch has no PR open yet. See the section D entry below for the method-level trail. This does **not** touch, raise, or otherwise affect CARE-SUB-02 or CARE-SUB-06, whose partial-evidence gaps remain exactly as before. The v0.19 note above is kept verbatim.
+
 ## A. RKS authority
 
 | RKS | Capability | Spec | Gate/control |
@@ -509,7 +511,7 @@ Each of the five rows the v0.18 note above left open (CARE-SUB-03, CARE-SUB-04, 
 
 **Scope of the claim.** This correction is scoped narrowly: it does **not** touch, raise, or otherwise affect ADM-090, ADM-100, or any row not named above.
 
-### ADM-070 raised — 25 Aug 2026
+### ADM-070 raised — 25 Aug 2026 (v0.20)
 
 The gap the entry immediately above confirmed — no GET/view surface anywhere for payment/transaction references, only the existing POST-only decide endpoint — is closed. `App\Filament\Admin\Resources\PaymentVerifications\PaymentVerificationsResource` (branch `feat/adm-070-payment-verifications-admin-view`, commit `01e2155`, not yet merged/no PR opened yet) is a real, read-only Filament admin resource: `getPages()` registers only `index`/`view`, never `create`/`edit`. It is gated by `App\Platform\Payment\Contracts\PaymentActionAuthorizer` (`FinanceOrRestrictedAdminPaymentAuthorizer`) — the same contract the existing manual-verification write path (`VerifyManualPaymentController`/`VerifyManualPayment`) already uses, reused directly rather than a new read-scope authorizer, since `payment_verifications` has no scopeable column. `canAccess()`, `getAuthorizationResponse()`, and `getEloquentQuery()` all fail closed on refusal (`getEloquentQuery()` `abort(403)`s rather than silently falling through to an unfiltered query). The write/decide path itself is untouched by this resource — it stays exactly where it was, a plain controller route, not a Filament panel page — this resource only adds visibility.
 
