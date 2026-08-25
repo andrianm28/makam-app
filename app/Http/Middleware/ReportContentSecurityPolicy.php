@@ -117,8 +117,9 @@ use Symfony\Component\HttpFoundation\Response;
  * report-only posture, which blocked nothing at all.
  *
  * ---------------------------------------------------------------------------
- * `unsafe-inline` on `style-src` — Filament's own JS mutates the `style`
- * ATTRIBUTE, which a nonce cannot cover at all
+ * `style-src-attr 'unsafe-inline'` — Filament's own JS mutates the `style`
+ * ATTRIBUTE, and a bare `'unsafe-inline'` on `style-src` is NOT enough to
+ * permit that while a nonce is also present
  * ---------------------------------------------------------------------------
  * Real enforcement (this file's own SEC-08 flip) surfaced a second,
  * distinct Filament/Alpine breakage the report-only period never caught,
@@ -132,34 +133,54 @@ use Symfony\Component\HttpFoundation\Response;
  * $store.sidebar.groupIsCollapsed(label) }` markup the `unsafe-eval` note
  * above already covers) set CSS directly via `element.style.*`, i.e. they
  * write the `style="..."` HTML ATTRIBUTE at runtime, not a `<style>`
- * element or `<link rel=stylesheet>`. A nonce only has meaning for `<style>`
- * elements and stylesheets the SERVER emits with a `nonce="..."` attribute
- * attached — the CSP spec's nonce-source has no attribute-level form at
- * all, so `'nonce-{$nonce}'` on `style-src` was NEVER able to cover this,
- * with or without enforcement. Confirmed via a real CI browser-suite
+ * element or `<link rel=stylesheet>`. Confirmed via a real CI browser-suite
  * failure (run 32871721430, `e2e-renewal-external.spec.ts`, all 3 attempts,
- * deterministic not flaky): the blocked mutation throws inside Alpine's
- * page-wide boot (`Cannot read properties of null (reading 'includes')`),
- * which — exactly like the `unsafe-eval`-less attempt described above —
- * takes down every OTHER directive on the page too, not just style. The
- * admin sidebar rendered as a broken full-viewport overlay, pushing real
- * page content (e.g. the renewal-order list's "Lihat" link) outside the
- * viewport.
+ * deterministic not flaky): the blocked mutation left the admin sidebar
+ * rendered as a broken full-viewport overlay, pushing real page content
+ * (e.g. the renewal-order list's "Lihat" link) outside the viewport.
  *
- * This does not add a third-party origin: `style-src` stays
- * `'self' 'nonce-{$nonce}' 'unsafe-inline'` — same origin list as before,
- * plus this one keyword. `'unsafe-inline'` for style only permits setting
- * CSS property values through the DOM the page's own script already
- * controls; it is not `script-src`'s `'unsafe-inline'` (which this policy
- * still does NOT carry — see `script-src` above) and grants no script
- * execution path of its own. Some browsers ignore a directive's
- * `'unsafe-inline'` for actual `<style>` ELEMENTS when a nonce is also
- * present (a CSP backward-compatibility fallback for older browsers) — but
- * that fallback has no attribute-level analogue, since nonce-source was
- * never attribute-addressable to begin with. So regardless of that
- * elements-only fallback, this keyword's real, load-bearing effect here is
- * exactly the one this fix needs: permitting `element.style.*` attribute
- * mutation, which nothing else in this directive can express.
+ * FIRST ATTEMPT AT THIS FIX WAS WRONG, disproven by the real fix attempt's
+ * own CI run (32873855280) rather than assumed correct from spec-reading:
+ * simply adding `'unsafe-inline'` to the existing `style-src 'self'
+ * 'nonce-{$nonce}'` line did NOT work. The real Chromium console message
+ * captured in that run's Playwright trace says exactly why: "Applying
+ * inline style violates the following Content Security Policy directive
+ * 'style-src ... 'unsafe-inline''. Note that 'unsafe-inline' is ignored if
+ * either a hash or nonce value is present in the source list." The
+ * documented "nonce present → `'unsafe-inline'` is ignored" backward-
+ * compatibility fallback is NOT scoped to `<style>` ELEMENTS only, as this
+ * file's previous version of this note assumed — it applies to the whole
+ * `style-src` source list, attribute checks included, because the fallback
+ * is a property of the SOURCE LIST being matched, not of what kind of
+ * "does this comply" check consults it. Adding `'unsafe-inline'` to a
+ * source list that already carries a nonce is therefore a complete no-op
+ * in every nonce-aware browser, for both elements and attributes — proven
+ * live, not merely re-derived from the spec text after the fact.
+ *
+ * The actual fix is CSP3's `style-src-attr`/`style-src-elem` split: when
+ * both are declared explicitly, a nonce-aware browser stops falling back to
+ * `style-src` for element/attribute checks and consults each directive's
+ * OWN source list instead — so `style-src-attr` can carry `'unsafe-inline'`
+ * with NO nonce in the same list, where the "ignored if nonce present"
+ * fallback simply does not trigger, while `style-src-elem` keeps the nonce
+ * for Livewire's server-emitted `<style>` tag (see the "Why a nonce, not
+ * 'unsafe-inline'" section above). `style-src` itself is left intact as the
+ * fallback for the (now vanishingly rare) browser with no CSP3 support for
+ * `style-src-attr`/`style-src-elem` at all — such a browser ignores those
+ * two directives as unrecognised and uses `style-src`'s own list for
+ * everything, same as before this fix; it is not the mechanism modern
+ * evergreen browsers (which this Playwright suite and this app's real
+ * traffic both run) actually use.
+ *
+ * None of this adds a third-party origin: `style-src-attr` is
+ * `'unsafe-inline'` alone (no origin list — attribute style values are not
+ * fetched from anywhere, so there is nothing for an origin to scope), and
+ * `style-src-elem` carries the exact same `'self' 'nonce-{$nonce}'` the
+ * combined `style-src` line already had. `'unsafe-inline'` for style only
+ * permits setting CSS property VALUES through the DOM the page's own
+ * script already controls; it is not `script-src`'s `'unsafe-inline'`
+ * (which this policy still does NOT carry anywhere — see `script-src`
+ * above) and grants no script execution path of its own.
  */
 final class ReportContentSecurityPolicy
 {
@@ -184,13 +205,29 @@ final class ReportContentSecurityPolicy
             // selectively. Still nonce-scoped, still no 'unsafe-inline',
             // still no third-party script origin.
             "script-src 'self' 'nonce-{$nonce}' 'unsafe-eval'",
-            // 'unsafe-inline' — see this class's own doc block for exactly
-            // why: Filament's bundled Alpine mutates the `style` ATTRIBUTE
-            // at runtime (`element.style.*`), which a nonce cannot cover —
-            // nonce-source has no attribute-level form in the CSP spec.
-            // Still no third-party style origin: 'self' plus the nonce plus
-            // this one keyword.
+            // Kept as the pre-CSP3 fallback for a browser that does not
+            // recognise style-src-attr/style-src-elem below (which then
+            // fall back to THIS line for both elements and attributes).
+            // 'unsafe-inline' here is a genuine no-op in any nonce-aware
+            // browser (nonce present in this same list — see this class's
+            // own doc block for the real Chromium console message that
+            // proved this the hard way), so it does nothing for the
+            // browsers this app actually needs to support; it costs
+            // nothing to leave for the legacy fallback case either.
             "style-src 'self' 'nonce-{$nonce}' 'unsafe-inline'",
+            // style-src-elem/style-src-attr — see this class's own doc
+            // block for exactly why a bare 'unsafe-inline' on style-src
+            // above does NOT permit Filament's Alpine-driven
+            // `element.style.*` attribute mutation while a nonce is also
+            // present: CSP3's fetch-directive split is the only way to give
+            // attributes an 'unsafe-inline' source list that has no nonce
+            // in it (so the "ignored if nonce present" fallback never
+            // triggers) while elements keep the nonce Livewire's injected
+            // `<style>` tag still needs. No third-party origin either way —
+            // style-src-attr has no origin list at all, and style-src-elem
+            // carries the exact same 'self' + nonce style-src already had.
+            "style-src-elem 'self' 'nonce-{$nonce}'",
+            "style-src-attr 'unsafe-inline'",
             // https://ui-avatars.com — Filament's default
             // `AvatarProviders\UiAvatarsProvider` (no custom
             // `->defaultAvatarProvider()` is configured on either panel)

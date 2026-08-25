@@ -81,16 +81,21 @@ final class ReportContentSecurityPolicyTest extends TestCase
     }
 
     /**
-     * `style-src` stays free of `unsafe-eval` — that gap is script-only
-     * (Alpine/Livewire directive parsing), not a blanket relaxation of the
-     * whole policy. `style-src` DOES now carry `'unsafe-inline'` — see
-     * `test_the_policy_allows_unsafe_inline_style_for_filaments_attribute_level_style_mutation()`
-     * below and the middleware's own doc block (SEC-08 CSP-enforcement
-     * follow-up) for exactly why.
+     * `style-src` (the base/fallback directive, kept for browsers with no
+     * CSP3 style-src-attr/style-src-elem support) stays free of
+     * `unsafe-eval` — that gap is script-only (Alpine/Livewire directive
+     * parsing), not a blanket relaxation of the whole policy. `style-src`
+     * DOES now also carry `'unsafe-inline'`, but see
+     * `test_style_src_attr_allows_unsafe_inline_with_no_nonce_to_actually_take_effect()`
+     * below for why that alone is NOT the real fix (it is a documented
+     * Chromium no-op whenever a nonce is also present in the same list) and
+     * the middleware's own doc block (SEC-08 CSP-enforcement follow-up) for
+     * the full story, including the real Chromium console message that
+     * disproved the first attempt.
      *
      * RENAMED from `test_style_src_does_not_carry_unsafe_eval`, which also
      * asserted `style-src` had no `unsafe-inline` — that assertion is now
-     * the opposite of correct and is pinned by the new test instead.
+     * the opposite of correct and is pinned by the tests below instead.
      */
     public function test_style_src_does_not_carry_unsafe_eval(): void
     {
@@ -99,31 +104,65 @@ final class ReportContentSecurityPolicyTest extends TestCase
         $policy = (string) $response->headers->get('Content-Security-Policy');
         $directives = array_map('trim', explode(';', $policy));
 
-        $styleSrc = collect($directives)->first(fn (string $d): bool => str_starts_with($d, 'style-src'));
+        $styleSrc = collect($directives)->first(fn (string $d): bool => $d === 'style-src' || str_starts_with($d, 'style-src '));
 
         $this->assertNotNull($styleSrc);
         $this->assertStringNotContainsString('unsafe-eval', $styleSrc);
     }
 
     /**
-     * `unsafe-inline` in `style-src`, deliberately — see the middleware's
-     * own doc block for exactly why (Filament's bundled Alpine mutates the
-     * `style` ATTRIBUTE at runtime via `element.style.*`, which a nonce
-     * cannot cover — nonce-source has no attribute-level form in the CSP
-     * spec). Pinned here, mirroring
+     * The REAL fix, pinned precisely — see the middleware's own doc block
+     * for the full story: a bare `'unsafe-inline'` alongside a nonce on the
+     * same `style-src` list is a documented no-op in every nonce-aware
+     * browser ("'unsafe-inline' is ignored if either a hash or nonce value
+     * is present in the source list" — the exact real Chromium console
+     * message that disproved this PR's first attempt, captured from a live
+     * CI Playwright trace, run 32873855280). `style-src-attr` must carry
+     * `'unsafe-inline'` with NO nonce in its own list for the "ignored if
+     * nonce present" fallback to never trigger — that is what actually
+     * permits Filament's Alpine-driven `element.style.*` attribute
+     * mutation. Pinned here, mirroring
      * `test_the_policy_allows_unsafe_eval_for_filaments_alpine_usage()`
-     * above, so a future attempt to remove it doesn't silently reintroduce
-     * the real regression this fixed: a live CI Playwright run
-     * (32871721430) showed the admin sidebar rendering as a broken
-     * full-viewport overlay once this was missing under enforcement.
+     * above, so a future attempt to "simplify" this back into a bare
+     * `style-src 'unsafe-inline'` doesn't silently reintroduce the real
+     * regression this fixed: a live CI Playwright run (32871721430, then
+     * confirmed still broken by the first fix attempt in 32873855280)
+     * showed the admin sidebar rendering as a broken full-viewport overlay,
+     * pushing the renewal-order list's "Lihat" link outside the viewport.
      */
-    public function test_the_policy_allows_unsafe_inline_style_for_filaments_attribute_level_style_mutation(): void
+    public function test_style_src_attr_allows_unsafe_inline_with_no_nonce_to_actually_take_effect(): void
     {
         $response = $this->get('/');
 
         $policy = (string) $response->headers->get('Content-Security-Policy');
+        $directives = array_map('trim', explode(';', $policy));
 
-        $this->assertMatchesRegularExpression("/style-src [^;]*'unsafe-inline'/", $policy);
+        $styleSrcAttr = collect($directives)->first(fn (string $d): bool => str_starts_with($d, 'style-src-attr'));
+
+        $this->assertSame("style-src-attr 'unsafe-inline'", $styleSrcAttr, 'style-src-attr must carry unsafe-inline with no nonce, or the CSP "ignored if nonce present" fallback silently defeats it.');
+    }
+
+    /**
+     * `style-src-elem` — the CSP3 counterpart to
+     * `test_style_src_attr_allows_unsafe_inline_with_no_nonce_to_actually_take_effect()`
+     * above: elements (Livewire's server-emitted `<style>` tag) keep the
+     * nonce, exactly as `style-src` carried before this fix, so splitting
+     * the directive doesn't regress the nonce-scoping `test_the_policy_
+     * carries_a_nonce_shared_between_script_src_and_style_src()` below
+     * already proves for the combined line.
+     */
+    public function test_style_src_elem_keeps_the_nonce_with_no_unsafe_inline(): void
+    {
+        $response = $this->get('/');
+
+        $policy = (string) $response->headers->get('Content-Security-Policy');
+        $directives = array_map('trim', explode(';', $policy));
+
+        $styleSrcElem = collect($directives)->first(fn (string $d): bool => str_starts_with($d, 'style-src-elem'));
+
+        $this->assertNotNull($styleSrcElem);
+        $this->assertMatchesRegularExpression("/^style-src-elem 'self' 'nonce-[A-Za-z0-9]{40}'$/", $styleSrcElem);
+        $this->assertStringNotContainsString('unsafe-inline', $styleSrcElem);
     }
 
     public function test_the_policy_carries_a_nonce_shared_between_script_src_and_style_src(): void
