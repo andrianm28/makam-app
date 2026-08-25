@@ -95,8 +95,33 @@ final class HomePageRouteTest extends TestCase
         $response = $this->get('/');
 
         $response->assertOk();
-        // AC3 — the hero's hand-written primary CTA (see home-page.blade.php's
-        // own doc block for why it is not <x-mk.button>).
+        // AC3 — the hero's single primary CTA, rendered via <x-mk.hero>'s
+        // `cta` prop (brand visual refresh Phase 2; see
+        // test_hero_section_uses_the_mk_hero_component_with_a_real_image
+        // below for the component-identity assertion).
+        $response->assertSee('Pesan Makam');
+        $response->assertSee('href="/pemesanan-makam"', false);
+    }
+
+    /**
+     * Brand visual refresh Phase 2
+     * (docs/superpowers/plans/2026-08-25-brand-visual-refresh-phase2-homepage.md
+     * Task 1) — proves the hero renders via the real `<x-mk.hero>` component
+     * (its distinguishing root class), not just that the old hand-written
+     * markup's text happens to still appear. Also asserts the hero's image
+     * renders — the `src` is a PLACEHOLDER path
+     * (public/images/hero/cemetery-garden-daylight.jpg does not exist yet in
+     * this repo); the final binary photo file is a deliberate follow-up once
+     * the project owner picks one of the sourced candidates (see this PR's
+     * description). Wiring, tests, and verification are real and complete now.
+     */
+    public function test_hero_section_uses_the_mk_hero_component_with_a_real_image(): void
+    {
+        $response = $this->get('/');
+
+        $response->assertOk();
+        $response->assertSee('relative overflow-hidden rounded-lg', false);
+        $response->assertSee('src="'.asset('images/hero/cemetery-garden-daylight.jpg').'"', false);
         $response->assertSee('Pesan Makam');
         $response->assertSee('href="/pemesanan-makam"', false);
     }

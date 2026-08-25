@@ -128,38 +128,35 @@
         </div>
     @endif
 
-    {{-- Section 2: Hero — full-bleed bg-primary-50 band (--mk-surface-warm),
-         same pattern the footer uses. Eyebrow + short bg-secondary-400 rule
-         is the page's one sanctioned Leaf-as-decorative-accent moment
-         (design-system.md §1.2(b): 300-400 permitted as "decorative
-         rules/icons"). h1 promoted to text-4xl/text-5xl — the scale tokens
-         already label these "hero mobile"/"hero desktop" (§1.4); this is
-         the first place on the page that actually uses them. Dual CTA
-         (primary "Pesan Makam" + secondary "Lihat TPU & TPS") stays inside
-         §2.3's "exactly one primary action" — only one is `variant=primary`. --}}
-    <section aria-labelledby="hero-heading" class="bg-primary-50 py-8 lg:py-12">
-        <div class="mx-auto max-w-content px-4 md:px-6 lg:px-8">
-            <div class="mx-auto max-w-prose space-y-4 text-center">
-                <p class="text-sm font-medium uppercase tracking-wide text-primary-700">Makam.co.id</p>
-                <div class="mx-auto h-1 w-12 rounded-sm bg-secondary-400" aria-hidden="true"></div>
-                <h1 id="hero-heading" class="text-4xl font-semibold tracking-tight text-neutral-900 lg:text-5xl">
-                    Urus Pemakaman dengan Tenang, dalam Satu Platform
-                </h1>
-                <p class="text-base text-neutral-600 md:text-lg">
-                    Pesan makam, jelajahi layanan pemakaman, dan urus perpanjangan masa sewa makam secara online. Setiap
-                    langkah tercatat jelas, dari pemesanan hingga konfirmasi.
-                </p>
-                <div class="flex flex-col items-center justify-center gap-3 pt-2 sm:flex-row">
-                    <x-mk.button variant="primary" size="lg" href="/pemesanan-makam">
-                        Pesan Makam
-                    </x-mk.button>
-                    <x-mk.button variant="secondary" size="lg" :href="route('cemeteries.index')">
-                        Lihat TPU &amp; TPS
-                    </x-mk.button>
-                </div>
-            </div>
-        </div>
-    </section>
+    {{-- Section 2: Hero — <x-mk.hero> (brand visual refresh Phase 2,
+         docs/superpowers/specs/2026-08-21-brand-visual-refresh-design.md §4.2).
+         Single primary CTA per §2.3; the prior secondary "Lihat TPU & TPS"
+         button moved into Section 3's card grid area as a plain text link
+         below the cards (see below) rather than competing with the hero's
+         one sanctioned primary action. The eyebrow label and secondary-accent
+         rule the old hand-written markup had are dropped, not relocated —
+         <x-mk.hero> has no slot for them and design-system.md's hero
+         typography row does not call for an eyebrow.
+
+         `image` is a PLACEHOLDER path: public/images/hero/cemetery-garden-
+         daylight.jpg does not exist in this repo yet. The real file is a
+         deliberate follow-up once the project owner picks one of the sourced
+         candidate photos (see this change's PR description) — see
+         docs/design/design-system.md §2.2 (real cemetery/garden, daylight, no
+         people in grief) and the misattribution precedent in
+         database/migrations/2026_08_24_100000_backfill_photo_and_maps_url_for_real_cemeteries.php's
+         doc block (why the photo must not depict one specific, identifiable
+         real cemetery). --}}
+    <x-mk.hero
+        image="{{ asset('images/hero/cemetery-garden-daylight.jpg') }}"
+        heading="Urus Pemakaman dengan Tenang, dalam Satu Platform"
+        :cta="['label' => 'Pesan Makam', 'href' => '/pemesanan-makam']"
+    >
+        <p class="text-base text-neutral-600 md:text-lg">
+            Pesan makam, jelajahi layanan pemakaman, dan urus perpanjangan masa sewa makam secara online. Setiap
+            langkah tercatat jelas, dari pemesanan hingga konfirmasi.
+        </p>
+    </x-mk.hero>
 
     {{-- Section 3: four service cards — AC1's exact order, from
          HomePage::PRIMARY_MENUS (see that class's own doc block for why
@@ -200,6 +197,11 @@
                 </li>
             @endforeach
         </ul>
+        <p class="mt-4 text-center text-sm text-neutral-600">
+            <a href="{{ route('cemeteries.index') }}" class="font-medium text-primary-700 underline underline-offset-2">
+                Lihat semua TPU &amp; TPS
+            </a>
+        </p>
     </section>
 
     {{-- Section 4: Cara kerja singkat — a simplified summary of
