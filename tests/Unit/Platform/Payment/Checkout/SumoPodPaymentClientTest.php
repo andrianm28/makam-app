@@ -303,4 +303,121 @@ final class SumoPodPaymentClientTest extends TestCase
 
         Http::assertNothingSent();
     }
+
+    /**
+     * `fetchStatus()` — the reconciliation half added for
+     * `Actions\ReconcilePaymentSession`. The endpoint path is an inference
+     * from REST convention (see `SumoPodPaymentClient::STATUS_PATH`'s doc
+     * block); this test pins the inferred contract, not a confirmed one.
+     */
+    public function test_fetch_status_gets_the_status_endpoint_and_returns_the_provider_record(): void
+    {
+        Http::fake([
+            'api-pay-sandbox.sumopod.com/api/v1/payments/uuid-1' => Http::response([
+                'payment_id' => 'uuid-1',
+                'order_id' => 'MK-2026-ABCDEFGH',
+                'amount' => 900_000,
+                'fee' => 6_600,
+                'net_amount' => 893_400,
+                'status' => 'completed',
+                'payment_method' => 'qris',
+                'completed_at' => '2026-08-25T09:30:00+00:00',
+            ], 200),
+        ]);
+
+        $result = $this->client()->fetchStatus('uuid-1');
+
+        $this->assertSame('uuid-1', $result->paymentId);
+        $this->assertSame('MK-2026-ABCDEFGH', $result->orderId);
+        $this->assertSame('completed', $result->status);
+        $this->assertSame(90_000_000, $result->amountMinor);
+        $this->assertSame(660_000, $result->feeMinor);
+        $this->assertSame(89_340_000, $result->netAmountMinor);
+        $this->assertSame('qris', $result->paymentMethod);
+        $this->assertInstanceOf(CarbonImmutable::class, $result->completedAt);
+        $this->assertSame('2026-08-25 09:30:00', $result->completedAt->format('Y-m-d H:i:s'));
+
+        Http::assertSent(function (Request $request): bool {
+            return $request->method() === 'GET'
+                && $request->url() === self::PROVIDER_URL.'/api/v1/payments/uuid-1'
+                && $request->header('X-Api-Key') === ['test-key'];
+        });
+    }
+
+    public function test_fetch_status_returns_a_pending_status_with_no_completed_at(): void
+    {
+        Http::fake([
+            'api-pay-sandbox.sumopod.com/api/v1/payments/uuid-pending' => Http::response([
+                'payment_id' => 'uuid-pending',
+                'order_id' => 'MK-2026-PENDING1',
+                'amount' => 100_000,
+                'fee' => 1_000,
+                'net_amount' => 99_000,
+                'status' => 'pending',
+            ], 200),
+        ]);
+
+        $result = $this->client()->fetchStatus('uuid-pending');
+
+        $this->assertSame('pending', $result->status);
+        $this->assertNull($result->completedAt);
+        $this->assertNull($result->paymentMethod);
+    }
+
+    public function test_fetch_status_fails_closed_when_the_key_is_unset(): void
+    {
+        Http::fake();
+
+        $this->expectException(PaymentCheckoutUnavailableException::class);
+        $this->client(['api_key' => ''])->fetchStatus('uuid-1');
+
+        Http::assertNothingSent();
+    }
+
+    public function test_fetch_status_fails_closed_for_a_blank_payment_id(): void
+    {
+        Http::fake();
+
+        $this->expectException(PaymentCheckoutProviderException::class);
+        $this->client()->fetchStatus('   ');
+
+        Http::assertNothingSent();
+    }
+
+    public function test_fetch_status_surfaces_provider_errors(): void
+    {
+        Http::fake(['*' => Http::response(['error' => 'not found'], 404)]);
+
+        $this->expectException(PaymentCheckoutProviderException::class);
+        $this->client()->fetchStatus('uuid-missing');
+    }
+
+    public function test_fetch_status_surfaces_a_connection_failure_as_a_provider_error(): void
+    {
+        Http::fake([
+            'api-pay-sandbox.sumopod.com/api/v1/payments/uuid-1' => function (): void {
+                throw new ConnectionException('timed out');
+            },
+        ]);
+
+        $this->expectException(PaymentCheckoutProviderException::class);
+        $this->client()->fetchStatus('uuid-1');
+    }
+
+    public function test_fetch_status_rejects_a_response_missing_a_required_field(): void
+    {
+        Http::fake([
+            'api-pay-sandbox.sumopod.com/api/v1/payments/uuid-1' => Http::response([
+                'payment_id' => 'uuid-1',
+                'order_id' => 'MK-2026-ABCDEFGH',
+                'amount' => 900_000,
+                'fee' => 6_600,
+                // 'net_amount' missing.
+                'status' => 'completed',
+            ], 200),
+        ]);
+
+        $this->expectException(PaymentCheckoutProviderException::class);
+        $this->client()->fetchStatus('uuid-1');
+    }
 }
