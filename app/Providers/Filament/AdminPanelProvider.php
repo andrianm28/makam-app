@@ -154,6 +154,28 @@ class AdminPanelProvider extends PanelProvider
             ->default()
             ->login()
             ->colors($this->filamentColors())
+            // design-system.md §7.1/OQ-07: dark mode is explicitly OUT of
+            // MVP scope ("No dark mode until OQ-07 is resolved" / "Add
+            // `dark:` utilities" is listed as a ❌ anti-pattern) — it has no
+            // required states in screen-inventory.md and no test coverage.
+            // Filament defaults `hasDarkMode(true)` with
+            // `defaultThemeMode(ThemeMode::System)`, so on a browser/OS with
+            // a dark colour-scheme preference the panel silently rendered
+            // dark: every custom admin Blade view under
+            // resources/views/filament/admin/ (feature-gate-admin,
+            // finance-reports, outgoing-payments-report, etc.) only defines
+            // light-oriented `text-neutral-700/800/900`, with no `dark:`
+            // pairing anywhere (none may exist while OQ-07 stays open), so
+            // that text rendered as dark-gray-on-near-black — confirmed via
+            // a live screenshot of Gerbang Fitur's "ID"/"Kapabilitas"
+            // columns during this session's UAT pass. `->darkMode(false)`
+            // is Filament's own documented way to force light theme
+            // unconditionally (Panel/Concerns/HasDarkMode.php) and matches
+            // the design system's stance without adding a single `dark:`
+            // class to any Blade view — the actual gap is "this panel
+            // should never enter dark mode at all," not "every view is
+            // missing its dark-mode pairing."
+            ->darkMode(false)
             // ADR-0034: official mark; stacked lockup reads badly at 2rem, so
             // the panel carries the mark — a horizontal lockup is OQ-12 scope.
             ->brandLogo(asset('brand/mark-96.png'))

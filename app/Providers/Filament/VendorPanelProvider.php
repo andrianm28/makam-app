@@ -56,6 +56,13 @@ final class VendorPanelProvider extends PanelProvider
             ->path('vendor')
             ->login()
             ->colors($this->filamentColors())
+            // design-system.md §7.1/OQ-07: dark mode is explicitly OUT of
+            // MVP scope — see AdminPanelProvider's identical fix for the
+            // full explanation. Filament's `defaultThemeMode(System)`
+            // default means this panel silently rendered dark on a
+            // dark-preference browser too, with the same unpaired
+            // `text-neutral-*` contrast problem.
+            ->darkMode(false)
             // ADR-0034: official mark; stacked lockup reads badly at 2rem, so
             // the panel carries the mark — a horizontal lockup is OQ-12 scope.
             ->brandLogo(asset('brand/mark-96.png'))
