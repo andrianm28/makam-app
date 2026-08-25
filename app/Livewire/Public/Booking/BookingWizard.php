@@ -29,7 +29,6 @@ use App\Platform\FeatureGate\ModeResolver;
 use App\Platform\IdentityAccess\ActorContextResolver;
 use App\Platform\Payment\Actions\OpenPaymentSession;
 use App\Platform\Payment\Actions\OpenPaymentSessionCommand;
-use App\Platform\Payment\Actions\ReconcilePaymentSession;
 use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutProviderException;
 use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutUnavailableException;
 use App\Platform\Payment\Exceptions\PaymentSessionOpeningDeniedException;
@@ -42,7 +41,6 @@ use App\Platform\SiteSettings\Models\SiteSetting;
 use App\Platform\SiteSettings\SettingsService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Livewire\Attributes\Locked;
@@ -719,33 +717,30 @@ final class BookingWizard extends Component
      * from a URL.
      *
      * ---------------------------------------------------------------------------
-     * Reconciliation, added for the same reason
-     * `Actions\ReconcilePaymentSession`'s class doc block names: the ONLY way
-     * a session left `AWAITING_PAYMENT` used to be a delivered webhook, and a
-     * real incident (25 Aug 2026) showed that single path can silently fail.
-     * When this render finds a session still `AWAITING_PAYMENT` — meaning the
-     * customer's browser has come back to this page, the one moment this
-     * class has a reliable, PHP-session-scoped reference to WHICH session to
-     * check (never the URL — the query-string-based lookup
-     * `Http\Controllers\PaymentReturnController` exposes is a display-only
-     * selector guarded by its own structural test, `PaymentReturnRouteTest`,
-     * against ever containing a write; reconciliation belongs here, in the
-     * component that already holds the session id from its own stored PHP
-     * session, not there) — it asks the provider directly via
-     * `ReconcilePaymentSession`, which settles through the exact same path a
-     * real webhook uses if the provider reports a terminal outcome. This is
-     * NOT "mark paid from browser return URL": the browser triggers WHEN the
-     * check runs, never WHAT it concludes — that answer comes only from the
-     * provider's own authenticated API response.
+     * No provider status-lookup API exists — confirmed 25 Aug 2026
+     * ---------------------------------------------------------------------------
+     * A same-day reconciliation feature (`Actions\ReconcilePaymentSession`,
+     * `Jobs\ReconcileStalePaymentSessionsJob`, and an earlier version of this
+     * method) was built and briefly deployed to poll SumoPod for a session's
+     * real status as a fallback when the webhook is delayed or fails. It was
+     * reverted the same day: SumoPod's Managed Payment product has no
+     * GET-payment-status endpoint at all — confirmed directly by the
+     * merchant's own dashboard support, not merely undocumented. The
+     * "fetchStatus" endpoint the reverted code called returned a real HTTP
+     * 404 in production and was failing on every booking-wizard render for a
+     * session still `AWAITING_PAYMENT`, adding ~400-500ms of real customer-
+     * facing latency per render until reverted.
      *
-     * Throttled per session (`self::RECONCILIATION_COOLDOWN_SECONDS`) so
-     * Livewire's normal re-render cadence cannot turn every keystroke on this
-     * page into an outbound provider API call. A failed reconciliation
-     * attempt (the provider unreachable, a malformed response) is swallowed
-     * here and never surfaces as a page error — the scheduled sweep
-     * (`Jobs\ReconcileStalePaymentSessionsJob`) is the durable fallback, and
-     * the customer should never see a checkout page break because a
-     * best-effort freshness check failed.
+     * SumoPod's own confirmation mechanisms are exactly two: the webhook
+     * (`payment.completed`/`failed`/`expired`, `Http\Controllers\
+     * WebhookController`, the only writer via `Actions\
+     * ApplyPaymentSettlement`) and the browser return URL — which this
+     * codebase deliberately never trusts for state (`Http\Controllers\
+     * PaymentReturnController`'s own doc block, AC4: "never mark paid from
+     * browser return URL"). SumoPod's dashboard can resend a failed webhook
+     * delivery from its own Webhooks tab; there is no code-side substitute
+     * for that pending a real staff-facing stale-session report (a genuinely
+     * useful follow-up, not built here).
      *
      * @return array{state: SessionState|null, link_url: string|null}
      */
@@ -767,45 +762,10 @@ final class BookingWizard extends Component
             return ['state' => null, 'link_url' => null];
         }
 
-        if (SessionState::tryFrom((string) $session->state) === SessionState::AwaitingPayment) {
-            $session = $this->reconcileOnceWithCooldown($session) ?? $session;
-        }
-
         return [
             'state' => SessionState::tryFrom((string) $session->state),
             'link_url' => is_string($stored['link_url'] ?? null) ? $stored['link_url'] : null,
         ];
-    }
-
-    private const int RECONCILIATION_COOLDOWN_SECONDS = 20;
-
-    /**
-     * Runs `ReconcilePaymentSession` at most once per
-     * `RECONCILIATION_COOLDOWN_SECONDS` for a given session, and returns the
-     * session freshly re-read when reconciliation ran (so a settlement that
-     * just happened is reflected in THIS render, not the next one) — `null`
-     * when the cooldown skipped the check or the attempt failed, telling the
-     * caller to keep using the row it already has.
-     */
-    private function reconcileOnceWithCooldown(PaymentSession $session): ?PaymentSession
-    {
-        $cooldownKey = 'payment_reconcile_cooldown:'.$session->getKey();
-
-        if (Cache::has($cooldownKey)) {
-            return null;
-        }
-
-        Cache::put($cooldownKey, true, self::RECONCILIATION_COOLDOWN_SECONDS);
-
-        try {
-            app(ReconcilePaymentSession::class)($session);
-        } catch (Throwable $e) {
-            report($e);
-
-            return null;
-        }
-
-        return $session->fresh();
     }
 
     private function saveStepOrShowErrors(int $step, array $payload): void

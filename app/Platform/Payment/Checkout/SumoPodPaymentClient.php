@@ -77,19 +77,6 @@ final readonly class SumoPodPaymentClient implements PaymentCheckoutClient
     private const string CREATE_PAYMENT_PATH = '/api/v1/payments';
 
     /**
-     * NOT CONFIRMED against SumoPod's published API documentation — inferred
-     * from REST convention against the documented `POST /api/v1/payments`
-     * create endpoint (`{payment_id}` path segment, same base URL, same
-     * `X-Api-Key` header). Flagged prominently here and in the PR that adds
-     * `fetchStatus()`: verify against SumoPod's real API docs (or a live
-     * sandbox call) before trusting this in production. If the endpoint or
-     * response shape differs, `fetchStatus()` fails loudly via
-     * `PaymentCheckoutProviderException` (a non-2xx status or a response
-     * missing a required field) — it never silently returns a wrong status.
-     */
-    private const string STATUS_PATH = '/api/v1/payments/';
-
-    /**
      * ADR-0033 §Decision response fields, all required for a usable hosted
      * checkout.
      *
@@ -102,22 +89,6 @@ final readonly class SumoPodPaymentClient implements PaymentCheckoutClient
         'fee',
         'net_amount',
         'payment_link_url',
-        'status',
-    ];
-
-    /**
-     * The status-lookup response's required fields — a subset of
-     * `REQUIRED_RESPONSE_FIELDS`, since a status record has no hosted-checkout
-     * link to return.
-     *
-     * @var list<string>
-     */
-    private const array REQUIRED_STATUS_FIELDS = [
-        'payment_id',
-        'order_id',
-        'amount',
-        'fee',
-        'net_amount',
         'status',
     ];
 
@@ -164,95 +135,6 @@ final readonly class SumoPodPaymentClient implements PaymentCheckoutClient
         }
 
         return $this->resultFrom($response->json());
-    }
-
-    /**
-     * Server-to-server status lookup — see `PaymentStatusResult`'s class doc
-     * block for why this exists and `STATUS_PATH`'s doc block for the
-     * endpoint-path caveat. `$providerPaymentId` is the ONLY input (a lookup
-     * key, matching `PaymentSession.provider_payment_id`); the answer comes
-     * entirely from the provider's own response, never from a caller-supplied
-     * claim.
-     */
-    public function fetchStatus(string $providerPaymentId): PaymentStatusResult
-    {
-        $apiKey = trim($this->config['api_key'] ?? '');
-        $providerUrl = rtrim(trim($this->config['provider_url'] ?? ''), '/');
-
-        if ($apiKey === '') {
-            throw PaymentCheckoutUnavailableException::becauseApiKeyIsUnset();
-        }
-
-        if ($providerUrl === '') {
-            throw PaymentCheckoutUnavailableException::becauseProviderUrlIsUnset();
-        }
-
-        $id = trim($providerPaymentId);
-
-        if ($id === '') {
-            throw PaymentCheckoutProviderException::becauseMalformedResponse();
-        }
-
-        try {
-            $response = Http::withHeaders(['X-Api-Key' => $apiKey])
-                ->get($providerUrl.self::STATUS_PATH.rawurlencode($id));
-        } catch (ConnectionException $e) {
-            throw PaymentCheckoutProviderException::becauseProviderUnreachable($e);
-        }
-
-        if (! $response->successful()) {
-            throw PaymentCheckoutProviderException::forStatus($response->status());
-        }
-
-        return $this->statusResultFrom($response->json());
-    }
-
-    /**
-     * Same shape as `resultFrom()` for the status-lookup response — a
-     * malformed or incomplete body is never partially trusted.
-     *
-     * @param  mixed  $body  the decoded response body, whatever the provider sent
-     */
-    private function statusResultFrom(mixed $body): PaymentStatusResult
-    {
-        if (! is_array($body)) {
-            throw PaymentCheckoutProviderException::becauseMalformedResponse();
-        }
-
-        foreach (self::REQUIRED_STATUS_FIELDS as $field) {
-            if (! array_key_exists($field, $body)) {
-                throw PaymentCheckoutProviderException::becauseMalformedResponse();
-            }
-        }
-
-        $completedAt = null;
-
-        if (array_key_exists('completed_at', $body) && $body['completed_at'] !== null) {
-            if (! is_string($body['completed_at'])) {
-                throw PaymentCheckoutProviderException::becauseMalformedResponse();
-            }
-
-            try {
-                $completedAt = CarbonImmutable::parse($body['completed_at']);
-            } catch (Throwable) {
-                throw PaymentCheckoutProviderException::becauseMalformedResponse();
-            }
-        }
-
-        $paymentMethod = array_key_exists('payment_method', $body) && is_string($body['payment_method'])
-            ? $body['payment_method']
-            : null;
-
-        return new PaymentStatusResult(
-            paymentId: (string) $body['payment_id'],
-            orderId: (string) $body['order_id'],
-            status: (string) $body['status'],
-            amountMinor: $this->toMinorUnits($body['amount']),
-            feeMinor: $this->toMinorUnits($body['fee']),
-            netAmountMinor: $this->toMinorUnits($body['net_amount']),
-            paymentMethod: $paymentMethod,
-            completedAt: $completedAt,
-        );
     }
 
     /**
