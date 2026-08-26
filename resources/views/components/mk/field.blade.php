@@ -107,13 +107,30 @@
     // Checkbox/radio: 20px visual control (`size-5`) inside a 44px
     // clickable row — the row height comes from the wrapping <label>, not
     // this element. `rounded-xs` for checkbox, `rounded-full` for radio.
+    //
+    // `accent-primary-600` (added — real browser audit, not a docs update):
+    // `text-primary-600` alone does NOT recolour a native checkbox/radio's
+    // checked-state fill in any evergreen browser. That only happens via
+    // the CSS `accent-color` property (this repo ships no `appearance-none`
+    // reset and no `@tailwindcss/forms` plugin — confirmed by grepping
+    // resources/css/*.css before writing this — so the classic
+    // forms-plugin `text-*`-drives-the-check-icon trick has no plugin here
+    // to do the appearance reset). Without it every checkbox/radio in the
+    // app rendered with the plain browser-default accent (blue in Chrome)
+    // regardless of this class list. `accent-*` is a core Tailwind utility
+    // (not the forms plugin) generated from the same `--color-*` theme
+    // scale as `text-*`/`bg-*`, so this is still token-only, no hardcoded
+    // value. Same fix mirrored verbatim in
+    // resources/views/livewire/public/booking/wizard.blade.php's own
+    // $mkCheckbox (that file's header comment says its recipe is "copied
+    // verbatim" from this one — keep both in sync).
     if ($isCheckboxLike) {
         $shape = $type === 'radio' ? 'rounded-full' : 'rounded-xs';
-        $controlClasses = trim("size-5 shrink-0 border bg-neutral-0 $shape text-primary-600
+        $controlClasses = trim("size-5 shrink-0 border bg-neutral-0 $shape text-primary-600 accent-primary-600
             transition-[border-color,box-shadow] duration-fast ease-standard
             focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary-600
             disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:border-neutral-300
-            " . ($error ? 'border-danger-600' : 'border-neutral-450'));
+            " . ($error ? 'border-danger-600 accent-danger-600' : 'border-neutral-450'));
     }
 @endphp
 

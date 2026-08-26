@@ -14,6 +14,7 @@ use App\Domain\Booking\BookingWizardStep;
 use App\Domain\Booking\Exceptions\BookingDraftVersionConflictException;
 use App\Domain\Booking\Exceptions\BookingStepValidationException;
 use App\Domain\Booking\Models\BookingDraft;
+use App\Domain\CemeteryCapability\Models\CemeteryCapabilityProfile;
 use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\OrderWorkflow\Actions\SubmitBookingDraft;
@@ -26,6 +27,7 @@ use App\Domain\Quotation\Models\Quote;
 use App\Domain\Quotation\Models\QuoteLine;
 use App\Domain\ServiceCatalog\ServiceCatalogQuery;
 use App\Domain\ServiceCatalog\ServiceCode;
+use App\Livewire\Public\Directory\Support\PublicCapabilityProjection;
 use App\Platform\FeatureGate\ModeResolver;
 use App\Platform\FeatureGate\Modes\PaymentMode;
 use App\Platform\IdentityAccess\ActorContextResolver;
@@ -982,6 +984,7 @@ final class BookingWizard extends Component
     {
         $cemeteries = new Collection;
         $packagesByCemetery = [];
+        $cemeteryCapabilities = [];
         $this->cemeteryListUnavailable = false;
 
         if ($this->city !== '') {
@@ -1002,11 +1005,42 @@ final class BookingWizard extends Component
                         $cemetery->id => CemeteryPublicQuery::activePackages($cemetery),
                     ])
                     ->all();
+
+                // design-system.md §3.3's normative Cemetery card spec
+                // (PUB-011) requires the SAME card content the public
+                // directory (`resources/views/livewire/public/directory/
+                // index.blade.php`) already renders: type badge, name,
+                // photo, address, facilities, attributed price range, and
+                // availability. Availability needs the cemetery's resolved
+                // capability profile, projected through the same public
+                // allowlist the directory uses
+                // (`PublicCapabilityProjection::forCemetery()`) — resolved
+                // once per cemetery here, exactly mirroring
+                // `CemeteryDirectoryIndex::render()`'s own per-card
+                // try/catch: one cemetery's capability-resolution failure
+                // degrades to AC4's safe defaults rather than blanking the
+                // whole step.
+                $cemeteryCapabilities = $cemeteries
+                    ->mapWithKeys(function (Cemetery $cemetery): array {
+                        try {
+                            $capabilities = PublicCapabilityProjection::forCemetery($cemetery);
+                        } catch (Throwable $e) {
+                            report($e);
+
+                            $capabilities = PublicCapabilityProjection::from(
+                                new CemeteryCapabilityProfile(CemeteryCapabilityProfile::safeDefaults())
+                            );
+                        }
+
+                        return [$cemetery->id => $capabilities];
+                    })
+                    ->all();
             } catch (Throwable $e) {
                 report($e);
                 $this->cemeteryListUnavailable = true;
                 $cemeteries = new Collection;
                 $packagesByCemetery = [];
+                $cemeteryCapabilities = [];
             }
         }
 
@@ -1126,6 +1160,7 @@ final class BookingWizard extends Component
             'cities' => CemeteryPublicQuery::launchCities(),
             'cemeteries' => $cemeteries,
             'packagesByCemetery' => $packagesByCemetery,
+            'cemeteryCapabilities' => $cemeteryCapabilities,
             'basicServices' => $basicServices,
             'additionalServices' => $additionalServices,
             'summary' => $summary,

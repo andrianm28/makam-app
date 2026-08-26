@@ -55,9 +55,20 @@ export async function completeStep1(page: Page, cityLabel: string): Promise<void
     await expect(page.locator('#booking-step-2-heading')).toBeVisible();
 }
 
-/** Selects a cemetery that has NO `cemetery_packages` rows (a single click). */
+/**
+ * Selects a cemetery that has NO `cemetery_packages` rows (a single click).
+ *
+ * The Step 2 card is no longer itself a `<button>` whose accessible name is
+ * the cemetery name — design-system.md §3.3's Cemetery card spec (PUB-011)
+ * requires the card to show photo/address/facilities/price content the
+ * card can no longer also BE the click target for (an interactive
+ * `<x-mk.card>` may hold only one focusable control, and this step needs a
+ * `wire:click` action, not a navigation link — see wizard.blade.php's own
+ * comment at Step 2). The selection control is now an explicit
+ * "Pilih {cemetery name}" button inside the (non-interactive) card.
+ */
 export async function completeStep2NoPackage(page: Page, cemeteryName: string): Promise<void> {
-    await page.getByRole('button', { name: cemeteryName }).click();
+    await page.getByRole('button', { name: `Pilih ${cemeteryName}` }).click();
     await expect(page.locator('#booking-step-3-heading')).toBeVisible();
 }
 
