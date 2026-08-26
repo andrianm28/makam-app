@@ -8,6 +8,7 @@ use App\Domain\OrderWorkflow\Exceptions\IllegalOrderTransitionException;
 use App\Domain\OrderWorkflow\Exceptions\OrderAlreadyPaidException;
 use App\Domain\OrderWorkflow\Exceptions\PaidAmountDoesNotMatchQuoteException;
 use App\Domain\OrderWorkflow\Models\Order;
+use App\Domain\OrderWorkflow\Models\OrderInvoice;
 use App\Domain\OrderWorkflow\Models\OrderStatusEvent;
 use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\OrderWorkflow\PaidTrigger;
@@ -100,13 +101,23 @@ use Illuminate\Support\Facades\DB;
  * 4. `Order::stampPaidSource()` with the event that step 3 returned — the
  *    second authorized door on the model, which opens only for a persisted
  *    `DIBAYAR` token.
- * 5. `payment.received.v1` on the outbox, INSIDE the transaction and AFTER
- *    the transition. That position is the entire reason a duplicate cannot
- *    double-notify: a duplicate throws at step 3 and so never reaches step 5
- *    at all, and even if it somehow did, the whole transaction rolls back.
- *    Moving this call earlier would make the notification depend on a
- *    rollback rather than on control flow; moving it OUTSIDE the transaction
- *    would let a rolled-back payment still notify the customer.
+ * 5. `Actions\IssueInvoice`, INSIDE the same transaction and AFTER the
+ *    stamp — a basic invoice/receipt record for the ONLINE-payment path
+ *    (see that Action's own doc block for exactly why it stays minimal and
+ *    why it is scoped to this path only). Same reasoning as step 6: an
+ *    invoice must commit or roll back WITH the transition, never exist for
+ *    an order that turns out not to be paid.
+ * 6. `payment.received.v1` on the outbox, INSIDE the transaction and AFTER
+ *    both the transition and the invoice. That position is the entire
+ *    reason a duplicate cannot double-notify: a duplicate throws at step 3
+ *    and so never reaches step 6 at all, and even if it somehow did, the
+ *    whole transaction rolls back. Moving this call earlier would make the
+ *    notification depend on a rollback rather than on control flow; moving
+ *    it OUTSIDE the transaction would let a rolled-back payment still
+ *    notify the customer. It is also why the invoice must be issued BEFORE
+ *    this step and not after: the outbox payload's `invoice_reference`
+ *    (see `emitPaymentReceived()`) needs a real, already-committed-within-
+ *    this-transaction invoice to reference.
  *
  * ---------------------------------------------------------------------------
  * Duplicate arrival: two distinct rejections, one outcome
@@ -165,7 +176,9 @@ final readonly class ApplyPaidEffects
 
         $order->stampPaidSource($event, $trigger->source->value, $trigger->sourceId);
 
-        $this->emitPaymentReceived($order, $trigger);
+        $invoice = app(IssueInvoice::class)($order, $trigger);
+
+        $this->emitPaymentReceived($order, $trigger, $invoice);
 
         return $order;
     }
@@ -196,8 +209,20 @@ final readonly class ApplyPaidEffects
      * repeated here — `Outbox::record()` stamps the row's own `occurred_at`,
      * and a second, caller-supplied timestamp under a similar name is a
      * reconciliation trap rather than information.
+     *
+     * `invoice_reference` was added to close NOTIF-02's "+invoice" gap for
+     * this (online) path — `docs/contracts/notification-matrix.md`'s
+     * "Payment received" row names the customer channel as "EMAIL/WA +
+     * invoice", and until `Actions\IssueInvoice` existed there was no
+     * invoice of any kind to reference. Still references-only: a reference
+     * number and nothing about the order's content or party. No new event
+     * name and no event-catalog row is added — `payment.received.v1`'s
+     * existing catalogue row already names `invoice` among its "Main
+     * consumers" (`docs/contracts/event-catalog.md:19`), so this is an
+     * additive field on the event that row already anticipates, not a new
+     * event.
      */
-    private function emitPaymentReceived(Order $order, PaidTrigger $trigger): void
+    private function emitPaymentReceived(Order $order, PaidTrigger $trigger, OrderInvoice $invoice): void
     {
         Outbox::record(
             eventName: 'payment.received.v1',
@@ -210,6 +235,7 @@ final readonly class ApplyPaidEffects
                 'source_id' => $trigger->sourceId,
                 'amount_minor' => $trigger->amount->toMinorInt(),
                 'currency' => $trigger->currency,
+                'invoice_reference' => $invoice->reference,
             ],
             classification: OutboxClassification::Internal,
             idempotencyKey: "paid_effects:{$trigger->businessKey}",
