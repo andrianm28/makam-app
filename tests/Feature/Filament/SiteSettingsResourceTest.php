@@ -43,6 +43,28 @@ final class SiteSettingsResourceTest extends TestCase
     }
 
     /**
+     * UI-audit fix (26 Aug 2026): with no `getModelLabel()`/
+     * `getPluralModelLabel()`/page `$title` override, Filament derived both
+     * breadcrumb crumbs from the English class names ("Site Setting" for
+     * the resource, "Edit Site Settings" for the page) — every other admin
+     * resource's breadcrumb is Indonesian. Proves the rendered page no
+     * longer shows either English form.
+     */
+    public function test_the_page_breadcrumb_is_indonesian(): void
+    {
+        $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
+
+        $this->actingAs($user)
+            ->get('/admin/pengaturan-situs')
+            ->assertOk()
+            ->assertSee('Pengaturan Situs')
+            // Catches both "Site Setting" and "Site Settings" — the latter
+            // contains the former as a substring.
+            ->assertDontSee('Site Setting');
+    }
+
+    /**
      * P2 whole-branch review fix wave (D2): `save()` used to write whatever
      * `$this->data` held without running the form rules, so an invalid email
      * or an over-long value was persisted silently. The fix validates the

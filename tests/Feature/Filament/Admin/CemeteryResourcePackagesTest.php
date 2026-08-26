@@ -249,6 +249,37 @@ final class CemeteryResourcePackagesTest extends TestCase
             ->assertTableActionDoesNotExist('delete');
     }
 
+    /**
+     * UI-audit fix (26 Aug 2026): with no `->modelLabel()` override, the
+     * table's empty-state description
+     * (`filament-tables::table.empty.description` — "Buat :model untuk
+     * memulai.") fell back to the `CemeteryPackage` class name, producing
+     * "Buat cemetery package untuk memulai." — English mixed into an
+     * otherwise-Indonesian sentence, even though this manager's own tab
+     * title ("Paket Makam") was already correct. Proves the empty state now
+     * reads entirely in Indonesian for a cemetery with zero package rows.
+     */
+    public function test_the_empty_state_has_no_english_words(): void
+    {
+        $this->admin();
+
+        $cemetery = Cemetery::query()->create([
+            'name' => 'TPU Tanpa Paket',
+            'slug' => 'tpu-tanpa-paket',
+            'type' => 'TPU',
+            'city' => 'JAKARTA',
+            'address' => 'Jl. Contoh Kota Jakarta No. 200',
+            'publication_status' => 'draft',
+        ]);
+
+        Livewire::test(PackagesRelationManager::class, [
+            'ownerRecord' => $cemetery,
+            'pageClass' => EditCemetery::class,
+        ])
+            ->assertSee('Buat paket makam untuk memulai.')
+            ->assertDontSee('cemetery package');
+    }
+
     public function test_a_customer_cannot_interact_with_the_packages_relation_manager(): void
     {
         $user = User::factory()->create();

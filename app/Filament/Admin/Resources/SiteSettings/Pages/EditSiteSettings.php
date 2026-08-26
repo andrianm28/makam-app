@@ -52,6 +52,16 @@ final class EditSiteSettings extends Page implements HasForms
 
     protected string $view = 'filament.admin.resources.site-settings.edit-site-settings';
 
+    // UI-audit fix (26 Aug 2026): with no `$title`, `BasePage::getTitle()`
+    // humanises the class basename ("EditSiteSettings" -> "Edit Site
+    // Settings"), which is where the breadcrumb's English trailing crumb
+    // came from — `SiteSettingsResource::getModelLabel()`/
+    // `getPluralModelLabel()` fix the leading crumb, this fixes the page's
+    // own. Plain noun, no "Edit" prefix, matching this codebase's other
+    // single-page `$title` overrides (e.g. `InAppNotifications::$title =
+    // 'Notifikasi'`) and the already-correct navigation label.
+    protected static ?string $title = 'Pengaturan Situs';
+
     public array $data = [];
 
     public function mount(): void

@@ -7,14 +7,18 @@ namespace App\Filament\Admin\Resources\BookingOrders\Schemas;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\Models\OrderDocument;
 use App\Domain\OrderWorkflow\OrderStatus;
+use App\Domain\OrderWorkflow\ProductType;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PlotReservation\PlotReservationState;
 use App\Domain\Quotation\Models\Quote;
 use App\Domain\Quotation\Models\QuoteLine;
+use App\Domain\Quotation\QuoteStatus;
+use App\Filament\Admin\Resources\BookingOrders\BookingOrderProductTypeLabel;
 use App\Filament\Admin\Resources\BookingOrders\BookingOrderStatusBadge;
 use App\Platform\IdentityAccess\Scopes\Models\ScopeAssignment;
 use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use Filament\Infolists\Components\RepeatableEntry;
+use Filament\Infolists\Components\RepeatableEntry\TableColumn;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -60,7 +64,9 @@ final class BookingOrderInfolist
                             ->color(fn (string $state): string => BookingOrderStatusBadge::color(OrderStatus::from($state)))
                             ->formatStateUsing(fn (string $state): string => BookingOrderStatusBadge::label(OrderStatus::from($state))),
 
-                        TextEntry::make('product_type')->label('Jenis Layanan'),
+                        TextEntry::make('product_type')
+                            ->label('Jenis Layanan')
+                            ->formatStateUsing(fn (string $state): string => BookingOrderProductTypeLabel::label(ProductType::from($state))),
 
                         TextEntry::make('created_at')->label('Dibuat')->dateTime(),
                     ]),
@@ -94,6 +100,24 @@ final class BookingOrderInfolist
                             ->columnSpanFull()
                             ->state(fn (Order $record): Collection => self::quoteLines($record))
                             ->placeholder('Belum ada penawaran.')
+                            // UI-audit fix (26 Aug 2026): a real table layout
+                            // (`RepeatableEntry::table()`, confirmed against
+                            // the installed `filament/filament` v5.7.3 —
+                            // `vendor/filament/infolists/src/Components/
+                            // RepeatableEntry.php`'s `toEmbeddedTableHtml()`)
+                            // instead of the default one-stacked-card-per-line
+                            // layout, which read as vertically heavy at 1440px
+                            // desktop width. `TableColumn` entries below are
+                            // positional, not label-matched — they map onto
+                            // the `->schema([...])` components in the same
+                            // order, so that array's order must stay in sync
+                            // with this one.
+                            ->table([
+                                TableColumn::make('Layanan'),
+                                TableColumn::make('Jumlah')->alignEnd(),
+                                TableColumn::make('Harga satuan')->alignEnd(),
+                                TableColumn::make('Subtotal')->alignEnd(),
+                            ])
                             ->schema([
                                 TextEntry::make('description')->label('Layanan'),
                                 TextEntry::make('quantity')->label('Jumlah'),
@@ -115,7 +139,7 @@ final class BookingOrderInfolist
                                     return 'Belum ada penawaran';
                                 }
 
-                                return self::moneyString($quote->totalMinor()->toMinorInt()).' · '.$quote->status;
+                                return self::moneyString($quote->totalMinor()->toMinorInt()).' · '.self::quoteStatusLabel(QuoteStatus::from($quote->status));
                             }),
                     ]),
 
@@ -232,6 +256,24 @@ final class BookingOrderInfolist
     private static function moneyString(int $amountMinor): string
     {
         return 'Rp '.number_format($amountMinor / 100, 0, ',', '.');
+    }
+
+    /**
+     * Same mapping `App\Filament\Admin\Resources\PreNeedCases\Schemas\
+     * PreNeedCaseInfolist::quoteStatusLabel()` already uses for the
+     * identical `QuoteStatus` enum — reused verbatim here rather than
+     * invented, so the two admin surfaces never drift on the same
+     * catalogue's Indonesian wording (UI audit fix, 26 Aug 2026: this
+     * "Total Penawaran" line was concatenating the raw enum, e.g.
+     * "· ISSUED", straight into the rendered string).
+     */
+    private static function quoteStatusLabel(QuoteStatus $status): string
+    {
+        return match ($status) {
+            QuoteStatus::ISSUED => 'Diterbitkan',
+            QuoteStatus::ACCEPTED => 'Diterima',
+            QuoteStatus::SUPERSEDED => 'Digantikan',
+        };
     }
 
     private static function stateColor(string $state): string
