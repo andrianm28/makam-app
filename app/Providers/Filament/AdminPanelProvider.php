@@ -27,6 +27,7 @@ use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\Facades\Vite;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use RuntimeException;
 
@@ -329,22 +330,41 @@ class AdminPanelProvider extends PanelProvider
             // layout and the login/"simple" layout extend — so this hook
             // fires on `/admin/login` too, closing the race regardless of
             // which page a visitor's browser reaches first.
+            //
+            // CSP-nonce fix (26 Aug 2026): this renderHook's own inline
+            // `<script>` had no `nonce` attribute at all — trunk's own CI
+            // caught it via `CspNonceCoversEveryInlineTagTest`, which failed
+            // on `/admin/login` and the authenticated `/admin` dashboard
+            // (both render this hook) while `/vendor/login` and `/vendor`
+            // stayed green, since `VendorPanelProvider` has no equivalent
+            // hook. `ReportContentSecurityPolicy::handle()` seeds the
+            // request's nonce via `app(Vite::class)->useCspNonce()` before
+            // this closure ever runs, so `Vite::cspNonce()` here returns the
+            // exact same value the response header carries — the same
+            // mechanism `resources/views/vendor/filament/assets.blade.php`
+            // and the other PR #203 view overrides already use, just called
+            // from PHP instead of Blade (a renderHook closure returns a raw
+            // string, not a compiled view).
             ->renderHook(
                 PanelsRenderHook::HEAD_END,
-                fn (): string => <<<'HTML'
-                    <script>
-                        try {
-                            if (localStorage.getItem('collapsedGroups') === null) {
-                                localStorage.setItem('collapsedGroups', JSON.stringify([]));
+                function (): string {
+                    $nonce = Vite::cspNonce();
+
+                    return <<<HTML
+                        <script nonce="{$nonce}">
+                            try {
+                                if (localStorage.getItem('collapsedGroups') === null) {
+                                    localStorage.setItem('collapsedGroups', JSON.stringify([]));
+                                }
+                            } catch (e) {
+                                // Storage unavailable (private browsing, disabled
+                                // storage, etc.) — Alpine's own \$persist already
+                                // degrades to its in-memory default in that case,
+                                // so there is nothing further to do here.
                             }
-                        } catch (e) {
-                            // Storage unavailable (private browsing, disabled
-                            // storage, etc.) — Alpine's own $persist already
-                            // degrades to its in-memory default in that case,
-                            // so there is nothing further to do here.
-                        }
-                    </script>
-                    HTML,
+                        </script>
+                        HTML;
+                },
             );
     }
 
