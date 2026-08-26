@@ -56,13 +56,24 @@ explicit decision, rather than closed with the documented manual-fallback altern
 **Mitigations:**
 - Unmissable payment-step labelling — **built** (PR #106): an urgent-intent warning on the "Bayar Sekarang"
   card itself, before any redirect to the sandbox, stating plainly no real transaction occurs. A second,
-  calmer-intent site-wide banner (PR #107, Lane C4) reinforces the same point on every page.
+  calmer-intent site-wide banner (PR #107, Lane C4) reinforced the same point on every page — **removed 26 Aug
+  2026, see Update below.**
 - Daily reconciliation of orders marked paid against actual settlement — **process still not built; owner
   named 20 Aug 2026.** Ira is the named daily payment-reconciliation owner, per the user's explicit decision
   recorded during this ADR's closeout pass. The reconciliation *process itself* (a scripted or tooled daily
   check against `docs/domain/traceability-matrix.md`-class evidence) remains unbuilt — naming an owner
   unblocks launch per this item's own prior condition, but does not substitute for the process existing.
 - Reversing this is a one-row gate change (`G-PAY-01` → closed), no code.
+
+**Update (26 Aug 2026):** the site-wide beta banner (PR #107, Lane C4) has been removed from every page
+(`resources/views/layouts/app.blade.php`) at the explicit, informed decision of the project owner, who was
+told beforehand that this banner was a documented mitigation for this item and confirmed removal anyway while
+`G-PAY-01` stays open in sandbox mode. This is a deliberate narrowing of this item's mitigation list, not an
+oversight: the payment-step-specific warning on the "Bayar Sekarang" card (PR #106) is untouched and is now
+the sole remaining mitigation for this risk. Removing the banner also removed the axe-core "region" landmark
+concern its own placement had introduced (it sat directly in `<body>`, outside any landmark) — that concern
+does not reapply now that the banner is gone, confirmed by a real Playwright + axe-core run of
+`tests/browser/smoke.spec.ts` against the homepage with zero violations.
 
 **Status as of 20 Aug 2026:** the reconciliation owner gap that blocked launch is closed (Ira, named above).
 The reconciliation process itself is still not built and should be tracked as its own follow-up, not
