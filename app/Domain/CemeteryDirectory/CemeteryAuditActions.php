@@ -34,4 +34,6 @@ final class CemeteryAuditActions
     public const string UPDATED = 'CEMETERY_UPDATED';
 
     public const string DELETED = 'CEMETERY_DELETED';
+
+    public const string PLOT_TRACKING_MODE_CHANGED = 'CEMETERY_PLOT_TRACKING_MODE_CHANGED';
 }
