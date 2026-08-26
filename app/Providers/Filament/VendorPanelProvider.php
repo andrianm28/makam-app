@@ -10,7 +10,6 @@ use App\Filament\Vendor\Pages\PayoutStatus;
 use App\Filament\Vendor\Pages\Profile;
 use App\Filament\Vendor\Pages\TransactionHistory;
 use App\Http\Middleware\AssignCorrelationId;
-use Filament\FontProviders\LocalFontProvider;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -47,6 +46,17 @@ use RuntimeException;
  * ADR-0034) wire the same real raster mark as `/admin`
  * (`public/brand/mark-96.png`, Task 3), so the two panels cannot drift on
  * brand mark either.
+ *
+ * REVERTED, 26 Aug 2026 — explicit, informed owner decision, mirroring
+ * `AdminPanelProvider`'s identical reversal (see its own doc block, "SIXTH
+ * change", for the full record): PR #170's `->darkMode(false)` is removed
+ * (dark mode now follows Filament's default system-preference behaviour
+ * again, with the same dark-mode legibility risk knowingly reaccepted —
+ * OQ-07 is still open), and PR #174's `provider: LocalFontProvider::class`
+ * is removed from `->font()` below (Filament's default `BunnyFontProvider`
+ * is restored, which re-opens `ReportContentSecurityPolicy` to
+ * `https://fonts.bunny.net` — see that middleware's own doc block). Neither
+ * is a fix; both known risks are knowingly reaccepted.
  */
 final class VendorPanelProvider extends PanelProvider
 {
@@ -57,13 +67,15 @@ final class VendorPanelProvider extends PanelProvider
             ->path('vendor')
             ->login()
             ->colors($this->filamentColors())
-            // design-system.md §7.1/OQ-07: dark mode is explicitly OUT of
-            // MVP scope — see AdminPanelProvider's identical fix for the
-            // full explanation. Filament's `defaultThemeMode(System)`
-            // default means this panel silently rendered dark on a
-            // dark-preference browser too, with the same unpaired
-            // `text-neutral-*` contrast problem.
-            ->darkMode(false)
+            // REVERTED, 26 Aug 2026 — see this class's own doc block above
+            // and AdminPanelProvider's identical reversal for the full
+            // record. `->darkMode(false)` (PR #170) is intentionally
+            // removed; Filament's own default (`hasDarkMode(true)`,
+            // system-preference theme) is restored. KNOWN, ACCEPTED RISK:
+            // the dark-mode legibility bug PR #170 fixed can recur on a
+            // dark-preference browser/OS, since OQ-07 stays open and no
+            // Blade view has `dark:` pairing. Do not add `dark:` classes as
+            // part of this revert.
             // ADR-0034: official mark; stacked lockup reads badly at 2rem, so
             // the panel carries the mark — a horizontal lockup is OQ-12 scope.
             ->brandLogo(asset('brand/mark-96.png'))
@@ -102,13 +114,17 @@ final class VendorPanelProvider extends PanelProvider
             ->authMiddleware([
                 Authenticate::class,
             ])
-            // Self-hosted only, and the same theme file as /admin —
-            // `provider: LocalFontProvider::class` is REQUIRED here for the
-            // same reason as `AdminPanelProvider`'s identical fix: see its
-            // class-level doc-block note (SEC-08 CSP-enforcement follow-up)
-            // for why omitting it silently falls back to Filament's
-            // BunnyFontProvider once a custom family is set.
-            ->font('Inter var', provider: LocalFontProvider::class)
+            // REVERTED, 26 Aug 2026 — see this class's own doc block above
+            // and AdminPanelProvider's identical reversal for the full
+            // record. `provider: LocalFontProvider::class` (PR #174) is
+            // intentionally removed; Filament's documented default
+            // (`BunnyFontProvider` for a custom family) is restored. This
+            // relies on `ReportContentSecurityPolicy` allowing
+            // `https://fonts.bunny.net` on `style-src`/`style-src-elem` and
+            // `font-src` — see that middleware's own doc block. Do not
+            // reintroduce `LocalFontProvider::class` without also
+            // re-closing that CSP exception; the two must move together.
+            ->font('Inter var')
             ->viteTheme('resources/css/filament/admin/theme.css');
     }
 
