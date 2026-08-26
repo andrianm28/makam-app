@@ -60,6 +60,25 @@ final class SiteSetting extends Model
      */
     public const string KEY_LEGAL_REVIEW_NOTE = 'legal_review_note';
 
+    /**
+     * The manual bank-transfer destination shown on the booking wizard's
+     * Step 8 fallback card (and, wherever the same manual path is offered
+     * elsewhere) when the customer cannot pay online. Same "no fictional
+     * placeholder" discipline as `KEY_COMPANY_NIB`: a made-up bank name and
+     * account number would look exactly like a real destination account —
+     * unlike "PT Contoh ..." — so all three fields default to null/empty and
+     * callers MUST render an honest "belum dikonfigurasi" state rather than
+     * inventing a placeholder. All three are treated as one unit: the public
+     * view only shows a destination once bank name, account number, AND
+     * account holder are non-empty (a partial set is as useless to a payer
+     * as none).
+     */
+    public const string KEY_BANK_TRANSFER_BANK_NAME = 'bank_transfer_bank_name';
+
+    public const string KEY_BANK_TRANSFER_ACCOUNT_NUMBER = 'bank_transfer_account_number';
+
+    public const string KEY_BANK_TRANSFER_ACCOUNT_HOLDER = 'bank_transfer_account_holder';
+
     public const array KNOWN_KEYS = [
         self::KEY_SERVICE_HOURS,
         self::KEY_SUPPORT_PHONE,
@@ -72,6 +91,9 @@ final class SiteSetting extends Model
         self::KEY_COMPANY_ADDRESS,
         self::KEY_COMPANY_NIB,
         self::KEY_LEGAL_REVIEW_NOTE,
+        self::KEY_BANK_TRANSFER_BANK_NAME,
+        self::KEY_BANK_TRANSFER_ACCOUNT_NUMBER,
+        self::KEY_BANK_TRANSFER_ACCOUNT_HOLDER,
     ];
 
     protected $table = 'site_settings';

@@ -82,7 +82,23 @@ final class EditSiteSettings extends Page implements HasForms
         DB::transaction(function () use (&$changed, $actorRef, $actorRole): void {
             foreach (SiteSetting::KNOWN_KEYS as $key) {
                 $value = trim((string) ($this->data[$key] ?? ''));
-                $current = SiteSetting::valueFor($key);
+                // Bug fix (found while adding the 3 bank-transfer keys):
+                // `valueFor()` returns null when no row exists yet, which is
+                // NOT `===` to an empty-string submission from an untouched
+                // form field — so on the very FIRST save, every key the
+                // admin never touched (still '') was treated as "changed"
+                // (null !== ''), creating an empty row and inflating the
+                // audit event's `subject_id` (one comma-joined list of every
+                // KNOWN_KEYS entry) with keys nobody actually edited. Adding
+                // the 3 new keys pushed that list past the `subject_id`
+                // column's 255-char limit and crashed the first-ever save
+                // with a Postgres "value too long" error — a real,
+                // previously-latent bug this change exposed, not a new one.
+                // Both "no row" and "an empty-string row" mean the SAME
+                // thing to every caller (`SettingsService`, `SiteSetting::
+                // valueFor`) — "not configured" — so they must compare equal
+                // here too.
+                $current = SiteSetting::valueFor($key) ?? '';
 
                 if ($current === $value) {
                     continue;
