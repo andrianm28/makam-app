@@ -10,6 +10,7 @@ use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PlotReservation\PlotReservationState;
 use App\Domain\Quotation\Models\Quote;
+use App\Domain\Quotation\Models\QuoteLine;
 use App\Filament\Admin\Resources\BookingOrders\BookingOrderStatusBadge;
 use App\Platform\IdentityAccess\Scopes\Models\ScopeAssignment;
 use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
@@ -88,6 +89,22 @@ final class BookingOrderInfolist
                 Section::make('Penawaran')
                     ->columns(2)
                     ->schema([
+                        RepeatableEntry::make('quoteLines')
+                            ->label('Rincian penawaran')
+                            ->columnSpanFull()
+                            ->state(fn (Order $record): Collection => self::quoteLines($record))
+                            ->placeholder('Belum ada penawaran.')
+                            ->schema([
+                                TextEntry::make('description')->label('Layanan'),
+                                TextEntry::make('quantity')->label('Jumlah'),
+                                TextEntry::make('unit_amount_minor')
+                                    ->label('Harga satuan')
+                                    ->formatStateUsing(fn (int $state): string => self::moneyString($state)),
+                                TextEntry::make('line_total_minor')
+                                    ->label('Subtotal')
+                                    ->formatStateUsing(fn (int $state): string => self::moneyString($state)),
+                            ]),
+
                         TextEntry::make('quote')
                             ->label('Total Penawaran')
                             ->columnSpanFull()
@@ -98,9 +115,7 @@ final class BookingOrderInfolist
                                     return 'Belum ada penawaran';
                                 }
 
-                                $totalRupiah = $quote->totalMinor()->toMinorInt() / 100;
-
-                                return 'Rp '.number_format($totalRupiah, 0, ',', '.').' · '.$quote->status;
+                                return self::moneyString($quote->totalMinor()->toMinorInt()).' · '.$quote->status;
                             }),
                     ]),
 
@@ -197,6 +212,26 @@ final class BookingOrderInfolist
     private static function activeReservation(Order $record): ?PlotReservation
     {
         return PlotReservation::activeForOrder($record)?->loadMissing('plot.block.cemetery');
+    }
+
+    /**
+     * The current quote's frozen line-item snapshot (`Quote::currentFor()`
+     * -> `lines`, the real `hasMany` on `QuoteLine`) — or an empty collection
+     * when the order has never been quoted, so the `RepeatableEntry`'s own
+     * placeholder renders instead of an error.
+     *
+     * @return Collection<int, QuoteLine>
+     */
+    private static function quoteLines(Order $record): Collection
+    {
+        $quote = Quote::currentFor($record);
+
+        return $quote?->lines ?? new Collection;
+    }
+
+    private static function moneyString(int $amountMinor): string
+    {
+        return 'Rp '.number_format($amountMinor / 100, 0, ',', '.');
     }
 
     private static function stateColor(string $state): string

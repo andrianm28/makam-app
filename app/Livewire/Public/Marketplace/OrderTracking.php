@@ -121,6 +121,7 @@ final class OrderTracking extends Component
 
         $vendorStatus = null;
         $canFileComplaint = false;
+        $items = null;
         if ($this->order !== null) {
             $vendorOrder = $this->order->vendorOrders->first();
             if ($vendorOrder !== null) {
@@ -128,11 +129,18 @@ final class OrderTracking extends Component
                 $canFileComplaint = ! $this->complaintSubmitted
                     && VendorProcessingStatus::isCustomerComplaintEligible($vendorStatus);
             }
+
+            // Eager-loaded by `MarketplaceOrderQuery::findForCustomer()`
+            // (`items.listing.product`) — the same frozen per-line snapshot
+            // `MarketplaceOrderInfolist` shows staff, now shown to the
+            // customer too instead of only the bundled total.
+            $items = $this->order->items;
         }
 
         return view('livewire.public.marketplace.order-tracking', [
             'vendorStatus' => $vendorStatus,
             'canFileComplaint' => $canFileComplaint,
+            'items' => $items,
         ])->layout('layouts.app', [
             'title' => 'Status Pesanan - Layanan Pemakaman - Makam.co.id',
             'active' => 'layanan',

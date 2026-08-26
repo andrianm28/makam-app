@@ -23,6 +23,7 @@ use App\Domain\Quotation\Actions\ComposeQuoteLinesFromBookingDraft;
 use App\Domain\Quotation\Actions\IssueQuote;
 use App\Domain\Quotation\Exceptions\UnpricedBookingServiceException;
 use App\Domain\Quotation\Models\Quote;
+use App\Domain\Quotation\Models\QuoteLine;
 use App\Domain\ServiceCatalog\ServiceCatalogQuery;
 use App\Domain\ServiceCatalog\ServiceCode;
 use App\Platform\FeatureGate\ModeResolver;
@@ -933,6 +934,50 @@ final class BookingWizard extends Component
         return null;
     }
 
+    /**
+     * Step 9's line-item summary — the same `{lines: [{code, label,
+     * quantity, unit_price, line_total}], total, all_prices_available}`
+     * shape `BookingDraftQuery::summary()` produces, so the Blade table at
+     * `wizard.blade.php`'s `$confirmationData['summary']` needs no shape
+     * change either way.
+     *
+     * Prefers the ACTUAL issued quote (`Quote::currentFor($order)->lines`)
+     * once one exists: that is the frozen commercial record the customer
+     * already agreed to, immune to a catalog price changing between
+     * issuance and viewing this screen (unlike a live recompute, which
+     * could silently drift). Falls back to the live recompute — exactly
+     * today's behaviour — only when no quote has been issued yet, which is
+     * the normal case for a MANUAL-payment submission: `saveStep8()`'s
+     * chain calls `SubmitBookingDraft` but never `IssueQuote` (only the
+     * ONLINE branch in `openOnlinePayment()` does), so there is nothing
+     * "issued" to show for those orders and the live recompute is still the
+     * honest answer.
+     */
+    private function confirmationSummary(?Order $order, BookingDraft $draft): array
+    {
+        $quote = $order !== null ? Quote::currentFor($order) : null;
+
+        if ($quote === null) {
+            return BookingDraftQuery::summary($draft);
+        }
+
+        $lines = $quote->lines
+            ->map(fn (QuoteLine $line): array => [
+                'code' => null,
+                'label' => $line->description,
+                'quantity' => $line->quantity,
+                'unit_price' => $line->unit_amount_minor,
+                'line_total' => $line->line_total_minor,
+            ])
+            ->all();
+
+        return [
+            'lines' => $lines,
+            'total' => $quote->totalMinor()->toMinorInt(),
+            'all_prices_available' => true,
+        ];
+    }
+
     public function render(): View
     {
         $cemeteries = new Collection;
@@ -1011,7 +1056,7 @@ final class BookingWizard extends Component
                 $confirmationData = [
                     'draft_id' => $draft->id,
                     'order_reference' => $order?->reference,
-                    'summary' => BookingDraftQuery::summary($draft),
+                    'summary' => $this->confirmationSummary($order, $draft),
                     'customer_name' => $draft->customer_full_name,
                     'customer_mobile' => $draft->customer_mobile,
                     'customer_email' => $draft->customer_email,
