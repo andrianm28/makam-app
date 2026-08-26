@@ -5,14 +5,9 @@ declare(strict_types=1);
 namespace App\Providers\Filament;
 
 use App\Filament\Admin\Pages\FeatureGateAdmin;
-use App\Filament\Admin\Pages\FinanceReports;
 use App\Filament\Admin\Pages\InAppNotifications;
-use App\Filament\Admin\Pages\OrdersReport;
-use App\Filament\Admin\Pages\OutgoingPaymentsReport;
 use App\Filament\Admin\Pages\PasswordReauthentication;
-use App\Filament\Admin\Pages\ReceiptsReport;
-use App\Filament\Admin\Pages\RenewalPeriodReport;
-use App\Filament\Admin\Pages\VendorPerformanceReport;
+use App\Filament\Admin\Pages\Reports;
 use App\Filament\Admin\Widgets\FailedPaymentExceptionQueueWidget;
 use App\Filament\Admin\Widgets\FinancialOverviewWidget;
 use App\Filament\Admin\Widgets\OrderStatusOverviewWidget;
@@ -198,12 +193,7 @@ class AdminPanelProvider extends PanelProvider
             ->pages([
                 Pages\Dashboard::class,
                 FeatureGateAdmin::class,
-                FinanceReports::class,
-                OrdersReport::class,
-                ReceiptsReport::class,
-                OutgoingPaymentsReport::class,
-                VendorPerformanceReport::class,
-                RenewalPeriodReport::class,
+                Reports::class,
                 PasswordReauthentication::class,
                 InAppNotifications::class,
             ])

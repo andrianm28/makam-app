@@ -2,19 +2,22 @@
 
 declare(strict_types=1);
 
-namespace App\Filament\Admin\Pages\Concerns;
+namespace App\Livewire\Admin\Reports\Concerns;
 
 use Illuminate\Http\Response;
 
 /**
- * Shared CSV line-building and streaming for the ADM-090 report pages
- * (`OrdersReport`, `ReceiptsReport`, `OutgoingPaymentsReport`,
- * `VendorPerformanceReport`, `RenewalPeriodReport`). Extracted once five
- * pages needed byte-identical quoting/escaping rather than five copies of
- * `Actions\BulkFinancialExport::toCsvLine()`'s logic drifting independently.
+ * Shared CSV line-building and streaming for the ADM-090 report tabs
+ * (`OrdersReportPanel`, `ReceiptsReportPanel`, `OutgoingPaymentsReportPanel`,
+ * `VendorPerformanceReportPanel`, `RenewalPeriodReportPanel`) hosted inside
+ * `App\Filament\Admin\Pages\Reports`. Moved verbatim from the former
+ * `App\Filament\Admin\Pages\Concerns\ExportsReportCsv` (the same six-page
+ * consolidation this batch performs moved the five report Filament pages
+ * that used it into plain nested Livewire components) — the RFC 4180
+ * quoting/escaping logic itself is unchanged.
  *
  * Same RFC 4180 quoting and formula-injection neutralisation as
- * `BulkFinancialExport::toCsvLine()` — a leading `=`, `+`, `-` or `@` in a
+ * `BulkFinancialExport::toCsvLine()`: a leading `=`, `+`, `-` or `@` in a
  * text field gets a leading apostrophe, except when the field is itself
  * numeric (a negative amount is a number, not a formula).
  */

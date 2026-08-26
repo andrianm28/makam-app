@@ -2,40 +2,31 @@
 
 declare(strict_types=1);
 
-namespace App\Filament\Admin\Pages;
+namespace App\Livewire\Admin\Reports;
 
 use App\Domain\Marketplace\Exceptions\InvalidVendorFulfillmentReportException;
 use App\Domain\Marketplace\VendorFulfillmentReport;
-use App\Filament\Admin\Pages\Concerns\ExportsReportCsv;
+use App\Livewire\Admin\Reports\Concerns\ExportsReportCsv;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\MasterData\Contracts\MasterDataAdminAuthorizerContract;
 use App\Platform\IdentityAccess\MasterData\Exceptions\MasterDataNotAuthorisedException;
 use Carbon\CarbonImmutable;
-use Filament\Pages\Page;
+use Illuminate\Contracts\View\View;
 use Illuminate\Http\Response;
+use Livewire\Component;
 
 /**
- * ADM-090/AC7 "report on ... vendor performance ... by period where data
- * exists". Mirrors `FinanceReports`'s architecture over
- * `VendorFulfillmentReport` — see that class's own doc block for why
- * fulfilment-outcome counts, not an invented rating, is "performance" here.
- *
- * `canAccess()` and the "no business-entity scoping" reasoning are identical
- * to `OrdersReport`'s, over the vendor domain instead of the order one — see
- * `VendorFulfillmentReport`'s doc block, and `Filament\Admin\Resources\
- * Vendors\VendorResource::canAccess()`, the resource this report shares its
- * gate with.
- *
- * The export follows `OrdersReport`'s in-page-CSV reasoning: `exportCsv()`
- * re-derives the same rows already authorized and rendered.
+ * "Laporan Kinerja Vendor" tab of `App\Filament\Admin\Pages\Reports`. Moved
+ * verbatim from the former standalone
+ * `App\Filament\Admin\Pages\VendorPerformanceReport` Filament page — see
+ * `OrdersReportPanel`'s doc block for why this
+ * `MasterDataAdminAuthorizerContract`-gated tab still self-enforces
+ * `canAccess()` even though it is the same gate `Reports::canAccess()`
+ * already used.
  */
-final class VendorPerformanceReport extends Page
+final class VendorPerformanceReportPanel extends Component
 {
     use ExportsReportCsv;
-
-    protected static ?string $slug = 'laporan-kinerja-vendor';
-
-    protected string $view = 'filament.admin.pages.vendor-performance-report';
 
     public string $period = '';
 
@@ -57,21 +48,18 @@ final class VendorPerformanceReport extends Page
         return true;
     }
 
-    public static function getNavigationLabel(): string
-    {
-        return 'Laporan Kinerja Vendor';
-    }
-
-    public function getTitle(): string
-    {
-        return 'Laporan Kinerja Vendor';
-    }
-
     public function mount(): void
     {
+        abort_unless(self::canAccess(), 403);
+
         $this->period = CarbonImmutable::now()->format('Y-m');
 
         $this->loadReport();
+    }
+
+    public function hydrate(): void
+    {
+        abort_unless(self::canAccess(), 403);
     }
 
     public function loadReport(): void
@@ -115,5 +103,10 @@ final class VendorPerformanceReport extends Page
         }
 
         return $this->streamCsv($lines, "vendor-performance-report-{$this->period}.csv");
+    }
+
+    public function render(): View
+    {
+        return view('livewire.admin.reports.vendor-performance-report-panel');
     }
 }

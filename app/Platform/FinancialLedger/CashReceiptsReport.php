@@ -25,7 +25,7 @@ use Illuminate\Support\Facades\DB;
  * (`ChartOfAccounts::CASH_BANK_ACCOUNT`, code `7000`) is debited: `Journal`
  * posts a balanced batch for every settled payment, manual verification, and
  * renewal, each crediting a revenue/AR account and debiting `7000` for the
- * amount received (see `FinanceReportsPageTest::seedCurrentMonthLedger()` for
+ * amount received (see `FinanceReportPanelTest::seedCurrentMonthLedger()` for
  * the shape). Filtering `journal_entries` to that one leg, joined to its
  * batch, is therefore the report — not an approximation of one.
  *

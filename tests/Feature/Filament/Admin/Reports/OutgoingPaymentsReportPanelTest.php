@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Filament\Admin\Reports;
 
-use App\Filament\Admin\Pages\OutgoingPaymentsReport;
+use App\Livewire\Admin\Reports\OutgoingPaymentsReportPanel;
 use App\Models\User;
 use App\Platform\Audit\AuditSource;
 use App\Platform\FinancialLedger\Actions\ManualPayout;
@@ -28,14 +28,14 @@ use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
- * `OutgoingPaymentsReport` — ADM-090/AC7's outgoing-payments-by-period
+ * `OutgoingPaymentsReportPanel` — ADM-090/AC7's outgoing-payments-by-period
  * report. Payout fixtures go through the real `VendorPayable::assess()` +
  * `ManualPayout::pay()` workflow (`ManualPayoutTest`'s own fixture shape),
  * not a raw insert, so the `payouts.payable_id` foreign key and the
  * vendor-payable/payout consistency invariant stay real. Same
  * `LedgerReadAuthorizer` scoping fixture as `ReceiptsReportPageTest`.
  */
-final class OutgoingPaymentsReportPageTest extends TestCase
+final class OutgoingPaymentsReportPanelTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -56,16 +56,16 @@ final class OutgoingPaymentsReportPageTest extends TestCase
         $user = User::factory()->create();
         $this->actAsActor($user, roles: []);
 
-        $this->assertFalse(OutgoingPaymentsReport::canAccess());
+        $this->assertFalse(OutgoingPaymentsReportPanel::canAccess());
 
-        Livewire::actingAs($user)->test(OutgoingPaymentsReport::class)->assertForbidden();
+        Livewire::actingAs($user)->test(OutgoingPaymentsReportPanel::class)->assertForbidden();
     }
 
     public function test_an_empty_period_renders_the_required_empty_state(): void
     {
         $user = $this->authorisedFinanceUser();
 
-        $component = Livewire::actingAs($user)->test(OutgoingPaymentsReport::class);
+        $component = Livewire::actingAs($user)->test(OutgoingPaymentsReportPanel::class);
 
         $this->assertSame(CarbonImmutable::now()->format('Y-m'), $component->get('period'));
         $component->assertSee('Belum ada pembayaran keluar pada periode ini')
@@ -77,7 +77,7 @@ final class OutgoingPaymentsReportPageTest extends TestCase
         $user = $this->authorisedFinanceUser();
         $this->payVendor();
 
-        $component = Livewire::actingAs($user)->test(OutgoingPaymentsReport::class);
+        $component = Livewire::actingAs($user)->test(OutgoingPaymentsReportPanel::class);
 
         $component->assertCount('reportRows', 1)
             ->assertSet('totalMinor', self::AMOUNT);
@@ -89,7 +89,7 @@ final class OutgoingPaymentsReportPageTest extends TestCase
         $this->payVendor();
         $this->payVendor(entityRef: self::OTHER_ENTITY, sourceId: 'order-other');
 
-        $component = Livewire::actingAs($user)->test(OutgoingPaymentsReport::class);
+        $component = Livewire::actingAs($user)->test(OutgoingPaymentsReportPanel::class);
 
         $component->assertCount('reportRows', 1)
             ->assertSet('totalMinor', self::AMOUNT);
@@ -104,7 +104,7 @@ final class OutgoingPaymentsReportPageTest extends TestCase
             'occurred_at' => CarbonImmutable::now()->subMonths(2),
         ]);
 
-        $component = Livewire::actingAs($user)->test(OutgoingPaymentsReport::class);
+        $component = Livewire::actingAs($user)->test(OutgoingPaymentsReportPanel::class);
 
         $component->assertCount('reportRows', 0);
     }
@@ -113,7 +113,7 @@ final class OutgoingPaymentsReportPageTest extends TestCase
     {
         $user = $this->authorisedFinanceUser();
 
-        $component = Livewire::actingAs($user)->test(OutgoingPaymentsReport::class);
+        $component = Livewire::actingAs($user)->test(OutgoingPaymentsReportPanel::class);
 
         $component->set('period', '2026-13')->call('loadReport');
 

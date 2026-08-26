@@ -2,38 +2,34 @@
 
 declare(strict_types=1);
 
-namespace App\Filament\Admin\Pages;
+namespace App\Livewire\Admin\Reports;
 
-use App\Domain\Renewal\Exceptions\InvalidRenewalReportException;
-use App\Domain\Renewal\RenewalReport;
-use App\Filament\Admin\Pages\Concerns\ExportsReportCsv;
+use App\Domain\OrderWorkflow\Exceptions\InvalidOrderPeriodReportException;
+use App\Domain\OrderWorkflow\OrderPeriodReport;
+use App\Livewire\Admin\Reports\Concerns\ExportsReportCsv;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\MasterData\Contracts\MasterDataAdminAuthorizerContract;
 use App\Platform\IdentityAccess\MasterData\Exceptions\MasterDataNotAuthorisedException;
 use Carbon\CarbonImmutable;
-use Filament\Pages\Page;
+use Illuminate\Contracts\View\View;
 use Illuminate\Http\Response;
+use Livewire\Component;
 
 /**
- * ADM-090/AC7 "report on ... renewal by period where data exists". Mirrors
- * `FinanceReports`'s architecture over `RenewalReport` — see that class's
- * own doc block for why the period filters `target_due_period` (the
- * renewal's own due-period concept) rather than `created_at`.
- *
- * `canAccess()` and the "no business-entity scoping" reasoning are identical
- * to `OrdersReport`'s, over the renewal domain instead of the order one —
- * see `RenewalReport`'s doc block, and `RenewalOrderResource::canAccess()`,
- * the resource this report shares its gate with.
- *
- * The export follows `OrdersReport`'s in-page-CSV reasoning.
+ * "Laporan Pesanan" tab of `App\Filament\Admin\Pages\Reports`. Moved
+ * verbatim from the former standalone `App\Filament\Admin\Pages\OrdersReport`
+ * Filament page — see `Reports`'s doc block for the consolidation this is
+ * part of, and `FinanceReportPanel`'s doc block for why a tab still
+ * self-enforces its own `canAccess()` even though `Reports::canAccess()`
+ * already used the identical `MasterDataAdminAuthorizerContract` gate: this
+ * tab's own check is what stays correct if that gate is ever narrowed for
+ * only some of the tabs sharing it, and it is what the standalone
+ * `Livewire::test(OrdersReportPanel::class)` unit-level tests exercise
+ * directly.
  */
-final class RenewalPeriodReport extends Page
+final class OrdersReportPanel extends Component
 {
     use ExportsReportCsv;
-
-    protected static ?string $slug = 'laporan-periode-perpanjangan';
-
-    protected string $view = 'filament.admin.pages.renewal-period-report';
 
     public string $period = '';
 
@@ -57,21 +53,18 @@ final class RenewalPeriodReport extends Page
         return true;
     }
 
-    public static function getNavigationLabel(): string
-    {
-        return 'Laporan Perpanjangan';
-    }
-
-    public function getTitle(): string
-    {
-        return 'Laporan Perpanjangan';
-    }
-
     public function mount(): void
     {
+        abort_unless(self::canAccess(), 403);
+
         $this->period = CarbonImmutable::now()->format('Y-m');
 
         $this->loadReport();
+    }
+
+    public function hydrate(): void
+    {
+        abort_unless(self::canAccess(), 403);
     }
 
     public function loadReport(): void
@@ -80,8 +73,8 @@ final class RenewalPeriodReport extends Page
         $this->resetErrorBag('period');
 
         try {
-            $result = app(RenewalReport::class)->summary($this->period);
-        } catch (InvalidRenewalReportException) {
+            $result = app(OrderPeriodReport::class)->summary($this->period);
+        } catch (InvalidOrderPeriodReportException) {
             $message = 'Format periode tidak valid. Gunakan format YYYY-MM, contohnya 2026-08.';
 
             $this->addError('period', $message);
@@ -108,6 +101,11 @@ final class RenewalPeriodReport extends Page
 
         $lines[] = $this->csvLine(['TOTAL', (string) $this->total]);
 
-        return $this->streamCsv($lines, "renewal-period-report-{$this->period}.csv");
+        return $this->streamCsv($lines, "orders-report-{$this->period}.csv");
+    }
+
+    public function render(): View
+    {
+        return view('livewire.admin.reports.orders-report-panel');
     }
 }

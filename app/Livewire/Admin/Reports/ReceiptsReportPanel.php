@@ -2,53 +2,29 @@
 
 declare(strict_types=1);
 
-namespace App\Filament\Admin\Pages;
+namespace App\Livewire\Admin\Reports;
 
-use App\Filament\Admin\Pages\Concerns\ExportsReportCsv;
+use App\Livewire\Admin\Reports\Concerns\ExportsReportCsv;
 use App\Platform\FinancialLedger\CashReceiptsReport;
 use App\Platform\FinancialLedger\Contracts\LedgerReadAuthorizer;
 use App\Platform\FinancialLedger\Exceptions\InvalidLedgerReportException;
 use App\Platform\FinancialLedger\Exceptions\LedgerReadNotAuthorisedException;
 use App\Platform\IdentityAccess\ActorContext;
 use Carbon\CarbonImmutable;
-use Filament\Pages\Page;
+use Illuminate\Contracts\View\View;
 use Illuminate\Http\Response;
+use Livewire\Component;
 
 /**
- * ADM-090/AC7 "report on ... receipts ... by period where data exists".
- * Mirrors `FinanceReports`'s architecture — see that page's own doc block —
- * over `CashReceiptsReport` instead of `LedgerReport` (that class's doc
- * block argues why a receipts LIST, not an account-code summary, is the
- * right shape here).
- *
- * ---------------------------------------------------------------------------
- * AC10 scoping: the SAME `LedgerReadAuthorizer` `FinanceReports` uses
- * ---------------------------------------------------------------------------
- * Receipts are journal-derived money, so they carry the same
- * `journal_batches.entity_ref` business-entity dimension the ledger does.
- * `canAccess()`, `loadReport()` and `exportCsv()` all resolve
- * `Contracts\LedgerReadAuthorizer` fresh (never cache the scope across a
- * request) — identical discipline to `FinanceReports`, for the identical
- * reason: a grant revoked mid-session must stop the page on the next
- * Livewire interaction, not only at the next full page load.
- *
- * ---------------------------------------------------------------------------
- * The export — in-page, not `BulkFinancialExport`'s reauthenticated route
- * ---------------------------------------------------------------------------
- * See `OrdersReport`'s doc block for the reasoning this page shares:
- * `exportCsv()` re-derives the same authorized, already-rendered rows rather
- * than opening a second, wider read, so it does not need
- * `BulkFinancialExport`'s re-authentication ceremony. This is still real
- * financial data leaving the system as a file — flagged for human review per
- * `AGENTS.md` §Infrastructure-agent execution.
+ * "Laporan Penerimaan" tab of `App\Filament\Admin\Pages\Reports`. Moved
+ * verbatim from the former standalone `App\Filament\Admin\Pages\ReceiptsReport`
+ * Filament page — see `FinanceReportPanel`'s doc block for why this
+ * `LedgerReadAuthorizer`-gated tab still self-enforces `canAccess()` on top
+ * of `Reports::canAccess()`'s broader floor.
  */
-final class ReceiptsReport extends Page
+final class ReceiptsReportPanel extends Component
 {
     use ExportsReportCsv;
-
-    protected static ?string $slug = 'laporan-kwitansi';
-
-    protected string $view = 'filament.admin.pages.receipts-report';
 
     public string $period = '';
 
@@ -74,21 +50,18 @@ final class ReceiptsReport extends Page
         return true;
     }
 
-    public static function getNavigationLabel(): string
-    {
-        return 'Laporan Penerimaan';
-    }
-
-    public function getTitle(): string
-    {
-        return 'Laporan Penerimaan';
-    }
-
     public function mount(): void
     {
+        abort_unless(self::canAccess(), 403);
+
         $this->period = CarbonImmutable::now()->format('Y-m');
 
         $this->loadReport();
+    }
+
+    public function hydrate(): void
+    {
+        abort_unless(self::canAccess(), 403);
     }
 
     public function loadReport(): void
@@ -157,5 +130,10 @@ final class ReceiptsReport extends Page
         $lines[] = $this->csvLine(['TOTAL', '', '', '', '', (string) $result->totalMinor]);
 
         return $this->streamCsv($lines, "receipts-report-{$this->period}.csv");
+    }
+
+    public function render(): View
+    {
+        return view('livewire.admin.reports.receipts-report-panel');
     }
 }

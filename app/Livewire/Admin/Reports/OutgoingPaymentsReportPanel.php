@@ -2,37 +2,30 @@
 
 declare(strict_types=1);
 
-namespace App\Filament\Admin\Pages;
+namespace App\Livewire\Admin\Reports;
 
-use App\Filament\Admin\Pages\Concerns\ExportsReportCsv;
+use App\Livewire\Admin\Reports\Concerns\ExportsReportCsv;
 use App\Platform\FinancialLedger\Contracts\LedgerReadAuthorizer;
 use App\Platform\FinancialLedger\Exceptions\InvalidLedgerReportException;
 use App\Platform\FinancialLedger\Exceptions\LedgerReadNotAuthorisedException;
 use App\Platform\FinancialLedger\PayoutSummaryReport;
 use App\Platform\IdentityAccess\ActorContext;
 use Carbon\CarbonImmutable;
-use Filament\Pages\Page;
+use Illuminate\Contracts\View\View;
 use Illuminate\Http\Response;
+use Livewire\Component;
 
 /**
- * ADM-090/AC7 "report on ... outgoing payments ... by period where data
- * exists". Mirrors `FinanceReports`'s architecture over `PayoutSummaryReport`
- * (that class's own doc block argues why `payouts` — not a journal filter —
- * is the right source for this report).
- *
- * AC10 scoping, `canAccess()` shape, and the export's design are identical to
- * `ReceiptsReport` — see that page's doc block for the reasoning shared by
- * both: same `LedgerReadAuthorizer`, resolved fresh on every access; same
- * in-page CSV export rather than `BulkFinancialExport`'s reauthenticated
- * route, flagged for human review for the same reason.
+ * "Laporan Pembayaran Keluar" tab of `App\Filament\Admin\Pages\Reports`.
+ * Moved verbatim from the former standalone
+ * `App\Filament\Admin\Pages\OutgoingPaymentsReport` Filament page — see
+ * `FinanceReportPanel`'s doc block for why this `LedgerReadAuthorizer`-gated
+ * tab still self-enforces `canAccess()` on top of `Reports::canAccess()`'s
+ * broader floor.
  */
-final class OutgoingPaymentsReport extends Page
+final class OutgoingPaymentsReportPanel extends Component
 {
     use ExportsReportCsv;
-
-    protected static ?string $slug = 'laporan-pembayaran-keluar';
-
-    protected string $view = 'filament.admin.pages.outgoing-payments-report';
 
     public string $period = '';
 
@@ -58,21 +51,18 @@ final class OutgoingPaymentsReport extends Page
         return true;
     }
 
-    public static function getNavigationLabel(): string
-    {
-        return 'Laporan Pembayaran Keluar';
-    }
-
-    public function getTitle(): string
-    {
-        return 'Laporan Pembayaran Keluar';
-    }
-
     public function mount(): void
     {
+        abort_unless(self::canAccess(), 403);
+
         $this->period = CarbonImmutable::now()->format('Y-m');
 
         $this->loadReport();
+    }
+
+    public function hydrate(): void
+    {
+        abort_unless(self::canAccess(), 403);
     }
 
     public function loadReport(): void
@@ -142,5 +132,10 @@ final class OutgoingPaymentsReport extends Page
         $lines[] = $this->csvLine(['TOTAL', '', '', (string) $result->totalMinor, '', '', '']);
 
         return $this->streamCsv($lines, "outgoing-payments-report-{$this->period}.csv");
+    }
+
+    public function render(): View
+    {
+        return view('livewire.admin.reports.outgoing-payments-report-panel');
     }
 }

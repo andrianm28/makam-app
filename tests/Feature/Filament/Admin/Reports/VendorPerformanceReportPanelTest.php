@@ -10,7 +10,7 @@ use App\Domain\Marketplace\Models\Vendor;
 use App\Domain\Marketplace\Models\VendorListing;
 use App\Domain\Marketplace\Models\VendorOrder;
 use App\Domain\Marketplace\VendorProcessingStatus;
-use App\Filament\Admin\Pages\VendorPerformanceReport;
+use App\Livewire\Admin\Reports\VendorPerformanceReportPanel;
 use App\Models\User;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use Carbon\CarbonImmutable;
@@ -22,13 +22,13 @@ use Tests\Support\GrantsActorRoles;
 use Tests\TestCase;
 
 /**
- * `VendorPerformanceReport` — ADM-090/AC7's vendor-performance-by-period
+ * `VendorPerformanceReportPanel` — ADM-090/AC7's vendor-performance-by-period
  * report. `canAccess()` is role-only, the same
  * `MasterDataAdminAuthorizerContract` gate `VendorResource` uses — see
  * `VendorFulfillmentReport`'s doc block for why no business-entity scoping
  * applies.
  */
-final class VendorPerformanceReportPageTest extends TestCase
+final class VendorPerformanceReportPanelTest extends TestCase
 {
     use GrantsActorRoles;
     use RefreshDatabase;
@@ -41,9 +41,9 @@ final class VendorPerformanceReportPageTest extends TestCase
 
     public function test_guests_and_bare_users_are_denied(): void
     {
-        $this->assertFalse(VendorPerformanceReport::canAccess());
+        $this->assertFalse(VendorPerformanceReportPanel::canAccess());
         $this->actingAs(User::factory()->create());
-        $this->assertFalse(VendorPerformanceReport::canAccess());
+        $this->assertFalse(VendorPerformanceReportPanel::canAccess());
     }
 
     public function test_back_office_roles_can_access(): void
@@ -52,7 +52,7 @@ final class VendorPerformanceReportPageTest extends TestCase
             $user = User::factory()->create();
             $this->grantRoleTo($user, $role);
             $this->actingAs($user);
-            $this->assertTrue(VendorPerformanceReport::canAccess(), "role {$role} should access");
+            $this->assertTrue(VendorPerformanceReportPanel::canAccess(), "role {$role} should access");
         }
     }
 
@@ -60,7 +60,7 @@ final class VendorPerformanceReportPageTest extends TestCase
     {
         $user = $this->authorisedUser();
 
-        $component = Livewire::actingAs($user)->test(VendorPerformanceReport::class);
+        $component = Livewire::actingAs($user)->test(VendorPerformanceReportPanel::class);
 
         $this->assertSame(CarbonImmutable::now()->format('Y-m'), $component->get('period'));
         $component->assertSee('Belum ada pesanan vendor pada periode ini')
@@ -78,7 +78,7 @@ final class VendorPerformanceReportPageTest extends TestCase
         $this->makeVendorOrder($vendor, $listing, VendorProcessingStatus::DIBATALKAN);
         $this->makeVendorOrder($vendor, $listing, VendorProcessingStatus::KOMPLAIN);
 
-        $component = Livewire::actingAs($user)->test(VendorPerformanceReport::class);
+        $component = Livewire::actingAs($user)->test(VendorPerformanceReportPanel::class);
 
         $component->assertCount('reportRows', 1);
 
@@ -102,7 +102,7 @@ final class VendorPerformanceReportPageTest extends TestCase
             'created_at' => CarbonImmutable::now()->subMonths(2),
         ]);
 
-        $component = Livewire::actingAs($user)->test(VendorPerformanceReport::class);
+        $component = Livewire::actingAs($user)->test(VendorPerformanceReportPanel::class);
 
         $component->assertCount('reportRows', 0);
     }
@@ -111,7 +111,7 @@ final class VendorPerformanceReportPageTest extends TestCase
     {
         $user = $this->authorisedUser();
 
-        $component = Livewire::actingAs($user)->test(VendorPerformanceReport::class);
+        $component = Livewire::actingAs($user)->test(VendorPerformanceReportPanel::class);
 
         $component->set('period', '2026-13')->call('loadReport');
 

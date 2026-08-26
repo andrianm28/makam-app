@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Tests\Feature\FinancialLedger;
+namespace Tests\Feature\Filament\Admin\Reports;
 
-use App\Filament\Admin\Pages\FinanceReports;
+use App\Livewire\Admin\Reports\FinanceReportPanel;
 use App\Models\User;
 use App\Platform\FinancialLedger\FinanceLedgerReadAuthorizer;
 use App\Platform\FinancialLedger\Journal;
@@ -18,21 +18,28 @@ use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
- * The `FinanceReports` admin page — the report's and the export's mount point.
+ * `FinanceReportPanel` — the "Laporan Keuangan" tab of the consolidated
+ * `App\Filament\Admin\Pages\Reports` admin page (formerly the standalone
+ * `FinanceReports` Filament page; moved here verbatim by the six-report-page
+ * consolidation) — the report's and the export's mount point.
  * `PasswordReauthenticationPageTest` is the sibling precedent for the
- * Filament page test shape. Required states (§6) covered here: empty (the
+ * Filament page test shape this component's tests still follow, even though
+ * it is now tested as a plain nested Livewire component rather than a
+ * top-level Filament page. Required states (§6) covered here: empty (the
  * exact "Belum ada
  * transaksi pada periode ini" copy), success (rows + metadata), validation
  * error (inline, malformed period), and the export button's link to the gated
  * route.
  *
  * Every success case must bind a `finance` `ActorContext` and create a real
- * `scope_assignments` grant, because the page is gated by the same policy the
- * export is. The panel's own access policy is only `isAuthenticated()`, so
- * without `canAccess()` any panel user would have seen every badan usaha's
- * account totals — the refusal test below is what keeps that closed.
+ * `scope_assignments` grant, because the component is gated by the same
+ * policy the export is. Its own `canAccess()` re-check on `mount()`/
+ * `hydrate()` — and `Reports`'s own `@livewire()` visibility guard — are what
+ * keep another panel user from seeing every badan usaha's account totals; see
+ * `ReportsPageTest` for the consolidated page's own cross-tab visibility
+ * coverage of this exact boundary.
  */
-final class FinanceReportsPageTest extends TestCase
+final class FinanceReportPanelTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -45,9 +52,9 @@ final class FinanceReportsPageTest extends TestCase
         $user = User::factory()->create();
         $this->actAsActor($user, roles: []);
 
-        $this->assertFalse(FinanceReports::canAccess());
+        $this->assertFalse(FinanceReportPanel::canAccess());
 
-        Livewire::actingAs($user)->test(FinanceReports::class)->assertForbidden();
+        Livewire::actingAs($user)->test(FinanceReportPanel::class)->assertForbidden();
     }
 
     public function test_a_finance_actor_without_a_business_entity_grant_cannot_access_the_page(): void
@@ -55,7 +62,7 @@ final class FinanceReportsPageTest extends TestCase
         $user = User::factory()->create();
         $this->actAsActor($user);
 
-        $this->assertFalse(FinanceReports::canAccess());
+        $this->assertFalse(FinanceReportPanel::canAccess());
     }
 
     public function test_a_revoked_grant_does_not_grant_access(): void
@@ -64,14 +71,14 @@ final class FinanceReportsPageTest extends TestCase
         $this->actAsActor($user);
         $this->grant($user, revoked: true);
 
-        $this->assertFalse(FinanceReports::canAccess());
+        $this->assertFalse(FinanceReportPanel::canAccess());
     }
 
     public function test_an_empty_ledger_renders_the_required_empty_state_with_the_current_period(): void
     {
         $user = $this->authorisedFinanceUser();
 
-        $component = Livewire::actingAs($user)->test(FinanceReports::class);
+        $component = Livewire::actingAs($user)->test(FinanceReportPanel::class);
 
         $this->assertSame(CarbonImmutable::now()->format('Y-m'), $component->get('period'));
         $component->assertSee('Belum ada transaksi pada periode ini')
@@ -84,7 +91,7 @@ final class FinanceReportsPageTest extends TestCase
         $user = $this->authorisedFinanceUser();
         $this->seedCurrentMonthLedger();
 
-        $component = Livewire::actingAs($user)->test(FinanceReports::class);
+        $component = Livewire::actingAs($user)->test(FinanceReportPanel::class);
 
         $component->assertSee('Kode akun')
             ->assertSee('TOTAL')
@@ -106,7 +113,7 @@ final class FinanceReportsPageTest extends TestCase
         $this->seedCurrentMonthLedger();
 
         Livewire::actingAs($user)
-            ->test(FinanceReports::class)
+            ->test(FinanceReportPanel::class)
             ->assertSee('Rp 1.000')
             ->assertDontSee('Debit (IDR)');
     }
@@ -126,7 +133,7 @@ final class FinanceReportsPageTest extends TestCase
         );
 
         Livewire::actingAs($user)
-            ->test(FinanceReports::class)
+            ->test(FinanceReportPanel::class)
             ->assertSet('debitTotal', 100_000)
             ->assertDontSee('Rp 7.770');
     }
@@ -135,7 +142,7 @@ final class FinanceReportsPageTest extends TestCase
     {
         $user = $this->authorisedFinanceUser();
 
-        $component = Livewire::actingAs($user)->test(FinanceReports::class);
+        $component = Livewire::actingAs($user)->test(FinanceReportPanel::class);
 
         $component->set('period', '2026-13')->call('loadReport');
 
@@ -150,7 +157,7 @@ final class FinanceReportsPageTest extends TestCase
         $user = $this->authorisedFinanceUser();
         $this->seedCurrentMonthLedger();
 
-        $component = Livewire::actingAs($user)->test(FinanceReports::class);
+        $component = Livewire::actingAs($user)->test(FinanceReportPanel::class);
 
         $component->set('period', '2026-13')->call('loadReport')->assertCount('reportRows', 0);
 
@@ -166,7 +173,7 @@ final class FinanceReportsPageTest extends TestCase
         $user = $this->authorisedFinanceUser();
 
         Livewire::actingAs($user)
-            ->test(FinanceReports::class)
+            ->test(FinanceReportPanel::class)
             ->assertSeeHtml(route('admin.finance.exports', ['period' => CarbonImmutable::now()->format('Y-m')]));
     }
 
@@ -179,7 +186,7 @@ final class FinanceReportsPageTest extends TestCase
         $user = $this->authorisedFinanceUser();
 
         Livewire::actingAs($user)
-            ->test(FinanceReports::class)
+            ->test(FinanceReportPanel::class)
             ->set('entityRef', self::ENTITY)
             ->call('loadReport')
             ->assertSeeHtml(e(route('admin.finance.exports', [

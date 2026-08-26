@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Filament\Admin\Reports;
 
-use App\Filament\Admin\Pages\ReceiptsReport;
+use App\Livewire\Admin\Reports\ReceiptsReportPanel;
 use App\Models\User;
 use App\Platform\FinancialLedger\FinanceLedgerReadAuthorizer;
 use App\Platform\FinancialLedger\Journal;
@@ -18,14 +18,14 @@ use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
- * `ReceiptsReport` — ADM-090/AC7's receipts-by-period report. Same
- * authorization/scoping fixture shape as `FinanceReportsPageTest` (this page
+ * `ReceiptsReportPanel` — ADM-090/AC7's receipts-by-period report. Same
+ * authorization/scoping fixture shape as `FinanceReportPanelTest` (this page
  * shares the identical `LedgerReadAuthorizer` gate), because AC10's
  * business-entity half genuinely applies here — receipts are journal-derived
  * money. Required states (§6) covered: access denial, empty, success with a
  * receipt row, cross-entity exclusion, and the inline validation error.
  */
-final class ReceiptsReportPageTest extends TestCase
+final class ReceiptsReportPanelTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -38,9 +38,9 @@ final class ReceiptsReportPageTest extends TestCase
         $user = User::factory()->create();
         $this->actAsActor($user, roles: []);
 
-        $this->assertFalse(ReceiptsReport::canAccess());
+        $this->assertFalse(ReceiptsReportPanel::canAccess());
 
-        Livewire::actingAs($user)->test(ReceiptsReport::class)->assertForbidden();
+        Livewire::actingAs($user)->test(ReceiptsReportPanel::class)->assertForbidden();
     }
 
     public function test_a_finance_actor_without_a_business_entity_grant_cannot_access_the_page(): void
@@ -48,14 +48,14 @@ final class ReceiptsReportPageTest extends TestCase
         $user = User::factory()->create();
         $this->actAsActor($user);
 
-        $this->assertFalse(ReceiptsReport::canAccess());
+        $this->assertFalse(ReceiptsReportPanel::canAccess());
     }
 
     public function test_an_empty_ledger_renders_the_required_empty_state(): void
     {
         $user = $this->authorisedFinanceUser();
 
-        $component = Livewire::actingAs($user)->test(ReceiptsReport::class);
+        $component = Livewire::actingAs($user)->test(ReceiptsReportPanel::class);
 
         $this->assertSame(CarbonImmutable::now()->format('Y-m'), $component->get('period'));
         $component->assertSee('Belum ada penerimaan pada periode ini')
@@ -67,7 +67,7 @@ final class ReceiptsReportPageTest extends TestCase
         $user = $this->authorisedFinanceUser();
         $this->seedReceipt();
 
-        $component = Livewire::actingAs($user)->test(ReceiptsReport::class);
+        $component = Livewire::actingAs($user)->test(ReceiptsReportPanel::class);
 
         $component->assertCount('reportRows', 1)
             ->assertSet('totalMinor', 100_000);
@@ -79,7 +79,7 @@ final class ReceiptsReportPageTest extends TestCase
         $this->seedReceipt();
         $this->seedReceipt(entityRef: self::OTHER_ENTITY, suffix: '-other', amountMinor: 777_000);
 
-        $component = Livewire::actingAs($user)->test(ReceiptsReport::class);
+        $component = Livewire::actingAs($user)->test(ReceiptsReportPanel::class);
 
         $component->assertCount('reportRows', 1)
             ->assertSet('totalMinor', 100_000);
@@ -89,7 +89,7 @@ final class ReceiptsReportPageTest extends TestCase
     {
         $user = $this->authorisedFinanceUser();
 
-        $component = Livewire::actingAs($user)->test(ReceiptsReport::class);
+        $component = Livewire::actingAs($user)->test(ReceiptsReportPanel::class);
 
         $component->set('period', '2026-13')->call('loadReport');
 
