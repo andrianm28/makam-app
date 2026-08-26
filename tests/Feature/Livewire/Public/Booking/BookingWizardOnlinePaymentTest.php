@@ -19,6 +19,7 @@ use App\Domain\OrderWorkflow\ProductType;
 use App\Domain\Quotation\Actions\AcceptQuote;
 use App\Domain\Quotation\Models\Quote;
 use App\Domain\Quotation\QuoteStatus;
+use App\Domain\ServiceCatalog\Models\PriceVersion;
 use App\Domain\ServiceCatalog\Models\ServiceDefinition;
 use App\Domain\ServiceCatalog\ServiceCode;
 use App\Livewire\Public\Booking\BookingWizard;
@@ -774,5 +775,98 @@ final class BookingWizardOnlinePaymentTest extends TestCase
         $this->get(route('payments.cancel', ['payment_id' => 'uuid-1']))
             ->assertOk()
             ->assertSee('Sesi pembayaran telah kedaluwarsa');
+    }
+
+    /**
+     * Fix 3 of the itemized-quote-display pass: Step 9 previously recomputed
+     * `BookingDraftQuery::summary($draft)` live, every render — the same
+     * seam Step 5 legitimately uses pre-issuance, but WRONG once a quote has
+     * actually been issued, because a live recompute can silently drift from
+     * what the customer was actually quoted (e.g. a catalog price change
+     * between issuance and viewing the confirmation). This proves Step 9 now
+     * reads the ACTUAL frozen quote (`Quote::currentFor($order)->lines`)
+     * once one exists: the catalog price for GRAVE_DIGGING is changed AFTER
+     * the chain's first `openOnlinePayment()` click issues the quote, and
+     * Step 9 must still show the OLD, frozen unit price — never the new one
+     * a live recompute would produce.
+     */
+    public function test_step_9_shows_the_issued_quotes_frozen_amount_not_a_live_recompute(): void
+    {
+        $this->withPaymentGate(open: true);
+        Http::fake();
+
+        $draftId = $this->journeyToStepEight()->get('draftId');
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
+        // First click: the chain submits the draft and issues its quote.
+        // The guard denies (operator-side prerequisites aren't in place),
+        // but the order and quote are real — currentStep stays PAYMENT,
+        // matching test_online_submit_creates_order_and_quote_but_fails_
+        // closed_without_calling_the_provider.
+        $component->call('openOnlinePayment')
+            ->assertSet('currentStep', BookingWizardStep::PAYMENT);
+
+        $order = $this->chainOrderFor($draftId);
+        $quote = Quote::query()->where('order_id', $order->getKey())->sole();
+
+        $grave = ServiceDefinition::findByCode(ServiceCode::GRAVE_DIGGING);
+        $this->assertNotNull($grave);
+
+        $graveLine = $quote->lines()->where('service_definition_id', $grave->getKey())->sole();
+        $issuedUnitPriceMinor = (int) $graveLine->unit_amount_minor;
+
+        // Change the catalog price AFTER issuance — a live recompute would
+        // pick this up; the frozen quote must not.
+        $oldPrice = $grave->currentPriceVersion();
+        $this->assertNotNull($oldPrice);
+        $oldPrice->forceFill(['superseded_at' => CarbonImmutable::now()])->save();
+
+        $newAmount = '9999999.00';
+        PriceVersion::query()->create([
+            'priceable_type' => ServiceDefinition::class,
+            'priceable_id' => $grave->getKey(),
+            'version_number' => $oldPrice->version_number + 1,
+            'amount' => $newAmount,
+            'currency' => (string) $oldPrice->currency,
+            'source' => 'test fixture: post-issuance price change',
+            'effective_from' => CarbonImmutable::now(),
+            'recorded_by' => 'test',
+        ]);
+
+        $recomputedUnitPriceMinor = Money::fromDecimal($newAmount);
+        $this->assertNotSame(
+            $issuedUnitPriceMinor,
+            $recomputedUnitPriceMinor,
+            'the fixture must actually change the price, or this test proves nothing.',
+        );
+
+        $issuedFormatted = (new Money($issuedUnitPriceMinor))->format();
+        $recomputedFormatted = (new Money($recomputedUnitPriceMinor))->format();
+
+        // Step 9 must show the OLD, issued amount and never the new one.
+        $component->call('goToStep', BookingWizardStep::CONFIRMATION)
+            ->assertSet('currentStep', BookingWizardStep::CONFIRMATION)
+            ->assertSee($issuedFormatted)
+            ->assertDontSee($recomputedFormatted);
+
+        // Step 5, the pre-issuance summary, is unaffected and stays a live
+        // recompute — a fresh component (Step 5 is only shown before the
+        // draft has left SERVICES) proves the seam `BookingDraftQuery::
+        // summary()` still drives it directly, unchanged by this fix.
+        $summaryComponent = $this->componentAtSummaryFor($draftId);
+        $summaryComponent->assertSee($recomputedFormatted);
+    }
+
+    /**
+     * Step 5 is read-only and reachable once Step 4 is done — same
+     * `canReachStep()` rule `BookingWizardStepsSixToNineEndToEndTest`
+     * exercises for Step 9. Used only to prove Step 5 still shows a live
+     * recompute, unaffected by the Step 9 fix above.
+     */
+    private function componentAtSummaryFor(string $draftId): Testable
+    {
+        return Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->call('goToStep', BookingWizardStep::SUMMARY)
+            ->assertSet('currentStep', BookingWizardStep::SUMMARY);
     }
 }

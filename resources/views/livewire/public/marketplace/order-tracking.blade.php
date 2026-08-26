@@ -6,8 +6,17 @@
     through StatusIntent — never a `match` on a status in this file. They are
     visually and structurally distinct; a paid order is never shown as
     fulfilment-complete (AC12). Tokens only.
+
+    The itemized breakdown below follows checkout.blade.php's own
+    "Ringkasan pesanan" pattern exactly (`<x-mk.table>` + `Money::format()`)
+    rather than inventing a new shape — `$order->items` is the frozen
+    `MarketplaceOrderItem` snapshot (already eager-loaded with
+    `listing.product` by `MarketplaceOrderQuery::findForCustomer()`), the
+    same data `MarketplaceOrderInfolist` already shows staff.
 --}}
 @php
+    use App\Domain\Marketplace\Models\MarketplaceOrderItem;
+    use App\Platform\FinancialLedger\Money;
     use App\Support\Design\StatusIntent;
 @endphp
 
@@ -43,6 +52,43 @@
                     </div>
                 </dl>
             </x-mk.card>
+
+            <section aria-labelledby="order-items-heading" class="mb-6">
+                <h2 id="order-items-heading" class="text-lg font-semibold text-neutral-900">Rincian pesanan</h2>
+
+                <x-mk.table
+                    caption="Rincian item pesanan"
+                    :headers="[
+                        ['key' => 'product', 'label' => 'Produk'],
+                        ['key' => 'price', 'label' => 'Harga', 'numeric' => true],
+                        ['key' => 'quantity', 'label' => 'Jml'],
+                        ['key' => 'lineTotal', 'label' => 'Subtotal', 'numeric' => true],
+                    ]"
+                    :rows="$items->map(fn (MarketplaceOrderItem $item): array => [
+                        'id' => $item->id,
+                        'product' => $item->listing->product->name,
+                        'price' => (new Money((int) $item->unit_price_minor))->format(),
+                        'quantity' => $item->quantity,
+                        'lineTotal' => $item->lineTotal()->format(),
+                    ])->all()"
+                    class="mt-4"
+                />
+
+                <div class="mt-6 space-y-2 text-base">
+                    <div class="flex items-center justify-between gap-4">
+                        <span class="text-neutral-600">Subtotal</span>
+                        <span class="tabular-nums text-neutral-900">{{ (new Money((int) $order->subtotal_minor))->format() }}</span>
+                    </div>
+                    <div class="flex items-center justify-between gap-4">
+                        <span class="text-neutral-600">Ongkos kirim</span>
+                        <span class="tabular-nums text-neutral-900">{{ (new Money((int) $order->delivery_fee_minor))->format() }}</span>
+                    </div>
+                    <div class="flex items-center justify-between gap-4 border-t border-neutral-200 pt-2">
+                        <span class="font-semibold text-neutral-900">Total</span>
+                        <span class="font-bold tabular-nums text-neutral-900">{{ $order->total()->format() }}</span>
+                    </div>
+                </div>
+            </section>
 
             <section aria-labelledby="order-status-heading" class="mt-6">
                 <h2 id="order-status-heading" class="text-lg font-semibold text-neutral-900">Status pesanan Anda</h2>

@@ -211,6 +211,43 @@ final class OrderTrackingScreenTest extends TestCase
         $this->assertSame(0, AuditEvent::query()->where('action', MarketplaceAuditActions::ORDER_STATUS_CHANGED)->count());
     }
 
+    /**
+     * PUB-024 previously rendered only the bundled `$order->total()` — the
+     * per-line `MarketplaceOrderItem` snapshot (`items()`, a real `hasMany`
+     * with `product_id`/`quantity`/`unit_price_minor`/`line_total_minor`)
+     * was never loaded or shown. This proves the itemized breakdown now
+     * renders with the correct product name and amounts, alongside the
+     * pre-existing subtotal/delivery-fee/total figures.
+     */
+    public function test_order_items_render_with_the_correct_product_name_and_amounts(): void
+    {
+        $order = $this->order('cust-1', VendorProcessingStatus::DIPROSES, PaymentState::BELUM_DIBAYAR);
+        $listing = VendorListing::query()->where('vendor_id', $order->vendor_id)->sole();
+
+        $order->items()->create([
+            'vendor_listing_id' => $listing->id,
+            'product_id' => $listing->product_id,
+            'quantity' => 2,
+            'unit_price_minor' => 150_000,
+            'line_total_minor' => 300_000,
+            'price_version' => 1,
+        ]);
+
+        $productName = Product::findByCode(ProductCode::FLOWER_BOARD)->name;
+
+        Livewire::test(OrderTracking::class, ['orderNumber' => $order->order_number, 'customerRef' => 'cust-1'])
+            ->assertOk()
+            ->assertSee($productName)
+            // `Money`'s minor-units factor is 100 (config('money.minor_units')),
+            // so unit_price_minor 150_000 / line_total_minor 300_000 /
+            // delivery_fee_minor 25_000 / total_minor 325_000 format as
+            // Rp 1.500 / Rp 3.000 / Rp 250 / Rp 3.250 — none fabricated,
+            // all read straight from the order/item rows the fixture wrote.
+            ->assertSeeInOrder(['Rp 1.500', 'Rp 3.000'])
+            ->assertSee('Rp 250')
+            ->assertSee('Rp 3.250');
+    }
+
     public function test_a_customer_cannot_file_a_complaint_on_someone_elses_order(): void
     {
         $order = $this->order('cust-owner', VendorProcessingStatus::DITERIMA_VENDOR, PaymentState::BELUM_DIBAYAR);

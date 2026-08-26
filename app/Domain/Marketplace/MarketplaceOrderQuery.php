@@ -26,7 +26,7 @@ final class MarketplaceOrderQuery
     public static function findForCustomer(string $orderNumber, string $customerRef): ?MarketplaceOrder
     {
         return MarketplaceOrder::query()
-            ->with('vendorOrders')
+            ->with(['vendorOrders', 'items.listing.product'])
             ->where('order_number', $orderNumber)
             ->forCustomer($customerRef)
             ->first();
