@@ -561,6 +561,73 @@ business cannot evidence. The component slot may be built only once real partner
 review content exists to populate it — building it earlier, even with an intent to fill it in
 later, invites exactly that fabrication risk.
 
+### 3.3e Sticky comparison rail — `<x-mk.sticky-comparison-rail>` (added 26 Aug 2026)
+
+**Ahead of content.** Built after a competitive read of `kamboja.co.id`'s pricing-tier page found
+a strong pattern worth adopting: a sticky right-rail widget combining a condensed multi-tier price
+comparison, the page's one primary CTA, a trust/review slot, and a compact related-links list — in
+one persistent element, instead of spreading "compare plans," "convert," and "explore more" across
+separate page sections. **Only that layout pattern is adopted.** Every visual treatment — colour,
+shape, type, spacing — comes exclusively from this document's own tokens and the existing
+`<x-mk.card>`/`<x-mk.button>`/`<x-mk.badge>` primitives; no pill-shaped buttons (§1.5 forbids them
+site-wide) and no borrowed palette. **No real page consumes this component yet** — cemetery package
+pricing and care-subscription tier pricing are both separate, in-progress workstreams that will
+need this exact comparison UI once their tier data exists. Until then it ships as an isolated,
+tested primitive (`tests/Feature/View/Components/MkStickyComparisonRailTest.php`), fixture data
+only.
+
+**Composition, not a new visual primitive.** The card chrome (border, radius, shadow, padding) is
+delegated to `<x-mk.card padding="lg">` rather than reinvented — the same "extend, don't fork"
+reasoning §3.6a documents for `filter-chip.blade.php`. This component only adds the `<aside>`
+sticky-positioning wrapper and the tier/CTA/trust/links content structure inside the card.
+
+**Props**
+
+| Prop | Values | Default |
+|---|---|---|
+| `heading` | string \| null | `null` — no default marketing copy is invented; omit to render no heading |
+| `label` | string | `'Perbandingan paket'` — accessible name for the `<aside>` landmark when `heading` is absent |
+| `tiers` | array of `['label', 'price', 'priceSource', 'indicative', 'description']` | `[]` |
+| `cta` | array `['label' => string, 'href' => string]`, **required** | — |
+| `links` | array of `['label' => string, 'href' => string]` | `[]` |
+
+**Tier price — the honest-availability convention, reused verbatim.** `price` is a
+**pre-formatted** string (formatting happens upstream, e.g. `CemeteryPresenter::priceRange()`,
+never inside the view). A `null` price renders "Belum tersedia" — the same honest-empty-state
+reasoning `CemeteryPresenter`'s own doc block states: *"showing nothing is honest; showing a number
+with an invented source would not be."* No fixture or caller may substitute a fabricated example
+price for a missing one. When a price is present and `priceSource` is given, it renders as
+"Sumber: {priceSource}" per §2.3's "show the source ... on any fee figure." When `indicative` is
+`true`, the tier renders the same `<x-mk.badge intent="neutral" icon="clock">Perlu konfirmasi</x-mk.badge>`
+the cemetery directory already uses (`resources/views/livewire/public/directory/detail.blade.php`)
+— `neutral`, never `success` (§2.3: an indicative price is never styled as a success).
+
+**CTA — exactly one primary action.** Rendered as a single
+`<x-mk.button variant="primary" size="lg" full :href="$cta['href']">`, identical in spirit to
+`<x-mk.hero>`'s CTA contract (§3.3c) and §2.3's "one primary action per view." Omitting `cta`
+throws `InvalidArgumentException` at render time — same fail-loudly convention `<x-mk.hero>` uses
+for a missing `heading`.
+
+**Trust slot — ties into §3.3d's reserved pattern, no invented content.** An optional named
+`trust` slot exists for a trust/review-badge component to plug into this rail. §3.3d above (landed
+on trunk after this component's own authoring began) reserves exactly that future component,
+`<x-mk.trust-badge-strip>`, as **documentation only — not yet built**, because no real
+partner/review/certification content exists to populate it. This slot is the documented place a
+future `<x-slot:trust><x-mk.trust-badge-strip>...</x-mk.trust-badge-strip></x-slot:trust>` usage
+will go once §3.3d's component actually ships; until then it renders only what a caller supplies,
+with **no built-in fallback content** — this component does not build `<x-mk.trust-badge-strip>`
+itself, and does not invent placeholder trust content, per §3.3d's own hard constraint.
+
+**Related links.** Each entry renders as `<x-mk.button variant="link">` — §3.1's existing "link:
+inline in prose" variant — rather than inventing a new link-list primitive.
+
+**Responsive behaviour.** Desktop: sticky positioning reuses §4.3's own wizard "form + sticky
+summary" example verbatim — `md:sticky md:top-24 md:self-start` — rather than inventing a new
+breakpoint or offset. Below `md` the `<aside>` is a plain, non-sticky block in normal document
+flow, matching `<x-mk.table>`'s own `md:`-gated mobile-first collapse (§3.5). No new `--mk-z-*`
+layer is introduced: like the wizard aside it mirrors, this is a sticky element positioned *within*
+the page's normal content column, not a viewport-pinned bar, so none of §1.5's z-index layers apply.
+
 ### 3.4 Modal and Bottom Sheet — `<x-mk.modal>`
 
 **Mobile-first rule: below `md`, a modal renders as a bottom sheet.** Centred dialogs on a 360 px viewport push content under the keyboard.
