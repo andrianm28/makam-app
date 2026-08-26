@@ -14,6 +14,19 @@
       8. Customer-service CTA
       9. Footer                 -> rendered by layouts/app.blade.php, not here
 
+    --- ADDED 26 Aug 2026: "Kehangatan Keluarga" supporting photo section,
+    between 6 and 7 (not renumbered above) ---
+    This is deliberately NOT a tenth entry in the NORMATIVE nine-section
+    list above — it is not part of information-architecture.md §3's
+    contract, so nothing there needed to change. It is new, project-owner-
+    approved homepage content: a second, different real photo (warm, joyful
+    family) reinforcing the "lighter, younger, warmer" brand direction
+    alongside the existing location-focused hero (Section 2, which stays
+    untouched). Placed directly after Section 6 (Trust/safety) because it
+    continues the same reassurance beat with a human visual, right before
+    the page moves into FAQ mode — see that section's own comment below for
+    the full reasoning and image sourcing.
+
     --- Section 5 now renders — reversed from its original "deliberately
     absent" state ---
     App\Livewire\Public\HomePage::render()'s own doc block has the full
@@ -341,6 +354,61 @@
                 @endforeach
             </ul>
         </div>
+    </section>
+
+    {{-- "Kehangatan Keluarga" — supporting photo section, between Sections
+         6 and 7 (see this file's top doc block, "ADDED 26 Aug 2026", for
+         why this is not a tenth NORMATIVE section). Reuses <x-mk.card>'s
+         existing `media` + padded-body slot pattern (design-system.md
+         §3.3, the same shape Section 5's featured-cemetery cards already
+         use above) rather than inventing a new layout — design-system.md
+         §9.2 MUST #2, "extend primitives rather than forking". Centered,
+         single, non-interactive card (`padding="lg"`, no `href`, no
+         `interactive`): informational only, nothing to click, so it reads
+         as a smaller supporting note rather than competing with the hero.
+
+         Deliberately does NOT reuse <x-mk.hero>: that component renders an
+         <h1> (hero.blade.php's own doc block), and this page's Section 2
+         hero already owns the page's one <h1> — a second <h1> here would
+         break heading hierarchy. This section's heading is a plain <h2>,
+         the same level every other homepage section below uses.
+
+         image points to public/images/home/family-warmth.jpg — a real,
+         candid, joyful family photo (Pexels, photographer RDNE Stock
+         project, Pexels License, no attribution required; see this
+         change's commit message for the source URL and this session's
+         verification trail). design-system.md §2.2's Imagery row ("Real
+         cemeteries/gardens, daylight, no people in grief") governs the
+         hero/cemetery-card photography cage specifically — Section 2's
+         hero above still fully honours it, untouched. This is a SECOND,
+         different photo for a deliberately different purpose (warm family
+         reassurance, not a location/facility image), which the project
+         owner explicitly reviewed and approved separately from that cage,
+         the same "additional, not a replacement" relationship this
+         section's placement has to information-architecture.md §3's nine
+         sections. `alt=""`: decorative, same convention the hero above
+         uses — the heading and copy below already carry the message the
+         image doesn't add information beyond. --}}
+    <section aria-labelledby="family-warmth-heading" class="mx-auto max-w-content px-4 py-5 md:px-6 lg:px-8 lg:py-8">
+        <x-mk.card class="mx-auto max-w-2xl" padding="lg">
+            <x-slot:media>
+                <img
+                    src="{{ asset('images/home/family-warmth.jpg') }}"
+                    alt=""
+                    loading="lazy"
+                    class="h-64 w-full object-cover md:h-80"
+                >
+            </x-slot:media>
+            <div class="flex flex-col items-center gap-3 text-center">
+                <h2 id="family-warmth-heading" class="text-2xl font-semibold text-neutral-900">
+                    Didampingi dengan Hangat, Setiap Langkah
+                </h2>
+                <p class="text-base text-neutral-600">
+                    Kami memahami setiap keluarga punya cerita masing-masing. Tim kami hadir membantu Anda mengurus
+                    setiap kebutuhan dengan tenang, jelas, dan penuh perhatian — dari awal hingga selesai.
+                </p>
+            </div>
+        </x-mk.card>
     </section>
 
     {{-- Section 7: FAQ highlights — §6.5 provider-unavailable degrades
