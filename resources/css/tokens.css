@@ -283,6 +283,20 @@
   --mk-text-link: var(--color-primary-600);
   --mk-text-link-hover: var(--color-primary-700);
   --mk-text-on-brand: var(--color-neutral-0);
+  --mk-text-price: var(--color-primary-800); /* ADR-0037: monetary figures ONLY
+    (cemetery price ranges, renewal fees, quote/invoice totals) — a plain-text
+    "price/amount emphasis" purpose distinct from every other existing use of
+    primary-800 (button `pressed` fill, badge-on-tint foreground), neither of
+    which is body text on a white surface. Reuses the Earth family's darkest
+    legible shade instead of adding a new hue, keeping the palette restrained
+    (design-system.md §2.2 "few hues") the same way `--mk-intent-urgent-*`
+    reuses `warning` instead of inventing a colour (see that token's own
+    comment above). Provably AA on white without a new verify-contrast.py
+    assertion: primary-800 is strictly darker than the already-verified
+    "primary-700 on white" pair (12.16:1, design-system.md §7.1), so its own
+    ratio only improves. Per design-system.md §1.2(d) "one accent, one
+    purpose", this token renders a CONFIRMED/final monetary figure only — an
+    INDICATIVE price range stays `neutral`, per the existing §2.3 DO. */
 
   /* 2.3 BORDERS
    * `subtle`/`default` are DECORATIVE (WCAG 1.4.11 does not apply).

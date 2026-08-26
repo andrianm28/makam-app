@@ -42,6 +42,8 @@ This document is the **single source of truth for visual design decisions**. It 
 
 `v0.3` (21 Aug 2026): **OQ-12 resolved.** The real official logo (`docs/design/brand/source/logo.png`) replaced the earlier render-based estimate. Every Earth/Leaf hex in §1.2 is now sampled directly from that file (`docs/design/brand/sample-logo-colours.php`), and the full 50–950 ramp is derived from those anchors by `docs/design/brand/generate-ramp.php` (position-based lightness interpolation along the same curve the original ramp used, holding hue+saturation fixed — see that script's own doc comment for the method). No brand hex in this document is an estimate any longer. §7.1's contrast run was re-verified against the new values; see §11.
 
+`v0.4` (26 Aug 2026): three governance additions from a kamboja.co.id competitive-benchmark review — see [ADR-0037](../adr/0037-price-emphasis-and-one-accent-one-purpose.md). §1.2(d) codifies "one accent, one purpose" as an explicit rule (with a matching §9.2 MUST NOT 13), generalizing the discipline §1.2(b) already applied informally to Leaf. §2.2 gains positive imagery guidance (candid warmth when people are present) alongside its existing constraints-only list. §3.3d reserves the `<x-mk.trust-badge-strip>` pattern as documentation only — explicitly not built, pending real partner/review content. `tokens.css` gains one new token, `--mk-text-price` (Earth `primary-800`), for confirmed monetary figures only; no existing token value changed and §7.1's 49 asserted pairs are unaffected.
+
 ---
 
 ## 1. Design tokens
@@ -94,6 +96,8 @@ doc comment for the method). No value here is an estimate any longer.
 A `secondary-100` tile carrying a `secondary-800` icon (`<x-mk.icon-medallion tone="leaf">`, added 19 Aug 2026) is a surface-tint-plus-text usage, not a fill — it stays inside the cage, not an exception to it. It is `aria-hidden`, decorative only, and never appears adjacent to order/payment/availability data where a status reading could attach to it.
 
 **(c) Danger is muted brick `#A32435`, not a bright red.** Users on this site are frequently in the first hours of bereavement. A saturated alarm red is hostile. `#A32435` holds 7.34:1 on white — it is *more* legible than a typical bright red while reading as serious rather than panicked. (Hue tuned −11° from the v0.1 value, `#A32A24`, by ADR-0034 D4 — see the danger row above.)
+
+**(d) One accent, one purpose — governance rule, added 26 Aug 2026 (kamboja.co.id benchmark).** A competitive review of kamboja.co.id found it uses exactly one accent colour for urgency (its emergency hotline) and exactly one, different, accent colour for money/price figures — never reused for anything else. This design system already applies that discipline informally: (b) above cages Leaf to "surface tint + accent **only**," `danger` is reserved for errors/rejection, `warning` for waiting/urgency, `success` for confirmed payment, `info` for system notices. This paragraph makes the discipline an explicit, general rule rather than a set of family-specific carve-outs: **every accent/semantic colour token in `tokens.css` has exactly one designated purpose across the whole application, and must not be reused for a different semantic meaning elsewhere, even where it would be visually convenient.** A colour choosing to *look* like a good fit for a second meaning is not a licence to reuse it — a new meaning gets a new token (which may still reuse an existing family's shade, per §9.4, if that shade has no other plain-usage purpose yet — see `--mk-text-price` below) or, if none fits, a properly-verified new one. This is the same reasoning §1.2(b) already gives for why Leaf can never fill a status chip: a shared hue with a second meaning is read as the *first* meaning by a user under stress. Enforced at §9.2 MUST NOT 13.
 
 **"Urgent" is an alias, not a new colour.** `information-architecture.md` §4 requires `Urgent` to have visual priority, and `AGENTS.md` forbids implying a service claim while gate `G-OPS-01` is closed. So `--mk-intent-urgent-*` aliases the warning family with a strong left border, and **must always ship with an explicit availability label**. No new hue, no implied promise.
 
@@ -218,6 +222,8 @@ Easing: `--ease-standard` default · `--ease-decelerate` entering · `--ease-acc
 | Motion | Barely noticeable | Animated, celebratory, attention-seeking |
 | Copy voice | Plain Indonesian, direct, no euphemism-dodging | Corporate jargon, sales urgency, false cheer |
 | Trust signals | Named source, last-updated timestamp, honest availability | Badges, testimonials-as-decoration, countdown timers |
+
+**Imagery guidance is a constraint set, not only a constraint set — added 26 Aug 2026 (kamboja.co.id benchmark).** The row above states what to avoid; it does not yet say what to reach for when a photo *does* include people. kamboja.co.id's hero photography is deliberately warm, joyful family photography — grandparents with grandchildren, a father with his kids — rather than solemn funeral-industry imagery, and this validates the brand-refresh direction already in motion here ("lighter, younger, warmer," [`2026-08-21-brand-visual-refresh-design.md`](../superpowers/specs/2026-08-21-brand-visual-refresh-design.md)), demonstrated by the real Indonesian cemetery aerial photo already shipped in the Phase 2 homepage hero (§3.3c). The positive complement to the "no people in grief" constraint: **when photography includes people, prefer candid warmth and connection — family, community, everyday life — over solitary or somber framing.** This is guidance for future imagery choices, not a mandate to source new photography now; no photo currently in the codebase needs to change because of this addition. It still answers to every constraint in the table above (real, daylight, no grief) — it narrows *which* real, daylight, non-grief photography to prefer when people are present at all, it does not loosen anything.
 
 ### 2.3 DO / DON'T
 
@@ -524,7 +530,38 @@ decorative-image convention (the heading already carries the information the ima
 heading renders as a real `<h1>`, so it participates in the page's normal heading outline like any
 other page.
 
-### 3.3d Sticky comparison rail — `<x-mk.sticky-comparison-rail>` (added 26 Aug 2026)
+### 3.3d Trust badge strip — `<x-mk.trust-badge-strip>` — ⚠️ **RESERVED, NOT BUILT** (documentation only, added 26 Aug 2026)
+
+kamboja.co.id shows real trust signals prominently: review-platform badges, government/partner
+logos, media coverage. This repository has **no real content for that yet** — no confirmed
+partner relationships, no review-platform listing, no press mentions — and §2.3's existing DO/DON'T
+already forbids "testimonials-as-decoration." **This subsection reserves the intended pattern and
+its future component name so the slot is ready the day real content exists; it is documentation
+only. Do not build the Blade component in this phase** — there is nothing real to pass it yet, and
+an empty or placeholder-populated component is worse than no component (§2.3 DON'T, `AGENTS.md`
+prohibition on fabricated claims).
+
+**Intended shape, when built:** `<x-mk.trust-badge-strip>` following this repo's existing
+`<x-mk.*>` naming convention (`resources/views/components/mk/`, alongside `hero.blade.php`,
+`card.blade.php`, etc.) — a horizontal row of small logo/badge images (review platform, government
+or industry certification, partner), each with real `alt` text naming the source (§2.2 "Trust
+signals: named source" applies here too — a badge with no named source is exactly the
+"badge-as-decoration" pattern §2.3 already forbids).
+
+**Placement guidance:** near the homepage hero (directly below §4.5's hero section, before or
+after "Cara kerja") or in the footer, matching where kamboja.co.id places its own trust row and
+consistent with §4.5's normative homepage section order — inserting it would be a change to §4.5
+and needs the same product-contract review any other homepage-order change needs, not a decision
+this subsection makes unilaterally.
+
+**Hard constraint — must not ship with fabricated content.** No placeholder logos, no invented
+review-platform badges, no "as seen in" claims without a real citation. This mirrors §2.3's
+existing "no testimonials-as-decoration" rule and `AGENTS.md`'s prohibition on implying a claim the
+business cannot evidence. The component slot may be built only once real partner/certification/
+review content exists to populate it — building it earlier, even with an intent to fill it in
+later, invites exactly that fabrication risk.
+
+### 3.3e Sticky comparison rail — `<x-mk.sticky-comparison-rail>` (added 26 Aug 2026)
 
 **Ahead of content.** Built after a competitive read of `kamboja.co.id`'s pricing-tier page found
 a strong pattern worth adopting: a sticky right-rail widget combining a condensed multi-tier price
@@ -571,11 +608,15 @@ the cemetery directory already uses (`resources/views/livewire/public/directory/
 throws `InvalidArgumentException` at render time — same fail-loudly convention `<x-mk.hero>` uses
 for a missing `heading`.
 
-**Trust slot — generic, no invented content.** An optional named `trust` slot exists so a future
-trust/review-badge component has a documented place to plug into this rail. As of this component's
-authoring, no trust-badge component or design-system section has landed (confirmed absent, not
-fabricated here); the slot renders only what a caller supplies, with **no built-in fallback
-content**.
+**Trust slot — ties into §3.3d's reserved pattern, no invented content.** An optional named
+`trust` slot exists for a trust/review-badge component to plug into this rail. §3.3d above (landed
+on trunk after this component's own authoring began) reserves exactly that future component,
+`<x-mk.trust-badge-strip>`, as **documentation only — not yet built**, because no real
+partner/review/certification content exists to populate it. This slot is the documented place a
+future `<x-slot:trust><x-mk.trust-badge-strip>...</x-mk.trust-badge-strip></x-slot:trust>` usage
+will go once §3.3d's component actually ships; until then it renders only what a caller supplies,
+with **no built-in fallback content** — this component does not build `<x-mk.trust-badge-strip>`
+itself, and does not invent placeholder trust content, per §3.3d's own hard constraint.
 
 **Related links.** Each entry renders as `<x-mk.button variant="link">` — §3.1's existing "link:
 inline in prose" variant — rather than inventing a new link-list primitive.
@@ -1537,6 +1578,7 @@ A conflict between ranks is a **defect**. Rank 1 wins for values; rank 2 wins fo
 10. ❌ Style a pending state as success, or claim a notification delivery without delivery state.
 11. ❌ Preview, thumbnail, or link a quarantined document.
 12. ❌ Introduce a new token without §9.4.
+13. ❌ **Reuse an accent/semantic colour token for a second, different meaning.** One accent, one purpose (§1.2(d), added 26 Aug 2026) — e.g. `--mk-text-price` renders a confirmed monetary figure and nothing else; it must never be repurposed as a generic "emphasis" or "strong" colour for unrelated content, the same way `secondary`/Leaf (rule 7) must never be repurposed as a fill.
 
 ### 9.3 Definition of Done for any UI change
 
@@ -1618,6 +1660,9 @@ COLOUR    primary-600 #563B26  brand/CTA/link/focus (Earth — logo-sampled, OQ-
           neutral-700 #444B4B  body text
           neutral-450 #7F8787  interactive borders  ← not 300
           secondary   #336B3E  Leaf — surface/accent ONLY, never a fill (logo-sampled, OQ-12 resolved)
+          text-price  #382719  (primary-800) monetary figures ONLY — confirmed price/fee/total, never indicative
+
+Each accent/semantic token above has exactly ONE purpose app-wide (§1.2(d), §9.2 MUST NOT 13).
 
 TEXT      16px floor on all inputs · text-base body · 500 UI · 600 headings
 SPACE     4px base · gutter p-4/md:p-6/lg:px-8 · section 40/64 · touch h-11
@@ -1633,6 +1678,7 @@ STATES    loading · empty · validation · authorization · provider-unavailabl
 NEVER     hardcode a value · colour-only status · pending-as-success
           claim undelivered notification · preview a quarantined file
           countdown/urgency pressure · celebrate · pill button · dark mode
+          reuse an accent token for a second purpose (§1.2(d))
 ```
 
 ---

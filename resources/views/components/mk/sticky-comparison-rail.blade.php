@@ -1,7 +1,7 @@
 {{--
     resources/views/components/mk/sticky-comparison-rail.blade.php
 
-    <x-mk.sticky-comparison-rail> — design-system.md §3.3d. A right-rail
+    <x-mk.sticky-comparison-rail> — design-system.md §3.3e. A right-rail
     widget combining a condensed multi-tier price comparison, the page's one
     primary CTA, an optional trust/review slot, and a compact related-links
     list — all in one persistent element.
@@ -93,14 +93,20 @@
               prose" convention — no new link-list primitive invented.
 
     Slots
-      trust (named, optional) — a generic slot for a future trust/review
-            badge. design-system.md has NO landed trust-badge component or
-            section as of this component's authoring (confirmed absent by
-            search, not fabricated here) — so this slot renders whatever
-            the caller passes, with NO built-in fallback content. It exists
-            so a future <x-mk.trust-badge>-shaped component (or similar)
-            has a documented place to plug into this rail without a
-            breaking change to this component's props.
+      trust (named, optional) — the documented place for design-system.md
+            §3.3d's reserved <x-mk.trust-badge-strip> once it actually ships
+            (§3.3d landed on trunk mid-authoring of this component; it
+            reserves that component's name/shape as DOCUMENTATION ONLY —
+            "do not build the Blade component in this phase" — because no
+            real partner/review/certification content exists yet to
+            populate it). This slot renders whatever the caller passes, with
+            NO built-in fallback content: this component does not build
+            <x-mk.trust-badge-strip> itself and does not invent placeholder
+            trust content, matching §3.3d's own hard constraint. Future
+            usage once that component ships:
+              <x-slot:trust>
+                  <x-mk.trust-badge-strip ... />
+              </x-slot:trust>
 
     -----------------------------------------------------------------------
     NOT IMPLEMENTED — no real page passes real data through this yet (see
