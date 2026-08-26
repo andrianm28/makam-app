@@ -122,6 +122,39 @@ final class GraveSearchStatesTest extends TestCase
     }
 
     /**
+     * UI/UX audit, 26 Aug 2026: the gate-closed page rendered `icon="slash"`
+     * — `icon.slash` (`resources/views/components/icon/slash.blade.php`) is
+     * StatusIntent's DIBATALKAN/cancelled *badge* glyph, a single bare
+     * diagonal stroke (`d="m9 20.247 6-16.5"`) meant to sit inline next to
+     * badge text. Blown up to a lone size-12 page icon it rendered as an
+     * unrecognisable diagonal line rather than a complete glyph. The fix
+     * switches to `icon="inbox"` — the same complete, multi-segment
+     * `icon.inbox` glyph this component already uses for its "no result"
+     * empty state below (STATE 3 of 3). This asserts the SAME markup —
+     * the real `icon.inbox` SVG's exact `<path d="...">` — appears on the
+     * gate-closed page, and that the broken `icon.slash` path is gone.
+     */
+    public function test_the_gate_closed_states_icon_is_the_complete_inbox_glyph_not_the_bare_slash(): void
+    {
+        $inboxSource = file_get_contents(resource_path('views/components/icon/inbox.blade.php'));
+        preg_match('/<path[^>]*\bd="([^"]+)"/', $inboxSource, $inboxMatches);
+        $this->assertNotEmpty($inboxMatches, 'icon.inbox must contain a <path d="..."> to compare against.');
+        $inboxPathD = $inboxMatches[1];
+
+        $slashSource = file_get_contents(resource_path('views/components/icon/slash.blade.php'));
+        preg_match('/<path[^>]*\bd="([^"]+)"/', $slashSource, $slashMatches);
+        $this->assertNotEmpty($slashMatches, 'icon.slash must contain a <path d="..."> to compare against.');
+        $slashPathD = $slashMatches[1];
+
+        Livewire::withQueryParams(['tpu' => CemeteryFixture::id('package', 0)])
+            ->test(GraveSearch::class)
+            ->assertOk()
+            ->assertSee(self::GATE_CLOSED_MARKER)
+            ->assertSeeHtml($inboxPathD)
+            ->assertDontSeeHtml($slashPathD);
+    }
+
+    /**
      * A closed gate must not be reachable around: even a URL carrying a
      * name term renders the explanatory page, never a result set.
      */

@@ -78,9 +78,18 @@
 
              The copy is explicit that this says NOTHING about whether the
              record exists — the same discipline the privacy-limited state
-             needs, for the same reason. --}}
+             needs, for the same reason.
+
+             icon="inbox", not icon="slash": `icon.slash` is StatusIntent's
+             DIBATALKAN/cancelled badge glyph (app/Support/Design/
+             StatusIntent.php) — a single bare diagonal stroke, legitimate
+             inline next to badge text but unreadable as a lone size-12
+             page icon (UI/UX audit, 26 Aug 2026). `icon.inbox` is the
+             glyph this same file already uses for its other empty/no-data
+             state (STATE 3 of 3 below) and renders a real, recognizable
+             outline — reused here for consistency. --}}
         @if ($gateClosed)
-            <x-mk.gate-closed-page heading="Pencarian Data Makam Belum Tersedia" icon="slash">
+            <x-mk.gate-closed-page heading="Pencarian Data Makam Belum Tersedia" icon="inbox">
                 <p>
                     Pencarian data makam secara online belum kami aktifkan. Basis data registri makam sedang kami
                     siapkan bersama pengelola TPU/TPS, dan kami belum dapat membukanya untuk pencarian mandiri.
