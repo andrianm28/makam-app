@@ -12,25 +12,21 @@ use Tests\TestCase;
  * Laravel's raw unstyled default 404 page. See that view's own doc block for
  * why it is a minimal standalone document rather than `layouts.app`.
  *
- * `withoutVite()` in `setUp()` follows the exact same convention
- * `BrandIdentityTest` already established for a real full-page GET: without
- * it, `@vite(...)` throws `ViteManifestNotFoundException` on this host (no
- * frontend build here — `CLAUDE.md`'s Scope note), and
- * `Illuminate\Foundation\Exceptions\Handler::renderHttpException()` silently
- * swallows that (its own `catch (Throwable $t)` block, since `app.debug` is
- * off in testing) and falls back to Laravel's generic Symfony-rendered page
- * — which still returns the correct 404 status (why the *other* 404 tests
- * across this suite that only assert status, not content, keep passing
- * either way) but would make THIS test's content assertions false negatives.
+ * No `withoutVite()` needed here (unlike `BrandIdentityTest`/
+ * `HomePageRouteTest`, which render `layouts.app` and its real `@vite`
+ * call): `errors/404.blade.php` and `errors/500.blade.php` were rebuilt to
+ * have zero dependency on `@vite`/the Vite facade at all — see that view's
+ * own doc block for the real regression this fixed. An earlier version of
+ * this comment assumed `Handler::renderHttpException()`'s catch block
+ * always swallows a `@vite` failure quietly; that assumption was wrong
+ * (`config('app.debug') && throw $t` re-throws whenever `app.debug` is
+ * on, which it is in this repo's `.env.example`-derived test environment)
+ * and caused a real CI regression — every `abort(404)` anywhere in the app
+ * became a 500. Disproven, not fixed by adding `withoutVite()` everywhere:
+ * removing the dependency from the view is the actual fix.
  */
 final class ErrorPagesTest extends TestCase
 {
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->withoutVite();
-    }
-
     /**
      * A route that has never existed and never will — proves the branded
      * page renders for the generic "no matching route" case, not just for

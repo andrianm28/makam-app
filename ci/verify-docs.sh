@@ -34,7 +34,9 @@ hits=$(grep -rInE '#[0-9A-Fa-f]{6}\b' \
         --include='*.blade.php' --include='*.css' --include='*.js' --include='*.php' \
         resources/ app/ 2>/dev/null | grep -v 'resources/css/tokens.css' \
         | grep -v 'app/Support/Design/generated/' \
-        | grep -v 'app/Support/Design/BrandAssetBuilder.php' || true)
+        | grep -v 'app/Support/Design/BrandAssetBuilder.php' \
+        | grep -v 'resources/views/errors/404.blade.php' \
+        | grep -v 'resources/views/errors/500.blade.php' || true)
 # app/Support/Design/generated/ (FilamentPalette.php) is machine-generated
 # FROM tokens.css by `php artisan design:generate-filament-palette`
 # (design-system.md §8.3 OQ-09) — its hex values are a derived artifact, not
@@ -46,6 +48,17 @@ hits=$(grep -rInE '#[0-9A-Fa-f]{6}\b' \
 # backdrop for the raster logo pipeline (brand-identity-adoption plan, Task
 # 3). This is a generated-artwork recolour target, not a UI design decision
 # tokens.css governs, the same reasoning as the generated/ exemption above.
+# resources/views/errors/404.blade.php and 500.blade.php are the third,
+# deliberate exception (found and documented 26 Aug 2026 fixing a real CI
+# regression — see 404.blade.php's own doc block for the full incident):
+# error-boundary views must render even when the Vite build pipeline is
+# broken or missing, so they cannot depend on `@vite`/tokens.css's normal
+# `@theme` pipeline the way every other view does. Both files' inline
+# <style> blocks copy their literal values verbatim from tokens.css, with
+# the exact source line documented per value — the same "derived artifact,
+# not an independent source of truth" reasoning as the two exemptions
+# above, just copied by hand instead of by a generator command, because an
+# error page cannot safely invoke one at render time either.
 if [ -z "$hits" ]; then pass "no hex literals outside tokens.css"
 else fail "hex literal outside tokens.css:"; echo "$hits" | head -10; fi
 
