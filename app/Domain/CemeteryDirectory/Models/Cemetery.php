@@ -9,6 +9,7 @@ use App\Domain\CemeteryCapability\Models\CemeteryPackage;
 use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityQuery;
+use App\Domain\CemeteryDirectory\PlotTrackingMode;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use Database\Factories\CemeteryFactory;
 use Illuminate\Database\Eloquent\Builder;
@@ -110,6 +111,13 @@ final class Cemetery extends Model
         'plot_tracking_mode',
         'published_at',
         'unpublished_at',
+    ];
+
+    /**
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'plot_tracking_mode' => PlotTrackingMode::AGGREGATE,
     ];
 
     /**

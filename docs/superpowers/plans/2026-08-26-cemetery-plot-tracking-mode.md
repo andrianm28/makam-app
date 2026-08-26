@@ -349,6 +349,8 @@ git commit -m "feat(cemetery-directory): add plot_tracking_mode column to cemete
 
 ## Task 3: `CreateCemeteryBlock` refuses to create a block under an AGGREGATE cemetery
 
+**Reverted after the final whole-branch review, 26 Aug 2026.** This task's guard was found to ship enforcement with no enablement path: every existing cemetery defaults to AGGREGATE tracking mode, and no Filament UI anywhere lets an admin switch a cemetery to GRANULAR yet (`SetCemeteryPlotTrackingMode`, Task 4, has zero call-sites outside its own test). Shipping the guard alone made it impossible to create a `CemeteryBlock` for ANY cemetery in the system through the product, and broke 8 of 11 tests in the existing `tests/Feature/Filament/PlotInventoryAdminTest.php`. The guard was reverted (commit history preserves the original implementation for reference) and should be re-proposed together with whatever later phase actually wires `SetCemeteryPlotTrackingMode` into a real Filament control, so enforcement and enablement ship together.
+
 **Files:**
 - Modify: `app/Domain/PlotInventory/Actions/CreateCemeteryBlock.php`
 - Test: `tests/Feature/Domain/PlotInventory/CreateCemeteryBlockTest.php` (existing file — add new test methods, do not remove existing ones)

@@ -29,4 +29,14 @@ final class CemeteryPlotTrackingModeColumnTest extends TestCase
 
         $this->assertSame(PlotTrackingMode::GRANULAR, $cemetery->fresh()->plot_tracking_mode);
     }
+
+    public function test_a_freshly_constructed_instance_reads_the_default_without_refreshing(): void
+    {
+        $cemetery = Cemetery::factory()->create();
+
+        // Deliberately NOT calling ->fresh() here — this is exactly the
+        // gap the final review found: an un-refreshed instance must still
+        // read the correct default, not null.
+        $this->assertSame(PlotTrackingMode::AGGREGATE, $cemetery->plot_tracking_mode);
+    }
 }
