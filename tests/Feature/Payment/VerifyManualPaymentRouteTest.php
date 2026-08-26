@@ -4,10 +4,18 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Payment;
 
+use App\Domain\Marketplace\Models\MarketplaceOrder;
+use App\Domain\Marketplace\Models\Vendor;
+use App\Domain\Marketplace\PaymentState;
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Models\User;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\Models\AuditEvent;
+use App\Platform\FinancialLedger\Actions\VendorPayable;
+use App\Platform\FinancialLedger\Money;
+use App\Platform\FinancialLedger\VendorPayableAssessmentTrigger;
+use App\Platform\FinancialLedger\VendorPayableEligibility;
+use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\Models\ActorSession;
 use App\Platform\IdentityAccess\Reauthentication\Models\ReauthenticationEvent;
 use App\Platform\IdentityAccess\Roles\ActorRole;
@@ -49,10 +57,57 @@ final class VerifyManualPaymentRouteTest extends TestCase
 {
     use RefreshDatabase;
 
+    private const int TOTAL_MINOR = 325_000_00;
+
+    /**
+     * A real marketplace order (BELUM_DIBAYAR, vendor payable opened HELD —
+     * same fixture shape `VerifyManualPaymentTest`/`WebhookPaidEffectsTest`
+     * already establish) plus a SUBMITTED `payment_verifications` row linked
+     * to it with a matching stated amount. Real linkage is required since
+     * PAY-02: `VerifyManualPayment` refuses to approve a row with no
+     * `order_id`/`amount_minor`, and this route test's whole purpose is
+     * proving the AUTHORIZATION gate, not re-proving PAY-02's own amount
+     * logic (`VerifyManualPaymentTest` owns that) — so every fixture here
+     * uses a matching amount and every approval in this file is expected to
+     * succeed on the merits once authorized.
+     */
     private function submittedVerification(): PaymentVerification
     {
+        $vendor = Vendor::query()->create(['name' => 'Toko Bunga', 'is_active' => true]);
+
+        $order = MarketplaceOrder::query()->create([
+            'order_number' => 'MKT-'.Str::upper(Str::random(10)),
+            'customer_ref' => 'cust-1',
+            'entity_ref' => 'BU-JKT-01',
+            'vendor_id' => $vendor->id,
+            'subtotal_minor' => self::TOTAL_MINOR,
+            'delivery_fee_minor' => 0,
+            'total_minor' => self::TOTAL_MINOR,
+            'payment_state' => PaymentState::BELUM_DIBAYAR,
+            'idempotency_key' => 'mkt-'.Str::lower(Str::random(12)),
+            'placed_at' => CarbonImmutable::now(),
+        ]);
+
+        (new VendorPayable(actorContext: ActorContext::guest()))->assess(
+            vendorId: $vendor->id,
+            entityRef: 'BU-JKT-01',
+            sourceType: 'marketplace_order',
+            sourceId: $order->id,
+            amount: new Money(self::TOTAL_MINOR),
+            eligibility: new VendorPayableEligibility(
+                orderPaid: false,
+                fulfilmentEvidenceAccepted: false,
+                disputeWindowEndsAt: null,
+            ),
+            trigger: VendorPayableAssessmentTrigger::UnattendedAssessment,
+            now: CarbonImmutable::now(),
+        );
+
         return PaymentVerification::createSubmitted([
-            'reference' => 'order-route-1',
+            'reference' => $order->order_number,
+            'order_id' => $order->id,
+            'amount_minor' => self::TOTAL_MINOR,
+            'currency' => 'IDR',
             'payment_method' => 'bank_transfer',
             'payment_reference' => 'TRX-route-1',
             'instructions' => null,
@@ -196,7 +251,18 @@ final class VerifyManualPaymentRouteTest extends TestCase
 
         $this->assertSame(
             0,
-            AuditEvent::query()->where('outcome', AuditOutcome::Allowed->value)->count(),
+            AuditEvent::query()
+                ->where('outcome', AuditOutcome::Allowed->value)
+                // Excludes `VENDOR_PAYABLE_ASSESSED` — since PAY-02,
+                // `submittedVerification()` opens a real marketplace order's
+                // vendor payable as part of building a REALISTIC fixture (the
+                // same setup a real checkout performs), and that legitimately
+                // writes its own Allowed audit row before the HTTP call this
+                // assertion is checking even happens. What this assertion
+                // still proves, unweakened: a refused actor collects no
+                // Allowed row FOR THIS ENDPOINT's own decision.
+                ->where('action', '!=', 'VENDOR_PAYABLE_ASSESSED')
+                ->count(),
             'A refused actor must not collect a single Allowed audit row.',
         );
         $this->assertSame(

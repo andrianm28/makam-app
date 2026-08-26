@@ -13,6 +13,7 @@ use App\Domain\Marketplace\Models\ServiceArea;
 use App\Platform\Audit\AuditSource;
 use App\Platform\FeatureGate\ModeResolver;
 use App\Platform\FeatureGate\Modes\PaymentMode;
+use App\Platform\FinancialLedger\Money;
 use App\Platform\Payment\Actions\OpenPaymentSession;
 use App\Platform\Payment\Actions\OpenPaymentSessionCommand;
 use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutProviderException;
@@ -53,11 +54,15 @@ use Throwable;
  * ---------------------------------------------------------------------------
  * `submitManualProof()` submits through `SubmitManualPayment`, which writes
  * exactly one `payment_verifications` row (`reference` = the marketplace
- * order number) plus its audit event — it deliberately does not touch
- * `marketplace_orders.payment_state` (its own doc block: it writes nothing
- * beyond its own row). Moving the order from `BELUM_DIBAYAR` to
- * `MENUNGGU_VERIFIKASI`/`DIBAYAR` is the verifier lane's job once an admin
- * accepts the proof; this screen only records the customer's submission.
+ * order number, `order_id` = that order's real id since PAY-02, plus the
+ * customer's own stated `manualPaymentAmount` converted through
+ * `Money::fromDecimal()`) plus its audit event — it deliberately does not
+ * touch `marketplace_orders.payment_state` itself (its own doc block: it
+ * writes nothing beyond its own row). Moving the order to `DIBAYAR` is the
+ * verifier lane's job (`App\Platform\Payment\VerifyManualPayment`, since
+ * PAY-02, calls `App\Domain\Marketplace\Actions\MarkMarketplaceOrderPaid`
+ * on approval) once an admin accepts the proof; this screen only records
+ * the customer's submission.
  *
  * ---------------------------------------------------------------------------
  * Duplicate submit is safe (§6.6); failures never leak internals
@@ -82,6 +87,17 @@ final class Checkout extends Component
     public ?string $scheduledFor = null;
 
     public string $manualPaymentReference = '';
+
+    /**
+     * The customer's OWN stated transfer amount, as a decimal-rupiah string
+     * from the form — see `SubmitManualPayment`'s own doc block for why this
+     * is not defaulted to the order total. Converted through
+     * `Money::fromDecimal()` (the platform's one read seam for a decimal
+     * amount, `config('money.currency')`'s convention) at submit time, never
+     * before — the raw string is what §6.3 requires be kept on screen if
+     * validation fails.
+     */
+    public string $manualPaymentAmount = '';
 
     public string $idempotencyKey;
 
@@ -205,12 +221,30 @@ final class Checkout extends Component
 
         $this->manualSubmissionError = null;
 
+        $validated = Validator::make(
+            ['manualPaymentAmount' => $this->manualPaymentAmount],
+            ['manualPaymentAmount' => ['required', 'numeric', 'gt:0']],
+            [],
+            ['manualPaymentAmount' => 'jumlah transfer'],
+        )->validate();
+
+        try {
+            $amountMinor = Money::fromDecimal((string) $validated['manualPaymentAmount']);
+        } catch (Throwable $e) {
+            report($e);
+            $this->manualSubmissionError = 'Jumlah transfer tidak valid. Masukkan angka yang benar.';
+
+            return;
+        }
+
         try {
             app(SubmitManualPayment::class)->submit(
                 reference: $this->placedOrderNumber,
                 paymentMethod: 'MANUAL',
                 paymentReference: trim($this->manualPaymentReference),
                 instructions: null,
+                amountMinor: $amountMinor,
+                currency: (string) config('money.currency'),
                 proofFile: null,
                 actorRef: auth()->id(),
                 actorRole: auth()->check() ? 'customer' : 'guest',

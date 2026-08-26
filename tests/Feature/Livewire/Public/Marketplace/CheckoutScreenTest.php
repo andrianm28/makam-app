@@ -158,6 +158,7 @@ final class CheckoutScreenTest extends TestCase
         $order = MarketplaceOrder::firstOrFail();
 
         $component->set('manualPaymentReference', 'TRF-12345')
+            ->set('manualPaymentAmount', '325000')
             ->call('submitManualProof')
             ->assertHasNoErrors();
 
@@ -166,5 +167,28 @@ final class CheckoutScreenTest extends TestCase
             ->sole();
         $this->assertSame('TRF-12345', $verification->payment_reference);
         $this->assertSame('MANUAL', $verification->payment_method);
+        $this->assertSame($order->id, $verification->order_id);
+        $this->assertSame(325_000_00, $verification->amount_minor);
+        $this->assertSame('IDR', $verification->currency);
+    }
+
+    public function test_submitting_manual_proof_without_an_amount_is_rejected(): void
+    {
+        [, $area] = $this->seedCart();
+
+        $component = Livewire::test(Checkout::class)
+            ->set('recipientName', 'Budi Santoso')
+            ->set('recipientPhone', '081234567890')
+            ->set('recipientEmail', 'budi@example.test')
+            ->set('selectedAreaCode', $area->area_code)
+            ->call('placeOrder')
+            ->assertHasNoErrors();
+
+        $component->set('manualPaymentReference', 'TRF-12345')
+            ->set('manualPaymentAmount', '')
+            ->call('submitManualProof')
+            ->assertHasErrors(['manualPaymentAmount']);
+
+        $this->assertSame(0, PaymentVerification::query()->count());
     }
 }

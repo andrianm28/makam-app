@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Admin\Resources\PaymentVerifications\Tables;
 
+use App\Platform\FinancialLedger\Money;
 use App\Platform\Payment\PaymentVerificationStatus;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -21,9 +22,12 @@ use Filament\Tables\Table;
  * here would be exactly the kind of ad hoc status vocabulary
  * `docs/design/design-system.md` §3.7 exists to prevent.
  *
- * `reference` is caller-supplied free text, NOT a foreign key (the
- * migration's own doc block) — displayed as a plain string, with no attempt
- * to resolve it against any order table.
+ * `reference` is still displayed as the caller-supplied free-text string it
+ * always was (submission-time display value, not re-derived). Since PAY-02
+ * (`2026_08_26_120000_add_order_link_and_amount_to_payment_verifications_
+ * table.php`) it is ALSO backed by a real `order_id` foreign key to
+ * `marketplace_orders` — `marketplaceOrder.order_number` is shown alongside
+ * it so staff can see the real linkage, not just the free-text echo of it.
  */
 final class PaymentVerificationsTable
 {
@@ -35,6 +39,15 @@ final class PaymentVerificationsTable
                     ->label('Referensi')
                     ->searchable()
                     ->sortable(),
+
+                TextColumn::make('marketplaceOrder.order_number')
+                    ->label('Pesanan')
+                    ->placeholder('—'),
+
+                TextColumn::make('amount_minor')
+                    ->label('Jumlah')
+                    ->placeholder('—')
+                    ->formatStateUsing(fn (?int $state): string => $state === null ? '—' : (new Money($state))->format()),
 
                 TextColumn::make('payment_method')
                     ->label('Metode Pembayaran'),

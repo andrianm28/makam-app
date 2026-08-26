@@ -275,6 +275,18 @@
 
                     <form wire:submit="submitManualProof" class="mt-4 space-y-4">
                         <x-mk.field
+                            label="Jumlah transfer"
+                            name="manualPaymentAmount"
+                            type="number"
+                            inputmode="decimal"
+                            prefix="Rp"
+                            wire:model="manualPaymentAmount"
+                            :error="$errors->first('manualPaymentAmount')"
+                            hint="Isi sesuai jumlah yang benar-benar Anda transfer."
+                            required
+                        />
+
+                        <x-mk.field
                             label="Nomor referensi transfer"
                             name="manualPaymentReference"
                             wire:model="manualPaymentReference"

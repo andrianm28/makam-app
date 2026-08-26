@@ -4,18 +4,29 @@ declare(strict_types=1);
 
 namespace App\Platform\Payment\Models;
 
+use App\Domain\Marketplace\Models\MarketplaceOrder;
 use App\Platform\Payment\Exceptions\PaymentVerificationAlreadyDecidedException;
 use App\Platform\Payment\PaymentVerificationDecision;
 use App\Platform\Payment\PaymentVerificationStatus;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use LogicException;
 
 /**
  * Eloquent model for `payment_verifications` — see
- * `2026_08_11_100000_create_payment_verifications_table.php` for the schema
- * and for why this table has no foreign key to `payment_sessions` or any
- * order/booking table.
+ * `2026_08_11_100000_create_payment_verifications_table.php` for the base
+ * schema and `2026_08_26_120000_add_order_link_and_amount_to_payment_
+ * verifications_table.php` for `order_id`/`amount_minor`/`currency`, added
+ * once real usage confirmed the only caller is the marketplace manual-
+ * payment path — see that migration's own doc block for why `order_id`
+ * points at `marketplace_orders` and not `orders` (booking).
+ *
+ * `order_id`/`amount_minor`/`currency` are nullable at the schema level
+ * (pre-existing rows on a live database could not be verified as
+ * backfillable from this environment) but are ALWAYS populated by
+ * `SubmitManualPayment` for every row it creates — see that class.
+ * `VerifyManualPayment` refuses to approve a row missing either.
  *
  * ---------------------------------------------------------------------------
  * Three doors, no others — the "one write API per table" convention this
@@ -50,6 +61,9 @@ final class PaymentVerification extends Model
      */
     protected $fillable = [
         'reference',
+        'order_id',
+        'amount_minor',
+        'currency',
         'payment_method',
         'payment_reference',
         'instructions',
@@ -61,9 +75,16 @@ final class PaymentVerification extends Model
     protected function casts(): array
     {
         return [
+            'amount_minor' => 'integer',
             'submitted_at' => 'immutable_datetime',
             'decided_at' => 'immutable_datetime',
         ];
+    }
+
+    /** @return BelongsTo<MarketplaceOrder, $this> */
+    public function marketplaceOrder(): BelongsTo
+    {
+        return $this->belongsTo(MarketplaceOrder::class, 'order_id');
     }
 
     protected static function booted(): void

@@ -110,7 +110,7 @@ final class PaymentVerificationsResource extends Resource
             abort(403);
         }
 
-        return PaymentVerification::query()->latest('submitted_at');
+        return PaymentVerification::query()->with('marketplaceOrder')->latest('submitted_at');
     }
 
     public static function getPages(): array
