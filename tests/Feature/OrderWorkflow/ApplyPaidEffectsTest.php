@@ -10,6 +10,7 @@ use App\Domain\OrderWorkflow\Exceptions\IllegalOrderTransitionException;
 use App\Domain\OrderWorkflow\Exceptions\OrderIsGuardedException;
 use App\Domain\OrderWorkflow\Exceptions\PaidAmountDoesNotMatchQuoteException;
 use App\Domain\OrderWorkflow\Models\Order;
+use App\Domain\OrderWorkflow\Models\OrderInvoice;
 use App\Domain\OrderWorkflow\Models\OrderStatusEvent;
 use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\OrderWorkflow\PaidTrigger;
@@ -64,6 +65,13 @@ final class ApplyPaidEffectsTest extends TestCase
 
         self::assertSame(1, $this->paymentReceivedCount($order));
 
+        // A basic invoice/receipt record now exists for this order (closes
+        // NOTIF-02's "+invoice" gap for the online path).
+        $invoice = OrderInvoice::query()->where('order_id', $order->getKey())->sole();
+        self::assertSame(self::TOTAL_MINOR, (int) $invoice->amount_minor);
+        self::assertSame('IDR', $invoice->currency);
+        self::assertStringStartsWith('INV-', $invoice->reference);
+
         $outbox = OutboxEvent::query()
             ->where('event_name', 'payment.received.v1')
             ->where('aggregate_id', $order->getKey())
@@ -83,6 +91,7 @@ final class ApplyPaidEffectsTest extends TestCase
             'source_id' => 'evt_webhook_1',
             'amount_minor' => self::TOTAL_MINOR,
             'currency' => 'IDR',
+            'invoice_reference' => $invoice->reference,
         ], $outbox->payload);
     }
 
@@ -118,6 +127,12 @@ final class ApplyPaidEffectsTest extends TestCase
 
         self::assertSame(1, $this->paidEventCount($order));
         self::assertSame(1, $this->paymentReceivedCount($order));
+
+        // Re-processing the same paid event does not create a second invoice
+        // — the same exactly-once guarantee `paidEventCount` and
+        // `paymentReceivedCount` already assert, extended to the new
+        // financial artifact.
+        self::assertSame(1, OrderInvoice::query()->where('order_id', $order->getKey())->count());
     }
 
     public function test_a_manual_verification_followed_by_a_webhook_yields_one_status_event_and_one_outbox_row(): void

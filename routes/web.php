@@ -25,6 +25,7 @@ use App\Livewire\Public\Directory\CemeteryDirectoryIndex;
 use App\Livewire\Public\Faq\FaqArticleDetail;
 use App\Livewire\Public\Faq\FaqIndex;
 use App\Livewire\Public\HomePage;
+use App\Livewire\Public\Invoices\InvoiceReceiptPage;
 use App\Livewire\Public\Legal\PrivacyPolicy;
 use App\Livewire\Public\Legal\TermsOfService;
 use App\Livewire\Public\Marketplace\Cart;
@@ -341,6 +342,25 @@ Route::permanentRedirect('/memorial/{profileId}', '/kenangan/{profileId}');
 | Read-only GET: no write surface exists on this route.
 */
 Route::get('/sertifikat/{subjectType}/{subjectId}', CertificateStatusPage::class)->name('sertifikat.status');
+
+/*
+|--------------------------------------------------------------------------
+| Invoice/receipt — the customer-facing surface for a basic order invoice
+|--------------------------------------------------------------------------
+| Closes NOTIF-02's "no invoice/receipt concept exists" gap for the
+| ONLINE-payment path (`App\Domain\OrderWorkflow\Actions\ApplyPaidEffects`
+| / `Actions\IssueInvoice`) — see those Actions' own doc blocks and
+| `docs/testing/release-gates.md`'s NOTIF-02 note.
+|
+| Keyed by the invoice's own generated `reference` (an unguessable
+| 14-character token, `Actions\IssueInvoice`), the same
+| reference-keyed-not-id-keyed shape `/langganan/{subscriptionReference}`
+| already uses for an unauthenticated customer page. An unknown reference
+| is a plain 404 — no enumeration.
+|
+| Read-only GET: no write surface exists on this route.
+*/
+Route::get('/kwitansi/{reference}', InvoiceReceiptPage::class)->name('invoice.show');
 
 /*
 |--------------------------------------------------------------------------
