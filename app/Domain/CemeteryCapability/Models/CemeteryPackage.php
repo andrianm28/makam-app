@@ -52,6 +52,21 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * configured and their indicative availability — `name` is deliberately a
  * plain operator-supplied string, not this module asserting a canonical
  * service-type list of its own.
+ *
+ * ---------------------------------------------------------------------------
+ * Package/class-level pricing — added 26 Aug 2026
+ * ---------------------------------------------------------------------------
+ * `price_min`/`price_max`/`price_currency`/`price_source`/`price_effective_at`
+ * (`2026_08_26_110000_add_price_fields_to_cemetery_packages_table.php`)
+ * mirror `Cemetery`'s own five price columns EXACTLY, not the `Money`/
+ * append-only `price_versions` convention `ServiceDefinition` uses — see
+ * that migration's own doc block for the reasoning. This is the same
+ * indicative, attributed figure `Cemetery::price_min`/`price_max` already
+ * is, just resolved at package/class granularity: never a firmer
+ * commitment, never charged, never versioned. `App\Livewire\Public\
+ * Directory\Support\CemeteryPresenter::packagePriceRange()`/
+ * `packagePriceAttribution()` render it with the identical "Perlu
+ * konfirmasi" framing the cemetery-level figure already carries.
  */
 final class CemeteryPackage extends Model
 {
@@ -68,6 +83,10 @@ final class CemeteryPackage extends Model
         'description',
         'sort_order',
         'is_active',
+        'price_min',
+        'price_max',
+        'price_currency',
+        'price_source',
     ];
 
     /**
@@ -78,6 +97,9 @@ final class CemeteryPackage extends Model
         return [
             'sort_order' => 'integer',
             'is_active' => 'boolean',
+            'price_min' => 'decimal:2',
+            'price_max' => 'decimal:2',
+            'price_effective_at' => 'immutable_datetime',
         ];
     }
 
@@ -85,6 +107,25 @@ final class CemeteryPackage extends Model
     {
         self::saving(function (self $package): void {
             CemeteryPackageAvailabilityStatus::assertKnown($package->availability_status);
+
+            // `price_effective_at` is deliberately NOT in `$fillable` — an
+            // admin cannot hand-enter it (see this class's own doc block
+            // and the migration's). It is stamped automatically whenever a
+            // priced field actually changes, mirroring `PriceVersion.
+            // effective_from`'s "recorded at, not hand-entered" discipline
+            // without needing that class's append-only/versioning machinery.
+            //
+            // The `! isDirty('price_effective_at')` guard exists so a
+            // caller that DOES explicitly set it — a test fixture backfilling
+            // a historical date, or a future admin field — is not silently
+            // overwritten by this hook; only the "admin changed a price
+            // field and said nothing about the date" path is auto-stamped.
+            if ($package->isDirty(['price_min', 'price_max', 'price_currency', 'price_source'])
+                && ! $package->isDirty('price_effective_at')) {
+                $package->price_effective_at = $package->price_min !== null || $package->price_max !== null
+                    ? now()
+                    : null;
+            }
         });
     }
 

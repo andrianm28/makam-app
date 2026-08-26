@@ -107,6 +107,101 @@ final class CemeteryResourcePackagesTest extends TestCase
         $this->assertSame('allowed', $event->outcome);
     }
 
+    /**
+     * The real gap a 25 Aug 2026 scoping investigation found: no admin
+     * write path existed anywhere for `cemetery_packages` PRICING (the
+     * columns did not even exist). This is that path — an admin sets a
+     * package price through the same relation-manager form already proven
+     * above, it persists with the mandatory attribution field, and the
+     * write leaves the same `audit_events` row every other package write
+     * does (no new sensitive-action gate: `CemeteryPackageAuditActions`'
+     * own doc block classifies package edits as content-editorial, and a
+     * price edit is not a different kind of edit).
+     */
+    public function test_packages_relation_manager_sets_a_package_price_with_an_audit_row(): void
+    {
+        $user = $this->admin();
+
+        $cemetery = $this->cemeteryBySlug(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]);
+
+        Livewire::test(PackagesRelationManager::class, [
+            'ownerRecord' => $cemetery,
+            'pageClass' => EditCemetery::class,
+        ])
+            ->callTableAction('create', data: [
+                'name' => 'Makam Tumpang Berharga',
+                'class_label' => 'Kelas A',
+                'availability_status' => CemeteryPackageAvailabilityStatus::AVAILABLE,
+                'description' => 'Contoh paket dengan harga untuk uji relation manager.',
+                'sort_order' => 6,
+                'is_active' => true,
+                'price_min' => '3000000',
+                'price_max' => '5000000',
+                'price_source' => 'Daftar harga pengelola, Agustus 2026',
+            ])
+            ->assertHasNoTableActionErrors();
+
+        $package = CemeteryPackage::query()
+            ->where('cemetery_id', $cemetery->id)
+            ->where('name', 'Makam Tumpang Berharga')
+            ->sole();
+
+        $this->assertSame('3000000.00', $package->price_min);
+        $this->assertSame('5000000.00', $package->price_max);
+        $this->assertSame('IDR', $package->price_currency);
+        $this->assertSame('Daftar harga pengelola, Agustus 2026', $package->price_source);
+        // Never admin-entered — CemeteryPackage::booted() stamps it.
+        $this->assertNotNull($package->price_effective_at);
+
+        $event = AuditEvent::query()
+            ->where('action', 'CEMETERY_PACKAGE_CREATED')
+            ->where('subject_id', (string) $package->id)
+            ->sole();
+
+        $this->assertSame((string) $user->id, $event->actor_ref);
+        $this->assertSame('allowed', $event->outcome);
+    }
+
+    /**
+     * Editing an existing package's price re-stamps `price_effective_at`
+     * (proved at the model level by `CemeteryPackagePricingTest`; this
+     * proves it survives the real Filament edit path an admin actually
+     * uses, and still leaves an audit row).
+     */
+    public function test_packages_relation_manager_edits_a_packages_price(): void
+    {
+        $this->admin();
+
+        $cemetery = $this->cemeteryBySlug(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0]);
+        $package = $cemetery->packages()->firstOrFail();
+        $this->assertNull($package->price_min);
+
+        Livewire::test(PackagesRelationManager::class, [
+            'ownerRecord' => $cemetery,
+            'pageClass' => EditCemetery::class,
+        ])
+            ->callTableAction('edit', $package, data: [
+                'name' => $package->name,
+                'availability_status' => $package->availability_status,
+                'sort_order' => $package->sort_order,
+                'price_min' => '4000000',
+                'price_max' => '6000000',
+                'price_source' => 'Estimasi tim customer service',
+            ])
+            ->assertHasNoTableActionErrors();
+
+        $package->refresh();
+        $this->assertSame('4000000.00', $package->price_min);
+        $this->assertSame('6000000.00', $package->price_max);
+        $this->assertSame('Estimasi tim customer service', $package->price_source);
+        $this->assertNotNull($package->price_effective_at);
+
+        $this->assertDatabaseHas('audit_events', [
+            'action' => 'CEMETERY_PACKAGE_UPDATED',
+            'subject_id' => (string) $package->id,
+        ]);
+    }
+
     public function test_packages_relation_manager_edits_a_package_with_an_audit_row(): void
     {
         $user = $this->admin();

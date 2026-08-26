@@ -294,6 +294,76 @@ final class CemeteryDetailRouteTest extends TestCase
     }
 
     /**
+     * The real gap a 25 Aug 2026 scoping investigation found: no
+     * `cemetery_packages` column carried a price at all, so a package could
+     * never show its own figure — only the cemetery-level aggregate range
+     * above. Seeded packages (`CemeteryExampleData::packages()`) never set
+     * one (honesty framing, same reason the cemetery-level seed rows don't
+     * fabricate a price), so this test sets one explicitly to exercise the
+     * "priced" render branch, mirroring how `test_the_map_link_renders_
+     * when_the_cemetery_has_one()` above exercises its own explicit-value
+     * branch.
+     */
+    public function test_a_package_with_a_price_renders_it_with_attribution(): void
+    {
+        $cemetery = $this->exampleCemetery();
+        $package = $cemetery->packages()->firstOrFail();
+
+        $package->update([
+            'price_min' => '3000000.00',
+            'price_max' => '5000000.00',
+            'price_source' => 'Daftar harga pengelola, Agustus 2026',
+        ]);
+        $package->refresh();
+
+        $response = $this->get(route('cemeteries.show', ['cemeterySlug' => $cemetery->slug]));
+
+        $response->assertSee('Rp 3.000.000 - Rp 5.000.000');
+        $response->assertSee('Daftar harga pengelola, Agustus 2026');
+        $response->assertSee('per '.$package->price_effective_at->format('d/m/Y'));
+    }
+
+    /**
+     * The honest counterpart: an unset package price must never render a
+     * fabricated figure — same "showing nothing is honest" rule
+     * `CemeteryPresenter::priceRange()` already documents for the
+     * cemetery-level figure.
+     */
+    public function test_a_package_without_a_price_shows_an_honest_unavailable_state(): void
+    {
+        $cemetery = $this->exampleCemetery();
+        $package = $cemetery->packages()->firstOrFail();
+
+        $this->assertNull($package->price_min);
+        $this->assertNull($package->price_max);
+
+        $this->get(route('cemeteries.show', ['cemeterySlug' => $cemetery->slug]))
+            ->assertOk()
+            ->assertSee('Harga paket ini belum tersedia.');
+    }
+
+    /**
+     * A blank `price_source` must never render as if it were attributed —
+     * the same fallback `CemeteryPresenter::priceAttribution()` already
+     * uses for the cemetery-level figure.
+     */
+    public function test_a_package_with_a_price_but_no_source_shows_the_honest_source_fallback(): void
+    {
+        $cemetery = $this->exampleCemetery();
+        $package = $cemetery->packages()->firstOrFail();
+
+        $package->update([
+            'price_min' => '3000000.00',
+            'price_max' => '5000000.00',
+            'price_source' => null,
+        ]);
+
+        $this->get(route('cemeteries.show', ['cemeterySlug' => $cemetery->slug]))
+            ->assertSee('Rp 3.000.000 - Rp 5.000.000')
+            ->assertSee('Sumber tidak tercatat');
+    }
+
+    /**
      * §6.2 — a cemetery with no configured packages is an ORDINARY state
      * (the seed populates them on two of ten), and must read as "not
      * recorded yet", never as a failure and never as a bare "no data".
