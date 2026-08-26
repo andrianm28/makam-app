@@ -23,7 +23,6 @@ use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
-use RuntimeException;
 
 /**
  * `/vendor` panel provider — `information-architecture.md` §5.
@@ -35,28 +34,36 @@ use RuntimeException;
  * decision made per query by `App\Filament\Vendor\Concerns\ScopesToCurrentVendor`
  * — see AC4's "SHALL NOT grant record access on panel membership alone".
  *
- * `->colors()` loads the same tokens.css-derived palette as
- * `AdminPanelProvider`, via the same generator output, so the two panels
- * cannot drift apart on status colour (design-system.md §3.7 requires the
- * public site and the panels to render the same status colours). The previous
- * version of this file passed `fn () => []`, which silently fell back to
- * Filament's own default palette and defeated that requirement.
- *
- * `->brandLogo()` / `->brandLogoHeight()` (brand-identity-adoption Task 5,
- * ADR-0034) wire the same real raster mark as `/admin`
- * (`public/brand/mark-96.png`, Task 3), so the two panels cannot drift on
- * brand mark either.
- *
  * REVERTED, 26 Aug 2026 — explicit, informed owner decision, mirroring
- * `AdminPanelProvider`'s identical reversal (see its own doc block, "SIXTH
- * change", for the full record): PR #170's `->darkMode(false)` is removed
- * (dark mode now follows Filament's default system-preference behaviour
- * again, with the same dark-mode legibility risk knowingly reaccepted —
- * OQ-07 is still open), and PR #174's `provider: LocalFontProvider::class`
- * is removed from `->font()` below (Filament's default `BunnyFontProvider`
- * is restored, which re-opens `ReportContentSecurityPolicy` to
- * `https://fonts.bunny.net` — see that middleware's own doc block). Neither
- * is a fix; both known risks are knowingly reaccepted.
+ * `AdminPanelProvider`'s identical reversal (see its own doc block,
+ * "SEVENTH change", for the full record). This panel no longer follows the
+ * public site's brand identity at all:
+ *
+ *   - `->colors(...)` (the tokens.css-derived generated palette, shared
+ *     with `/admin` via `app/Support/Design/generated/FilamentPalette.php`)
+ *     is removed — this panel now uses Filament's own default colour
+ *     scheme.
+ *   - `->font('Inter var')` is removed — no custom font family is
+ *     requested at all; Filament's own default font stack applies.
+ *   - `->viteTheme(...)` is removed — that custom theme file existed
+ *     solely to inject brand colours/font and carried no non-branding
+ *     structural fix, so it (and its `vite.config.js` entry) were deleted
+ *     outright. This panel now uses Filament's own default, package-shipped
+ *     CSS build.
+ *   - `->brandLogo()`/`->brandLogoHeight()` (the real raster mark,
+ *     ADR-0034 Task 5, previously shared with `/admin`) are removed. In
+ *     their place, `->brandName('Makam Vendor')` — plain text, not the
+ *     designed wordmark/logo — is kept purely for functional
+ *     identification. Judgment call, flagged in this batch's PR
+ *     description for the project owner to confirm or correct.
+ *
+ * Dark mode is unchanged by this reversal — this panel still follows
+ * Filament's default system-preference dark mode (restored by the earlier,
+ * separate 26 Aug 2026 revert of PR #170, `AdminPanelProvider`'s "SIXTH
+ * change"). `ReportContentSecurityPolicy`'s `https://fonts.bunny.net`
+ * allowance is also left untouched by this batch (now simply unused, not
+ * actively wrong) — CSP configuration is out of this batch's scope; see
+ * `AdminPanelProvider`'s doc block for the same note.
  */
 final class VendorPanelProvider extends PanelProvider
 {
@@ -66,20 +73,9 @@ final class VendorPanelProvider extends PanelProvider
             ->id('vendor')
             ->path('vendor')
             ->login()
-            ->colors($this->filamentColors())
-            // REVERTED, 26 Aug 2026 — see this class's own doc block above
-            // and AdminPanelProvider's identical reversal for the full
-            // record. `->darkMode(false)` (PR #170) is intentionally
-            // removed; Filament's own default (`hasDarkMode(true)`,
-            // system-preference theme) is restored. KNOWN, ACCEPTED RISK:
-            // the dark-mode legibility bug PR #170 fixed can recur on a
-            // dark-preference browser/OS, since OQ-07 stays open and no
-            // Blade view has `dark:` pairing. Do not add `dark:` classes as
-            // part of this revert.
-            // ADR-0034: official mark; stacked lockup reads badly at 2rem, so
-            // the panel carries the mark — a horizontal lockup is OQ-12 scope.
-            ->brandLogo(asset('brand/mark-96.png'))
-            ->brandLogoHeight('2rem')
+            // See this class's own doc block above. Plain text only, kept
+            // for functional identification.
+            ->brandName('Makam Vendor')
             ->discoverResources(
                 in: app_path('Filament/Vendor/Resources'),
                 for: 'App\\Filament\\Vendor\\Resources',
@@ -113,42 +109,6 @@ final class VendorPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
-            ])
-            // REVERTED, 26 Aug 2026 — see this class's own doc block above
-            // and AdminPanelProvider's identical reversal for the full
-            // record. `provider: LocalFontProvider::class` (PR #174) is
-            // intentionally removed; Filament's documented default
-            // (`BunnyFontProvider` for a custom family) is restored. This
-            // relies on `ReportContentSecurityPolicy` allowing
-            // `https://fonts.bunny.net` on `style-src`/`style-src-elem` and
-            // `font-src` — see that middleware's own doc block. Do not
-            // reintroduce `LocalFontProvider::class` without also
-            // re-closing that CSP exception; the two must move together.
-            ->font('Inter var')
-            ->viteTheme('resources/css/filament/admin/theme.css');
-    }
-
-    /**
-     * The tokens.css-derived palette, shared with `/admin`. Throws rather than
-     * falling back to Filament's defaults if the generator has never run — see
-     * `AdminPanelProvider::filamentColors()`, which this mirrors deliberately.
-     *
-     * @return array<string, array<int, string>|string>
-     */
-    private function filamentColors(): array
-    {
-        $path = app_path('Support/Design/generated/FilamentPalette.php');
-
-        if (! is_file($path)) {
-            throw new RuntimeException(
-                'Filament palette has not been generated. Run `php artisan design:generate-filament-palette` '
-                ."(expected at {$path})."
-            );
-        }
-
-        /** @var array<string, array<int, string>|string> $palette */
-        $palette = require $path;
-
-        return $palette;
+            ]);
     }
 }

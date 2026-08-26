@@ -2,7 +2,7 @@
 
 **Version:** v0.2 — brand identity adopted (ADR-0034), OQ-01/OQ-02 resolved; remaining sections **PROPOSED** (awaiting design + product approval)
 **Date:** 25 Juli 2026
-**Scope:** Public web (Blade + Livewire 4), Filament 5 panels (`/admin`, `/vendor`), and printed documents (invoice, kwitansi, agreement, certificate).
+**Scope:** Public web (Blade + Livewire 4) and printed documents (invoice, kwitansi, agreement, certificate). **Filament 5 panels (`/admin`, `/vendor`) are explicitly OUT of scope for visual branding, 26 Aug 2026** — they use Filament's own stock default appearance, not this brand system; see §8.3 for the reversal record. Accessibility/behavioural rules elsewhere in this document that are not colour/font/logo branding may still be good practice for panels but are not enforced there by this document.
 **Token source of truth:** [`resources/css/tokens.css`](../../resources/css/tokens.css)
 **Contrast verifier:** [`docs/design/verify-contrast.py`](verify-contrast.py)
 
@@ -129,7 +129,7 @@ Never use an odd value. `p-[13px]` is a lint failure (§9.5).
 
 | Token | Stack | Where |
 |---|---|---|
-| `--font-sans` | Inter var → system fallback | Everything by default. Filament panels stay **all-Inter** — brand voice is a public-surface concern (ADR-0034 D7). |
+| `--font-sans` | Inter var → system fallback | Public site only. **Superseded, 26 Aug 2026 (explicit owner decision):** admin/vendor Filament panels no longer use this token or any custom font at all — see §8.3's updated note. Brand voice, including typography, is a public-surface concern only. |
 | `--font-display` | Poppins → Inter var → system fallback | `h1`/`h2`, hero, header wordmark **only** (ADR-0034 D7). Self-hosted via `@fontsource/poppins`, latin subset, weight **600 only**. `h3`/`h4` stay Inter — Poppins' wide geometry hurts at small sizes. Measured initial route payload (Poppins latin-600 + Inter latin, gzipped woff2, Task 2): **≈56 KB** (8 KB Poppins + 48 KB Inter) — under the §4.6 60 KB budget. |
 | `--font-document` | Source Serif 4 / Lora → Georgia | Certificate/agreement/invoice documents **only**, consumed by `print.css` (§8.5) once it is built. Holds the value `--font-display` carried before ADR-0034, verbatim — added specifically so a document can never silently inherit the new Poppins brand face. |
 | `--font-mono` | JetBrains Mono → system | Order reference, payment reference, audit IDs |
@@ -1256,10 +1256,9 @@ resources/
 ├── css/
 │   ├── tokens.css              ← SINGLE SOURCE OF TRUTH for design values
 │   ├── app.css                 ← public site entry (imports tailwind + tokens)
-│   ├── print.css               ← invoice / kwitansi / agreement / certificate
-│   └── filament/
-│       ├── admin/theme.css     ← /admin panel theme
-│       └── vendor/theme.css    ← /vendor panel theme
+│   └── print.css               ← invoice / kwitansi / agreement / certificate
+│   (no filament/ theme directory — superseded 26 Aug 2026, see §8.3:
+│    admin/vendor panels carry no custom theme CSS at all)
 ├── js/
 │   └── app.js
 └── views/
@@ -1404,69 +1403,22 @@ export default {
 
 > **Caveat:** wrapping colours in `var()` disables Tailwind's automatic opacity modifiers in some v3-era code paths (`bg-primary-600/50`). Under Tailwind 4's `@theme`, opacity modifiers work via `color-mix()` and are unaffected. This is one more reason `@theme` is canonical and this shim is a last resort. **Not verified against a build** (§12).
 
-### 8.3 Filament 5 panels — ⚠️ partially verified 25 Jul 2026 (Batch 2.4, S2-T3)
+### 8.3 Filament 5 panels — ⚠️ SUPERSEDED, 26 Aug 2026 (explicit project-owner decision)
 
-`AdminPanelProvider` (loading a `tokens.css`-generated palette, resolving OQ-09) is registered in `bootstrap/providers.php` and **booted successfully in CI against the real, pinned `filament/filament` v5.7.3** (run 30153271555 — no API mismatch, all tests green). That specific uncertainty — "does this even boot" — is resolved. Two things this section originally described are NOT what shipped, by deliberate, documented deviation rather than oversight: `->font('Inter var', provider: LocalFontProvider::class)` (no confirmed FQCN for `LocalFontProvider` in `filament/support` v5.7.3 — the panel self-hosts via `@font-face`/`@fontsource-variable/inter` instead, matching the public site) and the `discoverResources()`/`discoverPages()`/`discoverWidgets()` calls (the directories they'd scan don't exist yet under the current empty `app/Filament/Admin/` scaffold — add them back when the first Admin Resource is built). Neither of those two specific points has been verified either way.
+**Current state: admin/vendor Filament panels do NOT follow this brand system.** They use Filament's own default, out-of-the-box appearance — stock primary/gray colour scheme, stock font stack, no custom theme CSS, no logo/wordmark. `AdminPanelProvider`/`VendorPanelProvider` carry only `->brandName('Makam Admin')`/`->brandName('Makam Vendor')` (plain text, for functional identification — which app is this — not a designed brand element). This is a deliberate reversal of everything this section originally described, not a bug or a partial implementation: the project owner decided admin/vendor panels are internal back-office tools, separate from the public-facing Earth-brown/Leaf-green identity, which stays exactly as documented in §1–§7 for the public site only. See `AdminPanelProvider`'s own doc block ("SEVENTH change") for the full record.
 
-Goal: `/admin` and `/vendor` inherit the same tokens, so a `DIBAYAR` badge is identical in the customer view and the admin table.
+Everything below this point in §8.3 is a **historical record of the superseded approach** (Batch 2.4/S2-T3, then ADR-0034 Task 5, then the SEC-08/font-provider back-and-forth), kept for provenance — it does **not** describe current shipped code. Do not use it as a guide for new work; do not re-add `->colors()`, `->font()`, `->viteTheme()`, or `->brandLogo()` to either panel provider without a new explicit owner decision reversing the 26 Aug 2026 reversal.
 
-```css
-/* resources/css/filament/admin/theme.css */
-@import "tailwindcss";
-@import "../../../../vendor/filament/filament/resources/css/theme.css";
+<details>
+<summary>Historical: token-derived Filament theming (shipped 25 Jul–26 Aug 2026, then reverted)</summary>
 
-/* Same tokens, one source of truth. */
-@import "../../tokens.css";
+`AdminPanelProvider` previously loaded a `tokens.css`-generated palette (resolving OQ-09) via `->colors($this->filamentColors())`, reading `app/Support/Design/generated/FilamentPalette.php` — produced by `php artisan design:generate-filament-palette` and diff-checked by `php artisan design:verify-filament-palette` (§9.5 gate 6). A companion `resources/css/filament/admin/theme.css` imported `tokens.css` and a self-hosted Inter font, wired in via `->viteTheme(...)`. Both panels also carried `->brandLogo(asset('brand/mark-96.png'))->brandLogoHeight('2rem')` (ADR-0034 Task 5).
 
-@source "../../../../app/Filament/Admin/**/*.php";
-@source "../../../../resources/views/filament/admin/**/*.blade.php";
+None of that is wired into either panel provider any more. The generator class (`app/Support/Design/FilamentPaletteGenerator.php`) and its two artisan commands (`GenerateFilamentPaletteCommand`, `VerifyFilamentPaletteCommand`) still exist in the repo and the CI `design:verify-filament-palette` step (§9.5 gate 6) still runs, but **the generated file they produce has no consumer** — no panel reads it. This is intentionally left as-is by the 26 Aug 2026 reversal rather than deleted; a follow-up may remove the now-dead generator/CI-gate machinery, but that is a separate, not-yet-made decision (flagged, not actioned, in the PR that made this reversal).
 
-/* Map Filament's semantic colour slots onto our palette. */
-@theme {
-  --color-primary-50:  #EFF7F8;   /* Filament resolves its accent from --color-primary-* */
-  /* tokens.css already defines the full primary ramp; this block exists only
-     if Filament requires literal values in its own @theme scope. Prefer
-     removing it once verified against a real Filament 5 install. */
-}
-```
+`resources/css/filament/admin/theme.css` itself was deleted (it carried no non-branding structural fix, so there was nothing to keep), along with its `vite.config.js` Vite entry.
 
-```php
-// app/Providers/Filament/AdminPanelProvider.php — as shipped (ADR-0034, Task 5)
-public function panel(Panel $panel): Panel
-{
-    return $panel
-        ->id('admin')
-        ->path('admin')
-        ->colors($this->filamentColors())
-        ->brandLogo(asset('brand/mark-96.png'))
-        ->brandLogoHeight('2rem')
-        ->font('Inter var')
-        ->viteTheme('resources/css/filament/admin/theme.css');
-}
-
-/**
- * Loads the tokens.css-derived palette instead of a hand-maintained hex
- * array. Throws loudly if the generator has never been run — a missing
- * palette should fail panel boot, not silently fall back to Filament's
- * own default colours.
- */
-private function filamentColors(): array
-{
-    $path = app_path('Support/Design/generated/FilamentPalette.php');
-
-    if (! is_file($path)) {
-        throw new RuntimeException(
-            'Filament palette has not been generated. Run: php artisan design:generate-filament-palette'
-        );
-    }
-
-    return require $path;
-}
-```
-
-**Values are generated from `tokens.css` — never hand-maintained.** `app/Support/Design/generated/FilamentPalette.php` is produced by `php artisan design:generate-filament-palette`; regenerate it after any token change and confirm no drift with `php artisan design:verify-filament-palette` (§9.5 gate 6). `VendorPanelProvider` follows the identical pattern.
-
-**Filament status badges must use the §3.7 mapping**, not Filament's default colour guesses:
+**Filament status badges still use the §3.7 mapping** where a Resource exists — `StatusIntent` is a public-site/domain concern, not a panel-branding one, and is unaffected by this reversal:
 
 ```php
 Tables\Columns\TextColumn::make('status')
@@ -1477,9 +1429,11 @@ Tables\Columns\TextColumn::make('status')
     ->formatStateUsing(fn (string $state): string => StatusIntent::label($state));
 ```
 
-**OQ-09 — resolved.** Filament resolves colours in PHP and cannot read CSS custom properties, so the array above still duplicates `tokens.css` values in a generated file — but that generated file (`app/Support/Design/generated/FilamentPalette.php`) is produced and diff-checked by `FilamentPaletteGenerator`, never hand-typed. `tokens.css` remains rank 1 (§9.1); the generated file is overwritten on every regeneration and CI gate 6 (§9.5) fails the build on drift.
+Whether this remains correct once panels stop carrying the tokens.css palette (i.e. whether `StatusIntent::filamentColor()` should now return one of Filament's default colour keys instead of a token-derived hex) is **not resolved by this reversal** and needs a follow-up check once a Resource actually renders a status badge in CI.
 
-**Uncertainty:** the exact theme-file path, the `vendor/filament/.../theme.css` import target, and `LocalFontProvider` naming are written from the documented Filament 5 baseline and are **not verified against an installed Filament 5**. Confirm against the shipped docs at scaffold time.
+</details>
+
+**OQ-09 — reopened by the 26 Aug 2026 reversal.** It was previously marked resolved (generator + CI diff, described above); it is not moot again in the sense the original question asked ("Filament resolves colours in PHP and cannot read CSS variables — how do we avoid drift?"), because there is no longer anything to keep from drifting: no panel reads a colour array at all.
 
 ### 8.4 Livewire 4
 
@@ -1545,7 +1499,7 @@ No email templates exist yet in this repository — this is a rule section for f
 | 2 | `docs/design/design-system.md` (this file) | Component contracts, state patterns, layout rules, rationale |
 | 3 | `resources/views/components/mk/*` | Canonical implementation of §3 |
 | 4 | `docs/design/verify-contrast.py` | Executable accessibility gate for §7.1 |
-| 5 | Filament panel providers | Panel wiring **derived from** rank 1 — never an independent source |
+| 5 | Filament panel providers | **Superseded 26 Aug 2026 (§8.3):** admin/vendor panels no longer derive any value from rank 1 — they use Filament's stock appearance and carry no design-token wiring at all. This row is kept only as a historical description of ranks 1–4's own scope (public site, not panels). |
 
 A conflict between ranks is a **defect**. Rank 1 wins for values; rank 2 wins for behaviour. Do not resolve a conflict by editing the lower rank to match.
 
@@ -1561,7 +1515,7 @@ A conflict between ranks is a **defect**. Rank 1 wins for values; rank 2 wins fo
 6. Read gate/fallback modes from the **server** (§6.9).
 7. Keep every interactive target at **44 px** on public surfaces.
 8. Re-run `verify-contrast.py` after any colour change.
-9. Keep Filament's PHP colour array in sync with `tokens.css` (§8.3), regenerating rather than editing.
+9. ~~Keep Filament's PHP colour array in sync with `tokens.css` (§8.3), regenerating rather than editing.~~ **Superseded 26 Aug 2026:** admin/vendor Filament panels no longer consume this array at all (§8.3) — this rule applied only while they did.
 
 **MUST NOT**
 
@@ -1698,7 +1652,7 @@ These require a decision from design, product, or brand. **Each is a real fork, 
 | **OQ-06** | Exact **Indonesian microcopy** for each state in §6. Strings here are illustrative; final copy needs a product/legal pass, especially payment, Urgent availability, and privacy notices (`faq-catalog.md` forbids publishing unsupported SLA or method). | Illustrative only | §6 |
 | **OQ-07** | **Dark mode** — in or out? Absent from `screen-inventory.md`, so it currently has no required states and no test coverage. Adding it roughly doubles the visual QA surface. | **Out of MVP.** Not implemented (`tokens.css` §6) | §1.2, §7.1 |
 | **OQ-08** | Is the **44 px** floor acceptable, or should public CTAs target 48 px given the Jabodetabek Android device mix? | 44 px (WCAG 2.5.5) | §7.3 |
-| **OQ-09** | How is the **Filament PHP colour array** generated from `tokens.css`? Filament resolves colours in PHP and cannot read CSS variables, so today the hex values are duplicated (§8.3). A build-time generator plus CI diff is proposed but unwritten. | Manual sync + CI diff check | §8.3, §9.5 |
+| **OQ-09** | How is the **Filament PHP colour array** generated from `tokens.css`? Filament resolves colours in PHP and cannot read CSS variables, so today the hex values are duplicated (§8.3). A build-time generator plus CI diff is proposed but unwritten. | **Moot, 26 Aug 2026.** Was resolved via a generator + CI diff (`FilamentPaletteGenerator`, §8.3); superseded by the same-date decision that admin/vendor panels carry no custom colour array at all — nothing left to keep in sync. | §8.3, §9.5 |
 | **OQ-10** | Does a **Content-Security-Policy** exist or is one planned? No CSP is defined in [`security-baseline.md`](../security/security-baseline.md). Self-hosted fonts and an inline SVG sprite are CSP-friendly, but Livewire/Alpine may need `script-src` accommodation. This should be decided **before** the scaffold, not retrofitted. | None defined — flagged as a gap | §1.4, §4.6 |
 | **OQ-11** | Should `docs/design/` be added as a canonical Kiro steering document? | **Resolved, done 25 Jul 2026.** `design-system.md` and `tokens.css` are registered in `.kiro/steering/design.md` (a conditional steering file, loaded when work touches `resources/`, `app/Filament/`, `app/Livewire/`, or `docs/design/` — see `.kiro/steering/project.md`'s index) | Adoption |
 
@@ -1729,7 +1683,8 @@ This table was written when `makam-app` had no application code at all. The scaf
 | Every generated utility name in §8.2 (`max-w-form`, `max-w-prose`, `max-w-content`, `duration-fast`, `z-modal`, `z-header`, `touch-target`, `h-11`, `h-13`, `xs:`, `border-neutral-450`, `ease-standard`, `text-base`) | **Verified 25 Jul 2026 — S2-T1 closed.** CI greps the compiled CSS for each (`resources/views/design-system-smoke-test.blade.php` forces the ones with no real usage yet — `max-w-form`/`prose`/`content`, `xs:` — to actually generate, since Tailwind's JIT scanner only emits what's literally referenced somewhere) |
 | The `tailwind.config.js` shim, including the `var()`-in-colours opacity caveat | **NOT TESTED** |
 | **Filament 5 theming (§8.3)** — panel boot itself | **Verified 25 Jul 2026** — `AdminPanelProvider` boots successfully in CI against the real, pinned `filament/filament` v5.7.3 (all tests green) |
-| **Filament 5 theming (§8.3)** — `LocalFontProvider`, `discoverResources()`/`discoverPages()`/`discoverWidgets()` | **NOT VERIFIED, deliberately not used** — see §8.3's own updated note for the specific, documented reason each was skipped rather than guessed at |
+| **Filament 5 theming (§8.3)** — `LocalFontProvider`, `discoverResources()`/`discoverPages()`/`discoverWidgets()` | **Moot, 26 Aug 2026** — the custom-theming approach this row described was reverted the same day (§8.3); `discoverResources()` itself is retained (unrelated to branding) but no font-provider question applies any more since neither panel requests a custom font |
+| **Filament 5 theming (§8.3)** — brand colours/font/logo removed | **Reverted, 26 Aug 2026, explicit owner decision.** admin/vendor panels now use Filament's stock default appearance; `tests/Feature/Filament/PanelBrandingTest.php` asserts a plain-text `->brandName()` only and no `->brandLogo()`. Run against the pinned CI image + real Postgres/Redis for this batch — see the batch's PR for the result. |
 | All Blade/Livewire snippets (§3.1, §3.2, §6.1, §8.4) | **NOT TESTED** — never rendered or compiled |
 | `StatusIntent` helper and `design:verify-filament-palette` command | **Written and tested 25 Jul 2026** — `app/Support/Design/StatusIntent.php`, 26 tests green in CI (real PHPUnit run, not the earlier `php -l`-only claim); `design:verify-filament-palette` exists and works when run manually, not yet wired into CI (that's S2-T4/Batch 2.5) |
 | Logo/wordmark — real Earth/Leaf mark in header + footer, placeholder "M" monogram retired (ADR-0034, Task 4) | **Test written, NOT RUN locally.** `<x-mk.logo>` rewritten; `tests/Feature/View/Components/MkLogoTest.php` (4 assertions) and `tests/Feature/View/BrandIdentityTest.php` (`GET /` renders header mark, footer inverse mark, favicon links) exist and are `php -l` clean, but PHPUnit needs PHP ≥8.5 and this host runs 8.3.6 — **CI evidence pending.** |
