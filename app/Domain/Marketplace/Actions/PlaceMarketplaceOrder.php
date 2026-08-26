@@ -35,19 +35,48 @@ use InvalidArgumentException;
  * idempotency check is bypassed.
  *
  * ---------------------------------------------------------------------------
- * Ruling 2 (14 Aug 2026): the checkout payable is an UNATTENDED assessment
+ * Ruling 2 (14 Aug 2026, corrected 26 Aug 2026): the checkout payable is an
+ * UNATTENDED assessment — and MUST be attributed to an explicit guest actor,
+ * never the ambient one
  * ---------------------------------------------------------------------------
  * `VendorPayable::assess()` requires `ActorContext` and a trigger. A
  * customer's checkout is nobody's human decision: the customer is not an
  * operator, no `finance` role or vendor grant exists on the request, and the
  * payable is opened HELD (not eligible — the vendor has fulfilled nothing).
  * The call therefore names `VendorPayableAssessmentTrigger::UnattendedAssessment`
- * explicitly and the actor context is resolved from the container (the
- * scoped `ActorContext` binding; a guest request resolves `ActorContext::guest()`,
- * which `FinanceVendorPayableAuthorizer::authorizeUnattended()` accepts and
- * which makes the audit row's `actorRole: 'system'` true by construction).
- * If a human IS present on the context, the authorizer refuses — the Action
- * does not bypass it.
+ * explicitly.
+ *
+ * The original version of this ruling read the actor context from the
+ * container (`app(ActorContext::class)`) on the theory that "a guest request
+ * resolves `ActorContext::guest()`". That theory was wrong for the actual
+ * common case: `PlaceMarketplaceOrder` runs inside `Checkout::placeOrder()`,
+ * which ANY signed-in customer reaches — the container's per-request scoped
+ * `ActorContext` then resolves to that real, authenticated identity, not a
+ * guest one. `FinanceVendorPayableAuthorizer::authorizeUnattended()`
+ * unconditionally throws `VendorPayableNotAuthorisedException` whenever
+ * `$actorContext->isAuthenticated()` is true — by design, so a person cannot
+ * launder a human decision through the system path (see that authorizer's
+ * own doc block). Net effect: every logged-in customer's checkout call threw
+ * here, `Checkout::placeOrder()`'s broad `catch (Throwable $e)` swallowed it
+ * behind a generic "Checkout belum dapat diproses" message, and no
+ * production incident had yet surfaced only because no real vendor
+ * listings/pricing existed to reach a real checkout attempt.
+ *
+ * The fix: pass an EXPLICIT `ActorContext::guest()`, never the ambient one —
+ * the same pattern established for the identical defect in
+ * `MarkMarketplaceOrderPaid::releasePayable()` (see that method's doc block
+ * for the full reasoning, which applies here unchanged). This does not
+ * weaken any real authorization gate: WHO may place a marketplace order at
+ * all is decided entirely by this Action's own caller-side checks
+ * (`Checkout::placeOrder()`'s validation and the cart/session ownership
+ * check in `cart()`), both unchanged. This line only decides which identity
+ * the downstream vendor-payable *fact recognition* — "a payable exists, HELD,
+ * for this order" — is attributed to. Recognising that a payable now exists
+ * is a mechanical consequence of the order being placed, not a second human
+ * money-movement decision requiring its own `finance` + per-vendor
+ * `ScopeAssignment` grant; the real, human-attributable fact (that this
+ * customer placed this order) is captured elsewhere, on the order and cart
+ * rows themselves.
  *
  * ---------------------------------------------------------------------------
  * Allocation is a loop over distinct vendors; one `vendor_orders` row per
@@ -213,11 +242,17 @@ final class PlaceMarketplaceOrder
         int $amountMinor,
         CarbonImmutable $now,
     ): void {
-        // Resolved here, not constructor-injected, so the Action stays
-        // constructible with zero arguments (the plan's call shape) while
-        // still reading the container's per-request scoped `ActorContext` —
-        // the same source `GuardPaymentSession` and `ManualPayout` read.
-        $actorContext = app(ActorContext::class);
+        // NEVER the live per-request `ActorContext` here — see the class
+        // doc block's "Ruling 2 (corrected 26 Aug 2026)" section. This used
+        // to read `app(ActorContext::class)`, the container's per-request
+        // scoped context, which resolves to the REAL authenticated customer
+        // during checkout and made `FinanceVendorPayableAuthorizer::
+        // authorizeUnattended()` throw for every logged-in customer. An
+        // explicit `ActorContext::guest()` is the correct, constant identity
+        // for this unattended fact-recognition call regardless of who is
+        // signed in — mirrors the identical fix in
+        // `MarkMarketplaceOrderPaid::releasePayable()`.
+        $actorContext = ActorContext::guest();
 
         (new VendorPayable(actorContext: $actorContext))->assess(
             vendorId: $vendorId,
