@@ -96,6 +96,26 @@ final class SiteSettingsResource extends Resource
         return 'Pengaturan Situs';
     }
 
+    /**
+     * UI-audit fix (26 Aug 2026): with no override, Filament derives the
+     * breadcrumb's first crumb from `get_model_label(SiteSetting::class)`
+     * — "Site Setting", English, straight from the model class name — while
+     * every other resource in this codebase overrides both label methods
+     * (e.g. `PreNeedCaseResource::getModelLabel()` -> 'kasus pra-layanan',
+     * `getPluralModelLabel()` -> 'Kasus Pra-Layanan'). Same pattern here,
+     * reusing the already-correct `getNavigationLabel()` wording rather than
+     * inventing new copy.
+     */
+    public static function getModelLabel(): string
+    {
+        return 'pengaturan situs';
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return 'Pengaturan Situs';
+    }
+
     public static function auditRoleFor(ActorContext $actor): string
     {
         foreach ([ActorRole::ADMIN, ActorRole::RESTRICTED_ADMIN, ActorRole::OPERATOR, ActorRole::FINANCE] as $role) {

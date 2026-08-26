@@ -12,6 +12,7 @@ use App\Domain\Quotation\Actions\IssueQuote;
 use App\Domain\Quotation\Models\Quote;
 use App\Domain\ServiceCatalog\Models\ServiceDefinition;
 use App\Domain\ServiceCatalog\ServiceCode;
+use App\Filament\Admin\Resources\BookingOrders\BookingOrderProductTypeLabel;
 use App\Filament\Admin\Resources\BookingOrders\Pages\ViewBookingOrder;
 use App\Models\User;
 use App\Platform\IdentityAccess\Roles\ActorRole;
@@ -141,5 +142,39 @@ final class BookingOrderQuoteLineItemsTest extends TestCase
         Livewire::test(ViewBookingOrder::class, ['record' => $order->getRouteKey()])
             ->assertOk()
             ->assertSee('Belum ada penawaran');
+    }
+
+    /**
+     * UI-audit fix (26 Aug 2026): "Jenis Layanan" previously rendered the
+     * raw `product_type` enum value straight into the infolist. Proves the
+     * localized label renders instead and the raw machine code does not
+     * leak into the page.
+     */
+    public function test_the_service_type_renders_a_localized_label_not_the_raw_enum(): void
+    {
+        $draft = BookingDraft::query()->create(['customer_full_name' => 'UAT Pemesan']);
+        $order = $this->orderFor($draft);
+
+        Livewire::test(ViewBookingOrder::class, ['record' => $order->getRouteKey()])
+            ->assertOk()
+            ->assertSee(BookingOrderProductTypeLabel::label(ProductType::AT_NEED_SERVICE_ORDER))
+            ->assertDontSee(ProductType::AT_NEED_SERVICE_ORDER->value);
+    }
+
+    /**
+     * UI-audit fix (26 Aug 2026): the "Total Penawaran" line concatenated
+     * the raw `QuoteStatus` value (e.g. "· ISSUED") into the rendered
+     * string. Proves the localized status label renders instead.
+     */
+    public function test_the_quote_status_renders_a_localized_label_not_the_raw_enum(): void
+    {
+        $draft = BookingDraft::query()->create(['customer_full_name' => 'UAT Pemesan']);
+        $order = $this->orderFor($draft);
+        $this->issueQuoteFor($order);
+
+        Livewire::test(ViewBookingOrder::class, ['record' => $order->getRouteKey()])
+            ->assertOk()
+            ->assertSee('Diterbitkan')
+            ->assertDontSee('· ISSUED');
     }
 }

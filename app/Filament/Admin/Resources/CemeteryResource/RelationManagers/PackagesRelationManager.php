@@ -185,6 +185,17 @@ final class PackagesRelationManager extends RelationManager
     protected function makeTable(): Table
     {
         return parent::makeTable()
+            // UI-audit fix (26 Aug 2026): with no explicit model label, the
+            // table's empty-state description
+            // (`filament-tables::table.empty.description` — "Buat :model
+            // untuk memulai.") falls back to `get_model_label($model)`,
+            // which derives from the `CemeteryPackage` class name and
+            // produces the English "cemetery package" — leaking into an
+            // otherwise-Indonesian sentence even though this manager's own
+            // `$title` ("Paket Makam") never fed that fallback. Setting the
+            // model label explicitly fixes the empty state without touching
+            // `$title` (the tab label), which was already correct.
+            ->modelLabel('paket makam')
             ->defaultSort('sort_order')
             ->columns([
                 TextColumn::make('name')

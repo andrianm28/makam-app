@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Filament\Admin\Resources\BookingOrders\Tables;
 
 use App\Domain\OrderWorkflow\OrderStatus;
+use App\Domain\OrderWorkflow\ProductType;
+use App\Filament\Admin\Resources\BookingOrders\BookingOrderProductTypeLabel;
 use App\Filament\Admin\Resources\BookingOrders\BookingOrderStatusBadge;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
@@ -20,7 +22,9 @@ final class BookingOrdersTable
             ->columns([
                 TextColumn::make('reference')->label('Referensi')->searchable(),
                 TextColumn::make('bookingDraft.customer_full_name')->label('Pemesan')->searchable(),
-                TextColumn::make('product_type')->label('Jenis Layanan'),
+                TextColumn::make('product_type')
+                    ->label('Jenis Layanan')
+                    ->formatStateUsing(fn (string $state): string => BookingOrderProductTypeLabel::label(ProductType::from($state))),
                 TextColumn::make('status')
                     ->label('Status')
                     ->badge()

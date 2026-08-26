@@ -20,6 +20,7 @@ use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Pages;
 use Filament\Panel;
 use Filament\PanelProvider;
+use Filament\View\PanelsRenderHook;
 use Filament\Widgets;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -284,7 +285,67 @@ class AdminPanelProvider extends PanelProvider
             // `LocalFontProvider::class` here without also re-closing that
             // CSP exception; the two must move together.
             ->font('Inter var')
-            ->viteTheme('resources/css/filament/admin/theme.css');
+            ->viteTheme('resources/css/filament/admin/theme.css')
+            // UI-audit fix (26 Aug 2026): closes the `Cannot read properties
+            // of null (reading 'includes')` console error thrown from
+            // `Proxy.groupIsCollapsed` on every panel page, including
+            // `/admin/login`.
+            //
+            // Root cause, traced against the installed `filament/filament`
+            // v5.7.3 sources (not guessed): Alpine's sidebar store persists
+            // `collapsedGroups` via `Alpine.$persist(null).as('collapsedGroups')`
+            // (`vendor/filament/filament/resources/js/stores/sidebar.js`).
+            // Its default stays the literal `null` until something writes an
+            // array to `localStorage['collapsedGroups']`. The ONLY code that
+            // ever writes that key is an inline `<script>` embedded in
+            // `resources/views/livewire/sidebar.blade.php` — which renders
+            // only on pages that actually have a sidebar. The Alpine store
+            // itself, though, is registered globally and exists on EVERY
+            // page, including `/admin/login` (no sidebar there). So a
+            // visitor's very first request against a browser with no prior
+            // `collapsedGroups` value — most commonly hitting `/login` first
+            // — creates the store with `collapsedGroups` still `null`. If
+            // the NEXT page (e.g. the post-login dashboard, reached via a
+            // Livewire `wire:navigate` SPA transition rather than a full
+            // reload) is the first one to render a `<li
+            // x-bind:class="{ 'fi-collapsed': $store.sidebar.
+            // groupIsCollapsed(label) }">` sidebar-group element — which
+            // happens for EVERY group, including the unlabeled default group
+            // `Filament\Navigation\NavigationBuilder::getNavigation()` wraps
+            // every ungrouped nav item in — the store object already exists
+            // in memory from the login page with `collapsedGroups` still
+            // `null` (Alpine does not re-read localStorage into an existing
+            // store on a SPA transition), so `null.includes(label)` throws.
+            // No navigation group in this panel is misconfigured — grepping
+            // this whole app finds zero `->navigationGroup()`/`NavigationGroup::make()`
+            // calls anywhere, so every nav item goes through that same
+            // unlabeled-default-group path; this is a first-visit Alpine/
+            // localStorage race, not a per-resource bug.
+            //
+            // Fix: seed `localStorage['collapsedGroups']` to `[]` from
+            // `<head>`, on every request, before Alpine ever runs. `HEAD_END`
+            // is rendered by `vendor/filament/filament/resources/views/
+            // components/layout/base.blade.php`, which BOTH the full app
+            // layout and the login/"simple" layout extend — so this hook
+            // fires on `/admin/login` too, closing the race regardless of
+            // which page a visitor's browser reaches first.
+            ->renderHook(
+                PanelsRenderHook::HEAD_END,
+                fn (): string => <<<'HTML'
+                    <script>
+                        try {
+                            if (localStorage.getItem('collapsedGroups') === null) {
+                                localStorage.setItem('collapsedGroups', JSON.stringify([]));
+                            }
+                        } catch (e) {
+                            // Storage unavailable (private browsing, disabled
+                            // storage, etc.) — Alpine's own $persist already
+                            // degrades to its in-memory default in that case,
+                            // so there is nothing further to do here.
+                        }
+                    </script>
+                    HTML,
+            );
     }
 
     /**
