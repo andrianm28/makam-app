@@ -16,8 +16,10 @@ use App\Domain\Marketplace\Models\VendorListing;
 use App\Domain\Marketplace\PaymentState;
 use App\Domain\Marketplace\ProductCode;
 use App\Livewire\Public\Marketplace\Checkout;
+use App\Models\User;
 use App\Platform\Payment\Models\PaymentVerification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -46,6 +48,31 @@ final class CheckoutScreenTest extends TestCase
             'area_label' => 'Jakarta Selatan', 'delivery_fee_minor' => 25_000, 'is_active' => true,
         ]);
         $cart = CartModel::create(['session_ref' => session()->getId()]);
+        (new AddToCart)->handle($cart, $listing, 2);
+
+        return [$cart->fresh(), $area];
+    }
+
+    /**
+     * Same fixture as `seedCart()`, but the cart is owned by an authenticated
+     * user (`customer_ref`) rather than a guest session — the exact shape
+     * `Checkout::cart()` resolves for a signed-in customer.
+     */
+    private function seedCartForUser(User $user): array
+    {
+        $vendor = Vendor::create(['name' => 'Toko Bunga', 'is_active' => true]);
+        $listing = VendorListing::create([
+            'vendor_id' => $vendor->id,
+            'product_id' => Product::findByCode(ProductCode::FLOWER_BOARD)->id,
+            'price_minor' => 150_000, 'price_version' => 1,
+            'availability_mode' => AvailabilityMode::STOCKED, 'stock_quantity' => 10,
+            'evidence_requirement' => EvidenceRequirement::NONE, 'is_active' => true,
+        ]);
+        $area = ServiceArea::create([
+            'vendor_id' => $vendor->id, 'area_code' => 'JKT-SELATAN',
+            'area_label' => 'Jakarta Selatan', 'delivery_fee_minor' => 25_000, 'is_active' => true,
+        ]);
+        $cart = CartModel::create(['customer_ref' => (string) $user->id]);
         (new AddToCart)->handle($cart, $listing, 2);
 
         return [$cart->fresh(), $area];
@@ -93,6 +120,50 @@ final class CheckoutScreenTest extends TestCase
         $this->assertSame(PaymentState::BELUM_DIBAYAR, $order->payment_state);
         $this->assertSame(1, $order->vendorOrders()->count());
         $this->assertSame('budi@example.test', $order->vendorOrders()->first()->customer_email);
+    }
+
+    /**
+     * The real production-breaking bug this test exists to catch: before the
+     * fix, `PlaceMarketplaceOrder::assessPayable()` resolved the ambient
+     * per-request `ActorContext` — which, for ANY logged-in customer, is the
+     * real authenticated actor, not a guest one.
+     * `FinanceVendorPayableAuthorizer::authorizeUnattended()` then threw
+     * `VendorPayableNotAuthorisedException` for every such checkout,
+     * silently swallowed by `Checkout::placeOrder()`'s broad
+     * `catch (Throwable $e)` into a generic "Checkout belum dapat diproses"
+     * error — i.e. checkout was broken for every authenticated customer.
+     * This asserts the full HTTP/Livewire-component-level path — not just a
+     * unit test of `assessPayable()` in isolation — because that broad catch
+     * is exactly the layer that hid the defect before.
+     */
+    public function test_an_authenticated_customer_can_place_an_order_end_to_end(): void
+    {
+        $user = User::factory()->create();
+        [, $area] = $this->seedCartForUser($user);
+
+        $this->actingAs($user);
+
+        Livewire::test(Checkout::class)
+            ->set('recipientName', 'Budi Santoso')
+            ->set('recipientPhone', '081234567890')
+            ->set('recipientEmail', 'budi@example.test')
+            ->set('selectedAreaCode', $area->area_code)
+            ->call('placeOrder')
+            ->assertHasNoErrors()
+            ->assertDontSee('Checkout belum dapat diproses');
+
+        $order = MarketplaceOrder::firstOrFail();
+        $this->assertSame(PaymentState::BELUM_DIBAYAR, $order->payment_state);
+        $this->assertSame((string) $user->id, $order->customer_ref);
+
+        // The payable was really opened, and attributed to the system actor
+        // (never the authenticated customer) — proves the fix's actual
+        // effect, not just the absence of an exception.
+        $payable = DB::table('vendor_payables')
+            ->where('source_type', 'marketplace_order')
+            ->where('source_id', $order->id)
+            ->sole();
+        $this->assertSame(300_000, (int) $payable->amount_minor);
     }
 
     public function test_a_double_submit_creates_only_one_order(): void

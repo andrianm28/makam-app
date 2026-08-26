@@ -18,6 +18,7 @@ use App\Domain\Marketplace\Models\VendorListing;
 use App\Domain\Marketplace\PaymentState;
 use App\Domain\Marketplace\ProductCode;
 use App\Domain\Marketplace\VendorProcessingStatus;
+use App\Models\User;
 use App\Platform\FinancialLedger\Actions\VendorPayable;
 use App\Platform\FinancialLedger\Money;
 use App\Platform\FinancialLedger\VendorPayableState;
@@ -139,6 +140,42 @@ final class PlaceMarketplaceOrderTest extends TestCase
         $this->assertSame('system', $audit->actor_role);
         $this->assertNull($audit->actor_ref);
         $this->assertSame('job', $audit->source);
+    }
+
+    /**
+     * The bug this test exists to catch: `assessPayable()` used to resolve
+     * the AMBIENT container `ActorContext` (`app(ActorContext::class)`),
+     * which for a real authenticated request is the signed-in customer, not
+     * a guest. `FinanceVendorPayableAuthorizer::authorizeUnattended()`
+     * unconditionally throws for any authenticated actor — so this exact
+     * call, from any signed-in customer's checkout, threw
+     * `VendorPayableNotAuthorisedException` before the fix. Placing an order
+     * while `actingAs()` an authenticated user reproduces the real
+     * production request shape directly against the Action (the Livewire
+     * end-to-end proof lives in `CheckoutScreenTest`).
+     */
+    public function test_placing_an_order_as_an_authenticated_customer_does_not_throw(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $order = $this->place($this->cartWithTwo(), 'idem-auth-1', (string) $user->id);
+
+        $this->assertSame(PaymentState::BELUM_DIBAYAR, $order->payment_state);
+
+        $payable = DB::table('vendor_payables')
+            ->where('source_type', 'marketplace_order')
+            ->where('source_id', $order->id)
+            ->sole();
+
+        // Attributed to the system actor regardless of who is signed in —
+        // the fix's actual effect, not just the absence of an exception.
+        $audit = DB::table('audit_events')
+            ->where('action', VendorPayable::AUDIT_ACTION_ASSESSED)
+            ->where('subject_id', (string) $payable->id)
+            ->sole();
+        $this->assertSame('system', $audit->actor_role);
+        $this->assertNull($audit->actor_ref);
     }
 
     public function test_a_blank_badan_usaha_fails_closed_and_writes_nothing(): void
