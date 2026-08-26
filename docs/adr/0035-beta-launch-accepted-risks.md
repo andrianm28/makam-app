@@ -224,34 +224,58 @@ per-user data scoping — the same bar items 1–10 hold sandbox payments and th
 accepted-risk item is being opened here; this addendum exists so a reader of this ADR is not left assuming
 `/akun` was reviewed under items 1–10 when it postdates them.
 
-### 12. `dev` and `beta` share `APP_KEY`, session/cache/Redis prefix, and provider sandbox credentials — accepted by explicit decision, not remediated
+### 12. `dev` and `beta` shared `APP_KEY`, session/cache/Redis prefix, and provider sandbox credentials — accepted 24 Aug 2026, partially remediated 25 Aug 2026 after causing a real customer-facing bug
 
 `docs/testing/release-gates.md` §I's "Development and staging have different APP keys..." box (re-verified
-24 Aug 2026) found that on the one dev/beta pair actually running, isolation exists only for database
+24 Aug 2026) found that on the one dev/beta pair actually running, isolation existed only for database
 identity (`DB_USERNAME`/`DB_PASSWORD`/`DB_DATABASE`) — `APP_KEY`, `REDIS_PREFIX`, `CACHE_PREFIX`,
 `SESSION_COOKIE`, `SESSION_DOMAIN`, `QUEUE_CONNECTION`, `FILESYSTEM_DISK`, and the
-`SUMODOP_SANDBOX_API_KEY`/`SUMODOP_SANDBOX_WEBHOOK_SECRET` pair are all identical between `.env.dev` and
-`.env.beta`, confirmed by hash comparison (no raw value ever printed or logged). The live consequence is
-real, not hypothetical: `beta-worker`, a genuine `restart: unless-stopped` container running
-`queue:work --queue=critical,urgent,notifications,default`, shares dev's Redis queue keyspace right now — a
-job dispatched from `dev-web` today is executable by `beta-worker` against beta's real database and real
-provider credentials.
+`SUMODOP_SANDBOX_API_KEY`/`SUMODOP_SANDBOX_WEBHOOK_SECRET` pair were all identical between `.env.dev` and
+`.env.beta`, confirmed by hash comparison (no raw value ever printed or logged).
 
 **Decision (24 Aug 2026):** per the user's explicit instruction — "its oke its intended to promote dev to
-beta" — this sharing is accepted, not remediated. The product intent is that dev is meant to be promotable
+beta" — this sharing was accepted, not remediated. The product intent is that dev is meant to be promotable
 straight into beta without a credential-regeneration step in between; the shared configuration is how that
 promotion path stays cheap, not an oversight left over from the 17 Aug 2026 host migration (item 8 above).
 
-**Mitigation:** none beyond database-identity separation (already real) and the ordering constraint recorded
-in `release-gates.md`'s Horizon box: persistent Horizon supervisors are not started on dev outside a
-disposable rehearsal, since that specific action would convert this already-accepted latent sharing into
-active, continuous cross-environment job consumption — a materially different question from the credential
-sharing itself, and one this decision does not pre-answer.
+**What actually happened next (25 Aug 2026):** within 24 hours of that acceptance, this exact sharing caused
+a real, live customer-facing bug — clicking "Jakarta" on the public booking wizard's Step 1 never advanced
+past Step 1, because `SESSION_DOMAIN=dev.makam.co.id` meant a browser visiting `makam.co.id` never sent its
+session cookie, so `BookingDraftBinding`'s session-based draft-ownership check silently failed on every
+request and `currentOrNewDraft()` created a fresh draft on every click. This was diagnosed and fixed the same
+day: `APP_ENV`, `APP_URL`, `SESSION_DOMAIN`, `SESSION_COOKIE`, `REDIS_PREFIX`, and `CACHE_PREFIX` were
+de-shared for `.env.beta` (beta now runs its own values, distinct from dev — verified via `php artisan about`
+showing `Environment: production`, `Debug Mode: OFF`, and real post-fix health checks). `beta-worker`'s
+Redis-queue-keyspace collision with `dev-web`, called out below as the concrete live risk this item recorded,
+is resolved as a direct consequence of the `REDIS_PREFIX`/`CACHE_PREFIX` split.
 
-**Reversal:** regenerating a distinct `APP_KEY`, `REDIS_PREFIX`/`CACHE_PREFIX`, session cookie/domain,
-`HORIZON_PREFIX`, and provider sandbox credentials for `.env.beta` — real engineering work, not a config
-flip, and not currently planned. Revisit if dev/beta promotion stops being the intended workflow, or before
-beta ever carries payment/customer data at a scale where this stops being an acceptable risk.
+**Correction to this item's own framing:** "accepted, not remediated" turned out to be the wrong call for the
+session/cache/Redis fields specifically — the acceptance was made without weighing that a session-scoping
+field colliding across environments is not just a security/isolation concern but a direct functional-
+correctness one, and it broke the platform's own primary conversion path (booking) within a day. Recorded
+here as a finding for future risk-acceptance decisions on this project: a "shared config enables cheap
+promotion" tradeoff needs a per-field pass, not a single blanket accept, since some fields (session scoping)
+carry functional risk an isolation-focused review can miss.
+
+**What remains genuinely shared, by continuing deliberate choice:** `APP_KEY` and the
+`SUMODOP_SANDBOX_API_KEY`/`SUMODOP_SANDBOX_WEBHOOK_SECRET` pair. `APP_KEY` sharing is unchanged from the
+original decision above. The SumoPod sandbox merchant reference was separately renamed from
+`merchant-contoh-dev` to `merchant-beta` (25 Aug 2026, alongside a webhook-URL misconfiguration fix on
+SumoPod's dashboard) to stop dev and beta from appearing as the same merchant on the provider's side — this
+was a webhook-routing fix, not a remediation of this item's credential-sharing acceptance, and the sandbox
+API key/secret pair itself remains shared between dev and beta.
+
+**Mitigation:** database-identity separation (already real), the session/cache/Redis field split (new,
+25 Aug 2026), and the ordering constraint recorded in `release-gates.md`'s Horizon box: persistent Horizon
+supervisors are not started on dev outside a disposable rehearsal, since that specific action would convert
+the still-shared `APP_KEY`/sandbox-credential surface into active, continuous cross-environment job
+consumption — a materially different question from the credential sharing itself, and one this decision does
+not pre-answer.
+
+**Reversal:** regenerating a distinct `APP_KEY` and provider sandbox credentials for `.env.beta` — real
+engineering work, not a config flip, and not currently planned. Revisit if dev/beta promotion stops being the
+intended workflow, or before beta ever carries payment/customer data at a scale where this stops being an
+acceptable risk.
 
 ## Consequences
 
