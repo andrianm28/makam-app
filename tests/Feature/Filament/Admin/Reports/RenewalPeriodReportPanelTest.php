@@ -7,7 +7,7 @@ namespace Tests\Feature\Filament\Admin\Reports;
 use App\Domain\GraveRegistry\Models\GraveRecord;
 use App\Domain\Renewal\Models\Renewal;
 use App\Domain\Renewal\RenewalStatus;
-use App\Filament\Admin\Pages\RenewalPeriodReport;
+use App\Livewire\Admin\Reports\RenewalPeriodReportPanel;
 use App\Models\User;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use Carbon\CarbonImmutable;
@@ -17,12 +17,12 @@ use Tests\Support\GrantsActorRoles;
 use Tests\TestCase;
 
 /**
- * `RenewalPeriodReport` — ADM-090/AC7's renewal-by-period report. Filters by
+ * `RenewalPeriodReportPanel` — ADM-090/AC7's renewal-by-period report. Filters by
  * `target_due_period`, not `created_at` — see `RenewalReport`'s doc block
  * for why. `canAccess()` is role-only, the same
  * `MasterDataAdminAuthorizerContract` gate `RenewalOrderResource` uses.
  */
-final class RenewalPeriodReportPageTest extends TestCase
+final class RenewalPeriodReportPanelTest extends TestCase
 {
     use GrantsActorRoles;
     use RefreshDatabase;
@@ -35,9 +35,9 @@ final class RenewalPeriodReportPageTest extends TestCase
 
     public function test_guests_and_bare_users_are_denied(): void
     {
-        $this->assertFalse(RenewalPeriodReport::canAccess());
+        $this->assertFalse(RenewalPeriodReportPanel::canAccess());
         $this->actingAs(User::factory()->create());
-        $this->assertFalse(RenewalPeriodReport::canAccess());
+        $this->assertFalse(RenewalPeriodReportPanel::canAccess());
     }
 
     public function test_back_office_roles_can_access(): void
@@ -46,7 +46,7 @@ final class RenewalPeriodReportPageTest extends TestCase
             $user = User::factory()->create();
             $this->grantRoleTo($user, $role);
             $this->actingAs($user);
-            $this->assertTrue(RenewalPeriodReport::canAccess(), "role {$role} should access");
+            $this->assertTrue(RenewalPeriodReportPanel::canAccess(), "role {$role} should access");
         }
     }
 
@@ -54,7 +54,7 @@ final class RenewalPeriodReportPageTest extends TestCase
     {
         $user = $this->authorisedUser();
 
-        $component = Livewire::actingAs($user)->test(RenewalPeriodReport::class);
+        $component = Livewire::actingAs($user)->test(RenewalPeriodReportPanel::class);
 
         $this->assertSame(CarbonImmutable::now()->format('Y-m'), $component->get('period'));
         $component->assertSee('Belum ada perpanjangan jatuh tempo pada periode ini')
@@ -71,7 +71,7 @@ final class RenewalPeriodReportPageTest extends TestCase
         $this->makeRenewal($dueThisMonth, RenewalStatus::MENUNGGU_PEMBAYARAN);
         $this->makeRenewal($dueThisMonth, RenewalStatus::DIBAYAR);
 
-        $component = Livewire::actingAs($user)->test(RenewalPeriodReport::class);
+        $component = Livewire::actingAs($user)->test(RenewalPeriodReportPanel::class);
 
         $component->assertCount('reportRows', 2)
             ->assertSet('total', 3);
@@ -84,7 +84,7 @@ final class RenewalPeriodReportPageTest extends TestCase
         $dueNextMonth = CarbonImmutable::now()->addMonths(2)->startOfMonth()->toDateString();
         $this->makeRenewal($dueNextMonth, RenewalStatus::MENUNGGU_PEMBAYARAN);
 
-        $component = Livewire::actingAs($user)->test(RenewalPeriodReport::class);
+        $component = Livewire::actingAs($user)->test(RenewalPeriodReportPanel::class);
 
         $component->assertSet('total', 0);
     }
@@ -93,7 +93,7 @@ final class RenewalPeriodReportPageTest extends TestCase
     {
         $user = $this->authorisedUser();
 
-        $component = Livewire::actingAs($user)->test(RenewalPeriodReport::class);
+        $component = Livewire::actingAs($user)->test(RenewalPeriodReportPanel::class);
 
         $component->set('period', '2026-13')->call('loadReport');
 

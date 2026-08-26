@@ -585,7 +585,7 @@ final class BulkFinancialExportTest extends TestCase
     /**
      * A malformed period must be a 4xx, not the app's own incident page.
      *
-     * This is reachable from the panel's own button: `FinanceReports` shows the
+     * This is reachable from the panel's own button: `FinanceReportPanel` shows the
      * inline validation error for `2026-13` and STILL emits the raw period into
      * the export link, so pressing Ekspor CSV afterwards used to return an
      * uncaught 500. `InvalidLedgerReportException` extends

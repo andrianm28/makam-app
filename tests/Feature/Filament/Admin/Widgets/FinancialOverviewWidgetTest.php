@@ -26,7 +26,7 @@ use Tests\TestCase;
 /**
  * ADM-001 AC1 — "payment" and "report" dashboard modules
  * (`FinancialOverviewWidget`). Gated and scoped like `FinanceReports`
- * (`tests/Feature/FinancialLedger/FinanceReportsPageTest.php` is the sibling
+ * (`tests/Feature/Filament/Admin/Reports/FinanceReportPanelTest.php` is the sibling
  * precedent this file follows): a `finance`-role actor without a business-
  * entity grant is refused, and a granted actor sees ONLY their own badan
  * usaha's payment figures — the leak-prevention assertion is the point of

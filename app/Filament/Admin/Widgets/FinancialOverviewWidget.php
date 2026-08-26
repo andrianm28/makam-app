@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Admin\Widgets;
 
-use App\Filament\Admin\Pages\FinanceReports;
+use App\Filament\Admin\Pages\Reports;
 use App\Platform\FinancialLedger\Contracts\LedgerReadAuthorizer;
 use App\Platform\FinancialLedger\Exceptions\LedgerReadNotAuthorisedException;
 use App\Platform\FinancialLedger\Models\Reconciliation;
@@ -24,8 +24,9 @@ use Filament\Widgets\StatsOverviewWidget\Stat;
  * Unlike TPU/TPS, vendor, and FAQ counts, `payment_sessions` and
  * `reconciliations` are badan-usaha-scoped financial records —
  * `LedgerReadScope`'s own doc block: "the QUERY-LEVEL SCOPE `AGENTS.md`
- * §Authorization makes mandatory... not a display hint." `FinanceReports`
- * and `ReconciliationsResource` both gate on `LedgerReadAuthorizer` (`finance`
+ * §Authorization makes mandatory... not a display hint." The "Laporan
+ * Keuangan" tab of `App\Filament\Admin\Pages\Reports` (its
+ * `FinanceReportPanel` component) and `ReconciliationsResource` both gate on `LedgerReadAuthorizer` (`finance`
  * role plus at least one active privileged `BUSINESS_ENTITY` grant) rather
  * than the four-role `MasterDataAdminAuthorizerContract` — this widget
  * follows the same narrower gate, and filters every query by the actor's own
@@ -35,8 +36,9 @@ use Filament\Widgets\StatsOverviewWidget\Stat;
  *
  * `canView()` only proves the actor holds SOME grant (`entityRef: null`);
  * `getStats()` re-derives the scope itself rather than trusting a cached
- * result, matching `FinanceReports::loadReport()`'s own re-authorize-per-call
- * shape — a grant revoked mid-session stops the figures at the next render.
+ * result, matching `FinanceReportPanel::loadReport()`'s own
+ * re-authorize-per-call shape — a grant revoked mid-session stops the
+ * figures at the next render.
  */
 final class FinancialOverviewWidget extends StatsOverviewWidget
 {
@@ -90,7 +92,7 @@ final class FinancialOverviewWidget extends StatsOverviewWidget
                 ->description('Lihat laporan keuangan')
                 ->icon('heroicon-o-document-chart-bar')
                 ->color('info')
-                ->url(FinanceReports::getUrl()),
+                ->url(Reports::getUrl(['tab' => 'keuangan'])),
         ];
     }
 }

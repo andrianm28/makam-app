@@ -315,39 +315,98 @@ test.describe('E2E-ADMIN/VENDOR — admin dashboard and reports', () => {
             expect(results.violations).toEqual([]);
         });
 
-        test('the three master-data-gated report pages are reachable and titled correctly', async ({ page }) => {
-            // OrdersReport, RenewalPeriodReport, VendorPerformanceReport all gate
-            // on the same four-role MasterDataAdminAuthorizerContract as
-            // PlatformOverviewWidget above — admin passes.
-            const reports: Array<{ path: string; title: string }> = [
-                { path: '/admin/laporan-pesanan', title: 'Laporan Pesanan' },
-                { path: '/admin/laporan-periode-perpanjangan', title: 'Laporan Perpanjangan' },
-                { path: '/admin/laporan-kinerja-vendor', title: 'Laporan Kinerja Vendor' },
+        // The six former standalone report pages (OrdersReport,
+        // RenewalPeriodReport, VendorPerformanceReport, FinanceReports,
+        // ReceiptsReport, OutgoingPaymentsReport) were consolidated into one
+        // `App\Filament\Admin\Pages\Reports` page (slug `laporan`) with each
+        // former page now a tab rendered by a nested Livewire panel
+        // component (`App\Livewire\Admin\Reports\*Panel`) — see that class's
+        // own doc block. The consolidated page's own heading is always the
+        // generic `getTitle()` value "Laporan"; the former per-page titles
+        // now live only as: (a) the tab button's accessible name (rendered
+        // by Filament's `<x-filament::tabs.item>`, a plain `<button>` with
+        // `aria-current="true"` when active — not a `role="tab"`/ARIA-tabs
+        // widget, confirmed by reading
+        // `vendor/filament/support/resources/views/components/tabs/item.blade.php`),
+        // and (b) each panel's own unique "Periode" field description text
+        // (`resources/views/livewire/admin/reports/*-panel.blade.php`).
+        // `activeTab` is `#[Url(as: 'tab')]`-bound
+        // (`app/Filament/Admin/Pages/Reports.php`), so a direct
+        // `?tab=<key>` deep link lands on that tab on first load — the same
+        // mechanism `FinancialOverviewWidget`'s own stat-card link relies on.
+        test('the three master-data-gated report tabs are reachable and titled correctly', async ({ page }) => {
+            // OrdersReportPanel, RenewalPeriodReportPanel,
+            // VendorPerformanceReportPanel all gate on the same four-role
+            // MasterDataAdminAuthorizerContract as PlatformOverviewWidget
+            // above — admin passes.
+            const reports: Array<{ tab: string; title: string; description: string }> = [
+                {
+                    tab: 'pesanan',
+                    title: 'Laporan Pesanan',
+                    description: 'Jumlah pesanan per status untuk periode tersebut (format YYYY-MM), berdasarkan tanggal dibuat.',
+                },
+                {
+                    tab: 'perpanjangan',
+                    title: 'Laporan Perpanjangan',
+                    description: 'Jumlah perpanjangan per status yang jatuh tempo pada periode tersebut (format YYYY-MM).',
+                },
+                {
+                    tab: 'kinerja-vendor',
+                    title: 'Laporan Kinerja Vendor',
+                    description: 'Ringkasan pesanan vendor per vendor untuk periode tersebut (format YYYY-MM), berdasarkan tanggal dibuat.',
+                },
             ];
 
             for (const report of reports) {
-                const response = await page.goto(report.path);
+                const response = await page.goto(`/admin/laporan?tab=${report.tab}`);
                 expect(response?.status()).toBe(200);
-                await expect(page.getByRole('heading', { name: report.title })).toBeVisible();
+                await expect(page.getByRole('heading', { name: 'Laporan', exact: true })).toBeVisible();
+
+                const tabButton = page.getByRole('button', { name: report.title, exact: true });
+                await expect(tabButton).toBeVisible();
+                await expect(tabButton).toHaveAttribute('aria-current', 'true');
+
+                await expect(page.getByText(report.description)).toBeVisible();
             }
         });
 
-        test('the three finance-gated report pages are reachable and titled correctly for the admin holding ledger-read access', async ({ page }) => {
-            // FinanceReports, ReceiptsReport, OutgoingPaymentsReport all gate on
-            // FinanceLedgerReadAuthorizer (see this file's header comment) —
-            // e2e-admin holds the finance role plus a privileged BUSINESS_ENTITY
-            // grant (seed migration), so canAccess() is true and each page
-            // returns a real 200.
-            const reports: Array<{ path: string; title: string }> = [
-                { path: '/admin/laporan-keuangan', title: 'Laporan Keuangan' },
-                { path: '/admin/laporan-kwitansi', title: 'Laporan Penerimaan' },
-                { path: '/admin/laporan-pembayaran-keluar', title: 'Laporan Pembayaran Keluar' },
+        test('the three finance-gated report tabs are reachable and titled correctly for the admin holding ledger-read access', async ({ page }) => {
+            // FinanceReportPanel, ReceiptsReportPanel,
+            // OutgoingPaymentsReportPanel all gate on FinanceLedgerReadAuthorizer
+            // (see this file's header comment) — e2e-admin holds the finance
+            // role plus a privileged BUSINESS_ENTITY grant (seed migration),
+            // so canAccess() is true and each tab's panel actually mounts and
+            // renders (not merely a visible-but-unmounted tab button — see
+            // `Reports`'s own doc block on why an unauthorized tab's Livewire
+            // component is never embedded in the HTML at all).
+            const reports: Array<{ tab: string; title: string; description: string }> = [
+                {
+                    tab: 'keuangan',
+                    title: 'Laporan Keuangan',
+                    description: 'Laporan diringkas dari jurnal untuk periode tersebut (format YYYY-MM).',
+                },
+                {
+                    tab: 'penerimaan',
+                    title: 'Laporan Penerimaan',
+                    description: 'Penerimaan kas/bank yang tercatat di jurnal untuk periode tersebut (format YYYY-MM).',
+                },
+                {
+                    tab: 'pembayaran-keluar',
+                    title: 'Laporan Pembayaran Keluar',
+                    description: 'Pembayaran keluar (payout vendor) yang tercatat untuk periode tersebut (format YYYY-MM).',
+                },
             ];
 
             for (const report of reports) {
-                const response = await page.goto(report.path);
+                const response = await page.goto(`/admin/laporan?tab=${report.tab}`);
                 expect(response?.status()).toBe(200);
-                await expect(page.getByRole('heading', { name: report.title })).toBeVisible();
+                await expect(page.getByRole('heading', { name: 'Laporan', exact: true })).toBeVisible();
+
+                const tabButton = page.getByRole('button', { name: report.title, exact: true });
+                await expect(tabButton).toBeVisible();
+                await expect(tabButton).toHaveAttribute('aria-current', 'true');
+
+                await expect(page.getByText(report.description)).toBeVisible();
             }
         });
     });
