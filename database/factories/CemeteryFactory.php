@@ -8,7 +8,6 @@ use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
-use App\Domain\CemeteryDirectory\PlotTrackingMode;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -42,7 +41,6 @@ final class CemeteryFactory extends Factory
             'slug' => fake()->unique()->slug(),
             'city' => LaunchCityCode::JAKARTA,
             'address' => fake()->streetAddress(),
-            'plot_tracking_mode' => PlotTrackingMode::AGGREGATE,
         ];
     }
 }

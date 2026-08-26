@@ -9,7 +9,6 @@ use App\Domain\CemeteryCapability\Models\CemeteryPackage;
 use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityQuery;
-use App\Domain\CemeteryDirectory\PlotTrackingMode;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use Database\Factories\CemeteryFactory;
 use Illuminate\Database\Eloquent\Builder;
@@ -135,7 +134,6 @@ final class Cemetery extends Model
         self::saving(function (self $cemetery): void {
             CemeteryType::assertKnown($cemetery->type);
             CemeteryPublicationStatus::assertKnown($cemetery->publication_status);
-            PlotTrackingMode::assertKnown($cemetery->plot_tracking_mode);
 
             // City codes are table-backed (`launch_cities`, admin-
             // extendable) with the canonical `LaunchCityCode::KNOWN_CODES`
