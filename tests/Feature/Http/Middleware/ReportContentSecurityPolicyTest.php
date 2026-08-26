@@ -150,6 +150,16 @@ final class ReportContentSecurityPolicyTest extends TestCase
      * the directive doesn't regress the nonce-scoping `test_the_policy_
      * carries_a_nonce_shared_between_script_src_and_style_src()` below
      * already proves for the combined line.
+     *
+     * UPDATED (26 Aug 2026, explicit owner decision, reverting PR #174's
+     * font-provider fix — see `ReportContentSecurityPolicy`'s own doc
+     * block, "https://fonts.bunny.net ... REVERTED" section): this
+     * directive now also carries `https://fonts.bunny.net`, for
+     * `BunnyFontProvider`'s `<link rel="stylesheet">` tag, which both
+     * `AdminPanelProvider` and `VendorPanelProvider` emit again now that
+     * neither passes `provider: LocalFontProvider::class`. Still no
+     * `unsafe-inline` here — that origin addition is unrelated to the
+     * nonce/unsafe-inline question this test otherwise pins.
      */
     public function test_style_src_elem_keeps_the_nonce_with_no_unsafe_inline(): void
     {
@@ -161,7 +171,7 @@ final class ReportContentSecurityPolicyTest extends TestCase
         $styleSrcElem = collect($directives)->first(fn (string $d): bool => str_starts_with($d, 'style-src-elem'));
 
         $this->assertNotNull($styleSrcElem);
-        $this->assertMatchesRegularExpression("/^style-src-elem 'self' 'nonce-[A-Za-z0-9]{40}'$/", $styleSrcElem);
+        $this->assertMatchesRegularExpression("/^style-src-elem 'self' 'nonce-[A-Za-z0-9]{40}' https:\\/\\/fonts\\.bunny\\.net$/", $styleSrcElem);
         $this->assertStringNotContainsString('unsafe-inline', $styleSrcElem);
     }
 
@@ -207,8 +217,17 @@ final class ReportContentSecurityPolicyTest extends TestCase
      * directive must stay origin-free — while pinning BOTH exceptions to
      * exactly the origins they are meant to be, not a broader wildcard that
      * would silently permit more than intended.
+     *
+     * UPDATED (26 Aug 2026, explicit owner decision, reverting PR #174's
+     * font-provider fix — see `ReportContentSecurityPolicy`'s own doc
+     * block): `style-src`, `style-src-elem`, and `font-src` now each carry
+     * a THIRD/FOURTH/FIFTH deliberate exception, `https://fonts.bunny.net`
+     * — `BunnyFontProvider`'s stylesheet `<link>` and the font files its
+     * CSS references, both confirmed to resolve to that one origin against
+     * the real installed package and a real fetch of Bunny's CSS response.
+     * Renamed again to name every exception this policy now carries.
      */
-    public function test_the_policy_declares_no_third_party_origin_except_the_deliberate_maps_frame_src(): void
+    public function test_the_policy_declares_no_third_party_origin_except_the_deliberate_maps_avatar_and_bunny_font_exceptions(): void
     {
         $response = $this->get('/');
 
@@ -224,6 +243,26 @@ final class ReportContentSecurityPolicyTest extends TestCase
 
             if (str_starts_with($directive, 'img-src')) {
                 $this->assertSame("img-src 'self' data: https://ui-avatars.com", $directive);
+
+                continue;
+            }
+
+            if (str_starts_with($directive, 'style-src-elem')) {
+                $this->assertStringContainsString('https://fonts.bunny.net', $directive);
+                $this->assertStringNotContainsString('https://ui-avatars.com', $directive);
+
+                continue;
+            }
+
+            if ($directive === 'style-src' || str_starts_with($directive, 'style-src ')) {
+                $this->assertStringContainsString('https://fonts.bunny.net', $directive);
+                $this->assertStringNotContainsString('https://ui-avatars.com', $directive);
+
+                continue;
+            }
+
+            if (str_starts_with($directive, 'font-src')) {
+                $this->assertSame("font-src 'self' https://fonts.bunny.net", $directive);
 
                 continue;
             }

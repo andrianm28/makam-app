@@ -181,6 +181,75 @@ use Symfony\Component\HttpFoundation\Response;
  * script already controls; it is not `script-src`'s `'unsafe-inline'`
  * (which this policy still does NOT carry anywhere — see `script-src`
  * above) and grants no script execution path of its own.
+ *
+ * ---------------------------------------------------------------------------
+ * `https://fonts.bunny.net` on `style-src`/`style-src-elem`/`font-src` —
+ * REVERTED, 26 Aug 2026, an explicit informed owner decision, reopening a
+ * third-party origin this policy previously excluded
+ * ---------------------------------------------------------------------------
+ * PR #174 (5aca419) made `AdminPanelProvider`/`VendorPanelProvider` pass
+ * `provider: LocalFontProvider::class` to `->font('Inter var', ...)`
+ * specifically so neither panel would emit any request to
+ * `https://fonts.bunny.net` — Filament's default `BunnyFontProvider`
+ * (which a custom font family resolves to without that override) leaked a
+ * visitor's IP to a third party on every admin/vendor page load, on a page
+ * that may be handling private case/order data (design-system.md §1.4:
+ * self-hosted fonts only). That `provider:` argument is now deliberately
+ * REMOVED from both panels (a separate, explicit owner decision — see each
+ * panel provider's own doc block) — restoring Filament's documented
+ * default, `BunnyFontProvider`. This middleware is updated to match:
+ * omitting the CSP exception below would not restore the old look, it
+ * would leave the font broken outright, since real CSP enforcement (SEC-08,
+ * live since 25 Aug 2026) blocks an unlisted origin rather than merely
+ * reporting it.
+ *
+ * Confirmed against the real installed `filament/filament`
+ * `BunnyFontProvider::getHtml()`
+ * (`vendor/filament/filament/src/FontProviders/BunnyFontProvider.php`),
+ * not guessed: it emits two tags, both against the SAME origin —
+ *
+ *   <link rel="preconnect" href="https://fonts.bunny.net">
+ *   <link href="https://fonts.bunny.net/css?family=inter-var:400,500,600,700&display=swap" rel="stylesheet" />
+ *
+ * The `rel="stylesheet"` tag is a stylesheet-fetching `<link>` element, so
+ * it is governed by `style-src-elem` (and, for a browser with no CSP3
+ * support for the split directives, by the `style-src` fallback line) —
+ * NOT `style-src-attr`, which only covers the `style="..."` ATTRIBUTE
+ * Filament's own Alpine code mutates (see the `style-src-attr` section
+ * above); a stylesheet `<link>` is an element-level fetch, a different
+ * concern entirely. `https://fonts.bunny.net` is added to both
+ * `style-src`/`style-src-elem`'s source lists.
+ *
+ * The CSS that URL returns then declares `@font-face { src: url(...) }`
+ * rules for the actual font files. Fetched for real (not assumed) against
+ * `https://fonts.bunny.net/css?family=inter:400,500,600,700&display=swap`:
+ * every one of its 56 `@font-face` rules' `url()` values also resolves to
+ * `https://fonts.bunny.net` — unlike Google Fonts' two-origin split
+ * (`fonts.googleapis.com` for CSS, `fonts.gstatic.com` for files), Bunny
+ * Fonts serves both the stylesheet and the font files from the SAME single
+ * origin. So exactly one origin, `https://fonts.bunny.net`, is added to
+ * `font-src` too, and no second origin is needed anywhere.
+ *
+ * The `rel="preconnect"` tag is a resource hint, not a stylesheet or font
+ * fetch — if a browser enforces `connect-src` against it and this policy's
+ * `connect-src 'self'` blocks it, the tag simply fails to warm the
+ * connection early; the actual stylesheet and font fetches below still
+ * proceed and still succeed via `style-src-elem`/`font-src`, so
+ * `connect-src` is deliberately left unchanged. Worth revisiting only if a
+ * real console warning about the blocked preconnect turns out to matter in
+ * practice; nothing observed shows it does.
+ *
+ * Known, accepted trade-off, mirroring the original fix's own trade-off in
+ * reverse: this reopens `style-src`/`style-src-elem`/`font-src` to a real
+ * third-party origin, `https://fonts.bunny.net` — the visitor-IP-leak
+ * concern PR #174 closed is knowingly reaccepted, not resolved. Reversing
+ * THIS change (closing the exception again) requires putting `provider:
+ * LocalFontProvider::class` back on both panels' `->font()` calls at the
+ * same time; removing only the CSP exception while the panels still emit
+ * the Bunny `<link>` tags would just reintroduce the blocked-font bug this
+ * revert is meant to avoid, and removing only the panels' provider
+ * argument while leaving this exception in place is exactly today's
+ * change and does what it says.
  */
 final class ReportContentSecurityPolicy
 {
@@ -214,7 +283,13 @@ final class ReportContentSecurityPolicy
             // proved this the hard way), so it does nothing for the
             // browsers this app actually needs to support; it costs
             // nothing to leave for the legacy fallback case either.
-            "style-src 'self' 'nonce-{$nonce}' 'unsafe-inline'",
+            // https://fonts.bunny.net — REVERTED, 26 Aug 2026, an explicit
+            // informed owner decision; see this class's own doc block's
+            // "https://fonts.bunny.net ... REVERTED" section for the full
+            // record (both panels' font provider reversal and exactly why
+            // this origin, confirmed against the real installed
+            // BunnyFontProvider source and a real fetch of Bunny's CSS).
+            "style-src 'self' 'nonce-{$nonce}' 'unsafe-inline' https://fonts.bunny.net",
             // style-src-elem/style-src-attr — see this class's own doc
             // block for exactly why a bare 'unsafe-inline' on style-src
             // above does NOT permit Filament's Alpine-driven
@@ -223,10 +298,15 @@ final class ReportContentSecurityPolicy
             // attributes an 'unsafe-inline' source list that has no nonce
             // in it (so the "ignored if nonce present" fallback never
             // triggers) while elements keep the nonce Livewire's injected
-            // `<style>` tag still needs. No third-party origin either way —
-            // style-src-attr has no origin list at all, and style-src-elem
-            // carries the exact same 'self' + nonce style-src already had.
-            "style-src-elem 'self' 'nonce-{$nonce}'",
+            // `<style>` tag still needs. style-src-attr has no origin list
+            // at all (attribute style values are not fetched from
+            // anywhere). style-src-elem carries the same 'self' + nonce
+            // style-src already had, PLUS https://fonts.bunny.net — the one
+            // deliberate third-party exception, REVERTED 26 Aug 2026 (see
+            // this class's own doc block), for the BunnyFontProvider
+            // stylesheet `<link rel="stylesheet">` tag, which is an
+            // element-level fetch, not an attribute mutation.
+            "style-src-elem 'self' 'nonce-{$nonce}' https://fonts.bunny.net",
             "style-src-attr 'unsafe-inline'",
             // https://ui-avatars.com — Filament's default
             // `AvatarProviders\UiAvatarsProvider` (no custom
@@ -238,7 +318,14 @@ final class ReportContentSecurityPolicy
             // describes). Scoped to exactly this one image host, nothing
             // wider — img-src stays otherwise 'self' plus inline `data:`.
             "img-src 'self' data: https://ui-avatars.com",
-            "font-src 'self'",
+            // https://fonts.bunny.net — REVERTED, 26 Aug 2026, an explicit
+            // informed owner decision; see this class's own doc block's
+            // "https://fonts.bunny.net ... REVERTED" section for exactly
+            // why this one origin covers every font FILE Bunny's CSS
+            // response references (confirmed via a real fetch, not
+            // assumed — Bunny Fonts serves stylesheet and files from the
+            // same origin, unlike Google Fonts' two-origin split).
+            "font-src 'self' https://fonts.bunny.net",
             "connect-src 'self'",
             // Cemetery directory detail pages embed a Google Maps iframe
             // (App\Domain\CemeteryDirectory\Models\Cemetery::embedMapUrl())
