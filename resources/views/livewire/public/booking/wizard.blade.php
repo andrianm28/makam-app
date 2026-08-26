@@ -21,6 +21,12 @@
     step 6-8 form cannot drift field by field; they are still literal strings
     in this file, which is what Tailwind's scanner needs.
 --}}
+@php
+    use App\Livewire\Public\Directory\Support\CemeteryAvailabilityIntent;
+    use App\Livewire\Public\Directory\Support\CemeteryPresenter;
+    use App\Domain\ServiceCatalog\FulfillmentOwner;
+    use App\Platform\FinancialLedger\Money;
+@endphp
 <div class="py-8 md:py-12">
     @php
         $mkControl = 'h-11 w-full rounded-md border bg-neutral-0 px-4 text-base text-neutral-900
@@ -37,9 +43,22 @@
 
         $mkControlError = 'border-danger-600 focus:border-danger-600 focus:ring-danger-600';
 
-        $mkCheckbox = 'size-5 shrink-0 rounded-xs border bg-neutral-0 text-primary-600
+        // `accent-primary-600` is the real fix, not `text-primary-600` alone
+        // — this repo has no `@tailwindcss/forms` plugin and no
+        // `appearance-none` reset anywhere (checked directly against
+        // resources/css/*.css before writing this), so `text-primary-600`
+        // by itself never recolours a native checkbox's checked-state fill
+        // in any evergreen browser; only the CSS `accent-color` property
+        // does. `accent-*` is a core Tailwind utility generated from the
+        // same `--color-*` theme scale as `text-*`, so this stays
+        // token-only. Mirrors field.blade.php's own checkbox recipe (that
+        // file's doc comment records the same finding) — this variable's
+        // own doc comment below still promises it is copied verbatim from
+        // there, so both are kept in sync.
+        $mkCheckbox = 'size-5 shrink-0 rounded-xs border bg-neutral-0 text-primary-600 accent-primary-600
             transition-[border-color,box-shadow] duration-fast ease-standard
-            focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary-600';
+            focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary-600
+            disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:border-neutral-300';
 
         $mkFieldState = static fn (bool $invalid): string => $invalid ? $mkControlError : $mkControlIdle;
     @endphp
@@ -157,58 +176,127 @@
                         </x-mk.button>
                     </div>
                 @else
-                    {{-- Two-level choice. A cemetery with active package/class
-                         rows CANNOT be selected on its own — SaveBookingDraftStep
-                         ::validateCemetery() requires a package id for it
-                         (booking-wizard-fields.md §Step 2, "package/class when
-                         applicable"), so those cards expand into one button per
-                         package instead of a single whole-card button that could
-                         only ever be rejected. Cemeteries with no packages keep
-                         the plain whole-card button. --}}
+                    {{-- design-system.md §3.3's normative Cemetery card spec
+                         (PUB-011): type badge, name, primary photo, address,
+                         facilities, price range WITH source, and availability
+                         status. This is the SAME card content
+                         `resources/views/livewire/public/directory/index.blade.php`
+                         renders one click away, resolved via the same
+                         presenter classes (`CemeteryPresenter`,
+                         `CemeteryAvailabilityIntent`) — Step 2 used to show
+                         only the type badge and name. No shared
+                         `<x-mk.card as="a" interactive>` here, though:
+                         card.blade.php's own doc block forbids nesting a
+                         second `<a>`/`<button>` inside an interactive card,
+                         and this step needs a `wire:click` ACTION (not a
+                         navigation link), sometimes several — one per
+                         package/class. So the card renders as a plain,
+                         non-interactive `<x-mk.card>` (content only, no
+                         `interactive`/`as="a"`), with the real selection
+                         control(s) as an explicit element inside it, same
+                         two-level choice as before: a single "Pilih ..."
+                         button for a cemetery with no packages, or one
+                         button per package/class. --}}
                     <ul class="grid gap-4 md:grid-cols-2" aria-label="Daftar TPU/TPS">
                         @foreach ($cemeteries as $cemetery)
-                            @php($packages = $packagesByCemetery[$cemetery->id] ?? collect())
+                            @php
+                                $packages = $packagesByCemetery[$cemetery->id] ?? collect();
+                                $capabilities = $cemeteryCapabilities[$cemetery->id] ?? null;
+                                $availabilityMode = $capabilities?->availabilityMode
+                                    ?? \App\Domain\CemeteryCapability\AvailabilityMode::INDICATIVE;
+                                $availability = CemeteryAvailabilityIntent::forCemetery($availabilityMode);
+                                $priceRange = CemeteryPresenter::priceRange($cemetery);
+                                $priceAttribution = CemeteryPresenter::priceAttribution($cemetery);
+                                $photoUrl = CemeteryPresenter::photoUrl($cemetery);
+                                $facilities = CemeteryPresenter::facilities($cemetery);
+                            @endphp
                             <li>
-                                @if ($packages->isEmpty())
-                                    <button
-                                        type="button"
-                                        wire:click="saveStep2('{{ $cemetery->id }}')"
-                                        wire:loading.attr="disabled"
-                                        wire:target="saveStep2"
-                                        class="block w-full rounded-lg border border-neutral-200 bg-neutral-0 p-4 text-left shadow-sm transition-[border-color,box-shadow] duration-fast ease-standard select-none hover:border-primary-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 md:p-6"
-                                    >
-                                        <span class="flex flex-col gap-4">
-                                            <span class="text-lg font-semibold text-neutral-900">{{ $cemetery->name }}</span>
+                                <x-mk.card class="h-full">
+                                    <x-slot:media>
+                                        @if ($photoUrl)
+                                            <img
+                                                src="{{ $photoUrl }}"
+                                                alt="Ilustrasi {{ $cemetery->name }}"
+                                                loading="lazy"
+                                                class="h-40 w-full object-cover"
+                                            >
+                                        @else
+                                            <div class="flex h-40 w-full items-center justify-center bg-neutral-100">
+                                                <span class="text-sm text-neutral-600">Foto belum tersedia</span>
+                                            </div>
+                                        @endif
+                                    </x-slot:media>
+
+                                    <div class="space-y-3">
+                                        <div class="flex flex-wrap items-center gap-2">
                                             <x-mk.badge intent="neutral">{{ $cemetery->type }}</x-mk.badge>
-                                        </span>
-                                    </button>
-                                @else
-                                    <div class="h-full rounded-lg border border-neutral-200 bg-neutral-0 p-4 shadow-sm md:p-6">
-                                        <div class="flex flex-col gap-4">
-                                            <span class="text-lg font-semibold text-neutral-900">{{ $cemetery->name }}</span>
-                                            <x-mk.badge intent="neutral">{{ $cemetery->type }}</x-mk.badge>
+                                            <x-mk.badge :intent="$availability['intent']" :icon="$availability['icon']">
+                                                {{ $availability['label'] }}
+                                            </x-mk.badge>
                                         </div>
 
-                                        <p id="cemetery-{{ $cemetery->id }}-packages-label" class="mt-4 text-sm text-neutral-600">
-                                            Pilih paket/kelas untuk TPU/TPS ini:
-                                        </p>
+                                        <h3 class="text-lg font-semibold text-neutral-900">{{ $cemetery->name }}</h3>
 
-                                        <ul class="mt-2 flex flex-wrap gap-2" aria-labelledby="cemetery-{{ $cemetery->id }}-packages-label">
-                                            @foreach ($packages as $package)
-                                                <li>
-                                                    <x-mk.button
-                                                        variant="secondary"
-                                                        wire:click="saveStep2('{{ $cemetery->id }}', {{ $package->id }})"
-                                                        wire:loading.attr="disabled"
-                                                        wire:target="saveStep2"
-                                                    >
-                                                        {{ $package->name }}@if ($package->class_label) &mdash; {{ $package->class_label }}@endif
-                                                    </x-mk.button>
-                                                </li>
-                                            @endforeach
-                                        </ul>
+                                        <p class="text-base text-neutral-600">{{ $cemetery->address }}</p>
+
+                                        @if ($facilities !== [])
+                                            <ul class="flex flex-wrap gap-1.5" aria-label="Fasilitas">
+                                                @foreach ($facilities as $facility)
+                                                    <li><x-mk.badge intent="neutral" size="sm">{{ $facility }}</x-mk.badge></li>
+                                                @endforeach
+                                            </ul>
+                                        @endif
+
+                                        <div class="space-y-0.5">
+                                            @if ($priceRange !== null && $priceAttribution !== null)
+                                                <p class="text-base font-medium text-neutral-900">{{ $priceRange }}</p>
+                                                <p class="text-sm text-[var(--mk-text-muted)]">
+                                                    Sumber: {{ $priceAttribution['source'] }}@if ($priceAttribution['effective']) &middot; per {{ $priceAttribution['effective'] }}@endif
+                                                </p>
+                                                <p class="text-sm text-[var(--mk-text-muted)]">
+                                                    Kisaran indikatif, {{ CemeteryAvailabilityIntent::NEEDS_CONFIRMATION_LABEL }}.
+                                                </p>
+                                            @else
+                                                <p class="text-sm text-[var(--mk-text-muted)]">
+                                                    Kisaran biaya belum tersedia untuk lokasi ini.
+                                                </p>
+                                            @endif
+                                        </div>
                                     </div>
-                                @endif
+
+                                    @if ($packages->isEmpty())
+                                        <x-mk.button
+                                            variant="primary"
+                                            full
+                                            wire:click="saveStep2('{{ $cemetery->id }}')"
+                                            wire:loading.attr="disabled"
+                                            wire:target="saveStep2"
+                                        >
+                                            Pilih {{ $cemetery->name }}
+                                        </x-mk.button>
+                                    @else
+                                        <div>
+                                            <p id="cemetery-{{ $cemetery->id }}-packages-label" class="text-sm text-neutral-600">
+                                                Pilih paket/kelas untuk TPU/TPS ini:
+                                            </p>
+
+                                            <ul class="mt-2 flex flex-wrap gap-2" aria-labelledby="cemetery-{{ $cemetery->id }}-packages-label">
+                                                @foreach ($packages as $package)
+                                                    <li>
+                                                        <x-mk.button
+                                                            variant="secondary"
+                                                            wire:click="saveStep2('{{ $cemetery->id }}', {{ $package->id }})"
+                                                            wire:loading.attr="disabled"
+                                                            wire:target="saveStep2"
+                                                        >
+                                                            {{ $package->name }}@if ($package->class_label) &mdash; {{ $package->class_label }}@endif
+                                                        </x-mk.button>
+                                                    </li>
+                                                @endforeach
+                                            </ul>
+                                        </div>
+                                    @endif
+                                </x-mk.card>
                             </li>
                         @endforeach
                     </ul>
@@ -260,6 +348,23 @@
                     Langkah 4 &mdash; Pilih Layanan
                 </h2>
 
+                {{-- design-system.md §3.3's normative Service/add-on row
+                     spec (PUB-013): name, description, fulfillment owner
+                     (platform / operator / vendor), price, availability,
+                     quantity/variant control. Rows used to show only the
+                     checkbox and service name, even though the price and
+                     fulfillment-owner data was already sitting on the same
+                     `ServiceDefinition` rows Step 5's summary correctly
+                     reads (`ServiceDefinition::currentPriceVersion()` —
+                     see `BookingDraftQuery::summary()`, the exact method
+                     Step 5 calls). This block reuses that same method
+                     rather than a new query. Quantity is fixed at 1 for
+                     every row — the checkbox IS the quantity/variant
+                     control this batch ships; a real quantity/variant
+                     picker is out of scope here (see
+                     `BookingWizard::continueFromStep4()`'s own doc block,
+                     which already flags that scope line and predates this
+                     fix). --}}
                 <fieldset class="flex flex-col gap-6">
                     <legend class="sr-only">Pilih layanan</legend>
 
@@ -272,20 +377,43 @@
                              shape saveStep4() receives is unchanged. --}}
                         <ul class="flex flex-col gap-2">
                             @foreach ($basicServices as $service)
-                                <li class="flex items-center gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                                    <input
-                                        type="checkbox"
-                                        id="service-{{ $service->code }}"
-                                        value="{{ $service->code }}"
-                                        wire:model="stagedServiceCodes"
-                                        checked
-                                        disabled
-                                        class="touch-target"
-                                    />
-                                    <label for="service-{{ $service->code }}" class="flex-1 text-base text-neutral-800">
-                                        {{ $service->name }}
+                                @php($priceVersion = $service->currentPriceVersion())
+                                <li>
+                                    <label
+                                        for="service-{{ $service->code }}"
+                                        class="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-3 select-none"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            id="service-{{ $service->code }}"
+                                            value="{{ $service->code }}"
+                                            wire:model="stagedServiceCodes"
+                                            checked
+                                            disabled
+                                            class="{{ $mkCheckbox }} mt-0.5 border-neutral-450"
+                                        />
+                                        <span class="flex flex-1 flex-col gap-1">
+                                            <span class="flex flex-wrap items-center gap-2">
+                                                <span class="text-base font-medium text-neutral-900">{{ $service->name }}</span>
+                                                <x-mk.badge intent="neutral">Wajib</x-mk.badge>
+                                            </span>
+                                            @if ($service->description)
+                                                <span class="text-sm text-neutral-600">{{ $service->description }}</span>
+                                            @endif
+                                            <span class="text-sm text-[var(--mk-text-muted)]">
+                                                Dipenuhi oleh: {{ $service->fulfillment_owner !== null ? FulfillmentOwner::label($service->fulfillment_owner) : 'Belum ditentukan' }}
+                                            </span>
+                                        </span>
+                                        <span class="shrink-0 text-right">
+                                            @if ($priceVersion !== null)
+                                                <span class="block text-base font-medium text-neutral-900">
+                                                    {{ (new Money(Money::fromDecimal((string) $priceVersion->amount)))->format() }}
+                                                </span>
+                                            @else
+                                                <x-mk.badge intent="pending" size="sm">Harga belum tersedia</x-mk.badge>
+                                            @endif
+                                        </span>
                                     </label>
-                                    <x-mk.badge intent="neutral">Wajib</x-mk.badge>
                                 </li>
                             @endforeach
                         </ul>
@@ -297,16 +425,37 @@
                         </p>
                         <ul class="flex flex-col gap-2">
                             @foreach ($additionalServices as $service)
-                                <li class="flex items-center gap-3 rounded-lg border border-neutral-200 bg-neutral-0 p-3">
-                                    <input
-                                        type="checkbox"
-                                        id="service-{{ $service->code }}"
-                                        value="{{ $service->code }}"
-                                        wire:model="stagedServiceCodes"
-                                        class="touch-target"
-                                    />
-                                    <label for="service-{{ $service->code }}" class="flex-1 text-base text-neutral-800">
-                                        {{ $service->name }}
+                                @php($priceVersion = $service->currentPriceVersion())
+                                <li>
+                                    <label
+                                        for="service-{{ $service->code }}"
+                                        class="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-neutral-200 bg-neutral-0 p-3 select-none"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            id="service-{{ $service->code }}"
+                                            value="{{ $service->code }}"
+                                            wire:model="stagedServiceCodes"
+                                            class="{{ $mkCheckbox }} mt-0.5 border-neutral-450"
+                                        />
+                                        <span class="flex flex-1 flex-col gap-1">
+                                            <span class="text-base font-medium text-neutral-900">{{ $service->name }}</span>
+                                            @if ($service->description)
+                                                <span class="text-sm text-neutral-600">{{ $service->description }}</span>
+                                            @endif
+                                            <span class="text-sm text-[var(--mk-text-muted)]">
+                                                Dipenuhi oleh: {{ $service->fulfillment_owner !== null ? FulfillmentOwner::label($service->fulfillment_owner) : 'Belum ditentukan' }}
+                                            </span>
+                                        </span>
+                                        <span class="shrink-0 text-right">
+                                            @if ($priceVersion !== null)
+                                                <span class="block text-base font-medium text-neutral-900">
+                                                    {{ (new Money(Money::fromDecimal((string) $priceVersion->amount)))->format() }}
+                                                </span>
+                                            @else
+                                                <x-mk.badge intent="pending" size="sm">Harga belum tersedia</x-mk.badge>
+                                            @endif
+                                        </span>
                                     </label>
                                 </li>
                             @endforeach
@@ -550,7 +699,7 @@
                                 wire:model="privacyNoticeAccepted"
                                 aria-describedby="privacy-notice-accepted-hint{{ $errors->has('privacy_notice_accepted') ? ' privacy-notice-accepted-error' : '' }}"
                                 @if ($errors->has('privacy_notice_accepted')) aria-invalid="true" @endif
-                                class="{{ $mkCheckbox }} mt-0.5 {{ $errors->has('privacy_notice_accepted') ? 'border-danger-600' : 'border-neutral-450' }}"
+                                class="{{ $mkCheckbox }} mt-0.5 {{ $errors->has('privacy_notice_accepted') ? 'border-danger-600 accent-danger-600' : 'border-neutral-450' }}"
                             >
                             <span class="text-base text-neutral-800">
                                 Saya menyetujui

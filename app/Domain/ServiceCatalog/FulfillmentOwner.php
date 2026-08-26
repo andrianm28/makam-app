@@ -42,6 +42,25 @@ final class FulfillmentOwner
     }
 
     /**
+     * Customer-facing Indonesian label — same established idiom as
+     * `App\Domain\Booking\BookingRelationshipCode::label()` and its
+     * siblings: the stored value is a plain lower_snake identifier, never
+     * shown raw on a public screen. An unrecognised value falls back to the
+     * raw string rather than throwing, matching `BookingRelationshipCode
+     * ::label()`'s own defensive default — a display helper degrades, it
+     * does not 500 a booking screen over a display-only concern.
+     */
+    public static function label(string $owner): string
+    {
+        return match ($owner) {
+            self::PLATFORM => 'Platform Makam.co.id',
+            self::CEMETERY_OPERATOR => 'Pengelola TPU/TPS',
+            self::VENDOR => 'Vendor',
+            default => $owner,
+        };
+    }
+
+    /**
      * @throws InvalidArgumentException when `$owner` is not one of
      *                                  `self::KNOWN_OWNERS`.
      */

@@ -10,6 +10,7 @@ use App\Domain\Booking\BookingWizardStep;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\ServiceCatalog\Actions\RecordServiceDefinitionPriceVersion;
+use App\Domain\ServiceCatalog\FulfillmentOwner;
 use App\Domain\ServiceCatalog\Models\PriceVersion;
 use App\Domain\ServiceCatalog\Models\ServiceDefinition;
 use App\Domain\ServiceCatalog\ServiceCatalogQuery;
@@ -166,5 +167,86 @@ final class BookingWizardStepsFourAndFiveTest extends TestCase
         Livewire::test(BookingWizard::class)
             ->call('saveStep1', '')
             ->assertSet('autosaveState', 'failed');
+    }
+
+    /**
+     * A UI/UX audit (25 Aug 2026) found Step 4's rows showed only a
+     * checkbox and the service name — design-system.md §3.3's normative
+     * Service/add-on row spec (PUB-013) also requires price, fulfillment
+     * owner, and availability, even though the price data was already
+     * sitting on the same `ServiceDefinition` rows Step 5's summary
+     * correctly reads. This test proves the row now shows the price, using
+     * a test-owned price (same isolation `setTestOwnedPrice()` gives the
+     * Step 5 total test above) so it does not depend on the dummy seed's
+     * own amounts.
+     */
+    public function test_step_4_shows_the_price_for_each_service_row(): void
+    {
+        $this->setTestOwnedPrice(ServiceCode::DOCUMENT_PROCESSING, '350000.00');
+
+        $draftId = $this->draftAtStep4();
+
+        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->assertSee('Rp 350.000');
+    }
+
+    /**
+     * `ServiceOperationalExampleData::operationalDefaults()` (see
+     * `2026_07_26_220000_seed_service_definition_dummy_operational_data.php`'s
+     * own doc block) records real, seeded `fulfillment_owner` values for all
+     * 12 catalogue services — DOCUMENT_PROCESSING is `platform`,
+     * GRAVE_DIGGING is `cemetery_operator`, every additional service
+     * (AMBULANCE included) is `vendor`. This is real fixture data, not
+     * invented for this test.
+     */
+    public function test_step_4_shows_the_fulfillment_owner_for_each_service_row(): void
+    {
+        $draftId = $this->draftAtStep4();
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
+
+        $component->assertSee(FulfillmentOwner::label(FulfillmentOwner::PLATFORM));
+        $component->assertSee(FulfillmentOwner::label(FulfillmentOwner::CEMETERY_OPERATOR));
+        $component->assertSee(FulfillmentOwner::label(FulfillmentOwner::VENDOR));
+    }
+
+    /**
+     * `ServiceDefinition::description` seeds `null` for every one of the 12
+     * catalogue rows (`2026_07_26_180700_...`'s own doc block: "no
+     * description copy beyond the code/label pair"), so this test sets one
+     * directly to prove the row actually renders it when present, rather
+     * than asserting against a value the seed never populates.
+     */
+    public function test_step_4_shows_the_description_when_the_catalogue_has_one(): void
+    {
+        ServiceDefinition::findByCode(ServiceCode::AMBULANCE)
+            ->update(['description' => 'Layanan ambulans untuk pemindahan jenazah.']);
+
+        $draftId = $this->draftAtStep4();
+
+        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->assertSee('Layanan ambulans untuk pemindahan jenazah.');
+    }
+
+    /**
+     * design-system.md §3.3: a service row's "availability" is honest, not
+     * fabricated — a service whose catalogue price has not been recorded
+     * yet shows the SAME "Harga belum tersedia" state Step 5's summary
+     * already renders for a missing price (`BookingDraftQuery::summary()`),
+     * not an invented in-stock/out-of-stock signal.
+     */
+    public function test_step_4_shows_an_honest_unavailable_price_badge_when_no_price_version_exists(): void
+    {
+        $service = ServiceDefinition::findByCode(ServiceCode::AMBULANCE);
+
+        PriceVersion::query()
+            ->where('priceable_type', ServiceDefinition::class)
+            ->where('priceable_id', $service->id)
+            ->delete();
+
+        $draftId = $this->draftAtStep4();
+
+        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->assertSee('Harga belum tersedia');
     }
 }
