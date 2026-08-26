@@ -309,7 +309,7 @@
         @endif
 
         <p class="mt-10 text-base text-neutral-600">
-            Butuh bantuan?{" "}
+            Butuh bantuan?
             <a
                 href="{{ route('bantuan.index') }}"
                 class="touch-target inline-flex items-center text-base text-primary-700 underline underline-offset-2 hover:text-primary-800"

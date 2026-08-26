@@ -262,4 +262,24 @@ final class CheckoutScreenTest extends TestCase
 
         $this->assertSame(0, PaymentVerification::query()->count());
     }
+
+    /**
+     * UI/UX audit, 26 Aug 2026: the "Butuh bantuan? Hubungi Customer
+     * Service" line carried a leftover JSX/React-style `{" "}`
+     * empty-expression space-holder. Blade doesn't interpret `{" "}`
+     * specially, so it was echoed verbatim as literal visible text —
+     * "Butuh bantuan?{" "} Hubungi Customer Service" — instead of
+     * rendering a plain space between the two. Regression guard: the raw
+     * `{" "}` string must never reappear in the rendered checkout page.
+     */
+    public function test_the_customer_service_line_has_no_literal_jsx_space_holder(): void
+    {
+        $this->seedCart();
+
+        Livewire::test(Checkout::class)
+            ->assertOk()
+            ->assertSee('Butuh bantuan?')
+            ->assertSee('Hubungi Customer Service')
+            ->assertDontSeeHtml('{" "}');
+    }
 }
