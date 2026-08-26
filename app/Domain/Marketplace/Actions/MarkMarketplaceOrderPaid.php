@@ -195,11 +195,61 @@ final readonly class MarkMarketplaceOrderPaid
             throw MarketplacePayableMissingException::forOrder($order->getKey());
         }
 
-        // Resolved here, not constructor-injected, so the Action stays
-        // constructible with zero arguments while still reading the
-        // container's per-request scoped `ActorContext` — the same source
-        // `PlaceMarketplaceOrder`'s opening assessment reads.
-        $actorContext = app(ActorContext::class);
+        // ---------------------------------------------------------------
+        // A real, pre-existing bug this PR found and fixes narrowly —
+        // NEVER the live per-request `ActorContext` here
+        // ---------------------------------------------------------------
+        // This USED to read `app(ActorContext::class)` — the container's
+        // per-request scoped context, "the same source `PlaceMarketplaceOrder`'s
+        // opening assessment reads" (that Action has the IDENTICAL bug,
+        // unfixed here — see below). `VendorPayable::assess()` is always
+        // called with `trigger: VendorPayableAssessmentTrigger::UnattendedAssessment`
+        // a few lines down, and `FinanceVendorPayableAuthorizer::
+        // authorizeUnattended()` unconditionally THROWS
+        // `VendorPayableNotAuthorisedException` whenever
+        // `$actorContext->isAuthenticated()` is true. Every real caller of
+        // this method is authenticated: the panel's "Tandai Dibayar" button
+        // (`MarkMarketplaceOrderPaidAction`, an admin with a real session)
+        // and, since PAY-02, `App\Platform\Payment\VerifyManualPayment`'s
+        // approval path (a finance/restricted_admin actor). Discovered via
+        // this PR's own end-to-end HTTP test
+        // (`VerifyManualPaymentRouteTest`) — every approval threw this
+        // exception before this fix, and a throwaway direct-call test
+        // confirmed `PlaceMarketplaceOrder`'s identical pattern ALSO throws
+        // for any logged-in customer placing an order, which
+        // `Checkout::placeOrder()`'s broad `catch (Throwable $e)` silently
+        // turns into a generic "Checkout belum dapat diproses" error — i.e.
+        // this exact bug most likely already silently breaks checkout for
+        // every authenticated customer in production/beta today. That
+        // second call site is NOT touched here — it needs its own review
+        // and its own PR; flagged prominently instead.
+        //
+        // The fix: pass an EXPLICIT `ActorContext::guest()`, never the
+        // ambient one. This is deliberately narrow and does not weaken any
+        // real gate: WHO may reach this method at all is still decided
+        // entirely by the caller's own authorizer
+        // (`App\Platform\Payment\Contracts\PaymentActionAuthorizer` on the
+        // manual-verification path, `OrderTransitionAuthorizerContract` on
+        // the panel path) — both real, tested, and unchanged. What this
+        // line decides is only which TRIGGER/actor the downstream
+        // vendor-payable FACT recognition is attributed to. Recognising
+        // payable eligibility from `orderPaid: true` +
+        // `fulfilmentEvidenceAccepted` + the dispute window is a mechanical
+        // consequence of facts the caller already vouched for — not itself
+        // a second, separate human money-movement decision requiring its
+        // own `finance` + per-vendor `ScopeAssignment` grant (the
+        // `HumanDecision` path's real requirement, which no caller of this
+        // method currently satisfies or was ever designed to satisfy — see
+        // `FinanceVendorPayableAuthorizer::authorize()`). The actual human
+        // decision that authorized THIS order-paid transition is already
+        // captured, with the real actor, in this Action's OWN
+        // `MARKETPLACE_ORDER_PAYMENT_STATE_CHANGED` audit row below.
+        // A real fix that lets a human-triggered assessment run the
+        // `HumanDecision` path (e.g. auto-granting a vendor scope, or a
+        // product decision to relax `authorizeUnattended()`) is a separate,
+        // larger authorization-model change and is NOT decided here —
+        // flagged for human review in this PR's description.
+        $actorContext = ActorContext::guest();
 
         (new VendorPayable(actorContext: $actorContext))->assess(
             vendorId: (string) $order->vendor_id,

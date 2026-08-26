@@ -4,11 +4,21 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Payment;
 
+use App\Domain\Marketplace\Exceptions\MarketplacePaymentAmountMismatchException;
+use App\Domain\Marketplace\Models\MarketplaceOrder;
+use App\Domain\Marketplace\Models\Vendor;
+use App\Domain\Marketplace\PaymentState;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\Exceptions\AuditReasonRequiredException;
 use App\Platform\Audit\Models\AuditEvent;
+use App\Platform\FinancialLedger\Actions\VendorPayable;
+use App\Platform\FinancialLedger\Money;
+use App\Platform\FinancialLedger\VendorPayableAssessmentTrigger;
+use App\Platform\FinancialLedger\VendorPayableEligibility;
+use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\Payment\Exceptions\PaymentVerificationAlreadyDecidedException;
+use App\Platform\Payment\Exceptions\PaymentVerificationMissingLinkageException;
 use App\Platform\Payment\Models\PaymentSession;
 use App\Platform\Payment\Models\PaymentVerification;
 use App\Platform\Payment\PaymentAuditActions;
@@ -17,32 +27,88 @@ use App\Platform\Payment\PaymentVerificationStatus;
 use App\Platform\Payment\VerifyManualPayment;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
  * `VerifyManualPayment` — Task 5's safe slice, Wave 1c Append-Correction
- * (`task-5-brief.md`). Proves AC8's "separate authorized action": a
- * `payment_verifications` row moves from `SUBMITTED` to `VERIFIED`/
- * `REJECTED` exactly once, with a mandatory reason enforced by
+ * (`task-5-brief.md`), extended by PAY-02
+ * (`docs/testing/release-gates.md` §C) to actually mark the linked
+ * marketplace order paid on approval. Proves AC8's "separate authorized
+ * action": a `payment_verifications` row moves from `SUBMITTED` to
+ * `VERIFIED`/`REJECTED` exactly once, with a mandatory reason enforced by
  * `Audit::record()`'s own `SensitiveActions` check (not re-implemented
- * here), and structurally proves the hard prohibition: no
- * `payment_sessions` write, no `Journal::post()`, no `SessionState::Paid`,
- * no `OrderWorkflow` reference. `VerifyManualPaymentRouteTest` covers the
- * HTTP/re-authentication half.
+ * here); proves PAY-02's amount-matched order transition and its
+ * all-or-nothing rollback on mismatch; and structurally proves the
+ * remaining hard prohibitions: no `payment_sessions` write, no
+ * `Journal::post()`, no `app/Domain/OrderWorkflow/` reference (booking
+ * orders never flow through this table — see PAY-02's migration doc block).
+ * `VerifyManualPaymentRouteTest` covers the HTTP/re-authentication half.
  */
 final class VerifyManualPaymentTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function submittedVerification(): PaymentVerification
+    private const int TOTAL_MINOR = 325_000_00;
+
+    /**
+     * A marketplace order placed through the checkout shape (BELUM_DIBAYAR,
+     * vendor payable opened HELD) plus a SUBMITTED `payment_verifications`
+     * row linked to it with a matching stated amount — same fixture shape
+     * `WebhookPaidEffectsTest::marketplaceOrder()` already establishes for
+     * the sibling (webhook) paid path.
+     */
+    private function submittedVerificationForANewOrder(?int $statedAmountMinor = null): array
     {
-        return PaymentVerification::createSubmitted([
-            'reference' => 'order-1',
+        $vendor = Vendor::query()->create(['name' => 'Toko Bunga', 'is_active' => true]);
+
+        $order = MarketplaceOrder::query()->create([
+            'order_number' => 'MKT-'.Str::upper(Str::random(10)),
+            'customer_ref' => 'cust-1',
+            'entity_ref' => 'BU-JKT-01',
+            'vendor_id' => $vendor->id,
+            'subtotal_minor' => self::TOTAL_MINOR,
+            'delivery_fee_minor' => 0,
+            'total_minor' => self::TOTAL_MINOR,
+            'payment_state' => PaymentState::BELUM_DIBAYAR,
+            'idempotency_key' => 'mkt-'.Str::lower(Str::random(12)),
+            'placed_at' => CarbonImmutable::now(),
+        ]);
+
+        (new VendorPayable(actorContext: ActorContext::guest()))->assess(
+            vendorId: $vendor->id,
+            entityRef: 'BU-JKT-01',
+            sourceType: 'marketplace_order',
+            sourceId: $order->id,
+            amount: new Money(self::TOTAL_MINOR),
+            eligibility: new VendorPayableEligibility(
+                orderPaid: false,
+                fulfilmentEvidenceAccepted: false,
+                disputeWindowEndsAt: null,
+            ),
+            trigger: VendorPayableAssessmentTrigger::UnattendedAssessment,
+            now: CarbonImmutable::now(),
+        );
+
+        $verification = PaymentVerification::createSubmitted([
+            'reference' => $order->order_number,
+            'order_id' => $order->id,
+            'amount_minor' => $statedAmountMinor ?? self::TOTAL_MINOR,
+            'currency' => 'IDR',
             'payment_method' => 'bank_transfer',
             'payment_reference' => 'TRX-1',
             'instructions' => null,
             'submitted_at' => CarbonImmutable::now(),
         ]);
+
+        return [$verification, $order];
+    }
+
+    private function submittedVerification(): PaymentVerification
+    {
+        [$verification] = $this->submittedVerificationForANewOrder();
+
+        return $verification;
     }
 
     public function test_approving_transitions_to_verified_and_records_the_decision(): void
@@ -239,7 +305,7 @@ final class VerifyManualPaymentTest extends TestCase
         }
     }
 
-    public function test_it_never_touches_payment_sessions_the_journal_or_the_order_aggregate(): void
+    public function test_it_never_references_payment_sessions_the_journal_or_the_booking_order_aggregate(): void
     {
         $source = $this->withoutComments((string) file_get_contents(base_path('app/Platform/Payment/VerifyManualPayment.php')));
 
@@ -249,7 +315,6 @@ final class VerifyManualPaymentTest extends TestCase
             'SessionState::Paid',
             'Journal::post',
             'OrderWorkflow',
-            'DIBAYAR',
         ] as $forbidden) {
             $this->assertStringNotContainsString($forbidden, $source, "VerifyManualPayment.php references [{$forbidden}]");
         }
@@ -269,6 +334,164 @@ final class VerifyManualPaymentTest extends TestCase
         );
 
         $this->assertSame(0, PaymentSession::query()->count());
+    }
+
+    // -----------------------------------------------------------------
+    // PAY-02: approving links to a real order and marks it paid.
+    // -----------------------------------------------------------------
+
+    public function test_approving_marks_the_linked_marketplace_order_paid_with_the_stated_amount(): void
+    {
+        [$verification, $order] = $this->submittedVerificationForANewOrder();
+
+        (new VerifyManualPayment)->verify(
+            verification: $verification,
+            decision: PaymentVerificationDecision::Approve,
+            reason: 'Matches bank statement',
+            actorRef: 9,
+            actorRole: 'finance',
+            source: AuditSource::Panel,
+        );
+
+        $order->refresh();
+        $this->assertSame(PaymentState::DIBAYAR, $order->payment_state);
+
+        $paymentStateChanged = AuditEvent::query()
+            ->where('action', 'MARKETPLACE_ORDER_PAYMENT_STATE_CHANGED')
+            ->where('subject_id', $order->id)
+            ->latest('id')
+            ->first();
+        $this->assertNotNull($paymentStateChanged);
+    }
+
+    public function test_an_amount_mismatch_refuses_the_whole_approval_and_rolls_back(): void
+    {
+        [$verification, $order] = $this->submittedVerificationForANewOrder(statedAmountMinor: self::TOTAL_MINOR - 1);
+
+        try {
+            (new VerifyManualPayment)->verify(
+                verification: $verification,
+                decision: PaymentVerificationDecision::Approve,
+                reason: 'Looks right',
+                actorRef: 9,
+                actorRole: 'finance',
+                source: AuditSource::Panel,
+            );
+
+            $this->fail('Expected MarketplacePaymentAmountMismatchException for a stated amount that does not match the order total.');
+        } catch (MarketplacePaymentAmountMismatchException) {
+            $verification->refresh();
+            $order->refresh();
+
+            $this->assertSame(
+                PaymentVerificationStatus::Submitted,
+                $verification->status(),
+                'An amount mismatch must roll back the decide() mutation too, not just refuse the order transition.'
+            );
+            $this->assertSame(PaymentState::BELUM_DIBAYAR, $order->payment_state);
+            $this->assertSame(
+                0,
+                AuditEvent::query()->where('action', PaymentAuditActions::MANUAL_VERIFICATION)->count(),
+                'No audit row for a decision that never committed.'
+            );
+        }
+    }
+
+    public function test_rejecting_never_touches_the_linked_order(): void
+    {
+        [$verification, $order] = $this->submittedVerificationForANewOrder();
+
+        (new VerifyManualPayment)->verify(
+            verification: $verification,
+            decision: PaymentVerificationDecision::Reject,
+            reason: 'Reference does not match any transfer we received',
+            actorRef: 9,
+            actorRole: 'finance',
+            source: AuditSource::Panel,
+        );
+
+        $order->refresh();
+        $this->assertSame(PaymentState::BELUM_DIBAYAR, $order->payment_state);
+    }
+
+    public function test_re_approving_an_already_verified_row_does_not_double_apply(): void
+    {
+        [$verification, $order] = $this->submittedVerificationForANewOrder();
+
+        (new VerifyManualPayment)->verify(
+            verification: $verification,
+            decision: PaymentVerificationDecision::Approve,
+            reason: 'First approval',
+            actorRef: 9,
+            actorRole: 'finance',
+            source: AuditSource::Panel,
+        );
+
+        $this->expectException(PaymentVerificationAlreadyDecidedException::class);
+
+        try {
+            (new VerifyManualPayment)->verify(
+                verification: PaymentVerification::findOrFail($verification->id),
+                decision: PaymentVerificationDecision::Approve,
+                reason: 'Second approval attempt',
+                actorRef: 9,
+                actorRole: 'finance',
+                source: AuditSource::Panel,
+            );
+        } finally {
+            $this->assertSame(
+                1,
+                AuditEvent::query()->where('action', 'MARKETPLACE_ORDER_PAYMENT_STATE_CHANGED')->where('subject_id', $order->id)->count(),
+                'A second approve attempt on an already-decided row must not mark the order paid a second time.'
+            );
+        }
+    }
+
+    public function test_a_row_missing_order_linkage_cannot_be_approved(): void
+    {
+        // Simulates a row that predates PAY-02 — created without the new
+        // columns, which stayed nullable at the schema level for exactly
+        // this reason (see the migration's own doc block).
+        $verification = PaymentVerification::createSubmitted([
+            'reference' => 'legacy-order-token',
+            'payment_method' => 'bank_transfer',
+            'payment_reference' => 'TRX-legacy',
+            'instructions' => null,
+            'submitted_at' => CarbonImmutable::now(),
+        ]);
+
+        $this->expectException(PaymentVerificationMissingLinkageException::class);
+
+        (new VerifyManualPayment)->verify(
+            verification: $verification,
+            decision: PaymentVerificationDecision::Approve,
+            reason: 'Trying anyway',
+            actorRef: 9,
+            actorRole: 'finance',
+            source: AuditSource::Panel,
+        );
+    }
+
+    public function test_a_row_missing_order_linkage_can_still_be_rejected(): void
+    {
+        $verification = PaymentVerification::createSubmitted([
+            'reference' => 'legacy-order-token',
+            'payment_method' => 'bank_transfer',
+            'payment_reference' => 'TRX-legacy',
+            'instructions' => null,
+            'submitted_at' => CarbonImmutable::now(),
+        ]);
+
+        (new VerifyManualPayment)->verify(
+            verification: $verification,
+            decision: PaymentVerificationDecision::Reject,
+            reason: 'Cannot be verified: predates order linkage',
+            actorRef: 9,
+            actorRole: 'finance',
+            source: AuditSource::Panel,
+        );
+
+        $this->assertSame(PaymentVerificationStatus::Rejected, $verification->fresh()->status());
     }
 
     private function withoutComments(string $source): string
