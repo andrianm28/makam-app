@@ -268,6 +268,60 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
     }
 
     /**
+     * UI/UX audit finding (26 Aug 2026) — a genuinely free cemetery
+     * (`price_min`/`price_max` both exactly `0`, e.g. "gratis bagi pemegang
+     * KTP DKI sejak 2024") previously rendered the factually-correct but
+     * broken-looking "Rp 0 - Rp 0". `CemeteryPresenter::priceRange()` now
+     * special-cases both-bounds-zero to `"Gratis"`. Asserted against a real
+     * rendered card, not just the presenter in isolation, so a regression in
+     * either `priceRange()` or the view's `@if ($priceRange !== null ...)`
+     * branch is caught.
+     */
+    public function test_a_genuinely_free_cemetery_shows_gratis_not_rp_0_rp_0(): void
+    {
+        $cemetery = Cemetery::factory()->create([
+            'publication_status' => CemeteryPublicationStatus::PUBLISHED,
+            'price_min' => 0,
+            'price_max' => 0,
+            'price_currency' => 'IDR',
+            'price_source' => 'Gratis bagi pemegang KTP DKI sejak 2024',
+            'price_effective_at' => now(),
+        ]);
+
+        $response = $this->get(route('cemeteries.index'));
+
+        $response->assertSee($cemetery->name);
+        $response->assertSee('Gratis');
+        $this->assertStringNotContainsString('Rp 0 - Rp 0', (string) $response->getContent());
+    }
+
+    /**
+     * Regression guard for the fix above: an unset price (`price_min`/
+     * `price_max` both `null`, the ordinary "no agreed pricing yet" state —
+     * distinct from the confirmed-free `0`/`0` case) must keep rendering the
+     * existing honest "Kisaran biaya belum tersedia untuk lokasi ini."
+     * fallback, not "Gratis" and not "Rp 0 - Rp 0".
+     */
+    public function test_a_cemetery_with_unset_price_still_shows_the_existing_fallback_message(): void
+    {
+        $cemetery = Cemetery::factory()->create([
+            'publication_status' => CemeteryPublicationStatus::PUBLISHED,
+            'price_min' => null,
+            'price_max' => null,
+            'price_source' => null,
+            'price_effective_at' => null,
+        ]);
+
+        $response = $this->get(route('cemeteries.index'));
+
+        $response->assertSee($cemetery->name);
+        $response->assertSee('Kisaran biaya belum tersedia untuk lokasi ini.');
+
+        $body = $this->body((string) $response->getContent());
+        $this->assertStringNotContainsString('Gratis', $body);
+    }
+
+    /**
      * §6.3 — an unknown `?city=` is a stated validation error, not a
      * silently empty result. The distinction matters: on a directory whose
      * negative criteria include "No hidden omission of a required MVP

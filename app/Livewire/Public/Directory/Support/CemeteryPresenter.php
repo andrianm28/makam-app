@@ -31,16 +31,29 @@ final class CemeteryPresenter
      * would not be." The views render an explicit "price not yet available"
      * message for that case rather than an empty gap.
      *
-     * Callers MUST pair this with `priceSource()` — AC3 requires the range
-     * to be ATTRIBUTED, and design-system.md §2.3 requires a named source
-     * and last-updated time on any fee figure. `priceAttribution()` below
-     * is the single call that returns both, so a view cannot accidentally
-     * render the number without its provenance.
+     * UPDATED 26 Aug 2026 (UI/UX audit) — a genuinely free cemetery
+     * (`price_min === 0.0 && price_max === 0.0`, e.g. "gratis bagi
+     * pemegang KTP DKI sejak 2024") previously rendered "Rp 0 - Rp 0",
+     * which is factually correct but reads as a broken/placeholder value
+     * at a glance. That specific case now renders "Gratis" instead. This
+     * is deliberately narrower than "either bound is zero" — a lopsided
+     * `0`/non-zero pair is far more likely to be a data-entry mistake than
+     * a real free offering, so it is left to fall through to the ordinary
+     * `Rp 0 - Rp X` rendering rather than being silently reinterpreted as
+     * "free". Only the confirmed-free case (both bounds exactly `0`) gets
+     * the special copy; an unset price (`null`) is untouched by this
+     * change and keeps returning `null` above, so callers' existing
+     * "price not yet available" fallback for that case is unaffected —
+     * display-layer only, the stored `0.00`/`0.00` values are unchanged.
      */
     public static function priceRange(Cemetery $cemetery): ?string
     {
         if ($cemetery->price_min === null || $cemetery->price_max === null) {
             return null;
+        }
+
+        if ((float) $cemetery->price_min === 0.0 && (float) $cemetery->price_max === 0.0) {
+            return 'Gratis';
         }
 
         $currency = (string) ($cemetery->price_currency ?? 'IDR');
