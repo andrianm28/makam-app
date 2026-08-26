@@ -77,6 +77,44 @@
                 </div>
             </section>
 
+            @if ($complaintSubmitted)
+                <x-mk.alert intent="success" title="Komplain terkirim" class="mt-6" live="polite">
+                    <p class="text-base">
+                        Komplain Anda telah diterima dan diteruskan ke vendor. Tim kami akan menghubungi Anda
+                        jika diperlukan informasi tambahan.
+                    </p>
+                </x-mk.alert>
+            @elseif ($canFileComplaint)
+                <section aria-labelledby="complaint-heading" class="mt-6">
+                    <h2 id="complaint-heading" class="text-lg font-semibold text-neutral-900">Ajukan komplain</h2>
+                    <p class="mt-1 text-base text-neutral-600">
+                        Ada masalah dengan pesanan ini? Jelaskan keluhan Anda dan kami akan meneruskannya ke vendor.
+                    </p>
+
+                    <form wire:submit="fileComplaint" class="mt-4 space-y-4">
+                        <x-mk.field
+                            label="Keluhan Anda"
+                            name="complaintReason"
+                            type="textarea"
+                            wire:model="complaintReason"
+                            :error="$errors->first('complaintReason')"
+                            hint="Jelaskan apa yang tidak sesuai dengan pesanan ini (minimal 10 karakter)."
+                            required
+                        />
+
+                        @if ($complaintError !== null)
+                            <x-mk.alert intent="danger" title="Komplain belum dapat diajukan" live="assertive">
+                                <p class="text-base">{{ $complaintError }}</p>
+                            </x-mk.alert>
+                        @endif
+
+                        <x-mk.button variant="danger" type="submit">
+                            Ajukan komplain
+                        </x-mk.button>
+                    </form>
+                </section>
+            @endif
+
             <p class="mt-10 text-base text-neutral-600">
                 Butuh bantuan?{" "}
                 <a

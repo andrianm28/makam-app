@@ -103,6 +103,41 @@ use Illuminate\Support\Facades\DB;
  * — gives every real decision a distinct key while the pre-existing
  * `$statusChanged` guard still stops a literal duplicate submit of the
  * exact same request from ever reaching this code at all.
+ *
+ * ---------------------------------------------------------------------------
+ * `vendor_order.complaint_filed.v1` — any transition INTO `KOMPLAIN`
+ * ---------------------------------------------------------------------------
+ * Unlike `vendor_order.decided.v1` above, this is not discriminated by
+ * `$previousStatus` at all: both the vendor's own one-click "Tandai
+ * komplain" self-flag (`EditVendorOrder::getHeaderActions()`) and a
+ * customer-initiated complaint (`App\Livewire\Public\Marketplace\
+ * OrderTracking::fileComplaint()`, gated by
+ * `VendorProcessingStatus::isCustomerComplaintEligible()`) call this same
+ * single write path with `status: KOMPLAIN` — there is no second field
+ * distinguishing "who filed it" that this event needs to carry beyond what
+ * `notes` and the audit row's `actor_role` already record. Emitted whenever
+ * the real (`$statusChanged`) transition lands on `KOMPLAIN`, from any
+ * source status — no vendor order is created already `KOMPLAIN`, so this can
+ * only ever be a genuine complaint being filed, never a no-op re-save.
+ *
+ * `docs/contracts/notification-matrix.md` currently has no "complaint"
+ * row — the module's 17 canonical rows are pinned by
+ * `TemplateRendererTest`, and adding an 18th is a dedicated,
+ * migration-plus-pinned-test change this Action's own PR does not make
+ * (this repo already treats matrix-row additions as their own lane — see
+ * the merged `feat/notification-matrix-cheap-rows` history). Per
+ * `DispatchNotificationConsumerOnOutboxEventPublished`'s own documented
+ * behaviour, an outbox event with no matching `notification_templates.
+ * outbox_event_name` row is consumed as "nothing to send" — silently and
+ * correctly, by design, not a bug. Recording the event here regardless
+ * still gives this a durable, idempotent outbox/audit trail today and a
+ * ready integration point for whichever future change adds that matrix row.
+ *
+ * Idempotency key: `vendor_order_complaint_filed:{id}:{audit_id}` — the
+ * same "fold in the fresh audit row's id" reasoning as
+ * `vendor_order.decided.v1` above (a vendor order can plausibly be
+ * corrected out of `KOMPLAIN` and land back on it again later; `{id}`
+ * alone would collide two genuinely distinct complaints).
  */
 final readonly class UpdateVendorOrderStatus
 {
@@ -168,6 +203,22 @@ final readonly class UpdateVendorOrderStatus
                         ],
                         classification: OutboxClassification::Internal,
                         idempotencyKey: "vendor_order_decided:{$order->getKey()}:{$status}:{$audit->id}",
+                    );
+                }
+
+                if ($status === VendorProcessingStatus::KOMPLAIN) {
+                    Outbox::record(
+                        eventName: 'vendor_order.complaint_filed.v1',
+                        eventVersion: 1,
+                        aggregateType: 'vendor_order',
+                        aggregateId: $order->getKey(),
+                        data: [
+                            'vendor_order_id' => $order->getKey(),
+                            'previous_status' => $previousStatus,
+                            'filed_by_role' => $actorRole,
+                        ],
+                        classification: OutboxClassification::Internal,
+                        idempotencyKey: "vendor_order_complaint_filed:{$order->getKey()}:{$audit->id}",
                     );
                 }
             }
