@@ -85,9 +85,39 @@ final class VendorProcessingStatus
         self::DIBATALKAN,
     ];
 
+    /**
+     * Statuses from which the CUSTOMER (not the vendor) may file a
+     * complaint on their own marketplace order — `App\Livewire\Public\
+     * Marketplace\OrderTracking::fileComplaint()`'s eligibility gate.
+     *
+     * `DITERIMA_VENDOR` and later, up to but excluding a terminal state:
+     * `MENUNGGU_VENDOR` is excluded because nothing has happened yet for
+     * the customer to complain about (the vendor hasn't even responded).
+     * `SELESAI`/`DITOLAK_VENDOR`/`DIBATALKAN`/`KOMPLAIN` itself are all
+     * excluded as terminal or already-in-that-state — this mirrors
+     * `UpdateVendorOrderStatus`'s own "no transition graph" stance by not
+     * inventing a general legal-moves ordering, but a customer-facing
+     * "may I file a complaint right now" UI decision still needs SOME
+     * closed answer, and this is it, named once here so the Livewire
+     * component and its tests share one definition instead of each
+     * restating the list.
+     *
+     * @var list<string>
+     */
+    public const array CUSTOMER_COMPLAINT_ELIGIBLE_STATUSES = [
+        self::DITERIMA_VENDOR,
+        self::DIPROSES,
+        self::DIKIRIM_OR_DIJADWALKAN,
+    ];
+
     public static function isKnown(string $status): bool
     {
         return in_array($status, self::KNOWN_STATUSES, true);
+    }
+
+    public static function isCustomerComplaintEligible(string $status): bool
+    {
+        return in_array($status, self::CUSTOMER_COMPLAINT_ELIGIBLE_STATUSES, true);
     }
 
     /**

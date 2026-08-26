@@ -421,6 +421,54 @@ test.describe('E2E-MKT — checkout and manual payment', () => {
         expect(results.violations).toEqual([]);
     });
 
+    test('a freshly-placed order cannot be complained about yet — the action is not shown', async ({ page }) => {
+        await addProductAToCart(page);
+        await page.getByRole('link', { name: 'Lanjut ke pembayaran' }).click();
+        await page.waitForURL(/\/marketplace\/checkout$/);
+
+        await placeOrder(page, { areaLabel: 'Jakarta Selatan' });
+
+        await page.getByRole('link', { name: 'Lacak pesanan' }).click();
+        await page.waitForURL(/\/marketplace\/pesanan\//);
+
+        // PlaceMarketplaceOrder always creates the vendor order at
+        // VendorProcessingStatus::MENUNGGU_VENDOR (see the earlier "a guest
+        // completes checkout..." test's own comment for the verification of
+        // this against PlaceMarketplaceOrder.php) — not in
+        // VendorProcessingStatus::CUSTOMER_COMPLAINT_ELIGIBLE_STATUSES, so
+        // OrderTracking's complaint-filing section must not render at all
+        // on a freshly-placed order.
+        //
+        // This is the one deterministic, CI-safe slice of the complaint-
+        // filing flow this guest-only spec file can cover: proving the
+        // action is correctly ABSENT here. Proving it correctly APPEARS and
+        // WORKS once a vendor accepts the order would need an authenticated
+        // vendor-panel session (`/vendor/pesanan`,
+        // `tests/browser/e2e-admin-vendor.spec.ts`) to advance the status
+        // first — and that suite's `e2e-vendor` fixture login is granted
+        // whichever vendor a UUID sort happens to pick first
+        // (`2026_08_22_110000_seed_e2e_admin_vendor_test_users.php`'s own
+        // `$firstVendorId = DB::table('vendors')->orderBy('id')->value('id')`,
+        // and `vendors.id` is a UUID primary key — verified directly against
+        // `2026_08_12_100000_create_vendors_table.php` — so that ordering
+        // carries no relation to catalogue seeding order), never reliably
+        // the same vendor this spec's fixed `PRODUCT_A`/`PRODUCT_B`
+        // catalogue codes belong to. A full guest-checkout → vendor-accept
+        // → customer-complains cross-role E2E is therefore not reliably
+        // buildable without new fixture infrastructure tying a specific
+        // catalogue vendor to a login — out of scope here. The eligible-
+        // status path (filing, transition to KOMPLAIN, validation,
+        // ownership) is covered thoroughly instead by
+        // `tests/Feature/Livewire/Public/Marketplace/OrderTrackingScreenTest.php`.
+        await expect(page.getByRole('heading', { level: 1, name: 'Status Pesanan' })).toBeVisible();
+        await expect(page.getByText('Menunggu Vendor', { exact: true })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Ajukan komplain' })).toHaveCount(0);
+        await expect(page.getByRole('button', { name: 'Ajukan komplain' })).toHaveCount(0);
+
+        const results = await new AxeBuilder({ page }).analyze();
+        expect(results.violations).toEqual([]);
+    });
+
     test('checkout, its post-order state, and order tracking are all accessible', async ({ page }) => {
         await addProductAToCart(page);
         await page.getByRole('link', { name: 'Lanjut ke pembayaran' }).click();

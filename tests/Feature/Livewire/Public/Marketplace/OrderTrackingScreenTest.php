@@ -6,18 +6,23 @@ namespace Tests\Feature\Livewire\Public\Marketplace;
 
 use App\Domain\Marketplace\AvailabilityMode;
 use App\Domain\Marketplace\EvidenceRequirement;
+use App\Domain\Marketplace\MarketplaceAuditActions;
 use App\Domain\Marketplace\Models\MarketplaceOrder;
 use App\Domain\Marketplace\Models\Product;
 use App\Domain\Marketplace\Models\Vendor;
 use App\Domain\Marketplace\Models\VendorListing;
+use App\Domain\Marketplace\Models\VendorOrder;
 use App\Domain\Marketplace\PaymentState;
 use App\Domain\Marketplace\ProductCode;
 use App\Domain\Marketplace\VendorProcessingStatus;
 use App\Livewire\Public\Marketplace\OrderTracking;
+use App\Platform\Audit\Models\AuditEvent;
+use App\Platform\Outbox\Models\OutboxEvent;
 use App\Support\Design\StatusIntent;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 final class OrderTrackingScreenTest extends TestCase
@@ -120,5 +125,107 @@ final class OrderTrackingScreenTest extends TestCase
             $component->assertOk()->assertSee('Pesanan tidak ditemukan');
             $component->assertDontSee('Toko Bunga');
         }
+    }
+
+    public function test_a_customer_can_file_a_complaint_on_their_own_order_in_an_eligible_status(): void
+    {
+        $order = $this->order('cust-1', VendorProcessingStatus::DITERIMA_VENDOR, PaymentState::DIBAYAR);
+        $vendorOrder = $order->vendorOrders->first();
+
+        Livewire::test(OrderTracking::class, ['orderNumber' => $order->order_number, 'customerRef' => 'cust-1'])
+            ->assertSee('Ajukan komplain')
+            ->set('complaintReason', 'Karangan bunga yang dikirim tidak sesuai dengan pesanan.')
+            ->call('fileComplaint')
+            ->assertHasNoErrors()
+            ->assertSee('Komplain terkirim');
+
+        $vendorOrder->refresh();
+        $this->assertSame(VendorProcessingStatus::KOMPLAIN, $vendorOrder->status);
+        $this->assertSame(
+            'Komplain pelanggan: Karangan bunga yang dikirim tidak sesuai dengan pesanan.',
+            $vendorOrder->notes,
+        );
+
+        $audit = AuditEvent::query()
+            ->where('action', MarketplaceAuditActions::ORDER_STATUS_CHANGED)
+            ->where('subject_id', (string) $vendorOrder->id)
+            ->sole();
+        $this->assertSame('customer', $audit->actor_role);
+        $this->assertSame(
+            ['previous_state' => VendorProcessingStatus::DITERIMA_VENDOR, 'new_state' => VendorProcessingStatus::KOMPLAIN],
+            $audit->metadata,
+        );
+
+        $outbox = OutboxEvent::query()
+            ->where('event_name', 'vendor_order.complaint_filed.v1')
+            ->where('aggregate_id', $vendorOrder->getKey())
+            ->sole();
+        $this->assertEqualsCanonicalizing(
+            ['vendor_order_id' => $vendorOrder->getKey(), 'previous_status' => VendorProcessingStatus::DITERIMA_VENDOR, 'filed_by_role' => 'customer'],
+            $outbox->payload,
+        );
+    }
+
+    public function test_filing_a_complaint_requires_a_reason(): void
+    {
+        $order = $this->order('cust-1', VendorProcessingStatus::DIPROSES, PaymentState::BELUM_DIBAYAR);
+        $vendorOrder = $order->vendorOrders->first();
+
+        Livewire::test(OrderTracking::class, ['orderNumber' => $order->order_number, 'customerRef' => 'cust-1'])
+            ->set('complaintReason', '')
+            ->call('fileComplaint')
+            ->assertHasErrors(['complaintReason' => 'required']);
+
+        $this->assertSame(VendorProcessingStatus::DIPROSES, $vendorOrder->refresh()->status);
+        $this->assertSame(0, AuditEvent::query()->where('action', MarketplaceAuditActions::ORDER_STATUS_CHANGED)->count());
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function ineligibleStatusProvider(): iterable
+    {
+        yield 'awaiting vendor response' => [VendorProcessingStatus::MENUNGGU_VENDOR];
+        yield 'rejected by vendor' => [VendorProcessingStatus::DITOLAK_VENDOR];
+        yield 'already complete' => [VendorProcessingStatus::SELESAI];
+        yield 'already a complaint' => [VendorProcessingStatus::KOMPLAIN];
+        yield 'cancelled' => [VendorProcessingStatus::DIBATALKAN];
+    }
+
+    #[DataProvider('ineligibleStatusProvider')]
+    public function test_an_ineligible_order_status_refuses_the_complaint(string $status): void
+    {
+        $order = $this->order('cust-1', $status, PaymentState::BELUM_DIBAYAR);
+        $vendorOrder = $order->vendorOrders->first();
+
+        // The action button itself must not render for an ineligible status.
+        Livewire::test(OrderTracking::class, ['orderNumber' => $order->order_number, 'customerRef' => 'cust-1'])
+            ->assertDontSee('Ajukan komplain')
+            // A direct call (bypassing the hidden UI) must still be refused
+            // server-side — the real guard is not the `@if` in the view.
+            ->set('complaintReason', 'Ada masalah dengan pesanan ini, mohon ditinjau kembali.')
+            ->call('fileComplaint')
+            ->assertHasNoErrors();
+
+        $this->assertSame($status, $vendorOrder->refresh()->status);
+        $this->assertSame(0, AuditEvent::query()->where('action', MarketplaceAuditActions::ORDER_STATUS_CHANGED)->count());
+    }
+
+    public function test_a_customer_cannot_file_a_complaint_on_someone_elses_order(): void
+    {
+        $order = $this->order('cust-owner', VendorProcessingStatus::DITERIMA_VENDOR, PaymentState::BELUM_DIBAYAR);
+        $vendorOrder = $order->vendorOrders->first();
+
+        Livewire::test(OrderTracking::class, [
+            'orderNumber' => $order->order_number, 'customerRef' => 'cust-intruder',
+        ])
+            ->assertDontSee('Ajukan komplain')
+            ->set('complaintReason', 'Mencoba mengajukan komplain atas pesanan orang lain.')
+            ->call('fileComplaint')
+            ->assertHasNoErrors();
+
+        $this->assertSame(VendorProcessingStatus::DITERIMA_VENDOR, $vendorOrder->refresh()->status);
+        $this->assertSame(0, AuditEvent::query()->where('action', MarketplaceAuditActions::ORDER_STATUS_CHANGED)->count());
+        $this->assertNull(VendorOrder::query()->where('id', $vendorOrder->id)->where('status', VendorProcessingStatus::KOMPLAIN)->first());
     }
 }
