@@ -250,6 +250,36 @@ use Symfony\Component\HttpFoundation\Response;
  * revert is meant to avoid, and removing only the panels' provider
  * argument while leaving this exception in place is exactly today's
  * change and does what it says.
+ *
+ * ---------------------------------------------------------------------------
+ * Filament's OWN inline `<style>`/`<script>` tags had no nonce at all —
+ * fixed via three Blade view overrides, not a change to this file
+ * ---------------------------------------------------------------------------
+ * Found live, 26 Aug 2026: this file's earlier "Why a nonce" section's claim
+ * that Livewire's own asset injector needs "no change needed on this
+ * codebase's side" is true for LIVEWIRE's tags, but incomplete — it does not
+ * extend to FILAMENT's own bundled Blade views, which turned out to emit
+ * several literal inline `<style>`/`<script>` tags of their own with no
+ * nonce at all (confirmed: zero `nonce` usage anywhere under
+ * `vendor/filament`, and Filament has no first-class CSP nonce mechanism —
+ * see filamentphp/filament#7032 and #8329, both open/unresolved). Since
+ * `style-src-elem`/`script-src` above carry a nonce with no
+ * `'unsafe-inline'` fallback, every one of those tags was blocked outright —
+ * including the one that defines Filament's own `--fi-color-primary-*`/
+ * `--danger-*` CSS custom properties, which is why every primary-colored
+ * button sitewide (the panel login submit button included) silently
+ * rendered invisible. Fixed at the VIEW layer, not here: three Laravel view
+ * overrides (`resources/views/vendor/filament/assets.blade.php`,
+ * `resources/views/vendor/filament-panels/components/layout/base.blade.php`,
+ * `resources/views/vendor/filament-panels/livewire/sidebar.blade.php`) add
+ * `nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}"` to each
+ * un-nonced tag, replicating the exact mechanism Livewire's own tags already
+ * use — see `docs/testing/release-gates.md` §H's SEC-08/CSP follow-up entry
+ * for the full investigation trail, and
+ * `tests/Feature/Http/Middleware/CspNonceCoversEveryInlineTagTest.php` for
+ * the regression test (deliberately general — every inline tag in a real
+ * rendered response must carry the header's nonce, not a list of the
+ * specific tags found broken today).
  */
 final class ReportContentSecurityPolicy
 {
