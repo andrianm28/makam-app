@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\PlotInventory\Actions;
 
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\CemeteryDirectory\PlotTrackingMode;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotInventory\PlotInventoryAuditActions;
@@ -46,6 +47,11 @@ use InvalidArgumentException;
  * the model's `saving` state guard is bypassed by construction — the
  * values are fixed constants (`available`, zero-padded slots), which is
  * exactly the guarantee the guard exists for.
+ *
+ * A block may only be created for a cemetery already in GRANULAR tracking
+ * mode (`App\Domain\CemeteryDirectory\PlotTrackingMode::GRANULAR`) — see
+ * the guard at the top of `__invoke()`. This prevents a block silently
+ * existing under a cemetery still marked `aggregate`.
  */
 final class CreateCemeteryBlock
 {
@@ -61,6 +67,14 @@ final class CreateCemeteryBlock
         AuditSource $auditSource = AuditSource::Panel,
         ?string $reason = null,
     ): CemeteryBlock {
+        if ($cemetery->plot_tracking_mode !== PlotTrackingMode::GRANULAR) {
+            throw new InvalidArgumentException(
+                "Cannot create a block for cemetery [{$cemetery->getKey()}]: it is tracked in ".
+                "'{$cemetery->plot_tracking_mode}' mode. Switch it to 'granular' via ".
+                'SetCemeteryPlotTrackingMode first.'
+            );
+        }
+
         if ($capacity < 1) {
             throw new InvalidArgumentException('Cemetery block capacity must be at least 1.');
         }
