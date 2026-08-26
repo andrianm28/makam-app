@@ -9,6 +9,7 @@ use App\Domain\CemeteryCapability\CemeteryPackageAvailabilityStatus;
 use App\Domain\CemeteryCapability\Models\CemeteryPackage;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Filament\Admin\Resources\CemeteryResource;
+use App\Livewire\Public\Directory\Support\CemeteryPresenter;
 use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
@@ -39,6 +40,27 @@ use Illuminate\Database\Eloquent\Model;
  * The package `name` is deliberately a free-text operator string, NOT a
  * closed list — `CemeteryPackage`'s own doc block explains why this module
  * must not assert a competing service-type catalogue.
+ *
+ * ---------------------------------------------------------------------------
+ * Package/class-level pricing — added 26 Aug 2026
+ * ---------------------------------------------------------------------------
+ * `price_min`/`price_max`/`price_source` are admin-editable here (mirroring
+ * `CemeteryForm`'s own `price_min`/`price_max` fields for the cemetery-level
+ * figure). `price_currency` is NOT exposed — it defaults to `IDR` at the
+ * column level, matching `CemeteryForm`'s identical choice not to expose a
+ * currency picker for a launch that only ever transacts in Rupiah.
+ * `price_effective_at` is NEVER a form field — `CemeteryPackage::booted()`
+ * stamps it automatically whenever a priced field changes, so an admin
+ * cannot hand-enter a false "as of" date. This is the FIRST real admin
+ * write path for package pricing; before this, `cemetery_packages` had no
+ * price columns at all.
+ *
+ * `price_source` is left optional, not required: `CemeteryPresenter::
+ * packagePriceAttribution()` already renders an honest "Sumber tidak
+ * tercatat" fallback for a blank source (the same fallback the
+ * cemetery-level figure has always had), so an admin who enters a min/max
+ * without a source produces a visibly-unattributed figure on the public
+ * page rather than a silently-fabricated one.
  *
  * ---------------------------------------------------------------------------
  * Filament 5 shape: instance methods, not statics
@@ -129,6 +151,28 @@ final class PackagesRelationManager extends RelationManager
                     ->default(1)
                     ->minValue(1),
 
+                TextInput::make('price_min')
+                    ->label('Harga mulai (Rp)')
+                    ->numeric()
+                    ->nullable()
+                    ->minValue(0),
+
+                TextInput::make('price_max')
+                    ->label('Harga maksimal (Rp)')
+                    ->numeric()
+                    ->nullable()
+                    ->minValue(0),
+
+                TextInput::make('price_source')
+                    ->label('Sumber harga')
+                    ->nullable()
+                    ->maxLength(255)
+                    ->helperText(
+                        'Contoh: "Daftar harga pengelola, Agustus 2026". Ditampilkan sebagai atribusi '
+                        .'wajib di halaman publik — kosongkan hanya jika sumber benar-benar belum tercatat.'
+                    )
+                    ->columnSpanFull(),
+
                 Textarea::make('description')
                     ->label('Deskripsi')
                     ->nullable()
@@ -163,6 +207,10 @@ final class PackagesRelationManager extends RelationManager
                 TextColumn::make('sort_order')
                     ->label('Urutan')
                     ->sortable(),
+
+                TextColumn::make('price_min')
+                    ->label('Harga')
+                    ->formatStateUsing(fn (CemeteryPackage $record): string => CemeteryPresenter::packagePriceRange($record) ?? 'Belum tersedia'),
 
                 IconColumn::make('is_active')
                     ->label('Aktif')

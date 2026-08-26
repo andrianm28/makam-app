@@ -259,6 +259,14 @@
                                     $capabilities->availabilityMode,
                                     (string) $package->availability_status,
                                 );
+                                // Package/class-level price — the finer-grained
+                                // counterpart to the cemetery-level range above.
+                                // Same "Perlu konfirmasi" framing, same honest
+                                // null-when-unset behaviour: see
+                                // CemeteryPresenter::packagePriceRange()'s own
+                                // doc block.
+                                $packagePriceRange = CemeteryPresenter::packagePriceRange($package);
+                                $packagePriceAttribution = CemeteryPresenter::packagePriceAttribution($package);
                             @endphp
                             <li class="flex flex-wrap items-start justify-between gap-3 p-4">
                                 <div class="space-y-1">
@@ -267,6 +275,14 @@
                                     </p>
                                     @if ($package->description)
                                         <p class="text-sm text-neutral-600">{{ $package->description }}</p>
+                                    @endif
+                                    @if ($packagePriceRange !== null && $packagePriceAttribution !== null)
+                                        <p class="text-base font-semibold text-neutral-900">{{ $packagePriceRange }}</p>
+                                        <p class="text-xs text-[var(--mk-text-muted)]">
+                                            Sumber: {{ $packagePriceAttribution['source'] }}@if ($packagePriceAttribution['effective']) &middot; per {{ $packagePriceAttribution['effective'] }}@endif
+                                        </p>
+                                    @else
+                                        <p class="text-xs text-[var(--mk-text-muted)]">Harga paket ini belum tersedia.</p>
                                     @endif
                                 </div>
                                 <x-mk.badge :intent="$packageIntent['intent']" :icon="$packageIntent['icon']">

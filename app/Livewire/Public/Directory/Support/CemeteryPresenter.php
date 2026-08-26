@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Public\Directory\Support;
 
+use App\Domain\CemeteryCapability\Models\CemeteryPackage;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 
 /**
@@ -78,6 +79,57 @@ final class CemeteryPresenter
                 ? 'Sumber tidak tercatat'
                 : (string) $source,
             'effective' => $cemetery->price_effective_at?->format('d/m/Y'),
+        ];
+    }
+
+    /**
+     * The package/class-level counterpart to {@see self::priceRange()} —
+     * added 26 Aug 2026 to close a real gap: `Cemetery` only ever carried
+     * ONE aggregate range per cemetery, so the site could never show a price
+     * for one specific package/class (e.g. "Makam Tumpang Kelas A" vs
+     * "Kelas B"). Same formatting, same `null`-when-unset honesty, same
+     * `Rp`-symbol convention — deliberately NOT a firmer commitment than the
+     * cemetery-level figure, just resolved at finer granularity. See
+     * `CemeteryPackage`'s own doc block for why the underlying columns
+     * mirror `Cemetery`'s shape exactly rather than the `Money`/
+     * `price_versions` convention.
+     */
+    public static function packagePriceRange(CemeteryPackage $package): ?string
+    {
+        if ($package->price_min === null || $package->price_max === null) {
+            return null;
+        }
+
+        $currency = (string) ($package->price_currency ?? 'IDR');
+        $symbol = $currency === 'IDR' ? 'Rp' : $currency;
+
+        $min = number_format((float) $package->price_min, 0, ',', '.');
+        $max = number_format((float) $package->price_max, 0, ',', '.');
+
+        return "{$symbol} {$min} - {$symbol} {$max}";
+    }
+
+    /**
+     * The mandatory attribution for a package's price range — same shape
+     * and same "an unattributed figure must never look attributed" rule as
+     * {@see self::priceAttribution()}. `null` exactly when {@see
+     * self::packagePriceRange()} is `null`.
+     *
+     * @return array{source: string, effective: ?string}|null
+     */
+    public static function packagePriceAttribution(CemeteryPackage $package): ?array
+    {
+        if (self::packagePriceRange($package) === null) {
+            return null;
+        }
+
+        $source = $package->price_source;
+
+        return [
+            'source' => $source === null || $source === ''
+                ? 'Sumber tidak tercatat'
+                : (string) $source,
+            'effective' => $package->price_effective_at?->format('d/m/Y'),
         ];
     }
 
