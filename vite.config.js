@@ -11,13 +11,11 @@ export default defineConfig({
             input: [
                 'resources/css/app.css',
                 'resources/js/app.js',
-                // AdminPanelProvider::panel() -> ->viteTheme('resources/css/filament/admin/theme.css').
-                // Never built as a Vite entry, so `/admin` crashed on every
-                // request ("Unable to locate file in Vite manifest") — the
-                // theme file's own doc block flagged this exact gap as
-                // "not verified against an installed Filament 5" and it was
-                // never closed. Confirmed live on dev.makam.co.id (Vite.php:1042).
-                'resources/css/filament/admin/theme.css',
+                // resources/css/filament/admin/theme.css and its Vite entry
+                // (previously here) were removed 26 Aug 2026: admin/vendor
+                // Filament panels no longer carry any custom theme CSS —
+                // see AdminPanelProvider's doc block ("SEVENTH change") for
+                // the full record of that reversal.
             ],
             refresh: true,
         }),
