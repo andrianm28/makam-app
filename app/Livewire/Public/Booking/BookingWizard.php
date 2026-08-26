@@ -40,6 +40,7 @@ use App\Platform\Payment\PaymentProviders;
 use App\Platform\Payment\SessionState;
 use App\Platform\SiteSettings\Models\SiteSetting;
 use App\Platform\SiteSettings\SettingsService;
+use App\Support\BankTransferInfo;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -1090,6 +1091,15 @@ final class BookingWizard extends Component
             'onlinePaymentLinkUrl' => $onlinePaymentState['link_url'],
             'isSandboxPayment' => $isSandboxPayment,
             'showManualPayment' => $showManualPayment,
+            // Step 8's "Pembayaran Manual" fallback card: admin-configured
+            // via SiteSettingsResource (`App\Support\BankTransferInfo`'s own
+            // doc block) — null fields mean the operator has not entered a
+            // real destination yet, and the view must render an honest
+            // "belum dikonfigurasi" state rather than a fabricated one.
+            'bankTransferConfigured' => BankTransferInfo::isConfigured(),
+            'bankTransferBankName' => BankTransferInfo::bankName(),
+            'bankTransferAccountNumber' => BankTransferInfo::accountNumber(),
+            'bankTransferAccountHolder' => BankTransferInfo::accountHolder(),
         ])->layout('layouts.app', [
             'title' => 'Pemesanan Makam - Makam.co.id',
             'active' => null,

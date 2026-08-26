@@ -963,10 +963,35 @@
                             <div class="flex flex-col gap-2">
                                 <h3 class="text-base font-semibold text-neutral-900">Pembayaran Manual</h3>
                                 <p class="text-sm text-neutral-600">
-                                    Transfer ke rekening yang akan diinformasikan setelah Anda melanjutkan.
-                                    Mohon siapkan bukti transfer untuk verifikasi.
+                                    Transfer sejumlah total pesanan ke rekening tujuan di bawah ini, lalu masukkan
+                                    nomor referensi transfer Anda. Mohon siapkan bukti transfer untuk verifikasi.
                                 </p>
                             </div>
+
+                            {{-- Admin-configured via SiteSettingsResource
+                                 (`App\Support\BankTransferInfo`) — never a
+                                 fabricated placeholder. `$bankTransferConfigured`
+                                 is true only once bank name, account number,
+                                 AND account holder are all set; a partial
+                                 configuration falls into the honest "belum
+                                 dikonfigurasi" branch below rather than
+                                 showing an incomplete destination. --}}
+                            @if ($bankTransferConfigured)
+                                <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-lg bg-neutral-50 p-4 text-sm text-neutral-700">
+                                    <dt class="font-medium text-neutral-700">Bank</dt>
+                                    <dd>{{ $bankTransferBankName }}</dd>
+                                    <dt class="font-medium text-neutral-700">Nomor Rekening</dt>
+                                    <dd>{{ $bankTransferAccountNumber }}</dd>
+                                    <dt class="font-medium text-neutral-700">Atas Nama</dt>
+                                    <dd>{{ $bankTransferAccountHolder }}</dd>
+                                </dl>
+                            @else
+                                <x-mk.alert intent="pending" icon="clock" title="Rekening tujuan belum dikonfigurasi" live="off">
+                                    Rekening tujuan transfer belum tersedia di sistem. Hubungi admin melalui
+                                    kontak dukungan sebelum melakukan transfer, agar dana Anda terkirim ke
+                                    rekening yang benar.
+                                </x-mk.alert>
+                            @endif
 
                             <div class="flex max-w-form flex-col gap-1.5">
                                 <label for="payment-reference" class="text-base font-medium text-neutral-800">

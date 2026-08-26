@@ -48,6 +48,11 @@ final class SiteSettingsForm
                 TextInput::make('data.payment_merchant_ref')->label('Ref merchant pembayaran')->maxLength(120),
                 TextInput::make('data.payment_badan_usaha_ref')->label('Ref badan usaha pembayaran')->maxLength(120),
             ])->description('Identitas non-rahasia (FIN-DEC). Kredensial tetap di lingkungan (env).'),
+            Section::make('Rekening transfer manual')->schema([
+                TextInput::make('data.bank_transfer_bank_name')->label('Nama bank')->maxLength(120),
+                TextInput::make('data.bank_transfer_account_number')->label('Nomor rekening')->maxLength(60),
+                TextInput::make('data.bank_transfer_account_holder')->label('Nama pemilik rekening')->maxLength(191),
+            ])->description('Rekening tujuan yang ditampilkan pada kartu "Pembayaran Manual" di wizard pemesanan. Kosongkan salah satu untuk menyembunyikan seluruh rekening — jangan isi sebagian, karena pembayar tidak dapat menggunakan rekening yang tidak lengkap.'),
         ]);
     }
 }

@@ -41,6 +41,9 @@ final class EditSiteSettingsSmokeTest extends TestCase
         $component->assertFormFieldExists('data.company_address');
         $component->assertFormFieldExists('data.company_nib');
         $component->assertFormFieldExists('data.legal_review_note');
+        $component->assertFormFieldExists('data.bank_transfer_bank_name');
+        $component->assertFormFieldExists('data.bank_transfer_account_number');
+        $component->assertFormFieldExists('data.bank_transfer_account_holder');
 
         $component
             ->set('data.service_hours', 'Senin-Jumat 09.00-18.00')
@@ -48,6 +51,9 @@ final class EditSiteSettingsSmokeTest extends TestCase
             ->set('data.company_name', 'PT Makam Digital Nusantara')
             ->set('data.company_nib', '1234567890123')
             ->set('data.legal_review_note', 'Ditinjau 1 Sep 2026 oleh Firma Hukum Contoh')
+            ->set('data.bank_transfer_bank_name', 'Bank Makam Sejahtera')
+            ->set('data.bank_transfer_account_number', '1234567890')
+            ->set('data.bank_transfer_account_holder', 'PT Makam Digital Nusantara')
             ->call('save')
             ->assertNotified();
 
@@ -56,6 +62,9 @@ final class EditSiteSettingsSmokeTest extends TestCase
         $this->assertSame('PT Makam Digital Nusantara', SiteSetting::valueFor(SiteSetting::KEY_COMPANY_NAME));
         $this->assertSame('1234567890123', SiteSetting::valueFor(SiteSetting::KEY_COMPANY_NIB));
         $this->assertSame('Ditinjau 1 Sep 2026 oleh Firma Hukum Contoh', SiteSetting::valueFor(SiteSetting::KEY_LEGAL_REVIEW_NOTE));
+        $this->assertSame('Bank Makam Sejahtera', SiteSetting::valueFor(SiteSetting::KEY_BANK_TRANSFER_BANK_NAME));
+        $this->assertSame('1234567890', SiteSetting::valueFor(SiteSetting::KEY_BANK_TRANSFER_ACCOUNT_NUMBER));
+        $this->assertSame('PT Makam Digital Nusantara', SiteSetting::valueFor(SiteSetting::KEY_BANK_TRANSFER_ACCOUNT_HOLDER));
 
         $event = AuditEvent::query()->where('action', SiteSettingsAuditActions::UPDATED)->first();
         $this->assertNotNull($event);
