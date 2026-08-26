@@ -8,7 +8,7 @@ use InvalidArgumentException;
 
 /**
  * The closed list of `cemeteries.plot_tracking_mode` values —
- * `/home/ubuntu/.claude/plans/swirling-cooking-umbrella.md` §"Cemetery
+ * `docs/superpowers/plans/2026-08-26-cemetery-plot-tracking-mode.md` §"Cemetery
  * tracking-tier concept": a cemetery is permanently AGGREGATE (only
  * class-level `cemetery_packages.availability_status` capacity is
  * tracked) or GRANULAR (real per-plot inventory exists — `CemeteryBlock` +
