@@ -126,6 +126,34 @@ final class HomePageRouteTest extends TestCase
         $response->assertSee('href="/pemesanan-makam"', false);
     }
 
+    /**
+     * "Kehangatan Keluarga" supporting photo section (added 26 Aug 2026,
+     * see home-page.blade.php's own doc block for the full placement and
+     * sourcing reasoning) — proves the section renders on the real
+     * homepage with the real image, and proves the existing hero and other
+     * sections still render alongside it (nothing broken by the insertion).
+     */
+    public function test_family_warmth_section_renders_with_the_real_image_alongside_the_existing_hero(): void
+    {
+        $response = $this->get('/');
+
+        $response->assertOk();
+
+        // The new section: real copy and the real image path.
+        $response->assertSee('Didampingi dengan Hangat, Setiap Langkah');
+        $response->assertSee('src="'.asset('images/home/family-warmth.jpg').'"', false);
+
+        // The existing hero (Section 2) is untouched — same image, same CTA.
+        $response->assertSee('src="'.asset('images/hero/cemetery-garden-daylight.jpg').'"', false);
+        $response->assertSee('Pesan Makam');
+        $response->assertSee('href="/pemesanan-makam"', false);
+
+        // Sections around the insertion point still render: Trust (6) above
+        // it, FAQ highlights (7) below it.
+        $response->assertSee('Kenapa Makam.co.id');
+        $response->assertSee('Pertanyaan yang Sering Diajukan');
+    }
+
     public function test_customer_service_cta_is_present(): void
     {
         $response = $this->get('/');
