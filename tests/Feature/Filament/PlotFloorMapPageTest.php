@@ -6,13 +6,17 @@ namespace Tests\Feature\Filament;
 
 use App\Domain\CemeteryCapability\CemeteryPackageAvailabilityStatus;
 use App\Domain\CemeteryCapability\Models\CemeteryPackage;
+use App\Domain\CemeteryDirectory\Access\CurrentCemeteryScope;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\CemeteryDirectory\PlotTrackingMode;
 use App\Domain\PlotInventory\Actions\CreateCemeteryBlock;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Filament\Admin\Pages\PlotFloorMap as AdminPlotFloorMap;
+use App\Filament\Operator\Pages\PlotFloorMap as OperatorPlotFloorMap;
 use App\Models\User;
 use App\Platform\IdentityAccess\Roles\ActorRole;
+use App\Platform\IdentityAccess\Scopes\Models\ScopeAssignment;
+use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -264,6 +268,170 @@ final class PlotFloorMapPageTest extends TestCase
         $this->assertContains(
             AdminPlotFloorMap::class,
             Filament::getPanel('admin')->getPages(),
+        );
+    }
+
+    /**
+     * A real cemetery-operator: the `cemetery_operator` role grant that
+     * lets them through `CemeteryOperatorPanelAccessPolicy`, plus a real
+     * `scope_assignments` row per granted cemetery. No fabricated
+     * ActorContext — the whole chain is exercised.
+     *
+     * @param  list<string>  $cemeteryIds
+     */
+    private function actingAsCemeteryOperator(array $cemeteryIds): User
+    {
+        $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::CEMETERY_OPERATOR);
+
+        foreach ($cemeteryIds as $cemeteryId) {
+            ScopeAssignment::query()->create([
+                'actor_identifier' => (string) $user->id,
+                'entity_type' => ScopeEntityType::CEMETERY,
+                'entity_id' => $cemeteryId,
+            ]);
+        }
+
+        $this->actingAs($user);
+        $this->forgetResolvedActorContext();
+        $this->app->forgetScopedInstances();
+
+        return $user;
+    }
+
+    // -----------------------------------------------------------------
+    // The verification bar: /admin sees all, /operator sees only granted
+    // -----------------------------------------------------------------
+
+    public function test_an_operator_sees_only_the_cemetery_they_are_granted(): void
+    {
+        $setupActor = $this->admin();
+        $own = $this->granularCemeteryWithBlock($setupActor);
+        $other = $this->granularCemeteryWithBlock($setupActor);
+
+        $this->actingAsCemeteryOperator([(string) $own->getKey()]);
+
+        $options = (new OperatorPlotFloorMap)->cemeteryOptions();
+
+        $this->assertArrayHasKey((string) $own->getKey(), $options);
+        $this->assertArrayNotHasKey((string) $other->getKey(), $options);
+    }
+
+    public function test_the_admin_page_sees_both_cemeteries_the_operator_page_narrows(): void
+    {
+        $setupActor = $this->admin();
+        $own = $this->granularCemeteryWithBlock($setupActor);
+        $other = $this->granularCemeteryWithBlock($setupActor);
+
+        $adminOptions = (new AdminPlotFloorMap)->cemeteryOptions();
+        $this->assertArrayHasKey((string) $own->getKey(), $adminOptions);
+        $this->assertArrayHasKey((string) $other->getKey(), $adminOptions);
+
+        $this->actingAsCemeteryOperator([(string) $own->getKey()]);
+        $this->assertCount(1, (new OperatorPlotFloorMap)->cemeteryOptions());
+    }
+
+    /**
+     * The property is client-writable; the select's option list is a
+     * render fact, not a security property. Setting `cemeteryId` over the
+     * wire to a cemetery the operator holds no grant for must resolve to
+     * nothing — not to that cemetery's inventory.
+     */
+    public function test_an_operator_cannot_wire_their_way_into_an_ungranted_cemetery(): void
+    {
+        $setupActor = $this->admin();
+        $own = $this->granularCemeteryWithBlock($setupActor);
+        $other = Cemetery::factory()->create(['plot_tracking_mode' => PlotTrackingMode::GRANULAR]);
+        app(CreateCemeteryBlock::class)($other, 'BLOK-Z', 'Blok Z', 2, $setupActor->id, 'admin');
+
+        $operator = $this->actingAsCemeteryOperator([(string) $own->getKey()]);
+
+        Livewire::actingAs($operator)
+            ->test(OperatorPlotFloorMap::class)
+            ->set('cemeteryId', (string) $other->getKey())
+            ->assertOk()
+            ->assertSee('Pilih makam untuk melihat ketersediaan plot.')
+            ->assertDontSee('BLOK-Z');
+    }
+
+    public function test_an_operator_with_no_grant_cannot_access_the_operator_page(): void
+    {
+        $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::CEMETERY_OPERATOR);
+        $this->actingAs($user);
+        $this->app->forgetScopedInstances();
+
+        $this->assertFalse(app(CurrentCemeteryScope::class)->hasAnyGrant());
+        $this->assertFalse(OperatorPlotFloorMap::canAccess());
+    }
+
+    public function test_a_guest_cannot_access_the_operator_page(): void
+    {
+        $this->assertFalse(OperatorPlotFloorMap::canAccess());
+    }
+
+    public function test_the_operator_page_renders_the_granted_cemeterys_map(): void
+    {
+        $setupActor = $this->admin();
+        $own = $this->granularCemeteryWithBlock($setupActor);
+
+        $operator = $this->actingAsCemeteryOperator([(string) $own->getKey()]);
+
+        Livewire::actingAs($operator)
+            ->test(OperatorPlotFloorMap::class)
+            ->assertSet('cemeteryId', (string) $own->getKey())
+            ->assertSee('BLOK-A')
+            ->assertSee('001');
+    }
+
+    public function test_the_operator_page_renders_quota_cards_for_an_aggregate_cemetery(): void
+    {
+        $aggregate = $this->aggregateCemeteryWithPackage();
+
+        $operator = $this->actingAsCemeteryOperator([(string) $aggregate->getKey()]);
+
+        Livewire::actingAs($operator)
+            ->test(OperatorPlotFloorMap::class)
+            ->assertSee('Kuota per paket')
+            ->assertSee('Paket Utama')
+            ->assertSee('Terbatas');
+    }
+
+    /**
+     * The roadmap's stated invariant: the two subclasses differ in
+     * cemetery-options scoping and nothing else. A second overridden
+     * method is a second place scoping could drift, so the shape itself is
+     * asserted, not just its current behaviour.
+     */
+    public function test_the_two_subclasses_override_only_the_options_source_and_access_gate(): void
+    {
+        $allowed = ['cemeteryOptions', 'canAccess'];
+
+        foreach ([AdminPlotFloorMap::class, OperatorPlotFloorMap::class] as $subclass) {
+            $declared = array_map(
+                static fn (\ReflectionMethod $method): string => $method->getName(),
+                (new \ReflectionClass($subclass))->getMethods(),
+            );
+
+            $ownMethods = array_values(array_filter(
+                $declared,
+                static fn (string $name): bool => (new \ReflectionMethod($subclass, $name))
+                    ->getDeclaringClass()->getName() === $subclass,
+            ));
+
+            sort($ownMethods);
+            $expected = $allowed;
+            sort($expected);
+
+            $this->assertSame($expected, $ownMethods, "{$subclass} declares an unexpected method.");
+        }
+    }
+
+    public function test_the_page_is_registered_on_the_operator_panel(): void
+    {
+        $this->assertContains(
+            OperatorPlotFloorMap::class,
+            Filament::getPanel('operator')->getPages(),
         );
     }
 }

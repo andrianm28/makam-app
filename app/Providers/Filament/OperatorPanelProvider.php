@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Providers\Filament;
 
 use App\Filament\Operator\Pages\Dashboard;
+use App\Filament\Operator\Pages\PlotFloorMap;
 use App\Http\Middleware\AssignCorrelationId;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -39,9 +40,11 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
  * there is no later reversal to make. Stock Filament colour scheme, stock
  * font stack, `->brandName()` only for functional identification.
  *
- * Ships only a placeholder Dashboard page and no discoverable Resources —
- * later phases (C: orders dashboard, D: plot availability) add real
- * Resources/Pages here.
+ * Ships the placeholder Dashboard plus, from Phase D (28 Aug 2026), the
+ * cemetery-scoped `PlotFloorMap` page. No Resources yet — Phase C's
+ * `CemeteryOrderResource` is the first. Pages are listed explicitly rather
+ * than discovered, for the same unconfirmed-discovery-behaviour reason
+ * `AdminPanelProvider`'s doc block records.
  */
 final class OperatorPanelProvider extends PanelProvider
 {
@@ -54,6 +57,7 @@ final class OperatorPanelProvider extends PanelProvider
             ->brandName('Makam Operator')
             ->pages([
                 Dashboard::class,
+                PlotFloorMap::class,
             ])
             ->widgets([
                 Widgets\AccountWidget::class,
