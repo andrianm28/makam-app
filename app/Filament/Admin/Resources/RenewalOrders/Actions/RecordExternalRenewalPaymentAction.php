@@ -57,7 +57,7 @@ final class RecordExternalRenewalPaymentAction
                     ->rows(2)
                     ->required(),
             ])
-            ->authorize(fn (): bool => self::authorized())
+            ->authorize(fn (): bool => self::authorized($renewal))
             ->visible(fn (Renewal $record): bool => $record->status === RenewalStatus::MENUNGGU_PEMBAYARAN)
             ->action(function (array $data) use ($renewal): void {
                 $actor = app(ActorContext::class);
@@ -65,7 +65,11 @@ final class RecordExternalRenewalPaymentAction
                 $actorRole = RenewalOrderResource::auditRoleFor($actor);
 
                 try {
-                    app(OrderTransitionAuthorizerContract::class)->authorizeTransition($actor, self::TRANSITION);
+                    app(OrderTransitionAuthorizerContract::class)->authorizeTransition(
+                        $actor,
+                        self::TRANSITION,
+                        $renewal->graveRecord?->cemetery_id,
+                    );
                     app(ReauthenticationGuard::class)->assertFresh($actor);
                 } catch (ReauthenticationRequiredException) {
                     Notification::make()
@@ -100,10 +104,14 @@ final class RecordExternalRenewalPaymentAction
             });
     }
 
-    private static function authorized(): bool
+    private static function authorized(Renewal $renewal): bool
     {
         try {
-            app(OrderTransitionAuthorizerContract::class)->authorizeTransition(app(ActorContext::class), self::TRANSITION);
+            app(OrderTransitionAuthorizerContract::class)->authorizeTransition(
+                app(ActorContext::class),
+                self::TRANSITION,
+                $renewal->graveRecord?->cemetery_id,
+            );
 
             return true;
         } catch (\Throwable) {
