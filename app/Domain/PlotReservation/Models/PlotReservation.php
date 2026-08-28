@@ -166,17 +166,30 @@ final class PlotReservation extends Model
      */
     public static function activeForOrder(Order $order): ?self
     {
-        $latest = self::query()
-            ->where('order_id', $order->getKey())
-            ->orderByDesc('created_at')
-            ->orderByDesc('id')
-            ->first();
+        return self::incumbentOf(
+            self::query()
+                ->where('order_id', $order->getKey())
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->first()
+        );
+    }
 
-        if ($latest === null || ! in_array($latest->state, [PlotReservationState::HELD, PlotReservationState::CONFIRMED], true)) {
+    /**
+     * The incumbency rule of `activeForOrder()`, applied to a head row the
+     * caller already has. A table listing eager-loads whole chains through
+     * `Order::plotReservations()` (ordered newest-first) and calls this on
+     * `->first()`, which is the same head row `activeForOrder()` would
+     * select — one query for the page instead of one per row, with the
+     * rule itself not duplicated.
+     */
+    public static function incumbentOf(?self $head): ?self
+    {
+        if ($head === null || ! in_array($head->state, PlotReservationState::ACTIVE_STATES, true)) {
             return null;
         }
 
-        return $latest;
+        return $head;
     }
 
     /**
@@ -197,7 +210,7 @@ final class PlotReservation extends Model
             ->orderByDesc('id')
             ->first();
 
-        if ($latest === null || ! in_array($latest->state, [PlotReservationState::HELD, PlotReservationState::CONFIRMED], true)) {
+        if ($latest === null || ! in_array($latest->state, PlotReservationState::ACTIVE_STATES, true)) {
             return null;
         }
 

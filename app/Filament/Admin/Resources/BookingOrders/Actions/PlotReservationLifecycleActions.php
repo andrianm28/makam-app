@@ -64,7 +64,7 @@ final class PlotReservationLifecycleActions
             ->modalHeading('Lepaskan reservasi plot')
             ->modalDescription('Plot akan kembali tersedia.')
             ->visible(
-                fn (): bool => in_array($reservation->state, [PlotReservationState::HELD, PlotReservationState::CONFIRMED], true)
+                fn (): bool => in_array($reservation->state, PlotReservationState::ACTIVE_STATES, true)
             )
             ->authorize(fn (): bool => self::roleAllowed())
             ->action(fn () => self::run($order, $reservation, 'release_plot_reservation', 'Reservasi dilepas.'));
