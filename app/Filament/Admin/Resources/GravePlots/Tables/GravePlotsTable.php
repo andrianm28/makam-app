@@ -19,6 +19,7 @@ use App\Platform\IdentityAccess\MasterData\Contracts\MasterDataAdminAuthorizerCo
 use App\Platform\IdentityAccess\MasterData\Exceptions\MasterDataNotAuthorisedException;
 use App\Platform\IdentityAccess\Reauthentication\Exceptions\ReauthenticationRequiredException;
 use App\Platform\IdentityAccess\Reauthentication\ReauthenticationGuard;
+use App\Support\Design\StatusIntent;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
@@ -207,26 +208,37 @@ final class GravePlotsTable
             ]);
     }
 
+    /**
+     * design-system.md §3.7 is normative and §9.2 MUST #5 is enforceable:
+     * "Components must not switch on enum strings. Resolve status → intent
+     * in ONE place." The local `match ($state)` that used to live here was
+     * that forbidden switch; the mapping now lives in
+     * `StatusIntent::FAMILY_PLOT_STATE`, which the Phase D floor map reads
+     * too, so the two surfaces cannot drift into two colour schemes for
+     * the same four states.
+     *
+     * The rendered output is UNCHANGED: success / warning / danger / info,
+     * exactly as this table has shipped since 16 Aug 2026 — locked by
+     * `StatusIntentTest::test_grave_plots_table_colours_and_labels_are_
+     * unchanged_by_the_centralisation()`.
+     */
     public static function stateColor(string $state): string
     {
-        return match ($state) {
-            PlotState::AVAILABLE => 'success',
-            PlotState::RESERVED => 'warning',
-            PlotState::OCCUPIED => 'danger',
-            PlotState::MAINTENANCE => 'info',
-            default => 'gray',
-        };
+        return StatusIntent::filamentColor($state, StatusIntent::FAMILY_PLOT_STATE);
     }
 
+    /**
+     * Same centralisation as `stateColor()`. One behavioural difference
+     * from the removed `match`: an UNKNOWN state used to return the raw
+     * value verbatim and now returns its humanisation, plus a logged
+     * warning. Unreachable in practice — `GravePlot::booted()` asserts
+     * `PlotState::assertKnown()` on every save, so no row can carry an
+     * unmapped state — and the logged warning is strictly more useful
+     * than silently rendering a raw enum to an operator.
+     */
     public static function stateLabel(string $state): string
     {
-        return match ($state) {
-            PlotState::AVAILABLE => 'Tersedia',
-            PlotState::RESERVED => 'Dipesan',
-            PlotState::OCCUPIED => 'Terisi',
-            PlotState::MAINTENANCE => 'Perawatan',
-            default => $state,
-        };
+        return StatusIntent::label($state, StatusIntent::FAMILY_PLOT_STATE);
     }
 
     private static function actorMayManage(): bool

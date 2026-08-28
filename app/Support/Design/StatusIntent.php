@@ -81,8 +81,16 @@ use Illuminate\Support\Facades\Log;
  * new entry in `MAP` below, sourced from a design-system.md update (a new
  * §3.7 table), not invented in this file.
  *
- * `plot-inventory-and-reservation`'s design.md does not define a status
- * enum in its current form (only table ownership) — nothing to map yet.
+ * UPDATED 28 Aug 2026 (Phase D, plot availability dashboard): the
+ * paragraph that previously stood here said `plot-inventory-and-
+ * reservation` "does not define a status enum ... nothing to map yet".
+ * That stopped being true when `App\Domain\PlotInventory\PlotState`
+ * shipped (16 Aug 2026). Both it and
+ * `App\Domain\CemeteryCapability\CemeteryPackageAvailabilityStatus` are
+ * now mapped below as `FAMILY_PLOT_STATE` and
+ * `FAMILY_CEMETERY_PACKAGE_AVAILABILITY`, sourced — as the "Extending to
+ * another domain" rule above requires — from two new design-system.md
+ * §3.7 tables added in the same change, not invented in this file.
  *
  * `order-lifecycle.md` §5 also defines a THIRD, separate Pre-Need family
  * (`INTEREST_REGISTERED -> CONTACTED -> CLOSED`) that does not match
@@ -109,6 +117,25 @@ final class StatusIntent
     public const FAMILY_CARE_COMPLAINT = 'care_complaint';
 
     public const FAMILY_CARE_MAKE_GOOD = 'care_make_good';
+
+    /**
+     * `App\Domain\PlotInventory\PlotState` — design-system.md §3.7 "Plot
+     * state". Keys are the LOWERCASE stored values of that class, not its
+     * constant names: `grave_plots.plot_state` holds 'available', never
+     * 'AVAILABLE', and a map keyed on the constant name would silently
+     * resolve every real row to the neutral fallback.
+     */
+    public const FAMILY_PLOT_STATE = 'plot_state';
+
+    /**
+     * `App\Domain\CemeteryCapability\CemeteryPackageAvailabilityStatus` —
+     * design-system.md §3.7 "Cemetery package availability". Deliberately a
+     * SEPARATE family from plot state: they answer two different questions
+     * at two different granularities (one class-level indicative claim vs.
+     * one plot's operational truth) and an aggregate-tier cemetery has no
+     * plot states at all.
+     */
+    public const FAMILY_CEMETERY_PACKAGE_AVAILABILITY = 'cemetery_package_availability';
 
     public const INTENT_NEUTRAL = 'neutral';
 
@@ -158,7 +185,7 @@ final class StatusIntent
      * design system defines on top of them, not a restatement of the state
      * machine itself.
      *
-     * @var array<string, array<string, array{intent: string, icon: string}>>
+     * @var array<string, array<string, array{intent: string, icon: string, label?: string}>>
      */
     private const MAP = [
         self::FAMILY_ORDER_LIFECYCLE => [
@@ -253,6 +280,31 @@ final class StatusIntent
             'IN_PROGRESS' => ['intent' => self::INTENT_INFO, 'icon' => 'cog'],
             'COMPLETED' => ['intent' => self::INTENT_SUCCESS, 'icon' => 'check-badge'],
         ],
+        // Plot state — design-system.md §3.7 "Plot state" (Phase D of the
+        // TPU/TPS operator dashboard roadmap). The intents are chosen so
+        // the Filament bridge reproduces `GravePlotsTable`'s ALREADY
+        // SHIPPED colours byte for byte (success / warning / danger /
+        // info): centralising a mapping must not repaint a live page.
+        // `occupied` carries the `slash` icon for the same reason
+        // `DIBATALKAN` does — terminal and factual, not an error — even
+        // though its colour is `danger`, which reads "not bookable".
+        self::FAMILY_PLOT_STATE => [
+            'available' => ['intent' => self::INTENT_SUCCESS, 'icon' => 'check-circle', 'label' => 'Tersedia'],
+            'reserved' => ['intent' => self::INTENT_PENDING, 'icon' => 'clock', 'label' => 'Dipesan'],
+            'occupied' => ['intent' => self::INTENT_DANGER, 'icon' => 'slash', 'label' => 'Terisi'],
+            'maintenance' => ['intent' => self::INTENT_INFO, 'icon' => 'cog', 'label' => 'Perawatan'],
+        ],
+        // Cemetery package availability — design-system.md §3.7. Every
+        // value here is INDICATIVE by construction (see that enum's own
+        // doc block: the owning cemetery's `availability_mode` is the only
+        // thing that could ever make an availability claim a guarantee,
+        // and it never is under the safe default), so `AVAILABLE` renders
+        // `success` as "currently open for enquiry", never as a promise.
+        self::FAMILY_CEMETERY_PACKAGE_AVAILABILITY => [
+            'AVAILABLE' => ['intent' => self::INTENT_SUCCESS, 'icon' => 'check-circle', 'label' => 'Tersedia'],
+            'LIMITED' => ['intent' => self::INTENT_PENDING, 'icon' => 'alert-circle', 'label' => 'Terbatas'],
+            'UNAVAILABLE' => ['intent' => self::INTENT_DANGER, 'icon' => 'slash', 'label' => 'Penuh'],
+        ],
     ];
 
     /**
@@ -301,25 +353,34 @@ final class StatusIntent
     /**
      * Blade-facing resolver: `StatusIntent::label($status)`.
      *
-     * Deliberately NOT a hand-maintained per-status copy table: the order
-     * lifecycle and vendor processing enums are already Indonesian domain
-     * terms (MASUK, DIBAYAR, SELESAI, ...), so a structural humanisation —
-     * underscores to spaces, title case — produces a readable Indonesian
-     * label without inventing new product copy this batch has no authority
-     * to write. This also satisfies §3.6's "never abbreviate the canonical
-     * status enum in the badge label": the full enum is always present,
-     * just formatted for reading.
+     * Two-tier by design. A family MAY declare an explicit `label` per
+     * status; when it does, that label wins. When it does not, the status
+     * falls back to a structural humanisation — underscores to spaces,
+     * title case.
      *
-     * Known rough edge: `DIKIRIM_OR_DIJADWALKAN` humanises to "Dikirim Or
-     * Dijadwalkan" — the embedded English "OR" reads awkwardly next to
-     * Indonesian words. Rewriting it to "Dikirim atau Dijadwalkan" would be
-     * inventing copy (deciding "OR" means "atau" here is a product-content
-     * call, not a formatting one), so it is left as the honest structural
-     * transform of the canonical enum rather than silently improved.
+     * The fallback is right for the order-lifecycle, vendor-processing,
+     * marketplace-payment and care families: their enums are already
+     * Indonesian domain terms (MASUK, DIBAYAR, SELESAI, ...), so
+     * humanising them produces readable Indonesian without inventing
+     * product copy, and §3.6's "never abbreviate the canonical status enum
+     * in the badge label" is satisfied because the full enum is always
+     * present, just formatted for reading.
+     *
+     * The explicit tier exists because that argument does NOT hold for the
+     * two families added with Phase D: `PlotState` and
+     * `CemeteryPackageAvailabilityStatus` store ENGLISH values
+     * ('available', 'LIMITED'), so humanising them would put English on an
+     * Indonesian page. Their labels are not invented here either — they
+     * are the copy `GravePlotsTable` has shipped since 16 Aug 2026 and the
+     * copy design-system.md §3.7 now records normatively.
+     *
+     * Known rough edge (unchanged): `DIKIRIM_OR_DIJADWALKAN` humanises to
+     * "Dikirim Or Dijadwalkan". Rewriting it to "atau" would be inventing
+     * copy, so it is left as the honest structural transform.
      */
     public static function label(string $status, ?string $family = null): string
     {
-        return self::humanize($status);
+        return self::resolve($status, $family)['label'] ?? self::humanize($status);
     }
 
     /**
@@ -360,7 +421,7 @@ final class StatusIntent
     }
 
     /**
-     * @return array{intent: string, icon: string}
+     * @return array{intent: string, icon: string, label?: string}
      */
     private static function resolve(string $status, ?string $family): array
     {
@@ -392,7 +453,13 @@ final class StatusIntent
         $first = reset($matches);
         $allAgree = true;
         foreach ($matches as $entry) {
-            if ($entry['intent'] !== $first['intent'] || $entry['icon'] !== $first['icon']) {
+            // Label participates: two families that agree on intent and
+            // icon but disagree on the rendered words are still a genuine
+            // collision — the badge a user reads would differ by which
+            // family happened to be checked first.
+            if ($entry['intent'] !== $first['intent']
+                || $entry['icon'] !== $first['icon']
+                || ($entry['label'] ?? null) !== ($first['label'] ?? null)) {
                 $allAgree = false;
                 break;
             }

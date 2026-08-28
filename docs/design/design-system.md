@@ -730,6 +730,29 @@ Components must **not** switch on enum strings. Resolve status → intent in one
 | `GAGAL` | `danger` | x-circle |
 | `DIKEMBALIKAN` | `neutral` | clock-x |
 
+**Plot state** (`PlotState`, added 28 Aug 2026 with the plot availability dashboard)
+
+Status values are the lowercase stored values of `app/Domain/PlotInventory/PlotState.php` — `grave_plots.plot_state` never holds an uppercase value.
+
+| Status | Intent | Icon | Label | Rationale |
+|---|---|---|---|---|
+| `available` | `success` | check-circle | Tersedia | Reservable now |
+| `reserved` | `pending` | clock | Dipesan | Claimed by an active reservation, not yet a burial |
+| `occupied` | `danger` | slash | Terisi | A burial has taken place. `danger` reads "not bookable", the `slash` icon reads "terminal and factual, not an error" |
+| `maintenance` | `info` | cog | Perawatan | Operator-declared unavailable, work underway |
+
+**Cemetery package availability** (`CemeteryPackageAvailabilityStatus`, added 28 Aug 2026 with the plot availability dashboard)
+
+| Status | Intent | Icon | Label | Rationale |
+|---|---|---|---|---|
+| `AVAILABLE` | `success` | check-circle | Tersedia | Open for enquiry |
+| `LIMITED` | `pending` | alert-circle | Terbatas | Capacity constrained |
+| `UNAVAILABLE` | `danger` | slash | Penuh | No capacity at this class |
+
+> **Every value in the cemetery-package table is indicative, never a guarantee.** The owning cemetery's `cemetery_capability_profiles.availability_mode` is the single source of truth for whether any availability claim is a guarantee, and it never is under the safe `INDICATIVE` default (see `CemeteryPackageAvailabilityStatus`'s own doc block). `Tersedia` therefore means "open for enquiry", never "reserved for you".
+
+> **Plot state and package availability are two granularities, not two spellings of one thing.** A granular-tier cemetery answers availability from `grave_plots.plot_state`; an aggregate-tier cemetery answers it from `cemetery_packages.availability_status`. They are separate `StatusIntent` families and must never be merged.
+
 > `PaymentState` and `VendorProcessingStatus` are deliberately separate vocabularies. A paid order is never a completed one, and the two always render as two distinct indicators (PUB-024), never one merged "done" badge.
 
 > **`DIBAYAR` ≠ `SELESAI`.** `marketplace-catalog.md` and `AGENTS.md` both require this: "Paid does not mean completed." Payment and fulfilment are separate states and must be shown as two distinct indicators, never merged into one "done" badge.
