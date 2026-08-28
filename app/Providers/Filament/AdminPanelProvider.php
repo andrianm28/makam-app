@@ -7,6 +7,7 @@ namespace App\Providers\Filament;
 use App\Filament\Admin\Pages\FeatureGateAdmin;
 use App\Filament\Admin\Pages\InAppNotifications;
 use App\Filament\Admin\Pages\PasswordReauthentication;
+use App\Filament\Admin\Pages\PlotFloorMap;
 use App\Filament\Admin\Pages\Reports;
 use App\Filament\Admin\Widgets\FailedPaymentExceptionQueueWidget;
 use App\Filament\Admin\Widgets\FinancialOverviewWidget;
@@ -233,6 +234,7 @@ class AdminPanelProvider extends PanelProvider
                 Reports::class,
                 PasswordReauthentication::class,
                 InAppNotifications::class,
+                PlotFloorMap::class,
             ])
             ->widgets([
                 Widgets\AccountWidget::class,
