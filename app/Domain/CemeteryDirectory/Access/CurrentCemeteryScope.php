@@ -47,6 +47,13 @@ final class CurrentCemeteryScope
         return $this->scopes->grantedEntityIds($actorIdentifier, ScopeEntityType::CEMETERY);
     }
 
+    /**
+     * No production call site today — only
+     * `OperatorPanelScopingTest` calls this. Kept because it mirrors
+     * `CurrentVendorScope::hasAnyGrant()`'s identical shape exactly, which is
+     * a real argument for the mirror staying exact; this is a conscious
+     * decision to carry speculative API, not an inherited oversight.
+     */
     public function hasAnyGrant(): bool
     {
         return $this->grantedCemeteryIds() !== [];
@@ -81,7 +88,12 @@ final class CurrentCemeteryScope
 
     /**
      * Granted cemeteries as `id => name`, for a future create form's
-     * cemetery picker.
+     * cemetery picker — mirrors `CurrentVendorScope::grantedVendorOptions()`,
+     * which IS wired into `VendorPicker` today. This one has no production
+     * consumer yet: Phase C's `/operator` create form is where it is meant
+     * to be used, and until that form lands it is speculative API kept
+     * deliberately, for the same "exact mirror" reasoning as `hasAnyGrant()`
+     * above, not test-only by accident.
      *
      * @return array<string, string>
      */

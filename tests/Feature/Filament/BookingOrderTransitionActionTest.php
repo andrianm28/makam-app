@@ -7,6 +7,7 @@ namespace Tests\Feature\Filament;
 use App\Domain\Booking\Models\BookingDraft;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\OrderWorkflow\Models\Order;
+use App\Domain\OrderWorkflow\Models\OrderStatusEvent;
 use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\OrderWorkflow\ProductType;
 use App\Filament\Admin\Resources\BookingOrders\Actions\TransitionOrderAction;
@@ -125,5 +126,18 @@ final class BookingOrderTransitionActionTest extends TestCase
         $action->call();
 
         $this->assertSame(OrderStatus::DIVERIFIKASI, $order->fresh()->status());
+
+        // Known-wrong, Phase-C-deferred behaviour (final review, Important
+        // #2): `BookingOrderResource::auditRoleFor()` does not recognise
+        // `cemetery_operator`, so this transition's audit trail misattributes
+        // the actor to the generic 'authenticated_actor' fallback instead of
+        // the real role. This assertion pins that CURRENT value on purpose —
+        // it must start FAILING the moment Phase C teaches `auditRoleFor()`
+        // about `cemetery_operator`, which is the intended tripwire.
+        $event = OrderStatusEvent::query()
+            ->where('order_id', $order->getKey())
+            ->where('to_status', OrderStatus::DIVERIFIKASI->value)
+            ->sole();
+        $this->assertSame('authenticated_actor', $event->actor_role);
     }
 }

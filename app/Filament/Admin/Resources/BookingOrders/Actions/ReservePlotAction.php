@@ -123,10 +123,13 @@ final class ReservePlotAction
     }
 
     /**
-     * The actor gate — operator/restricted_admin/admin admitted, everyone
-     * else (finance, vendor, guests, bare users) denied. Composes the
-     * resource's own access response first: the action can never authorize
-     * an actor the resource page itself would not admit.
+     * The actor gate — admits exactly `self::ALLOWED_ROLES` (operator/
+     * restricted_admin/admin/cemetery_operator; see that constant's doc
+     * block for the cemetery_operator addition and its current
+     * incompleteness), everyone else (finance, vendor, guests, bare users)
+     * denied. Composes the resource's own access response first: the action
+     * can never authorize an actor the resource page itself would not
+     * admit.
      */
     private static function roleAllowed(): bool
     {

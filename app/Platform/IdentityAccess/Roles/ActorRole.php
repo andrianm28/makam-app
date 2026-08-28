@@ -87,6 +87,13 @@ final class ActorRole
      * (the `/operator` panel's access check) and
      * `OrderWorkflow\Authorization\OrderTransitionAuthorizer`'s
      * cemetery-scoped branch.
+     *
+     * Shares its literal value, `'cemetery_operator'`, with
+     * `App\Platform\Notification\RecipientRole::CEMETERY_OPERATOR` — a
+     * DIFFERENT vocabulary. That constant means "holds a cemetery scope
+     * grant, whatever their `ActorRole`" (resolved via `actorsForEntity()`,
+     * not role assignment); this one means "holds this specific role
+     * assignment." Do not conflate the two just because the string matches.
      */
     public const string CEMETERY_OPERATOR = 'cemetery_operator';
 

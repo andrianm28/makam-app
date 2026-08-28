@@ -58,13 +58,15 @@ final class UserCanAccessPanelTest extends TestCase
 
     public function test_unknown_panel_id_resolves_closed(): void
     {
-        // Neither `/vendor` nor an operator panel exists in this codebase
-        // yet — this asserts the default-closed behaviour rather than an
-        // implicit allow for a panel id nobody declared a policy for.
+        // `admin`, `vendor`, and `operator` are all real `match` arms in
+        // `User::canAccessPanel()` now — this exercises the `default =>
+        // false` arm with a panel id nobody declared a policy for, so it
+        // actually reaches the fallback instead of coincidentally passing
+        // via a real policy's own denial.
         $user = User::factory()->create();
 
         $panel = Mockery::mock(Panel::class);
-        $panel->shouldReceive('getId')->andReturn('vendor');
+        $panel->shouldReceive('getId')->andReturn('nonexistent');
 
         $this->assertFalse($user->canAccessPanel($panel));
     }
