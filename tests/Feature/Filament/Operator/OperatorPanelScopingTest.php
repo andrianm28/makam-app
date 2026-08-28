@@ -9,7 +9,6 @@ use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Filament\Operator\Concerns\ScopesToCurrentCemetery;
 use App\Models\User;
-use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\Scopes\Models\ScopeAssignment;
 use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use Illuminate\Foundation\Testing\RefreshDatabase;
