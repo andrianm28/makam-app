@@ -141,8 +141,8 @@ final class StatusIntent
      * `App\Domain\PlotReservation\PlotReservationState` — design-system.md
      * §3.7 "Plot reservation state" (final-review finding I-2, fixed 29 Aug
      * 2026). Keys are the LOWERCASE stored values of that class
-     * (`held`/`confirmed`/`released`/`expired`), matching the same
-     * lowercase-stored-value convention `FAMILY_PLOT_STATE` uses. A
+     * (`held`/`confirmed`/`released`/`expired`/`converted`), matching the
+     * same lowercase-stored-value convention `FAMILY_PLOT_STATE` uses. A
      * separate family from `FAMILY_PLOT_STATE`: a reservation's lifecycle
      * and a plot's operational state are two different questions, and the
      * two vocabularies do not share a single value.
@@ -320,14 +320,19 @@ final class StatusIntent
         // Plot reservation state — design-system.md §3.7 "Plot reservation
         // state" (final-review finding I-2, fixed 29 Aug 2026). `held` and
         // `confirmed` are the ACTIVE states of an append-only chain;
-        // `released` and `expired` are terminal and factual, not errors —
-        // the same reasoning `DIBATALKAN`/`occupied` already use, hence
-        // `neutral` rather than `danger`.
+        // `released`, `expired` and `converted` are terminal and factual,
+        // not errors — the same reasoning `DIBATALKAN`/`occupied` already
+        // use, hence `neutral` rather than `danger`. `converted` is where
+        // a draft hold's own chain closes when its plot claim moves to a
+        // new order-anchored reservation (`PlotReservationState::CONVERTED`
+        // doc block) — not a customer-facing outcome, so it reuses
+        // `released`'s `slash` icon for the same "closed/done" meaning.
         self::FAMILY_PLOT_RESERVATION => [
             'held' => ['intent' => self::INTENT_PENDING, 'icon' => 'clock', 'label' => 'Ditahan'],
             'confirmed' => ['intent' => self::INTENT_SUCCESS, 'icon' => 'check-circle', 'label' => 'Dikonfirmasi'],
             'released' => ['intent' => self::INTENT_NEUTRAL, 'icon' => 'slash', 'label' => 'Dilepaskan'],
             'expired' => ['intent' => self::INTENT_NEUTRAL, 'icon' => 'clock-x', 'label' => 'Kedaluwarsa'],
+            'converted' => ['intent' => self::INTENT_NEUTRAL, 'icon' => 'slash', 'label' => 'Dikonversi'],
         ],
     ];
 
