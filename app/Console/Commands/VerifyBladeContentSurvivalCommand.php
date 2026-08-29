@@ -157,8 +157,19 @@ class VerifyBladeContentSurvivalCommand extends Command
         preg_match_all('/>([^<>{}@]{12,})</s', $body, $textMatches);
         $copyAnchors = [];
         foreach ($textMatches[1] as $t) {
+            // The multi-line check MUST run before trim(): a match that only
+            // spans a line break because it captured trailing whitespace up
+            // to the next tag (e.g. an arrow operator's `>` resetting the
+            // anchor start mid-directive, such as `->plots as $plot)` before
+            // a tag on the next line) has its only "\n" trimmed away first,
+            // silently defeating this exclusion — confirmed against a real
+            // false positive on `plot-floor-map/granular.blade.php`.
+            if (str_contains($t, "\n")) {
+                continue;
+            }
+
             $t = trim($t);
-            if ($t !== '' && ! str_contains($t, "\n")) {
+            if ($t !== '') {
                 $copyAnchors[$t] = true;
             }
         }
