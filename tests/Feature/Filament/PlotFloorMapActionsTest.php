@@ -15,6 +15,8 @@ use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotInventory\PlotInventoryAuditActions;
 use App\Domain\PlotInventory\PlotState;
+use App\Domain\PlotReservation\Actions\ConfirmPlotReservation;
+use App\Domain\PlotReservation\Actions\ReservePlot;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PlotReservation\PlotReservationState;
 use App\Filament\Admin\Pages\PlotFloorMap as AdminPlotFloorMap;
@@ -433,5 +435,177 @@ final class PlotFloorMapActionsTest extends TestCase
 
         $this->assertSame(PlotState::OCCUPIED, $plot->fresh()?->plot_state);
         $this->assertSame(0, PlotReservation::query()->count());
+    }
+
+    // -----------------------------------------------------------------
+    // Reservation lifecycle on a reserved cell
+    // -----------------------------------------------------------------
+
+    /**
+     * @return array{0: Cemetery, 1: GravePlot, 2: Order}
+     */
+    private function reservedPlot(User $admin): array
+    {
+        [$cemetery, $block] = $this->granularCemetery($admin);
+        $plot = $this->firstPlot($block);
+        $order = $this->orderForCemetery($cemetery);
+
+        app(ReservePlot::class)(
+            $plot,
+            $order,
+            (string) $admin->id,
+            'admin',
+        );
+
+        return [$cemetery, $plot->fresh(), $order];
+    }
+
+    public function test_a_held_reservation_can_be_confirmed_from_the_map(): void
+    {
+        $admin = $this->freshAdmin();
+        [$cemetery, $plot, $order] = $this->reservedPlot($admin);
+
+        Livewire::actingAs($admin)
+            ->test(AdminPlotFloorMap::class)
+            ->set('cemeteryId', (string) $cemetery->getKey())
+            ->call('openPlot', (string) $plot->getKey())
+            ->assertSee('Konfirmasi Reservasi')
+            ->call('runReservationAction', 'confirm')
+            ->assertOk();
+
+        $this->assertSame(
+            PlotReservationState::CONFIRMED,
+            PlotReservation::activeForPlot($plot)?->state,
+        );
+        $this->assertSame(
+            PlotState::RESERVED,
+            $plot->fresh()?->plot_state,
+            'Confirming does not free the plot — a confirmed reservation is still the claim.',
+        );
+    }
+
+    public function test_a_held_reservation_can_be_released_and_the_plot_returns_to_available(): void
+    {
+        $admin = $this->freshAdmin();
+        [$cemetery, $plot] = $this->reservedPlot($admin);
+
+        Livewire::actingAs($admin)
+            ->test(AdminPlotFloorMap::class)
+            ->set('cemeteryId', (string) $cemetery->getKey())
+            ->call('openPlot', (string) $plot->getKey())
+            ->call('runReservationAction', 'release')
+            ->assertOk();
+
+        $this->assertNull(PlotReservation::activeForPlot($plot));
+        $this->assertSame(PlotState::AVAILABLE, $plot->fresh()?->plot_state);
+    }
+
+    public function test_a_held_reservation_can_be_expired(): void
+    {
+        $admin = $this->freshAdmin();
+        [$cemetery, $plot] = $this->reservedPlot($admin);
+
+        Livewire::actingAs($admin)
+            ->test(AdminPlotFloorMap::class)
+            ->set('cemeteryId', (string) $cemetery->getKey())
+            ->call('openPlot', (string) $plot->getKey())
+            ->call('runReservationAction', 'expire')
+            ->assertOk();
+
+        $this->assertNull(PlotReservation::activeForPlot($plot));
+        $this->assertSame(PlotState::AVAILABLE, $plot->fresh()?->plot_state);
+    }
+
+    public function test_expire_is_not_offered_once_a_reservation_is_confirmed(): void
+    {
+        $admin = $this->freshAdmin();
+        [$cemetery, $plot] = $this->reservedPlot($admin);
+
+        app(ConfirmPlotReservation::class)(
+            PlotReservation::activeForPlot($plot),
+            (string) $admin->id,
+            'admin',
+        );
+
+        $component = Livewire::actingAs($admin)
+            ->test(AdminPlotFloorMap::class)
+            ->set('cemeteryId', (string) $cemetery->getKey())
+            ->call('openPlot', (string) $plot->getKey());
+
+        $component->assertSee('Lepaskan Reservasi')
+            ->assertDontSee('Kedaluwarsakan Reservasi')
+            ->assertDontSee('Konfirmasi Reservasi');
+
+        // And the wire call is refused too, not just hidden.
+        $component->call('runReservationAction', 'expire');
+
+        $this->assertSame(
+            PlotReservationState::CONFIRMED,
+            PlotReservation::activeForPlot($plot)?->state,
+        );
+    }
+
+    public function test_an_available_plot_offers_no_reservation_actions(): void
+    {
+        $admin = $this->freshAdmin();
+        [$cemetery, $block] = $this->granularCemetery($admin);
+        $plot = $this->firstPlot($block);
+
+        Livewire::actingAs($admin)
+            ->test(AdminPlotFloorMap::class)
+            ->set('cemeteryId', (string) $cemetery->getKey())
+            ->call('openPlot', (string) $plot->getKey())
+            ->assertDontSee('Konfirmasi Reservasi')
+            ->assertDontSee('Lepaskan Reservasi')
+            ->call('runReservationAction', 'release')
+            ->assertOk();
+
+        $this->assertSame(PlotState::AVAILABLE, $plot->fresh()?->plot_state);
+    }
+
+    public function test_an_unknown_reservation_action_key_writes_nothing(): void
+    {
+        $admin = $this->freshAdmin();
+        [$cemetery, $plot] = $this->reservedPlot($admin);
+
+        Livewire::actingAs($admin)
+            ->test(AdminPlotFloorMap::class)
+            ->set('cemeteryId', (string) $cemetery->getKey())
+            ->call('openPlot', (string) $plot->getKey())
+            ->call('runReservationAction', 'obliterate')
+            ->assertOk();
+
+        $this->assertSame(
+            PlotReservationState::HELD,
+            PlotReservation::activeForPlot($plot)?->state,
+        );
+    }
+
+    public function test_a_bare_cemetery_operator_cannot_run_a_reservation_action(): void
+    {
+        $setupAdmin = $this->freshAdmin();
+        [$cemetery, $plot] = $this->reservedPlot($setupAdmin);
+
+        $operator = User::factory()->create();
+        $this->grantRoleTo($operator, ActorRole::CEMETERY_OPERATOR);
+        ScopeAssignment::query()->create([
+            'actor_identifier' => (string) $operator->id,
+            'entity_type' => ScopeEntityType::CEMETERY,
+            'entity_id' => (string) $cemetery->getKey(),
+        ]);
+        $this->actingAs($operator);
+        $this->seedActorSession($operator, CarbonImmutable::now());
+        $this->forgetResolvedActorContext();
+        $this->app->forgetScopedInstances();
+
+        Livewire::actingAs($operator)
+            ->test(OperatorPlotFloorMap::class)
+            ->call('openPlot', (string) $plot->getKey())
+            ->call('runReservationAction', 'release');
+
+        $this->assertSame(
+            PlotReservationState::HELD,
+            PlotReservation::activeForPlot($plot)?->state,
+        );
     }
 }

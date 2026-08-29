@@ -11,7 +11,12 @@ use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotInventory\PlotState;
+use App\Domain\PlotReservation\Actions\ConfirmPlotReservation;
+use App\Domain\PlotReservation\Actions\ExpirePlotReservation;
+use App\Domain\PlotReservation\Actions\ReleasePlotReservation;
 use App\Domain\PlotReservation\Actions\ReservePlot;
+use App\Domain\PlotReservation\Models\PlotReservation;
+use App\Domain\PlotReservation\PlotReservationState;
 use App\Filament\Admin\Pages\PasswordReauthentication;
 use App\Filament\Admin\Resources\GravePlots\GravePlotsResource;
 use App\Filament\Shared\PlotInventory\PlotStateOverrides;
@@ -444,6 +449,105 @@ abstract class BasePlotFloorMapPage extends Page
             && $plot->plot_state === PlotState::AVAILABLE
             && $this->linkedOrder() !== null
             && $this->actorMayWrite();
+    }
+
+    /**
+     * The open cell's incumbent reservation, or null. `activeForPlot()` is
+     * the module's own head-row resolver (latest row of the plot's
+     * append-only chain, counted only when `held` or `confirmed`) — this
+     * page must not re-derive that from the chain itself, or it would
+     * become a second, drifting definition of "active".
+     */
+    public function activeReservation(): ?PlotReservation
+    {
+        $plot = $this->activePlot();
+
+        return $plot === null ? null : PlotReservation::activeForPlot($plot);
+    }
+
+    /**
+     * The lifecycle transitions that are meaningful for the open cell's
+     * incumbent reservation, as `action key => Indonesian label`. Mirrors
+     * the shipped `PlotReservationLifecycleActions` on the order view:
+     * confirm and expire from `held` only, release from `held` or
+     * `confirmed`.
+     *
+     * Render-time meaning only. `runReservationAction()` re-derives the
+     * same map server-side before dispatching, because a hidden button is
+     * still wire-addressable.
+     *
+     * @return array<string, string>
+     */
+    public function availableReservationActions(): array
+    {
+        $reservation = $this->activeReservation();
+
+        if ($reservation === null || ! $this->actorMayWrite()) {
+            return [];
+        }
+
+        return match ($reservation->state) {
+            PlotReservationState::HELD => [
+                'confirm' => 'Konfirmasi Reservasi',
+                'release' => 'Lepaskan Reservasi',
+                'expire' => 'Kedaluwarsakan Reservasi',
+            ],
+            PlotReservationState::CONFIRMED => [
+                'release' => 'Lepaskan Reservasi',
+            ],
+            default => [],
+        };
+    }
+
+    /**
+     * Dispatches one EXISTING, UNMODIFIED lifecycle action against the open
+     * cell's incumbent reservation.
+     *
+     * This page contributes no locking and no state assert of its own: each
+     * of the three actions takes the plot-row lock FIRST, re-reads the head
+     * of the plot's reservation chain under it, and throws
+     * `PlotReservationTransitionException` when the head is not in the
+     * allowed from-state. The `availableReservationActions()` re-check here
+     * is a courtesy that produces a readable refusal for the common stale
+     * click; the domain action is the correctness boundary, and a race the
+     * re-check cannot see is refused there instead.
+     */
+    public function runReservationAction(string $action): void
+    {
+        if (! $this->actorMayWrite()) {
+            Notification::make()->danger()->title('Anda tidak berwenang mengubah reservasi.')->send();
+
+            return;
+        }
+
+        $reservation = $this->activeReservation();
+
+        if ($reservation === null || ! array_key_exists($action, $this->availableReservationActions())) {
+            Notification::make()->danger()->title('Tindakan reservasi ini tidak tersedia untuk plot tersebut.')->send();
+
+            return;
+        }
+
+        if (! $this->requireFreshAuthentication()) {
+            return;
+        }
+
+        $actor = app(ActorContext::class);
+        $actorRole = GravePlotsResource::auditRoleFor($actor);
+        $actorReference = (string) $actor->identityReference;
+
+        try {
+            match ($action) {
+                'confirm' => app(ConfirmPlotReservation::class)($reservation, $actorReference, $actorRole),
+                'release' => app(ReleasePlotReservation::class)($reservation, $actorReference, $actorRole),
+                'expire' => app(ExpirePlotReservation::class)($reservation, $actorReference, $actorRole),
+            };
+
+            Notification::make()->success()->title('Reservasi diperbarui.')->send();
+            $this->closePlot();
+        } catch (Throwable $exception) {
+            Notification::make()->danger()->title('Tindakan reservasi gagal')->body($exception->getMessage())->send();
+        }
     }
 
     /**

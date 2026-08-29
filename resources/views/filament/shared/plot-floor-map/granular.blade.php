@@ -78,6 +78,13 @@
                         {{ StatusIntent::label($activePlot->plot_state, StatusIntent::FAMILY_PLOT_STATE) }}
                     </x-filament::badge>
                 </div>
+                @php $modalReservation = $this->activeReservation(); @endphp
+                @if ($modalReservation !== null)
+                    <p class="text-sm text-neutral-600">
+                        Reservasi: {{ $modalReservation->state }} ·
+                        {{ $modalReservation->reserved_at?->format('Y-m-d H:i') ?? '—' }}
+                    </p>
+                @endif
                 <p class="text-sm text-neutral-600">
                     Paket / Kelas: {{ $activePlot->cemeteryPackage?->name ?? 'Tanpa paket' }}
                 </p>
@@ -94,6 +101,16 @@
                     Reservasi untuk pesanan #{{ $this->linkedOrder()?->reference }}
                 </x-filament::button>
             @endif
+
+            @foreach ($this->availableReservationActions() as $reservationAction => $reservationLabel)
+                <x-filament::button
+                    color="gray"
+                    wire:click="runReservationAction('{{ $reservationAction }}')"
+                    x-on:click="$dispatch('close-modal', { id: 'plot-floor-map-cell' })"
+                >
+                    {{ $reservationLabel }}
+                </x-filament::button>
+            @endforeach
 
             @foreach ($this->availableOverrides() as $overrideState => $overrideLabel)
                 <x-filament::button
