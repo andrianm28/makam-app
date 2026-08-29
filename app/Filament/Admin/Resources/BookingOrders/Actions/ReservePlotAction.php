@@ -66,12 +66,23 @@ final class ReservePlotAction
      * reservation is not a money-adjacent action, and finance's domain is
      * money — mirror of the plan's Task 5 role decision.
      *
+     * `ActorRole::CEMETERY_OPERATOR` was added by the TPU/TPS operator
+     * dashboard roadmap's Phase A
+     * (docs/superpowers/plans/2026-08-28-operator-panel-and-role.md, Task
+     * 5) as groundwork for Phase C, where a real `/operator` resource
+     * reuses this action. Adding the role here alone is NOT sufficient
+     * today: `roleAllowed()` below composes `BookingOrderResource
+     * ::canAccess()` first, which still refuses `cemetery_operator`
+     * unconditionally — see that plan's "Known, deliberate incompleteness"
+     * section.
+     *
      * @var list<string>
      */
     private const array ALLOWED_ROLES = [
         ActorRole::OPERATOR,
         ActorRole::RESTRICTED_ADMIN,
         ActorRole::ADMIN,
+        ActorRole::CEMETERY_OPERATOR,
     ];
 
     public static function make(Order $order): Action
@@ -112,10 +123,13 @@ final class ReservePlotAction
     }
 
     /**
-     * The actor gate — operator/restricted_admin/admin admitted, everyone
-     * else (finance, vendor, guests, bare users) denied. Composes the
-     * resource's own access response first: the action can never authorize
-     * an actor the resource page itself would not admit.
+     * The actor gate — admits exactly `self::ALLOWED_ROLES` (operator/
+     * restricted_admin/admin/cemetery_operator; see that constant's doc
+     * block for the cemetery_operator addition and its current
+     * incompleteness), everyone else (finance, vendor, guests, bare users)
+     * denied. Composes the resource's own access response first: the action
+     * can never authorize an actor the resource page itself would not
+     * admit.
      */
     private static function roleAllowed(): bool
     {

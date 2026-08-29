@@ -162,7 +162,11 @@ final class TransitionOrderAction
         }
 
         try {
-            app(OrderTransitionAuthorizerContract::class)->authorizeTransition(app(ActorContext::class), $transition);
+            app(OrderTransitionAuthorizerContract::class)->authorizeTransition(
+                app(ActorContext::class),
+                $transition,
+                $order->bookingDraft?->cemetery_id,
+            );
         } catch (OrderActionNotAuthorisedException) {
             return false;
         }
@@ -183,7 +187,11 @@ final class TransitionOrderAction
         $transition = self::TRANSITION_NAME[$to->value];
 
         try {
-            app(OrderTransitionAuthorizerContract::class)->authorizeTransition($actor, $transition);
+            app(OrderTransitionAuthorizerContract::class)->authorizeTransition(
+                $actor,
+                $transition,
+                $order->bookingDraft?->cemetery_id,
+            );
 
             if (in_array($transition, self::MONEY_TRANSITIONS, true)) {
                 app(ReauthenticationGuard::class)->assertFresh($actor);

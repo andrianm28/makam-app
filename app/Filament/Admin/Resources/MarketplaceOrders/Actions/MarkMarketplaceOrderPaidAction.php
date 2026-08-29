@@ -80,6 +80,10 @@ final class MarkMarketplaceOrderPaidAction
                 $actorRole = MarketplaceOrderResource::auditRoleFor($actor);
 
                 try {
+                    // No cemetery id is resolved here on purpose — a
+                    // MarketplaceOrder has no cemetery concept, so this call
+                    // correctly excludes cemetery_operator from marketplace
+                    // payment transitions (Phase A, Task 6).
                     app(OrderTransitionAuthorizerContract::class)->authorizeTransition($actor, 'mark_marketplace_order_paid');
                     app(ReauthenticationGuard::class)->assertFresh($actor);
                 } catch (ReauthenticationRequiredException) {
@@ -115,6 +119,10 @@ final class MarkMarketplaceOrderPaidAction
     private static function authorized(): bool
     {
         try {
+            // No cemetery id is resolved here on purpose — a MarketplaceOrder
+            // has no cemetery concept, so this call correctly excludes
+            // cemetery_operator from marketplace payment transitions
+            // (Phase A, Task 6).
             app(OrderTransitionAuthorizerContract::class)->authorizeTransition(app(ActorContext::class), 'mark_marketplace_order_paid');
 
             return true;

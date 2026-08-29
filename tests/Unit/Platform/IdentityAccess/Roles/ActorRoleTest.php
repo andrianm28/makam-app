@@ -23,15 +23,15 @@ final class ActorRoleTest extends TestCase
     {
         $this->assertSame([
             'admin', 'restricted_admin', 'finance', 'operator',
-            'case_manager', 'vendor', 'customer', 'system',
+            'case_manager', 'vendor', 'cemetery_operator', 'customer', 'system',
         ], ActorRole::KNOWN_ROLES);
     }
 
-    public function test_known_roles_list_has_exactly_eight_entries(): void
+    public function test_known_roles_list_has_exactly_nine_entries(): void
     {
         // Locks the count in explicitly so an accidental duplicate or a
         // silently dropped entry fails loudly here.
-        $this->assertCount(8, ActorRole::KNOWN_ROLES);
+        $this->assertCount(9, ActorRole::KNOWN_ROLES);
     }
 
     public function test_guest_sentinel_is_never_a_grantable_role(): void

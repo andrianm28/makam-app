@@ -45,6 +45,7 @@ final class PanelBrandingTest extends TestCase
         $expected = [
             'admin' => 'Makam Admin',
             'vendor' => 'Makam Vendor',
+            'operator' => 'Makam Operator',
         ];
 
         foreach ($expected as $id => $name) {

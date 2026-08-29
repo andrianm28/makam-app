@@ -293,6 +293,9 @@ final class Order extends Model
         throw OrderIsGuardedException::forOperation('delete');
     }
 
+    /**
+     * @return BelongsTo<BookingDraft, $this>
+     */
     public function bookingDraft(): BelongsTo
     {
         return $this->belongsTo(BookingDraft::class, 'booking_draft_id');

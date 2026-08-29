@@ -24,6 +24,8 @@ use InvalidArgumentException;
  * - `operator` — `DocumentAccessPolicy::ROLES_WITH_RESTRICTED_DOCUMENT_ACCESS`.
  * - `case_manager` — `DocumentAccessPolicy::ROLES_WITH_RESTRICTED_DOCUMENT_ACCESS`.
  * - `vendor` — `docs/security/rbac-matrix.md` column; no code consumer yet.
+ * - `cemetery_operator` — `docs/superpowers/plans/2026-08-28-operator-panel-and-role.md`
+ *   (this plan); no code consumer until this same plan's later tasks land.
  * - `customer` — `DocumentAccessPolicy::ROLES_WITH_RESTRICTED_DOCUMENT_ACCESS`.
  * - `system` — `FinanceVendorPayableAuthorizer::SYSTEM_ROLE`, the value
  *   recorded for a genuinely unattended (no human actor) run.
@@ -75,6 +77,26 @@ final class ActorRole
 
     public const string VENDOR = 'vendor';
 
+    /**
+     * The TPU/TPS operator dashboard roadmap's Phase A role
+     * (`/home/ubuntu/.claude/plans/swirling-cooking-umbrella.md`, "Role &
+     * scoping"). Structurally identical to `VENDOR`: an actor acting for one
+     * or more specific cemeteries via a `scope_assignments` grant of
+     * `Scopes\ScopeEntityType::CEMETERY`, never platform-wide. First real
+     * consumers land in this same plan: `Panel\CemeteryOperatorPanelAccessPolicy`
+     * (the `/operator` panel's access check) and
+     * `OrderWorkflow\Authorization\OrderTransitionAuthorizer`'s
+     * cemetery-scoped branch.
+     *
+     * Shares its literal value, `'cemetery_operator'`, with
+     * `App\Platform\Notification\RecipientRole::CEMETERY_OPERATOR` — a
+     * DIFFERENT vocabulary. That constant means "holds a cemetery scope
+     * grant, whatever their `ActorRole`" (resolved via `actorsForEntity()`,
+     * not role assignment); this one means "holds this specific role
+     * assignment." Do not conflate the two just because the string matches.
+     */
+    public const string CEMETERY_OPERATOR = 'cemetery_operator';
+
     public const string CUSTOMER = 'customer';
 
     public const string SYSTEM = 'system';
@@ -94,6 +116,7 @@ final class ActorRole
         self::OPERATOR,
         self::CASE_MANAGER,
         self::VENDOR,
+        self::CEMETERY_OPERATOR,
         self::CUSTOMER,
         self::SYSTEM,
     ];

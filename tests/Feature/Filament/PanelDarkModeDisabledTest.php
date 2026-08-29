@@ -43,7 +43,7 @@ final class PanelDarkModeDisabledTest extends TestCase
 {
     public function test_panels_follow_filaments_default_system_preference_dark_mode(): void
     {
-        foreach (['admin', 'vendor'] as $id) {
+        foreach (['admin', 'vendor', 'operator'] as $id) {
             $panel = Filament::getPanel($id);
 
             $this->assertTrue(

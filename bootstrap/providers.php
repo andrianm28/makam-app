@@ -14,6 +14,7 @@ use App\Platform\Payment\Providers\PaymentServiceProvider;
 use App\Platform\SiteSettings\Providers\SiteSettingsServiceProvider;
 use App\Providers\AppServiceProvider;
 use App\Providers\Filament\AdminPanelProvider;
+use App\Providers\Filament\OperatorPanelProvider;
 use App\Providers\Filament\VendorPanelProvider;
 
 return [
@@ -24,6 +25,11 @@ return [
     // against the actual pinned filament/filament v5.7.3 package).
     AdminPanelProvider::class,
     VendorPanelProvider::class,
+    // TPU/TPS operator dashboard roadmap Phase A
+    // (docs/superpowers/plans/2026-08-28-operator-panel-and-role.md) —
+    // registers the /operator panel skeleton. Same registration pattern as
+    // AdminPanelProvider/VendorPanelProvider above.
+    OperatorPanelProvider::class,
     // FeatureGateServiceProvider's own class-level comment documented this
     // exact missing line since the batch that wrote it (Sprint 3):
     // GateRegistrySource/FeatureGateResolver/ModeResolver bindings existed

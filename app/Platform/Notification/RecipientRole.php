@@ -19,6 +19,14 @@ use InvalidArgumentException;
  * provisional (per ruling 2, `docs/superpowers/plans/2026-08-10-wave1a-
  * notifications-decisions.md`) is *how* a role is derived from a scope
  * grant, which lives behind `Contracts\RecipientRoleSource`.
+ *
+ * `self::CEMETERY_OPERATOR` shares its literal value, `'cemetery_operator'`,
+ * with `App\Platform\IdentityAccess\Roles\ActorRole::CEMETERY_OPERATOR` — a
+ * DIFFERENT vocabulary. This constant means "an actor holding a cemetery
+ * scope grant, whatever their `ActorRole`" (resolved via
+ * `actorsForEntity()`, not role assignment); that one means "holds the
+ * specific `cemetery_operator` role assignment." A recipient resolved here
+ * is not necessarily a `cemetery_operator`-role actor.
  */
 final class RecipientRole
 {
