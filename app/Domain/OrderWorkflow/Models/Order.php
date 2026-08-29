@@ -7,6 +7,7 @@ namespace App\Domain\OrderWorkflow\Models;
 use App\Domain\Booking\Models\BookingDraft;
 use App\Domain\OrderWorkflow\Exceptions\OrderIsGuardedException;
 use App\Domain\OrderWorkflow\OrderStatus;
+use App\Domain\PlotReservation\Models\PlotReservation;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -304,6 +305,26 @@ final class Order extends Model
     public function statusEvents(): HasMany
     {
         return $this->hasMany(OrderStatusEvent::class, 'order_id');
+    }
+
+    /**
+     * The order's full append-only reservation chain, newest row first —
+     * the same `created_at DESC, id DESC` order `PlotReservation
+     * ::activeForOrder()` selects on, so `->first()` on an eager-loaded
+     * chain IS the head row that method would return.
+     *
+     * Ordering lives in the relation rather than at each call site
+     * precisely because eager loading is the point: `->with('plotReservations')`
+     * carries the ordering with it, a `->with(['plotReservations' => fn (...)])`
+     * closure at each call site would not.
+     *
+     * @return HasMany<PlotReservation, $this>
+     */
+    public function plotReservations(): HasMany
+    {
+        return $this->hasMany(PlotReservation::class, 'order_id')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
     }
 
     public function parties(): HasMany

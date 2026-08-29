@@ -17,12 +17,13 @@ use Illuminate\Database\Eloquent\Builder;
  * shares, so scoping here also makes a direct URL to another cemetery's
  * record a 404 rather than an open edit form.
  *
- * No `/operator` Resource consumes this trait yet — Phase A ships only the
- * mechanism (see `docs/superpowers/plans/2026-08-28-operator-panel-and-role.md`,
- * Task 3). Phase C's `CemeteryOrderResource` is the first real consumer;
- * per the roadmap it reaches its cemetery indirectly via
- * `bookingDraft.cemetery_id`, so it overrides `applyCemeteryScope()` rather
- * than relying on this trait's direct-column default.
+ * `App\Filament\Operator\Resources\CemeteryOrders\CemeteryOrderResource`
+ * (Phase C) is the first and currently only consumer. As anticipated here
+ * when Phase A shipped the mechanism, it reaches its cemetery indirectly via
+ * `bookingDraft.cemetery_id` and therefore overrides `applyCemeteryScope()`
+ * with a subquery rather than relying on this trait's direct-column default;
+ * `cemeteryScopeColumn()` is unused by it. A future Resource on a table with
+ * a real `cemetery_id` column inherits both defaults unchanged.
  */
 trait ScopesToCurrentCemetery
 {

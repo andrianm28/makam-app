@@ -14,8 +14,9 @@ use App\Domain\PlotInventory\PlotState;
 use App\Domain\PlotReservation\Actions\ReservePlot;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Filament\Admin\Resources\BookingOrders\BookingOrderResource;
+use App\Filament\Support\CemeteryOrderActionGate;
+use App\Filament\Support\OrderViewUrl;
 use App\Platform\IdentityAccess\ActorContext;
-use App\Platform\IdentityAccess\Roles\ActorRole;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
@@ -32,9 +33,12 @@ use Illuminate\Database\Eloquent\Collection;
  * `->visible()` is the RENDER gate: it answers "may this button be drawn at
  * all" from ORDER state — the order must be at a reservable status, must not
  * already hold an active reservation, and its draft's cemetery must resolve.
- * `->authorize()` is the ACTOR gate: the reservation is an operational
- * (non-money) action, so the admission list is operator / restricted_admin /
- * admin — finance is deliberately excluded (finance's domain is money).
+ * `->authorize()` is the ACTOR gate, delegated to
+ * `App\Filament\Support\CemeteryOrderActionGate`: the reservation is an
+ * operational (non-money) action, so two paths admit: an `/admin` actor
+ * holding one of the platform-wide operational roles, or a
+ * `cemetery_operator` whose grants include this order's own cemetery.
+ * Finance is deliberately excluded from both (finance's domain is money).
  * `run()` re-checks the same actor gate as its first act, because "the
  * button was not rendered" is not a security property.
  *
@@ -61,37 +65,13 @@ final class ReservePlotAction
         OrderStatus::MENUNGGU_KETERSEDIAAN->value,
     ];
 
-    /**
-     * The operational-actor admission list. Deliberately not finance: the
-     * reservation is not a money-adjacent action, and finance's domain is
-     * money — mirror of the plan's Task 5 role decision.
-     *
-     * `ActorRole::CEMETERY_OPERATOR` was added by the TPU/TPS operator
-     * dashboard roadmap's Phase A
-     * (docs/superpowers/plans/2026-08-28-operator-panel-and-role.md, Task
-     * 5) as groundwork for Phase C, where a real `/operator` resource
-     * reuses this action. Adding the role here alone is NOT sufficient
-     * today: `roleAllowed()` below composes `BookingOrderResource
-     * ::canAccess()` first, which still refuses `cemetery_operator`
-     * unconditionally — see that plan's "Known, deliberate incompleteness"
-     * section.
-     *
-     * @var list<string>
-     */
-    private const array ALLOWED_ROLES = [
-        ActorRole::OPERATOR,
-        ActorRole::RESTRICTED_ADMIN,
-        ActorRole::ADMIN,
-        ActorRole::CEMETERY_OPERATOR,
-    ];
-
     public static function make(Order $order): Action
     {
         return Action::make('reserve_plot')
             ->label('Reservasi Plot')
             ->icon(Heroicon::OutlinedMapPin)
             ->visible(fn (): bool => self::visibleFor($order))
-            ->authorize(fn (): bool => self::roleAllowed())
+            ->authorize(fn (): bool => CemeteryOrderActionGate::allows($order))
             ->schema([
                 Select::make('plot_id')
                     ->label('Plot')
@@ -120,32 +100,6 @@ final class ReservePlotAction
         }
 
         return self::draftCemeteryResolves($order);
-    }
-
-    /**
-     * The actor gate — admits exactly `self::ALLOWED_ROLES` (operator/
-     * restricted_admin/admin/cemetery_operator; see that constant's doc
-     * block for the cemetery_operator addition and its current
-     * incompleteness), everyone else (finance, vendor, guests, bare users)
-     * denied. Composes the resource's own access response first: the action
-     * can never authorize an actor the resource page itself would not
-     * admit.
-     */
-    private static function roleAllowed(): bool
-    {
-        if (! BookingOrderResource::canAccess()) {
-            return false;
-        }
-
-        $actor = app(ActorContext::class);
-
-        foreach (self::ALLOWED_ROLES as $role) {
-            if ($actor->hasRole($role)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**
@@ -208,7 +162,7 @@ final class ReservePlotAction
      */
     private static function run(Order $order, int|string $plotId): void
     {
-        if (! self::roleAllowed()) {
+        if (! CemeteryOrderActionGate::allows($order)) {
             Notification::make()
                 ->danger()
                 ->title('Anda tidak berwenang mereservasi plot.')
@@ -241,7 +195,7 @@ final class ReservePlotAction
             );
 
             Notification::make()->success()->title('Plot berhasil direservasi.')->send();
-            redirect()->route('filament.admin.resources.pesanan-pemakaman.view', ['record' => $order->getKey()]);
+            redirect()->to(OrderViewUrl::for($order));
         } catch (\Throwable $exception) {
             Notification::make()->danger()->title('Reservasi gagal')->body($exception->getMessage())->send();
         }

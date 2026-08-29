@@ -20,6 +20,7 @@ use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PlotReservation\PlotReservationState;
 use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\Outbox\Models\OutboxEvent;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -183,5 +184,76 @@ final class PlotReservationLifecycleTest extends TestCase
             ->where('subject_id', $expired->getKey())
             ->sole();
         $this->assertStringContainsString('plot state diverged from reserved (override preserved)', $audit->reason);
+    }
+
+    public function test_active_states_is_the_closed_held_confirmed_pair(): void
+    {
+        $this->assertSame(['held', 'confirmed'], PlotReservationState::ACTIVE_STATES);
+    }
+
+    public function test_incumbent_of_returns_the_head_row_when_it_is_active(): void
+    {
+        $reservation = new PlotReservation(['state' => PlotReservationState::HELD]);
+
+        $this->assertSame($reservation, PlotReservation::incumbentOf($reservation));
+    }
+
+    public function test_incumbent_of_returns_null_for_a_released_head_row(): void
+    {
+        $reservation = new PlotReservation(['state' => PlotReservationState::RELEASED]);
+
+        $this->assertNull(PlotReservation::incumbentOf($reservation));
+    }
+
+    public function test_incumbent_of_returns_null_for_a_null_head_row(): void
+    {
+        $this->assertNull(PlotReservation::incumbentOf(null));
+    }
+
+    public function test_plot_reservations_relation_returns_the_chain_newest_first(): void
+    {
+        $cemetery = Cemetery::factory()->create();
+        $block = CemeteryBlock::query()->create([
+            'cemetery_id' => $cemetery->id,
+            'code' => 'BLOK-C1',
+            'name' => 'Blok C1',
+            'capacity' => 5,
+            'is_active' => true,
+        ]);
+        $plot = GravePlot::query()->create([
+            'block_id' => $block->id,
+            'slot' => 'C1-001',
+            'plot_state' => PlotState::AVAILABLE,
+        ]);
+        $order = Order::query()->create([
+            'reference' => 'MK-2026-'.Str::upper(Str::random(8)),
+            'product_type' => ProductType::AT_NEED_SERVICE_ORDER->value,
+            'status' => OrderStatus::DIVERIFIKASI->value,
+        ]);
+
+        $held = PlotReservation::query()->create([
+            'plot_id' => $plot->id,
+            'order_id' => $order->id,
+            'state' => PlotReservationState::HELD,
+            'reserved_by_ref' => '1',
+            'reserved_at' => CarbonImmutable::now()->subHour(),
+            'created_at' => CarbonImmutable::now()->subHour(),
+            'updated_at' => CarbonImmutable::now()->subHour(),
+        ]);
+        $released = PlotReservation::query()->create([
+            'plot_id' => $plot->id,
+            'order_id' => $order->id,
+            'state' => PlotReservationState::RELEASED,
+            'reserved_by_ref' => '1',
+            'released_at' => CarbonImmutable::now(),
+            'created_at' => CarbonImmutable::now(),
+            'updated_at' => CarbonImmutable::now(),
+        ]);
+
+        $chain = $order->fresh()->plotReservations;
+
+        $this->assertSame((string) $released->id, (string) $chain->first()->id);
+        $this->assertSame((string) $held->id, (string) $chain->last()->id);
+        $this->assertNull(PlotReservation::incumbentOf($chain->first()));
     }
 }

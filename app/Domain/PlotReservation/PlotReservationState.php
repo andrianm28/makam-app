@@ -44,6 +44,20 @@ final class PlotReservationState
         self::EXPIRED,
     ];
 
+    /**
+     * The states in which a reservation still holds its plot. The class doc
+     * block above has always said "`held` and `confirmed` are the active
+     * states" in prose; this constant is that sentence as code, so the
+     * pair lives in exactly one place instead of being re-typed at each
+     * call site.
+     *
+     * @var list<string>
+     */
+    public const array ACTIVE_STATES = [
+        self::HELD,
+        self::CONFIRMED,
+    ];
+
     public static function isKnown(string $state): bool
     {
         return in_array($state, self::KNOWN_STATES, true);
