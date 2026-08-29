@@ -1082,6 +1082,26 @@ final class BookingWizard extends Component
     }
 
     /**
+     * Which of the four consolidated screens `$currentStep` belongs to — a
+     * pure function of the existing step state, not a second piece of
+     * tracked progress. Screen 1 (Cari & Pilih) = steps 1-4; Screen 2 (Detail
+     * Pemesanan) = steps 5-7; Screen 3 (Pembayaran) = step 8 alone (kept
+     * standalone — too much conditional online/manual/sandbox/session-
+     * recovery branching to merge safely); Screen 4 (Konfirmasi) = step 9
+     * alone (terminal). See `docs/superpowers/specs/
+     * 2026-08-29-wizard-screen-consolidation-design.md`.
+     */
+    public function currentScreen(): int
+    {
+        return match (true) {
+            $this->currentStep <= BookingWizardStep::SERVICES => 1,
+            $this->currentStep <= BookingWizardStep::DECEASED_DATA => 2,
+            $this->currentStep === BookingWizardStep::PAYMENT => 3,
+            default => 4,
+        };
+    }
+
+    /**
      * Steps 5 (SUMMARY) and 9 (CONFIRMATION) are READ-ONLY, so they are never
      * written to `completed_steps` — which meant a "have you completed it?"
      * reachability test locked the user out of both the moment they navigated
