@@ -1302,7 +1302,12 @@ final class BookingWizard extends Component
         $basicServices = new Collection;
         $additionalServices = new Collection;
 
-        if ($this->currentStep === BookingWizardStep::SERVICES) {
+        // Screen 1's Step 4 section can be visible while $currentStep has
+        // moved to an earlier step within the same screen (progressive
+        // reveal keeps a completed section on screen after "Kembali") — see
+        // BookingWizardProgressiveRevealTest and this method's own screen
+        // (not step) guard below.
+        if ($this->currentScreen() === 1) {
             $activeServices = ServiceCatalogQuery::allActive();
 
             $basicServices = $activeServices->filter(
@@ -1314,8 +1319,11 @@ final class BookingWizard extends Component
             )->values();
         }
 
+        // Ringkasan is a persistent summary card across the whole of Screen
+        // 2 (steps 5-7), not only while $currentStep === SUMMARY exactly —
+        // see this task's own report / the design spec's Screen 2 row.
         $summary = null;
-        if ($this->currentStep === BookingWizardStep::SUMMARY && $this->draftId !== null) {
+        if ($this->currentScreen() === 2 && $this->draftId !== null) {
             $draft = BookingDraftQuery::findBound($this->draftId);
             if ($draft !== null) {
                 $summary = BookingDraftQuery::summary($draft);

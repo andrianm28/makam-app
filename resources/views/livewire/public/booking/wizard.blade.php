@@ -110,7 +110,8 @@
             </p>
         </div>
 
-        @if ($currentStep === \App\Domain\Booking\BookingWizardStep::LOCATION)
+        @if ($this->currentScreen() === 1)
+        @if ($currentStep === \App\Domain\Booking\BookingWizardStep::LOCATION || in_array(\App\Domain\Booking\BookingWizardStep::LOCATION, $completedSteps, true))
             <section aria-labelledby="booking-step-1-heading">
                 <h2 id="booking-step-1-heading" class="mb-3 text-lg font-semibold text-neutral-900">
                     Langkah 1 &mdash; Pilih Lokasi
@@ -148,7 +149,8 @@
                     <p class="mt-3 text-sm text-danger-700" role="alert">{{ $message }}</p>
                 @enderror
             </section>
-        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::CEMETERY)
+        @endif
+        @if ($currentStep === \App\Domain\Booking\BookingWizardStep::CEMETERY || in_array(\App\Domain\Booking\BookingWizardStep::CEMETERY, $completedSteps, true))
             <section aria-labelledby="booking-step-2-heading">
                 <h2 id="booking-step-2-heading" class="mb-3 text-lg font-semibold text-neutral-900">
                     Langkah 2 &mdash; Pilih TPU/TPS
@@ -412,7 +414,8 @@
                     Kembali
                 </x-mk.button>
             </section>
-        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::SERVICE_TYPE)
+        @endif
+        @if ($currentStep === \App\Domain\Booking\BookingWizardStep::SERVICE_TYPE || in_array(\App\Domain\Booking\BookingWizardStep::SERVICE_TYPE, $completedSteps, true))
             <section aria-labelledby="booking-step-3-heading">
                 <h2 id="booking-step-3-heading" class="mb-3 text-lg font-semibold text-neutral-900">
                     Langkah 3 &mdash; Pilih Jenis Layanan
@@ -441,7 +444,8 @@
                     Kembali
                 </x-mk.button>
             </section>
-        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::SERVICES)
+        @endif
+        @if ($currentStep === \App\Domain\Booking\BookingWizardStep::SERVICES || in_array(\App\Domain\Booking\BookingWizardStep::SERVICES, $completedSteps, true))
             <section aria-labelledby="booking-step-4-heading">
                 <h2 id="booking-step-4-heading" class="mb-3 text-lg font-semibold text-neutral-900">
                     Langkah 4 &mdash; Pilih Layanan
@@ -580,7 +584,13 @@
                     </x-mk.button>
                 </div>
             </section>
-        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::SUMMARY)
+        @endif
+        @endif
+        @if ($this->currentScreen() === 2)
+            {{-- Screen 2 "Detail Pemesanan": Ringkasan renders unconditionally
+                 here — reaching screen 2 at all already means step 4 is done,
+                 which is Ringkasan's only precondition — as a persistent
+                 summary card, not its own page. --}}
             <section aria-labelledby="booking-step-5-heading">
                 <h2 id="booking-step-5-heading" class="mb-3 text-lg font-semibold text-neutral-900">
                     Langkah 5 &mdash; Ringkasan Pesanan
@@ -624,7 +634,7 @@
                     </x-mk.button>
                 </div>
             </section>
-        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::CUSTOMER_DATA)
+        @if ($currentStep === \App\Domain\Booking\BookingWizardStep::CUSTOMER_DATA || in_array(\App\Domain\Booking\BookingWizardStep::CUSTOMER_DATA, $completedSteps, true))
             <section aria-labelledby="booking-step-6-heading">
                 <h2 id="booking-step-6-heading" class="mb-3 text-lg font-semibold text-neutral-900">
                     Langkah 6 &mdash; Data Pemesan
@@ -851,7 +861,8 @@
                     </div>
                 </form>
             </section>
-        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::DECEASED_DATA)
+        @endif
+        @if ($currentStep === \App\Domain\Booking\BookingWizardStep::DECEASED_DATA || in_array(\App\Domain\Booking\BookingWizardStep::DECEASED_DATA, $completedSteps, true))
             <section aria-labelledby="booking-step-7-heading">
                 <h2 id="booking-step-7-heading" class="mb-3 text-lg font-semibold text-neutral-900">
                     Langkah 7 &mdash; Data Almarhum
@@ -1020,7 +1031,9 @@
                     </div>
                 </form>
             </section>
-        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::PAYMENT)
+        @endif
+        @endif
+        @if ($this->currentScreen() === 3)
             <section aria-labelledby="booking-step-8-heading">
                 <h2 id="booking-step-8-heading" class="mb-3 text-lg font-semibold text-neutral-900">
                     Langkah 8 &mdash; Pembayaran
@@ -1308,7 +1321,8 @@
                     Kembali
                 </x-mk.button>
             </section>
-        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::CONFIRMATION)
+        @endif
+        @if ($this->currentScreen() === 4)
             <section aria-labelledby="booking-step-9-heading">
                 <h2 id="booking-step-9-heading" class="mb-3 text-lg font-semibold text-neutral-900">
                     Langkah 9 &mdash; Konfirmasi
