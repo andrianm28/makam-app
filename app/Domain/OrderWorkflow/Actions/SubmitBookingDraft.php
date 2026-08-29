@@ -12,6 +12,8 @@ use App\Domain\OrderWorkflow\Models\OrderParty;
 use App\Domain\OrderWorkflow\OrderPartyRole;
 use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\OrderWorkflow\ProductType;
+use App\Domain\PlotReservation\Actions\ConvertDraftHoldToOrderReservation;
+use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PreNeed\Actions\RegisterPreNeedInterest;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
@@ -108,6 +110,7 @@ final readonly class SubmitBookingDraft
         private RecordOrderStatusChange $recordStatusChange,
         private OpenFuneralCase $openFuneralCase,
         private RegisterPreNeedInterest $registerPreNeedInterest,
+        private ConvertDraftHoldToOrderReservation $convertDraftHold,
     ) {}
 
     public function __invoke(BookingDraft $draft, string $idempotencyKey): Order
@@ -217,6 +220,17 @@ final readonly class SubmitBookingDraft
             'relationship_to_deceased' => $draft->customer_relationship,
             'preferred_contact_channel' => $draft->customer_contact_channel,
         ]);
+
+        // Only when the customer actually went through the Step 2 picker
+        // (granular-tier cemetery) — most drafts have no hold at all, and
+        // that is the normal case, not an error. See
+        // `ConvertDraftHoldToOrderReservation`'s class doc block for the
+        // no-fallback failure mode this can throw.
+        $draftHold = PlotReservation::activeForDraft($draft);
+
+        if ($draftHold instanceof PlotReservation) {
+            ($this->convertDraftHold)($draftHold, $order);
+        }
 
         return $order;
     }

@@ -35,6 +35,16 @@ final class PlotReservationState
     public const string EXPIRED = 'expired';
 
     /**
+     * The draft hold's own chain ends here when
+     * `Actions\ConvertDraftHoldToOrderReservation` succeeds — the plot's
+     * claim moves to a NEW order-anchored row (still `held`), and this row
+     * is what closes the draft-scoped chain. NOT an active state: the
+     * draft hold no longer holds the plot in its own right once converted
+     * — the new order-anchored row does.
+     */
+    public const string CONVERTED = 'converted';
+
+    /**
      * @var list<string>
      */
     public const array KNOWN_STATES = [
@@ -42,6 +52,7 @@ final class PlotReservationState
         self::CONFIRMED,
         self::RELEASED,
         self::EXPIRED,
+        self::CONVERTED,
     ];
 
     /**
