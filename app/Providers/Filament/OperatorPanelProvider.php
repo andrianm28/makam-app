@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Providers\Filament;
 
 use App\Filament\Operator\Pages\Dashboard;
+use App\Filament\Operator\Resources\CemeteryOrders\CemeteryOrderResource;
 use App\Http\Middleware\AssignCorrelationId;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -39,9 +40,8 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
  * there is no later reversal to make. Stock Filament colour scheme, stock
  * font stack, `->brandName()` only for functional identification.
  *
- * Ships only a placeholder Dashboard page and no discoverable Resources —
- * later phases (C: orders dashboard, D: plot availability) add real
- * Resources/Pages here.
+ * Ships the placeholder Dashboard page plus Phase C's `CemeteryOrderResource`
+ * (the orders dashboard). Phase D adds plot availability.
  */
 final class OperatorPanelProvider extends PanelProvider
 {
@@ -52,6 +52,13 @@ final class OperatorPanelProvider extends PanelProvider
             ->path('operator')
             ->login()
             ->brandName('Makam Operator')
+            // Explicit registration, not `->discoverResources()`: this panel
+            // names every surface it exposes, so a class appearing under
+            // `App\Filament\Operator\Resources` cannot become reachable
+            // without an intentional edit here.
+            ->resources([
+                CemeteryOrderResource::class,
+            ])
             ->pages([
                 Dashboard::class,
             ])
