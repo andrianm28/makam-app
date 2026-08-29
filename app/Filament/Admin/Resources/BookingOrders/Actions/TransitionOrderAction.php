@@ -23,6 +23,7 @@ use App\Domain\OrderWorkflow\OrderStatus;
 use App\Filament\Admin\Pages\PasswordReauthentication;
 use App\Filament\Admin\Resources\BookingOrders\BookingOrderResource;
 use App\Filament\Admin\Resources\BookingOrders\BookingOrderStatusBadge;
+use App\Filament\Support\OrderViewUrl;
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\Reauthentication\Exceptions\ReauthenticationRequiredException;
@@ -198,7 +199,7 @@ final class TransitionOrderAction
             }
         } catch (ReauthenticationRequiredException) {
             session()->put(RequireRecentAuthentication::REASON_SESSION_KEY, 'money_action');
-            session()->put('url.intended', route('filament.admin.resources.pesanan-pemakaman.view', ['record' => $order->getKey()]));
+            session()->put('url.intended', OrderViewUrl::for($order));
 
             Notification::make()
                 ->warning()
@@ -206,6 +207,9 @@ final class TransitionOrderAction
                 ->body('Lakukan verifikasi ulang untuk tindakan ini.')
                 ->send();
 
+            // Money transitions are finance/admin only (OrderTransitionAuthorizer::MONEY_TRANSITIONS),
+            // and cemetery_operator is refused by that authorizer before this branch is ever
+            // reached, so this redirect staying /admin-only is deliberate, not a missed site.
             redirect()->route(PasswordReauthentication::ROUTE_NAME);
 
             return;
@@ -237,7 +241,7 @@ final class TransitionOrderAction
             };
 
             Notification::make()->success()->title('Transisi berhasil dicatat.')->send();
-            redirect()->route('filament.admin.resources.pesanan-pemakaman.view', ['record' => $order->getKey()]);
+            redirect()->to(OrderViewUrl::for($order));
         } catch (\Throwable $exception) {
             Notification::make()->danger()->title('Transisi gagal')->body($exception->getMessage())->send();
         }

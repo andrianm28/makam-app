@@ -11,6 +11,7 @@ use App\Domain\PlotReservation\Actions\ReleasePlotReservation;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PlotReservation\PlotReservationState;
 use App\Filament\Admin\Resources\BookingOrders\BookingOrderResource;
+use App\Filament\Support\OrderViewUrl;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use Filament\Actions\Action;
@@ -130,7 +131,7 @@ final class PlotReservationLifecycleActions
             };
 
             Notification::make()->success()->title($successTitle)->send();
-            redirect()->route('filament.admin.resources.pesanan-pemakaman.view', ['record' => $order->getKey()]);
+            redirect()->to(OrderViewUrl::for($order));
         } catch (\Throwable $exception) {
             Notification::make()->danger()->title('Pembaruan gagal')->body($exception->getMessage())->send();
         }

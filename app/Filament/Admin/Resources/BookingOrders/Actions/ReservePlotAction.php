@@ -14,6 +14,7 @@ use App\Domain\PlotInventory\PlotState;
 use App\Domain\PlotReservation\Actions\ReservePlot;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Filament\Admin\Resources\BookingOrders\BookingOrderResource;
+use App\Filament\Support\OrderViewUrl;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use Filament\Actions\Action;
@@ -241,7 +242,7 @@ final class ReservePlotAction
             );
 
             Notification::make()->success()->title('Plot berhasil direservasi.')->send();
-            redirect()->route('filament.admin.resources.pesanan-pemakaman.view', ['record' => $order->getKey()]);
+            redirect()->to(OrderViewUrl::for($order));
         } catch (\Throwable $exception) {
             Notification::make()->danger()->title('Reservasi gagal')->body($exception->getMessage())->send();
         }
