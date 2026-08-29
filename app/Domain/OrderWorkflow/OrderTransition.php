@@ -21,13 +21,20 @@ use App\Domain\OrderWorkflow\Exceptions\IllegalOrderTransitionException;
  *   - Nothing terminal is reachable after DIBAYAR. Once money is confirmed,
  *     §3's "compensating financial action" (PaymentReversal + reversing
  *     journal batch) is the correction mechanism, not a status edge.
+ *   - `DIVERIFIKASI -> PENAWARAN_TERKIRIM` is a second edge added by the
+ *     TPU/TPS operator dashboard roadmap's Phase F
+ *     (`docs/superpowers/plans/2026-08-29-booking-flow-shortening.md`):
+ *     reachable only when a plot reservation already exists, enforced by
+ *     `Actions\IssueQuoteFromReservedPlot`, not by this matrix — the
+ *     matrix only makes the edge possible, per this class's own
+ *     two-layer discipline.
  */
 final class OrderTransition
 {
     /** @var array<string, list<string>> */
     private const ALLOWED = [
         'MASUK' => ['DIVERIFIKASI', 'DITOLAK', 'DIBATALKAN'],
-        'DIVERIFIKASI' => ['MENUNGGU_KETERSEDIAAN', 'DITOLAK', 'DIBATALKAN'],
+        'DIVERIFIKASI' => ['MENUNGGU_KETERSEDIAAN', 'PENAWARAN_TERKIRIM', 'DITOLAK', 'DIBATALKAN'],
         'MENUNGGU_KETERSEDIAAN' => ['PENAWARAN_TERKIRIM', 'DITOLAK', 'DIBATALKAN'],
         'PENAWARAN_TERKIRIM' => ['DISETUJUI_PEMESAN', 'KEDALUWARSA', 'DIBATALKAN'],
         'DISETUJUI_PEMESAN' => ['MENUNGGU_PEMBAYARAN', 'KEDALUWARSA', 'DIBATALKAN'],
