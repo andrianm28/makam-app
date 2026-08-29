@@ -7,6 +7,7 @@ namespace App\Filament\Admin\Resources\CemeteryResource\Tables;
 use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
+use App\Domain\CemeteryDirectory\PlotTrackingMode;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
@@ -59,6 +60,13 @@ final class CemeteriesTable
                     ->formatStateUsing(fn (string $state): string => self::publicationLabel($state))
                     ->sortable(),
 
+                TextColumn::make('plot_tracking_mode')
+                    ->label('Pelacakan petak')
+                    ->badge()
+                    ->color(fn (string $state): string => self::trackingModeColor($state))
+                    ->formatStateUsing(fn (string $state): string => self::trackingModeLabel($state))
+                    ->sortable(),
+
                 TextColumn::make('price_min')
                     ->label('Harga mulai')
                     ->numeric(decimalPlaces: 0)
@@ -90,5 +98,17 @@ final class CemeteriesTable
             CemeteryPublicationStatus::UNPUBLISHED => 'Tidak dipublikasikan',
             default => 'Draf',
         };
+    }
+
+    public static function trackingModeColor(string $state): string
+    {
+        return $state === PlotTrackingMode::GRANULAR ? 'info' : 'gray';
+    }
+
+    public static function trackingModeLabel(string $state): string
+    {
+        return $state === PlotTrackingMode::GRANULAR
+            ? 'Granular (per petak)'
+            : 'Agregat (kuota per paket)';
     }
 }

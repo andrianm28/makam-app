@@ -8,6 +8,7 @@ use App\Domain\CemeteryDirectory\CemeteryAuditActions;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\GraveRegistry\Models\GraveRecord;
 use App\Filament\Admin\Resources\CemeteryResource;
+use App\Filament\Admin\Resources\CemeteryResource\Actions\SwitchToGranularTrackingAction;
 use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
@@ -53,6 +54,14 @@ use Illuminate\Database\QueryException;
  * and the same `QueryException` catch still covers the race between the
  * `hasGraveRecords()` check and the wrapped DELETE (the transaction rolls
  * back, nothing is deleted, nothing is audited).
+ *
+ * ---------------------------------------------------------------------------
+ * Tracking-mode toggle
+ * ---------------------------------------------------------------------------
+ * `SwitchToGranularTrackingAction` is the ONLY Filament call-site for
+ * `App\Domain\CemeteryDirectory\Actions\SetCemeteryPlotTrackingMode` — that
+ * domain action existed with no UI wiring at all until this addition. See
+ * the action class's own doc block for why it is one-directional here.
  */
 final class EditCemetery extends EditRecord
 {
@@ -65,7 +74,12 @@ final class EditCemetery extends EditRecord
      */
     protected function getHeaderActions(): array
     {
+        /** @var Cemetery $record */
+        $record = $this->record;
+
         return [
+            SwitchToGranularTrackingAction::make($record),
+
             DeleteAction::make()
                 ->action(function (Cemetery $record): void {
                     if ($this->hasGraveRecords($record)) {
