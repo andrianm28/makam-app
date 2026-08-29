@@ -58,6 +58,10 @@ use Illuminate\Support\Facades\DB;
  * inside `DB::transaction` is the documented alternative shape
  * ("same transaction some other way" — `Audit`'s class doc block), and
  * keeps mutation, audit, and outbox row atomic (AC4).
+ *
+ * `booking_draft_id` is carried forward from `$current` exactly like
+ * `order_id`, so a released row never silently drops which draft it
+ * belongs to.
  */
 final readonly class ReleasePlotReservation
 {
@@ -93,6 +97,7 @@ final readonly class ReleasePlotReservation
             $row = PlotReservation::query()->create([
                 'plot_id' => $plot->getKey(),
                 'order_id' => $current->order_id,
+                'booking_draft_id' => $current->booking_draft_id,
                 'state' => PlotReservationState::RELEASED,
                 'reserved_by_ref' => $current->reserved_by_ref,
                 'reserved_at' => $current->reserved_at,

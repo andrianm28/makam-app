@@ -6,9 +6,21 @@ namespace Tests\Feature\Domain\Booking\Actions;
 
 use App\Domain\Booking\Actions\PurgeStaleBookingDrafts;
 use App\Domain\Booking\Models\BookingDraft;
+use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
+use App\Domain\CemeteryDirectory\CemeteryType;
+use App\Domain\CemeteryDirectory\LaunchCityCode;
+use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\PlotInventory\Models\CemeteryBlock;
+use App\Domain\PlotInventory\Models\GravePlot;
+use App\Domain\PlotInventory\PlotState;
+use App\Domain\PlotReservation\Actions\ExpirePlotReservation;
+use App\Domain\PlotReservation\Actions\HoldPlotForDraft;
+use App\Domain\PlotReservation\Models\PlotReservation;
+use App\Domain\PlotReservation\PlotReservationState;
 use App\Platform\Audit\Models\AuditEvent;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -25,6 +37,13 @@ use Tests\TestCase;
  *   3. The audit trail records the sweep, and the COUNT — never the PII
  *      content. A deletion is accountable, but the audit trail must not
  *      become the very copy of the personal data the purge exists to remove.
+ *   4. A draft that once held a plot is still purgeable. Phase E gave
+ *      `plot_reservations` a `booking_draft_id` FK, and `plot_reservations`
+ *      is append-only — its rows are never deleted. Under the `RESTRICT`
+ *      that FK originally shipped with, the first such draft would have
+ *      raised an FK violation and, because the purge is one bulk `DELETE`
+ *      in one transaction, aborted the ENTIRE nightly sweep from then on.
+ *      These are the regression tests for that (whole-branch review C1).
  */
 final class PurgeStaleBookingDraftsTest extends TestCase
 {
@@ -148,6 +167,91 @@ final class PurgeStaleBookingDraftsTest extends TestCase
         (new PurgeStaleBookingDrafts)(retentionDays: 30);
 
         $this->assertDatabaseMissing('booking_drafts', ['id' => $withPii->id]);
+    }
+
+    public function test_a_stale_draft_with_a_live_plot_hold_is_still_purged(): void
+    {
+        $plot = $this->makePlot();
+        $abandoned = $this->makeDraftAged(days: 45, payload: [
+            'customer_full_name' => 'Rina Kartika',
+        ]);
+
+        $hold = (new HoldPlotForDraft)($plot, $abandoned, "booking_draft:{$abandoned->getKey()}");
+
+        $deleted = (new PurgeStaleBookingDrafts)(retentionDays: 30);
+
+        $this->assertSame(1, $deleted);
+        $this->assertDatabaseMissing('booking_drafts', ['id' => $abandoned->id]);
+
+        // The reservation evidence survives the purge — only the link to the
+        // erased draft is severed (`nullOnDelete`).
+        $survivor = PlotReservation::query()->findOrFail($hold->getKey());
+        $this->assertNull($survivor->booking_draft_id);
+        $this->assertSame(PlotReservationState::HELD, $survivor->state);
+        $this->assertSame($plot->getKey(), $survivor->plot_id);
+
+        // `reserved_by_ref` keeps textual traceability to the purged draft.
+        $this->assertSame("booking_draft:{$abandoned->id}", $survivor->reserved_by_ref);
+    }
+
+    public function test_a_stale_draft_whose_hold_already_reached_a_terminal_state_is_still_purged(): void
+    {
+        $plot = $this->makePlot();
+        $abandoned = $this->makeDraftAged(days: 45);
+
+        $hold = (new HoldPlotForDraft)($plot, $abandoned, "booking_draft:{$abandoned->getKey()}", ttlMinutes: -5);
+        (new ExpirePlotReservation)($hold, 'system', 'system');
+
+        // A terminal chain is TWO rows carrying `booking_draft_id`, not one
+        // — `ExpirePlotReservation` appends rather than mutating.
+        $this->assertSame(2, PlotReservation::query()->where('booking_draft_id', $abandoned->id)->count());
+
+        $deleted = (new PurgeStaleBookingDrafts)(retentionDays: 30);
+
+        $this->assertSame(1, $deleted);
+        $this->assertDatabaseMissing('booking_drafts', ['id' => $abandoned->id]);
+        $this->assertSame(2, PlotReservation::query()->whereNull('booking_draft_id')->count());
+    }
+
+    public function test_one_draft_with_a_hold_cannot_block_the_rest_of_the_sweep(): void
+    {
+        // The real shape of the C1 defect: the purge is a single bulk
+        // DELETE in one transaction, so under RESTRICT the offending row
+        // took every OTHER stale draft's PII down with it.
+        $withHold = $this->makeDraftAged(days: 45);
+        (new HoldPlotForDraft)($this->makePlot(), $withHold, "booking_draft:{$withHold->getKey()}");
+
+        $plain = $this->makeDraftAged(days: 45, payload: ['customer_full_name' => 'Agus Wibowo']);
+
+        $deleted = (new PurgeStaleBookingDrafts)(retentionDays: 30);
+
+        $this->assertSame(2, $deleted);
+        $this->assertDatabaseMissing('booking_drafts', ['id' => $withHold->id]);
+        $this->assertDatabaseMissing('booking_drafts', ['id' => $plain->id]);
+    }
+
+    private function makePlot(): GravePlot
+    {
+        $cemetery = Cemetery::query()->create([
+            'type' => CemeteryType::TPU,
+            'publication_status' => CemeteryPublicationStatus::PUBLISHED,
+            'name' => 'TPU Uji Coba',
+            'slug' => 'tpu-uji-coba-'.Str::lower(Str::random(6)),
+            'city' => LaunchCityCode::JAKARTA,
+            'address' => 'Jl. Contoh No. 1',
+        ]);
+        $block = CemeteryBlock::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'code' => 'BLOK-A',
+            'name' => 'Blok A',
+            'capacity' => 1,
+        ]);
+
+        return GravePlot::query()->create([
+            'block_id' => $block->getKey(),
+            'slot' => '001',
+            'plot_state' => PlotState::AVAILABLE,
+        ]);
     }
 
     /**

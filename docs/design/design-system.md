@@ -761,6 +761,7 @@ Status values are the lowercase stored values of `app/Domain/PlotReservation/Plo
 | `confirmed` | `success` | check-circle | Dikonfirmasi | Active claim, confirmed |
 | `released` | `neutral` | slash | Dilepaskan | Terminal, not an error |
 | `expired` | `neutral` | clock-x | Kedaluwarsa | Terminal, expiry is factual not alarming |
+| `converted` | `neutral` | slash | Dikonversi | Terminal, not an error — the draft hold's own chain closes here when its plot claim moves to a new order-anchored reservation |
 
 > **Plot state and package availability are two granularities, not two spellings of one thing.** A granular-tier cemetery answers availability from `grave_plots.plot_state`; an aggregate-tier cemetery answers it from `cemetery_packages.availability_status`. They are separate `StatusIntent` families and must never be merged.
 

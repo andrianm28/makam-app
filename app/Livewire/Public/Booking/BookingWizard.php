@@ -17,9 +17,17 @@ use App\Domain\Booking\Models\BookingDraft;
 use App\Domain\CemeteryCapability\Models\CemeteryCapabilityProfile;
 use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\CemeteryDirectory\PlotTrackingMode;
 use App\Domain\OrderWorkflow\Actions\SubmitBookingDraft;
 use App\Domain\OrderWorkflow\Exceptions\UnroutableProductTypeException;
 use App\Domain\OrderWorkflow\Models\Order;
+use App\Domain\PlotInventory\Models\CemeteryBlock;
+use App\Domain\PlotInventory\Models\GravePlot;
+use App\Domain\PlotReservation\Actions\HoldPlotForDraft;
+use App\Domain\PlotReservation\Actions\ReleasePlotReservation;
+use App\Domain\PlotReservation\Exceptions\DraftPlotHoldNoLongerValidException;
+use App\Domain\PlotReservation\Exceptions\PlotNotAvailableException;
+use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\Quotation\Actions\ComposeQuoteLinesFromBookingDraft;
 use App\Domain\Quotation\Actions\IssueQuote;
 use App\Domain\Quotation\Exceptions\UnpricedBookingServiceException;
@@ -28,6 +36,7 @@ use App\Domain\Quotation\Models\QuoteLine;
 use App\Domain\ServiceCatalog\ServiceCatalogQuery;
 use App\Domain\ServiceCatalog\ServiceCode;
 use App\Livewire\Public\Directory\Support\PublicCapabilityProjection;
+use App\Platform\Audit\AuditSource;
 use App\Platform\FeatureGate\ModeResolver;
 use App\Platform\FeatureGate\Modes\PaymentMode;
 use App\Platform\IdentityAccess\ActorContextResolver;
@@ -47,6 +56,7 @@ use App\Support\BankTransferInfo;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
@@ -88,6 +98,26 @@ final class BookingWizard extends Component
     public ?string $cemeteryId = null;
 
     public ?int $cemeteryPackageId = null;
+
+    /**
+     * The cemetery a granular-tier picker is currently showing plots for.
+     * Distinct from `$this->cemeteryId` (the SAVED draft field, only set
+     * once `saveStep2()` actually runs) — this is picker-only, pre-save
+     * UI state, and untrusted client input like every other public
+     * property (see `resolvePickerPlot()`).
+     */
+    public ?string $pickerCemeteryId = null;
+
+    /**
+     * The package id the picker was opened for, when the cemetery has
+     * packages — null for a cemetery with none. Threaded through
+     * `openPickerFor()` because the picker section renders ONCE, outside
+     * the per-cemetery `@foreach`/`@foreach ($packages as $package)` loops
+     * that hold this value in the existing Step 2 markup — a loop-local
+     * Blade variable is not in scope there, so it must be captured as
+     * component state instead.
+     */
+    public ?int $pickerCemeteryPackageId = null;
 
     public ?string $serviceType = null;
 
@@ -243,6 +273,20 @@ final class BookingWizard extends Component
         }
 
         $this->hydrateFrom($draft);
+
+        // A genuine page reload/resume with a live plot hold should show
+        // it without the customer manually reopening the picker. Scoped to
+        // mount() only (not every hydrateFrom() call from an autosave
+        // tick elsewhere in the wizard) — reopening on every save would
+        // re-fight a customer who deliberately closed the picker.
+        if (
+            $draft->cemetery_id !== null
+            && $this->pickerAppliesTo($draft->cemetery_id)
+            && PlotReservation::activeForDraft($draft) !== null
+        ) {
+            $this->pickerCemeteryId = $draft->cemetery_id;
+            $this->pickerCemeteryPackageId = $draft->cemetery_package_id;
+        }
     }
 
     private function hydrateFrom(BookingDraft $draft): void
@@ -353,6 +397,164 @@ final class BookingWizard extends Component
             'cemetery_id' => $cemeteryId,
             'cemetery_package_id' => $cemeteryPackageId,
         ]);
+    }
+
+    /**
+     * Whether Step 2's cemetery/package selection should show the plot
+     * picker instead of the plain "Pilih ..." buttons. Fails toward the
+     * EXISTING behaviour (no picker) on any lookup problem — a booking
+     * must never be blocked by this feature being unavailable.
+     *
+     * Resolved through `CemeteryPublicQuery::findPublishedById()`, the same
+     * published-only seam every other Step 2 read already goes through, and
+     * NOT through a raw `Cemetery::find()`. `openPickerFor()` is a public
+     * Livewire method taking a client-supplied id, so a raw lookup let an
+     * anonymous visitor point `$pickerCemeteryId` at any granular cemetery
+     * whose UUID they held — including a `draft`-status one — and read its
+     * blocks and plots through `pickerBlocks()`. That method's own
+     * fail-empty guard delegates here, so closing it here closes it for
+     * every picker path at once. `findPublishedById()` also carries the
+     * UUID-shape guard this method used to duplicate (a non-UUID string
+     * compared against a real `uuid` column is a Postgres type error, not a
+     * miss — see that method's doc block).
+     */
+    public function pickerAppliesTo(string $cemeteryId): bool
+    {
+        $cemetery = CemeteryPublicQuery::findPublishedById($cemeteryId);
+
+        return $cemetery !== null && $cemetery->plot_tracking_mode === PlotTrackingMode::GRANULAR;
+    }
+
+    /**
+     * Blocks (`code => name` => plots) for the picker, scoped to the
+     * cemetery the picker is currently open on. Empty when nothing is
+     * selected or the cemetery is not granular-tier — mirrors
+     * `App\Filament\Shared\PlotFloorMap\BasePlotFloorMapPage::blocks()`'s
+     * own fail-empty shape.
+     */
+    public function pickerBlocks(): \Illuminate\Support\Collection
+    {
+        if ($this->pickerCemeteryId === null || ! $this->pickerAppliesTo($this->pickerCemeteryId)) {
+            return new \Illuminate\Support\Collection;
+        }
+
+        return CemeteryBlock::query()
+            ->where('cemetery_id', $this->pickerCemeteryId)
+            ->with(['plots' => fn ($query) => $query->orderBy('slot')])
+            ->orderBy('code')
+            ->get();
+    }
+
+    /**
+     * The live draft hold for THIS draft, if any — resolved from the
+     * database on every render, never from client state, so a stale
+     * countdown can never outlive the real row. See design-system.md
+     * §8.4: "the indicator is driven by a server-confirmed [value], never
+     * by a local timer" — applied here to the hold countdown the same way
+     * it already applies to the autosave indicator.
+     */
+    public function activeDraftPlotHold(): ?PlotReservation
+    {
+        if ($this->draftId === null) {
+            return null;
+        }
+
+        $draft = BookingDraftQuery::findBound($this->draftId);
+
+        return $draft === null ? null : PlotReservation::activeForDraft($draft);
+    }
+
+    /**
+     * Opens the picker for a cemetery/package the customer has not yet
+     * saved via `saveStep2()` — client-visible UI state only, nothing
+     * persisted. Called by the "Pilih {{ cemetery }}" buttons INSTEAD of
+     * `saveStep2()` when `pickerAppliesTo()` is true; `saveStep2()` still
+     * runs, just later — from `holdPlotForStep2()` below, once a plot is
+     * actually held.
+     */
+    public function openPickerFor(string $cemeteryId, ?int $cemeteryPackageId = null): void
+    {
+        $this->pickerCemeteryId = $cemeteryId;
+        $this->pickerCemeteryPackageId = $cemeteryPackageId;
+    }
+
+    /**
+     * Holds the chosen plot for this draft, then saves Step 2 exactly the
+     * way the existing non-picker buttons already do — `saveStep2()` is
+     * called unchanged, so its own version-conflict/validation handling
+     * applies identically here.
+     *
+     * The hold has to come FIRST (the customer's claim on a contended plot
+     * is the thing worth winning), but `saveStep2()` can still refuse the
+     * cemetery/package afterwards — `SaveBookingDraftStep` re-validates the
+     * cemetery against the draft's city, its publication status and the
+     * package id, and can also raise a version conflict. Either way the
+     * draft never advances, so a hold left standing would squat a real plot
+     * in `reserved` for the whole TTL on behalf of a step that did not
+     * happen. So a failed save releases the hold again.
+     *
+     * Only a hold this call actually CREATED is released
+     * (`wasRecentlyCreated`): when `HoldPlotForDraft` returned an existing
+     * incumbent for the same plot, that hold predates this attempt and a
+     * spurious validation failure here must not take it away.
+     */
+    public function holdPlotForStep2(string $cemeteryId, ?int $cemeteryPackageId, string $plotId): void
+    {
+        if ($this->draftId === null) {
+            $this->autosaveState = 'failed';
+            $this->addError('draft', 'Sesi pemesanan Anda telah berakhir. Silakan mulai ulang.');
+
+            return;
+        }
+
+        $draft = BookingDraftQuery::findBound($this->draftId);
+
+        if ($draft === null) {
+            $this->autosaveState = 'failed';
+            $this->addError('draft', 'Sesi pemesanan Anda telah berakhir. Silakan mulai ulang.');
+
+            return;
+        }
+
+        if (! Str::isUuid($plotId) || ! $this->pickerAppliesTo($cemeteryId)) {
+            $this->addError('plot', 'Plot tidak valid.');
+
+            return;
+        }
+
+        $plot = GravePlot::query()
+            ->whereHas('block', fn ($query) => $query->where('cemetery_id', $cemeteryId))
+            ->find($plotId);
+
+        if ($plot === null) {
+            $this->addError('plot', 'Plot tidak ditemukan pada TPU/TPS ini.');
+
+            return;
+        }
+
+        try {
+            $hold = (new HoldPlotForDraft)($plot, $draft, "booking_draft:{$draft->getKey()}");
+        } catch (PlotNotAvailableException) {
+            $this->addError('plot', 'Plot ini baru saja dipilih oleh pengunjung lain. Silakan pilih plot lain.');
+
+            return;
+        }
+
+        $this->saveStep2($cemeteryId, $cemeteryPackageId);
+
+        // `autosaveState` rather than a check on the `cemetery_id` /
+        // `cemetery_package_id` error keys: `saveStepOrShowErrors()` sets it
+        // to `failed` on BOTH of its failure branches, so this also covers
+        // the version conflict, whose message lands on the `draft` key.
+        if ($hold->wasRecentlyCreated && $this->autosaveState === 'failed') {
+            (new ReleasePlotReservation)(
+                $hold,
+                "booking_draft:{$draft->getKey()}",
+                'customer',
+                reason: 'step 2 was not saved after the hold was taken',
+                auditSource: AuditSource::Api,
+            );
+        }
     }
 
     public function saveStep3(string $serviceType): void
@@ -491,6 +693,8 @@ final class BookingWizard extends Component
         // only carries an order reference when one really exists).
         try {
             app(SubmitBookingDraft::class)($saved, 'booking:'.$saved->id.':submit');
+        } catch (DraftPlotHoldNoLongerValidException) {
+            $this->routeBackToPlotPickerAfterExpiredHold();
         } catch (UnroutableProductTypeException|InvalidArgumentException $e) {
             report($e);
         }
@@ -648,6 +852,10 @@ final class BookingWizard extends Component
         } catch (UnroutableProductTypeException) {
             $this->onlinePaymentError = 'Pesanan jenis ini belum dapat dibayar secara online. Gunakan pembayaran manual atau hubungi dukungan.';
             $this->currentStep = BookingWizardStep::PAYMENT;
+
+            return;
+        } catch (DraftPlotHoldNoLongerValidException) {
+            $this->routeBackToPlotPickerAfterExpiredHold();
 
             return;
         } catch (InvalidArgumentException|OverflowException) {
@@ -835,6 +1043,25 @@ final class BookingWizard extends Component
         }
 
         $this->addError('draft', 'Pemesanan ini telah diubah di perangkat atau tab lain. Halaman dimuat ulang dengan data terbaru — silakan periksa lalu coba lagi.');
+    }
+
+    /**
+     * Per the roadmap's decision #7: an expired/lost draft plot hold at
+     * submission time does NOT fall back to submitting without a
+     * reservation — it blocks, and the customer is routed back to Step 2
+     * to re-pick. Reopens the picker for whichever cemetery the draft had
+     * saved, so the customer lands on a live grid rather than the bare
+     * cemetery list.
+     */
+    private function routeBackToPlotPickerAfterExpiredHold(): void
+    {
+        $this->currentStep = BookingWizardStep::CEMETERY;
+        $this->addError('plot', 'Plot yang Anda pilih sudah tidak lagi ditahan (kedaluwarsa atau diambil pengunjung lain). Silakan pilih plot lain.');
+
+        if ($this->cemeteryId !== null && $this->pickerAppliesTo($this->cemeteryId)) {
+            $this->pickerCemeteryId = $this->cemeteryId;
+            $this->pickerCemeteryPackageId = $this->cemeteryPackageId;
+        }
     }
 
     public function goToStep(int $step): void

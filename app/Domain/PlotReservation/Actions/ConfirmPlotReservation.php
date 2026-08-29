@@ -49,6 +49,10 @@ use App\Platform\Outbox\OutboxClassification;
  * writes no plot row: serialization is what makes the state assert
  * meaningful, and the outbox payload's `plot_id` comes from the locked
  * re-read like every other hop.
+ *
+ * `booking_draft_id` is carried forward from `$current` exactly like
+ * `order_id`, so a confirmed row never silently drops which draft it
+ * belongs to.
  */
 final readonly class ConfirmPlotReservation
 {
@@ -79,6 +83,7 @@ final readonly class ConfirmPlotReservation
                 $row = PlotReservation::query()->create([
                     'plot_id' => $plot->getKey(),
                     'order_id' => $current->order_id,
+                    'booking_draft_id' => $current->booking_draft_id,
                     'state' => PlotReservationState::CONFIRMED,
                     'reserved_by_ref' => $current->reserved_by_ref,
                     'reserved_at' => $current->reserved_at,

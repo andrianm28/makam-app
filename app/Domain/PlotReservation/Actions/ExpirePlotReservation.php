@@ -52,6 +52,10 @@ use Illuminate\Support\Facades\DB;
  * (the documented "same transaction some other way" shape) because the
  * divergence is only knowable under the plot lock, which `Audit::wrap`'s
  * call-time `$reason` cannot see.
+ *
+ * `booking_draft_id` is carried forward from `$current` exactly like
+ * `order_id`, so an expired row never silently drops which draft it
+ * belongs to.
  */
 final readonly class ExpirePlotReservation
 {
@@ -87,6 +91,7 @@ final readonly class ExpirePlotReservation
             $row = PlotReservation::query()->create([
                 'plot_id' => $plot->getKey(),
                 'order_id' => $current->order_id,
+                'booking_draft_id' => $current->booking_draft_id,
                 'state' => PlotReservationState::EXPIRED,
                 'reserved_by_ref' => $current->reserved_by_ref,
                 'reserved_at' => $current->reserved_at,
