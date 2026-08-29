@@ -8,6 +8,7 @@ use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\LaunchCityQuery;
+use App\Domain\CemeteryDirectory\PlotTrackingMode;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -47,6 +48,13 @@ use Filament\Schemas\Schema;
  * path, and `Cemetery::booted()`'s `saving` hook (closed-list assertion for
  * type/publication_status/city) still fires on it — the admin cannot write
  * a value that hook would reject.
+ *
+ * `plot_tracking_mode` IS the exception to the paragraph above: it DOES
+ * have a Domain Action (`SetCemeteryPlotTrackingMode`, guarded and
+ * audited), so unlike every other field on this form it is `disabled()`
+ * here — display-only, matching the `slug` convention above. Writing it
+ * goes through `Actions\SwitchToGranularTrackingAction` on the edit page's
+ * header instead.
  */
 final class CemeteryForm
 {
@@ -141,6 +149,28 @@ final class CemeteryForm
                         CemeteryPublicationStatus::KNOWN_STATUSES,
                         ['Draf', 'Dipublikasikan', 'Tidak dipublikasikan'],
                     ))
+                    ->columnSpanFull(),
+
+                Select::make('plot_tracking_mode')
+                    ->label('Pelacakan petak')
+                    ->native(false)
+                    ->default(PlotTrackingMode::AGGREGATE)
+                    ->options(array_combine(
+                        PlotTrackingMode::KNOWN_MODES,
+                        ['Agregat (kuota per paket)', 'Granular (per petak)'],
+                    ))
+                    // Read-only display, same convention as `slug` above:
+                    // disabled() excludes it from the dehydrated payload, so
+                    // this form can never write plot_tracking_mode. The only
+                    // sanctioned write path is
+                    // App\Domain\CemeteryDirectory\Actions\
+                    // SetCemeteryPlotTrackingMode, called from the "Aktifkan
+                    // pelacakan granular" header action on the edit page.
+                    ->disabled()
+                    ->helperText(
+                        'Klasifikasi permanen. Diubah lewat tombol "Aktifkan pelacakan '
+                        .'granular" pada halaman ubah, bukan lewat form ini.'
+                    )
                     ->columnSpanFull(),
             ]);
     }

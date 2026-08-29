@@ -8,9 +8,12 @@ use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\CemeteryDirectory\PlotTrackingMode;
 use App\Filament\Admin\Resources\CemeteryResource;
 use App\Filament\Admin\Resources\CemeteryResource\Pages\CreateCemetery;
 use App\Filament\Admin\Resources\CemeteryResource\Pages\EditCemetery;
+use App\Filament\Admin\Resources\CemeteryResource\Pages\ListCemeteries;
+use App\Filament\Admin\Resources\CemeteryResource\Tables\CemeteriesTable;
 use App\Models\User;
 use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\IdentityAccess\Roles\ActorRole;
@@ -149,6 +152,71 @@ final class CemeteryResourceCrudTest extends TestCase
             ->where('subject_id', (string) $cemetery->id)
             ->sole();
         $this->assertSame((string) $user->id, $event->actor_ref);
+    }
+
+    public function test_plot_tracking_mode_is_disabled_and_immutable_via_the_form(): void
+    {
+        $this->admin();
+
+        $cemetery = Cemetery::query()->create([
+            'name' => 'TPU Agregat',
+            'slug' => 'tpu-agregat',
+            'type' => CemeteryType::TPU,
+            'city' => LaunchCityCode::JAKARTA,
+            'address' => 'Jl. Contoh Kota Jakarta No. 2',
+            'publication_status' => CemeteryPublicationStatus::DRAFT,
+            'plot_tracking_mode' => PlotTrackingMode::AGGREGATE,
+        ]);
+
+        Livewire::test(EditCemetery::class, ['record' => $cemetery->getRouteKey()])
+            ->assertFormFieldIsDisabled('plot_tracking_mode')
+            ->fillForm(['plot_tracking_mode' => PlotTrackingMode::GRANULAR])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        // Unlike `SwitchToGranularTrackingAction`'s own dedicated test, this
+        // form field is display-only — submitting a different value through
+        // the form must never change the column. Only that action's own
+        // `SetCemeteryPlotTrackingMode` call is a sanctioned write path.
+        $this->assertSame(PlotTrackingMode::AGGREGATE, $cemetery->fresh()->plot_tracking_mode);
+    }
+
+    public function test_the_tracking_mode_badge_renders_the_correct_label_per_tier(): void
+    {
+        $this->admin();
+
+        $aggregate = Cemetery::query()->create([
+            'name' => 'TPU Kuota',
+            'slug' => 'tpu-kuota',
+            'type' => CemeteryType::TPU,
+            'city' => LaunchCityCode::JAKARTA,
+            'address' => 'Jl. Contoh Kota Jakarta No. 3',
+            'publication_status' => CemeteryPublicationStatus::DRAFT,
+            'plot_tracking_mode' => PlotTrackingMode::AGGREGATE,
+        ]);
+        $granular = Cemetery::query()->create([
+            'name' => 'TPU Petak',
+            'slug' => 'tpu-petak',
+            'type' => CemeteryType::TPU,
+            'city' => LaunchCityCode::JAKARTA,
+            'address' => 'Jl. Contoh Kota Jakarta No. 4',
+            'publication_status' => CemeteryPublicationStatus::DRAFT,
+            'plot_tracking_mode' => PlotTrackingMode::GRANULAR,
+        ]);
+
+        Livewire::test(ListCemeteries::class)
+            ->assertTableColumnStateSet('plot_tracking_mode', PlotTrackingMode::AGGREGATE, record: $aggregate)
+            ->assertTableColumnFormattedStateSet(
+                'plot_tracking_mode',
+                CemeteriesTable::trackingModeLabel(PlotTrackingMode::AGGREGATE),
+                record: $aggregate,
+            )
+            ->assertTableColumnStateSet('plot_tracking_mode', PlotTrackingMode::GRANULAR, record: $granular)
+            ->assertTableColumnFormattedStateSet(
+                'plot_tracking_mode',
+                CemeteriesTable::trackingModeLabel(PlotTrackingMode::GRANULAR),
+                record: $granular,
+            );
     }
 
     public function test_a_duplicate_slug_fails_create_validation(): void

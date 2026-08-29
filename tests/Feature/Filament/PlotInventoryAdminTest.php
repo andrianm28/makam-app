@@ -224,6 +224,30 @@ final class PlotInventoryAdminTest extends TestCase
         }
     }
 
+    public function test_create_block_action_is_hidden_for_an_aggregate_tier_cemetery(): void
+    {
+        $this->admin();
+
+        $cemetery = Cemetery::factory()->create(['plot_tracking_mode' => PlotTrackingMode::AGGREGATE]);
+
+        Livewire::test(BlocksRelationManager::class, [
+            'ownerRecord' => $cemetery,
+            'pageClass' => EditCemetery::class,
+        ])->assertTableActionHidden('create');
+    }
+
+    public function test_create_block_action_is_visible_for_a_granular_tier_cemetery(): void
+    {
+        $this->admin();
+
+        $cemetery = Cemetery::factory()->create(['plot_tracking_mode' => PlotTrackingMode::GRANULAR]);
+
+        Livewire::test(BlocksRelationManager::class, [
+            'ownerRecord' => $cemetery,
+            'pageClass' => EditCemetery::class,
+        ])->assertTableActionVisible('create');
+    }
+
     public function test_a_customer_cannot_interact_with_the_blocks_relation_manager(): void
     {
         $user = User::factory()->create();
