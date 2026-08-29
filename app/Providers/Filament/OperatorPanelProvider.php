@@ -6,6 +6,7 @@ namespace App\Providers\Filament;
 
 use App\Filament\Operator\Pages\Dashboard;
 use App\Filament\Operator\Pages\PlotFloorMap;
+use App\Filament\Operator\Resources\CemeteryOrders\CemeteryOrderResource;
 use App\Http\Middleware\AssignCorrelationId;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -40,11 +41,12 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
  * there is no later reversal to make. Stock Filament colour scheme, stock
  * font stack, `->brandName()` only for functional identification.
  *
- * Ships the placeholder Dashboard plus, from Phase D (28 Aug 2026), the
- * cemetery-scoped `PlotFloorMap` page. No Resources yet — Phase C's
- * `CemeteryOrderResource` is the first. Pages are listed explicitly rather
- * than discovered, for the same unconfirmed-discovery-behaviour reason
- * `AdminPanelProvider`'s doc block records.
+ * Ships the placeholder Dashboard page, Phase C's `CemeteryOrderResource`
+ * (the orders dashboard, the panel's first Resource), and Phase D's
+ * cemetery-scoped `PlotFloorMap` page (plot availability). Pages and
+ * Resources are both listed explicitly rather than discovered, for the same
+ * unconfirmed-discovery-behaviour reason `AdminPanelProvider`'s doc block
+ * records.
  */
 final class OperatorPanelProvider extends PanelProvider
 {
@@ -55,6 +57,13 @@ final class OperatorPanelProvider extends PanelProvider
             ->path('operator')
             ->login()
             ->brandName('Makam Operator')
+            // Explicit registration, not `->discoverResources()`: this panel
+            // names every surface it exposes, so a class appearing under
+            // `App\Filament\Operator\Resources` cannot become reachable
+            // without an intentional edit here.
+            ->resources([
+                CemeteryOrderResource::class,
+            ])
             ->pages([
                 Dashboard::class,
                 PlotFloorMap::class,

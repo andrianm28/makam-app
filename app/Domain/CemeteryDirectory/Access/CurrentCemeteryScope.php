@@ -48,11 +48,11 @@ final class CurrentCemeteryScope
     }
 
     /**
-     * No production call site today — only
-     * `OperatorPanelScopingTest` calls this. Kept because it mirrors
-     * `CurrentVendorScope::hasAnyGrant()`'s identical shape exactly, which is
-     * a real argument for the mirror staying exact; this is a conscious
-     * decision to carry speculative API, not an inherited oversight.
+     * Read by `App\Platform\IdentityAccess\Cemetery\CemeteryOrderAccessPolicy`
+     * as the grant half of the `/operator` orders resource's access gate.
+     * Was speculative API when Phase A shipped it (mirroring
+     * `CurrentVendorScope::hasAnyGrant()` exactly); Phase C is the consumer
+     * that was anticipated.
      */
     public function hasAnyGrant(): bool
     {

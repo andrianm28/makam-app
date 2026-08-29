@@ -11,7 +11,9 @@ use App\Domain\OrderWorkflow\Models\OrderStatusEvent;
 use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\OrderWorkflow\ProductType;
 use App\Filament\Admin\Resources\BookingOrders\Actions\TransitionOrderAction;
+use App\Filament\Admin\Resources\BookingOrders\BookingOrderResource;
 use App\Models\User;
+use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use App\Platform\IdentityAccess\Scopes\Models\ScopeAssignment;
 use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
@@ -127,17 +129,35 @@ final class BookingOrderTransitionActionTest extends TestCase
 
         $this->assertSame(OrderStatus::DIVERIFIKASI, $order->fresh()->status());
 
-        // Known-wrong, Phase-C-deferred behaviour (final review, Important
-        // #2): `BookingOrderResource::auditRoleFor()` does not recognise
-        // `cemetery_operator`, so this transition's audit trail misattributes
-        // the actor to the generic 'authenticated_actor' fallback instead of
-        // the real role. This assertion pins that CURRENT value on purpose —
-        // it must start FAILING the moment Phase C teaches `auditRoleFor()`
-        // about `cemetery_operator`, which is the intended tripwire.
+        // Phase A left this assertion pinned to the WRONG value
+        // ('authenticated_actor') as a deliberate tripwire, with a comment
+        // saying it must start failing the moment Phase C taught
+        // `auditRoleFor()` about `cemetery_operator`. Phase C did exactly
+        // that, so this now asserts the correct attribution. The flip is the
+        // tripwire working as designed, not a regression.
         $event = OrderStatusEvent::query()
             ->where('order_id', $order->getKey())
             ->where('to_status', OrderStatus::DIVERIFIKASI->value)
             ->sole();
-        $this->assertSame('authenticated_actor', $event->actor_role);
+        $this->assertSame(ActorRole::CEMETERY_OPERATOR, $event->actor_role);
+    }
+
+    public function test_audit_role_prefers_the_platform_wide_role_for_a_dual_role_actor(): void
+    {
+        $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::CEMETERY_OPERATOR);
+        $this->grantRoleTo($user, ActorRole::ADMIN);
+        $this->actingAs($user);
+
+        $this->assertSame(ActorRole::ADMIN, BookingOrderResource::auditRoleFor(app(ActorContext::class)));
+    }
+
+    public function test_audit_role_still_falls_through_for_an_actor_with_no_recognised_role(): void
+    {
+        $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::CUSTOMER);
+        $this->actingAs($user);
+
+        $this->assertSame('authenticated_actor', BookingOrderResource::auditRoleFor(app(ActorContext::class)));
     }
 }
