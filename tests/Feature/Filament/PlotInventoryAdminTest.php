@@ -6,6 +6,7 @@ namespace Tests\Feature\Filament;
 
 use App\Domain\CemeteryCapability\CemeteryPackageAvailabilityStatus;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\CemeteryDirectory\PlotTrackingMode;
 use App\Domain\PlotInventory\Actions\CreateCemeteryBlock;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\PlotState;
@@ -85,7 +86,7 @@ final class PlotInventoryAdminTest extends TestCase
     {
         $actor = $user ?? $this->admin();
 
-        $cemetery = Cemetery::factory()->create();
+        $cemetery = Cemetery::factory()->create(['plot_tracking_mode' => PlotTrackingMode::GRANULAR]);
         $block = app(CreateCemeteryBlock::class)(
             $cemetery,
             'BLOK-A',
@@ -170,7 +171,7 @@ final class PlotInventoryAdminTest extends TestCase
     {
         $user = $this->admin();
 
-        $cemetery = Cemetery::factory()->create();
+        $cemetery = Cemetery::factory()->create(['plot_tracking_mode' => PlotTrackingMode::GRANULAR]);
         $package = $cemetery->packages()->create([
             'name' => 'Paket Utama',
             'availability_status' => CemeteryPackageAvailabilityStatus::AVAILABLE,

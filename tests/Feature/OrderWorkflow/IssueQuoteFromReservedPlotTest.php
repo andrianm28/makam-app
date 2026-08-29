@@ -16,7 +16,6 @@ use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\OrderWorkflow\OrderTransition;
 use App\Domain\OrderWorkflow\ProductType;
-use App\Domain\PlotInventory\Actions\CreateCemeteryBlock;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotReservation\Actions\ReservePlot;
@@ -127,26 +126,33 @@ final class IssueQuoteFromReservedPlotTest extends TestCase
 
     public function test_an_aggregate_tier_order_is_refused_even_with_a_real_active_reservation(): void
     {
-        // The exact scenario the final whole-branch review reproduced by hand.
-        // CreateCemeteryBlock does NOT refuse a block on an aggregate-tier
-        // cemetery (a pre-existing gap in an earlier, already-merged phase,
-        // tracked separately and deliberately NOT fixed here), so an
-        // aggregate-tier cemetery CAN hold real plot inventory and a real,
-        // genuinely-active reservation against it. The reservation below is
-        // not a mock and not a null — activeForOrder() returns it. What
-        // refuses the shortcut is this action's own explicit tier check, and
-        // nothing else.
+        // The exact scenario the final whole-branch review reproduced by
+        // hand. `CreateCemeteryBlock` now refuses a block on an
+        // aggregate-tier cemetery (the separately-tracked follow-up this
+        // test's own history anticipated has since landed), so this
+        // fixture builds the block/plot directly rather than through that
+        // sanctioned action — exactly how a row from BEFORE that guard
+        // existed could still exist today. The point of this test is
+        // unchanged: it proves THIS action's own explicit tier check
+        // refuses the shortcut on its own, independent of whether
+        // `CreateCemeteryBlock` would ever produce such a row again. The
+        // reservation below is not a mock and not a null —
+        // activeForOrder() returns it.
         $service = $this->makePricedService();
         $cemetery = $this->makeCemetery(PlotTrackingMode::AGGREGATE);
 
-        // Deliberately through the real sanctioned block-creation action, not
-        // a raw ::create() — the point is that this succeeds today against an
-        // aggregate-tier cemetery. If a tier guard is ever added to
-        // CreateCemeteryBlock (the separately-tracked follow-up), this line
-        // will start throwing and this test will need reworking; that is the
-        // intended signal, not a fragile fixture.
-        $block = app(CreateCemeteryBlock::class)($cemetery, 'BLOK-A', 'Blok A', 1, 'user:1');
-        $plot = $block->plots()->sole();
+        $block = CemeteryBlock::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'code' => 'BLOK-A',
+            'name' => 'Blok A',
+            'capacity' => 1,
+            'is_active' => true,
+        ]);
+        $plot = GravePlot::query()->create([
+            'block_id' => $block->getKey(),
+            'slot' => '001',
+            'plot_state' => 'available',
+        ]);
 
         $draft = BookingDraft::query()->create([
             'cemetery_id' => $cemetery->getKey(),

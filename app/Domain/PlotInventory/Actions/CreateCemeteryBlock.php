@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\PlotInventory\Actions;
 
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\CemeteryDirectory\PlotTrackingMode;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotInventory\PlotInventoryAuditActions;
@@ -27,6 +28,23 @@ use InvalidArgumentException;
  * the plan's Task 1 signature for every existing caller) lets the admin
  * create form's `is_active` toggle control the block row — the form field
  * is wired through this parameter, it is never a silent no-op.
+ *
+ * ---------------------------------------------------------------------------
+ * Tracking-mode guard
+ * ---------------------------------------------------------------------------
+ * Refuses unless `$cemetery->plot_tracking_mode === PlotTrackingMode::GRANULAR`
+ * — an aggregate-tier cemetery's availability is `cemetery_packages
+ * .availability_status` (class-level capacity), never a specific plot's
+ * existence, so a block/plot row for one would be meaningless inventory
+ * an aggregate-tier order could still be handed as if it were real. This
+ * is the forward-direction half of the same one-way-in-practice tier
+ * boundary `SetCemeteryPlotTrackingMode` already enforces in reverse
+ * (`GRANULAR -> AGGREGATE` refused while any block exists). Added
+ * 29 Aug 2026 — discovered missing during the TPU/TPS operator dashboard
+ * roadmap's Phase F final review, which had proven it absent by direct
+ * reproduction; no existing cemetery in this environment's own seed data
+ * or migrations had blocks against an aggregate-tier cemetery, so this
+ * is a pure forward-looking guard, no backfill required.
  *
  * ---------------------------------------------------------------------------
  * Auditing
@@ -63,6 +81,13 @@ final class CreateCemeteryBlock
     ): CemeteryBlock {
         if ($capacity < 1) {
             throw new InvalidArgumentException('Cemetery block capacity must be at least 1.');
+        }
+
+        if ($cemetery->plot_tracking_mode !== PlotTrackingMode::GRANULAR) {
+            throw new InvalidArgumentException(
+                "Cannot create a block for cemetery [{$cemetery->getKey()}]: it is not in granular tracking mode. ".
+                'Switch it via SetCemeteryPlotTrackingMode first.'
+            );
         }
 
         return Audit::wrap(
