@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Admin\Resources\BookingOrders\Actions;
 
 use App\Domain\Booking\Models\BookingDraft;
+use App\Domain\CemeteryDirectory\Access\CurrentCemeteryScope;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\OrderStatus;
@@ -14,6 +15,7 @@ use App\Domain\PlotInventory\PlotState;
 use App\Domain\PlotReservation\Actions\ReservePlot;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Filament\Admin\Resources\BookingOrders\BookingOrderResource;
+use App\Filament\Operator\Resources\CemeteryOrders\CemeteryOrderResource;
 use App\Filament\Support\OrderViewUrl;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\Roles\ActorRole;
@@ -34,8 +36,10 @@ use Illuminate\Database\Eloquent\Collection;
  * all" from ORDER state — the order must be at a reservable status, must not
  * already hold an active reservation, and its draft's cemetery must resolve.
  * `->authorize()` is the ACTOR gate: the reservation is an operational
- * (non-money) action, so the admission list is operator / restricted_admin /
- * admin — finance is deliberately excluded (finance's domain is money).
+ * (non-money) action, so two paths admit: an `/admin` actor holding one of
+ * the platform-wide operational roles, or a `cemetery_operator` whose
+ * grants include this order's own cemetery. Finance is deliberately
+ * excluded from both (finance's domain is money).
  * `run()` re-checks the same actor gate as its first act, because "the
  * button was not rendered" is not a security property.
  *
@@ -63,27 +67,24 @@ final class ReservePlotAction
     ];
 
     /**
-     * The operational-actor admission list. Deliberately not finance: the
-     * reservation is not a money-adjacent action, and finance's domain is
-     * money — mirror of the plan's Task 5 role decision.
+     * The PLATFORM-WIDE operational admission list — actors whose authority
+     * is not scoped to any cemetery. Deliberately not finance: reserving a
+     * plot is not a money-adjacent action, and finance's domain is money.
      *
-     * `ActorRole::CEMETERY_OPERATOR` was added by the TPU/TPS operator
-     * dashboard roadmap's Phase A
-     * (docs/superpowers/plans/2026-08-28-operator-panel-and-role.md, Task
-     * 5) as groundwork for Phase C, where a real `/operator` resource
-     * reuses this action. Adding the role here alone is NOT sufficient
-     * today: `roleAllowed()` below composes `BookingOrderResource
-     * ::canAccess()` first, which still refuses `cemetery_operator`
-     * unconditionally — see that plan's "Known, deliberate incompleteness"
-     * section.
+     * `ActorRole::CEMETERY_OPERATOR` is deliberately NOT on this list even
+     * though it is admitted by `roleAllowed()`. It is a cemetery-scoped
+     * role, so it is answered by its own branch, which additionally
+     * requires the order's cemetery to be among the actor's grants. Folding
+     * it into this list would have meant either applying the cemetery check
+     * to the platform-wide roles (which hold no grants, so every order would
+     * be denied) or skipping it for everyone (cross-tenant exposure).
      *
      * @var list<string>
      */
-    private const array ALLOWED_ROLES = [
+    private const array PLATFORM_WIDE_ROLES = [
         ActorRole::OPERATOR,
         ActorRole::RESTRICTED_ADMIN,
         ActorRole::ADMIN,
-        ActorRole::CEMETERY_OPERATOR,
     ];
 
     public static function make(Order $order): Action
@@ -92,7 +93,7 @@ final class ReservePlotAction
             ->label('Reservasi Plot')
             ->icon(Heroicon::OutlinedMapPin)
             ->visible(fn (): bool => self::visibleFor($order))
-            ->authorize(fn (): bool => self::roleAllowed())
+            ->authorize(fn (): bool => self::roleAllowed($order))
             ->schema([
                 Select::make('plot_id')
                     ->label('Plot')
@@ -124,29 +125,50 @@ final class ReservePlotAction
     }
 
     /**
-     * The actor gate — admits exactly `self::ALLOWED_ROLES` (operator/
-     * restricted_admin/admin/cemetery_operator; see that constant's doc
-     * block for the cemetery_operator addition and its current
-     * incompleteness), everyone else (finance, vendor, guests, bare users)
-     * denied. Composes the resource's own access response first: the action
-     * can never authorize an actor the resource page itself would not
-     * admit.
+     * The actor gate — two mutually independent paths, either of which
+     * admits.
+     *
+     * 1. The `/admin` path, unchanged since P3: the actor passes
+     *    `BookingOrderResource::canAccess()` (the platform-wide master-data
+     *    gate) AND holds one of `PLATFORM_WIDE_ROLES`. These roles are not
+     *    cemetery-scoped and hold no cemetery grants, so no cemetery check
+     *    applies to them — applying one would deny them every order.
+     *
+     * 2. The `/operator` path, new in Phase C: the actor passes
+     *    `CemeteryOrderResource::canAccess()` (role + at least one active
+     *    cemetery grant) AND the order's own cemetery is among their
+     *    grants.
+     *
+     * The per-order check in path 2 is the load-bearing half. Unlike
+     * `TransitionOrderAction`, which delegates to the cemetery-aware
+     * `OrderTransitionAuthorizerContract`, this action has NO domain
+     * authorizer — all of its authorization lives here. Without the
+     * `CurrentCemeteryScope::allows()` call, an operator granted cemetery A
+     * could reserve a plot against cemetery B's order, because nothing
+     * downstream re-checks.
+     *
+     * An actor holding BOTH an admin-tier role and `cemetery_operator` is
+     * admitted by path 1 — correctly: they genuinely hold platform-wide
+     * authority, and the narrower role does not subtract from it.
+     *
+     * `run()` re-checks this as its first act, because "the button was not
+     * rendered" is not a security property.
      */
-    private static function roleAllowed(): bool
+    private static function roleAllowed(Order $order): bool
     {
-        if (! BookingOrderResource::canAccess()) {
-            return false;
-        }
-
         $actor = app(ActorContext::class);
 
-        foreach (self::ALLOWED_ROLES as $role) {
-            if ($actor->hasRole($role)) {
-                return true;
+        if (BookingOrderResource::canAccess()) {
+            foreach (self::PLATFORM_WIDE_ROLES as $role) {
+                if ($actor->hasRole($role)) {
+                    return true;
+                }
             }
         }
 
-        return false;
+        return CemeteryOrderResource::canAccess()
+            && $actor->hasRole(ActorRole::CEMETERY_OPERATOR)
+            && app(CurrentCemeteryScope::class)->allows($order->bookingDraft?->cemetery_id);
     }
 
     /**
@@ -209,7 +231,7 @@ final class ReservePlotAction
      */
     private static function run(Order $order, int|string $plotId): void
     {
-        if (! self::roleAllowed()) {
+        if (! self::roleAllowed($order)) {
             Notification::make()
                 ->danger()
                 ->title('Anda tidak berwenang mereservasi plot.')
