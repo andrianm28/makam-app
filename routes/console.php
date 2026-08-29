@@ -43,6 +43,13 @@ Schedule::command('outbox:publish')->everyMinute()->withoutOverlapping();
 // sent" is a cosmetic staleness window, not a correctness one.
 Schedule::command('orders:expire-stale-quotes')->hourly()->withoutOverlapping();
 
+// Sweep customer-abandoned Step 2 plot holds (App\Domain\PlotReservation\
+// Actions\HoldPlotForDraft) back to available. Every minute, matching
+// outbox:publish's cadence — a plot showing falsely "reserved" to every
+// other customer is directly revenue-visible, not a cosmetic staleness
+// window like orders:expire-stale-quotes.
+Schedule::command('plot-reservation:expire-stale-draft-holds')->everyMinute()->withoutOverlapping();
+
 // Detects a silently stalled outbox publisher or notification queue
 // worker — see SpineWatchdogCommand's own doc block for why this is the
 // highest-value alert available: every layer upstream of the async spine
