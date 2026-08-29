@@ -173,12 +173,22 @@ final class OperatorPanelScopingTest extends TestCase
 
     public function test_every_table_page_in_the_operator_panel_applies_the_cemetery_scope(): void
     {
+        $allPages = $this->panelClassesThatAre(Page::class);
+
+        // Canary on the UNFILTERED discovery, independent of whether any
+        // standalone table page exists today (it legitimately does not
+        // yet). Without this, a broken filter predicate below — inverted
+        // `!`, wrong interface — would silently reduce $pages to empty
+        // forever and this test would never be able to fail on its own
+        // defects, discovery-walk or otherwise.
+        $this->assertNotEmpty($allPages, 'Discovered no Page classes — the discovery walk is broken.');
+
         // A Resource's own List/View pages are Page subclasses that render a
         // table, but their query comes from the Resource, which the walk
         // above already checks — so they are excluded here. Only standalone
         // table pages, which own their query, are walked.
         $pages = array_filter(
-            $this->panelClassesThatAre(Page::class),
+            $allPages,
             static fn (string $page): bool => is_subclass_of($page, HasTable::class)
                 && ! is_subclass_of($page, \Filament\Resources\Pages\Page::class),
         );
