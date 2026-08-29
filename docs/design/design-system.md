@@ -751,6 +751,17 @@ Status values are the lowercase stored values of `app/Domain/PlotInventory/PlotS
 
 > **Every value in the cemetery-package table is indicative, never a guarantee.** The owning cemetery's `cemetery_capability_profiles.availability_mode` is the single source of truth for whether any availability claim is a guarantee, and it never is under the safe `INDICATIVE` default (see `CemeteryPackageAvailabilityStatus`'s own doc block). `Tersedia` therefore means "open for enquiry", never "reserved for you".
 
+**Plot reservation state** (`PlotReservationState`, added 29 Aug 2026 — final-review fix wave, finding I-2)
+
+Status values are the lowercase stored values of `app/Domain/PlotReservation/PlotReservationState.php` — `plot_reservations.state` never holds an uppercase value. A separate family from "Plot state" above: a reservation's own lifecycle and the plot's operational state are two different questions.
+
+| Status | Intent | Icon | Label | Rationale |
+|---|---|---|---|---|
+| `held` | `pending` | clock | Ditahan | Active claim, not yet confirmed |
+| `confirmed` | `success` | check-circle | Dikonfirmasi | Active claim, confirmed |
+| `released` | `neutral` | slash | Dilepaskan | Terminal, not an error |
+| `expired` | `neutral` | clock-x | Kedaluwarsa | Terminal, expiry is factual not alarming |
+
 > **Plot state and package availability are two granularities, not two spellings of one thing.** A granular-tier cemetery answers availability from `grave_plots.plot_state`; an aggregate-tier cemetery answers it from `cemetery_packages.availability_status`. They are separate `StatusIntent` families and must never be merged.
 
 > `PaymentState` and `VendorProcessingStatus` are deliberately separate vocabularies. A paid order is never a completed one, and the two always render as two distinct indicators (PUB-024), never one merged "done" badge.

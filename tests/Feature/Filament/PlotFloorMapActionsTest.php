@@ -281,8 +281,8 @@ final class PlotFloorMapActionsTest extends TestCase
         Livewire::actingAs($operator)
             ->test(OperatorPlotFloorMap::class)
             ->assertSee('BLOK-A')
-            ->assertDontSee('Tandai Terisi')
             ->call('openPlot', (string) $plot->getKey())
+            ->assertDontSee('Tandai Terisi')
             ->call('markPlotState', PlotState::OCCUPIED);
 
         $this->assertSame(PlotState::AVAILABLE, $plot->fresh()?->plot_state);
@@ -458,6 +458,24 @@ final class PlotFloorMapActionsTest extends TestCase
         );
 
         return [$cemetery, $plot->fresh(), $order];
+    }
+
+    /**
+     * Final-review finding I-2: the cell modal must never print the raw
+     * `PlotReservationState` value ('held') — it must resolve through
+     * `StatusIntent::FAMILY_PLOT_RESERVATION` to its Indonesian label.
+     */
+    public function test_the_cell_modal_shows_the_indonesian_reservation_label_not_the_raw_state(): void
+    {
+        $admin = $this->freshAdmin();
+        [$cemetery, $plot] = $this->reservedPlot($admin);
+
+        Livewire::actingAs($admin)
+            ->test(AdminPlotFloorMap::class)
+            ->set('cemeteryId', (string) $cemetery->getKey())
+            ->call('openPlot', (string) $plot->getKey())
+            ->assertSee('Ditahan')
+            ->assertDontSee('held', escape: false);
     }
 
     public function test_a_held_reservation_can_be_confirmed_from_the_map(): void

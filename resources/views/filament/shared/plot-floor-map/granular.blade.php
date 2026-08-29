@@ -80,10 +80,15 @@
                 </div>
                 @php $modalReservation = $this->activeReservation(); @endphp
                 @if ($modalReservation !== null)
-                    <p class="text-sm text-neutral-600">
-                        Reservasi: {{ $modalReservation->state }} ·
-                        {{ $modalReservation->reserved_at?->format('Y-m-d H:i') ?? '—' }}
-                    </p>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-sm text-neutral-600">Reservasi:</span>
+                        <x-filament::badge :color="StatusIntent::filamentColor($modalReservation->state, StatusIntent::FAMILY_PLOT_RESERVATION)">
+                            {{ StatusIntent::label($modalReservation->state, StatusIntent::FAMILY_PLOT_RESERVATION) }}
+                        </x-filament::badge>
+                        <span class="text-sm text-neutral-600">
+                            {{ $modalReservation->reserved_at?->format('Y-m-d H:i') ?? '—' }}
+                        </span>
+                    </div>
                 @endif
                 <p class="text-sm text-neutral-600">
                     Paket / Kelas: {{ $activePlot->cemeteryPackage?->name ?? 'Tanpa paket' }}

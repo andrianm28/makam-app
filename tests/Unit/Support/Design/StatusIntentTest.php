@@ -6,6 +6,7 @@ namespace Tests\Unit\Support\Design;
 
 use App\Domain\CemeteryCapability\CemeteryPackageAvailabilityStatus;
 use App\Domain\PlotInventory\PlotState;
+use App\Domain\PlotReservation\PlotReservationState;
 use App\Filament\Admin\Resources\GravePlots\Tables\GravePlotsTable;
 use App\Support\Design\StatusIntent;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -526,5 +527,49 @@ final class StatusIntentTest extends TestCase
         $this->assertSame('Dipesan', $table::stateLabel('reserved'));
         $this->assertSame('Terisi', $table::stateLabel('occupied'));
         $this->assertSame('Perawatan', $table::stateLabel('maintenance'));
+    }
+
+    // -------------------------------------------------------------------
+    // Plot reservation state (design-system.md §3.7 "Plot reservation
+    // state" — final-review finding I-2, fixed 29 Aug 2026)
+    // -------------------------------------------------------------------
+
+    /**
+     * The four values are the LOWERCASE stored values of
+     * `App\Domain\PlotReservation\PlotReservationState`, matching
+     * `plot_reservations.state`.
+     *
+     * @return list<array{0: string, 1: string, 2: string, 3: string}>
+     */
+    public static function plotReservationStateRows(): array
+    {
+        return [
+            ['held', StatusIntent::INTENT_PENDING, 'warning', 'Ditahan'],
+            ['confirmed', StatusIntent::INTENT_SUCCESS, 'success', 'Dikonfirmasi'],
+            ['released', StatusIntent::INTENT_NEUTRAL, 'gray', 'Dilepaskan'],
+            ['expired', StatusIntent::INTENT_NEUTRAL, 'gray', 'Kedaluwarsa'],
+        ];
+    }
+
+    #[DataProvider('plotReservationStateRows')]
+    public function test_plot_reservation_states_resolve_per_design_system_table(
+        string $status,
+        string $intent,
+        string $filamentColor,
+        string $label,
+    ): void {
+        $family = StatusIntent::FAMILY_PLOT_RESERVATION;
+
+        $this->assertSame($intent, StatusIntent::intent($status, $family));
+        $this->assertSame($filamentColor, StatusIntent::filamentColor($status, $family));
+        $this->assertSame($label, StatusIntent::label($status, $family));
+    }
+
+    public function test_every_known_plot_reservation_state_is_mapped(): void
+    {
+        $this->assertSame(
+            PlotReservationState::KNOWN_STATES,
+            StatusIntent::knownStatuses(StatusIntent::FAMILY_PLOT_RESERVATION),
+        );
     }
 }

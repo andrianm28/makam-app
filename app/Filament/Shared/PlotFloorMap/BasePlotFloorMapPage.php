@@ -15,6 +15,8 @@ use App\Domain\PlotReservation\Actions\ConfirmPlotReservation;
 use App\Domain\PlotReservation\Actions\ExpirePlotReservation;
 use App\Domain\PlotReservation\Actions\ReleasePlotReservation;
 use App\Domain\PlotReservation\Actions\ReservePlot;
+use App\Domain\PlotReservation\Exceptions\PlotNotAvailableException;
+use App\Domain\PlotReservation\Exceptions\PlotReservationTransitionException;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PlotReservation\PlotReservationState;
 use App\Filament\Admin\Pages\PasswordReauthentication;
@@ -431,8 +433,12 @@ abstract class BasePlotFloorMapPage extends Page
 
             Notification::make()->success()->title('Plot berhasil direservasi.')->send();
             $this->closePlot();
-        } catch (Throwable $exception) {
+        } catch (PlotNotAvailableException $exception) {
             Notification::make()->danger()->title('Reservasi gagal')->body($exception->getMessage())->send();
+        } catch (Throwable $exception) {
+            report($exception);
+
+            Notification::make()->danger()->title('Reservasi gagal')->body('Terjadi kesalahan, silakan coba lagi.')->send();
         }
     }
 
@@ -545,8 +551,12 @@ abstract class BasePlotFloorMapPage extends Page
 
             Notification::make()->success()->title('Reservasi diperbarui.')->send();
             $this->closePlot();
-        } catch (Throwable $exception) {
+        } catch (PlotReservationTransitionException $exception) {
             Notification::make()->danger()->title('Tindakan reservasi gagal')->body($exception->getMessage())->send();
+        } catch (Throwable $exception) {
+            report($exception);
+
+            Notification::make()->danger()->title('Tindakan reservasi gagal')->body('Terjadi kesalahan, silakan coba lagi.')->send();
         }
     }
 

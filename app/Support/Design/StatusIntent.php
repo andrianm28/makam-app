@@ -137,6 +137,18 @@ final class StatusIntent
      */
     public const FAMILY_CEMETERY_PACKAGE_AVAILABILITY = 'cemetery_package_availability';
 
+    /**
+     * `App\Domain\PlotReservation\PlotReservationState` — design-system.md
+     * §3.7 "Plot reservation state" (final-review finding I-2, fixed 29 Aug
+     * 2026). Keys are the LOWERCASE stored values of that class
+     * (`held`/`confirmed`/`released`/`expired`), matching the same
+     * lowercase-stored-value convention `FAMILY_PLOT_STATE` uses. A
+     * separate family from `FAMILY_PLOT_STATE`: a reservation's lifecycle
+     * and a plot's operational state are two different questions, and the
+     * two vocabularies do not share a single value.
+     */
+    public const FAMILY_PLOT_RESERVATION = 'plot_reservation';
+
     public const INTENT_NEUTRAL = 'neutral';
 
     public const INTENT_INFO = 'info';
@@ -304,6 +316,18 @@ final class StatusIntent
             'AVAILABLE' => ['intent' => self::INTENT_SUCCESS, 'icon' => 'check-circle', 'label' => 'Tersedia'],
             'LIMITED' => ['intent' => self::INTENT_PENDING, 'icon' => 'alert-circle', 'label' => 'Terbatas'],
             'UNAVAILABLE' => ['intent' => self::INTENT_DANGER, 'icon' => 'slash', 'label' => 'Penuh'],
+        ],
+        // Plot reservation state — design-system.md §3.7 "Plot reservation
+        // state" (final-review finding I-2, fixed 29 Aug 2026). `held` and
+        // `confirmed` are the ACTIVE states of an append-only chain;
+        // `released` and `expired` are terminal and factual, not errors —
+        // the same reasoning `DIBATALKAN`/`occupied` already use, hence
+        // `neutral` rather than `danger`.
+        self::FAMILY_PLOT_RESERVATION => [
+            'held' => ['intent' => self::INTENT_PENDING, 'icon' => 'clock', 'label' => 'Ditahan'],
+            'confirmed' => ['intent' => self::INTENT_SUCCESS, 'icon' => 'check-circle', 'label' => 'Dikonfirmasi'],
+            'released' => ['intent' => self::INTENT_NEUTRAL, 'icon' => 'slash', 'label' => 'Dilepaskan'],
+            'expired' => ['intent' => self::INTENT_NEUTRAL, 'icon' => 'clock-x', 'label' => 'Kedaluwarsa'],
         ],
     ];
 
