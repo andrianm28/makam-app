@@ -14,7 +14,6 @@ use App\Domain\CemeteryDirectory\PlotTrackingMode;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\OrderWorkflow\ProductType;
-use App\Domain\PlotInventory\Actions\CreateCemeteryBlock;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotReservation\Actions\ReservePlot;
@@ -195,19 +194,31 @@ final class IssueQuoteFromReservedPlotActionTest extends TestCase
     public function test_an_aggregate_tier_order_hides_the_button_even_with_a_real_active_reservation(): void
     {
         // UI-level mirror of the domain-level regression in
-        // IssueQuoteFromReservedPlotTest: an aggregate-tier cemetery CAN hold
-        // real plot inventory today (CreateCemeteryBlock has no tier guard —
-        // a pre-existing gap in an earlier phase, tracked separately and NOT
-        // fixed here), so the reservation below genuinely exists and is
-        // genuinely active. The button must still be hidden, and the only
-        // thing that hides it is qualifies()'s explicit tier check.
+        // IssueQuoteFromReservedPlotTest. CreateCemeteryBlock now refuses a
+        // block on an aggregate-tier cemetery (the follow-up this test's own
+        // history anticipated has since landed), so this fixture builds the
+        // block/plot directly — exactly how a row from before that guard
+        // existed could still exist today. The reservation below genuinely
+        // exists and is genuinely active; the button must still be hidden,
+        // and the only thing that hides it is qualifies()'s explicit tier
+        // check.
         $user = User::factory()->create();
         $this->grantRoleTo($user, ActorRole::OPERATOR);
         $this->actingAs($user);
 
         $cemetery = $this->makeCemetery(PlotTrackingMode::AGGREGATE);
-        $block = app(CreateCemeteryBlock::class)($cemetery, 'BLOK-A', 'Blok A', 1, (string) $user->getKey());
-        $plot = $block->plots()->sole();
+        $block = CemeteryBlock::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'code' => 'BLOK-A',
+            'name' => 'Blok A',
+            'capacity' => 1,
+            'is_active' => true,
+        ]);
+        $plot = GravePlot::query()->create([
+            'block_id' => $block->getKey(),
+            'slot' => '001',
+            'plot_state' => 'available',
+        ]);
 
         $order = $this->makeOrder(OrderStatus::DIVERIFIKASI, $this->makeDraft($cemetery));
         app(ReservePlot::class)($plot, $order, (string) $user->getKey(), 'operator');

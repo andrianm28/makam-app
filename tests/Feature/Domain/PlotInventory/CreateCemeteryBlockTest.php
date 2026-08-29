@@ -6,18 +6,27 @@ namespace Tests\Feature\Domain\PlotInventory;
 
 use App\Domain\CemeteryCapability\CemeteryPackageAvailabilityStatus;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\CemeteryDirectory\PlotTrackingMode;
 use App\Domain\PlotInventory\Actions\CreateCemeteryBlock;
 use App\Domain\PlotInventory\PlotState;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use InvalidArgumentException;
 use Tests\TestCase;
 
 final class CreateCemeteryBlockTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * Granular-tier — the tier a cemetery must already be in for a block
+     * to be created against it (see the class's own guard). Every
+     * pre-existing test in this file used the factory's aggregate-tier
+     * default, which the guard below now correctly refuses — fixed here
+     * rather than at each call site.
+     */
     private function cemetery(): Cemetery
     {
-        return Cemetery::factory()->create();
+        return Cemetery::factory()->create(['plot_tracking_mode' => PlotTrackingMode::GRANULAR]);
     }
 
     public function test_creates_block_and_generates_capacity_plots(): void
@@ -52,8 +61,18 @@ final class CreateCemeteryBlockTest extends TestCase
 
     public function test_capacity_must_be_positive(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(InvalidArgumentException::class);
         app(CreateCemeteryBlock::class)($this->cemetery(), 'BLOK-C', 'Blok C', 0, 'user:1', 'operator');
+    }
+
+    public function test_refuses_a_cemetery_that_is_not_yet_granular_tier(): void
+    {
+        $cemetery = Cemetery::factory()->create(['plot_tracking_mode' => PlotTrackingMode::AGGREGATE]);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('granular');
+
+        app(CreateCemeteryBlock::class)($cemetery, 'BLOK-E', 'Blok E', 1, 'user:1', 'operator');
     }
 
     public function test_class_link_is_applied_to_generated_plots(): void
