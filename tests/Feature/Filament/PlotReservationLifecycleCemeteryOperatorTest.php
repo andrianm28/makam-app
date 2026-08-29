@@ -141,4 +141,30 @@ final class PlotReservationLifecycleCemeteryOperatorTest extends TestCase
 
         $this->assertFalse(PlotReservationLifecycleActions::confirm($order, $reservation)->isAuthorized());
     }
+
+    /**
+     * `run()` authorizes against `$order` and mutates `$reservation` — two
+     * independent parameters on a public static factory shared across two
+     * panels. Nothing else asserts `$reservation->order_id ===
+     * $order->getKey()`, so this pins the guard directly: even an actor
+     * authorized for BOTH cemeteries (platform-wide admin) must not be able
+     * to clear a hold by passing a reservation that belongs to a different
+     * order than the one named in the call. `->call()` runs the action's
+     * closure directly (bypassing `isAuthorized()`), which is exactly what
+     * makes this assertion about the guard and not about the actor gate.
+     */
+    public function test_run_refuses_a_reservation_that_does_not_belong_to_the_given_order(): void
+    {
+        [$order] = $this->heldReservationIn($this->cemeteryA);
+        [, $foreignReservation] = $this->heldReservationIn($this->cemeteryB);
+
+        $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
+        $this->actingAs($user);
+        $this->app->forgetScopedInstances();
+
+        PlotReservationLifecycleActions::confirm($order, $foreignReservation)->call();
+
+        $this->assertSame(PlotReservationState::HELD, $foreignReservation->fresh()->state);
+    }
 }

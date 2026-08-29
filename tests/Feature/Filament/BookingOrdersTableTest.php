@@ -15,9 +15,11 @@ use App\Domain\PlotInventory\PlotState;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PlotReservation\PlotReservationState;
 use App\Filament\Admin\Resources\BookingOrders\Pages\ListBookingOrders;
+use App\Filament\Admin\Resources\BookingOrders\Tables\BookingOrdersTable;
 use App\Models\User;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -177,5 +179,26 @@ final class BookingOrdersTableTest extends TestCase
         // filter's own subquery), so this assertion fails loudly the moment
         // the N+1 is reintroduced.
         $this->assertSame(1, $reservationQueries);
+    }
+
+    /**
+     * `plotLabel()` dereferences `$reservation->plot->block` without a null
+     * guard was the finding (M-2 of the final review) — FK constraints
+     * (`grave_plots.block_id` is `restrictOnDelete`) make a genuinely
+     * orphaned row unreachable through normal writes, so this exercises the
+     * guard directly against an in-memory relation rather than trying to
+     * manufacture the impossible database state.
+     */
+    public function test_the_plot_column_degrades_instead_of_fataling_when_the_plot_relation_is_missing(): void
+    {
+        $order = $this->orderFor($this->cemeteryA, 'Budi Santoso');
+        $reservation = $this->holdAPlotFor($order, $this->cemeteryA, 'A-005');
+        $reservation->setRelation('plot', null);
+        $order->setRelation('plotReservations', new Collection([$reservation]));
+
+        $method = new \ReflectionMethod(BookingOrdersTable::class, 'plotLabel');
+        $method->setAccessible(true);
+
+        $this->assertSame('—', $method->invoke(null, $order));
     }
 }

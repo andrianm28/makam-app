@@ -121,6 +121,15 @@ final class BookingOrdersTable
      * The active reservation's plot, read from the ALREADY-EAGER-LOADED
      * chain — never through `PlotReservation::activeForOrder()`, which
      * would be one query per rendered row.
+     *
+     * `?->` chained rather than assumed: the plot/block FKs make a missing
+     * relation unlikely, but this renders on the operator's landing page, so
+     * a missing relation degrades to the same '—' placeholder the other
+     * columns in this file already use, rather than fataling the whole
+     * dashboard. Deliberately distinct from the "no active reservation"
+     * case (`null`, which reads as "Belum direservasi") — an active
+     * reservation with a dangling plot/block is a data inconsistency, not
+     * an unreserved order.
      */
     private static function plotLabel(Order $record): ?string
     {
@@ -130,7 +139,9 @@ final class BookingOrdersTable
             return null;
         }
 
-        return "{$reservation->plot->block->code} — {$reservation->plot->slot}";
+        return $reservation->plot?->block !== null
+            ? "{$reservation->plot->block->code} — {$reservation->plot->slot}"
+            : '—';
     }
 
     private static function plotStateLabel(Order $record): ?string
