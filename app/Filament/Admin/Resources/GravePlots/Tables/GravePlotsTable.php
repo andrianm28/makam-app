@@ -5,15 +5,11 @@ declare(strict_types=1);
 namespace App\Filament\Admin\Resources\GravePlots\Tables;
 
 use App\Domain\PlotInventory\Models\GravePlot;
-use App\Domain\PlotInventory\PlotInventoryAuditActions;
 use App\Domain\PlotInventory\PlotState;
 use App\Filament\Admin\Pages\PasswordReauthentication;
 use App\Filament\Admin\Resources\GravePlots\GravePlotsResource;
+use App\Filament\Shared\PlotInventory\PlotStateOverrides;
 use App\Http\Middleware\RequireRecentAuthentication;
-use App\Platform\Audit\Audit;
-use App\Platform\Audit\AuditOutcome;
-use App\Platform\Audit\AuditSource;
-use App\Platform\Audit\AuditSubject;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\MasterData\Contracts\MasterDataAdminAuthorizerContract;
 use App\Platform\IdentityAccess\MasterData\Exceptions\MasterDataNotAuthorisedException;
@@ -27,7 +23,6 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use InvalidArgumentException;
 
 /**
  * List-page table for `GravePlotsResource`: cemetery (via block), block
@@ -49,9 +44,13 @@ use InvalidArgumentException;
  *   `PlotState::AVAILABLE`.
  *
  * Each action's allowed from-state set is declared once in
- * `overrideFromStates()` and used BOTH by the `->visible()` closures and
- * by the run-time re-read in `overrideState()`, so render-time meaning and
- * wire-call enforcement cannot drift (finding I2).
+ * `App\Filament\Shared\PlotInventory\PlotStateOverrides::fromStates()` and
+ * used BOTH by the `->visible()` closures here and by that class's
+ * run-time re-read, so render-time meaning and wire-call enforcement
+ * cannot drift (finding I2). The rule moved out of this file on 28 Aug
+ * 2026 when the Phase D Floor/Block Map became a second surface offering
+ * the same three overrides; two hand-maintained copies of a security
+ * control is how the two would eventually disagree.
  *
  * Every override writes `plot_state` ONLY through
  * `Audit::wrap` + `GRAVE_PLOT_STATE_CHANGED` (the row change and its
@@ -77,7 +76,7 @@ use InvalidArgumentException;
  *    Layer 3 is the enforcement: a Livewire component method is addressable
  *    directly over the wire, so "the button was not rendered" is not a
  *    security property.
- * 4. In the shared write path `overrideState()`, a `fresh()` re-read of
+ * 4. In the shared write path `PlotStateOverrides::apply()`, a `fresh()` re-read of
  *    the record followed by a refusal when the CURRENT state is not in
  *    the target's from-set (finding I2): a wire call against a record
  *    whose state changed since the page rendered — e.g. `markAvailable`
@@ -150,7 +149,7 @@ final class GravePlotsTable
                     ->authorize(fn (): bool => self::actorMayManage())
                     ->visible(fn (GravePlot $record): bool => in_array(
                         $record->plot_state,
-                        self::overrideFromStates(PlotState::OCCUPIED),
+                        PlotStateOverrides::fromStates(PlotState::OCCUPIED),
                         true,
                     ))
                     ->action(function (GravePlot $record): void {
@@ -158,7 +157,14 @@ final class GravePlotsTable
                             return;
                         }
 
-                        self::overrideState($record, PlotState::OCCUPIED, 'Plot ditandai terisi.');
+                        // `GravePlotsResource::auditRoleFor()` is reused (not re-derived) so the
+                        // audit trail's `actor_role` cannot become two vocabularies for one action.
+                        PlotStateOverrides::apply(
+                            $record,
+                            PlotState::OCCUPIED,
+                            'Plot ditandai terisi.',
+                            GravePlotsResource::auditRoleFor(app(ActorContext::class)),
+                        );
                     }),
 
                 Action::make('markMaintenance')
@@ -171,7 +177,7 @@ final class GravePlotsTable
                     ->authorize(fn (): bool => self::actorMayManage())
                     ->visible(fn (GravePlot $record): bool => in_array(
                         $record->plot_state,
-                        self::overrideFromStates(PlotState::MAINTENANCE),
+                        PlotStateOverrides::fromStates(PlotState::MAINTENANCE),
                         true,
                     ))
                     ->action(function (GravePlot $record): void {
@@ -179,7 +185,14 @@ final class GravePlotsTable
                             return;
                         }
 
-                        self::overrideState($record, PlotState::MAINTENANCE, 'Plot ditandai perawatan.');
+                        // `GravePlotsResource::auditRoleFor()` is reused (not re-derived) so the
+                        // audit trail's `actor_role` cannot become two vocabularies for one action.
+                        PlotStateOverrides::apply(
+                            $record,
+                            PlotState::MAINTENANCE,
+                            'Plot ditandai perawatan.',
+                            GravePlotsResource::auditRoleFor(app(ActorContext::class)),
+                        );
                     }),
 
                 Action::make('markAvailable')
@@ -195,7 +208,7 @@ final class GravePlotsTable
                     ->authorize(fn (): bool => self::actorMayManage())
                     ->visible(fn (GravePlot $record): bool => in_array(
                         $record->plot_state,
-                        self::overrideFromStates(PlotState::AVAILABLE),
+                        PlotStateOverrides::fromStates(PlotState::AVAILABLE),
                         true,
                     ))
                     ->action(function (GravePlot $record): void {
@@ -203,7 +216,14 @@ final class GravePlotsTable
                             return;
                         }
 
-                        self::overrideState($record, PlotState::AVAILABLE, 'Plot ditandai tersedia.');
+                        // `GravePlotsResource::auditRoleFor()` is reused (not re-derived) so the
+                        // audit trail's `actor_role` cannot become two vocabularies for one action.
+                        PlotStateOverrides::apply(
+                            $record,
+                            PlotState::AVAILABLE,
+                            'Plot ditandai tersedia.',
+                            GravePlotsResource::auditRoleFor(app(ActorContext::class)),
+                        );
                     }),
             ]);
     }
@@ -253,27 +273,6 @@ final class GravePlotsTable
     }
 
     /**
-     * The allowed from-state set for each override target — the SINGLE
-     * source of truth consumed by both the row-action `->visible()`
-     * closures (render-time meaning) and `overrideState()`'s run-time
-     * re-read (wire-call enforcement), so the two cannot drift:
-     * - `markAvailable` (→ `available`) is only meaningful FROM
-     *   maintenance/occupied — never from `available` (no-op) and never
-     *   from `reserved`, whose claim belongs to an active reservation.
-     * - `markOccupied` (→ `occupied`) from available/reserved/maintenance.
-     * - `markMaintenance` (→ `maintenance`) from any other state.
-     */
-    private static function overrideFromStates(string $toState): array
-    {
-        return match ($toState) {
-            PlotState::AVAILABLE => [PlotState::MAINTENANCE, PlotState::OCCUPIED],
-            PlotState::OCCUPIED => [PlotState::AVAILABLE, PlotState::RESERVED, PlotState::MAINTENANCE],
-            PlotState::MAINTENANCE => [PlotState::AVAILABLE, PlotState::RESERVED, PlotState::OCCUPIED],
-            default => [],
-        };
-    }
-
-    /**
      * The wire-level re-authentication enforcement for the state overrides
      * (AGENTS.md: plot-override actions). On refusal, a warning notification
      * and a redirect into the password re-authentication page — the exact
@@ -299,67 +298,5 @@ final class GravePlotsTable
 
             return false;
         }
-    }
-
-    /**
-     * The shared write path for the three overrides: `Audit::wrap` +
-     * `GRAVE_PLOT_STATE_CHANGED` around the plot-state update. The model's
-     * `saving` guard still asserts the closed list inside the same
-     * transaction; an `InvalidArgumentException` there (or any other honest
-     * refusal) rolls the write AND its audit row back and surfaces as a
-     * danger notification.
-     *
-     * The run path re-reads the record (`fresh()`) BEFORE the write and
-     * refuses when its CURRENT state is not in the target's from-set
-     * (`overrideFromStates`): `->visible()` is not re-checked by
-     * Filament's mount, so a wire call against a stale view — e.g.
-     * `markAvailable` on a plot that has been reserved since the page
-     * rendered — would otherwise free the plot behind its active
-     * reservation (finding I2). The refusal is a danger notification and
-     * no write; the audit reason uses the re-read state so the trail
-     * records the transition that actually happened.
-     */
-    private static function overrideState(GravePlot $record, string $toState, string $successTitle): void
-    {
-        $fresh = $record->fresh() ?? $record;
-        $fromState = $fresh->plot_state;
-
-        if (! in_array($fromState, self::overrideFromStates($toState), true)) {
-            Notification::make()
-                ->title('Status plot tidak dapat diubah.')
-                ->body('Status plot saat ini tidak mengizinkan tindakan ini; tidak ada perubahan yang ditulis.')
-                ->danger()
-                ->send();
-
-            return;
-        }
-
-        try {
-            $actor = app(ActorContext::class);
-
-            Audit::wrap(
-                fn (): bool => $fresh->update(['plot_state' => $toState]),
-                action: PlotInventoryAuditActions::GRAVE_PLOT_STATE_CHANGED,
-                subject: new AuditSubject('grave_plot', (string) $fresh->getKey()),
-                outcome: AuditOutcome::Allowed,
-                actorRef: $actor->identityReference,
-                actorRole: GravePlotsResource::auditRoleFor($actor),
-                source: AuditSource::Panel,
-                reason: sprintf('Admin state override: plot %s → %s.', $fromState, $toState),
-            );
-        } catch (InvalidArgumentException $exception) {
-            Notification::make()
-                ->title('Status plot tidak dapat diubah.')
-                ->body($exception->getMessage())
-                ->danger()
-                ->send();
-
-            return;
-        }
-
-        Notification::make()
-            ->title($successTitle)
-            ->success()
-            ->send();
     }
 }

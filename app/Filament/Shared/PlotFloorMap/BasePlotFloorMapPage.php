@@ -9,7 +9,18 @@ use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\CemeteryDirectory\PlotTrackingMode;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
+use App\Domain\PlotInventory\PlotState;
+use App\Filament\Admin\Pages\PasswordReauthentication;
+use App\Filament\Admin\Resources\GravePlots\GravePlotsResource;
+use App\Filament\Shared\PlotInventory\PlotStateOverrides;
+use App\Http\Middleware\RequireRecentAuthentication;
+use App\Platform\IdentityAccess\ActorContext;
+use App\Platform\IdentityAccess\MasterData\Contracts\MasterDataAdminAuthorizerContract;
+use App\Platform\IdentityAccess\MasterData\Exceptions\MasterDataNotAuthorisedException;
+use App\Platform\IdentityAccess\Reauthentication\Exceptions\ReauthenticationRequiredException;
+use App\Platform\IdentityAccess\Reauthentication\ReauthenticationGuard;
 use BackedEnum;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Collection;
@@ -255,5 +266,166 @@ abstract class BasePlotFloorMapPage extends Page
             )
             ->whereKey($plotId)
             ->first();
+    }
+
+    /**
+     * May the CURRENT actor change plot state from this page?
+     *
+     * The same `MasterDataAdminAuthorizerContract` gate `GravePlotsTable`
+     * carries, evaluated identically on BOTH panels — this phase does not
+     * widen write authorization to `ActorRole::CEMETERY_OPERATOR`, which
+     * is not on that authorizer's four-role list. A bare cemetery-operator
+     * therefore gets a complete, correct, read-only map; see the
+     * `/operator` subclass's doc block for why widening it is a separate,
+     * sign-off-requiring decision.
+     *
+     * A null selection is also a "no": there is nothing to write to.
+     */
+    public function actorMayWrite(): bool
+    {
+        if ($this->selectedCemetery() === null) {
+            return false;
+        }
+
+        try {
+            app(MasterDataAdminAuthorizerContract::class)->authorize(app(ActorContext::class));
+        } catch (MasterDataNotAuthorisedException) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * The override targets that are meaningful for the currently open plot,
+     * as `target state => Indonesian button label`. Render-time meaning
+     * only — `PlotStateOverrides::apply()` re-asserts the same rule against
+     * a fresh re-read, because a hidden button is still wire-addressable.
+     *
+     * @return array<string, string>
+     */
+    public function availableOverrides(): array
+    {
+        $plot = $this->activePlot();
+
+        if ($plot === null || ! $this->actorMayWrite()) {
+            return [];
+        }
+
+        $labels = [
+            PlotState::OCCUPIED => 'Tandai Terisi',
+            PlotState::MAINTENANCE => 'Tandai Perawatan',
+            PlotState::AVAILABLE => 'Tandai Tersedia',
+        ];
+
+        return array_filter(
+            $labels,
+            fn (string $label, string $toState): bool => in_array(
+                $plot->plot_state,
+                PlotStateOverrides::fromStates($toState),
+                true,
+            ),
+            ARRAY_FILTER_USE_BOTH,
+        );
+    }
+
+    /**
+     * The ZERO-RECORD-ARGUMENT override action: the target state comes from
+     * the clicked button, the RECORD comes from `$activePlotId` re-resolved
+     * server-side through `resolvePlot()`. A wire call naming a plot in
+     * another cemetery — or in a cemetery this actor holds no grant for —
+     * resolves to null and writes nothing.
+     *
+     * Order of checks is deliberate and mirrors `GravePlotsTable`'s:
+     * 1. the actor gate, before anything else touches the record;
+     * 2. the plot re-resolution (scope enforcement);
+     * 3. recent re-authentication — AGENTS.md requires it for plot-override
+     *    actions, and a stale actor is routed to the challenge page with
+     *    `url.intended` pointing back at THIS page's own URL, so a
+     *    satisfied challenge returns here rather than to the plots table;
+     * 4. `PlotStateOverrides::apply()`, which owns the from-state rule and
+     *    the audited transactional write.
+     *
+     * Deliberately does NOT call `closePlot()` on success: the modal's
+     * "close" is a client-side Alpine dispatch on the button itself
+     * (`granular.blade.php`), fired on every click regardless of the wire
+     * response, so the visible modal always closes. Clearing
+     * `$activePlotId` server-side as well would make a second override on
+     * the SAME plot (e.g. maintenance -> available) require a fresh
+     * `openPlot()` round trip even though the plot never left view;
+     * `resolvePlot()` re-validates the id against the current scope on
+     * every call regardless, so leaving it set carries no security cost.
+     */
+    public function markPlotState(string $toState): void
+    {
+        if (! $this->actorMayWrite()) {
+            Notification::make()->danger()->title('Anda tidak berwenang mengubah status plot.')->send();
+
+            return;
+        }
+
+        $plot = $this->activePlot();
+
+        if ($plot === null) {
+            Notification::make()->danger()->title('Plot tidak ditemukan pada makam yang dipilih.')->send();
+
+            return;
+        }
+
+        if (! $this->requireFreshAuthentication()) {
+            return;
+        }
+
+        $titles = [
+            PlotState::OCCUPIED => 'Plot ditandai terisi.',
+            PlotState::MAINTENANCE => 'Plot ditandai perawatan.',
+            PlotState::AVAILABLE => 'Plot ditandai tersedia.',
+        ];
+
+        $successTitle = $titles[$toState] ?? null;
+
+        if ($successTitle === null) {
+            Notification::make()->danger()->title('Status tujuan tidak dikenali.')->send();
+
+            return;
+        }
+
+        // `GravePlotsResource::auditRoleFor()` is reused (not re-derived) so the map's
+        // audit rows and the table's audit rows cannot become two vocabularies for one action.
+        PlotStateOverrides::apply(
+            $plot,
+            $toState,
+            $successTitle,
+            GravePlotsResource::auditRoleFor(app(ActorContext::class)),
+        );
+    }
+
+    /**
+     * The wire-level re-authentication enforcement, same shape as
+     * `GravePlotsTable::requireFreshAuthentication()` but returning to THIS
+     * page. `static::getUrl()` resolves against whichever panel the
+     * concrete subclass is registered in, so no subclass override is
+     * needed and the two subclasses stay identical apart from
+     * `cemeteryOptions()`.
+     */
+    protected function requireFreshAuthentication(): bool
+    {
+        try {
+            app(ReauthenticationGuard::class)->assertFresh(app(ActorContext::class));
+
+            return true;
+        } catch (ReauthenticationRequiredException) {
+            Notification::make()
+                ->warning()
+                ->title('Perlu verifikasi ulang')
+                ->body('Lakukan verifikasi ulang untuk tindakan ini.')
+                ->send();
+
+            session()->put(RequireRecentAuthentication::REASON_SESSION_KEY, 'plot_override');
+            session()->put('url.intended', static::getUrl());
+            redirect()->route(PasswordReauthentication::ROUTE_NAME);
+
+            return false;
+        }
     }
 }

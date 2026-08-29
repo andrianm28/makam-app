@@ -85,6 +85,16 @@
         @endif
 
         <x-slot name="footer">
+            @foreach ($this->availableOverrides() as $overrideState => $overrideLabel)
+                <x-filament::button
+                    color="primary"
+                    wire:click="markPlotState('{{ $overrideState }}')"
+                    x-on:click="$dispatch('close-modal', { id: 'plot-floor-map-cell' })"
+                >
+                    {{ $overrideLabel }}
+                </x-filament::button>
+            @endforeach
+
             <x-filament::button
                 color="gray"
                 wire:click="closePlot"
