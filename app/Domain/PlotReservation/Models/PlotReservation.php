@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\PlotReservation\Models;
 
+use App\Domain\Booking\Models\BookingDraft;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotReservation\Exceptions\PlotReservationIsAppendOnlyException;
@@ -57,6 +58,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *
  * @property-read GravePlot|null $plot
  * @property-read Order|null $order
+ * @property-read BookingDraft|null $bookingDraft
  */
 final class PlotReservation extends Model
 {
@@ -72,6 +74,7 @@ final class PlotReservation extends Model
     protected $fillable = [
         'plot_id',
         'order_id',
+        'booking_draft_id',
         'state',
         'reserved_by_ref',
         'reason',
@@ -79,6 +82,7 @@ final class PlotReservation extends Model
         'confirmed_at',
         'released_at',
         'expired_at',
+        'expires_at',
     ];
 
     /**
@@ -91,6 +95,7 @@ final class PlotReservation extends Model
             'confirmed_at' => 'immutable_datetime',
             'released_at' => 'immutable_datetime',
             'expired_at' => 'immutable_datetime',
+            'expires_at' => 'immutable_datetime',
         ];
     }
 
@@ -134,6 +139,11 @@ final class PlotReservation extends Model
         return $this->belongsTo(Order::class, 'order_id');
     }
 
+    public function bookingDraft(): BelongsTo
+    {
+        return $this->belongsTo(BookingDraft::class, 'booking_draft_id');
+    }
+
     /**
      * The incumbent reservation for an order — used by `ReservePlot`'s
      * idempotency pre-check (an order with an active reservation is never
@@ -169,6 +179,25 @@ final class PlotReservation extends Model
         return self::incumbentOf(
             self::query()
                 ->where('order_id', $order->getKey())
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->first()
+        );
+    }
+
+    /**
+     * The incumbent hold for a booking draft — the draft-scoped mirror of
+     * `activeForOrder()`. Same head-row-then-filter reasoning: a
+     * superseded `held` row remains in the chain forever, so filtering by
+     * state first would resurrect a row a later hop already superseded.
+     *
+     * @param  BookingDraft  $draft  read for its key only — never content.
+     */
+    public static function activeForDraft(BookingDraft $draft): ?self
+    {
+        return self::incumbentOf(
+            self::query()
+                ->where('booking_draft_id', $draft->getKey())
                 ->orderByDesc('created_at')
                 ->orderByDesc('id')
                 ->first()
