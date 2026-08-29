@@ -16,6 +16,7 @@ use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\OrderWorkflow\OrderTransition;
 use App\Domain\OrderWorkflow\ProductType;
+use App\Domain\PlotInventory\Actions\CreateCemeteryBlock;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotReservation\Actions\ReservePlot;
@@ -117,26 +118,50 @@ final class IssueQuoteFromReservedPlotTest extends TestCase
         ]);
         $order = $this->makeOrder(OrderStatus::DIVERIFIKASI, $draft);
 
+        $this->assertNull(PlotReservation::activeForOrder($order));
+
         $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('no active plot reservation');
         app(IssueQuoteFromReservedPlot::class)($order, CarbonImmutable::now()->addDays(30), 'user:1', 'operator');
     }
 
-    public function test_an_aggregate_tier_order_can_never_qualify(): void
+    public function test_an_aggregate_tier_order_is_refused_even_with_a_real_active_reservation(): void
     {
-        // Structural, not a special case in the action: an aggregate-tier
-        // cemetery never has GravePlot rows, so PlotReservation::activeForOrder()
-        // is always null for such an order — verified directly here as an
-        // explicit regression, not left to the structural argument alone.
+        // The exact scenario the final whole-branch review reproduced by hand.
+        // CreateCemeteryBlock does NOT refuse a block on an aggregate-tier
+        // cemetery (a pre-existing gap in an earlier, already-merged phase,
+        // tracked separately and deliberately NOT fixed here), so an
+        // aggregate-tier cemetery CAN hold real plot inventory and a real,
+        // genuinely-active reservation against it. The reservation below is
+        // not a mock and not a null — activeForOrder() returns it. What
+        // refuses the shortcut is this action's own explicit tier check, and
+        // nothing else.
         $service = $this->makePricedService();
+        $cemetery = $this->makeCemetery(PlotTrackingMode::AGGREGATE);
+
+        // Deliberately through the real sanctioned block-creation action, not
+        // a raw ::create() — the point is that this succeeds today against an
+        // aggregate-tier cemetery. If a tier guard is ever added to
+        // CreateCemeteryBlock (the separately-tracked follow-up), this line
+        // will start throwing and this test will need reworking; that is the
+        // intended signal, not a fragile fixture.
+        $block = app(CreateCemeteryBlock::class)($cemetery, 'BLOK-A', 'Blok A', 1, 'user:1');
+        $plot = $block->plots()->sole();
+
         $draft = BookingDraft::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
             'service_type' => BookingServiceType::NEW_GRAVE,
             'selected_services' => [['code' => $service->code, 'quantity' => 1]],
         ]);
         $order = $this->makeOrder(OrderStatus::DIVERIFIKASI, $draft);
+        app(ReservePlot::class)($plot, $order, 'user:1', 'operator');
 
-        $this->assertNull(PlotReservation::activeForOrder($order));
+        // Precondition 2 genuinely passes — this is what makes the tier check
+        // load-bearing rather than decorative.
+        $this->assertNotNull(PlotReservation::activeForOrder($order));
 
         $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('not against a granular-tier cemetery');
         app(IssueQuoteFromReservedPlot::class)($order, CarbonImmutable::now()->addDays(30), 'user:1', 'operator');
     }
 }

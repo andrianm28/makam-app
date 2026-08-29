@@ -8,8 +8,15 @@ use App\Domain\OrderWorkflow\Exceptions\IllegalOrderTransitionException;
 
 /**
  * The allowed commercial edges. Mirrors `docs/domain/order-lifecycle.md` §2's
- * transition matrix, plus the three placements that matrix does not cover and
- * this module had to settle (grill-spec Round 1):
+ * transition matrix — including its `DIVERIFIKASI -> PENAWARAN_TERKIRIM` row,
+ * which that matrix marks as its one CONDITIONAL edge. That conditionality
+ * lives in `Actions\IssueQuoteFromReservedPlot`, not here: this matrix only
+ * makes the edge possible, per this class's own two-layer discipline (the
+ * same split the TPU/TPS operator dashboard roadmap's Phase F documents,
+ * `docs/superpowers/plans/2026-08-29-booking-flow-shortening.md`).
+ *
+ * Beyond the canonical matrix, three placements it does not cover and this
+ * module had to settle (grill-spec Round 1):
  *
  *   - `MENUNGGU_VERIFIKASI_PEMBAYARAN` is absent from the canonical matrix
  *     entirely. It sits on the MANUAL path only, between MENUNGGU_PEMBAYARAN
@@ -21,13 +28,6 @@ use App\Domain\OrderWorkflow\Exceptions\IllegalOrderTransitionException;
  *   - Nothing terminal is reachable after DIBAYAR. Once money is confirmed,
  *     §3's "compensating financial action" (PaymentReversal + reversing
  *     journal batch) is the correction mechanism, not a status edge.
- *   - `DIVERIFIKASI -> PENAWARAN_TERKIRIM` is a second edge added by the
- *     TPU/TPS operator dashboard roadmap's Phase F
- *     (`docs/superpowers/plans/2026-08-29-booking-flow-shortening.md`):
- *     reachable only when a plot reservation already exists, enforced by
- *     `Actions\IssueQuoteFromReservedPlot`, not by this matrix — the
- *     matrix only makes the edge possible, per this class's own
- *     two-layer discipline.
  */
 final class OrderTransition
 {

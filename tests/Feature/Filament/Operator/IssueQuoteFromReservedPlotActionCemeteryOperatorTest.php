@@ -126,4 +126,29 @@ final class IssueQuoteFromReservedPlotActionCemeteryOperatorTest extends TestCas
         $this->assertSame(OrderStatus::PENAWARAN_TERKIRIM, $order->fresh()->status());
         $this->assertNotNull(Quote::currentFor($order->fresh()));
     }
+
+    public function test_the_generic_auto_rendered_transition_button_never_appears_for_this_edge_on_the_operator_panel(): void
+    {
+        // The operator-panel half of the admin-panel regression in
+        // IssueQuoteFromReservedPlotActionTest. ViewCemeteryOrder carries its
+        // OWN copy of the `continue` guard that skips the generic per-edge
+        // factory for DIVERIFIKASI -> PENAWARAN_TERKIRIM; before this test,
+        // deleting that copy left the whole suite green. It matters most on
+        // this panel, where the actor is the lower-privilege
+        // cemetery_operator.
+        //
+        // assertActionDoesNotExist(), not assertActionHidden(): the loop
+        // `continue`s past the pair entirely, so the action is never
+        // registered and has no visible()/authorize() to fail. Same reasoning
+        // and same idiom as the admin-panel test.
+        $cemetery = $this->makeGranularCemetery();
+        $order = $this->makeOrder($cemetery);
+        $plot = $this->makePlotIn($cemetery);
+
+        $user = $this->actingAsCemeteryOperatorGrantedTo($cemetery);
+        app(ReservePlot::class)($plot, $order, (string) $user->getKey(), 'cemetery_operator');
+
+        Livewire::test(ViewCemeteryOrder::class, ['record' => $order->getRouteKey()])
+            ->assertActionDoesNotExist('transition_PENAWARAN_TERKIRIM');
+    }
 }

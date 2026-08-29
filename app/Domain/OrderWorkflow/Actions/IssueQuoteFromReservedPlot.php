@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\OrderWorkflow\Actions;
 
+use App\Domain\CemeteryDirectory\PlotTrackingMode;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\Models\OrderStatusEvent;
 use App\Domain\OrderWorkflow\OrderStatus;
@@ -25,7 +26,7 @@ use InvalidArgumentException;
  * `IssueOrderQuote`, not a reimplementation: quote composition, quote
  * issuance, and the actual `PENAWARAN_TERKIRIM` write all stay in exactly
  * one place. This class's only job is to refuse the shortcut when its
- * two preconditions are not both true, BEFORE `IssueOrderQuote` ever
+ * three preconditions are not all true, BEFORE `IssueOrderQuote` ever
  * runs — re-asserted here at call time, never trusted from the caller
  * (the same "the button was not rendered is not a security property"
  * discipline `ReservePlotAction`/`TransitionOrderAction` already follow;
@@ -46,10 +47,28 @@ use InvalidArgumentException;
  * roadmap's decision #6 verbatim ("a successfully-converted HELD
  * reservation is sufficient, no operator CONFIRMED gate required"). No
  * state-specific check is added here; a plain non-null read already
- * carries that decision. An aggregate-tier cemetery never has `GravePlot`
- * rows at all, so this is always null for such an order — the shortcut is
- * structurally unreachable for aggregate-tier orders, not specially
- * excluded.
+ * carries that decision.
+ *
+ * Precondition 3 — the reservation's own cemetery is granular-tier. This
+ * is an EXPLICIT, ENFORCED check, deliberately not an assumption. An
+ * earlier draft of this class asserted that aggregate-tier cemeteries
+ * structurally cannot have `GravePlot` rows and therefore cannot reach
+ * precondition 2 at all; that assertion is FALSE in the codebase as it
+ * stands. `App\Domain\PlotInventory\Actions\CreateCemeteryBlock` does not
+ * in fact refuse a block on an aggregate-tier cemetery (contrary to
+ * `PlotTrackingMode::GRANULAR`'s own doc block), so aggregate-tier
+ * cemeteries can accumulate real per-plot inventory and real reservations
+ * against it. That gap belongs to a different, already-merged module and
+ * is tracked as separate follow-up work — it is NOT fixed here, and this
+ * class must not depend on it being fixed. Hence the tier is read from the
+ * RESERVATION's own chain (`plot -> block -> cemetery`), not from the
+ * order's booking draft, so that a divergent `booking_drafts.cemetery_id`
+ * cannot decide a question about the plot actually being reserved. The
+ * exclusion matters because an aggregate-tier cemetery's availability is
+ * governed by `cemetery_packages.availability_status` capacity, which a
+ * specific plot reservation is no evidence of — skipping the manual
+ * `MENUNGGU_KETERSEDIAAN` confirmation there would skip the only check
+ * that exists.
  */
 final readonly class IssueQuoteFromReservedPlot
 {
@@ -72,9 +91,17 @@ final readonly class IssueQuoteFromReservedPlot
             );
         }
 
-        if (PlotReservation::activeForOrder($order) === null) {
+        $reservation = PlotReservation::activeForOrder($order);
+
+        if ($reservation === null) {
             throw new InvalidArgumentException(
                 'Order has no active plot reservation to skip the availability step with.'
+            );
+        }
+
+        if ($reservation->plot?->block?->cemetery?->plot_tracking_mode !== PlotTrackingMode::GRANULAR) {
+            throw new InvalidArgumentException(
+                "Order's reservation is not against a granular-tier cemetery; the availability shortcut only applies where a specific plot reservation is meaningful evidence of availability."
             );
         }
 

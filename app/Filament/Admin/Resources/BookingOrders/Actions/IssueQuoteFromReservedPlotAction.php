@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Admin\Resources\BookingOrders\Actions;
 
+use App\Domain\CemeteryDirectory\PlotTrackingMode;
 use App\Domain\OrderWorkflow\Actions\IssueQuoteFromReservedPlot;
 use App\Domain\OrderWorkflow\Authorization\Contracts\OrderTransitionAuthorizerContract;
 use App\Domain\OrderWorkflow\Exceptions\OrderActionNotAuthorisedException;
@@ -34,15 +35,16 @@ use Throwable;
  * `TransitionOrderAction`
  * ---------------------------------------------------------------------------
  * `->visible()` is the RENDER gate, from ORDER state alone: status must
- * be `DIVERIFIKASI` AND `PlotReservation::activeForOrder()` must be
- * non-null. `->authorize()` is the ACTOR gate — the SAME
+ * be `DIVERIFIKASI`, `PlotReservation::activeForOrder()` must be non-null,
+ * AND that reservation's own cemetery must be granular-tier.
+ * `->authorize()` is the ACTOR gate — the SAME
  * `OrderTransitionAuthorizerContract` check `TransitionOrderAction` uses
  * for the normal `issue_quote` edge (this shortcut is authorization-
  * equivalent to issuing a quote the normal way; only the precondition
  * differs, so it reuses the same transition NAME rather than inventing a
  * second one). `run()` re-checks BOTH gates as its first acts, because
  * "the button was not rendered" is not a security property, and because
- * `IssueQuoteFromReservedPlot` itself ALSO re-asserts its own two
+ * `IssueQuoteFromReservedPlot` itself ALSO re-asserts its own three
  * preconditions independently — belt and braces across three layers
  * (Filament visible, Filament authorize, domain-action precondition), not
  * redundant: each closes a different bypass (a stale render, a direct
@@ -84,13 +86,23 @@ final class IssueQuoteFromReservedPlotAction
     }
 
     /**
-     * The RENDER gate — order state only, no actor concept. Both
-     * preconditions `IssueQuoteFromReservedPlot` itself re-asserts.
+     * The RENDER gate — order state only, no actor concept. All three
+     * preconditions `IssueQuoteFromReservedPlot` itself re-asserts,
+     * including the granular-tier check: the reservation's own
+     * `plot -> block -> cemetery` chain must be granular-tier, because
+     * aggregate-tier cemeteries can (today) still hold real plot
+     * inventory — see that class's doc block for why that is an enforced
+     * check here rather than an assumed impossibility.
      */
     private static function qualifies(Order $order): bool
     {
-        return $order->status() === OrderStatus::DIVERIFIKASI
-            && PlotReservation::activeForOrder($order) !== null;
+        if ($order->status() !== OrderStatus::DIVERIFIKASI) {
+            return false;
+        }
+
+        $reservation = PlotReservation::activeForOrder($order);
+
+        return $reservation?->plot?->block?->cemetery?->plot_tracking_mode === PlotTrackingMode::GRANULAR;
     }
 
     private static function authorized(Order $order): bool

@@ -14,9 +14,11 @@ use App\Domain\CemeteryDirectory\PlotTrackingMode;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\OrderWorkflow\ProductType;
+use App\Domain\PlotInventory\Actions\CreateCemeteryBlock;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotReservation\Actions\ReservePlot;
+use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\Quotation\Models\Quote;
 use App\Domain\ServiceCatalog\Models\ServiceDefinition;
 use App\Domain\ServiceCatalog\ServiceCode;
@@ -45,11 +47,12 @@ final class IssueQuoteFromReservedPlotActionTest extends TestCase
         return ServiceDefinition::findByCode(ServiceCode::GRAVE_DIGGING);
     }
 
-    private function makeDraft(): BookingDraft
+    private function makeDraft(?Cemetery $cemetery = null): BookingDraft
     {
         $service = $this->makePricedService();
 
         return BookingDraft::query()->create([
+            'cemetery_id' => $cemetery?->getKey(),
             'service_type' => BookingServiceType::NEW_GRAVE,
             'selected_services' => [['code' => $service->code, 'quantity' => 1]],
             'customer_full_name' => 'UAT Penerima',
@@ -66,17 +69,22 @@ final class IssueQuoteFromReservedPlotActionTest extends TestCase
         ]);
     }
 
-    private function makeGranularCemeteryPlot(): GravePlot
+    private function makeCemetery(string $trackingMode): Cemetery
     {
-        $cemetery = Cemetery::query()->create([
+        return Cemetery::query()->create([
             'type' => CemeteryType::TPU,
             'publication_status' => CemeteryPublicationStatus::PUBLISHED,
             'name' => 'TPU Uji Coba',
             'slug' => 'tpu-uji-coba-'.Str::lower(Str::random(6)),
             'city' => LaunchCityCode::JAKARTA,
             'address' => 'Jl. Contoh No. 1',
-            'plot_tracking_mode' => PlotTrackingMode::GRANULAR,
+            'plot_tracking_mode' => $trackingMode,
         ]);
+    }
+
+    private function makeGranularCemeteryPlot(): GravePlot
+    {
+        $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
         $block = CemeteryBlock::query()->create(['cemetery_id' => $cemetery->getKey(), 'code' => 'BLOK-A', 'name' => 'Blok A', 'capacity' => 1]);
 
         return GravePlot::query()->create(['block_id' => $block->getKey(), 'slot' => '001', 'plot_state' => 'available']);
@@ -108,6 +116,8 @@ final class IssueQuoteFromReservedPlotActionTest extends TestCase
         $this->actingAs($user);
 
         $order = $this->makeOrder(OrderStatus::DIVERIFIKASI, $this->makeDraft());
+
+        $this->assertNull(PlotReservation::activeForOrder($order));
 
         Livewire::test(ViewBookingOrder::class, ['record' => $order->getRouteKey()])
             ->assertActionHidden('issue_quote_from_reserved_plot');
@@ -182,15 +192,27 @@ final class IssueQuoteFromReservedPlotActionTest extends TestCase
             ->assertActionDoesNotExist('transition_PENAWARAN_TERKIRIM');
     }
 
-    public function test_an_aggregate_tier_order_never_shows_the_button(): void
+    public function test_an_aggregate_tier_order_hides_the_button_even_with_a_real_active_reservation(): void
     {
+        // UI-level mirror of the domain-level regression in
+        // IssueQuoteFromReservedPlotTest: an aggregate-tier cemetery CAN hold
+        // real plot inventory today (CreateCemeteryBlock has no tier guard —
+        // a pre-existing gap in an earlier phase, tracked separately and NOT
+        // fixed here), so the reservation below genuinely exists and is
+        // genuinely active. The button must still be hidden, and the only
+        // thing that hides it is qualifies()'s explicit tier check.
         $user = User::factory()->create();
         $this->grantRoleTo($user, ActorRole::OPERATOR);
         $this->actingAs($user);
 
-        // No GravePlot/ReservePlot call at all — aggregate-tier orders have
-        // no plot inventory to reserve in the first place.
-        $order = $this->makeOrder(OrderStatus::DIVERIFIKASI, $this->makeDraft());
+        $cemetery = $this->makeCemetery(PlotTrackingMode::AGGREGATE);
+        $block = app(CreateCemeteryBlock::class)($cemetery, 'BLOK-A', 'Blok A', 1, (string) $user->getKey());
+        $plot = $block->plots()->sole();
+
+        $order = $this->makeOrder(OrderStatus::DIVERIFIKASI, $this->makeDraft($cemetery));
+        app(ReservePlot::class)($plot, $order, (string) $user->getKey(), 'operator');
+
+        $this->assertNotNull(PlotReservation::activeForOrder($order));
 
         Livewire::test(ViewBookingOrder::class, ['record' => $order->getRouteKey()])
             ->assertActionHidden('issue_quote_from_reserved_plot');
