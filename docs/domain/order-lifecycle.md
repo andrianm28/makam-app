@@ -40,6 +40,7 @@ KEDALUWARSA
 | Draft submission | MASUK | Customer | Required data complete | actor, draft, timestamp |
 | MASUK | DIVERIFIKASI | Admin | Identity/data review completed | verifier, note |
 | DIVERIFIKASI | MENUNGGU_KETERSEDIAAN | Admin | PIC assigned | PIC, cemetery |
+| DIVERIFIKASI | PENAWARAN_TERKIRIM | Admin/operator | **Conditional edge, not unconditional like every other row in this table.** Reachable only via `Actions\IssueQuoteFromReservedPlot`, which requires an active plot reservation on the order AND that the reservation's own cemetery is granular-tier. Skips the manual availability step because the specific plot is already held. | actor, quote version |
 | MENUNGGU_KETERSEDIAAN | PENAWARAN_TERKIRIM | Admin | Availability confirmed manually | source, operator/admin note, quote version |
 | PENAWARAN_TERKIRIM | DISETUJUI_PEMESAN | Customer | Quote not expired | customer, quote version |
 | DISETUJUI_PEMESAN | MENUNGGU_PEMBAYARAN | Admin/system | Payment gate active and admin opens payment | actor, gate evidence |

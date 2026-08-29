@@ -8,8 +8,15 @@ use App\Domain\OrderWorkflow\Exceptions\IllegalOrderTransitionException;
 
 /**
  * The allowed commercial edges. Mirrors `docs/domain/order-lifecycle.md` §2's
- * transition matrix, plus the three placements that matrix does not cover and
- * this module had to settle (grill-spec Round 1):
+ * transition matrix — including its `DIVERIFIKASI -> PENAWARAN_TERKIRIM` row,
+ * which that matrix marks as its one CONDITIONAL edge. That conditionality
+ * lives in `Actions\IssueQuoteFromReservedPlot`, not here: this matrix only
+ * makes the edge possible, per this class's own two-layer discipline (the
+ * same split the TPU/TPS operator dashboard roadmap's Phase F documents,
+ * `docs/superpowers/plans/2026-08-29-booking-flow-shortening.md`).
+ *
+ * Beyond the canonical matrix, three placements it does not cover and this
+ * module had to settle (grill-spec Round 1):
  *
  *   - `MENUNGGU_VERIFIKASI_PEMBAYARAN` is absent from the canonical matrix
  *     entirely. It sits on the MANUAL path only, between MENUNGGU_PEMBAYARAN
@@ -27,7 +34,7 @@ final class OrderTransition
     /** @var array<string, list<string>> */
     private const ALLOWED = [
         'MASUK' => ['DIVERIFIKASI', 'DITOLAK', 'DIBATALKAN'],
-        'DIVERIFIKASI' => ['MENUNGGU_KETERSEDIAAN', 'DITOLAK', 'DIBATALKAN'],
+        'DIVERIFIKASI' => ['MENUNGGU_KETERSEDIAAN', 'PENAWARAN_TERKIRIM', 'DITOLAK', 'DIBATALKAN'],
         'MENUNGGU_KETERSEDIAAN' => ['PENAWARAN_TERKIRIM', 'DITOLAK', 'DIBATALKAN'],
         'PENAWARAN_TERKIRIM' => ['DISETUJUI_PEMESAN', 'KEDALUWARSA', 'DIBATALKAN'],
         'DISETUJUI_PEMESAN' => ['MENUNGGU_PEMBAYARAN', 'KEDALUWARSA', 'DIBATALKAN'],
