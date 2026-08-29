@@ -24,6 +24,7 @@ use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotReservation\Actions\HoldPlotForDraft;
+use App\Domain\PlotReservation\Actions\ReleasePlotReservation;
 use App\Domain\PlotReservation\Exceptions\DraftPlotHoldNoLongerValidException;
 use App\Domain\PlotReservation\Exceptions\PlotNotAvailableException;
 use App\Domain\PlotReservation\Models\PlotReservation;
@@ -35,6 +36,7 @@ use App\Domain\Quotation\Models\QuoteLine;
 use App\Domain\ServiceCatalog\ServiceCatalogQuery;
 use App\Domain\ServiceCatalog\ServiceCode;
 use App\Livewire\Public\Directory\Support\PublicCapabilityProjection;
+use App\Platform\Audit\AuditSource;
 use App\Platform\FeatureGate\ModeResolver;
 use App\Platform\FeatureGate\Modes\PaymentMode;
 use App\Platform\IdentityAccess\ActorContextResolver;
@@ -402,14 +404,23 @@ final class BookingWizard extends Component
      * picker instead of the plain "Pilih ..." buttons. Fails toward the
      * EXISTING behaviour (no picker) on any lookup problem — a booking
      * must never be blocked by this feature being unavailable.
+     *
+     * Resolved through `CemeteryPublicQuery::findPublishedById()`, the same
+     * published-only seam every other Step 2 read already goes through, and
+     * NOT through a raw `Cemetery::find()`. `openPickerFor()` is a public
+     * Livewire method taking a client-supplied id, so a raw lookup let an
+     * anonymous visitor point `$pickerCemeteryId` at any granular cemetery
+     * whose UUID they held — including a `draft`-status one — and read its
+     * blocks and plots through `pickerBlocks()`. That method's own
+     * fail-empty guard delegates here, so closing it here closes it for
+     * every picker path at once. `findPublishedById()` also carries the
+     * UUID-shape guard this method used to duplicate (a non-UUID string
+     * compared against a real `uuid` column is a Postgres type error, not a
+     * miss — see that method's doc block).
      */
     public function pickerAppliesTo(string $cemeteryId): bool
     {
-        if (! Str::isUuid($cemeteryId)) {
-            return false;
-        }
-
-        $cemetery = Cemetery::query()->find($cemeteryId);
+        $cemetery = CemeteryPublicQuery::findPublishedById($cemeteryId);
 
         return $cemetery !== null && $cemetery->plot_tracking_mode === PlotTrackingMode::GRANULAR;
     }
@@ -472,6 +483,20 @@ final class BookingWizard extends Component
      * way the existing non-picker buttons already do — `saveStep2()` is
      * called unchanged, so its own version-conflict/validation handling
      * applies identically here.
+     *
+     * The hold has to come FIRST (the customer's claim on a contended plot
+     * is the thing worth winning), but `saveStep2()` can still refuse the
+     * cemetery/package afterwards — `SaveBookingDraftStep` re-validates the
+     * cemetery against the draft's city, its publication status and the
+     * package id, and can also raise a version conflict. Either way the
+     * draft never advances, so a hold left standing would squat a real plot
+     * in `reserved` for the whole TTL on behalf of a step that did not
+     * happen. So a failed save releases the hold again.
+     *
+     * Only a hold this call actually CREATED is released
+     * (`wasRecentlyCreated`): when `HoldPlotForDraft` returned an existing
+     * incumbent for the same plot, that hold predates this attempt and a
+     * spurious validation failure here must not take it away.
      */
     public function holdPlotForStep2(string $cemeteryId, ?int $cemeteryPackageId, string $plotId): void
     {
@@ -508,7 +533,7 @@ final class BookingWizard extends Component
         }
 
         try {
-            (new HoldPlotForDraft)($plot, $draft, "booking_draft:{$draft->getKey()}");
+            $hold = (new HoldPlotForDraft)($plot, $draft, "booking_draft:{$draft->getKey()}");
         } catch (PlotNotAvailableException) {
             $this->addError('plot', 'Plot ini baru saja dipilih oleh pengunjung lain. Silakan pilih plot lain.');
 
@@ -516,6 +541,20 @@ final class BookingWizard extends Component
         }
 
         $this->saveStep2($cemeteryId, $cemeteryPackageId);
+
+        // `autosaveState` rather than a check on the `cemetery_id` /
+        // `cemetery_package_id` error keys: `saveStepOrShowErrors()` sets it
+        // to `failed` on BOTH of its failure branches, so this also covers
+        // the version conflict, whose message lands on the `draft` key.
+        if ($hold->wasRecentlyCreated && $this->autosaveState === 'failed') {
+            (new ReleasePlotReservation)(
+                $hold,
+                "booking_draft:{$draft->getKey()}",
+                'customer',
+                reason: 'step 2 was not saved after the hold was taken',
+                auditSource: AuditSource::Api,
+            );
+        }
     }
 
     public function saveStep3(string $serviceType): void

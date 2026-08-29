@@ -94,6 +94,30 @@ final class PlotReservationExpiryTest extends TestCase
         $this->assertSame($plotB->getKey(), $expired->first()->plot_id);
     }
 
+    /**
+     * Whole-branch review I4. The candidate query is bounded below, so a
+     * row that expired long ago is not re-selected on every one-minute
+     * run for the life of the table. Only reachable after a sweep outage
+     * longer than the window — see the scheduler's class doc block for the
+     * operator-recovery cost this deliberately accepts.
+     */
+    public function test_a_hold_older_than_the_candidate_window_is_not_re_selected(): void
+    {
+        $ancientPlot = $this->makePlot();
+        $ancientDraft = BookingDraft::query()->create(['current_step' => 2]);
+        (new HoldPlotForDraft)($ancientPlot, $ancientDraft, "booking_draft:{$ancientDraft->getKey()}", ttlMinutes: -2 * 24 * 60);
+
+        $recentPlot = $this->makePlot();
+        $recentDraft = BookingDraft::query()->create(['current_step' => 2]);
+        (new HoldPlotForDraft)($recentPlot, $recentDraft, "booking_draft:{$recentDraft->getKey()}", ttlMinutes: -5);
+
+        $expired = app(PlotReservationExpiryScheduler::class)->expireStaleDraftHolds();
+
+        $this->assertCount(1, $expired);
+        $this->assertSame($recentPlot->getKey(), $expired->first()->plot_id);
+        $this->assertSame(PlotState::RESERVED, $ancientPlot->fresh()->plot_state);
+    }
+
     public function test_a_non_expired_hold_is_left_untouched(): void
     {
         $plot = $this->makePlot();

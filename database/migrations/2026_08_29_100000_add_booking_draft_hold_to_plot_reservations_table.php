@@ -12,11 +12,33 @@ use Illuminate\Support\Facades\Schema;
  * `BookingDraft` (a customer's step-2 plot pick, before an `Order` exists)
  * the same way `order_id` already anchors an operator-initiated hold.
  *
- * `restrictOnDelete()`, matching `order_id`'s own choice on this table —
- * see that column's comment in `2026_08_16_100020_create_plot_reservations
- * _table.php`: a cascade would let a `booking_drafts` row deletion silently
- * erase reservation evidence. `booking_drafts` has no delete/purge path in
- * this codebase today, so restrict costs nothing operationally.
+ * `nullOnDelete()` — and NOT `restrictOnDelete()`, which is what this plan's
+ * own "Resolutions" section (point 1) and an earlier version of this doc
+ * block both specified. That specification was wrong on its stated premise
+ * ("`booking_drafts` has no delete/purge path in this codebase today"):
+ * `App\Domain\Booking\Actions\PurgeStaleBookingDrafts` bulk-`delete()`s
+ * stale drafts nightly (`routes/console.php`, 30-day retention from
+ * `config/booking.php`), for privacy/retention reasons. Reconciling the two:
+ * the retention sweep wins, because `plot_reservations` is append-only —
+ * its rows are NEVER deleted (the model's `delete()` throws
+ * unconditionally), so a RESTRICT could never be satisfied by cascading
+ * cleanup. The first purged draft that had ever held a plot would raise an
+ * FK violation, and since the purge is one bulk `DELETE` in one
+ * transaction, that single row would abort the WHOLE nightly sweep — every
+ * night, forever, silently — leaving customer and deceased PII in
+ * `booking_drafts` indefinitely against the documented retention policy.
+ *
+ * `order_id`'s own `restrictOnDelete()` on this table is NOT contradicted:
+ * `orders` has no purge path and an order is a commercial record that must
+ * not vanish, so restrict is right there. The asymmetry is deliberate — a
+ * draft is transient PII with a scheduled expiry date, an order is not.
+ *
+ * The evidence this table exists to preserve survives the null: the
+ * reservation rows themselves are untouched (append-only), and
+ * `reserved_by_ref` independently stores `"booking_draft:{id}"` as a plain
+ * string, so which draft a hold belonged to stays textually traceable after
+ * the FK is severed. Only the join link is lost, and only for a draft that
+ * has already been deliberately erased.
  *
  * No CHECK constraint enforcing "exactly one of order_id/booking_draft_id":
  * this codebase's own precedent for that shape
@@ -26,22 +48,35 @@ use Illuminate\Support\Facades\Schema;
  *
  * `expires_at` is nullable because only draft-scoped `held` rows ever set
  * it — an operator-initiated (`order_id`-anchored) hold has no TTL.
+ *
+ * Two indexes, because the two readers have different leading columns:
+ * `(booking_draft_id, state)` serves `PlotReservation::activeForDraft()`,
+ * which always knows the draft; `(state, expires_at)` serves
+ * `PlotReservationExpiryScheduler`'s candidate sweep, which runs every
+ * minute with `booking_draft_id` entirely unconstrained and would
+ * otherwise have no usable index at all.
  */
 return new class extends Migration
 {
     public function up(): void
     {
         Schema::table('plot_reservations', function (Blueprint $table) {
-            $table->foreignUuid('booking_draft_id')->nullable()->after('order_id')->constrained('booking_drafts')->restrictOnDelete();
+            $table->foreignUuid('booking_draft_id')->nullable()->after('order_id')->constrained('booking_drafts')->nullOnDelete();
             $table->timestamp('expires_at')->nullable()->after('expired_at');
 
             $table->index(['booking_draft_id', 'state']);
+            $table->index(['state', 'expires_at']);
         });
     }
 
     public function down(): void
     {
         Schema::table('plot_reservations', function (Blueprint $table) {
+            // Dropped explicitly, and BEFORE its columns: `state` outlives
+            // this migration, so unlike `(booking_draft_id, state)` this
+            // index is not carried away by the column drops below.
+            $table->dropIndex(['state', 'expires_at']);
+
             $table->dropConstrainedForeignId('booking_draft_id');
             $table->dropColumn('expires_at');
         });

@@ -11,6 +11,7 @@ use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
+use App\Domain\PlotInventory\PlotState;
 use App\Domain\PlotReservation\Actions\HoldPlotForDraft;
 use App\Domain\PlotReservation\Exceptions\PlotNotAvailableException;
 use App\Domain\PlotReservation\Models\PlotReservation;
@@ -24,8 +25,8 @@ use Tests\TestCase;
  * class's doc block first — same reasoning applies verbatim, substituting
  * `BookingDraft` for `Order`). Outside `RefreshDatabase`'s outer
  * transaction so the first session's commit is genuinely visible to the
- * second; the trailing `migrate:fresh` after EACH test is load-bearing for
- * the same reason.
+ * second; the `migrate:fresh` in `tearDown()` is load-bearing for the same
+ * reason.
  *
  * `test_a_second_hold_is_refused_after_the_first_commits` proves the
  * PLOT-row lock refuses a second draft claiming an already-held plot —
@@ -33,17 +34,19 @@ use Tests\TestCase;
  * DIFFERENT drafts), so session B's plot-level assert, reached only
  * inside the transaction under the locked plot row, is what refuses it.
  *
- * `test_a_sequential_same_draft_different_plot_call_returns_the_incumbent_not_a_second_hold`
- * proves only the OUTER idempotency pre-check
- * (`PlotReservation::activeForDraft()`, run before `DB::transaction`
- * even opens): session B's pre-check already observes session A's
- * committed row and returns the incumbent immediately. NOT VERIFIED ON
- * THIS HOST, stated rather than assumed: because this repo's two-
- * connection pattern is sequential (session A fully commits before
- * session B starts), session B's pre-check short-circuits before the
- * draft-row lock is ever reached — so this test does NOT prove the
- * draft-row lock itself is load-bearing (mutation-testing it out still
- * leaves this test green). Same limitation `ReservePlot`'s own class doc
+ * `test_a_sequential_same_draft_different_plot_call_releases_the_incumbent_and_holds_the_new_plot`
+ * proves the whole-branch review's C2 contract across a real connection
+ * boundary: session B observes session A's committed hold on a DIFFERENT
+ * plot, releases it, and claims the plot it was actually asked for. It
+ * previously asserted the opposite (session B returns the incumbent
+ * unchanged) — that was the behaviour, and it was the defect.
+ *
+ * NOT VERIFIED ON THIS HOST, stated rather than assumed: neither test
+ * exercises the DRAFT-row lock. Because this repo's two-connection
+ * pattern is sequential (session A fully commits before session B
+ * starts), the two sessions never contend for it — so mutation-testing
+ * that lock out still leaves both tests green. Same limitation
+ * `ReservePlot`'s own class doc
  * block records for the analogous order-lock race ("only a true parallel
  * race, not sequential sessions, can pass the pre-check and reach the
  * locked re-check") — which is why `ReservePlotTwoConnectionTest` never
@@ -54,6 +57,23 @@ use Tests\TestCase;
  */
 final class HoldPlotForDraftTwoConnectionTest extends TestCase
 {
+    /**
+     * In `tearDown()`, not at the end of each test body: these tests commit
+     * for real (no `RefreshDatabase` transaction to roll back), so a FAILING
+     * assertion used to skip the reset and leave its rows behind for every
+     * later test in the run — which is how the C2 fix first presented, as
+     * four unrelated `ReservePlotTest` count failures. A failure here must
+     * cost one red test, not a poisoned suite.
+     */
+    protected function tearDown(): void
+    {
+        if (DB::connection()->getDriverName() === 'pgsql') {
+            Artisan::call('migrate:fresh');
+        }
+
+        parent::tearDown();
+    }
+
     public function test_a_second_hold_is_refused_after_the_first_commits(): void
     {
         if (DB::connection()->getDriverName() !== 'pgsql') {
@@ -98,8 +118,6 @@ final class HoldPlotForDraftTwoConnectionTest extends TestCase
 
         $this->assertSame(['ok', 'blocked'], $outcomes);
         $this->assertSame(1, PlotReservation::query()->count());
-
-        Artisan::call('migrate:fresh');
     }
 
     /**
@@ -108,24 +126,29 @@ final class HoldPlotForDraftTwoConnectionTest extends TestCase
      * can throw `PlotNotAvailableException` — each locks a DIFFERENT plot
      * row, so plot-level availability is never contended.
      *
-     * What this proves: session B's OUTER idempotency pre-check
-     * (`PlotReservation::activeForDraft()`, before `DB::transaction` even
-     * opens) finds session A's already-committed hold and returns it
-     * instead of creating a second one — "exactly one reservation row
-     * exists, and both calls return the same id".
+     * REWRITTEN by the whole-branch review's C2 fix. This test previously
+     * asserted that session B returned session A's incumbent unchanged.
+     * That WAS the behaviour, and it was the defect: a customer who walks
+     * back into Step 2 and picks a different plot kept the old hold while
+     * the wizard moved the draft's saved cemetery on, so the order could
+     * ship with a plot the customer never chose — in another cemetery
+     * entirely. The contract now is "the most recent choice wins", so what
+     * this test pins is the opposite outcome, across a real connection
+     * boundary: session A's committed hold is RELEASED and its plot
+     * returns to `available`, and session B's newly created hold is the
+     * draft's only live one.
      *
      * What this does NOT prove: that the draft-row lock (step 2a inside
      * the transaction) is load-bearing. Because the two sessions here run
      * sequentially — session A fully commits before session B starts —
-     * session B's outer pre-check already short-circuits before the
-     * transaction, let alone the lock, is ever reached. Removing the
-     * draft-row lock from `HoldPlotForDraft` leaves this test green. See
-     * the class doc block for why: this is the same limitation
-     * `ReservePlot`'s own doc block records for the analogous order-lock
-     * race, and the same reason `ReservePlotTwoConnectionTest` never
-     * attempts this shape of test for orders.
+     * nothing here contends for that lock. Removing the draft-row lock
+     * from `HoldPlotForDraft` leaves this test green. See the class doc
+     * block for why: this is the same limitation `ReservePlot`'s own doc
+     * block records for the analogous order-lock race, and the same reason
+     * `ReservePlotTwoConnectionTest` never attempts this shape of test for
+     * orders.
      */
-    public function test_a_sequential_same_draft_different_plot_call_returns_the_incumbent_not_a_second_hold(): void
+    public function test_a_sequential_same_draft_different_plot_call_releases_the_incumbent_and_holds_the_new_plot(): void
     {
         if (DB::connection()->getDriverName() !== 'pgsql') {
             $this->markTestSkipped('Sequential cross-connection re-read is only meaningful on PostgreSQL');
@@ -163,9 +186,17 @@ final class HoldPlotForDraftTwoConnectionTest extends TestCase
             DB::purge('pgsql_race');
         }
 
-        $this->assertSame($reservationIds[0], $reservationIds[1], 'the second session must return the incumbent, not create a second hold');
-        $this->assertSame(1, PlotReservation::query()->count());
+        $this->assertNotSame($reservationIds[0], $reservationIds[1], 'the second session must create a new hold for the newly chosen plot');
 
-        Artisan::call('migrate:fresh');
+        // held(first) + released(first) + held(second) — append-only.
+        $this->assertSame(3, PlotReservation::query()->count());
+
+        $this->assertSame(PlotState::AVAILABLE, $firstPlot->fresh()->plot_state);
+        $this->assertSame(PlotState::RESERVED, $secondPlot->fresh()->plot_state);
+
+        $live = PlotReservation::activeForDraft($draft->fresh());
+        $this->assertNotNull($live);
+        $this->assertSame($reservationIds[1], (string) $live->getKey());
+        $this->assertSame($secondPlot->getKey(), $live->plot_id);
     }
 }

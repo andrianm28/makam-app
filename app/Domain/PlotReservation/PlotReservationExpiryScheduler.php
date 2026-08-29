@@ -47,6 +47,33 @@ use Illuminate\Support\Collection;
  * is skipped before ever calling `ExpirePlotReservation`, not merely
  * caught after attempting it.
  *
+ * ---------------------------------------------------------------------------
+ * Why the candidate window is bounded below (whole-branch review I4)
+ * ---------------------------------------------------------------------------
+ * The `booking_draft_id` indirection above stops the sweep from ACTING on
+ * historical rows, but not from SELECTING them: because the `state` column
+ * never changes, a long-since-converted draft's original `held` row keeps
+ * matching `state = held AND expires_at < now()` forever, so the candidate
+ * set — and the per-draft `activeForDraft()` re-derivation each candidate
+ * costs — grew for the life of the table, on a sweep that runs every
+ * minute. Bounded to the last day: the TTL default is 15 minutes
+ * (`config/plot-reservation.php`), so a hold that expired more than a day
+ * ago has, on any healthy schedule, been swept, converted or released
+ * many times over.
+ *
+ * The accepted cost, stated rather than glossed: a hold can only age out
+ * of this window while still live if the sweep itself has not run for
+ * over 24 hours, and re-running the command afterwards will NOT pick
+ * those rows up — they are outside the window for good. Their plots stay
+ * `reserved` until an operator releases them from the Floor/Block Map,
+ * which is the same manual override that already exists for a customer's
+ * live draft hold. That is a deliberate trade: a bounded query that
+ * needs operator recovery after a day-long outage, over an unbounded one
+ * that degrades every minute for the life of the table.
+ *
+ * `(state, expires_at)` is indexed for exactly this predicate (see the
+ * Task 1 migration).
+ *
  * `AGENTS.md` §Queue and event reliability: "Consumers are idempotent" —
  * satisfied two ways here: the `activeForDraft()` re-derivation above
  * skips most already-resolved rows outright, and the remaining
@@ -71,6 +98,7 @@ final readonly class PlotReservationExpiryScheduler
             ->whereNotNull('booking_draft_id')
             ->where('state', PlotReservationState::HELD)
             ->where('expires_at', '<', $now)
+            ->where('expires_at', '>', $now->copy()->subDay())
             ->distinct()
             ->pluck('booking_draft_id');
 
