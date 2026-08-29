@@ -265,15 +265,27 @@
                                     </div>
 
                                     @if ($packages->isEmpty())
-                                        <x-mk.button
-                                            variant="primary"
-                                            full
-                                            wire:click="saveStep2('{{ $cemetery->id }}')"
-                                            wire:loading.attr="disabled"
-                                            wire:target="saveStep2"
-                                        >
-                                            Pilih {{ $cemetery->name }}
-                                        </x-mk.button>
+                                        @if ($this->pickerAppliesTo($cemetery->id))
+                                            <x-mk.button
+                                                variant="primary"
+                                                full
+                                                wire:click="openPickerFor('{{ $cemetery->id }}')"
+                                                wire:loading.attr="disabled"
+                                                wire:target="openPickerFor"
+                                            >
+                                                Pilih {{ $cemetery->name }} &mdash; Lihat Peta Plot
+                                            </x-mk.button>
+                                        @else
+                                            <x-mk.button
+                                                variant="primary"
+                                                full
+                                                wire:click="saveStep2('{{ $cemetery->id }}')"
+                                                wire:loading.attr="disabled"
+                                                wire:target="saveStep2"
+                                            >
+                                                Pilih {{ $cemetery->name }}
+                                            </x-mk.button>
+                                        @endif
                                     @else
                                         <div>
                                             <p id="cemetery-{{ $cemetery->id }}-packages-label" class="text-sm text-neutral-600">
@@ -283,14 +295,26 @@
                                             <ul class="mt-2 flex flex-wrap gap-2" aria-labelledby="cemetery-{{ $cemetery->id }}-packages-label">
                                                 @foreach ($packages as $package)
                                                     <li>
-                                                        <x-mk.button
-                                                            variant="secondary"
-                                                            wire:click="saveStep2('{{ $cemetery->id }}', {{ $package->id }})"
-                                                            wire:loading.attr="disabled"
-                                                            wire:target="saveStep2"
-                                                        >
-                                                            {{ $package->name }}@if ($package->class_label) &mdash; {{ $package->class_label }}@endif
-                                                        </x-mk.button>
+                                                        @if ($this->pickerAppliesTo($cemetery->id))
+                                                            <x-mk.button
+                                                                variant="secondary"
+                                                                wire:click="openPickerFor('{{ $cemetery->id }}', {{ $package->id }})"
+                                                                wire:loading.attr="disabled"
+                                                                wire:target="openPickerFor"
+                                                            >
+                                                                {{ $package->name }}@if ($package->class_label) &mdash; {{ $package->class_label }}@endif
+                                                                &mdash; Lihat Peta Plot
+                                                            </x-mk.button>
+                                                        @else
+                                                            <x-mk.button
+                                                                variant="secondary"
+                                                                wire:click="saveStep2('{{ $cemetery->id }}', {{ $package->id }})"
+                                                                wire:loading.attr="disabled"
+                                                                wire:target="saveStep2"
+                                                            >
+                                                                {{ $package->name }}@if ($package->class_label) &mdash; {{ $package->class_label }}@endif
+                                                            </x-mk.button>
+                                                        @endif
                                                     </li>
                                                 @endforeach
                                             </ul>
@@ -300,6 +324,81 @@
                             </li>
                         @endforeach
                     </ul>
+                @endif
+
+                @if ($this->pickerCemeteryId !== null)
+                    <section aria-labelledby="plot-picker-heading" class="mt-6 border-t border-neutral-200 pt-6">
+                        <h3 id="plot-picker-heading" class="mb-3 text-lg font-semibold text-neutral-900">
+                            Pilih plot
+                        </h3>
+
+                        @php $hold = $this->activeDraftPlotHold(); @endphp
+
+                        @if ($hold !== null)
+                            <x-mk.alert intent="pending" title="Plot ditahan sementara" live="polite" wire:poll.5s>
+                                Plot Anda ditahan agar tidak diambil pengunjung lain
+                                @if ($hold->expires_at !== null)
+                                    hingga pukul {{ $hold->expires_at->format('H:i') }}.
+                                @else
+                                    untuk sementara waktu.
+                                @endif
+                                Selesaikan langkah berikutnya sebelum waktu habis.
+                                <x-mk.badge intent="{{ \App\Support\Design\StatusIntent::intent($hold->state, \App\Support\Design\StatusIntent::FAMILY_PLOT_RESERVATION) }}"
+                                            :icon="\App\Support\Design\StatusIntent::icon($hold->state, \App\Support\Design\StatusIntent::FAMILY_PLOT_RESERVATION)">
+                                    {{ \App\Support\Design\StatusIntent::label($hold->state, \App\Support\Design\StatusIntent::FAMILY_PLOT_RESERVATION) }}
+                                </x-mk.badge>
+                            </x-mk.alert>
+                        @endif
+
+                        @error('plot')
+                            <p class="mb-3 text-sm text-danger-700" role="alert">{{ $message }}</p>
+                        @enderror
+
+                        <div class="grid gap-y-6">
+                            @forelse ($this->pickerBlocks() as $block)
+                                <div>
+                                    <p class="mb-2 text-sm font-medium text-neutral-900">{{ $block->code }} &mdash; {{ $block->name }}</p>
+                                    <ul class="flex flex-wrap gap-2" aria-label="Plot di {{ $block->code }}">
+                                        @foreach ($block->plots as $plot)
+                                            <li wire:key="plot-{{ $plot->id }}">
+                                                <x-mk.button
+                                                    variant="secondary"
+                                                    :disabled="$plot->plot_state !== \App\Domain\PlotInventory\PlotState::AVAILABLE"
+                                                    wire:click="holdPlotForStep2('{{ $this->pickerCemeteryId }}', {{ $this->pickerCemeteryPackageId ?? 'null' }}, '{{ $plot->id }}')"
+                                                    wire:loading.attr="disabled"
+                                                    wire:target="holdPlotForStep2"
+                                                >
+                                                    {{ $plot->slot }}
+                                                    <x-mk.badge
+                                                        intent="{{ \App\Support\Design\StatusIntent::intent($plot->plot_state, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE) }}"
+                                                        :icon="\App\Support\Design\StatusIntent::icon($plot->plot_state, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE)"
+                                                        size="sm"
+                                                    >
+                                                        {{ \App\Support\Design\StatusIntent::label($plot->plot_state, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE) }}
+                                                    </x-mk.badge>
+                                                </x-mk.button>
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                </div>
+                            @empty
+                                <div class="flex flex-col items-center gap-3 py-12 text-center">
+                                    <x-dynamic-component component="icon.inbox" class="size-12 text-neutral-400" aria-hidden="true" />
+                                    <h4 class="text-lg font-semibold text-neutral-800">
+                                        Belum ada plot terdaftar untuk TPU/TPS ini.
+                                    </h4>
+                                    <p class="max-w-prose text-base text-neutral-600">
+                                        Data plot untuk TPU/TPS ini belum disiapkan di sistem kami. Silakan
+                                        hubungi Bantuan agar petugas kami membantu Anda, atau kembali dan pilih
+                                        TPU/TPS lain.
+                                    </p>
+                                    <x-mk.button variant="secondary" href="/bantuan" class="mt-2">
+                                        Hubungi Bantuan
+                                    </x-mk.button>
+                                </div>
+                            @endforelse
+                        </div>
+                    </section>
                 @endif
 
                 @error('cemetery_id')
