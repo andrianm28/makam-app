@@ -137,9 +137,37 @@ final class BookingOrderResource extends Resource
         return 'Pesanan';
     }
 
+    /**
+     * The single `actor_role` value recorded in an order's audit trail —
+     * the first match in a fixed precedence order, most privileged first.
+     *
+     * `ActorRole::CEMETERY_OPERATOR` sits last, after the four platform-wide
+     * roles, matching its position relative to them in
+     * `ActorRole::KNOWN_ROLES` (whose declaration order IS precedence
+     * order): a cemetery-scoped role is less privileged than any of the
+     * back-office roles, so an actor holding both is attributed to the
+     * broader one.
+     *
+     * It was added by the TPU/TPS operator dashboard roadmap's Phase C.
+     * Phase A deliberately did not add it — at that point a
+     * `cemetery_operator` reaching this method would have been attributed
+     * without any cemetery scoping behind the call, so the honest record was
+     * the `'authenticated_actor'` sentinel. Phase C's `CemeteryOrderResource`
+     * and the cemetery-scoped gates on `ReservePlotAction` and
+     * `PlotReservationLifecycleActions` are what made the attribution
+     * truthful, and only then was it added.
+     */
     public static function auditRoleFor(ActorContext $actor): string
     {
-        foreach ([ActorRole::ADMIN, ActorRole::RESTRICTED_ADMIN, ActorRole::OPERATOR, ActorRole::FINANCE] as $role) {
+        $precedence = [
+            ActorRole::ADMIN,
+            ActorRole::RESTRICTED_ADMIN,
+            ActorRole::OPERATOR,
+            ActorRole::FINANCE,
+            ActorRole::CEMETERY_OPERATOR,
+        ];
+
+        foreach ($precedence as $role) {
             if ($actor->hasRole($role)) {
                 return $role;
             }
