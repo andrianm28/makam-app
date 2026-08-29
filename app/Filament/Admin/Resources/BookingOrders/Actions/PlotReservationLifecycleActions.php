@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Admin\Resources\BookingOrders\Actions;
 
+use App\Domain\CemeteryDirectory\Access\CurrentCemeteryScope;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\PlotReservation\Actions\ConfirmPlotReservation;
 use App\Domain\PlotReservation\Actions\ExpirePlotReservation;
@@ -11,6 +12,7 @@ use App\Domain\PlotReservation\Actions\ReleasePlotReservation;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PlotReservation\PlotReservationState;
 use App\Filament\Admin\Resources\BookingOrders\BookingOrderResource;
+use App\Filament\Operator\Resources\CemeteryOrders\CemeteryOrderResource;
 use App\Filament\Support\OrderViewUrl;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\Roles\ActorRole;
@@ -35,9 +37,18 @@ use Filament\Notifications\Notification;
 final class PlotReservationLifecycleActions
 {
     /**
+     * The platform-wide operational admission list — identical to
+     * `ReservePlotAction::PLATFORM_WIDE_ROLES`, deliberately, because these
+     * are the same class of non-money reservation action. Not finance.
+     *
+     * `cemetery_operator` is answered by its own branch in `roleAllowed()`,
+     * which additionally requires the order's cemetery to be among the
+     * actor's grants — see `ReservePlotAction::roleAllowed()`'s doc block
+     * for the full argument, which applies here unchanged.
+     *
      * @var list<string>
      */
-    private const array ALLOWED_ROLES = [
+    private const array PLATFORM_WIDE_ROLES = [
         ActorRole::OPERATOR,
         ActorRole::RESTRICTED_ADMIN,
         ActorRole::ADMIN,
@@ -52,7 +63,7 @@ final class PlotReservationLifecycleActions
             ->modalHeading('Konfirmasi reservasi plot')
             ->modalDescription('Reservasi ini dicatat di audit.')
             ->visible(fn (): bool => $reservation->state === PlotReservationState::HELD)
-            ->authorize(fn (): bool => self::roleAllowed())
+            ->authorize(fn (): bool => self::roleAllowed($order))
             ->action(fn () => self::run($order, $reservation, 'confirm_plot_reservation', 'Reservasi dikonfirmasi.'));
     }
 
@@ -67,7 +78,7 @@ final class PlotReservationLifecycleActions
             ->visible(
                 fn (): bool => in_array($reservation->state, PlotReservationState::ACTIVE_STATES, true)
             )
-            ->authorize(fn (): bool => self::roleAllowed())
+            ->authorize(fn (): bool => self::roleAllowed($order))
             ->action(fn () => self::run($order, $reservation, 'release_plot_reservation', 'Reservasi dilepas.'));
     }
 
@@ -80,25 +91,35 @@ final class PlotReservationLifecycleActions
             ->modalHeading('Kedaluwarsakan reservasi plot')
             ->modalDescription('Plot akan kembali tersedia.')
             ->visible(fn (): bool => $reservation->state === PlotReservationState::HELD)
-            ->authorize(fn (): bool => self::roleAllowed())
+            ->authorize(fn (): bool => self::roleAllowed($order))
             ->action(fn () => self::run($order, $reservation, 'expire_plot_reservation', 'Reservasi kedaluwarsa.'));
     }
 
-    private static function roleAllowed(): bool
+    /**
+     * Structurally identical to `ReservePlotAction::roleAllowed()` — the
+     * `/admin` path (master-data gate + a platform-wide role) or the
+     * `/operator` path (cemetery gate + `cemetery_operator` + the order's
+     * own cemetery among the actor's grants). See that method's doc block
+     * for the reasoning; the two are kept the same shape on purpose,
+     * because `/operator`'s `ViewCemeteryOrder` renders all four actions
+     * together and a divergence between them would show up as an operator
+     * able to place a hold they cannot clear.
+     */
+    private static function roleAllowed(Order $order): bool
     {
-        if (! BookingOrderResource::canAccess()) {
-            return false;
-        }
-
         $actor = app(ActorContext::class);
 
-        foreach (self::ALLOWED_ROLES as $role) {
-            if ($actor->hasRole($role)) {
-                return true;
+        if (BookingOrderResource::canAccess()) {
+            foreach (self::PLATFORM_WIDE_ROLES as $role) {
+                if ($actor->hasRole($role)) {
+                    return true;
+                }
             }
         }
 
-        return false;
+        return CemeteryOrderResource::canAccess()
+            && $actor->hasRole(ActorRole::CEMETERY_OPERATOR)
+            && app(CurrentCemeteryScope::class)->allows($order->bookingDraft?->cemetery_id);
     }
 
     /**
@@ -110,7 +131,7 @@ final class PlotReservationLifecycleActions
      */
     private static function run(Order $order, PlotReservation $reservation, string $transition, string $successTitle): void
     {
-        if (! self::roleAllowed()) {
+        if (! self::roleAllowed($order)) {
             Notification::make()
                 ->danger()
                 ->title('Anda tidak berwenang melakukan tindakan ini.')
