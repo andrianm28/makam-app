@@ -7,9 +7,11 @@ namespace App\Filament\Shared\PlotFloorMap;
 use App\Domain\CemeteryCapability\Models\CemeteryPackage;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\CemeteryDirectory\PlotTrackingMode;
+use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotInventory\PlotState;
+use App\Domain\PlotReservation\Actions\ReservePlot;
 use App\Filament\Admin\Pages\PasswordReauthentication;
 use App\Filament\Admin\Resources\GravePlots\GravePlotsResource;
 use App\Filament\Shared\PlotInventory\PlotStateOverrides;
@@ -26,6 +28,7 @@ use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * The Plot Availability dashboard — ONE page per back-office panel, not
@@ -92,6 +95,13 @@ abstract class BasePlotFloorMapPage extends Page
     public ?string $activePlotId = null;
 
     /**
+     * The order the page was entered for (`?order_id=`), or null in
+     * standalone mode. Untrusted like every other public property; see
+     * `linkedOrder()`.
+     */
+    public ?string $orderId = null;
+
+    /**
      * The cemeteries this panel's actor may work with, `id => name`. The
      * single authorization seam — see the class doc block.
      *
@@ -110,8 +120,13 @@ abstract class BasePlotFloorMapPage extends Page
     }
 
     /**
-     * Seeds the selection from `?cemetery_id=` when it names a cemetery
-     * this actor may see, otherwise from the "exactly one option" rule.
+     * Seeds the selection, in priority order:
+     *   1. `?cemetery_id=`, when it names a cemetery this actor may see;
+     *   2. the cemetery of `?order_id=`'s booking draft, when that order
+     *      resolves AND its cemetery is one this actor may see — the
+     *      order-linked entry mode, so an operator following a link from an
+     *      order lands on the right map with no second click;
+     *   3. the "exactly one option" rule.
      *
      * The one-option rule deliberately reproduces
      * `CurrentCemeteryScope::defaultCemeteryId()`'s semantics without
@@ -120,17 +135,40 @@ abstract class BasePlotFloorMapPage extends Page
      * single-cemetery deployment) and it keeps the subclasses to exactly
      * one overridden method, which is the invariant the class doc block
      * depends on.
+     *
+     * The order id is stored regardless of whether it resolves; every
+     * consumer goes through `linkedOrder()`, which re-validates it against
+     * the CURRENT selection on every call. Storing it unvalidated here and
+     * validating there means changing cemetery cannot leave a stale order
+     * armed.
      */
     public function mount(): void
     {
         $options = $this->cemeteryOptions();
 
-        $requested = request()->query('cemetery_id');
+        $requestedOrder = request()->query('order_id');
+        $this->orderId = is_string($requestedOrder) && $requestedOrder !== '' ? $requestedOrder : null;
 
-        if (is_string($requested) && array_key_exists($requested, $options)) {
-            $this->cemeteryId = $requested;
+        $requestedCemetery = request()->query('cemetery_id');
+
+        if (is_string($requestedCemetery) && array_key_exists($requestedCemetery, $options)) {
+            $this->cemeteryId = $requestedCemetery;
 
             return;
+        }
+
+        if ($this->orderId !== null && Str::isUuid($this->orderId)) {
+            $orderCemeteryId = Order::query()
+                ->with('bookingDraft')
+                ->find($this->orderId)
+                ?->bookingDraft
+                ?->cemetery_id;
+
+            if (is_string($orderCemeteryId) && array_key_exists($orderCemeteryId, $options)) {
+                $this->cemeteryId = $orderCemeteryId;
+
+                return;
+            }
         }
 
         $this->cemeteryId = count($options) === 1
@@ -294,6 +332,118 @@ abstract class BasePlotFloorMapPage extends Page
         }
 
         return true;
+    }
+
+    /**
+     * The order this page is reserving for, or null.
+     *
+     * The order is deliberately resolved THROUGH the selected cemetery: an
+     * order only counts when its booking draft's `cemetery_id` equals the
+     * currently selected cemetery, and the selection is itself
+     * re-validated against `cemeteryOptions()`. That single condition is
+     * what makes it impossible to reserve one cemetery's plot for another
+     * cemetery's order, and impossible for an operator to act on an order
+     * outside their grants — without adding a second scoping path.
+     *
+     * `booking_drafts.cemetery_id` is the same route to a cemetery that
+     * the shipped `ReservePlotAction` reads, so the two surfaces agree on
+     * what "this order's cemetery" means.
+     */
+    public function linkedOrder(): ?Order
+    {
+        if (! is_string($this->orderId) || ! Str::isUuid($this->orderId)) {
+            return null;
+        }
+
+        $cemetery = $this->selectedCemetery();
+
+        if ($cemetery === null) {
+            return null;
+        }
+
+        $order = Order::query()->with('bookingDraft')->find($this->orderId);
+
+        if ($order === null) {
+            return null;
+        }
+
+        return (string) $order->bookingDraft?->cemetery_id === (string) $cemetery->getKey()
+            ? $order
+            : null;
+    }
+
+    /**
+     * The order-linked entry mode's one write: dispatch the EXISTING,
+     * UNMODIFIED `ReservePlot` action for the open cell.
+     *
+     * This page performs no locking, no availability assert and no state
+     * flip of its own — `ReservePlot` owns all of that (order-row lock,
+     * then plot-row lock, then the `available` assert against the locked
+     * row, then the held row, the plot flip, the audit row and the outbox
+     * event, all in one transaction). Every refusal it raises —
+     * `PlotNotAvailableException` above all — surfaces here as a danger
+     * notification with no state change. Re-implementing any of that check
+     * locally would create a second, weaker copy of the module's
+     * concurrency discipline.
+     */
+    public function reserveForOrder(): void
+    {
+        if (! $this->actorMayWrite()) {
+            Notification::make()->danger()->title('Anda tidak berwenang mereservasi plot.')->send();
+
+            return;
+        }
+
+        $order = $this->linkedOrder();
+
+        if ($order === null) {
+            Notification::make()->danger()->title('Pesanan tidak ditemukan untuk makam yang dipilih.')->send();
+
+            return;
+        }
+
+        $plot = $this->activePlot();
+
+        if ($plot === null) {
+            Notification::make()->danger()->title('Plot tidak ditemukan pada makam yang dipilih.')->send();
+
+            return;
+        }
+
+        if (! $this->requireFreshAuthentication()) {
+            return;
+        }
+
+        $actor = app(ActorContext::class);
+
+        try {
+            app(ReservePlot::class)(
+                $plot,
+                $order,
+                (string) $actor->identityReference,
+                GravePlotsResource::auditRoleFor($actor),
+            );
+
+            Notification::make()->success()->title('Plot berhasil direservasi.')->send();
+            $this->closePlot();
+        } catch (Throwable $exception) {
+            Notification::make()->danger()->title('Reservasi gagal')->body($exception->getMessage())->send();
+        }
+    }
+
+    /**
+     * Whether the open cell may be offered to the linked order — the
+     * render-time condition only. `reserveForOrder()` re-derives all of it
+     * server-side, because a hidden button is still wire-addressable.
+     */
+    public function mayReserveActivePlot(): bool
+    {
+        $plot = $this->activePlot();
+
+        return $plot !== null
+            && $plot->plot_state === PlotState::AVAILABLE
+            && $this->linkedOrder() !== null
+            && $this->actorMayWrite();
     }
 
     /**

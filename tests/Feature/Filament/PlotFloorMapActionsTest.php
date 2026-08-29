@@ -4,13 +4,19 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Filament;
 
+use App\Domain\Booking\Models\BookingDraft;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\CemeteryDirectory\PlotTrackingMode;
+use App\Domain\OrderWorkflow\Models\Order;
+use App\Domain\OrderWorkflow\OrderStatus;
+use App\Domain\OrderWorkflow\ProductType;
 use App\Domain\PlotInventory\Actions\CreateCemeteryBlock;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotInventory\PlotInventoryAuditActions;
 use App\Domain\PlotInventory\PlotState;
+use App\Domain\PlotReservation\Models\PlotReservation;
+use App\Domain\PlotReservation\PlotReservationState;
 use App\Filament\Admin\Pages\PlotFloorMap as AdminPlotFloorMap;
 use App\Filament\Operator\Pages\PlotFloorMap as OperatorPlotFloorMap;
 use App\Filament\Shared\PlotInventory\PlotStateOverrides;
@@ -22,6 +28,7 @@ use App\Platform\IdentityAccess\Scopes\Models\ScopeAssignment;
 use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Livewire\Livewire;
 use Tests\Support\GrantsActorRoles;
 use Tests\TestCase;
@@ -82,6 +89,28 @@ final class PlotFloorMapActionsTest extends TestCase
     private function firstPlot(CemeteryBlock $block): GravePlot
     {
         return $block->plots()->orderBy('slot')->firstOrFail();
+    }
+
+    /**
+     * A real order anchored to `$cemetery` through its booking draft —
+     * the same `bookingDraft.cemetery_id` path `ReservePlotAction` reads.
+     *
+     * `product_type` and `status` are NOT NULL columns on `orders` with no
+     * defaults (`2026_08_12_100000_create_orders_table.php`), so both are
+     * set explicitly here — the brief's sample omitted them.
+     */
+    private function orderForCemetery(Cemetery $cemetery): Order
+    {
+        $draft = BookingDraft::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+        ]);
+
+        return Order::query()->create([
+            'reference' => 'ORD-'.Str::upper(Str::random(8)),
+            'product_type' => ProductType::PRE_NEED_PLOT_PURCHASE->value,
+            'status' => OrderStatus::DIVERIFIKASI->value,
+            'booking_draft_id' => $draft->getKey(),
+        ]);
     }
 
     // -----------------------------------------------------------------
@@ -296,5 +325,113 @@ final class PlotFloorMapActionsTest extends TestCase
             $overrides::fromStates(PlotState::MAINTENANCE),
         );
         $this->assertSame([], $overrides::fromStates('demolished'));
+    }
+
+    // -----------------------------------------------------------------
+    // Order-linked entry mode
+    // -----------------------------------------------------------------
+
+    public function test_the_order_linked_mode_offers_and_performs_a_reservation(): void
+    {
+        $admin = $this->freshAdmin();
+        [$cemetery, $block] = $this->granularCemetery($admin);
+        $plot = $this->firstPlot($block);
+        $order = $this->orderForCemetery($cemetery);
+
+        Livewire::actingAs($admin)
+            ->withQueryParams(['order_id' => (string) $order->getKey()])
+            ->test(AdminPlotFloorMap::class)
+            ->assertSet('cemeteryId', (string) $cemetery->getKey())
+            ->call('openPlot', (string) $plot->getKey())
+            ->assertSee('Reservasi untuk pesanan #'.$order->reference)
+            ->call('reserveForOrder')
+            ->assertOk();
+
+        $this->assertSame(PlotState::RESERVED, $plot->fresh()?->plot_state);
+
+        $reservation = PlotReservation::activeForOrder($order->fresh());
+        $this->assertNotNull($reservation);
+        $this->assertSame(PlotReservationState::HELD, $reservation->state);
+        $this->assertSame((string) $plot->getKey(), (string) $reservation->plot_id);
+    }
+
+    public function test_without_an_order_id_the_reservation_offer_is_absent_and_the_call_writes_nothing(): void
+    {
+        $admin = $this->freshAdmin();
+        [$cemetery, $block] = $this->granularCemetery($admin);
+        $plot = $this->firstPlot($block);
+
+        Livewire::actingAs($admin)
+            ->test(AdminPlotFloorMap::class)
+            ->set('cemeteryId', (string) $cemetery->getKey())
+            ->call('openPlot', (string) $plot->getKey())
+            ->assertDontSee('Reservasi untuk pesanan')
+            ->call('reserveForOrder')
+            ->assertOk();
+
+        $this->assertSame(PlotState::AVAILABLE, $plot->fresh()?->plot_state);
+        $this->assertSame(0, PlotReservation::query()->count());
+    }
+
+    public function test_a_malformed_order_id_is_ignored_instead_of_erroring(): void
+    {
+        $admin = $this->freshAdmin();
+        [$cemetery, $block] = $this->granularCemetery($admin);
+        $plot = $this->firstPlot($block);
+
+        Livewire::actingAs($admin)
+            ->withQueryParams(['order_id' => 'not-a-uuid'])
+            ->test(AdminPlotFloorMap::class)
+            ->set('cemeteryId', (string) $cemetery->getKey())
+            ->call('openPlot', (string) $plot->getKey())
+            ->call('reserveForOrder')
+            ->assertOk();
+
+        $this->assertSame(PlotState::AVAILABLE, $plot->fresh()?->plot_state);
+    }
+
+    /**
+     * The order is only ever addressable through the SELECTED cemetery,
+     * which is itself scoped. An order belonging to another cemetery
+     * resolves to null, so an operator can never reserve one cemetery's
+     * plot for another cemetery's order.
+     */
+    public function test_an_order_from_another_cemetery_does_not_resolve(): void
+    {
+        $admin = $this->freshAdmin();
+        [$cemetery, $block] = $this->granularCemetery($admin);
+        $plot = $this->firstPlot($block);
+
+        $otherCemetery = Cemetery::factory()->create(['plot_tracking_mode' => PlotTrackingMode::GRANULAR]);
+        $foreignOrder = $this->orderForCemetery($otherCemetery);
+
+        Livewire::actingAs($admin)
+            ->test(AdminPlotFloorMap::class)
+            ->set('cemeteryId', (string) $cemetery->getKey())
+            ->set('orderId', (string) $foreignOrder->getKey())
+            ->call('openPlot', (string) $plot->getKey())
+            ->call('reserveForOrder');
+
+        $this->assertSame(PlotState::AVAILABLE, $plot->fresh()?->plot_state);
+        $this->assertSame(0, PlotReservation::query()->count());
+    }
+
+    public function test_reserving_an_unavailable_plot_surfaces_the_domain_refusal_without_a_write(): void
+    {
+        $admin = $this->freshAdmin();
+        [$cemetery, $block] = $this->granularCemetery($admin);
+        $plot = $this->firstPlot($block);
+        $plot->update(['plot_state' => PlotState::OCCUPIED]);
+        $order = $this->orderForCemetery($cemetery);
+
+        Livewire::actingAs($admin)
+            ->withQueryParams(['order_id' => (string) $order->getKey()])
+            ->test(AdminPlotFloorMap::class)
+            ->call('openPlot', (string) $plot->getKey())
+            ->call('reserveForOrder')
+            ->assertOk();
+
+        $this->assertSame(PlotState::OCCUPIED, $plot->fresh()?->plot_state);
+        $this->assertSame(0, PlotReservation::query()->count());
     }
 }

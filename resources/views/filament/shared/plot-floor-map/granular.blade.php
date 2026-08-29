@@ -85,6 +85,16 @@
         @endif
 
         <x-slot name="footer">
+            @if ($this->mayReserveActivePlot())
+                <x-filament::button
+                    color="success"
+                    wire:click="reserveForOrder"
+                    x-on:click="$dispatch('close-modal', { id: 'plot-floor-map-cell' })"
+                >
+                    Reservasi untuk pesanan #{{ $this->linkedOrder()?->reference }}
+                </x-filament::button>
+            @endif
+
             @foreach ($this->availableOverrides() as $overrideState => $overrideLabel)
                 <x-filament::button
                     color="primary"

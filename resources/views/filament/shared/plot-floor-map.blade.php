@@ -27,6 +27,7 @@
     $cemeteryOptions = $this->cemeteryOptions();
     $selectedCemetery = $this->selectedCemetery();
     $trackingMode = $this->trackingMode();
+    $linkedOrder = $this->linkedOrder();
 @endphp
 
 <x-filament-panels::page>
@@ -52,6 +53,13 @@
                 </p>
             @endif
         </div>
+
+        @if ($linkedOrder !== null)
+            <p class="text-sm text-neutral-600">
+                Mode reservasi pesanan: pilih plot yang tersedia untuk pesanan
+                <span class="font-mono">#{{ $linkedOrder->reference }}</span>.
+            </p>
+        @endif
 
         @if ($selectedCemetery === null)
             <p class="text-sm text-neutral-600">
