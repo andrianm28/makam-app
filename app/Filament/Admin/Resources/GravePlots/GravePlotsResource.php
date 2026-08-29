@@ -33,6 +33,15 @@ use UnitEnum;
  * `plot_reservations` history) — no delete surface is offered until a
  * business need for one exists.
  *
+ * Since 28 Aug 2026 this is no longer the only plot surface: Phase D's
+ * `App\Filament\Admin\Pages\PlotFloorMap` renders the same inventory as a
+ * block-grouped map for granular-tier cemeteries and offers the same three
+ * state overrides through the shared
+ * `App\Filament\Shared\PlotInventory\PlotStateOverrides`. This resource is
+ * unchanged and deliberately kept: it is the only surface that lists plots
+ * across ALL cemeteries at once, with search and filters, which the
+ * per-cemetery map does not do.
+ *
  * Same access gate shape as `CemeteryResource` and the sibling order
  * resources: one `canAccess()` + one `getAuthorizationResponse()` both
  * delegating to the shared `MasterDataAdminAuthorizerContract` four-role
