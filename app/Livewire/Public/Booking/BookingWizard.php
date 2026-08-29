@@ -24,6 +24,7 @@ use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotReservation\Actions\HoldPlotForDraft;
+use App\Domain\PlotReservation\Exceptions\DraftPlotHoldNoLongerValidException;
 use App\Domain\PlotReservation\Exceptions\PlotNotAvailableException;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\Quotation\Actions\ComposeQuoteLinesFromBookingDraft;
@@ -653,6 +654,8 @@ final class BookingWizard extends Component
         // only carries an order reference when one really exists).
         try {
             app(SubmitBookingDraft::class)($saved, 'booking:'.$saved->id.':submit');
+        } catch (DraftPlotHoldNoLongerValidException) {
+            $this->routeBackToPlotPickerAfterExpiredHold();
         } catch (UnroutableProductTypeException|InvalidArgumentException $e) {
             report($e);
         }
@@ -810,6 +813,10 @@ final class BookingWizard extends Component
         } catch (UnroutableProductTypeException) {
             $this->onlinePaymentError = 'Pesanan jenis ini belum dapat dibayar secara online. Gunakan pembayaran manual atau hubungi dukungan.';
             $this->currentStep = BookingWizardStep::PAYMENT;
+
+            return;
+        } catch (DraftPlotHoldNoLongerValidException) {
+            $this->routeBackToPlotPickerAfterExpiredHold();
 
             return;
         } catch (InvalidArgumentException|OverflowException) {
@@ -997,6 +1004,25 @@ final class BookingWizard extends Component
         }
 
         $this->addError('draft', 'Pemesanan ini telah diubah di perangkat atau tab lain. Halaman dimuat ulang dengan data terbaru — silakan periksa lalu coba lagi.');
+    }
+
+    /**
+     * Per the roadmap's decision #7: an expired/lost draft plot hold at
+     * submission time does NOT fall back to submitting without a
+     * reservation — it blocks, and the customer is routed back to Step 2
+     * to re-pick. Reopens the picker for whichever cemetery the draft had
+     * saved, so the customer lands on a live grid rather than the bare
+     * cemetery list.
+     */
+    private function routeBackToPlotPickerAfterExpiredHold(): void
+    {
+        $this->currentStep = BookingWizardStep::CEMETERY;
+        $this->addError('plot', 'Plot yang Anda pilih sudah tidak lagi ditahan (kedaluwarsa atau diambil pengunjung lain). Silakan pilih plot lain.');
+
+        if ($this->cemeteryId !== null && $this->pickerAppliesTo($this->cemeteryId)) {
+            $this->pickerCemeteryId = $this->cemeteryId;
+            $this->pickerCemeteryPackageId = $this->cemeteryPackageId;
+        }
     }
 
     public function goToStep(int $step): void
