@@ -2,10 +2,13 @@ import { expect, Page, test } from '@playwright/test';
 
 /**
  * E2E-REN — docs/testing/test-strategy.md §2. Covers the public renewal
- * journey: /perpanjangan (city, TPU/TPS) -> /perpanjangan/cari (grave
- * search) -> /perpanjangan/biaya (fee) -> /perpanjangan/pembayaran
- * (payment) -> /perpanjangan/konfirmasi (confirmation). Selectors and
- * copy are read directly from app/Livewire/Public/Renewal/*.php and
+ * journey: /perpanjangan (city, TPU/TPS, grave search — Task 4 of
+ * docs/superpowers/plans/2026-08-29-wizard-screen-consolidation.md merged
+ * these three into ONE progressively-revealed screen; there is no longer a
+ * separate `/perpanjangan/cari` route) -> /perpanjangan/biaya (fee) ->
+ * /perpanjangan/pembayaran (payment) -> /perpanjangan/konfirmasi
+ * (confirmation). Selectors and copy are read directly from
+ * app/Livewire/Public/Renewal/*.php and
  * resources/views/livewire/public/renewal/*.blade.php, not guessed.
  *
  * ---------------------------------------------------------------------------
@@ -15,27 +18,29 @@ import { expect, Page, test } from '@playwright/test';
  *    `G-PAY-01` (online payment) — `database/migrations/2026_07_26_120400_
  *    seed_feature_gate_registry.php` seeds EVERY gate closed, and no other
  *    migration opens one. In CI (a fresh `php artisan migrate` every run,
- *    per `.github/workflows/ci.yml`'s browser-test job) this means
- *    `/perpanjangan/cari` renders the §6.4 gate-closed explanatory page,
- *    not the search form — the grave-search capability being closed also
- *    makes it impossible to ever open a real `Renewal` record through the
- *    public UI (`RenewalFee::terimaDanLanjutkan()` checks the same gate
- *    before writing anything), so `/perpanjangan/biaya`,
- *    `/perpanjangan/pembayaran` and `/perpanjangan/konfirmasi` can only
- *    ever be reached with a real record in a *different*, gate-open
- *    environment. This suite therefore checks gate state at runtime
+ *    per `.github/workflows/ci.yml`'s browser-test job) this means Step 3
+ *    of `/perpanjangan` (revealed once a TPU/TPS is selected) renders the
+ *    §6.4 gate-closed explanatory page, not the search form — the
+ *    grave-search capability being closed also makes it impossible to
+ *    ever open a real `Renewal` record through the public UI
+ *    (`RenewalFee::terimaDanLanjutkan()` checks the same gate before
+ *    writing anything), so `/perpanjangan/biaya`, `/perpanjangan/
+ *    pembayaran` and `/perpanjangan/konfirmasi` can only ever be reached
+ *    with a real record in a *different*, gate-open environment. This
+ *    suite therefore checks gate state at runtime
  *    (`graveSearchGateClosed()` below) rather than assuming either state,
  *    so it keeps passing once `G-DATA-01` is opened for real and exercises
  *    the genuine fuzzy-search/no-result branch whenever it can.
- * 2. Nothing in the search results view
- *    (resources/views/livewire/public/renewal/grave-search.blade.php)
- *    links to `/perpanjangan/biaya` — no `route('perpanjangan.biaya')`
- *    call and no literal href to that path exist anywhere under
- *    `resources/views/`. The fee/payment/confirmation steps are reachable
- *    only by a hand-built `?makam=` / `?perpanjangan=` URL today, never by
- *    clicking through from a search result. This suite tests those steps
- *    by direct navigation for that reason, and flags the missing link as a
- *    real product gap rather than working around it.
+ * 2. Nothing in the search results section
+ *    (resources/views/livewire/public/renewal/start.blade.php, Step 3 —
+ *    formerly a separate grave-search.blade.php, merged into this file by
+ *    the same Task 4) links to `/perpanjangan/biaya` — no
+ *    `route('perpanjangan.biaya')` call and no literal href to that path
+ *    exist anywhere under `resources/views/`. The fee/payment/confirmation
+ *    steps are reachable only by a hand-built `?makam=` / `?perpanjangan=`
+ *    URL today, never by clicking through from a search result. This suite
+ *    tests those steps by direct navigation for that reason, and flags the
+ *    missing link as a real product gap rather than working around it.
  */
 
 const STEP_LABELS = ['Kota', 'TPU/TPS', 'Cari Makam', 'Biaya', 'Pembayaran', 'Konfirmasi'];
@@ -44,8 +49,26 @@ function stepperGroup(page: Page) {
     return page.getByRole('group', { name: 'Progres perpanjangan makam' });
 }
 
+/**
+ * Selects the first reachable TPU/TPS (see `findCemeteryButton()` below)
+ * and reports whether Step 3's gate-closed explanatory page rendered.
+ * Step 3 is now revealed on the SAME `/perpanjangan` page rather than a
+ * separate route/navigation (Task 4's merge), so — unlike the old
+ * `page.goto('/perpanjangan/cari')` this replaces — the gate-closed
+ * heading is not necessarily in the DOM the instant the click's Livewire
+ * round-trip is sent. This waits for Step 3's OWN heading first (rendered
+ * unconditionally in both gate states, since it sits outside the
+ * `@if ($gateClosed)` branch in start.blade.php) as the settle point,
+ * then checks which of the two states underneath it actually rendered.
+ */
 async function graveSearchGateClosed(page: Page): Promise<boolean> {
-    await page.goto('/perpanjangan/cari');
+    await page.goto('/perpanjangan');
+
+    const cemeteryButton = await findCemeteryButton(page);
+    expect(cemeteryButton, 'expected at least one launch city to have a published TPU/TPS').not.toBeNull();
+
+    await cemeteryButton!.click();
+    await expect(page.getByRole('heading', { level: 2, name: /Cari Makam/ })).toBeVisible();
 
     return page
         .getByRole('heading', { level: 1, name: 'Pencarian Data Makam Belum Tersedia' })
@@ -54,27 +77,34 @@ async function graveSearchGateClosed(page: Page): Promise<boolean> {
 
 /**
  * Tries launch city buttons in order until one's TPU/TPS list yields at
- * least one published cemetery, returning that cemetery link. `selectCity`
- * is a `wire:click` action — each click needs its Livewire round-trip to
- * finish before the next city is tried, so this polls with `.waitFor()`
- * rather than a synchronous `.isVisible()` check (which reads the DOM
- * before the response lands and would race through every button without
- * ever finding the rendered list).
+ * least one published cemetery, returning that cemetery's forward control.
+ * `selectCity` is a `wire:click` action — each click needs its Livewire
+ * round-trip to finish before the next city is tried, so this polls with
+ * `.waitFor()` rather than a synchronous `.isVisible()` check (which reads
+ * the DOM before the response lands and would race through every button
+ * without ever finding the rendered list).
+ *
+ * `role: 'button'`, not `'link'`: pre-merge, this control was an
+ * `<a href="/perpanjangan/cari?tpu=...">` (a real navigation). Task 4's
+ * merged `start.blade.php` renders it as `<x-mk.button wire:click=
+ * "selectCemetery(...)">` with no `href` — a real `<button>` that reveals
+ * Step 3 on the same page — so the accessible role genuinely changed, not
+ * just the selector's convenience.
  */
-async function findCemeteryLink(page: Page) {
+async function findCemeteryButton(page: Page) {
     const cityButtons = page.getByRole('list', { name: 'Kota peluncuran' }).getByRole('button');
-    const cemeteryLink = page.getByRole('link', { name: 'Lanjut ke Pencarian Makam' }).first();
+    const cemeteryButton = page.getByRole('button', { name: 'Lanjut ke Pencarian Makam' }).first();
     const cityCount = await cityButtons.count();
 
     for (let i = 0; i < cityCount; i++) {
         await cityButtons.nth(i).click();
 
-        const gotCemetery = await cemeteryLink
+        const gotCemetery = await cemeteryButton
             .waitFor({ state: 'visible', timeout: 5000 })
             .then(() => true)
             .catch(() => false);
 
-        if (gotCemetery) return cemeteryLink;
+        if (gotCemetery) return cemeteryButton;
     }
 
     return null;
@@ -113,8 +143,8 @@ test('city step lists all five MVP launch cities and TPU/TPS selection reaches a
     // environment (docs/product/... "empty TPU/TPS" is itself an honest
     // §6.2 state, per start.blade.php) — try cities in order until one
     // yields at least one cemetery card, rather than assuming the first.
-    const cemeteryLink = await findCemeteryLink(page);
-    expect(cemeteryLink, 'expected at least one launch city to have a published TPU/TPS').not.toBeNull();
+    const cemeteryButton = await findCemeteryButton(page);
+    expect(cemeteryButton, 'expected at least one launch city to have a published TPU/TPS').not.toBeNull();
 
     // Step 2 is now current (a city has been chosen).
     const currentStepItem = stepperGroup(page)
@@ -122,8 +152,14 @@ test('city step lists all five MVP launch cities and TPU/TPS selection reaches a
         .filter({ has: page.locator('[aria-current="step"]') });
     await expect(currentStepItem.getByText('TPU/TPS', { exact: true })).toBeVisible();
 
-    await cemeteryLink!.click();
-    await expect(page).toHaveURL(/\/perpanjangan\/cari\?tpu=/);
+    // Selecting a TPU/TPS is now a same-page `wire:click` reveal (Task 4's
+    // merge), not a navigation to a separate `/perpanjangan/cari` route —
+    // the URL stays on `/perpanjangan` and the bookmarkable `?tpu=` param
+    // (`#[Url(as: 'tpu', history: true)]`) is pushed into it via Livewire's
+    // own history integration, while Step 3's heading reveals in place.
+    await cemeteryButton!.click();
+    await expect(page).toHaveURL(/\/perpanjangan\?.*tpu=/);
+    await expect(page.getByRole('heading', { level: 2, name: /Cari Makam/ })).toBeVisible();
 });
 
 test('grave search step is honest whether the online capability is open or closed', async ({ page }) => {
@@ -138,8 +174,13 @@ test('grave search step is honest whether the online capability is open or close
         ).toBeVisible();
         await expect(page.getByText('Ini tidak berarti data makam yang Anda cari tidak ada.')).toBeVisible();
         await expect(page.getByRole('link', { name: 'Hubungi Bantuan' })).toBeVisible();
-        // Support escape hatch back into the journey (§6.10).
-        await expect(page.getByRole('link', { name: 'pemilihan TPU/TPS' })).toHaveAttribute('href', '/perpanjangan');
+        // §6.10 support escape hatch. Pre-merge this gate-closed page also
+        // linked back to a separate "/perpanjangan" TPU/TPS-picker route
+        // ("Anda juga dapat kembali ke pemilihan TPU/TPS"); Task 4's merge
+        // dropped that link because Steps 1-2 are already visible on this
+        // SAME page (there is nothing to navigate "back" to), leaving only
+        // the FAQ link in the support slot — asserted here instead.
+        await expect(page.getByRole('link', { name: 'pertanyaan yang sering diajukan' })).toHaveAttribute('href', '/faq');
 
         return;
     }
@@ -149,11 +190,16 @@ test('grave search step is honest whether the online capability is open or close
     // genuine AC5 no-result state with a name guaranteed not to collide
     // with the "Contoh ..." fixture rows.
     await page.goto('/perpanjangan');
-    const cemeteryLink = await findCemeteryLink(page);
-    expect(cemeteryLink, 'expected at least one launch city to have a published TPU/TPS').not.toBeNull();
+    const cemeteryButton = await findCemeteryButton(page);
+    expect(cemeteryButton, 'expected at least one launch city to have a published TPU/TPS').not.toBeNull();
 
-    await cemeteryLink!.click();
-    await expect(page.getByRole('heading', { level: 1, name: 'Cari Data Makam' })).toBeVisible();
+    await cemeteryButton!.click();
+    // Pre-merge this was a standalone "Cari Data Makam" <h1> on its own
+    // route; Task 4's merge dropped that heading in favour of the plain
+    // "Mencari di {cemetery}." intro line under Step 3's own <h2> (already
+    // waited on inside `graveSearchGateClosed()` above), so the settle
+    // point here is the search form itself actually being present.
+    await expect(page.getByLabel('Nama almarhum')).toBeVisible();
 
     await page.getByLabel('Nama almarhum').fill('Zzznamatidakada999xyz');
     await page.getByRole('button', { name: 'Cari Data Makam' }).click();
