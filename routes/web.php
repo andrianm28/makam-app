@@ -36,7 +36,6 @@ use App\Livewire\Public\Marketplace\ProductDetail;
 use App\Livewire\Public\Memorial\MemorialFamilyPage;
 use App\Livewire\Public\Memorial\MemorialPublicPage;
 use App\Livewire\Public\PreNeed\PreNeedInterestPage;
-use App\Livewire\Public\Renewal\GraveSearch;
 use App\Livewire\Public\Renewal\RenewalConfirmation;
 use App\Livewire\Public\Renewal\RenewalFee;
 use App\Livewire\Public\Renewal\RenewalPayment;
@@ -269,7 +268,6 @@ Route::get('/kunjungan/{cemeterySlug}', VisitationPage::class)->name('kunjungan.
 | bounded by the fact that neither screen projects any grave record field.
 */
 Route::get('/perpanjangan', RenewalStart::class)->name('perpanjangan.index');
-Route::get('/perpanjangan/cari', GraveSearch::class)->name('perpanjangan.cari');
 Route::get('/perpanjangan/biaya', RenewalFee::class)->name('perpanjangan.biaya');
 Route::get('/perpanjangan/pembayaran', RenewalPayment::class)->name('perpanjangan.pembayaran');
 Route::get('/perpanjangan/konfirmasi', RenewalConfirmation::class)->name('perpanjangan.konfirmasi');

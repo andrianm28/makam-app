@@ -25,9 +25,10 @@ use Illuminate\Support\Str;
  *
  * This class does NOT check `G-DATA-01`. That check belongs to the screen,
  * before it decides whether to run a search at all — see
- * `App\Livewire\Public\Renewal\GraveSearch` and `GraveSearchOutcome`'s own
- * doc block for why the gate-closed case is deliberately not representable
- * as a search result. A caller that skips the gate check gets a working
+ * `App\Livewire\Public\Renewal\RenewalStart` (formerly `GraveSearch`,
+ * merged into it) and `GraveSearchOutcome`'s own doc block for why the
+ * gate-closed case is deliberately not representable as a search result.
+ * A caller that skips the gate check gets a working
  * search, which is a real footgun; it is accepted here rather than
  * duplicating gate resolution into the read path, because
  * `App\Platform\FeatureGate\ModeResolver` is documented as "the ONE place
@@ -133,6 +134,20 @@ final class GraveRegistryPublicQuery
      * throwing — a race between render and click (the registry changed
      * underneath the visitor) is an ordinary, expected condition here, not
      * an error.
+     *
+     * That race does not ALWAYS fail safe to `null`. A row inserted or
+     * reordered between the visitor's search render and their click can
+     * shift what sits at a given ordinal position, so this method can
+     * resolve to a DIFFERENT real record than the one the visitor actually
+     * clicked, rather than detecting the mismatch and returning `null`.
+     * This is an accepted property of the ordinal-index design, not a
+     * defect: the grave registry is low-churn (no bulk-import or bulk-edit
+     * path runs concurrently with public traffic), the render-to-click
+     * window is human-speed (seconds, not the sub-second window a
+     * high-churn table would need to worry about), and the fee-quote screen
+     * immediately downstream shows the deceased's identifying details for
+     * the customer to visually confirm before paying — an independent
+     * safety net that catches exactly this race if it ever occurs.
      */
     public static function resolveOpenRecordAt(GraveSearchCriteria $criteria, int $index): ?GraveRecord
     {
