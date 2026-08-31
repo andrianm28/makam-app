@@ -78,8 +78,16 @@ test.describe('E2E-A11Y — keyboard navigation', () => {
         // wizard.blade.php directly, not assumed -- so it is a genuine Tab
         // stop between the checkbox and the "Kembali"/"Lanjutkan" buttons.
         const privacyLink = page.getByRole('link', { name: 'Pemberitahuan Privasi', exact: true });
-        const back = page.getByRole('button', { name: 'Kembali', exact: true });
-        const submit = page.getByRole('button', { name: 'Lanjutkan', exact: true });
+        // Progressive reveal keeps Step 5's own completed section (and its
+        // own "Kembali" button) visible alongside Step 6 here, so an
+        // unscoped `getByRole('button', { name: 'Kembali' })` now resolves
+        // to 2 elements. Scope to Step 6's own `<section aria-labelledby=
+        // "booking-step-6-heading">` (real heading text confirmed in
+        // wizard.blade.php) so this targets the step under test, not
+        // whichever "Kembali" happens to be first in the DOM.
+        const step6Section = page.getByLabel('Langkah 6 — Data Pemesan');
+        const back = step6Section.getByRole('button', { name: 'Kembali', exact: true });
+        const submit = step6Section.getByRole('button', { name: 'Lanjutkan', exact: true });
 
         await fullName.focus();
         await expect(fullName).toBeFocused();

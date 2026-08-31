@@ -178,7 +178,13 @@ test('grave search step is honest whether the online capability is open or close
             page.getByRole('heading', { level: 1, name: 'Pencarian Data Makam Belum Tersedia' }),
         ).toBeVisible();
         await expect(page.getByText('Ini tidak berarti data makam yang Anda cari tidak ada.')).toBeVisible();
-        await expect(page.getByRole('link', { name: 'Hubungi Bantuan' })).toBeVisible();
+        // This page also carries the page-level §6.10 footer escape hatch
+        // ("Butuh bantuan menelusuri data makam? Hubungi Bantuan.", outside
+        // any step section, start.blade.php) — a real, intentional second
+        // "Hubungi Bantuan" link, not a merge defect. Scope to Step 3's own
+        // section (real heading text confirmed in start.blade.php) so this
+        // asserts the gate-closed page's own contextual CTA specifically.
+        await expect(page.getByLabel('Langkah 3 — Cari Makam').getByRole('link', { name: 'Hubungi Bantuan' })).toBeVisible();
         // §6.10 support escape hatch. Pre-merge this gate-closed page also
         // linked back to a separate "/perpanjangan" TPU/TPS-picker route
         // ("Anda juga dapat kembali ke pemilihan TPU/TPS"); Task 4's merge

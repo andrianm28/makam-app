@@ -38,7 +38,13 @@ test.describe('E2E-BOOK — loading states', () => {
         await page.locator('#customer-contact-channel').selectOption(CUSTOMER.contactChannel);
         await page.locator('#privacy-notice-accepted').check();
 
-        const submit = page.getByRole('button', { name: 'Lanjutkan' });
+        // Scoped to Step 6's own section: Step 5 stays visible alongside it
+        // (progressive reveal), but Step 5's own forward control is labelled
+        // "Lanjut ke Data Pemesan", not "Lanjutkan", so this particular
+        // locator is not actually ambiguous at this point in the flow.
+        // Scoping anyway keeps this consistent with the Step 7 test below,
+        // where the equivalent unscoped locator IS ambiguous.
+        const submit = page.getByLabel('Langkah 6 — Data Pemesan').getByRole('button', { name: 'Lanjutkan' });
 
         // Race the click against the loading assertions -- a local server
         // responds fast enough that a sequential `await` chain can miss the
@@ -69,7 +75,13 @@ test.describe('E2E-BOOK — loading states', () => {
         await page.locator('#deceased-date-of-death').fill(DECEASED.dod);
         await page.locator('#deceased-relationship').selectOption(DECEASED.relationship);
 
-        const submit = page.getByRole('button', { name: 'Lanjutkan' });
+        // Step 6 stays visible alongside Step 7 here (progressive reveal),
+        // and BOTH sections' own forward controls are labelled "Lanjutkan"
+        // — `getByLabel('Langkah 6 — Data Pemesan').getByRole('button',
+        // {name: 'Lanjutkan'})` also matches. Scope to Step 7's own section
+        // (real heading text confirmed in wizard.blade.php) so this targets
+        // the step this test is actually about.
+        const submit = page.getByLabel('Langkah 7 — Data Almarhum').getByRole('button', { name: 'Lanjutkan' });
 
         await Promise.all([
             expect(page.getByRole('status').filter({ hasText: 'Menyimpan data almarhum' })).toBeVisible(),
