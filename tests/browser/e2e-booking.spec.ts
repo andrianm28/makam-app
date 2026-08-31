@@ -73,8 +73,14 @@ test.describe('E2E-BOOK — full journey (Makam Baru, standard branch)', () => {
 
         await test.step('Step 3 — service type (Makam Baru / NEW_GRAVE)', async () => {
             // Product labels, not raw enum codes — BookingServiceType::LABELS.
+            // Scoped to Step 3's own section (same real collision
+            // `completeStep3()` in e2e-booking-helpers.ts documents: Step
+            // 2's cemetery listing can render its own "Makam Tumpang"
+            // package button, which stays visible alongside Step 3 under
+            // progressive reveal).
+            const step3 = page.getByLabel('Langkah 3 — Pilih Jenis Layanan');
             for (const label of ['Makam Baru', 'Makam Tumpang', 'Urgent', 'Pre-Need']) {
-                await expect(page.getByRole('button', { name: label, exact: true })).toBeVisible();
+                await expect(step3.getByRole('button', { name: label, exact: true })).toBeVisible();
             }
             await completeStep3(page, 'Makam Baru');
         });
