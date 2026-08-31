@@ -5,10 +5,13 @@ import { expect, Page, test } from '@playwright/test';
  * journey: /perpanjangan (city, TPU/TPS, grave search — Task 4 of
  * docs/superpowers/plans/2026-08-29-wizard-screen-consolidation.md merged
  * these three into ONE progressively-revealed screen; there is no longer a
- * separate `/perpanjangan/cari` route) -> /perpanjangan/biaya (fee) ->
- * /perpanjangan/pembayaran (payment) -> /perpanjangan/konfirmasi
- * (confirmation). Selectors and copy are read directly from
- * app/Livewire/Public/Renewal/*.php and
+ * separate `/perpanjangan/cari` route) -> /perpanjangan/pembayaran (fee +
+ * payment — Task 5 of the same plan merged `RenewalFee`'s former
+ * `/perpanjangan/biaya` route into this one, same progressive-reveal
+ * pattern: the fee section renders first, and only an explicit "Terima
+ * Tarif" click reveals payment IN PLACE, no navigation) ->
+ * /perpanjangan/konfirmasi (confirmation). Selectors and copy are read
+ * directly from app/Livewire/Public/Renewal/*.php and
  * resources/views/livewire/public/renewal/*.blade.php, not guessed.
  *
  * ---------------------------------------------------------------------------
@@ -23,24 +26,26 @@ import { expect, Page, test } from '@playwright/test';
  *    §6.4 gate-closed explanatory page, not the search form — the
  *    grave-search capability being closed also makes it impossible to
  *    ever open a real `Renewal` record through the public UI
- *    (`RenewalFee::terimaDanLanjutkan()` checks the same gate before
- *    writing anything), so `/perpanjangan/biaya`, `/perpanjangan/
- *    pembayaran` and `/perpanjangan/konfirmasi` can only ever be reached
- *    with a real record in a *different*, gate-open environment. This
- *    suite therefore checks gate state at runtime
- *    (`graveSearchGateClosed()` below) rather than assuming either state,
- *    so it keeps passing once `G-DATA-01` is opened for real and exercises
- *    the genuine fuzzy-search/no-result branch whenever it can.
- * 2. Nothing in the search results section
- *    (resources/views/livewire/public/renewal/start.blade.php, Step 3 —
- *    formerly a separate grave-search.blade.php, merged into this file by
- *    the same Task 4) links to `/perpanjangan/biaya` — no
- *    `route('perpanjangan.biaya')` call and no literal href to that path
- *    exist anywhere under `resources/views/`. The fee/payment/confirmation
- *    steps are reachable only by a hand-built `?makam=` / `?perpanjangan=`
- *    URL today, never by clicking through from a search result. This suite
- *    tests those steps by direct navigation for that reason, and flags the
- *    missing link as a real product gap rather than working around it.
+ *    (`RenewalPayment::terimaDanLanjutkan()` checks the same gate before
+ *    writing anything), so `/perpanjangan/pembayaran`'s fee section and
+ *    `/perpanjangan/konfirmasi` can only ever be reached with a real record
+ *    in a *different*, gate-open environment. This suite therefore checks
+ *    gate state at runtime (`graveSearchGateClosed()` below) rather than
+ *    assuming either state, so it keeps passing once `G-DATA-01` is opened
+ *    for real and exercises the genuine fuzzy-search/no-result branch
+ *    whenever it can.
+ * 2. Grave selection is session-only, never a URL parameter
+ *    (`App\Domain\Renewal\RenewalGraveSelection`'s own doc block) — Task 5
+ *    removed the fee section's former `?makam=` query parameter entirely,
+ *    so there is no hand-built URL that can reach the fee section anymore.
+ *    A search result's forward control (`RenewalStart::
+ *    selectGraveForRenewal()`) remembers the selection server-side and
+ *    redirects to `/perpanjangan/pembayaran` with no id in the URL at all.
+ *    This suite therefore cannot reach the fee section by direct navigation
+ *    (unlike before Task 5); the fee-section-specific browser coverage
+ *    below is limited to what direct navigation to `/perpanjangan/
+ *    pembayaran` can still exercise honestly — the not-found state when
+ *    nothing has been selected.
  */
 
 const STEP_LABELS = ['Kota', 'TPU/TPS', 'Cari Makam', 'Biaya', 'Pembayaran', 'Konfirmasi'];
@@ -220,41 +225,30 @@ test('grave search step is honest whether the online capability is open or close
     await expect(page.getByRole('link', { name: 'Hubungi bantuan' }).first()).toBeVisible();
 });
 
-test('fee step never leaks tariff data and always gives an honest reason it cannot proceed', async ({ page }) => {
-    const closed = await graveSearchGateClosed(page);
-
-    // No `makam` at all — checked before the gate, so this is the same
-    // message regardless of gate state (RenewalFee::resolveState()).
-    await page.goto('/perpanjangan/biaya');
-    await expect(page.getByRole('heading', { level: 1, name: 'Data makam tidak ditemukan.' })).toBeVisible();
+test('payment screen never leaks tariff data and gives an honest reason when nothing is selected', async ({
+    page,
+}) => {
+    // No selection at all — the fee section is reached only via a
+    // session-remembered grave selection (`RenewalGraveSelection`), which
+    // this direct navigation never makes, so this is the same not-found
+    // message `RenewalPayment::resolveState()` shows with no `perpanjangan`
+    // and no pending selection either.
+    await page.goto('/perpanjangan/pembayaran');
+    await expect(page.getByRole('heading', { level: 1, name: 'Data perpanjangan tidak ditemukan.' })).toBeVisible();
     // Every renewal screen also carries the §6.10 footer escape hatch in
     // addition to the denial-state CTA button, so two "Hubungi Bantuan"
     // links legitimately coexist here — .first() only needs one to exist.
     await expect(page.getByRole('link', { name: 'Hubungi Bantuan' }).first()).toBeVisible();
 
-    // A syntactically valid but nonexistent UUID — `grave_records.id` is a
-    // `uuid` column (database/migrations/2026_08_08_100000_create_grave_
-    // records_table.php), and a non-UUID string here throws an unhandled
-    // PostgreSQL "invalid input syntax for type uuid" error (a real 500,
-    // confirmed live against dev.makam.co.id) rather than resolving to the
-    // honest not-found message. That is a genuine pre-existing bug in
-    // RenewalFee::resolveState() — out of this batch's scope to fix
-    // (browser-spec-only) — reported separately rather than worked around
-    // by relaxing this test's own expectations.
-    await page.goto('/perpanjangan/biaya?makam=00000000-0000-0000-0000-000000000000');
+    // The former fee section's `?makam=` query parameter is no longer
+    // bound to anything — grave selection is session-only post-merge
+    // (RenewalGraveSelection's own doc block) — so an arbitrary query
+    // string here is simply ignored, and the screen still shows the same
+    // honest not-found state rather than a broken card.
+    await page.goto('/perpanjangan/pembayaran?makam=00000000-0000-0000-0000-000000000000');
+    await expect(page.getByRole('heading', { level: 1, name: 'Data perpanjangan tidak ditemukan.' })).toBeVisible();
 
-    if (closed) {
-        await expect(
-            page.getByRole('heading', {
-                level: 1,
-                name: 'Pencarian data makam secara online belum tersedia. Silakan hubungi petugas kami.',
-            }),
-        ).toBeVisible();
-    } else {
-        await expect(page.getByRole('heading', { level: 1, name: 'Data makam tidak ditemukan.' })).toBeVisible();
-    }
-
-    // Neither denial branch may render any tariff figure or source.
+    // Neither case may render any tariff figure or source.
     await expect(page.getByText('Estimasi biaya perpanjangan')).toHaveCount(0);
     await expect(page.getByText('Sumber tarif')).toHaveCount(0);
 
