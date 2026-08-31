@@ -8,6 +8,7 @@ use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\GraveRegistry\Models\GraveRecord;
 use DateTimeImmutable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -95,39 +96,7 @@ final class GraveRegistryPublicQuery
      */
     public static function search(GraveSearchCriteria $criteria): GraveSearchOutcome
     {
-        // The UUID-shape check is defence in depth, not duplicated
-        // validation. `grave_records.cemetery_id` is a real `uuid` column on
-        // PostgreSQL, so comparing it against a non-UUID string is a
-        // database type error rather than a miss — it would throw instead of
-        // returning nothing. `App\Domain\CemeteryDirectory\
-        // CemeteryPublicQuery::findPublishedById()` already stops that on the
-        // public screen's path; this stops it for any other caller too, since this is a
-        // public read entry point and the failure mode is a 500 on a search
-        // form rather than an empty result.
-        if (! $criteria->hasAnyTerm() || ! Str::isUuid($criteria->cemeteryId)) {
-            return GraveSearchOutcome::empty();
-        }
-
-        // The date-shape check is the UUID check's reasoning applied to the
-        // other criteria field backed by a typed column:
-        // `grave_records.death_date` is a real `date` on PostgreSQL, so
-        // `whereDate()` against a non-date string is a database type error
-        // rather than a miss — it throws instead of returning nothing.
-        //
-        // Defence in depth ONLY, and it deliberately cannot produce the right
-        // screen state on its own: an empty outcome renders as *no-result*,
-        // which is the very conflation this module exists to prevent. The
-        // correctness-carrying fix is `GraveSearch::mount()` populating the
-        // error bag so §6.3's validation state renders and no search runs.
-        // This clause exists so that a FUTURE caller which forgets to
-        // validate gets nothing back rather than a 500 on a public form.
-        if ($criteria->deathDate !== '' && ! self::isIsoDate($criteria->deathDate)) {
-            return GraveSearchOutcome::empty();
-        }
-
-        $records = self::buildQuery($criteria)
-            ->limit(self::MAX_RESULTS)
-            ->get();
+        $records = self::matchedRecords($criteria);
 
         $open = [];
         $restricted = [];
@@ -145,6 +114,60 @@ final class GraveRegistryPublicQuery
         }
 
         return new GraveSearchOutcome(openResults: $open, restrictedResults: $restricted);
+    }
+
+    /**
+     * The renewal journey's Screen 1 → Screen 2 handoff (`docs/superpowers/
+     * specs/2026-08-29-wizard-screen-consolidation-design.md`). A visitor
+     * picks a result by its ORDINAL POSITION in the open subset of the
+     * current search — never a database id, because `GraveRecordProjection`
+     * (what the rendered result rows actually are) deliberately has no `id`
+     * property at all. This method re-runs the IDENTICAL search server-side
+     * and resolves the real `GraveRecord` at that position, restricted to
+     * OPEN-mode rows only — a restricted row can never be renewed online
+     * regardless (`RenewalFee`'s own gate already refuses it), so there is
+     * no legitimate reason for this method to ever hand one back.
+     *
+     * Returns `null` for an out-of-range index or a criteria that would not
+     * search at all (mirroring `search()`'s own early returns) rather than
+     * throwing — a race between render and click (the registry changed
+     * underneath the visitor) is an ordinary, expected condition here, not
+     * an error.
+     */
+    public static function resolveOpenRecordAt(GraveSearchCriteria $criteria, int $index): ?GraveRecord
+    {
+        if ($index < 0) {
+            return null;
+        }
+
+        $openRecords = self::matchedRecords($criteria)->filter(
+            static fn (GraveRecord $record): bool => ! GraveRecordProjection::fromRecord($record, null)->isRestricted()
+        )->values();
+
+        $record = $openRecords->get($index);
+
+        return $record instanceof GraveRecord ? $record : null;
+    }
+
+    /**
+     * @return Collection<int, GraveRecord>
+     */
+    private static function matchedRecords(GraveSearchCriteria $criteria): Collection
+    {
+        // See `search()`'s former inline comments (now here, since both
+        // callers share this guard): the UUID/date shape checks are defence
+        // in depth against a database type error on PostgreSQL's typed
+        // columns, not duplicated validation — the screen's own validation
+        // is still what produces the right §6.3 state.
+        if (! $criteria->hasAnyTerm() || ! Str::isUuid($criteria->cemeteryId)) {
+            return collect();
+        }
+
+        if ($criteria->deathDate !== '' && ! self::isIsoDate($criteria->deathDate)) {
+            return collect();
+        }
+
+        return self::buildQuery($criteria)->limit(self::MAX_RESULTS)->get();
     }
 
     /**
