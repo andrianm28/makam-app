@@ -1301,22 +1301,40 @@ final class BookingWizard extends Component
         // today, and this way they cannot silently disagree tomorrow.
         $basicServices = new Collection;
         $additionalServices = new Collection;
+        $servicesCatalogUnavailable = false;
 
         // Screen 1's Step 4 section can be visible while $currentStep has
         // moved to an earlier step within the same screen (progressive
         // reveal keeps a completed section on screen after "Kembali") — see
         // BookingWizardProgressiveRevealTest and this method's own screen
-        // (not step) guard below.
+        // (not step) guard below. This query now runs on every Screen 1
+        // render rather than only on the exact SERVICES step, so — same
+        // fail-honest discipline as the cemetery-list read above — it must
+        // degrade instead of raising: a caught failure earlier in the SAME
+        // request (e.g. the cemetery-list catch above) leaves this
+        // unrelated read no safer on PostgreSQL, which poisons the whole
+        // ambient transaction once any query inside it errors, so every
+        // later query — even one touching a completely different table —
+        // raises the same generic "current transaction is aborted" error
+        // until rollback (SQLSTATE 25P02; SQLite has no such transaction
+        // isolation and never reproduced this).
         if ($this->currentScreen() === 1) {
-            $activeServices = ServiceCatalogQuery::allActive();
+            try {
+                $activeServices = ServiceCatalogQuery::allActive();
 
-            $basicServices = $activeServices->filter(
-                static fn ($definition): bool => ServiceCode::isBasic((string) $definition->code),
-            )->values();
+                $basicServices = $activeServices->filter(
+                    static fn ($definition): bool => ServiceCode::isBasic((string) $definition->code),
+                )->values();
 
-            $additionalServices = $activeServices->reject(
-                static fn ($definition): bool => ServiceCode::isBasic((string) $definition->code),
-            )->values();
+                $additionalServices = $activeServices->reject(
+                    static fn ($definition): bool => ServiceCode::isBasic((string) $definition->code),
+                )->values();
+            } catch (Throwable $e) {
+                report($e);
+                $servicesCatalogUnavailable = true;
+                $basicServices = new Collection;
+                $additionalServices = new Collection;
+            }
         }
 
         // Ringkasan is a persistent summary card across the whole of Screen
@@ -1418,6 +1436,7 @@ final class BookingWizard extends Component
             'cemeteryCapabilities' => $cemeteryCapabilities,
             'basicServices' => $basicServices,
             'additionalServices' => $additionalServices,
+            'servicesCatalogUnavailable' => $servicesCatalogUnavailable,
             'summary' => $summary,
             'confirmationData' => $confirmationData,
             'paymentMode' => $paymentMode,

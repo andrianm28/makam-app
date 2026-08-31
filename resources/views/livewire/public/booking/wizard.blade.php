@@ -451,6 +451,15 @@
                     Langkah 4 &mdash; Pilih Layanan
                 </h2>
 
+                @if ($servicesCatalogUnavailable)
+                    <x-mk.alert intent="pending" title="Daftar layanan sedang tidak dapat dimuat" live="polite">
+                        Kami tidak dapat memuat daftar layanan saat ini. Silakan muat ulang halaman ini beberapa
+                        saat lagi, atau
+                        <a href="/bantuan" class="font-medium underline underline-offset-2">hubungi Bantuan</a>
+                        agar petugas kami membantu langsung.
+                    </x-mk.alert>
+                @else
+
                 {{-- design-system.md §3.3's normative Service/add-on row
                      spec (PUB-013): name, description, fulfillment owner
                      (platform / operator / vendor), price, availability,
@@ -565,6 +574,7 @@
                         </ul>
                     </div>
                 </fieldset>
+                @endif
 
                 @error('selected_services')
                     <p class="mt-3 text-sm text-danger-700" role="alert">{{ $message }}</p>
