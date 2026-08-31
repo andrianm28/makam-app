@@ -126,7 +126,10 @@ final class GraveRegistryPublicQuery
      * property at all. This method re-runs the IDENTICAL search server-side
      * and resolves the real `GraveRecord` at that position, restricted to
      * OPEN-mode rows only — a restricted row can never be renewed online
-     * regardless (`RenewalFee`'s own gate already refuses it), so there is
+     * regardless (Screen 2's own gate already refuses it — `App\Livewire\
+     * Public\Renewal\RenewalPayment::terimaDanLanjutkan()` rejects any
+     * record whose `access_mode` is not OPEN, and `::resolveFeeState()`
+     * renders the privacy-restricted state instead of a quote), so there is
      * no legitimate reason for this method to ever hand one back.
      *
      * Returns `null` for an out-of-range index or a criteria that would not

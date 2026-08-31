@@ -137,10 +137,32 @@ final class RenewalStart extends Component
      * `?kota=` — dropping the visitor back to a working TPU/TPS list rather
      * than a 404, since nothing about this URL names a record whose
      * existence itself could leak.
+     *
+     * A read that FAILS is not evidence the id is bad, so a failure leaves
+     * `$this->cemeteryId` exactly as it was and says nothing — `render()`'s
+     * own guarded reads, immediately after, are what turn the failure into
+     * the §6.5 "Provider unavailable" banner. Without this guard the whole
+     * screen 500s before reaching them: `render()` calls this method first
+     * of all, and on PostgreSQL an earlier caught failure in the SAME
+     * request (`selectGraveForRenewal()`'s registry read, for instance)
+     * poisons the ambient transaction, so this SELECT raises too even
+     * though `cemeteries` itself is perfectly healthy (SQLSTATE 25P02).
      */
     private function normalizeCemetery(): void
     {
-        if ($this->cemeteryId !== '' && CemeteryPublicQuery::findPublishedById($this->cemeteryId) === null) {
+        if ($this->cemeteryId === '') {
+            return;
+        }
+
+        try {
+            $cemetery = CemeteryPublicQuery::findPublishedById($this->cemeteryId);
+        } catch (Throwable $e) {
+            report($e);
+
+            return;
+        }
+
+        if ($cemetery === null) {
             $this->cemeteryId = '';
         }
     }
@@ -236,6 +258,15 @@ final class RenewalStart extends Component
      * 3 and `GraveRegistryPublicQuery::resolveOpenRecordAt()`'s own doc
      * block. `$index` is the result row's ORDINAL POSITION in the current
      * search's open subset, never a database id.
+     *
+     * `resolveOpenRecordAt()` re-runs the SAME query `render()` already
+     * treats as fallible, so it gets the same guard: a registry read that
+     * fails between the results rendering and the visitor clicking one is
+     * §6.5 "Provider unavailable", not a 500. Setting `$searchUnavailable`
+     * (rather than inventing a second flag) keeps this on the one honest-
+     * degradation path the screen already has — `render()` re-derives that
+     * flag from its own re-run of the search immediately after, so the
+     * visitor is told the search is unavailable exactly while it is.
      */
     public function selectGraveForRenewal(int $index): mixed
     {
@@ -243,7 +274,14 @@ final class RenewalStart extends Component
             return null;
         }
 
-        $record = GraveRegistryPublicQuery::resolveOpenRecordAt($this->criteria(), $index);
+        try {
+            $record = GraveRegistryPublicQuery::resolveOpenRecordAt($this->criteria(), $index);
+        } catch (Throwable $e) {
+            report($e);
+            $this->searchUnavailable = true;
+
+            return null;
+        }
 
         if ($record === null) {
             $this->addError('name', 'Data makam yang dipilih sudah tidak tersedia. Silakan cari ulang.');
@@ -258,13 +296,32 @@ final class RenewalStart extends Component
     }
 
     /**
-     * Back-navigation target for a completed stepper dot — unchanged from
-     * the original `RenewalStart::goToStep()`, still an allow-list of one.
+     * Back-navigation target for a completed stepper dot. The allow-list
+     * covers the steps THIS component can own at once, which the merge
+     * widened from one to two: Screen 1 spans journey steps 1-3
+     * (`currentStep()`), so `<x-mk.stepper>` renders dot 1 as `complete`
+     * once a city is chosen AND dot 2 as `complete` once a TPU/TPS is —
+     * and a `complete` dot is a real `<button wire:click="goToStep(n)">`
+     * (see `stepper.blade.php`). A step left out of this list is therefore
+     * a visibly clickable dead control, not merely an unhandled case.
+     *
+     * Each arm reopens its step by resetting the state that step owns,
+     * reusing the very methods this screen's own in-page controls already
+     * call: dot 1 → `resetCity()` (which cascades through `resetCemetery()`
+     * to the search), dot 2 → `resetCemetery()` alone, leaving the chosen
+     * city standing. Steps 4-6 live on Screen 2/3 and can never render as
+     * `complete` here, so they stay a silent no-op rather than a 500.
      */
     public function goToStep(int $step): void
     {
         if ($step === RenewalJourneyStep::CITY) {
             $this->resetCity();
+
+            return;
+        }
+
+        if ($step === RenewalJourneyStep::CEMETERY) {
+            $this->resetCemetery();
         }
     }
 
@@ -302,9 +359,27 @@ final class RenewalStart extends Component
             }
         }
 
-        $selectedCemetery = $this->cemeteryId !== ''
-            ? CemeteryPublicQuery::findPublishedById($this->cemeteryId)
-            : null;
+        // Same fail-honest discipline as the city/TPU-TPS read above, and
+        // for the same reason one query further on: this read is new with
+        // the `GraveSearch` merge (Screen 1 now resolves the SELECTED
+        // cemetery as well as listing the city's), and it runs AFTER a read
+        // that is already allowed to fail. On PostgreSQL a failed statement
+        // poisons the whole ambient transaction until rollback (SQLSTATE
+        // 25P02), so once the caught failure above has happened, this
+        // unrelated read raises too — degrading it to the same §6.5
+        // "Provider unavailable" banner is the only honest answer, and
+        // leaving `$selectedCemetery` null keeps the search section (which
+        // requires it) from rendering against a cemetery we cannot confirm.
+        $selectedCemetery = null;
+
+        if ($this->cemeteryId !== '') {
+            try {
+                $selectedCemetery = CemeteryPublicQuery::findPublishedById($this->cemeteryId);
+            } catch (Throwable $e) {
+                report($e);
+                $this->cemeteryListUnavailable = true;
+            }
+        }
 
         $graveSearchMode = app(ModeResolver::class)->graveSearchMode();
         $gateClosed = $graveSearchMode === GraveSearchMode::ManualAssistance;

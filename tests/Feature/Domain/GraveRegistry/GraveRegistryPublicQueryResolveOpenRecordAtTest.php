@@ -42,7 +42,8 @@ final class GraveRegistryPublicQueryResolveOpenRecordAtTest extends TestCase
     /**
      * A restricted (limited/closed) match must never be resolvable through
      * this method — it exists to let Screen 1 hand Screen 2 a grave the
-     * visitor is actually allowed to renew, and RenewalFee's own gate
+     * visitor is actually allowed to renew, and Screen 2's own gate
+     * (`RenewalPayment::terimaDanLanjutkan()`'s `access_mode` check)
      * already refuses a non-open record. Defence in depth: even if a caller
      * mis-indexes, this method itself only ever returns an OPEN record.
      */

@@ -114,6 +114,94 @@ final class BookingWizardExpiredHoldOnSubmitTest extends TestCase
             ->assertSet('currentStep', BookingWizardStep::CEMETERY);
     }
 
+    /**
+     * The recovery state routing back to Step 2 is only a real requirement
+     * if the customer cannot simply step around it. Before the screen
+     * consolidation they could not: Step 2 was its own page, and Step 4's
+     * "Lanjutkan" was not on it. Now steps 1-4 are ALL Screen 1 (`currentScreen()`
+     * returns 1 for `CEMETERY`) and Step 4 is in `$completedSteps`, so its
+     * forward control renders right below the plot picker — and
+     * `continueFromStep4()` succeeds, because step 4's own data is still
+     * perfectly valid. One click and the customer is on Screen 2, past the
+     * re-pick, with the `plot` error and the whole point of routing back
+     * silently discarded.
+     *
+     * This asserts the control is not offered while that error stands, and —
+     * the half that makes it a real test rather than a snapshot — that it
+     * comes back the moment a plot is genuinely re-held, so the fix cannot
+     * be "hide the button forever". Screen 1 stays where the customer is
+     * throughout.
+     *
+     * SCOPE, stated rather than implied: the gate is exactly as durable as
+     * the error it reads. Livewire does not carry a component's error bag
+     * across requests (verified against this component, not assumed), so
+     * the error — and this gate with it — lasts for the render that
+     * follows the failed submission: the render the customer is actually
+     * looking at, and the only one from which the one-click bypass was
+     * reachable. A customer who first clicks some OTHER control on Screen 1
+     * clears the error and gets the forward control back. That residual
+     * path is not a data-integrity hole: `saveStep8()`/`openOnlinePayment()`
+     * re-check the hold server-side and route straight back here again (the
+     * two tests either side of this one), so the booking still cannot be
+     * submitted without a live hold.
+     */
+    public function test_an_expired_hold_recovery_does_not_offer_a_way_past_the_plot_re_pick(): void
+    {
+        $cemetery = Cemetery::query()->create([
+            'type' => CemeteryType::TPU,
+            'publication_status' => CemeteryPublicationStatus::PUBLISHED,
+            'name' => 'TPU Uji Coba',
+            'slug' => 'tpu-uji-coba-'.Str::lower(Str::random(6)),
+            'city' => LaunchCityCode::JAKARTA,
+            'address' => 'Jl. Contoh No. 1',
+            'plot_tracking_mode' => PlotTrackingMode::GRANULAR,
+        ]);
+        $block = CemeteryBlock::query()->create(['cemetery_id' => $cemetery->getKey(), 'code' => 'BLOK-A', 'name' => 'Blok A', 'capacity' => 1]);
+        $plot = GravePlot::query()->create(['block_id' => $block->getKey(), 'slot' => '001', 'plot_state' => 'available']);
+        $draftId = $this->draftIdAtStep2();
+        $draft = BookingDraft::query()->findOrFail($draftId);
+        $draft->forceFill([
+            'cemetery_id' => $cemetery->id,
+            'service_type' => BookingServiceType::NEW_GRAVE,
+            'customer_full_name' => 'Uji Coba',
+            'customer_mobile' => '081200000000',
+            'customer_relationship' => 'anak',
+            'current_step' => BookingWizardStep::PAYMENT,
+            'completed_steps' => [
+                BookingWizardStep::LOCATION,
+                BookingWizardStep::CEMETERY,
+                BookingWizardStep::SERVICE_TYPE,
+                BookingWizardStep::SERVICES,
+                BookingWizardStep::CUSTOMER_DATA,
+                BookingWizardStep::DECEASED_DATA,
+            ],
+        ])->saveQuietly();
+        app(HoldPlotForDraft::class)($plot, $draft, "booking_draft:{$draft->getKey()}", ttlMinutes: -1);
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->set('paymentReference', 'BCA 123456789 a.n. Uji Coba')
+            ->call('saveStep8', BookingPaymentMethod::MANUAL)
+            ->assertHasErrors('plot')
+            ->assertSet('currentStep', BookingWizardStep::CEMETERY);
+
+        // Step 4's section is genuinely on screen — this is Screen 1, and
+        // step 4 is completed — so the assertion below is about the forward
+        // CONTROL being withheld, not about the section being absent.
+        $this->assertSame(1, $component->instance()->currentScreen());
+        $component->assertSee('Langkah 4');
+
+        $component->assertDontSeeHtml('wire:click="continueFromStep4"')
+            ->assertSee('Pilih plot terlebih dahulu pada Langkah 2');
+
+        // Re-picking a plot is the way out, and it must actually be one:
+        // once the hold is real again the forward control returns.
+        $freshPlot = GravePlot::query()->create(['block_id' => $block->getKey(), 'slot' => '002', 'plot_state' => 'available']);
+
+        $component->call('holdPlotForStep2', $cemetery->id, null, $freshPlot->id)
+            ->assertHasNoErrors('plot')
+            ->assertSeeHtml('wire:click="continueFromStep4"');
+    }
+
     public function test_online_submission_with_an_expired_hold_routes_back_to_step_2(): void
     {
         $this->withPaymentGate(true);

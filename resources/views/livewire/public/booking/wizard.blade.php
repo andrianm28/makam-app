@@ -580,19 +580,40 @@
                     <p class="mt-3 text-sm text-danger-700" role="alert">{{ $message }}</p>
                 @enderror
 
+                {{-- The `plot` error is the expired/lost-hold recovery state
+                     (`BookingWizard::routeBackToPlotPickerAfterExpiredHold()`):
+                     `$currentStep` is sent back to Step 2 so the customer
+                     re-picks a plot. Under this screen's progressive reveal
+                     that does NOT take Step 4 off the page — steps 1-4 are all
+                     Screen 1, and Step 4 is in `$completedSteps` — so its own
+                     forward control would otherwise still be sitting there,
+                     one click from Screen 2, saving step 4's still-valid data
+                     and carrying the customer straight past the re-pick the
+                     error exists to demand. While that error stands, the
+                     sections AFTER the plot picker do not offer a way forward;
+                     "Kembali" and the picker itself stay live, because those
+                     are the way out. --}}
                 <div class="mt-4 flex gap-3">
                     <x-mk.button variant="tertiary" wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::SERVICE_TYPE }})">
                         Kembali
                     </x-mk.button>
-                    <x-mk.button
-                        variant="primary"
-                        wire:click="continueFromStep4"
-                        wire:loading.attr="disabled"
-                        wire:target="continueFromStep4"
-                    >
-                        Lanjutkan
-                    </x-mk.button>
+                    @unless ($errors->has('plot'))
+                        <x-mk.button
+                            variant="primary"
+                            wire:click="continueFromStep4"
+                            wire:loading.attr="disabled"
+                            wire:target="continueFromStep4"
+                        >
+                            Lanjutkan
+                        </x-mk.button>
+                    @endunless
                 </div>
+
+                @if ($errors->has('plot'))
+                    <p class="mt-3 text-sm text-danger-700" role="alert">
+                        Pilih plot terlebih dahulu pada Langkah 2 di atas sebelum melanjutkan.
+                    </p>
+                @endif
             </section>
         @endif
         @endif
@@ -606,7 +627,14 @@
                     Langkah 5 &mdash; Ringkasan Pesanan
                 </h2>
 
-                @if ($summary !== null)
+                @if ($summaryUnavailable)
+                    <x-mk.alert intent="pending" title="Ringkasan pesanan sedang tidak dapat dimuat" live="polite">
+                        Kami tidak dapat memuat ringkasan layanan Anda saat ini. Pilihan Anda tetap tersimpan.
+                        Silakan muat ulang halaman ini beberapa saat lagi, atau
+                        <a href="/bantuan" class="font-medium underline underline-offset-2">hubungi Bantuan</a>
+                        agar petugas kami membantu langsung.
+                    </x-mk.alert>
+                @elseif ($summary !== null)
                     <x-mk.table
                         caption="Ringkasan layanan yang dipilih"
                         :headers="[

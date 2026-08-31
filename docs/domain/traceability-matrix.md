@@ -383,16 +383,12 @@ Renewal steps 4–6 shipped with L8 on 12 Aug 2026 and merged 13 Aug 2026 (PR #2
 - **REN-05 (Payment), PUB-033.** *Stays `Specified (gated fallback)`* — the online-payment gate is closed, so the manual-coordination path is the required state, exactly what `RenewalPaymentTest::test_the_payment_screen_shows_manual_coordination_when_gate_is_closed` and `::test_the_payment_step_is_never_removed_when_gate_is_closed` pin. `GuardRenewalPaymentOpeningTest` asserts the five guard conditions — expired quote, amount mismatch, unaccepted quote, closed gate → manual required, closed grave access mode — and `RenewalPaymentTest::test_a_denial_never_prints_the_guards_specific_reason` covers the not-leaking side.
 - **REN-06 (Confirmation/invoice), PUB-034.** `RenewalConfirmationTest::test_the_confirmation_shows_reference_status_and_invoice_state` asserts the row's "invoice and due-date result"; `test_reloading_the_confirmation_never_creates_a_second_renewal` asserts the exactly-one-renewal invariant; `::test_an_unsettled_renewal_does_not_claim_a_new_due_date` and `::test_a_settled_renewal_shows_the_new_due_date` hold the due-date honesty; `test_support_escape_hatch_is_present` covers the support state.
 
-- **BOOK-01…BOOK-09, REN-01…REN-06 (29 Aug 2026 — wizard screen
-  consolidation).** Every row's Screen and Evidence cells above are
-  unchanged and remain accurate: an AC's evidence is still the SAME test
-  file, and a screen's PUB id still names the SAME functional screen. What
-  changed is presentation grouping only, recorded in `screen-inventory.md`'s
-  own dated note for this change — no AC gained or lost coverage, and no
-  test referenced here was deleted, only some were moved between files
-  during the `GraveSearch`→`RenewalStart` and `RenewalFee`→`RenewalPayment`
-  merges (their new locations: `tests/Feature/Livewire/Public/Renewal/
-  RenewalStartTest.php` and `RenewalPaymentTest.php` respectively).
+### BOOK-01…BOOK-09, REN-01…REN-06 — screen regrouping recorded 29 Aug 2026 (wizard screen consolidation)
+
+No row's Status changed and no row is re-evidenced here; this section exists only so the regrouping is recorded against the rows it touches rather than appended to an unrelated dated section above.
+
+- **What changed.** Both public wizards were regrouped into fewer page-turns without changing their documented step count, order, or labels (`docs/superpowers/specs/2026-08-29-wizard-screen-consolidation-design.md`). Every row's Screen and Evidence cells above remain accurate: an AC's evidence is still the SAME test file, and a screen's PUB id still names the SAME functional screen. The screen-by-screen mapping is recorded once, canonically, in `docs/product/screen-inventory.md`'s own 29 Aug 2026 note — it is deliberately not restated here.
+- **What did NOT change.** No AC gained or lost coverage. No test cited anywhere in this document was deleted; some moved between files during the `GraveSearch`→`RenewalStart` and `RenewalFee`→`RenewalPayment` component merges, and this document's REN-03 and REN-04 entries already cite their new homes (`tests/Feature/Livewire/Public/Renewal/RenewalStartTest.php` and `RenewalPaymentTest.php`).
 
 ### VENDOR-01 — raised to `Covered` 14 Aug 2026 (L10)
 

@@ -21,14 +21,31 @@
         />
 
         @if ($mode === 'not_found')
+            {{-- This state is reachable with nothing at all to act on: no
+                 `?perpanjangan=`, and no session-held grave selection —
+                 including AFTER a successful acceptance, since
+                 `terimaDanLanjutkan()` forgets the selection and
+                 `$perpanjangan` is `#[Url(history: true)]`, so a browser
+                 Back can land here with both gone. A support link alone
+                 would be a dead end, so the search itself is offered as the
+                 primary way out; Bantuan stays, one step down. --}}
             <div class="flex flex-col items-center gap-3 py-12 text-center">
                 <x-dynamic-component component="icon.inbox" class="size-12 text-neutral-400" aria-hidden="true" />
                 <h1 class="text-lg font-semibold text-neutral-800">
                     {{ $errorMessage }}
                 </h1>
-                <x-mk.button variant="primary" href="/bantuan">
-                    Hubungi Bantuan
-                </x-mk.button>
+                <p class="max-w-prose text-base text-neutral-600">
+                    Anda dapat mencari makam yang ingin diperpanjang dari awal, atau
+                    hubungi petugas kami untuk dibantu langsung.
+                </p>
+                <div class="mt-2 flex flex-wrap items-center justify-center gap-3">
+                    <x-mk.button variant="primary" href="/perpanjangan">
+                        Cari makam lain
+                    </x-mk.button>
+                    <x-mk.button variant="secondary" href="/bantuan">
+                        Hubungi Bantuan
+                    </x-mk.button>
+                </div>
             </div>
 
         @elseif ($mode === 'fee')

@@ -273,6 +273,40 @@ final class RenewalStartTest extends TestCase
     }
 
     /**
+     * The same drift-pin as the test above, one dot over — written because
+     * the `GraveSearch` merge widened this component from journey steps 1-2
+     * to 1-3, so for the first time TWO dots can render as `complete` here
+     * at once. Dot 2 (TPU/TPS) then becomes a live
+     * `<button wire:click="goToStep(2)">` exactly as dot 1 already was, and
+     * `goToStep()`'s allow-list has to have grown with it; it had not, which
+     * is precisely the dead-control defect the step-one test above exists to
+     * catch. The first assertion pins the seam (the stepper really does emit
+     * that button, so this test cannot pass while the control has silently
+     * stopped existing); the rest pin that clicking it genuinely reopens the
+     * TPU/TPS step, keeping the chosen city and dropping the search that
+     * belonged to the old cemetery.
+     */
+    public function test_the_completed_step_two_dot_reopens_the_cemetery_step(): void
+    {
+        $component = Livewire::test(RenewalStart::class, [
+            'city' => LaunchCityCode::JAKARTA,
+            'cemeteryId' => CemeteryFixture::id('package', 0),
+            'name' => 'Contoh',
+        ]);
+
+        $component->assertSee('Langkah 3 dari 6')
+            ->assertSee('wire:click="goToStep(2)"', false);
+
+        $component->call('goToStep', RenewalJourneyStep::CEMETERY)
+            ->assertOk()
+            ->assertSet('cemeteryId', '')
+            ->assertSet('city', LaunchCityCode::JAKARTA)
+            ->assertSet('name', '')
+            ->assertSet('searched', false)
+            ->assertSee('Langkah 2 dari 6');
+    }
+
+    /**
      * The "Ganti kota" control is a <x-mk.button variant="link"> (design-
      * system.md 9.2 MUST #2 — the page header claims every button uses the
      * primitive, and this was the one hand-forked holdout). It renders only
@@ -1229,6 +1263,60 @@ final class RenewalStartTest extends TestCase
             ->call('selectGraveForRenewal', 0)
             ->assertNoRedirect()
             ->assertSee('sudah tidak tersedia');
+    }
+
+    /**
+     * `render()` has always treated its own call into the grave-matching
+     * query as fallible (§6.5 "Provider unavailable"). `selectGraveForRenewal()`
+     * calls the SAME matching logic through `resolveOpenRecordAt()`, so a
+     * registry read that fails between the results rendering and the visitor
+     * clicking one must degrade the same way rather than 500.
+     *
+     * Dropping `grave_records` is what makes that read fail — and it is also
+     * what makes this a COMPOSITION test rather than a single-guard one: on
+     * PostgreSQL the failed statement aborts the whole ambient transaction
+     * (SQLSTATE 25P02), so every later read in the same request fails too,
+     * including `normalizeCemetery()`'s and `render()`'s own
+     * `CemeteryPublicQuery::findPublishedById()` calls against the
+     * perfectly-healthy `cemeteries` table. All three guards are load-bearing
+     * here; remove any one and this test fails with an uncaught exception.
+     * The visitor is left on an honest "sedang tidak dapat dimuat" screen
+     * with the support escape hatch, never redirected onward, and nothing is
+     * remembered as a selection.
+     */
+    public function test_a_failed_registry_read_when_selecting_a_result_degrades_honestly_instead_of_500ing(): void
+    {
+        $this->openTheDataGate();
+
+        $component = Livewire::test(RenewalStart::class, [
+            'cemeteryId' => CemeteryFixture::id('package', 0),
+            'name' => 'Contoh',
+        ])->call('search')->assertSet('searched', true);
+
+        // Reverse-dependency order: PostgreSQL blocks `DROP TABLE` of a
+        // parent by ANY incoming FK (2BP01). `memorial_profiles` and
+        // `renewals` both FK-reference `grave_records`, and each has its own
+        // dependents in turn — the same drop-list discipline (and reasoning)
+        // as `test_a_failed_cemetery_read_degrades_honestly_instead_of_500ing`
+        // above, trimmed to `grave_records`' own referencers.
+        Schema::dropIfExists('abuse_reports');
+        Schema::dropIfExists('moderation_cases');
+        Schema::dropIfExists('memorial_qr_tokens');
+        Schema::dropIfExists('memorial_media');
+        Schema::dropIfExists('memorial_contents');
+        Schema::dropIfExists('memorial_editors');
+        Schema::dropIfExists('memorial_profiles');
+        Schema::dropIfExists('renewal_external_markings');
+        Schema::dropIfExists('renewal_quotes');
+        Schema::dropIfExists('renewals');
+        Schema::dropIfExists('grave_records');
+
+        $component->call('selectGraveForRenewal', 0)
+            ->assertOk()
+            ->assertNoRedirect()
+            ->assertSee('/bantuan');
+
+        $this->assertNull(RenewalGraveSelection::current());
     }
 
     /**

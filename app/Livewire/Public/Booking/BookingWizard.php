@@ -1339,41 +1339,73 @@ final class BookingWizard extends Component
 
         // Ringkasan is a persistent summary card across the whole of Screen
         // 2 (steps 5-7), not only while $currentStep === SUMMARY exactly —
-        // see this task's own report / the design spec's Screen 2 row.
+        // see this task's own report / the design spec's Screen 2 row. That
+        // widening (one exact step to three) is also why this read needs the
+        // same fail-honest try/catch the two Screen 1 reads above already
+        // have: it now runs on three times as many renders, and
+        // `BookingDraftQuery::summary()` reads the service catalogue for
+        // every selected line, so a poisoned ambient transaction (SQLSTATE
+        // 25P02 — see the Step 4 comment above) reaches it exactly as it
+        // reaches them. A silently-null summary would be the dishonest
+        // outcome here: the Blade card would simply vanish with no
+        // explanation, so the failure gets its own explicit flag.
         $summary = null;
+        $summaryUnavailable = false;
         if ($this->currentScreen() === 2 && $this->draftId !== null) {
-            $draft = BookingDraftQuery::findBound($this->draftId);
-            if ($draft !== null) {
-                $summary = BookingDraftQuery::summary($draft);
+            try {
+                $draft = BookingDraftQuery::findBound($this->draftId);
+                if ($draft !== null) {
+                    $summary = BookingDraftQuery::summary($draft);
+                }
+            } catch (Throwable $e) {
+                report($e);
+                $summaryUnavailable = true;
             }
         }
 
+        // Step 9's read gets the same guard, for the same reason — and it is
+        // the one read on this screen whose failure MUST NOT be papered over
+        // with an optimistic default: `confirmationData` staying null already
+        // renders the honest "Sesi pemesanan tidak ditemukan" state (see
+        // `wizard.blade.php`'s Screen 4 block), which is exactly what an
+        // unreadable draft/order means here. Anything else would claim an
+        // order this render could not actually confirm.
         $confirmationData = null;
         if ($this->currentStep === BookingWizardStep::CONFIRMATION && $this->draftId !== null) {
-            $draft = BookingDraftQuery::findBound($this->draftId);
-            if ($draft !== null) {
-                // Only set once `saveStep8()`'s submission chain has actually
-                // created the order (the normal case) — a rare mid-request
-                // failure there is reported and swallowed, not surfaced
-                // here, so this stays null and Step 9 falls back to its
-                // honest "not yet processed" copy rather than claiming an
-                // order that does not exist.
-                $order = Order::query()->where('booking_draft_id', $draft->id)->first();
+            try {
+                $draft = BookingDraftQuery::findBound($this->draftId);
+            } catch (Throwable $e) {
+                report($e);
+                $draft = null;
+            }
 
-                $confirmationData = [
-                    'draft_id' => $draft->id,
-                    'order_reference' => $order?->reference,
-                    'summary' => $this->confirmationSummary($order, $draft),
-                    'customer_name' => $draft->customer_full_name,
-                    'customer_mobile' => $draft->customer_mobile,
-                    'customer_email' => $draft->customer_email,
-                    'deceased_name' => $draft->deceased_full_name,
-                    'payment_method' => $draft->payment_method,
-                    'payment_reference' => $draft->payment_reference,
-                    'contact_channel_label' => BookingContactChannel::label($draft->customer_contact_channel),
-                    'city_code' => $draft->city_code,
-                    'cemetery_id' => $draft->cemetery_id,
-                ];
+            if ($draft !== null) {
+                try {
+                    // Only set once `saveStep8()`'s submission chain has
+                    // actually created the order (the normal case) — a rare
+                    // mid-request failure there is reported and swallowed, not
+                    // surfaced here, so this stays null and Step 9 falls back
+                    // to its honest "not yet processed" copy rather than
+                    // claiming an order that does not exist.
+                    $order = Order::query()->where('booking_draft_id', $draft->id)->first();
+
+                    $confirmationData = [
+                        'draft_id' => $draft->id,
+                        'order_reference' => $order?->reference,
+                        'summary' => $this->confirmationSummary($order, $draft),
+                        'customer_name' => $draft->customer_full_name,
+                        'customer_mobile' => $draft->customer_mobile,
+                        'customer_email' => $draft->customer_email,
+                        'deceased_name' => $draft->deceased_full_name,
+                        'payment_method' => $draft->payment_method,
+                        'payment_reference' => $draft->payment_reference,
+                        'contact_channel_label' => BookingContactChannel::label($draft->customer_contact_channel),
+                        'city_code' => $draft->city_code,
+                        'cemetery_id' => $draft->cemetery_id,
+                    ];
+                } catch (Throwable $e) {
+                    report($e);
+                }
             }
         }
 
@@ -1438,6 +1470,7 @@ final class BookingWizard extends Component
             'additionalServices' => $additionalServices,
             'servicesCatalogUnavailable' => $servicesCatalogUnavailable,
             'summary' => $summary,
+            'summaryUnavailable' => $summaryUnavailable,
             'confirmationData' => $confirmationData,
             'paymentMode' => $paymentMode,
             'whatsAppMode' => $whatsAppMode,

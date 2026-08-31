@@ -272,6 +272,20 @@ Route::get('/kunjungan/{cemeterySlug}', VisitationPage::class)->name('kunjungan.
 | projects any grave record field.
 */
 Route::get('/perpanjangan', RenewalStart::class)->name('perpanjangan.index');
+// `/perpanjangan/cari` was a real, bookmarkable UI link until Task 4 merged
+// `GraveSearch` into `RenewalStart` — `?tpu=&nama=&blok=&tanggal=` was pushed
+// into browser history by that component's own `#[Url(...)]` properties, and
+// `RenewalStart` now carries the identical four parameter names. A bookmark
+// must therefore keep resolving instead of 404ing. Same closure shape (and
+// same reason) as `/cemeteries` above: a plain `Route::permanentRedirect`
+// filters to path variables only and would silently drop the query string.
+// `/perpanjangan/biaya` gets no such redirect deliberately — it was never a
+// bookmarkable UI link (no live path ever produced its `?makam=`).
+Route::get('/perpanjangan/cari', function (Request $request) {
+    $query = $request->getQueryString();
+
+    return redirect('/perpanjangan'.($query !== null ? '?'.$query : ''), 301);
+});
 Route::get('/perpanjangan/pembayaran', RenewalPayment::class)->name('perpanjangan.pembayaran');
 Route::get('/perpanjangan/konfirmasi', RenewalConfirmation::class)->name('perpanjangan.konfirmasi');
 

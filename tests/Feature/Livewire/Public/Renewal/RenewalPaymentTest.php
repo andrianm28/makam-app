@@ -372,6 +372,46 @@ final class RenewalPaymentTest extends TestCase
     }
 
     /**
+     * The `not_found` state is reachable with nothing at all left to act on,
+     * including AFTER a successful acceptance: `terimaDanLanjutkan()` calls
+     * `RenewalGraveSelection::forget()` and then sets `$perpanjangan`, a
+     * `#[Url(history: true)]` property — so a browser Back lands on this
+     * screen with the session selection already forgotten and the parameter
+     * gone, and `resolveState()` falls through to here. A support link on
+     * its own would be a dead end for a visitor who simply wants to search
+     * again, so the state must offer a real route back into the flow.
+     *
+     * The Back-button interaction itself is NOT what this asserts (no
+     * browser toolchain is available on this host, and Livewire's
+     * history-restoration mechanics are not exercised by
+     * `Livewire::test()`); this pins the cheaper, unconditional property —
+     * the state is recoverable however a visitor reached it.
+     */
+    public function test_the_not_found_state_offers_a_way_back_into_the_search_flow(): void
+    {
+        Livewire::test(RenewalPayment::class)
+            ->assertOk()
+            ->assertSee('tidak ditemukan')
+            ->assertSee('Cari makam lain')
+            ->assertSeeHtml('href="/perpanjangan"')
+            // The existing support escape hatch is not traded away for it.
+            ->assertSee('/bantuan');
+    }
+
+    /**
+     * The same recoverability, on the other route into `not_found` — a
+     * `?perpanjangan=` that names no real renewal (stale bookmark, purged
+     * row, tampered id).
+     */
+    public function test_an_unknown_renewal_id_also_offers_a_way_back_into_the_search_flow(): void
+    {
+        Livewire::test(RenewalPayment::class, ['perpanjangan' => '00000000-0000-0000-0000-000000000000'])
+            ->assertOk()
+            ->assertSee('Cari makam lain')
+            ->assertSeeHtml('href="/perpanjangan"');
+    }
+
+    /**
      * The guard's `denialReason()` names the specific condition that failed.
      * On an anonymous page that is an oracle: it distinguishes "no such
      * renewal" from "restricted grave" from "stale quote" for anyone
