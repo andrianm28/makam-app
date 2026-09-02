@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Filament\Admin\Resources\MarketplaceOrders\Schemas;
 
 use App\Domain\Marketplace\Models\MarketplaceOrder;
+use App\Domain\Marketplace\Models\MarketplaceOrderItem;
 use App\Filament\Admin\Resources\MarketplaceOrders\MarketplacePaymentStateBadge;
+use App\Models\User;
 use App\Platform\FinancialLedger\Models\VendorPayable as VendorPayableModel;
 use App\Platform\FinancialLedger\VendorPayableState;
 use App\Support\Design\StatusIntent;
@@ -28,8 +30,27 @@ use Filament\Schemas\Schema;
  * ---------------------------------------------------------------------------
  * - Items: `items()` relation (`MarketplaceOrderItem`), product name via
  *   `items.variant.product.name` (`MarketplaceOrderItem::variant()` ->
- *   `ProductVariant::product()`), frozen `quantity` / `unit_price_minor` /
- *   `line_total_minor` snapshots in integer minor units.
+ *   `ProductVariant::product()`) WHEN the item was checked out against a
+ *   variant, falling back to `items.listing.product.name` (`listing()` ->
+ *   `VendorListing::product()`) otherwise — `product_variant_id` is only
+ *   ever set for variant-based products; a real checkout for a plain
+ *   (non-variant) product like "Karangan Bunga Papan" leaves it null and
+ *   only sets `vendor_listing_id`/`product_id` directly, which the
+ *   variant-only path rendered as a blank "Produk: —" on every such item,
+ *   reproduced live during UAT (2 Sep 2026, see `productName()`). Frozen
+ *   `quantity` / `unit_price_minor` / `line_total_minor` snapshots in
+ *   integer minor units.
+ * - Customer: `customer_ref` is a plain string column (no Eloquent
+ *   relation on the model) holding a real `users.id` for an authenticated
+ *   checkout, so the raw column rendered as a bare id ("3") instead of a
+ *   name, also found live during UAT. `customerName()` resolves it through
+ *   `User::find()`, falling back to the raw ref for a guest/unresolvable
+ *   checkout rather than hiding it. `users.id` is a `bigint` column, so a
+ *   non-numeric ref shape (e.g. the "customer:1" fixture value) MUST be
+ *   filtered out before `User::find()` — passing it straight through
+ *   crashed with `SQLSTATE[22P02] invalid input syntax for type bigint`,
+ *   the same crash class as `PreNeedInterestPage::certificateSubject()`'s
+ *   earlier UUID-column version of this bug.
  * - Vendor allocation: `vendor()` BelongsTo (name) plus `vendorOrders()`
  *   HasMany (`VendorOrder` rows linked via `marketplace_order_id`) — the
  *   vendor's per-order refs are their `uuid`s.
@@ -41,7 +62,14 @@ use Filament\Schemas\Schema;
  *   are computed via `state()` closures using that same query — no new
  *   infrastructure invented. `VendorPayableState` colors/labels mirror the
  *   vendor panel's `PayoutStatus` table (gray 'Ditahan' / info 'Dapat
- *   dicairkan' / success 'Sudah dicairkan') so both surfaces agree.
+ *   dicairkan' / success 'Sudah dicairkan') so both surfaces agree. Found
+ *   while writing this fix's own regression tests: `payable_amount`'s
+ *   `state()` closure used to call `moneyString(int $amountMinor)` with
+ *   `payableFor($record)?->amount_minor` directly, which is `null` for ANY
+ *   order with no `vendor_payables` row yet (i.e. every order before
+ *   `MarkMarketplaceOrderPaid` opens one) — a `TypeError` that 500'd the
+ *   whole view page. `null` is now returned directly so the entry's own
+ *   `placeholder()` handles it, matching `payable_state`'s existing pattern.
  * - Vendor processing status: `vendorOrders().status`, a
  *   `VendorProcessingStatus` literal, rendered as a badge per vendor order
  *   through `StatusIntent::FAMILY_VENDOR_PROCESSING` (design-system §3.7
@@ -68,6 +96,7 @@ final class MarketplaceOrderInfolist
 
                 TextEntry::make('customer_ref')
                     ->label('Pelanggan')
+                    ->state(fn (MarketplaceOrder $record): ?string => self::customerName($record))
                     ->placeholder('—'),
 
                 TextEntry::make('entity_ref')
@@ -97,6 +126,7 @@ final class MarketplaceOrderInfolist
                     ->schema([
                         TextEntry::make('variant.product.name')
                             ->label('Produk')
+                            ->state(fn (MarketplaceOrderItem $record): ?string => self::productName($record))
                             ->placeholder('—'),
 
                         TextEntry::make('quantity')
@@ -128,7 +158,11 @@ final class MarketplaceOrderInfolist
 
                 TextEntry::make('payable_amount')
                     ->label('Kewajiban vendor')
-                    ->state(fn (MarketplaceOrder $record): ?string => self::moneyString(self::payableFor($record)?->amount_minor))
+                    ->state(function (MarketplaceOrder $record): ?string {
+                        $amountMinor = self::payableFor($record)?->amount_minor;
+
+                        return $amountMinor === null ? null : self::moneyString($amountMinor);
+                    })
                     ->placeholder('Belum ada kewajiban tercatat'),
 
                 TextEntry::make('payable_state')
@@ -174,5 +208,30 @@ final class MarketplaceOrderInfolist
     private static function moneyString(int $amountMinor): string
     {
         return 'Rp '.number_format($amountMinor / 100, 0, ',', '.');
+    }
+
+    /**
+     * `product_variant_id` is only ever set for a variant-based product;
+     * a real checkout for a plain product leaves it null and only sets
+     * `vendor_listing_id`/`product_id` — see this class's own doc block.
+     */
+    private static function productName(MarketplaceOrderItem $item): ?string
+    {
+        return $item->variant?->product?->name ?? $item->listing?->product?->name;
+    }
+
+    private static function customerName(MarketplaceOrder $order): ?string
+    {
+        if ($order->customer_ref === null || $order->customer_ref === '') {
+            return null;
+        }
+
+        if (! ctype_digit($order->customer_ref)) {
+            return $order->customer_ref;
+        }
+
+        $user = User::find($order->customer_ref);
+
+        return $user?->name ?? $order->customer_ref;
     }
 }
