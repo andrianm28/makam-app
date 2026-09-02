@@ -7,10 +7,12 @@ namespace App\Domain\Renewal;
 use InvalidArgumentException;
 
 /**
- * The three visible steps of the public renewal journey — consolidated from
- * six steps (city, TPU/TPS, grave search, fee, payment, confirmation) in
- * `docs/superpowers/specs/2026-08-29-wizard-screen-consolidation-design.md`.
- * Merged into search, fee & payment, and confirmation screens.
+ * The renewal journey has been renumbered from six steps to three step groups
+ * (see `docs/superpowers/specs/2026-09-02-wizard-step-reduction-design.md`).
+ * This class replaces the old step vocabulary with the new consolidated step
+ * numbering: 1=Cari Makam, 2=Biaya & Bayar, 3=Konfirmasi.
+ * Step consolidation also creates corresponding screen groups via `RenewalWizardScreen`
+ * (see `docs/superpowers/specs/2026-08-29-wizard-screen-consolidation-design.md`).
  *
  * ---------------------------------------------------------------------------
  * Why the labels live HERE and not inline in a Blade view
