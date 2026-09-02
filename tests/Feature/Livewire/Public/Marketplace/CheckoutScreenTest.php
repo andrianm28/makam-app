@@ -104,6 +104,32 @@ final class CheckoutScreenTest extends TestCase
         Livewire::test(Checkout::class)->assertSee('satu vendor');
     }
 
+    /**
+     * 2 Sep 2026 UAT finding: a bare `<select>` with no property-matching
+     * `selected` option still visually shows its first `<option>` (native
+     * browser behaviour) while `$selectedAreaCode` stayed at its `''`
+     * mount()-time default, silently disagreeing with what the page
+     * displayed. A customer who never touched the dropdown — because it
+     * already showed their area — submitted with the field looking filled
+     * while the bound value was really empty, surfacing as a "wajib diisi"
+     * error next to a visibly-selected option. Proves `mount()` now seeds
+     * `selectedAreaCode` to the first service area, so an untouched
+     * dropdown submits successfully rather than failing required
+     * validation.
+     */
+    public function test_placing_an_order_without_touching_the_area_dropdown_succeeds(): void
+    {
+        [, $area] = $this->seedCart();
+
+        $component = $this->fillRecipient(Livewire::test(Checkout::class));
+
+        $component->assertSet('selectedAreaCode', $area->area_code)
+            ->call('placeOrder')
+            ->assertHasNoErrors();
+
+        $this->assertTrue(MarketplaceOrder::query()->exists());
+    }
+
     public function test_placing_an_order_creates_it_unpaid_and_awaiting_the_vendor(): void
     {
         [, $area] = $this->seedCart();

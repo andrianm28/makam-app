@@ -226,7 +226,7 @@
                     </x-mk.field>
 
                     <x-mk.field
-                        label="Tanggal pelaksanaan (opsional)"
+                        label="Tanggal pelaksanaan"
                         name="scheduledFor"
                         wire:model="scheduledFor"
                         type="date"

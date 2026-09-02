@@ -14,9 +14,13 @@
 
     Status badge resolves through `App\Support\Design\StatusIntent` —
     design-system.md §3.7 is explicit that a component must never switch on
-    a status enum string itself. Product type is humanized inline
-    (`ProductType` has no `label()` helper, unlike `BookingServiceType`) —
-    this batch has no authority to write new canonical product copy.
+    a status enum string itself. Product type resolves through
+    `App\Domain\OrderWorkflow\ProductType::label()` (2 Sep 2026 UAT finding
+    — this row used to humanize the raw enum name inline, e.g. `AT_NEED_
+    SERVICE_ORDER` -> "At Need Service Order", leaking straight into a
+    public, otherwise-Indonesian screen; the canonical label already
+    existed one layer up in the Admin resource and is now reachable from
+    here too).
 
     Deliberately NO "Lihat detail" link on any row. `information-
     architecture.md`'s `/pesanan/{orderReference}` detail page (PUB-050) is
@@ -52,7 +56,7 @@
                                     {{ $order->reference }}
                                 </p>
                                 <p class="mt-1 text-sm text-neutral-600">
-                                    {{ ucwords(str_replace('_', ' ', strtolower($order->product_type))) }}
+                                    {{ \App\Domain\OrderWorkflow\ProductType::from($order->product_type)->label() }}
                                 </p>
                                 <p class="mt-1 text-sm text-neutral-500">
                                     Dibuat {{ $order->created_at?->translatedFormat('d M Y, H:i') }}

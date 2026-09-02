@@ -72,12 +72,22 @@ final class FaqArticleSeedTest extends TestCase
         $this->assertNull($draft->published_at);
     }
 
+    /**
+     * `metode-pembayaran-yang-tersedia` is a deliberate exception: `2026_09_
+     * 02_100000_update_faq_payment_method_answer_for_online_payment_launch.
+     * php` republished it at version 2 to correct a since-stale "online
+     * payment unavailable" claim (see that migration's own doc block and
+     * `FaqPaymentMethodAnswerAccuracyTest`). Every other seeded article is
+     * still untouched at version 1.
+     */
     public function test_every_published_seed_article_has_a_matching_first_version_snapshot(): void
     {
         $published = FaqArticle::forAdmin()->where('publish_state', FaqArticlePublishState::PUBLISHED)->get();
 
         foreach ($published as $article) {
-            $this->assertSame(1, $article->current_version, "Article [{$article->slug}] should be seeded at version 1.");
+            $expectedVersion = $article->slug === 'metode-pembayaran-yang-tersedia' ? 2 : 1;
+
+            $this->assertSame($expectedVersion, $article->current_version, "Article [{$article->slug}] should be at version {$expectedVersion}.");
             $this->assertNotNull($article->published_at);
             $this->assertDatabaseHas('faq_article_versions', [
                 'faq_article_id' => $article->id,

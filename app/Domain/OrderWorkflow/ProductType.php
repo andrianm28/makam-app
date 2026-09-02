@@ -101,4 +101,30 @@ enum ProductType: string
             BookingServiceType::PRE_NEED => self::PRE_NEED_PLOT_PURCHASE,
         };
     }
+
+    /**
+     * The Indonesian display label — moved here (2 Sep 2026 UAT finding)
+     * from `App\Filament\Admin\Resources\BookingOrders\
+     * BookingOrderProductTypeLabel`, which stays as a thin delegate so its
+     * existing call sites are untouched. Centralizing here is what let
+     * `/akun/pesanan` (`resources/views/livewire/public/akun/order-list.
+     * blade.php`) stop humanizing the raw enum name inline (`AT_NEED_
+     * SERVICE_ORDER` -> "At Need Service Order") for lack of "authority to
+     * write new canonical product copy" — that copy already existed here,
+     * one layer up, it just hadn't been reachable outside the Admin
+     * resource. "At-Need" and "Pre-Need" are kept as the established
+     * English product terms (see this enum's own doc block and
+     * `BookingOrderProductTypeLabel`'s prior doc block for the sourcing).
+     */
+    public function label(): string
+    {
+        return match ($this) {
+            self::AT_NEED_SERVICE_ORDER => 'Pesanan Layanan At-Need',
+            self::PRE_NEED_PLOT_PURCHASE => 'Pembelian Plot Pre-Need',
+            self::FUNERAL_PROTECTION_MEMBERSHIP => 'Keanggotaan Perlindungan Pemakaman',
+            self::CARE_SUBSCRIPTION => 'Langganan Perawatan',
+            self::MARKETPLACE_PRODUCT_ORDER => 'Pesanan Produk Marketplace',
+            self::RENEWAL_ORDER => 'Pesanan Perpanjangan',
+        };
+    }
 }
