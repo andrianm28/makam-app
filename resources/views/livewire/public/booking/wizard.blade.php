@@ -1614,6 +1614,24 @@
                             </p>
                         </x-mk.card>
                     </div>
+                @elseif ($confirmationUnavailable)
+                    {{-- `$confirmationUnavailable` means THIS read failed — it
+                         does NOT mean no order exists. By Step 9 an order
+                         has usually already been created, so the recovery
+                         here must never suggest starting a new booking:
+                         `SubmitBookingDraft`'s idempotency is keyed per
+                         DRAFT id, so a genuinely new draft would not be
+                         recognised as a duplicate of an order that may
+                         already exist, and following "start over" advice
+                         here could create a real second order. --}}
+                    <x-mk.alert intent="pending" title="Konfirmasi pesanan sedang tidak dapat dimuat" live="polite">
+                        Data pesanan Anda kemungkinan sudah tersimpan, tetapi halaman ini
+                        sementara tidak dapat memuatnya. Jangan memesan ulang &mdash; coba
+                        muat ulang halaman ini dalam beberapa saat.
+                    </x-mk.alert>
+                    <x-mk.button variant="secondary" href="/pemesanan-makam/draft/{{ $this->draftId }}" class="mt-4">
+                        Muat Ulang
+                    </x-mk.button>
                 @else
                     <x-mk.alert intent="pending" title="Sesi pemesanan tidak ditemukan" live="polite">
                         Data pemesanan tidak ditemukan. Silakan mulai pemesanan baru.

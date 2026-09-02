@@ -1363,20 +1363,34 @@ final class BookingWizard extends Component
             }
         }
 
-        // Step 9's read gets the same guard, for the same reason — and it is
-        // the one read on this screen whose failure MUST NOT be papered over
-        // with an optimistic default: `confirmationData` staying null already
-        // renders the honest "Sesi pemesanan tidak ditemukan" state (see
-        // `wizard.blade.php`'s Screen 4 block), which is exactly what an
-        // unreadable draft/order means here. Anything else would claim an
-        // order this render could not actually confirm.
+        // Step 9's read gets the same guard, for the same reason — but its
+        // failure mode is NOT the same as a genuine "no order yet" state, and
+        // must not be papered over with the same copy. `$confirmationData`
+        // stays null in BOTH cases (order genuinely does not exist yet vs.
+        // this render simply could not confirm one), so a second,
+        // independent flag — `$confirmationUnavailable` — exists specifically
+        // to tell those two apart: by Step 9, `saveStep8()`'s submission
+        // chain has USUALLY already created a real order (per Global
+        // Constraint AC7/idempotency — `SubmitBookingDraft` keys its
+        // uniqueness per DRAFT id), so if THIS read throws, we genuinely do
+        // not know whether an order already exists. Telling the customer to
+        // "start a new booking" in that case is actively dangerous: doing so
+        // opens a NEW draft, which `SubmitBookingDraft`'s idempotency cannot
+        // recognise as a duplicate of the one that may already exist, and a
+        // second real order gets created. `wizard.blade.php`'s Screen 4
+        // block renders a different, safe "try reloading — do not start a
+        // new booking" state when this flag is true, and only falls back to
+        // the original "not yet processed, start over" copy when the read
+        // genuinely succeeded and simply found no order.
         $confirmationData = null;
+        $confirmationUnavailable = false;
         if ($this->currentStep === BookingWizardStep::CONFIRMATION && $this->draftId !== null) {
             try {
                 $draft = BookingDraftQuery::findBound($this->draftId);
             } catch (Throwable $e) {
                 report($e);
                 $draft = null;
+                $confirmationUnavailable = true;
             }
 
             if ($draft !== null) {
@@ -1405,6 +1419,7 @@ final class BookingWizard extends Component
                     ];
                 } catch (Throwable $e) {
                     report($e);
+                    $confirmationUnavailable = true;
                 }
             }
         }
@@ -1472,6 +1487,7 @@ final class BookingWizard extends Component
             'summary' => $summary,
             'summaryUnavailable' => $summaryUnavailable,
             'confirmationData' => $confirmationData,
+            'confirmationUnavailable' => $confirmationUnavailable,
             'paymentMode' => $paymentMode,
             'whatsAppMode' => $whatsAppMode,
             'onlineSessionState' => $onlinePaymentState['state'],

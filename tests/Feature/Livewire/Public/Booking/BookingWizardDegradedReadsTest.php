@@ -10,6 +10,7 @@ use App\Domain\Booking\BookingPaymentMethod;
 use App\Domain\Booking\BookingWizardStep;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\OrderWorkflow\Models\Order;
 use App\Livewire\Public\Booking\BookingWizard;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -136,12 +137,16 @@ final class BookingWizardDegradedReadsTest extends TestCase
     }
 
     /**
-     * Step 9's guard deliberately degrades to the SAME null
-     * `$confirmationData` an unresolvable draft already produces, which the
-     * view renders as "Sesi pemesanan tidak ditemukan". That is the honest
-     * answer when the confirmation cannot be read: the alternative — a
-     * partially-populated card — would state things about an order this
-     * render never actually saw.
+     * Step 9's guard degrades to null `$confirmationData` when the read
+     * fails, same as an unresolvable draft — but NOT to the same COPY. By
+     * this point in the journey `saveStep8()` has already created a real
+     * order (this test's own draft/order both exist on disk; only the
+     * SUBSEQUENT read that renders them is what fails), so the view must
+     * show the "try reloading, do not start over" state
+     * (`$confirmationUnavailable`), never the "start a new booking" one —
+     * see `test_a_failed_confirmation_read_after_a_real_order_exists_never_suggests_starting_over`
+     * for the concrete duplicate-order risk this distinction exists to
+     * prevent.
      */
     public function test_a_failed_confirmation_read_degrades_honestly_instead_of_500ing(): void
     {
@@ -151,8 +156,50 @@ final class BookingWizardDegradedReadsTest extends TestCase
 
         $component->call('goToStep', BookingWizardStep::CONFIRMATION)
             ->assertOk()
-            ->assertSee('Sesi pemesanan tidak ditemukan');
+            ->assertSee('Konfirmasi pesanan sedang tidak dapat dimuat')
+            ->assertSee('Muat Ulang')
+            ->assertDontSee('Mulai Pemesanan Baru');
 
         $this->assertSame(4, $component->instance()->currentScreen());
+    }
+
+    /**
+     * The concrete scenario the fix wave's final review flagged: by Step 9
+     * an order usually already exists (`SubmitBookingDraft`'s idempotency is
+     * keyed per DRAFT id, not per order), so if the confirmation READ then
+     * fails, telling the customer to "start a new booking" would open a
+     * genuinely new draft that idempotency cannot recognise as a duplicate
+     * of the order that already exists — creating a real second order. This
+     * test proves the real order exists on disk (not merely that the UI
+     * looks right) BEFORE inducing the read failure, then asserts the safe
+     * copy renders once it does.
+     *
+     * No post-failure `assertDatabaseHas()` here: `makeServiceCatalogUnreadable()`
+     * poisons this test's own ambient RefreshDatabase transaction the same
+     * way it poisons the request's (Postgres aborts every later statement
+     * in that transaction, `SQLSTATE 25P02`, regardless of table) — the
+     * exact mechanic this whole guard exists to degrade honestly from. The
+     * pre-failure existence check above already proves the order is real;
+     * re-querying it afterward in the same poisoned transaction is not
+     * possible, matching the same limitation this codebase's other
+     * poisoned-transaction tests already accept.
+     */
+    public function test_a_failed_confirmation_read_after_a_real_order_exists_never_suggests_starting_over(): void
+    {
+        $component = $this->driveToConfirmation($this->componentAtStepThree());
+
+        $draftId = $component->get('draftId');
+        $order = Order::query()
+            ->where('booking_draft_id', $draftId)
+            ->firstOrFail();
+        $this->assertNotNull($order->reference);
+
+        $this->makeServiceCatalogUnreadable();
+
+        $component->call('goToStep', BookingWizardStep::CONFIRMATION)
+            ->assertOk()
+            ->assertSee('Jangan memesan ulang')
+            ->assertSee('Muat Ulang')
+            ->assertDontSee('Mulai Pemesanan Baru');
     }
 }
