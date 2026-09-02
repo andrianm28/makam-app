@@ -1082,6 +1082,26 @@ final class BookingWizard extends Component
     }
 
     /**
+     * Which of the four consolidated screens `$currentStep` belongs to — a
+     * pure function of the existing step state, not a second piece of
+     * tracked progress. Screen 1 (Cari & Pilih) = steps 1-4; Screen 2 (Detail
+     * Pemesanan) = steps 5-7; Screen 3 (Pembayaran) = step 8 alone (kept
+     * standalone — too much conditional online/manual/sandbox/session-
+     * recovery branching to merge safely); Screen 4 (Konfirmasi) = step 9
+     * alone (terminal). See `docs/superpowers/specs/
+     * 2026-08-29-wizard-screen-consolidation-design.md`.
+     */
+    public function currentScreen(): int
+    {
+        return match (true) {
+            $this->currentStep <= BookingWizardStep::SERVICES => 1,
+            $this->currentStep <= BookingWizardStep::DECEASED_DATA => 2,
+            $this->currentStep === BookingWizardStep::PAYMENT => 3,
+            default => 4,
+        };
+    }
+
+    /**
      * Steps 5 (SUMMARY) and 9 (CONFIRMATION) are READ-ONLY, so they are never
      * written to `completed_steps` — which meant a "have you completed it?"
      * reachability test locked the user out of both the moment they navigated
@@ -1281,53 +1301,126 @@ final class BookingWizard extends Component
         // today, and this way they cannot silently disagree tomorrow.
         $basicServices = new Collection;
         $additionalServices = new Collection;
+        $servicesCatalogUnavailable = false;
 
-        if ($this->currentStep === BookingWizardStep::SERVICES) {
-            $activeServices = ServiceCatalogQuery::allActive();
+        // Screen 1's Step 4 section can be visible while $currentStep has
+        // moved to an earlier step within the same screen (progressive
+        // reveal keeps a completed section on screen after "Kembali") — see
+        // BookingWizardProgressiveRevealTest and this method's own screen
+        // (not step) guard below. This query now runs on every Screen 1
+        // render rather than only on the exact SERVICES step, so — same
+        // fail-honest discipline as the cemetery-list read above — it must
+        // degrade instead of raising: a caught failure earlier in the SAME
+        // request (e.g. the cemetery-list catch above) leaves this
+        // unrelated read no safer on PostgreSQL, which poisons the whole
+        // ambient transaction once any query inside it errors, so every
+        // later query — even one touching a completely different table —
+        // raises the same generic "current transaction is aborted" error
+        // until rollback (SQLSTATE 25P02; SQLite has no such transaction
+        // isolation and never reproduced this).
+        if ($this->currentScreen() === 1) {
+            try {
+                $activeServices = ServiceCatalogQuery::allActive();
 
-            $basicServices = $activeServices->filter(
-                static fn ($definition): bool => ServiceCode::isBasic((string) $definition->code),
-            )->values();
+                $basicServices = $activeServices->filter(
+                    static fn ($definition): bool => ServiceCode::isBasic((string) $definition->code),
+                )->values();
 
-            $additionalServices = $activeServices->reject(
-                static fn ($definition): bool => ServiceCode::isBasic((string) $definition->code),
-            )->values();
-        }
-
-        $summary = null;
-        if ($this->currentStep === BookingWizardStep::SUMMARY && $this->draftId !== null) {
-            $draft = BookingDraftQuery::findBound($this->draftId);
-            if ($draft !== null) {
-                $summary = BookingDraftQuery::summary($draft);
+                $additionalServices = $activeServices->reject(
+                    static fn ($definition): bool => ServiceCode::isBasic((string) $definition->code),
+                )->values();
+            } catch (Throwable $e) {
+                report($e);
+                $servicesCatalogUnavailable = true;
+                $basicServices = new Collection;
+                $additionalServices = new Collection;
             }
         }
 
-        $confirmationData = null;
-        if ($this->currentStep === BookingWizardStep::CONFIRMATION && $this->draftId !== null) {
-            $draft = BookingDraftQuery::findBound($this->draftId);
-            if ($draft !== null) {
-                // Only set once `saveStep8()`'s submission chain has actually
-                // created the order (the normal case) — a rare mid-request
-                // failure there is reported and swallowed, not surfaced
-                // here, so this stays null and Step 9 falls back to its
-                // honest "not yet processed" copy rather than claiming an
-                // order that does not exist.
-                $order = Order::query()->where('booking_draft_id', $draft->id)->first();
+        // Ringkasan is a persistent summary card across the whole of Screen
+        // 2 (steps 5-7), not only while $currentStep === SUMMARY exactly —
+        // see this task's own report / the design spec's Screen 2 row. That
+        // widening (one exact step to three) is also why this read needs the
+        // same fail-honest try/catch the two Screen 1 reads above already
+        // have: it now runs on three times as many renders, and
+        // `BookingDraftQuery::summary()` reads the service catalogue for
+        // every selected line, so a poisoned ambient transaction (SQLSTATE
+        // 25P02 — see the Step 4 comment above) reaches it exactly as it
+        // reaches them. A silently-null summary would be the dishonest
+        // outcome here: the Blade card would simply vanish with no
+        // explanation, so the failure gets its own explicit flag.
+        $summary = null;
+        $summaryUnavailable = false;
+        if ($this->currentScreen() === 2 && $this->draftId !== null) {
+            try {
+                $draft = BookingDraftQuery::findBound($this->draftId);
+                if ($draft !== null) {
+                    $summary = BookingDraftQuery::summary($draft);
+                }
+            } catch (Throwable $e) {
+                report($e);
+                $summaryUnavailable = true;
+            }
+        }
 
-                $confirmationData = [
-                    'draft_id' => $draft->id,
-                    'order_reference' => $order?->reference,
-                    'summary' => $this->confirmationSummary($order, $draft),
-                    'customer_name' => $draft->customer_full_name,
-                    'customer_mobile' => $draft->customer_mobile,
-                    'customer_email' => $draft->customer_email,
-                    'deceased_name' => $draft->deceased_full_name,
-                    'payment_method' => $draft->payment_method,
-                    'payment_reference' => $draft->payment_reference,
-                    'contact_channel_label' => BookingContactChannel::label($draft->customer_contact_channel),
-                    'city_code' => $draft->city_code,
-                    'cemetery_id' => $draft->cemetery_id,
-                ];
+        // Step 9's read gets the same guard, for the same reason — but its
+        // failure mode is NOT the same as a genuine "no order yet" state, and
+        // must not be papered over with the same copy. `$confirmationData`
+        // stays null in BOTH cases (order genuinely does not exist yet vs.
+        // this render simply could not confirm one), so a second,
+        // independent flag — `$confirmationUnavailable` — exists specifically
+        // to tell those two apart: by Step 9, `saveStep8()`'s submission
+        // chain has USUALLY already created a real order (per Global
+        // Constraint AC7/idempotency — `SubmitBookingDraft` keys its
+        // uniqueness per DRAFT id), so if THIS read throws, we genuinely do
+        // not know whether an order already exists. Telling the customer to
+        // "start a new booking" in that case is actively dangerous: doing so
+        // opens a NEW draft, which `SubmitBookingDraft`'s idempotency cannot
+        // recognise as a duplicate of the one that may already exist, and a
+        // second real order gets created. `wizard.blade.php`'s Screen 4
+        // block renders a different, safe "try reloading — do not start a
+        // new booking" state when this flag is true, and only falls back to
+        // the original "not yet processed, start over" copy when the read
+        // genuinely succeeded and simply found no order.
+        $confirmationData = null;
+        $confirmationUnavailable = false;
+        if ($this->currentStep === BookingWizardStep::CONFIRMATION && $this->draftId !== null) {
+            try {
+                $draft = BookingDraftQuery::findBound($this->draftId);
+            } catch (Throwable $e) {
+                report($e);
+                $draft = null;
+                $confirmationUnavailable = true;
+            }
+
+            if ($draft !== null) {
+                try {
+                    // Only set once `saveStep8()`'s submission chain has
+                    // actually created the order (the normal case) — a rare
+                    // mid-request failure there is reported and swallowed, not
+                    // surfaced here, so this stays null and Step 9 falls back
+                    // to its honest "not yet processed" copy rather than
+                    // claiming an order that does not exist.
+                    $order = Order::query()->where('booking_draft_id', $draft->id)->first();
+
+                    $confirmationData = [
+                        'draft_id' => $draft->id,
+                        'order_reference' => $order?->reference,
+                        'summary' => $this->confirmationSummary($order, $draft),
+                        'customer_name' => $draft->customer_full_name,
+                        'customer_mobile' => $draft->customer_mobile,
+                        'customer_email' => $draft->customer_email,
+                        'deceased_name' => $draft->deceased_full_name,
+                        'payment_method' => $draft->payment_method,
+                        'payment_reference' => $draft->payment_reference,
+                        'contact_channel_label' => BookingContactChannel::label($draft->customer_contact_channel),
+                        'city_code' => $draft->city_code,
+                        'cemetery_id' => $draft->cemetery_id,
+                    ];
+                } catch (Throwable $e) {
+                    report($e);
+                    $confirmationUnavailable = true;
+                }
             }
         }
 
@@ -1390,8 +1483,11 @@ final class BookingWizard extends Component
             'cemeteryCapabilities' => $cemeteryCapabilities,
             'basicServices' => $basicServices,
             'additionalServices' => $additionalServices,
+            'servicesCatalogUnavailable' => $servicesCatalogUnavailable,
             'summary' => $summary,
+            'summaryUnavailable' => $summaryUnavailable,
             'confirmationData' => $confirmationData,
+            'confirmationUnavailable' => $confirmationUnavailable,
             'paymentMode' => $paymentMode,
             'whatsAppMode' => $whatsAppMode,
             'onlineSessionState' => $onlinePaymentState['state'],

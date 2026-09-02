@@ -73,7 +73,16 @@ export async function completeStep2NoPackage(page: Page, cemeteryName: string): 
 }
 
 export async function completeStep3(page: Page, serviceTypeLabel: string): Promise<void> {
-    await page.getByRole('button', { name: serviceTypeLabel, exact: true }).click();
+    // Step 2's own cemetery listing (`aria-label="Daftar TPU/TPS"`) stays
+    // visible alongside Step 3 (progressive reveal), and for a city whose
+    // OTHER (unselected) cemetery carries `cemetery_packages` rows, that
+    // listing renders its own package-selection button that can share text
+    // with a Step 3 service-type label (e.g. both call something "Makam
+    // Tumpang") — a real, confirmed collision, not a same-step duplicate.
+    // Scope to Step 3's own section (real heading text confirmed in
+    // wizard.blade.php) so this always clicks the service-type button, not
+    // a same-named cemetery/package control.
+    await page.getByLabel('Langkah 3 — Pilih Jenis Layanan').getByRole('button', { name: serviceTypeLabel, exact: true }).click();
     await expect(page.locator('#booking-step-4-heading')).toBeVisible();
 }
 
@@ -103,7 +112,12 @@ export async function completeStep7(page: Page): Promise<void> {
     await page.locator('#deceased-date-of-birth').fill(DECEASED.dob);
     await page.locator('#deceased-date-of-death').fill(DECEASED.dod);
     await page.locator('#deceased-relationship').selectOption(DECEASED.relationship);
-    await page.getByRole('button', { name: 'Lanjutkan' }).click();
+    // Step 6 stays visible alongside Step 7 here (progressive reveal), and
+    // both sections' own forward controls are labelled "Lanjutkan". Scope
+    // to Step 7's own section (real heading text confirmed in
+    // wizard.blade.php) so this always submits Step 7, not Step 6's
+    // already-submitted form.
+    await page.getByLabel('Langkah 7 — Data Almarhum').getByRole('button', { name: 'Lanjutkan' }).click();
     await expect(page.locator('#booking-step-8-heading')).toBeVisible();
 }
 

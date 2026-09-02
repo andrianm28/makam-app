@@ -4,10 +4,19 @@ declare(strict_types=1);
 
 namespace App\Livewire\Public\Renewal;
 
+use App\Domain\GraveRegistry\GraveRecordAccessMode;
+use App\Domain\GraveRegistry\GraveRecordProjection;
+use App\Domain\GraveRegistry\Models\GraveRecord;
 use App\Domain\Renewal\Actions\GuardRenewalPaymentOpening;
+use App\Domain\Renewal\Actions\OpenRenewal;
+use App\Domain\Renewal\Actions\QuoteRenewal;
+use App\Domain\Renewal\Exceptions\DuplicateRenewalPeriodException;
 use App\Domain\Renewal\Models\Renewal;
+use App\Domain\Renewal\RenewalGraveSelection;
 use App\Domain\Renewal\RenewalJourneyStep;
+use App\Domain\Renewal\RenewalQuoteDraft;
 use App\Platform\FeatureGate\ModeResolver;
+use App\Platform\FeatureGate\Modes\GraveSearchMode;
 use App\Platform\Payment\Actions\OpenPaymentSession;
 use App\Platform\Payment\Actions\OpenPaymentSessionCommand;
 use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutProviderException;
@@ -21,75 +30,49 @@ use App\Platform\Payment\SessionState;
 use App\Platform\SiteSettings\Models\SiteSetting;
 use App\Platform\SiteSettings\SettingsService;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Str;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Url;
 use Livewire\Component;
 use Throwable;
 
 /**
- * Step 5, PUB-033 — the payment screen. AC8.
+ * `/perpanjangan/pembayaran` — Screen 2 "Biaya & Bayar" of the consolidated
+ * renewal journey (`docs/superpowers/specs/2026-08-29-wizard-screen-
+ * consolidation-design.md`). Folds journey steps 4-5 (Biaya, Pembayaran)
+ * into one screen: the fee section renders first, and only once the
+ * visitor's explicit "Terima Tarif" click accepts it does the payment
+ * section reveal — on the SAME screen, no navigation (Implementation
+ * Decision 4 in the plan this class was built from).
  *
- * Renders one of three states, driven entirely by `GuardRenewalPaymentOpening`
- * (via `resolveState()`): a real "Bayar Sekarang" online checkout when the
- * guard allows the opening AND `G-PAY-01` is open, the manual-coordination
- * card when the guard allows the opening but the gate is closed
- * (`isManualCoordinationRequired()`), or a fixed refusal when the guard
- * denies outright. The step is never removed when the gate is closed
- * (design-system.md §6.9).
- *
- * The online branch's own opening call (`payOnline()`) goes through
- * `App\Platform\Payment\Actions\OpenPaymentSession::authorizeRenewal()` —
- * the ONLY path that creates a `payment_sessions` row for a renewal. That
- * method re-evaluates `GuardRenewalPaymentOpening` itself (this component
- * never trusts its own earlier read as authorization) and additionally
- * refuses an already-`DIBAYAR` renewal before the guard ever runs — see that
- * method's class doc block. This component's `payOnline()` mirrors
- * `App\Livewire\Public\Booking\BookingWizard::openOnlinePayment()`'s
- * try/catch shape and redirect mechanism.
+ * This class is the MERGE of the former `RenewalFee` (step 4, formerly its
+ * own route `/perpanjangan/biaya`) and `RenewalPayment` (step 5). Every
+ * property, guard call and payment mechanic below is carried over from
+ * whichever of the two owned it, UNCHANGED in behavior — see each member's
+ * own doc block for its original screen if that history matters.
  *
  * ---------------------------------------------------------------------------
- * The re-click guard, the same session-remembering mechanism
- * App\Livewire\Public\Marketplace\Checkout::payOnline() uses
+ * Which section renders is a THREE-WAY state, resolved fresh every render
  * ---------------------------------------------------------------------------
- * `#[Url]` makes this screen bookmarkable, so a customer who clicks "Bayar
- * Sekarang", backs out of the hosted checkout, and returns (a stale tab, a
- * reload, the browser back button) can trigger `payOnline()` a second time.
- * Without a guard that unconditionally opens a SECOND real `PaymentSession`
- * and a second live provider charge for the same still-unpaid renewal - a
- * genuine double-charge reachable through ordinary user behaviour, not an
- * edge case. `payOnline()` therefore stores `session_id`/`link_url` in the
- * Laravel session, keyed `'renewal_online_payment.'.$renewal->getKey()` (the
- * renewal's real UUID primary key). On a later call: a stored TERMINAL
- * session (`Paid`/`Failed`/`Expired`) is never re-opened from here - the
- * manual-coordination card and the eventual webhook-driven state govern
- * recovery, exactly like `Checkout::payOnline()`'s own terminal branch; a
- * stored still-open session redirects back to the SAME `link_url` instead of
- * opening a new one; only when nothing valid is stored does a genuinely new
- * session open.
+ *  1. `$perpanjangan !== ''` (a real `Renewal` exists — either a genuine
+ *     bookmark arrival, or one this same instance just created via
+ *     `terimaDanLanjutkan()`) → the PAYMENT section, via the unchanged
+ *     `resolveState()`/`GuardRenewalPaymentOpening` path `RenewalPayment`
+ *     has always used.
+ *  2. No `$perpanjangan` but `RenewalGraveSelection::current() !== null`
+ *     (Screen 1 just handed off a selection) → the FEE section, via the
+ *     unchanged `QuoteRenewal`/`GraveRecordProjection` path `RenewalFee`
+ *     has always used.
+ *  3. Neither → "tidak ditemukan", exactly `RenewalPayment`'s original
+ *     no-parameter case.
  *
- * ---------------------------------------------------------------------------
- * The guard's denial reason is a server-side diagnostic, never page copy
- * ---------------------------------------------------------------------------
- * `RenewalPaymentOpeningResult::denialReason()` names the specific condition
- * that failed — "Grave record not found", "Grave record is not available for
- * online renewal", "Payment amount does not match the quoted total". An
- * earlier revision printed that string straight onto an anonymous page, which
- * turned the screen into an oracle: anyone iterating UUIDs could tell a
- * renewal that does not exist from one whose grave is access-restricted from
- * one whose quote went stale, all without authenticating.
- *
- * This component therefore reduces the guard's outcome to a state flag and the
- * view prints one fixed Indonesian refusal with the support escape hatch. The
- * specific reason stays inside the guard, where an operator-facing surface can
- * still read it.
- *
- * ---------------------------------------------------------------------------
- * Access model
- * ---------------------------------------------------------------------------
- * Bearer-UUID: whoever holds the unguessable `renewals.id` may view this step.
- * That is deliberate for an anonymous journey with no accounts, and safe here
- * because this screen projects no grave record field at all — it names no
- * deceased, no block, and no dates. See `GuardRenewalPaymentOpening`'s doc
- * block for why this is an access model rather than a guard condition.
+ * `terimaDanLanjutkan()` — the only bridge between 2 and 1 — fires ONLY from
+ * an explicit click and, exactly as `RenewalFee::terimaDanLanjutkan()`
+ * always has, calls `OpenRenewal` (the only write in the entire renewal
+ * journey) and nothing else. It never redirects: it sets `$this->
+ * perpanjangan` directly, which `#[Url(history: true)]` reflects into the
+ * browser URL, and the NEXT render finds state 1 above — the same
+ * `resolveState()` a genuine bookmark arrival already uses.
  */
 final class RenewalPayment extends Component
 {
@@ -97,67 +80,85 @@ final class RenewalPayment extends Component
     public string $perpanjangan = '';
 
     /**
-     * The ONLINE branch's fail-closed copy — `null` means no `payOnline()`
-     * attempt has failed yet (or this is the first attempt). Every failure
-     * lands here as fixed Indonesian copy, never a 500 and never an English
-     * exception message (`AGENTS.md` §Observability). Mirrors
-     * `BookingWizard::$onlinePaymentError`'s exact role, renamed to avoid
-     * colliding with this component's own `errorMessage` (which, unlike
-     * this property, blocks the ENTIRE screen — "renewal not found").
+     * Set only by `terimaDanLanjutkan()`, to report a handled failure of the
+     * acceptance itself (formerly `RenewalFee::$actionMessage`).
      */
+    #[Locked]
+    public string $actionMessage = '';
+
     public ?string $checkoutError = null;
 
     public function render(): View
     {
+        $state = $this->resolveState();
+
         return view('livewire.public.renewal.payment', [
-            ...$this->resolveState(),
+            ...$state,
             'paymentMode' => app(ModeResolver::class)->paymentMode(),
-            'currentStep' => RenewalJourneyStep::PAYMENT,
+            'currentStep' => $state['mode'] === 'fee' ? RenewalJourneyStep::FEE : RenewalJourneyStep::PAYMENT,
             'stepLabels' => RenewalJourneyStep::labels(),
             'checkoutError' => $this->checkoutError,
-            // ADR-0035 item 1's mitigation, mirrored from `BookingWizard`:
-            // "unmissable payment-step labelling ... before any redirect to
-            // the sandbox." See that component's `render()` for the same
-            // computation and its own doc block for why this expression
-            // (rather than a hardcoded provider name) stays correct the day
-            // a real production provider is selected.
             'isSandboxPayment' => config('payment.default') === PaymentProviders::SUMOPOD_SANDBOX,
         ])->layout('layouts.app', [
-            'title' => 'Pembayaran Perpanjangan Makam - Makam.co.id',
+            'title' => $state['mode'] === 'fee'
+                ? 'Biaya Perpanjangan Makam - Makam.co.id'
+                : 'Pembayaran Perpanjangan Makam - Makam.co.id',
             'active' => 'perpanjangan',
         ]);
     }
 
     /**
-     * The ONLINE branch's checkout-opening action, triggered by the Blade
-     * view's "Bayar Sekarang" button — only rendered when `resolveState()`
-     * already computed `paymentState === 'online'`. Mirrors
-     * `BookingWizard::openOnlinePayment()`'s try/catch shape exactly (see
-     * that method's doc block for the full submission-chain reasoning; this
-     * renewal leg has no equivalent draft/order submission step, since a
-     * `Renewal` row already exists by the time this screen is reachable).
-     *
-     * Exception coverage, confirmed by reading `OpenPaymentSession::
-     * authorizeRenewal()`'s real committed code rather than assuming
-     * `BookingWizard`'s catch list transfers unchanged:
-     * - `PaymentSessionOpeningDeniedException` — `GuardRenewalPaymentOpening`
-     *   denied, OR returned `isAllowed() && isManualCoordinationRequired()`
-     *   (the gate closed between this screen's render and this click).
-     * - `PaymentSessionOrderAlreadyPaidException` — `assertRenewalNotAlready
-     *   Settled()` refused because `renewals.status` is already `DIBAYAR`.
-     *   This is a GENUINELY DIFFERENT exception type from the denial above,
-     *   not a second use of `PaymentSessionOpeningDeniedException` — the
-     *   task brief's premise that one exception type covers both cases does
-     *   not hold against the real code; `BookingWizard` catches the two
-     *   separately for the same reason, with different copy.
-     * - `PaymentCheckoutProviderException` / `PaymentCheckoutUnavailableException`
-     *   — the provider call failed (shared path, not renewal-specific).
-     * - Any other `Throwable` — reported and shown fixed fallback copy,
-     *   exactly like `BookingWizard`'s own final catch.
-     *
-     * Redirect: a plain `$this->redirect($session->payment_link_url)` —
-     * confirmed against `BookingWizard::openOnlinePayment()`'s real final
-     * line, which does NOT pass `navigate: false` for an external URL.
+     * The fee section's acceptance — formerly `RenewalFee::
+     * terimaDanLanjutkan()`. Re-resolves the grave and re-quotes
+     * server-side rather than trusting any value carried on the component,
+     * exactly as before. The only change from the original: no redirect —
+     * see this class's own doc block, "Implementation Decision 4".
+     */
+    public function terimaDanLanjutkan(): mixed
+    {
+        $graveId = RenewalGraveSelection::current();
+
+        if ($graveId === null) {
+            return null;
+        }
+
+        if (app(ModeResolver::class)->graveSearchMode() === GraveSearchMode::ManualAssistance) {
+            return null;
+        }
+
+        $grave = Str::isUuid($graveId) ? GraveRecord::query()->find($graveId) : null;
+
+        if (! $grave instanceof GraveRecord) {
+            return null;
+        }
+
+        if ((string) $grave->access_mode !== GraveRecordAccessMode::OPEN) {
+            return null;
+        }
+
+        try {
+            $renewal = app(OpenRenewal::class)($grave);
+        } catch (DuplicateRenewalPeriodException) {
+            $this->actionMessage = 'Perpanjangan untuk periode ini sudah tercatat. Silakan hubungi petugas kami untuk memeriksa statusnya.';
+
+            return null;
+        } catch (\InvalidArgumentException) {
+            $this->actionMessage = 'Tarif tidak tersedia. Silakan hubungi petugas kami.';
+
+            return null;
+        }
+
+        RenewalGraveSelection::forget();
+        $this->perpanjangan = $renewal->id;
+
+        return null;
+    }
+
+    /**
+     * The payment section's ONLINE branch — unchanged from `RenewalPayment::
+     * payOnline()`. See that method's original doc block (carried over
+     * verbatim in spirit) for the full re-click-guard and exception-mapping
+     * reasoning; nothing about it changes with this merge.
      */
     public function payOnline(): void
     {
@@ -171,9 +172,6 @@ final class RenewalPayment extends Component
             return;
         }
 
-        // The re-click guard — see this class's own doc block. Checked
-        // BEFORE opening a genuinely new session, mirroring
-        // `Checkout::payOnline()`'s structure exactly.
         $sessionKey = 'renewal_online_payment.'.$renewal->getKey();
         $stored = session($sessionKey);
 
@@ -184,10 +182,6 @@ final class RenewalPayment extends Component
                 $state = SessionState::tryFrom((string) $existing->state);
 
                 if ($state === SessionState::Paid || $state === SessionState::Failed || $state === SessionState::Expired) {
-                    // A terminal session is never re-opened from here — the
-                    // manual-coordination card / webhook-driven state
-                    // governs; the manual path is the recovery route for
-                    // Failed/Expired.
                     return;
                 }
 
@@ -215,9 +209,6 @@ final class RenewalPayment extends Component
             $session = app(OpenPaymentSession::class)(new OpenPaymentSessionCommand(
                 orderType: OrderType::Renewal,
                 orderRef: $renewal->reference,
-                // The current quote's total in integer minor units — the
-                // amount `authorizeRenewal()`'s guard verifies, never a
-                // client-supplied figure.
                 amountMinor: $quote->amountAsMoney()->toMinorInt(),
                 merchantRef: (string) app(SettingsService::class)
                     ->setting(SiteSetting::KEY_PAYMENT_MERCHANT_REF, (string) config('payment.merchant_ref', '')),
@@ -225,17 +216,10 @@ final class RenewalPayment extends Component
                 cancelReturnUrl: route('payments.cancel'),
             ));
         } catch (PaymentSessionOpeningDeniedException) {
-            // The guard denied, or allowed-but-gate-closed. Fixed Indonesian
-            // copy — the guard's own denial reason is internal English and
-            // stays off-screen (this component's own class doc block).
             $this->checkoutError = 'Pembayaran online belum dapat dibuka saat ini. Silakan hubungi petugas kami untuk koordinasi manual.';
 
             return;
         } catch (PaymentSessionOrderAlreadyPaidException) {
-            // The renewal is already DIBAYAR; a second session would only
-            // allow a second charge. Honest copy instead of the generic
-            // denial — and no `report()`: this is a normal customer action
-            // (a resumed/duplicate tab), not an error.
             $this->checkoutError = 'Perpanjangan ini telah dibayar dan tidak perlu dibayar lagi.';
 
             return;
@@ -261,18 +245,96 @@ final class RenewalPayment extends Component
     }
 
     /**
-     * @return array{errorMessage: string, paymentState: string}
+     * Resolves this render's screen state — mode `'not_found'` (neither a
+     * real renewal nor a pending selection), `'fee'` (a selection is
+     * pending, formerly `RenewalFee::resolveState()`), or the three
+     * payment-section outcomes `'denied'|'manual'|'online'` (a real renewal
+     * exists, formerly `RenewalPayment::resolveState()`) — driven fresh from
+     * the database on every render, exactly as before; the guard is never
+     * trusted from an earlier render.
+     *
+     * @return array{mode: string, errorMessage: string, privacyRestricted: bool, quoteUnavailable: bool, graveView: ?GraveRecordProjection, quote: ?RenewalQuoteDraft, paymentState: string}
      */
     private function resolveState(): array
     {
-        $notFound = [
+        $empty = [
+            'mode' => 'not_found',
             'errorMessage' => 'Data perpanjangan tidak ditemukan.',
+            'privacyRestricted' => false,
+            'quoteUnavailable' => false,
+            'graveView' => null,
+            'quote' => null,
             'paymentState' => 'none',
         ];
 
-        if ($this->perpanjangan === '') {
-            return $notFound;
+        if ($this->perpanjangan !== '') {
+            return [...$empty, ...$this->resolvePaymentState()];
         }
+
+        $graveId = RenewalGraveSelection::current();
+
+        if ($graveId === null) {
+            return $empty;
+        }
+
+        return [...$empty, ...$this->resolveFeeState($graveId)];
+    }
+
+    /**
+     * @return array{mode: string, errorMessage: string, privacyRestricted: bool, quoteUnavailable: bool, graveView: ?GraveRecordProjection, quote: ?RenewalQuoteDraft}
+     */
+    private function resolveFeeState(string $graveId): array
+    {
+        $fee = [
+            'mode' => 'fee',
+            'errorMessage' => '',
+            'privacyRestricted' => false,
+            'quoteUnavailable' => false,
+            'graveView' => null,
+            'quote' => null,
+        ];
+
+        if (app(ModeResolver::class)->graveSearchMode() === GraveSearchMode::ManualAssistance) {
+            return [...$fee, 'errorMessage' => 'Pencarian data makam secara online belum tersedia. Silakan hubungi petugas kami.'];
+        }
+
+        $grave = Str::isUuid($graveId)
+            ? GraveRecord::query()->with('cemetery')->find($graveId)
+            : null;
+
+        if (! $grave instanceof GraveRecord) {
+            return [...$fee, 'errorMessage' => 'Data makam tidak ditemukan.'];
+        }
+
+        $graveView = GraveRecordProjection::fromRecord($grave, $grave->cemetery?->name);
+
+        if ($graveView->isRestricted()) {
+            return [...$fee, 'graveView' => $graveView, 'privacyRestricted' => true];
+        }
+
+        if ($this->actionMessage !== '') {
+            return [...$fee, 'graveView' => $graveView, 'errorMessage' => $this->actionMessage];
+        }
+
+        try {
+            $quote = app(QuoteRenewal::class)($grave);
+        } catch (\InvalidArgumentException) {
+            return [...$fee, 'graveView' => $graveView, 'quoteUnavailable' => true];
+        }
+
+        return [...$fee, 'graveView' => $graveView, 'quote' => $quote];
+    }
+
+    /**
+     * @return array{mode: string, errorMessage: string, paymentState: string}
+     */
+    private function resolvePaymentState(): array
+    {
+        $notFound = [
+            'mode' => 'not_found',
+            'errorMessage' => 'Data perpanjangan tidak ditemukan.',
+            'paymentState' => 'none',
+        ];
 
         $renewal = Renewal::query()->find($this->perpanjangan);
 
@@ -283,16 +345,17 @@ final class RenewalPayment extends Component
         $quote = $renewal->quotes()->latest()->first();
 
         if ($quote === null) {
-            return ['errorMessage' => '', 'paymentState' => 'denied'];
+            return ['mode' => 'payment', 'errorMessage' => '', 'paymentState' => 'denied'];
         }
 
         $result = app(GuardRenewalPaymentOpening::class)($renewal, $quote->amountAsMoney());
 
         if (! $result->isAllowed()) {
-            return ['errorMessage' => '', 'paymentState' => 'denied'];
+            return ['mode' => 'payment', 'errorMessage' => '', 'paymentState' => 'denied'];
         }
 
         return [
+            'mode' => 'payment',
             'errorMessage' => '',
             'paymentState' => $result->isManualCoordinationRequired() ? 'manual' : 'online',
         ];

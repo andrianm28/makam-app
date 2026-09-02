@@ -110,7 +110,8 @@
             </p>
         </div>
 
-        @if ($currentStep === \App\Domain\Booking\BookingWizardStep::LOCATION)
+        @if ($this->currentScreen() === 1)
+        @if ($currentStep === \App\Domain\Booking\BookingWizardStep::LOCATION || in_array(\App\Domain\Booking\BookingWizardStep::LOCATION, $completedSteps, true))
             <section aria-labelledby="booking-step-1-heading">
                 <h2 id="booking-step-1-heading" class="mb-3 text-lg font-semibold text-neutral-900">
                     Langkah 1 &mdash; Pilih Lokasi
@@ -148,7 +149,8 @@
                     <p class="mt-3 text-sm text-danger-700" role="alert">{{ $message }}</p>
                 @enderror
             </section>
-        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::CEMETERY)
+        @endif
+        @if ($currentStep === \App\Domain\Booking\BookingWizardStep::CEMETERY || in_array(\App\Domain\Booking\BookingWizardStep::CEMETERY, $completedSteps, true))
             <section aria-labelledby="booking-step-2-heading">
                 <h2 id="booking-step-2-heading" class="mb-3 text-lg font-semibold text-neutral-900">
                     Langkah 2 &mdash; Pilih TPU/TPS
@@ -412,7 +414,8 @@
                     Kembali
                 </x-mk.button>
             </section>
-        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::SERVICE_TYPE)
+        @endif
+        @if ($currentStep === \App\Domain\Booking\BookingWizardStep::SERVICE_TYPE || in_array(\App\Domain\Booking\BookingWizardStep::SERVICE_TYPE, $completedSteps, true))
             <section aria-labelledby="booking-step-3-heading">
                 <h2 id="booking-step-3-heading" class="mb-3 text-lg font-semibold text-neutral-900">
                     Langkah 3 &mdash; Pilih Jenis Layanan
@@ -441,11 +444,21 @@
                     Kembali
                 </x-mk.button>
             </section>
-        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::SERVICES)
+        @endif
+        @if ($currentStep === \App\Domain\Booking\BookingWizardStep::SERVICES || in_array(\App\Domain\Booking\BookingWizardStep::SERVICES, $completedSteps, true))
             <section aria-labelledby="booking-step-4-heading">
                 <h2 id="booking-step-4-heading" class="mb-3 text-lg font-semibold text-neutral-900">
                     Langkah 4 &mdash; Pilih Layanan
                 </h2>
+
+                @if ($servicesCatalogUnavailable)
+                    <x-mk.alert intent="pending" title="Daftar layanan sedang tidak dapat dimuat" live="polite">
+                        Kami tidak dapat memuat daftar layanan saat ini. Silakan muat ulang halaman ini beberapa
+                        saat lagi, atau
+                        <a href="/bantuan" class="font-medium underline underline-offset-2">hubungi Bantuan</a>
+                        agar petugas kami membantu langsung.
+                    </x-mk.alert>
+                @else
 
                 {{-- design-system.md §3.3's normative Service/add-on row
                      spec (PUB-013): name, description, fulfillment owner
@@ -561,32 +574,67 @@
                         </ul>
                     </div>
                 </fieldset>
+                @endif
 
                 @error('selected_services')
                     <p class="mt-3 text-sm text-danger-700" role="alert">{{ $message }}</p>
                 @enderror
 
+                {{-- The `plot` error is the expired/lost-hold recovery state
+                     (`BookingWizard::routeBackToPlotPickerAfterExpiredHold()`):
+                     `$currentStep` is sent back to Step 2 so the customer
+                     re-picks a plot. Under this screen's progressive reveal
+                     that does NOT take Step 4 off the page — steps 1-4 are all
+                     Screen 1, and Step 4 is in `$completedSteps` — so its own
+                     forward control would otherwise still be sitting there,
+                     one click from Screen 2, saving step 4's still-valid data
+                     and carrying the customer straight past the re-pick the
+                     error exists to demand. While that error stands, the
+                     sections AFTER the plot picker do not offer a way forward;
+                     "Kembali" and the picker itself stay live, because those
+                     are the way out. --}}
                 <div class="mt-4 flex gap-3">
                     <x-mk.button variant="tertiary" wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::SERVICE_TYPE }})">
                         Kembali
                     </x-mk.button>
-                    <x-mk.button
-                        variant="primary"
-                        wire:click="continueFromStep4"
-                        wire:loading.attr="disabled"
-                        wire:target="continueFromStep4"
-                    >
-                        Lanjutkan
-                    </x-mk.button>
+                    @unless ($errors->has('plot'))
+                        <x-mk.button
+                            variant="primary"
+                            wire:click="continueFromStep4"
+                            wire:loading.attr="disabled"
+                            wire:target="continueFromStep4"
+                        >
+                            Lanjutkan
+                        </x-mk.button>
+                    @endunless
                 </div>
+
+                @if ($errors->has('plot'))
+                    <p class="mt-3 text-sm text-danger-700" role="alert">
+                        Pilih plot terlebih dahulu pada Langkah 2 di atas sebelum melanjutkan.
+                    </p>
+                @endif
             </section>
-        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::SUMMARY)
+        @endif
+        @endif
+        @if ($this->currentScreen() === 2)
+            {{-- Screen 2 "Detail Pemesanan": Ringkasan renders unconditionally
+                 here — reaching screen 2 at all already means step 4 is done,
+                 which is Ringkasan's only precondition — as a persistent
+                 summary card, not its own page. --}}
             <section aria-labelledby="booking-step-5-heading">
                 <h2 id="booking-step-5-heading" class="mb-3 text-lg font-semibold text-neutral-900">
                     Langkah 5 &mdash; Ringkasan Pesanan
                 </h2>
 
-                @if ($summary !== null)
+                @if ($summaryUnavailable)
+                    <x-mk.alert intent="pending" title="Ringkasan pesanan sedang tidak dapat dimuat" live="polite">
+                        Kami tidak dapat memuat ringkasan layanan Anda saat ini. Pilihan Anda tetap tersimpan.
+                        Silakan muat ulang halaman ini beberapa saat lagi, atau
+                        <a href="/bantuan" class="font-medium underline underline-offset-2">hubungi Bantuan</a>
+                        agar petugas kami membantu langsung.
+                    </x-mk.alert>
+                @elseif ($summary !== null)
                     <x-mk.table
                         caption="Ringkasan layanan yang dipilih"
                         :headers="[
@@ -624,7 +672,7 @@
                     </x-mk.button>
                 </div>
             </section>
-        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::CUSTOMER_DATA)
+        @if ($currentStep === \App\Domain\Booking\BookingWizardStep::CUSTOMER_DATA || in_array(\App\Domain\Booking\BookingWizardStep::CUSTOMER_DATA, $completedSteps, true))
             <section aria-labelledby="booking-step-6-heading">
                 <h2 id="booking-step-6-heading" class="mb-3 text-lg font-semibold text-neutral-900">
                     Langkah 6 &mdash; Data Pemesan
@@ -851,7 +899,8 @@
                     </div>
                 </form>
             </section>
-        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::DECEASED_DATA)
+        @endif
+        @if ($currentStep === \App\Domain\Booking\BookingWizardStep::DECEASED_DATA || in_array(\App\Domain\Booking\BookingWizardStep::DECEASED_DATA, $completedSteps, true))
             <section aria-labelledby="booking-step-7-heading">
                 <h2 id="booking-step-7-heading" class="mb-3 text-lg font-semibold text-neutral-900">
                     Langkah 7 &mdash; Data Almarhum
@@ -1020,7 +1069,9 @@
                     </div>
                 </form>
             </section>
-        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::PAYMENT)
+        @endif
+        @endif
+        @if ($this->currentScreen() === 3)
             <section aria-labelledby="booking-step-8-heading">
                 <h2 id="booking-step-8-heading" class="mb-3 text-lg font-semibold text-neutral-900">
                     Langkah 8 &mdash; Pembayaran
@@ -1308,7 +1359,8 @@
                     Kembali
                 </x-mk.button>
             </section>
-        @elseif ($currentStep === \App\Domain\Booking\BookingWizardStep::CONFIRMATION)
+        @endif
+        @if ($this->currentScreen() === 4)
             <section aria-labelledby="booking-step-9-heading">
                 <h2 id="booking-step-9-heading" class="mb-3 text-lg font-semibold text-neutral-900">
                     Langkah 9 &mdash; Konfirmasi
@@ -1562,6 +1614,24 @@
                             </p>
                         </x-mk.card>
                     </div>
+                @elseif ($confirmationUnavailable)
+                    {{-- `$confirmationUnavailable` means THIS read failed — it
+                         does NOT mean no order exists. By Step 9 an order
+                         has usually already been created, so the recovery
+                         here must never suggest starting a new booking:
+                         `SubmitBookingDraft`'s idempotency is keyed per
+                         DRAFT id, so a genuinely new draft would not be
+                         recognised as a duplicate of an order that may
+                         already exist, and following "start over" advice
+                         here could create a real second order. --}}
+                    <x-mk.alert intent="pending" title="Konfirmasi pesanan sedang tidak dapat dimuat" live="polite">
+                        Data pesanan Anda kemungkinan sudah tersimpan, tetapi halaman ini
+                        sementara tidak dapat memuatnya. Jangan memesan ulang &mdash; coba
+                        muat ulang halaman ini dalam beberapa saat.
+                    </x-mk.alert>
+                    <x-mk.button variant="secondary" href="/pemesanan-makam/draft/{{ $this->draftId }}" class="mt-4">
+                        Muat Ulang
+                    </x-mk.button>
                 @else
                     <x-mk.alert intent="pending" title="Sesi pemesanan tidak ditemukan" live="polite">
                         Data pemesanan tidak ditemukan. Silakan mulai pemesanan baru.

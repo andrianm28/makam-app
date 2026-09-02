@@ -73,8 +73,14 @@ test.describe('E2E-BOOK — full journey (Makam Baru, standard branch)', () => {
 
         await test.step('Step 3 — service type (Makam Baru / NEW_GRAVE)', async () => {
             // Product labels, not raw enum codes — BookingServiceType::LABELS.
+            // Scoped to Step 3's own section (same real collision
+            // `completeStep3()` in e2e-booking-helpers.ts documents: Step
+            // 2's cemetery listing can render its own "Makam Tumpang"
+            // package button, which stays visible alongside Step 3 under
+            // progressive reveal).
+            const step3 = page.getByLabel('Langkah 3 — Pilih Jenis Layanan');
             for (const label of ['Makam Baru', 'Makam Tumpang', 'Urgent', 'Pre-Need']) {
-                await expect(page.getByRole('button', { name: label, exact: true })).toBeVisible();
+                await expect(step3.getByRole('button', { name: label, exact: true })).toBeVisible();
             }
             await completeStep3(page, 'Makam Baru');
         });
@@ -195,8 +201,13 @@ test.describe('E2E-BOOK — progress indicator and back/forward navigation', () 
         await expect(progress).toHaveAttribute('aria-valuenow', '3');
         await expect(progress).toHaveAttribute('aria-valuetext', /Langkah 3 dari 9/);
 
-        // Back navigation via the step's own "Kembali" control.
-        await page.getByRole('button', { name: 'Kembali' }).click();
+        // Back navigation via the step's own "Kembali" control. Step 2's
+        // own completed section stays visible alongside Step 3 here
+        // (progressive reveal), and it has its own "Kembali" button too, so
+        // this is scoped to Step 3's own section (real heading text
+        // confirmed in wizard.blade.php) to click Step 3's control
+        // specifically, matching this test's own intent.
+        await page.getByLabel('Langkah 3 — Pilih Jenis Layanan').getByRole('button', { name: 'Kembali' }).click();
         await expect(page.locator('#booking-step-2-heading')).toBeVisible();
         await expect(progress).toHaveAttribute('aria-valuenow', '2');
 
@@ -212,8 +223,12 @@ test.describe('E2E-BOOK — progress indicator and back/forward navigation', () 
 
         // Step 7's own "Kembali" returns to step 6 with the just-entered
         // customer data still populated — proving the autosaved draft, not
-        // client-only form state, is what step 6 renders on return.
-        await page.getByRole('button', { name: 'Kembali' }).click();
+        // client-only form state, is what step 6 renders on return. Steps 5
+        // and 6 both stay visible alongside Step 7 here (progressive
+        // reveal) and each has its own "Kembali" button, so this is scoped
+        // to Step 7's own section (real heading text confirmed in
+        // wizard.blade.php) to click Step 7's control specifically.
+        await page.getByLabel('Langkah 7 — Data Almarhum').getByRole('button', { name: 'Kembali' }).click();
         await expect(page.locator('#booking-step-6-heading')).toBeVisible();
         await expect(page.locator('#customer-full-name')).toHaveValue(CUSTOMER.fullName);
         await expect(page.locator('#customer-email')).toHaveValue(CUSTOMER.email);

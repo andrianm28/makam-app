@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace Tests\Feature\Livewire\Public\Renewal;
 
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\GraveRegistry\GraveRecordAccessMode;
 use App\Domain\GraveRegistry\Models\GraveRecord;
 use App\Domain\Renewal\Models\Renewal;
 use App\Domain\Renewal\Models\RenewalQuote;
+use App\Domain\Renewal\RenewalGraveSelection;
 use App\Domain\Renewal\RenewalStatus;
 use App\Livewire\Public\Renewal\RenewalPayment;
+use App\Livewire\Public\Renewal\RenewalStart;
 use App\Platform\FeatureGate\Contracts\GateRegistrySource;
 use App\Platform\FeatureGate\FeatureGateResolver;
 use App\Platform\FeatureGate\GateRegistrySnapshot;
@@ -21,6 +24,7 @@ use App\Platform\Payment\PaymentProviders;
 use App\Platform\Payment\SessionState;
 use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -48,6 +52,11 @@ final class RenewalPaymentTest extends TestCase
     private function openThePaymentGate(): void
     {
         FeatureGate::query()->where('gate_id', 'G-PAY-01')->update(['state' => 'open']);
+    }
+
+    private function openTheDataGate(): void
+    {
+        FeatureGate::query()->where('gate_id', 'G-DATA-01')->update(['state' => 'open']);
     }
 
     private function closeThePaymentGate(): void
@@ -363,6 +372,46 @@ final class RenewalPaymentTest extends TestCase
     }
 
     /**
+     * The `not_found` state is reachable with nothing at all left to act on,
+     * including AFTER a successful acceptance: `terimaDanLanjutkan()` calls
+     * `RenewalGraveSelection::forget()` and then sets `$perpanjangan`, a
+     * `#[Url(history: true)]` property — so a browser Back lands on this
+     * screen with the session selection already forgotten and the parameter
+     * gone, and `resolveState()` falls through to here. A support link on
+     * its own would be a dead end for a visitor who simply wants to search
+     * again, so the state must offer a real route back into the flow.
+     *
+     * The Back-button interaction itself is NOT what this asserts (no
+     * browser toolchain is available on this host, and Livewire's
+     * history-restoration mechanics are not exercised by
+     * `Livewire::test()`); this pins the cheaper, unconditional property —
+     * the state is recoverable however a visitor reached it.
+     */
+    public function test_the_not_found_state_offers_a_way_back_into_the_search_flow(): void
+    {
+        Livewire::test(RenewalPayment::class)
+            ->assertOk()
+            ->assertSee('tidak ditemukan')
+            ->assertSee('Cari makam lain')
+            ->assertSeeHtml('href="/perpanjangan"')
+            // The existing support escape hatch is not traded away for it.
+            ->assertSee('/bantuan');
+    }
+
+    /**
+     * The same recoverability, on the other route into `not_found` — a
+     * `?perpanjangan=` that names no real renewal (stale bookmark, purged
+     * row, tampered id).
+     */
+    public function test_an_unknown_renewal_id_also_offers_a_way_back_into_the_search_flow(): void
+    {
+        Livewire::test(RenewalPayment::class, ['perpanjangan' => '00000000-0000-0000-0000-000000000000'])
+            ->assertOk()
+            ->assertSee('Cari makam lain')
+            ->assertSeeHtml('href="/perpanjangan"');
+    }
+
+    /**
      * The guard's `denialReason()` names the specific condition that failed.
      * On an anonymous page that is an oracle: it distinguishes "no such
      * renewal" from "restricted grave" from "stale quote" for anyone
@@ -400,5 +449,384 @@ final class RenewalPaymentTest extends TestCase
             ->assertSee('tidak dapat diproses')
             ->assertDontSee('devis')
             ->assertDontSee('quirote');
+    }
+
+    /**
+     * Migrated from RenewalFeeTest — the fee section still always shows
+     * tariff source and last-update, now reached via a session-remembered
+     * selection instead of a `?makam=` constructor param.
+     */
+    public function test_the_fee_screen_always_shows_the_tariff_source_and_last_update(): void
+    {
+        $this->openTheDataGate();
+        $cemetery = $this->cemeteryWithPrice();
+        $grave = GraveRecord::factory()->create(['cemetery_id' => $cemetery->id]);
+        RenewalGraveSelection::remember($grave->id);
+
+        Livewire::test(RenewalPayment::class)
+            ->assertOk()
+            ->assertSee('Sumber tarif')
+            ->assertSee('Terakhir diperbarui');
+    }
+
+    /**
+     * Migrated from RenewalFeeTest.
+     */
+    public function test_no_late_fine_figure_is_rendered_when_there_is_no_written_basis(): void
+    {
+        $this->openTheDataGate();
+        $cemetery = $this->cemeteryWithPrice();
+        $grave = GraveRecord::factory()->create([
+            'cemetery_id' => $cemetery->id,
+            'due_date' => now()->subYears(3)->format('Y-m-d'),
+        ]);
+        RenewalGraveSelection::remember($grave->id);
+
+        Livewire::test(RenewalPayment::class)
+            ->assertOk()
+            ->assertDontSee('Denda');
+    }
+
+    /**
+     * Migrated from RenewalFeeTest.
+     */
+    public function test_the_fee_screen_shows_the_renewal_amount(): void
+    {
+        $this->openTheDataGate();
+        $cemetery = $this->cemeteryWithPrice();
+        $grave = GraveRecord::factory()->create(['cemetery_id' => $cemetery->id]);
+        RenewalGraveSelection::remember($grave->id);
+
+        Livewire::test(RenewalPayment::class)
+            ->assertOk()
+            ->assertSee('Rp');
+    }
+
+    /**
+     * Migrated from RenewalFeeTest.
+     */
+    public function test_a_grave_without_a_tariff_source_renders_a_useful_error(): void
+    {
+        $this->openTheDataGate();
+        $cemetery = $this->cemeteryWithPrice();
+
+        DB::table('cemeteries')
+            ->where('id', $cemetery->id)
+            ->update(['price_min' => null, 'price_source' => null, 'price_effective_at' => null]);
+
+        $grave = GraveRecord::factory()->create(['cemetery_id' => $cemetery->id]);
+        RenewalGraveSelection::remember($grave->id);
+
+        Livewire::test(RenewalPayment::class)
+            ->assertOk()
+            ->assertSee('tarif');
+    }
+
+    /**
+     * Migrated from RenewalFeeTest.
+     */
+    public function test_the_stepper_shows_step_4_as_current(): void
+    {
+        $this->openTheDataGate();
+        $cemetery = $this->cemeteryWithPrice();
+        $grave = GraveRecord::factory()->create(['cemetery_id' => $cemetery->id]);
+        RenewalGraveSelection::remember($grave->id);
+
+        $component = Livewire::test(RenewalPayment::class);
+
+        $component->assertSee('Langkah 4 dari 6');
+
+        foreach (['Kota', 'TPU/TPS', 'Cari Makam', 'Biaya', 'Pembayaran', 'Konfirmasi'] as $label) {
+            $component->assertSee($label);
+        }
+    }
+
+    /**
+     * Migrated from RenewalFeeTest — renamed to avoid colliding with this
+     * class's own pre-existing `test_support_escape_hatch_is_present`
+     * (the payment section's escape hatch).
+     */
+    public function test_support_escape_hatch_is_present_on_the_fee_section(): void
+    {
+        $this->openTheDataGate();
+        $cemetery = $this->cemeteryWithPrice();
+        $grave = GraveRecord::factory()->create(['cemetery_id' => $cemetery->id]);
+        RenewalGraveSelection::remember($grave->id);
+
+        Livewire::test(RenewalPayment::class)
+            ->assertOk()
+            ->assertSee('/bantuan');
+    }
+
+    /**
+     * Migrated from RenewalFeeTest — the defect this guards against:
+     * `mount()` used to call an Action that persisted a `Renewal` and a
+     * `RenewalQuote`. Every anonymous GET of this URL — a refresh, a
+     * crawler, a link preview — created rows and claimed the AC11 unique
+     * business key `(grave_record_id, target_due_period)` for a grave the
+     * visitor has no relationship to. The second GET then hit the
+     * constraint, and the squatted key also blocked the admin AC10 marking
+     * path for that grave and period.
+     */
+    public function test_rendering_the_fee_screen_writes_nothing(): void
+    {
+        $this->openTheDataGate();
+        $grave = GraveRecord::factory()->create(['cemetery_id' => $this->cemeteryWithPrice()->id]);
+        RenewalGraveSelection::remember($grave->id);
+
+        Livewire::test(RenewalPayment::class)->assertOk();
+        RenewalGraveSelection::remember($grave->id);
+        Livewire::test(RenewalPayment::class)->assertOk();
+        RenewalGraveSelection::remember($grave->id);
+        Livewire::test(RenewalPayment::class)->assertOk();
+
+        $this->assertDatabaseCount('renewals', 0);
+        $this->assertDatabaseCount('renewal_quotes', 0);
+    }
+
+    /**
+     * Migrated from RenewalFeeTest — acceptance still creates exactly one
+     * renewal; the merged component no longer redirects (Implementation
+     * Decision 4) so this asserts `$perpanjangan` is now set in place of
+     * the old `assertRedirect()`.
+     */
+    public function test_accepting_the_quote_creates_exactly_one_renewal_and_reveals_payment_in_place(): void
+    {
+        $this->openTheDataGate();
+        $grave = GraveRecord::factory()->create(['cemetery_id' => $this->cemeteryWithPrice()->id]);
+        RenewalGraveSelection::remember($grave->id);
+
+        Livewire::test(RenewalPayment::class)
+            ->call('terimaDanLanjutkan')
+            ->assertSet('perpanjangan', fn (string $id) => $id !== '')
+            ->assertSee('Pembayaran');
+
+        $this->assertDatabaseCount('renewals', 1);
+        $this->assertDatabaseCount('renewal_quotes', 1);
+
+        RenewalGraveSelection::remember($grave->id);
+        Livewire::test(RenewalPayment::class)
+            ->call('terimaDanLanjutkan')
+            ->assertSet('actionMessage', fn (string $m) => str_contains($m, 'sudah tercatat'));
+
+        $this->assertDatabaseCount('renewals', 1);
+    }
+
+    /**
+     * Migrated from RenewalFeeTest. AC14 — a `closed` record is
+     * acknowledged as existing — never silently dropped, per
+     * `GraveRecordAccessMode`'s own doc block — but discloses no fields,
+     * and cannot be renewed online.
+     */
+    public function test_a_closed_record_shows_the_privacy_limited_state_and_no_grave_fields(): void
+    {
+        $this->openTheDataGate();
+        $grave = GraveRecord::factory()->create([
+            'cemetery_id' => $this->cemeteryWithPrice()->id,
+            'deceased_name' => 'Budi Santoso Rahasia',
+            'block' => 'Z-99',
+            'access_mode' => GraveRecordAccessMode::CLOSED,
+        ]);
+        RenewalGraveSelection::remember($grave->id);
+
+        Livewire::test(RenewalPayment::class)
+            ->assertOk()
+            ->assertSee('dibatasi')
+            ->assertDontSee('Budi Santoso Rahasia')
+            ->assertDontSee('Z-99')
+            ->assertDontSee('Sumber tarif');
+    }
+
+    /**
+     * Migrated from RenewalFeeTest — `limited` withholds the deceased's
+     * identity and dates while still naming the location, so it too must
+     * not render a fee.
+     */
+    public function test_a_limited_record_shows_the_privacy_limited_state_and_no_identity(): void
+    {
+        $this->openTheDataGate();
+        $grave = GraveRecord::factory()->create([
+            'cemetery_id' => $this->cemeteryWithPrice()->id,
+            'deceased_name' => 'Siti Aminah Rahasia',
+            'access_mode' => GraveRecordAccessMode::LIMITED,
+        ]);
+        RenewalGraveSelection::remember($grave->id);
+
+        Livewire::test(RenewalPayment::class)
+            ->assertOk()
+            ->assertSee('dibatasi')
+            ->assertDontSee('Siti Aminah Rahasia')
+            ->assertDontSee('Sumber tarif');
+    }
+
+    /**
+     * Migrated from RenewalFeeTest.
+     */
+    public function test_a_restricted_record_cannot_be_renewed_by_calling_the_action_directly(): void
+    {
+        $this->openTheDataGate();
+        $grave = GraveRecord::factory()->create([
+            'cemetery_id' => $this->cemeteryWithPrice()->id,
+            'access_mode' => GraveRecordAccessMode::CLOSED,
+        ]);
+        RenewalGraveSelection::remember($grave->id);
+
+        Livewire::test(RenewalPayment::class)
+            ->call('terimaDanLanjutkan')
+            ->assertSet('perpanjangan', '');
+
+        $this->assertDatabaseCount('renewals', 0);
+    }
+
+    /**
+     * Migrated from RenewalFeeTest, re-expressed: the merged component
+     * never accepts a grave id from the client at all (no `?makam=`
+     * equivalent), so an unknown grave is expressed as an unknown id
+     * remembered in the session instead of an unknown URL parameter.
+     */
+    public function test_an_unknown_grave_reports_not_found_rather_than_rendering_a_broken_card(): void
+    {
+        $this->openTheDataGate();
+        RenewalGraveSelection::remember('0198f000-0000-7000-8000-000000000000');
+
+        Livewire::test(RenewalPayment::class)
+            ->assertOk()
+            ->assertSee('tidak ditemukan')
+            ->assertDontSee('Sumber tarif');
+    }
+
+    /**
+     * Migrated from RenewalFeeTest, re-expressed: `grave_records.id` is a
+     * `uuid` column. `$makam` used to be a public, `#[Url]`-bound,
+     * attacker-controlled string with no format validation of its own —
+     * passing a non-UUID value straight to `find()` previously threw an
+     * uncaught PDOException. The merged component never accepts a grave id
+     * from the client at all, so this is re-expressed against a malformed
+     * value remembered in the session (still reachable in principle if the
+     * session value were ever corrupted) rather than a URL parameter.
+     */
+    public function test_a_malformed_makam_parameter_reports_not_found_rather_than_crashing(): void
+    {
+        $this->openTheDataGate();
+        RenewalGraveSelection::remember('not-a-uuid');
+
+        Livewire::test(RenewalPayment::class)
+            ->assertOk()
+            ->assertSee('tidak ditemukan')
+            ->assertDontSee('Sumber tarif');
+
+        RenewalGraveSelection::remember('not-a-uuid');
+        Livewire::test(RenewalPayment::class)
+            ->call('terimaDanLanjutkan')
+            ->assertSet('perpanjangan', '');
+
+        $this->assertDatabaseCount('renewals', 0);
+    }
+
+    /**
+     * Migrated from RenewalFeeTest. `grave_records.due_date` is nullable,
+     * so a published grave with no due date reaches this screen. There is
+     * no period to renew and no quote to accept — the screen must show the
+     * quote-unavailable state and acceptance must write nothing.
+     */
+    public function test_a_grave_without_a_due_date_shows_quote_unavailable_and_acceptance_writes_nothing(): void
+    {
+        $this->openTheDataGate();
+        $grave = GraveRecord::factory()->create([
+            'cemetery_id' => $this->cemeteryWithPrice()->id,
+            'due_date' => null,
+        ]);
+        RenewalGraveSelection::remember($grave->id);
+
+        Livewire::test(RenewalPayment::class)
+            ->assertOk()
+            ->assertSee('Tarif tidak tersedia')
+            ->assertDontSee('Lanjutkan ke Pembayaran');
+
+        RenewalGraveSelection::remember($grave->id);
+        Livewire::test(RenewalPayment::class)
+            ->call('terimaDanLanjutkan')
+            ->assertSet('perpanjangan', '');
+
+        $this->assertDatabaseCount('renewals', 0);
+        $this->assertDatabaseCount('renewal_quotes', 0);
+    }
+
+    /**
+     * The whole point of Task 3's `RenewalGraveSelection` — proves a
+     * complete search-then-fee-then-accept flow never puts the grave's id
+     * anywhere the client can read it: not in the fee screen's rendered
+     * HTML, not in any `#[Url]`-bound property, not in the URL Livewire
+     * reflects for `$perpanjangan` (which only ever holds the RENEWAL's id,
+     * created only after explicit acceptance).
+     */
+    public function test_a_search_then_fee_flow_never_exposes_the_grave_id_anywhere_client_visible(): void
+    {
+        $this->openTheDataGate();
+        FeatureGate::query()->where('gate_id', 'G-DATA-01')->update(['state' => 'open']);
+        $cemetery = $this->cemeteryWithPrice();
+        $grave = GraveRecord::factory()->create([
+            'cemetery_id' => $cemetery->id,
+            'deceased_name' => 'Contoh Tanpa Id Uji',
+        ]);
+
+        $search = Livewire::test(RenewalStart::class, [
+            'cemeteryId' => $cemetery->id,
+            'name' => 'Contoh Tanpa Id Uji',
+        ])->call('search');
+
+        $this->assertStringNotContainsString($grave->id, $search->html());
+
+        $search->call('selectGraveForRenewal', 0)->assertRedirect(route('perpanjangan.pembayaran'));
+
+        $fee = Livewire::test(RenewalPayment::class);
+        $this->assertStringNotContainsString($grave->id, $fee->html());
+        $fee->assertSet('perpanjangan', '');
+
+        $fee->call('terimaDanLanjutkan');
+
+        $renewalId = $fee->get('perpanjangan');
+        $this->assertNotSame('', $renewalId);
+        $this->assertNotSame($grave->id, $renewalId);
+        $this->assertDatabaseHas('renewals', ['id' => $renewalId, 'grave_record_id' => $grave->id]);
+    }
+
+    /**
+     * OpenRenewal must fire only from the explicit "Terima Tarif" click —
+     * never from mount, never from a bare render. Merely rendering the fee
+     * section with a pending selection must write nothing.
+     */
+    public function test_merely_rendering_the_fee_section_writes_nothing(): void
+    {
+        $this->openTheDataGate();
+        $grave = GraveRecord::factory()->create(['cemetery_id' => $this->cemeteryWithPrice()->id]);
+        RenewalGraveSelection::remember($grave->id);
+
+        Livewire::test(RenewalPayment::class)->assertOk();
+        RenewalGraveSelection::remember($grave->id);
+        Livewire::test(RenewalPayment::class)->assertOk();
+
+        $this->assertDatabaseCount('renewals', 0);
+    }
+
+    /**
+     * The payment section re-evaluates GuardRenewalPaymentOpening fresh on
+     * every render, even immediately after acceptance within the same
+     * component instance — never trusting a stale accepted-state from the
+     * fee half. Mirrors `test_pay_online_is_refused_when_the_gate_closes_
+     * before_the_click` but exercises the NEW in-place fee-to-payment
+     * transition rather than a bookmark arrival.
+     */
+    public function test_the_payment_section_re_evaluates_the_guard_immediately_after_in_place_acceptance(): void
+    {
+        $this->openTheDataGate();
+        $this->closeThePaymentGate();
+        $grave = GraveRecord::factory()->create(['cemetery_id' => $this->cemeteryWithPrice()->id]);
+        RenewalGraveSelection::remember($grave->id);
+
+        Livewire::test(RenewalPayment::class)
+            ->call('terimaDanLanjutkan')
+            ->assertSee('koordinasi manual')
+            ->assertDontSee('Bayar Sekarang');
     }
 }

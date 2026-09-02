@@ -25,9 +25,13 @@ use Illuminate\Support\Str;
  * `Actions\QuoteRenewal` calculates without writing; this Action writes. The
  * split exists because step 4 is an anonymous, bookmarkable GET, and the
  * screen that renders a quote must not be the thing that persists one. The
- * caller is `Livewire\Public\Renewal\RenewalFee::terimaDanLanjutkan()` — a
- * Livewire action, i.e. a POST the family triggers by accepting the quoted
- * figure, which is also what makes `accepted_at` below a true statement.
+ * only caller is `App\Livewire\Public\Renewal\RenewalPayment::
+ * terimaDanLanjutkan()` — the fee section of the merged Screen 2 "Biaya &
+ * Bayar" component, which absorbed the former `RenewalFee` on 29 Aug 2026
+ * (`docs/superpowers/specs/2026-08-29-wizard-screen-consolidation-design.md`)
+ * carrying this method across unchanged. It is a Livewire action, i.e. a
+ * POST the family triggers by accepting the quoted figure, which is also
+ * what makes `accepted_at` below a true statement.
  *
  * ---------------------------------------------------------------------------
  * Why acceptance is stamped here
