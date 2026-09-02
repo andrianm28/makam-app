@@ -133,6 +133,20 @@ final class Checkout extends Component
                 ->all()
             : [];
 
+        // A bare `<select>` with no property-matching `selected` option
+        // still visually shows its first `<option>` (native browser
+        // behaviour) while Livewire's own `$selectedAreaCode` stays at its
+        // `''` default — the two silently disagree until the user touches
+        // the field. That let a customer submit with the area FIELD
+        // showing their intended choice while the bound value was really
+        // empty, surfacing as a "wajib diisi" error next to a
+        // visibly-filled dropdown (2 Sep 2026 UAT finding). Seeding the
+        // property to the first option keeps what's shown and what's
+        // bound in agreement from first render, same discipline a
+        // `wire:model`-bound `<select>` needs whenever it has no blank
+        // placeholder option.
+        $this->selectedAreaCode = $this->serviceAreas[0]['area_code'] ?? '';
+
         // The §6.9 gate, read from the server authority — see class doc
         // block for why this is the guard's condition-1 source, not a
         // hardcoded boolean.
