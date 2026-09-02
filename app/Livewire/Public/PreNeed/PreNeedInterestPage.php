@@ -14,6 +14,7 @@ use App\Domain\PreNeed\Actions\RequestPreNeedConsultation;
 use App\Platform\FeatureGate\ModeResolver;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 use Livewire\Component;
 
 /**
@@ -66,13 +67,25 @@ use Livewire\Component;
  * internal never leave the server through it. The subject is resolved from
  * the wire type+id through `CERTIFICATE_SUBJECT_TYPES` — the only
  * pollable subject on this branch is a settled `Order`
- * (`CertificateEligibilityPolicy`), and the id is a UUID (the same
- * "whoever holds a token sees the state-only view" shape the renewal and
- * memorial token routes already use), so a missing/wrong id yields the
- * honest empty state, never a 404 or a leak. Task 2's route
+ * (`CertificateEligibilityPolicy`).
+ *
+ * The field's own label ("ID subjek / nomor pesanan") invites EITHER the
+ * raw primary-key UUID or the human-facing order reference (e.g.
+ * "MK-2026-XXXXXXXX") — a real customer only ever sees the latter, never
+ * the former. `certificateSubject()` therefore tries `find()` only when
+ * the input is UUID-shaped (`Str::isUuid()`, the same guard `BookingDraft
+ * Query::findBound()` already uses for the identical reason: PostgreSQL
+ * throws `SQLSTATE 22P02` for a non-UUID string against a `uuid` column,
+ * a real crash reproduced live during UAT 2 Sep 2026 — both with a real
+ * reference and a fake one), and falls back to a `reference` lookup
+ * otherwise. A missing/wrong id/reference yields the honest empty state,
+ * never a 404, a leak, or a 500. Task 2's route
  * `/sertifikat/{subjectType}/{subjectId}` is the canonical in-page
- * destination once that lane merges; this section is the self-contained
- * seam that must exist while it does not.
+ * destination once that lane merges (that route DOES take the raw id
+ * only, per its own doc block) — this section is the self-contained seam
+ * that must exist while it does not, and unlike that route it is the one
+ * surface a customer would realistically reach without a direct link, so
+ * it accepts what they'd actually have on hand.
  */
 final class PreNeedInterestPage extends Component
 {
@@ -218,7 +231,9 @@ final class PreNeedInterestPage extends Component
 
     private function certificateSubject(): ?Model
     {
-        if ($this->certSubjectId === '') {
+        $subjectId = trim($this->certSubjectId);
+
+        if ($subjectId === '') {
             return null;
         }
 
@@ -231,7 +246,9 @@ final class PreNeedInterestPage extends Component
         /** @var class-string<Model> $model */
         $model = $entry['model'];
 
-        $subject = $model::query()->find($this->certSubjectId);
+        $subject = Str::isUuid($subjectId)
+            ? $model::query()->find($subjectId)
+            : $model::query()->where('reference', $subjectId)->first();
 
         return $subject instanceof Model ? $subject : null;
     }
