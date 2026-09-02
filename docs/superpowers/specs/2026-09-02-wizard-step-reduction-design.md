@@ -34,7 +34,7 @@ Reduce the true number of validated, sequenced steps in both wizards —
 not just their screen/page-turn grouping — while keeping every existing
 field, its validation, and `SaveBookingDraftStep`'s server-enforced
 ordering intact for the steps that remain. Booking goes from 9 steps to
-5; renewal from 6 steps to 3. The customer-facing stepper is decoupled
+4; renewal from 6 steps to 3. The customer-facing stepper is decoupled
 from the internal step count entirely — the decisions below establish
 why and how.
 
@@ -49,6 +49,20 @@ whole submission instead of being caught per-step) — Data Pemesan+Data
 Almarhum also merge into one step. This is a deliberate, informed
 override of that caution, not an oversight; Decisions 7–8 below record
 it.
+
+**Second follow-up:** the user then asked whether booking should match
+renewal's 3-step count exactly ("kalo jadi 3 sama seperti perpanjangan
+apakah tepat?"). Assessed as not quite apt: unlike renewal's three clean
+phases (search → fee & pay → confirm), booking's Pembayaran and
+Konfirmasi steps cannot safely merge into anything else — Pembayaran
+already carries too much conditional branching (online/manual/sandbox/
+session-recovery) to merge, and Konfirmasi is a terminal state that
+depends on payment actually completing, sometimes asynchronously via
+webhook, so merging it backward breaks the sequence. The one further cut
+that IS legitimate — merging Lokasi+TPU/TPS+Layanan (the 5-step plan's
+steps 1–2) into one "Cari & Pilih" discovery step, same spirit as
+renewal's own search merge — was proposed instead and confirmed ("ya").
+Booking lands at 4 steps, not 3; Decision 9 below records it.
 
 ## Decisions (confirmed with the user this session — do not re-litigate)
 
@@ -95,10 +109,20 @@ it.
    raises abandonment risk, since a mistake anywhere blocks the whole
    thing instead of being caught per-step). Confirmed as a deliberate,
    informed choice, not a default.
+9. **Booking's Lokasi+TPU/TPS step and Layanan step (Decisions 2 and 7)
+   merge into each other too**, forming one "Cari & Pilih" discovery
+   step — location, cemetery (incl. plot picker), service type, and
+   service selection all validated/saved together. Booking lands at 4
+   real steps. Pembayaran and Konfirmasi stay unmerged (see the
+   Problem-statement follow-up above for why). Screens and steps now
+   converge to the same 4 for booking too, the same way Decision 3/4
+   already converged renewal's screens and steps to 3 — see the Solution
+   section for how the separate screen/step vocabularies are still kept
+   distinct in code despite the numbers now coinciding.
 
 ## Solution
 
-### Booking: `BookingWizardStep` 9 → 5
+### Booking: `BookingWizardStep` 9 → 4
 
 `app/Domain/Booking/BookingWizardStep.php` (currently `LOCATION=1` through
 `CONFIRMATION=9`, `LABELS` array, `count()`/`isKnown()`/`assertKnown()`/
@@ -106,52 +130,60 @@ it.
 
 | New constant | New value | Old value(s) | Label |
 |---|---|---|---|
-| `LOCATION_AND_CEMETERY` | 1 | 1 (`LOCATION`) + 2 (`CEMETERY`) | Pilih Lokasi & TPU/TPS |
-| `SERVICES` | 2 | 3 (`SERVICE_TYPE`) + 4 (`SERVICES`) | Pilih Layanan |
-| `CUSTOMER_AND_DECEASED_DATA` | 3 | 6 (`CUSTOMER_DATA`) + 7 (`DECEASED_DATA`) | Data Pemesan & Data Almarhum |
-| `PAYMENT` | 4 | 8 | Pembayaran |
-| `CONFIRMATION` | 5 | 9 | Konfirmasi |
+| `DISCOVERY` | 1 | 1 (`LOCATION`) + 2 (`CEMETERY`) + 3 (`SERVICE_TYPE`) + 4 (`SERVICES`) | Cari & Pilih |
+| `CUSTOMER_AND_DECEASED_DATA` | 2 | 6 (`CUSTOMER_DATA`) + 7 (`DECEASED_DATA`) | Data Pemesan & Data Almarhum |
+| `PAYMENT` | 3 | 8 | Pembayaran |
+| `CONFIRMATION` | 4 | 9 | Konfirmasi |
 
-`LOCATION`, `CEMETERY`, `SERVICE_TYPE`, `SUMMARY`, `CUSTOMER_DATA`, and
-`DECEASED_DATA` are removed as standalone constants — every field they
-governed still exists, just re-attached to one of the 5 remaining step
-constants above.
+`LOCATION`, `CEMETERY`, `SERVICE_TYPE`, `SERVICES` (the old step-4
+constant), `SUMMARY`, `CUSTOMER_DATA`, and `DECEASED_DATA` are removed as
+standalone constants — every field they governed still exists, just
+re-attached to one of the 4 remaining step constants above.
 
 **`app/Livewire/Public/Booking/BookingWizard.php`** (currently 1511
 lines):
-- `saveStep1(string $cityCode)` (line 354) and `saveStep2(string
-  $cemeteryId, ?int $cemeteryPackageId = null)` (line 394) merge into one
-  `saveStep1(string $cityCode, string $cemeteryId, ?int
-  $cemeteryPackageId = null)` against `LOCATION_AND_CEMETERY`. The UI
-  keeps its existing two-part interaction (pick city → cemetery list
-  filters in place, including the granular-tier plot picker) — only the
-  save/validate call at the end, once a cemetery is chosen, changes from
-  two calls to one. Confirm the exact current call shape (whether the
-  live component already defers the city save until a cemetery is picked,
-  or writes an intermediate draft state after step 1 alone) during
-  implementation before finalizing this merge's payload shape.
-- `saveStep3(string $serviceType)` (line 560) and `saveStep4(array
-  $selectedServices)` (line 568) merge into one `saveStep2(string
-  $serviceType, array $selectedServices)` against the new `SERVICES`
-  constant. `continueFromStep4()` (line 585) is renamed
-  `continueFromServices()` and calls the new merged method.
+- `saveStep1(string $cityCode)` (line 354), `saveStep2(string $cemeteryId,
+  ?int $cemeteryPackageId = null)` (line 394), `saveStep3(string
+  $serviceType)` (line 560), and `saveStep4(array $selectedServices)`
+  (line 568) all merge into one `saveStep1(string $cityCode, string
+  $cemeteryId, ?int $cemeteryPackageId, string $serviceType, array
+  $selectedServices)` against `DISCOVERY`. The UI keeps its existing
+  multi-part interaction (city → cemetery list filters in place, incl. the
+  granular-tier plot picker → service type → services) — only the
+  save/validate call at the end, once all four are chosen, changes from
+  four calls to one. `continueFromStep4()` (line 585) is renamed
+  `continueFromDiscovery()` and calls the new merged method. Confirm the
+  exact current call shape (whether the live component already defers
+  earlier saves until the whole discovery flow completes, or writes
+  intermediate draft state after each of the four sub-choices) during
+  implementation before finalizing this merge's payload shape — this is
+  the largest single merge in this spec and deserves its own careful
+  read of the current save-triggering logic before code changes begin.
 - `saveStep6()` (line 590) and `saveStep7()` (line 603) merge into one
-  `saveStep3()` against `CUSTOMER_AND_DECEASED_DATA`, combining both
+  `saveStep2()` against `CUSTOMER_AND_DECEASED_DATA`, combining both
   payloads (customer fields + deceased fields) into a single
   `saveStepOrShowErrors()` call. Both sub-forms remain visually distinct
   sections on the page (this is a validation/save-unit merge, not a
   request to visually blend "your info" and "the deceased's info" into
   one undifferentiated form) — only the submit boundary and error
   surfacing become shared, per Decision 8's accepted trade-off.
-- `saveStep8()` (line 636) becomes `saveStep4()`; its manual/online
+- `saveStep8()` (line 636) becomes `saveStep3()`; its manual/online
   payment branching logic is unchanged.
 - `screenFor()` (line ~1085) is updated to compare against the new
-  constant values. The 4-screen grouping itself is UNCHANGED: Screen 1
-  "Cari & Pilih" = steps 1–2 (Lokasi & TPU/TPS, then Layanan), Screen 2
-  "Detail Pemesanan" = step 3 alone (Data Pemesan & Almarhum, now the
-  screen's only step — with the Ringkasan sidebar always visible
-  alongside it, not gated behind a step save), Screen 3 "Pembayaran" =
-  step 4, Screen 4 "Konfirmasi" = step 5.
+  constant values. Screens and steps now converge to the same 4 for
+  booking, the same way Decisions 3/4 already converged renewal's:
+  Screen 1 "Cari & Pilih" = step 1 alone, Screen 2 "Detail Pemesanan" =
+  step 2 alone (with the Ringkasan sidebar always visible alongside it,
+  not gated behind a step save), Screen 3 "Pembayaran" = step 3, Screen 4
+  "Konfirmasi" = step 4. The separate `BookingWizardScreen` label
+  vocabulary (see the Stepper section below) is still kept as its own
+  class distinct from `BookingWizardStep`, even though the numbers now
+  coincide 1:1 — this keeps screen labels and internal step numbering
+  conceptually separate in code, matching how `RenewalWizardScreen`/
+  `RenewalJourneyStep` are already two classes despite the same
+  coincidence for renewal, rather than collapsing them into one class
+  that would need un-collapsing again if a future step is ever split back
+  out without a matching screen split.
 - The Ringkasan sidebar: currently rendered as part of Screen 2's content
   flow keyed off `$currentStep <= SUMMARY` reveal logic (`wizard.blade.php`
   comments at lines ~1306, ~1341 reference this). It becomes an
@@ -183,7 +215,7 @@ component lifecycle — no code path currently writes three separate
 `current_step` values for these three concerns (confirm exact save-call
 shape during implementation; if it currently does write three, collapse
 to one `saveSearchStep()` call against the new `SEARCH` constant,
-mirroring booking's `saveStep3()` merge above).
+mirroring booking's `DISCOVERY` merge above).
 
 **`app/Livewire/Public/Renewal/RenewalPayment.php`** (363 lines, already
 the merge of the former `RenewalFee` + `RenewalPayment`): same shape — its
@@ -237,23 +269,23 @@ updated for the renumbered steps.
 ## `design-system.md` / `AGENTS.md` amendments (required, not optional)
 
 - `AGENTS.md` §Mandatory MVP UX: `"Booking exposes Steps 1–9 exactly as
-  documented"` → `"Booking exposes Steps 1–5 exactly as documented."` A
+  documented"` → `"Booking exposes Steps 1–4 exactly as documented."` A
   new line is added directly beneath it recording this as a deliberate,
   owner-approved departure from the step count implied by RKS K23–K35 (see
   Context above), dated 2 Sep 2026, not a silent drift — matching how this
   repository already records other RKS-adjacent decisions (e.g. the
   Filament-panel brand-system reversal in `design-system.md` §8.3).
 - `design-system.md` §3.9 ("The nine-step default is normative" /
-  "Booking Steps 1–9" heading) is rewritten for the new 5-step booking
+  "Booking Steps 1–9" heading) is rewritten for the new 4-step booking
   vocabulary and the stepper's new screen-tracking role; the renewal
   paragraph ("six visible steps") is rewritten for 3. §9.2 MUST NOT 9 is
   rewritten from "hide/reorder/rename a booking step" to the equivalent
-  rule for the new 5/3 vocabularies, plus an explicit carve-out
+  rule for the new 4/3 vocabularies, plus an explicit carve-out
   permitting `labels` to reflect a wizard's SCREEN vocabulary (not just
   the sanctioned renewal exception it names today).
 - `docs/product/booking-wizard-fields.md` (`BookingWizardStep`'s own doc
   block cites this as the step-heading source) needs its heading list
-  updated to match the new 5 headings.
+  updated to match the new 4 headings.
 - `.kiro/specs/renewal-and-grave-registry` AC1 (`RenewalJourneyStep`'s own
   doc block cites this as its step-count source) — this is a `.kiro` spec,
   outside this repo's own `docs/superpowers/` convention; flag for the
@@ -303,18 +335,20 @@ updated for the renumbered steps.
 ## Testing / Verification
 
 - Every existing booking test file asserting a numeric `current_step`
-  value, a `saveStep3`/`saveStep4`/`saveStep6`/`saveStep7`/`saveStep8`
-  method name, or `BookingWizardStep::SERVICE_TYPE`/`SUMMARY` needs its
-  own update — the implementation plan must enumerate these files (grep
-  `BookingWizardStep::` and `saveStep` across `tests/`) rather than
-  discover them ad hoc during implementation.
-- New tests: `BookingWizardStep::count() === 5`, `RenewalJourneyStep::
-  count() === 3`, the merged `saveStep2()` validates both service-type and
-  service-selection payload keys together, and the merged `saveStep3()`
-  validates both customer-data and deceased-data payload keys together, `validateStepSequencing()`
-  still refuses e.g. step 4 before step 3, an in-flight draft at old
-  `current_step = 8` is treated as unresumable (not silently mapped to
-  new step 4).
+  value, a `saveStep1`/`saveStep2`/`saveStep3`/`saveStep4`/`saveStep6`/
+  `saveStep7`/`saveStep8` method name, or `BookingWizardStep::
+  SERVICE_TYPE`/`SUMMARY`/`LOCATION`/`CEMETERY`/`CUSTOMER_DATA`/
+  `DECEASED_DATA` needs its own update — the implementation plan must
+  enumerate these files (grep `BookingWizardStep::` and `saveStep` across
+  `tests/`) rather than discover them ad hoc during implementation.
+- New tests: `BookingWizardStep::count() === 4`, `RenewalJourneyStep::
+  count() === 3`, the merged `saveStep1()` validates city, cemetery,
+  service-type, and service-selection payload keys together against
+  `DISCOVERY`, the merged `saveStep2()` validates both customer-data and
+  deceased-data payload keys together against
+  `CUSTOMER_AND_DECEASED_DATA`, `validateStepSequencing()` still refuses
+  e.g. step 3 before step 2, an in-flight draft at old `current_step = 8`
+  is treated as unresumable (not silently mapped to new step 3).
 - Stepper: a new test asserting `BookingWizard`'s Blade view now passes an
   explicit 4-item `labels` array (regression test for the "omitting
   `labels` falls back to the OLD 9-item default" trap this spec
