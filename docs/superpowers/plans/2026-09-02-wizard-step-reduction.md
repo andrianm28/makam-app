@@ -164,7 +164,7 @@ final class BookingWizardStep
 }
 ```
 
-Update the class doc block to explain the 9→4 renumbering and point at the spec, matching the doc-block discipline already used elsewhere in this repo (see `RealisticMarketplacePricingExampleData`'s "Unit bug found in UAT" section for the expected style — a short "what changed and why, with a spec pointer" block, not a restatement of the whole spec).
+Update the class doc block to explain the 9→4 renumbering and point at the spec (`docs/superpowers/specs/2026-09-02-wizard-step-reduction-design.md`) — a short "what changed and why, with a spec pointer" block, not a restatement of the whole spec.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -306,7 +306,7 @@ final class RenewalJourneyStepTest extends TestCase
     {
         $this->assertSame([
             1 => 'Cari Makam',
-            2 => 'Biaya & Pembayaran',
+            2 => 'Biaya & Bayar',
             3 => 'Konfirmasi',
         ], RenewalJourneyStep::labels());
     }
@@ -346,7 +346,7 @@ final class RenewalJourneyStep
      */
     public const array LABELS = [
         self::SEARCH => 'Cari Makam',
-        self::FEE_AND_PAYMENT => 'Biaya & Pembayaran',
+        self::FEE_AND_PAYMENT => 'Biaya & Bayar',
         self::CONFIRMATION => 'Konfirmasi',
     ];
 
@@ -483,7 +483,7 @@ git commit -m "feat(renewal): renumber RenewalJourneyStep to 3 steps, add Renewa
 
 **Files:**
 - Modify: `app/Domain/Booking/Actions/SaveBookingDraftStep.php`
-- Test: `tests/Feature/Domain/Booking/Actions/SaveBookingDraftStepTest.php`, `SaveBookingDraftStepServicesTest.php`, `SaveBookingDraftStepSteps678Test.php`, `SaveBookingDraftStepIdempotencyTest.php`, `BookingDraftClosedListValidationTest.php` (existing — update to the new step numbers/merged payload shapes)
+- Test: `tests/Feature/Domain/Booking/Actions/SaveBookingDraftStepTest.php`, `SaveBookingDraftStepServicesTest.php`, `SaveBookingDraftStepSteps678Test.php`, `SaveBookingDraftStepIdempotencyTest.php` (existing — update to the new step numbers/merged payload shapes). `tests/Feature/Domain/Booking/BookingDraftClosedListValidationTest.php` is NOT touched by this task — read it and confirm: it tests `BookingDraft::create()`'s own model-level closed-list guards directly (e.g. `service_type`/`city_code` on the model, not through `SaveBookingDraftStep`) and has zero references to `BookingWizardStep` constants, so nothing here needs updating for this task.
 
 **Interfaces:**
 - Consumes: `BookingWizardStep::DISCOVERY`/`CUSTOMER_AND_DECEASED_DATA`/`PAYMENT`/`CONFIRMATION` from Task 1.
@@ -493,31 +493,40 @@ git commit -m "feat(renewal): renumber RenewalJourneyStep to 3 steps, add Renewa
 
 - [ ] **Step 1: Write the failing tests for the merged `DISCOVERY` validation**
 
-Add to `tests/Feature/Domain/Booking/Actions/SaveBookingDraftStepTest.php` (read the existing file first for its exact fixture-building helpers — likely a `makeDraft()` or similar factory helper already exists; reuse it rather than duplicating draft-creation logic):
+**Real-code correction (post-audit):** neither `SaveBookingDraftStepTest.php` nor `SaveBookingDraftStepSteps678Test.php` has a shared `makeDraft()`/`makeDraftAtDiscoveryComplete()` helper — every existing test builds its fixture inline via `BookingDraft::create([...])`, seeding `completed_steps` directly with whichever prior steps the test needs (see e.g. `SaveBookingDraftStepSteps678Test.php`'s own `draftReadyForStepSix()`/`draftReadyForStepSeven()` private helpers, which are file-local, not shared). Also: `BookingServiceType` has NO `AT_NEED` constant — its real values are `NEW_GRAVE`, `OVERLAPPING_GRAVE`, `URGENT_TODAY`, `PRE_NEED` (`app/Domain/Booking/BookingServiceType.php`); use `BookingServiceType::NEW_GRAVE`. The two real basic service codes are `ServiceCode::DOCUMENT_PROCESSING` and `ServiceCode::GRAVE_DIGGING` (`app/Domain/ServiceCatalog/ServiceCode.php:85-88`) — `validateServices()` rejects a selection missing either one, so both must be present. The code below reflects these corrections, built from scratch against the real fixture patterns.
+
+Add to `tests/Feature/Domain/Booking/Actions/SaveBookingDraftStepTest.php`:
 
 ```php
 public function test_discovery_step_accepts_a_full_valid_payload_in_one_call(): void
 {
-    $draft = $this->makeDraft(); // reuse existing test's draft-creation helper
+    $cemetery = Cemetery::query()
+        ->where('city', LaunchCityCode::JAKARTA)
+        ->where('publication_status', CemeteryPublicationStatus::PUBLISHED)
+        ->whereDoesntHave('packages')
+        ->firstOrFail();
+
+    $draft = BookingDraft::create([]);
 
     $saved = (new SaveBookingDraftStep)(
         $draft,
         BookingWizardStep::DISCOVERY,
         [
-            'city_code' => 'JAKARTA', // use a real LaunchCityQuery::isKnown() code from the fixture data this test file already relies on
-            'cemetery_id' => $this->knownCemeteryId, // reuse existing fixture cemetery
+            'city_code' => LaunchCityCode::JAKARTA,
+            'cemetery_id' => $cemetery->id,
             'cemetery_package_id' => null,
-            'service_type' => 'AT_NEED', // use a real BookingServiceType code already used elsewhere in this file
+            'service_type' => BookingServiceType::NEW_GRAVE,
             'selected_services' => [
-                ['code' => 'BASIC_CODE_FROM_FIXTURE', 'quantity' => 1], // reuse ServiceCode::BASIC_CODES fixture value already used in SaveBookingDraftStepServicesTest.php
+                ['code' => 'DOCUMENT_PROCESSING', 'quantity' => 1],
+                ['code' => 'GRAVE_DIGGING', 'quantity' => 1],
             ],
         ],
         'idem-discovery-1',
     );
 
-    $this->assertSame('JAKARTA', $saved->city_code);
-    $this->assertSame($this->knownCemeteryId, $saved->cemetery_id);
-    $this->assertSame('AT_NEED', $saved->service_type);
+    $this->assertSame(LaunchCityCode::JAKARTA, $saved->city_code);
+    $this->assertSame($cemetery->id, $saved->cemetery_id);
+    $this->assertSame(BookingServiceType::NEW_GRAVE, $saved->service_type);
     $this->assertNotEmpty($saved->selected_services);
     $this->assertSame(BookingWizardStep::CUSTOMER_AND_DECEASED_DATA, $saved->current_step);
     $this->assertContains(BookingWizardStep::DISCOVERY, $saved->completed_steps);
@@ -525,7 +534,12 @@ public function test_discovery_step_accepts_a_full_valid_payload_in_one_call(): 
 
 public function test_discovery_step_rejects_a_cemetery_outside_the_chosen_city_from_the_same_payload(): void
 {
-    $draft = $this->makeDraft();
+    $bogorCemetery = Cemetery::query()
+        ->where('city', LaunchCityCode::BOGOR)
+        ->where('publication_status', CemeteryPublicationStatus::PUBLISHED)
+        ->firstOrFail();
+
+    $draft = BookingDraft::create([]);
 
     $this->expectException(BookingStepValidationException::class);
 
@@ -533,11 +547,14 @@ public function test_discovery_step_rejects_a_cemetery_outside_the_chosen_city_f
         $draft,
         BookingWizardStep::DISCOVERY,
         [
-            'city_code' => 'JAKARTA',
-            'cemetery_id' => $this->knownCemeteryIdInADifferentCity, // a fixture cemetery whose ->city !== 'JAKARTA'
+            'city_code' => LaunchCityCode::JAKARTA,
+            'cemetery_id' => $bogorCemetery->id,
             'cemetery_package_id' => null,
-            'service_type' => 'AT_NEED',
-            'selected_services' => [['code' => 'BASIC_CODE_FROM_FIXTURE', 'quantity' => 1]],
+            'service_type' => BookingServiceType::NEW_GRAVE,
+            'selected_services' => [
+                ['code' => 'DOCUMENT_PROCESSING', 'quantity' => 1],
+                ['code' => 'GRAVE_DIGGING', 'quantity' => 1],
+            ],
         ],
         'idem-discovery-2',
     );
@@ -547,18 +564,27 @@ public function test_discovery_step_has_no_upstream_sequencing_requirement(): vo
 {
     // DISCOVERY is now the FIRST real step (like old LOCATION) — no
     // completed_steps precondition, unlike CUSTOMER_AND_DECEASED_DATA/PAYMENT.
-    $draft = $this->makeDraft();
+    $cemetery = Cemetery::query()
+        ->where('city', LaunchCityCode::JAKARTA)
+        ->where('publication_status', CemeteryPublicationStatus::PUBLISHED)
+        ->whereDoesntHave('packages')
+        ->firstOrFail();
+
+    $draft = BookingDraft::create([]);
     $this->assertSame([], $draft->completed_steps);
 
     $saved = (new SaveBookingDraftStep)(
         $draft,
         BookingWizardStep::DISCOVERY,
         [
-            'city_code' => 'JAKARTA',
-            'cemetery_id' => $this->knownCemeteryId,
+            'city_code' => LaunchCityCode::JAKARTA,
+            'cemetery_id' => $cemetery->id,
             'cemetery_package_id' => null,
-            'service_type' => 'AT_NEED',
-            'selected_services' => [['code' => 'BASIC_CODE_FROM_FIXTURE', 'quantity' => 1]],
+            'service_type' => BookingServiceType::NEW_GRAVE,
+            'selected_services' => [
+                ['code' => 'DOCUMENT_PROCESSING', 'quantity' => 1],
+                ['code' => 'GRAVE_DIGGING', 'quantity' => 1],
+            ],
         ],
         'idem-discovery-3',
     );
@@ -567,41 +593,42 @@ public function test_discovery_step_has_no_upstream_sequencing_requirement(): vo
 }
 ```
 
-Add to `tests/Feature/Domain/Booking/Actions/SaveBookingDraftStepSteps678Test.php` (read the existing file first — it already has customer/deceased fixture data to reuse):
+Add `use App\Domain\Booking\BookingServiceType;` to this file's imports if not already present (confirm during implementation — the file's current import list does not include it, since `service_type` was previously exercised via `BookingDraftClosedListValidationTest.php` at the model layer, not through raw constant references here).
+
+Add to `tests/Feature/Domain/Booking/Actions/SaveBookingDraftStepSteps678Test.php`, reusing its own real `customerPayload()`/`deceasedPayload()` helpers (already present in the file, returning arrays keyed exactly as `SaveBookingDraftStep` expects, with real values: `BookingRelationshipCode::ANAK`/`::ORANG_TUA`, `BookingContactChannel::WHATSAPP`, `BookingGender::PEREMPUAN` — all confirmed real constants) and adding one new local helper for a DISCOVERY-complete draft, matching this file's existing `draftReadyForStepSix()`-style pattern:
 
 ```php
+/**
+ * A draft that has legitimately completed DISCOVERY (the new step 1),
+ * which is the server-side precondition for saving
+ * CUSTOMER_AND_DECEASED_DATA (the new step 2).
+ */
+private function draftReadyForCustomerAndDeceasedData(): BookingDraft
+{
+    return BookingDraft::create([
+        'completed_steps' => [BookingWizardStep::DISCOVERY],
+    ]);
+}
+
 public function test_customer_and_deceased_data_step_accepts_a_full_valid_combined_payload(): void
 {
-    $draft = $this->makeDraftAtDiscoveryComplete(); // build/reuse a helper that gets a draft to the point DISCOVERY is done
+    $draft = $this->draftReadyForCustomerAndDeceasedData();
 
     $saved = (new SaveBookingDraftStep)(
         $draft,
         BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
-        [
-            'customer_full_name' => 'Budi Santoso',
-            'customer_mobile' => '081234567890',
-            'customer_email' => 'budi@example.test',
-            'customer_address' => 'Jl. Contoh No. 1, Jakarta',
-            'customer_relationship' => 'ANAK', // reuse a real BookingRelationshipCode from existing fixtures
-            'customer_contact_channel' => 'WHATSAPP', // reuse a real BookingContactChannel from existing fixtures
-            'privacy_notice_accepted' => true,
-            'deceased_full_name' => 'Almarhum Contoh',
-            'deceased_date_of_birth' => '1950-01-01',
-            'deceased_date_of_death' => '2026-01-01',
-            'deceased_relationship' => 'ORANG_TUA', // reuse a real BookingRelationshipCode
-            'deceased_gender' => null,
-        ],
+        [...$this->customerPayload(), ...$this->deceasedPayload()],
         'idem-cadd-1',
     );
 
     $this->assertSame('Budi Santoso', $saved->customer_full_name);
-    $this->assertSame('Almarhum Contoh', $saved->deceased_full_name);
+    $this->assertSame('Siti Rahayu', $saved->deceased_full_name);
     $this->assertSame(BookingWizardStep::PAYMENT, $saved->current_step);
 }
 
 public function test_customer_and_deceased_data_step_rejects_when_either_half_is_invalid(): void
 {
-    $draft = $this->makeDraftAtDiscoveryComplete();
+    $draft = $this->draftReadyForCustomerAndDeceasedData();
 
     $this->expectException(BookingStepValidationException::class);
 
@@ -609,18 +636,8 @@ public function test_customer_and_deceased_data_step_rejects_when_either_half_is
         $draft,
         BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
         [
-            'customer_full_name' => '', // invalid — triggers customer-half validation
-            'customer_mobile' => '081234567890',
-            'customer_email' => 'budi@example.test',
-            'customer_address' => 'Jl. Contoh No. 1, Jakarta',
-            'customer_relationship' => 'ANAK',
-            'customer_contact_channel' => 'WHATSAPP',
-            'privacy_notice_accepted' => true,
-            'deceased_full_name' => 'Almarhum Contoh',
-            'deceased_date_of_birth' => '1950-01-01',
-            'deceased_date_of_death' => '2026-01-01',
-            'deceased_relationship' => 'ORANG_TUA',
-            'deceased_gender' => null,
+            ...$this->customerPayload(['customer_full_name' => '']), // invalid — triggers customer-half validation
+            ...$this->deceasedPayload(),
         ],
         'idem-cadd-2',
     );
@@ -628,18 +645,20 @@ public function test_customer_and_deceased_data_step_rejects_when_either_half_is
 
 public function test_customer_and_deceased_data_step_requires_discovery_completed_first(): void
 {
-    $draft = $this->makeDraft(); // fresh draft, DISCOVERY not yet done
+    $draft = BookingDraft::create([]); // fresh draft, DISCOVERY not yet done
 
     $this->expectException(BookingStepValidationException::class);
 
     (new SaveBookingDraftStep)(
         $draft,
         BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
-        ['customer_full_name' => 'Budi Santoso' /* ...rest of a valid payload... */],
+        [...$this->customerPayload(), ...$this->deceasedPayload()],
         'idem-cadd-3',
     );
 }
 ```
+
+Confirm `customerPayload()`/`deceasedPayload()`'s exact return shapes by reading the file during implementation (they use array-spread with `$overrides`, so `[...$this->customerPayload(), ...$this->deceasedPayload()]` produces the full combined payload `SaveBookingDraftStep`'s `CUSTOMER_AND_DECEASED_DATA` branch expects) — this plan's snippets rely on their existing, real signatures rather than inventing new ones.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -788,7 +807,7 @@ Update this method's doc block — the old one explains the now-obsolete "Step 5
 
 - [ ] **Step 6: Run tests to verify they pass**
 
-Run the full `tests/Feature/Domain/Booking/Actions/` directory (all 5 files listed in this task's Files section) plus `tests/Unit/Domain/Booking/BookingWizardStepTest.php`. Expected: every test passes — this includes updating the PRE-EXISTING tests in these files that reference old constants (`LOCATION`, `CEMETERY`, `SERVICE_TYPE`, `SUMMARY`, `CUSTOMER_DATA`, `DECEASED_DATA`) or call `validateCemetery` semantics no longer present; read each file, find every such reference, and update it to the new step numbers/merged payload shape rather than deleting coverage. `BookingDraftClosedListValidationTest.php` specifically needs its per-field closed-list assertions (e.g. an unknown `service_type` value) re-pointed at `DISCOVERY` instead of `SERVICE_TYPE`/`SERVICES` separately.
+Run the full `tests/Feature/Domain/Booking/Actions/` directory (all 4 files listed in this task's Files section) plus `tests/Unit/Domain/Booking/BookingWizardStepTest.php`. Expected: every test passes — this includes updating the PRE-EXISTING tests in these files that reference old constants (`LOCATION`, `CEMETERY`, `SERVICE_TYPE`, `SUMMARY`, `CUSTOMER_DATA`, `DECEASED_DATA`) or call `validateCemetery` semantics no longer present; read each file, find every such reference, and update it to the new step numbers/merged payload shape rather than deleting coverage.
 
 - [ ] **Step 7: Commit**
 
@@ -813,51 +832,70 @@ git commit -m "feat(booking): merge SaveBookingDraftStep validators for DISCOVER
 
 **Second real-code finding, more significant:** `holdPlotForStep2()` (the plot-picker flow) TODAY holds a contended plot via `HoldPlotForDraft` and THEN immediately calls `saveStep2()` to persist `cemetery_id`/`cemetery_package_id` onto the draft — releasing the hold if that save fails. Under the merge, the actual `SaveBookingDraftStep` call for `DISCOVERY` cannot happen until service type AND services are ALSO chosen (they're validated together, in one payload). But the PLOT HOLD itself must stay an immediate, real action at cemetery-selection time — deferring it would let two visitors both "browse" the same plot while one fills out the rest of the form, defeating the entire purpose of holding scarce inventory. Resolution: keep `HoldPlotForDraft`'s call immediate and unchanged; stop calling any `SaveBookingDraftStep`-backed save right after it — instead track the chosen `cemeteryId`/`cemeteryPackageId`/held plot in Livewire component properties, and let the ONE final `continueFromDiscovery()` → `saveStep1()` call (fired once service type + services are also chosen) be the only place `SaveBookingDraftStep` is invoked for this step. Hold-release-on-failure logic moves from `holdPlotForStep2()`'s tail into `saveStep1()`'s failure branches.
 
-- [ ] **Step 1: Write the failing tests for the merged save method's happy path and hold-release-on-failure behavior**
+- [ ] **Step 1: Write the failing tests for the merged save method's happy path and the (deliberately) non-releasing failure path**
 
-Read `tests/Feature/Livewire/Public/Booking/BookingWizardPlotPickerTest.php` in full first — it already has the fixtures (a granular-tier cemetery, a `GravePlot`, `Livewire::test(BookingWizard::class)`) this task's new tests reuse. Add:
+Read `tests/Feature/Livewire/Public/Booking/BookingWizardPlotPickerTest.php` in full first. **Real-code correction (post-audit):** this file has no shared `$this->cemeteryId`/`$this->plotId`/`$this->basicServiceCode` properties — every existing test builds its own fixtures locally via the file's private `makeCemetery(string $trackingMode, ...)` and `makePlotIn(Cemetery $cemetery)` helpers, using local variables. `BookingServiceType::NEW_GRAVE` (not `'AT_NEED'`, which doesn't exist) and both `ServiceCode::DOCUMENT_PROCESSING`/`ServiceCode::GRAVE_DIGGING` (not a single fabricated code) are required, same correction as Task 3. Also, per the "Dropped: `releaseHeldPlotIfAny()`" decision in Step 4 above, the third test below asserts the OPPOSITE of what an earlier draft of this task described — the hold is deliberately NOT released on an unrelated validation failure. Add:
 
 ```php
-public function test_save_step1_persists_all_four_discovery_fields_in_one_call(): void
+public function test_save_step1_persists_all_five_discovery_fields_in_one_call(): void
 {
+    $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+
     $component = Livewire::test(BookingWizard::class)
-        ->call('saveStep1', 'JAKARTA', $this->cemeteryId, null, 'AT_NEED', [
-            ['code' => $this->basicServiceCode, 'quantity' => 1],
+        ->call('saveStep1', LaunchCityCode::JAKARTA, $cemetery->id, null, BookingServiceType::NEW_GRAVE, [
+            ['code' => 'DOCUMENT_PROCESSING', 'quantity' => 1],
+            ['code' => 'GRAVE_DIGGING', 'quantity' => 1],
         ]);
 
     $component->assertHasNoErrors();
 
     $draft = BookingDraft::query()->latest()->first();
-    $this->assertSame('JAKARTA', $draft->city_code);
-    $this->assertSame($this->cemeteryId, $draft->cemetery_id);
-    $this->assertSame('AT_NEED', $draft->service_type);
-    $this->assertSame(2, $draft->current_step); // CUSTOMER_AND_DECEASED_DATA
+    $this->assertSame(LaunchCityCode::JAKARTA, $draft->city_code);
+    $this->assertSame($cemetery->id, $draft->cemetery_id);
+    $this->assertSame(BookingServiceType::NEW_GRAVE, $draft->service_type);
+    $this->assertSame(BookingWizardStep::CUSTOMER_AND_DECEASED_DATA, $draft->current_step);
 }
 
 public function test_holding_a_plot_does_not_immediately_persist_the_draft(): void
 {
-    $component = Livewire::test(BookingWizard::class)
-        ->call('openPickerFor', $this->cemeteryId, null)
-        ->call('holdPlotForStep2', $this->cemeteryId, null, $this->plotId); // rename target per Step 4 below
+    $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+    $plot = $this->makePlotIn($cemetery);
 
-    // The hold exists...
-    $this->assertDatabaseHas('plot_reservations', ['plot_id' => $this->plotId]);
-    // ...but nothing was persisted onto a booking_drafts row yet — DISCOVERY
-    // is not complete until service type + services are also chosen.
-    $this->assertDatabaseMissing('booking_drafts', ['cemetery_id' => $this->cemeteryId]);
+    Livewire::test(BookingWizard::class)
+        ->call('openPickerFor', $cemetery->id)
+        ->call('holdPlotForDiscovery', $cemetery->id, null, (string) $plot->getKey());
+
+    // The hold exists (and, per the second real-code finding in Step 5
+    // above, a BookingDraft row now exists too — that row is required for
+    // the hold's own FK — but nothing DISCOVERY-shaped was persisted onto
+    // it yet)...
+    $this->assertDatabaseHas('plot_reservations', ['plot_id' => $plot->getKey()]);
+    // ...DISCOVERY is not complete until service type + services are also
+    // chosen, so the draft's cemetery_id is still unset.
+    $this->assertDatabaseMissing('booking_drafts', ['cemetery_id' => $cemetery->id]);
 }
 
-public function test_a_failed_discovery_save_releases_a_hold_this_session_created(): void
+public function test_a_failed_discovery_save_does_not_release_the_hold(): void
 {
+    $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+    $plot = $this->makePlotIn($cemetery);
+
     Livewire::test(BookingWizard::class)
-        ->call('openPickerFor', $this->cemeteryId, null)
-        ->call('holdPlotForStep2', $this->cemeteryId, null, $this->plotId)
-        ->call('saveStep1', '', $this->cemeteryId, null, 'AT_NEED', [
-            ['code' => $this->basicServiceCode, 'quantity' => 1],
-        ]) // empty city_code — fails validateLocation()
+        ->call('openPickerFor', $cemetery->id)
+        ->call('holdPlotForDiscovery', $cemetery->id, null, (string) $plot->getKey())
+        ->call('saveStep1', '', $cemetery->id, null, BookingServiceType::NEW_GRAVE, [
+            ['code' => 'DOCUMENT_PROCESSING', 'quantity' => 1],
+            ['code' => 'GRAVE_DIGGING', 'quantity' => 1],
+        ]) // empty city_code — fails validateLocation(), unrelated to the plot pick
         ->assertHasErrors(['city_code']);
 
-    $this->assertDatabaseMissing('plot_reservations', ['plot_id' => $this->plotId, 'state' => 'HELD']);
+    // Deliberately still HELD — see "Dropped: releaseHeldPlotIfAny()" in
+    // Step 4 above. A typo in an unrelated field must not cost the
+    // customer their already-held plot; the scheduled TTL sweep is the
+    // safety net for a truly abandoned attempt, not this failure path.
+    // `PlotReservationState::HELD` is the lowercase string `'held'` — use
+    // the constant, not a hardcoded literal, to avoid a casing mismatch.
+    $this->assertDatabaseHas('plot_reservations', ['plot_id' => $plot->getKey(), 'state' => PlotReservationState::HELD]);
 }
 ```
 
@@ -865,7 +903,9 @@ public function test_a_failed_discovery_save_releases_a_hold_this_session_create
 
 Expected: FAIL — `saveStep1` doesn't accept 5 arguments yet.
 
-- [ ] **Step 3: Read `BookingWizard.php` in full before editing** — 1511 lines, multiple properties (`$cityCode`, `$cemeteryId`, `$cemeteryPackageId`, `$serviceType`, `$stagedServiceCodes` or similar — confirm exact property names by reading the class's `#[Locked]`/public property declarations near the top of the file) feed the four old save methods. Confirm which of these properties already exist vs. need adding, and whether `pickerCemeteryId`/`pickerCemeteryPackageId` (used by `openPickerFor()`) are distinct from the "confirmed selection" properties or the same ones — this determines whether `holdPlotForStep2()`'s restructure needs new properties or can reuse existing ones.
+- [ ] **Step 3: Confirmed real property names (post-audit — verified directly against `BookingWizard.php`'s declarations, lines ~93-181)**
+
+All properties this task needs already exist — nothing to add: `public string $city = ''` (NOT `$cityCode`), `public ?string $cemeteryId = null`, `public ?int $cemeteryPackageId = null`, `public ?string $serviceType = null`, `public array $selectedServices = []`, `public array $stagedServiceCodes = []` (the picker's staged checkbox state — distinct from `$selectedServices`, which is the already-persisted shape), `public array $completedSteps = []`, `public int $currentStep`, `public int $version = 1`. `$pickerCemeteryId`/`$pickerCemeteryPackageId` (used by `openPickerFor()`) ARE distinct properties from `$cemeteryId`/`$cemeteryPackageId` — the picker properties track which cemetery's picker is currently open, the plain ones track the customer's confirmed selection. `holdPlotForStep2()`'s restructure (Step 5 below) reuses all of these; no new properties are needed.
 
 - [ ] **Step 4: Delete `saveStep2()`, `saveStep3()`, `saveStep4()`, `continueFromStep4()`; rewrite `saveStep1()`**
 
@@ -909,17 +949,15 @@ public function saveStep1(
         foreach ($e->getErrors() as $field => $messages) {
             $this->addError($field, $messages[0]);
         }
-        $this->releaseHeldPlotIfAny();
     } catch (BookingDraftVersionConflictException) {
         $this->handleVersionConflict();
-        $this->releaseHeldPlotIfAny();
     }
 }
 
 public function continueFromDiscovery(): void
 {
     $this->saveStep1(
-        $this->cityCode,
+        $this->city,
         $this->cemeteryId,
         $this->cemeteryPackageId,
         $this->serviceType,
@@ -931,46 +969,73 @@ public function continueFromDiscovery(): void
 }
 ```
 
-Confirm the exact existing property names (`$this->cityCode` etc.) against what Step 3's read found — the names above are illustrative of the shape, not a guess to leave unverified.
+**Property name fix (post-audit):** the real property is `$this->city` (`public string $city = ''`), NOT `$this->cityCode` — the snippet above is corrected; an earlier draft of this task used the wrong name, which would have thrown a `TypeError` at runtime (an undeclared-property read passed into `saveStep1(string $cityCode, ...)`'s non-nullable parameter). See Step 3's confirmed property list above.
 
-- [ ] **Step 5: Restructure `holdPlotForStep2()` to stop calling a `SaveBookingDraftStep`-backed save**
+**Dropped: `releaseHeldPlotIfAny()`.** An earlier draft of this task called a `releaseHeldPlotIfAny()` helper from both catch blocks above, re-fetching the hold via `PlotReservation::activeForDraft()` and checking `$hold->wasRecentlyCreated`. That check is broken by construction: `wasRecentlyCreated` only means anything on the exact Eloquent instance returned by the `->create()` call that inserted a row — any later re-fetch via a query (which is what `activeForDraft()` does) always returns `false` for it, even for a hold created moments earlier in a prior request. Since `DISCOVERY`'s save is now deferred until service type + services are also chosen (not immediate, unlike the old `saveStep2()`), any release-on-failure logic here would be re-fetching in a later request and hitting exactly this false-negative.
 
-Rename to `holdPlotForDiscovery()` (the method no longer corresponds to a numbered "step 2"). Remove the trailing `$this->saveStep2($cemeteryId, $cemeteryPackageId);` call and its `wasRecentlyCreated`/`autosaveState === 'failed'` release check — the hold now stays open until `continueFromDiscovery()` → `saveStep1()` either succeeds (hold is later converted by `SubmitBookingDraft`'s existing chain, unchanged) or fails (released via the new `releaseHeldPlotIfAny()` helper called from `saveStep1()`'s catch blocks in Step 4 above). Set `$this->cemeteryId`/`$this->cemeteryPackageId` (the properties `continueFromDiscovery()` reads) from this method instead of relying on a save's own persisted state.
+Rather than work around the flag (e.g. carrying the hold's own return value across requests in a Livewire property), this task deliberately does NOT auto-release the hold when a `DISCOVERY` save fails for an unrelated reason (e.g. a `city_code` typo) — releasing it would strip away a perfectly valid plot pick over a mistake in a different field entirely, now that four sub-choices share one save/validate unit instead of one. The existing scheduled command `plot-reservation:expire-stale-draft-holds` (`app/Console/Commands/PlotReservationExpireStaleDraftHoldsCommand.php`, registered in `routes/console.php` as `Schedule::command('plot-reservation:expire-stale-draft-holds')->everyMinute()->withoutOverlapping()`) is the safety net for a truly abandoned attempt — confirmed to exist and to actually run on a schedule, not just exist as unused code. A customer who fixes their typo and resubmits keeps their held plot; a customer who genuinely walks away has their hold swept within a minute of its TTL, same as any other abandoned hold. `HoldPlotForDraft`'s own release-and-reacquire logic (unchanged, see its class doc block) still handles the one case that DOES need an explicit release: the customer picking a DIFFERENT plot than one they already hold.
 
-Add a new private helper:
+- [ ] **Step 5: Restructure `holdPlotForStep2()` to stop calling a `SaveBookingDraftStep`-backed save, and to create the draft eagerly if none exists yet**
+
+Rename to `holdPlotForDiscovery()` (the method no longer corresponds to a numbered "step 2"). Remove the trailing `$this->saveStep2($cemeteryId, $cemeteryPackageId);` call and its `wasRecentlyCreated`/`autosaveState === 'failed'` release-on-failure block entirely — per the "Dropped: `releaseHeldPlotIfAny()`" note in Step 4 above, no release-on-failure logic is added back here either; the hold simply stays open (converted later by `SubmitBookingDraft`'s existing chain on success, or swept by the scheduled `plot-reservation:expire-stale-draft-holds` command if the attempt is truly abandoned).
+
+**Second real-code gap found while re-verifying this task (not in any of the three audit reports — found independently while checking the method's real precondition):** the CURRENT `holdPlotForStep2()` starts with `if ($this->draftId === null) { ...error...; return; }` — it REQUIRES a draft to already exist. That precondition held under the old flow because `saveStep1()` (old Step 1, Lokasi) always ran first and created the draft before the customer could ever reach the cemetery/plot picker. Under the `DISCOVERY` merge, NOTHING creates the draft until the final combined `saveStep1()` call — which fires only once service type and services are ALSO chosen, i.e. strictly AFTER the plot pick. `HoldPlotForDraft` requires a real `BookingDraft $draft` row to attach the reservation to (its FK), so `holdPlotForDiscovery()` cannot simply wait for one to already exist. Fix: `holdPlotForDiscovery()` must itself lazily create the draft on first use, the same way the OLD `saveStep1()` used to — via `currentOrNewDraft()` — but WITHOUT persisting any `DISCOVERY` fields onto it yet (those still wait for the final combined save) and WITHOUT redirecting to the resumable draft URL yet (that redirect stays exclusively in the final `saveStep1()`, so the customer isn't navigated away mid-selection).
 
 ```php
-/**
- * Releases a plot hold THIS session created, if the just-attempted
- * DISCOVERY save failed. Moved here from the old `holdPlotForStep2()`'s
- * tail (see this class's doc block on the DISCOVERY merge) — the hold
- * now outlives the moment it was taken, since persistence is deferred
- * until service type + services are also chosen.
- */
-private function releaseHeldPlotIfAny(): void
+public function holdPlotForDiscovery(string $cemeteryId, ?int $cemeteryPackageId, string $plotId): void
 {
-    if ($this->draftId === null || $this->pickerCemeteryId === null) {
+    if ($this->draftId === null) {
+        // First time this component needs a draft row to exist (a plot
+        // hold's FK requires one) — create it silently now, matching what
+        // the old saveStep1() used to do, but without persisting any
+        // DISCOVERY field yet and without redirecting: the customer is
+        // still mid-selection, not done with this step.
+        $draft = $this->currentOrNewDraft();
+        $this->draftId = $draft->getKey();
+        $this->version = $draft->version;
+    } else {
+        $draft = BookingDraftQuery::findBound($this->draftId);
+
+        if ($draft === null) {
+            $this->autosaveState = 'failed';
+            $this->addError('draft', 'Sesi pemesanan Anda telah berakhir. Silakan mulai ulang.');
+
+            return;
+        }
+    }
+
+    if (! Str::isUuid($plotId) || ! $this->pickerAppliesTo($cemeteryId)) {
+        $this->addError('plot', 'Plot tidak valid.');
+
         return;
     }
 
-    $draft = BookingDraftQuery::findBound($this->draftId);
-    $hold = $draft !== null ? PlotReservation::activeForDraft($draft) : null;
+    $plot = GravePlot::query()
+        ->whereHas('block', fn ($query) => $query->where('cemetery_id', $cemeteryId))
+        ->find($plotId);
 
-    if ($hold !== null && $hold->wasRecentlyCreated) {
-        (new ReleasePlotReservation)(
-            $hold,
-            "booking_draft:{$draft->getKey()}",
-            'customer',
-            reason: 'discovery step was not saved after the hold was taken',
-            auditSource: AuditSource::Api,
-        );
+    if ($plot === null) {
+        $this->addError('plot', 'Plot tidak ditemukan pada TPU/TPS ini.');
+
+        return;
     }
+
+    try {
+        (new HoldPlotForDraft)($plot, $draft, "booking_draft:{$draft->getKey()}");
+    } catch (PlotNotAvailableException) {
+        $this->addError('plot', 'Plot ini baru saja dipilih oleh pengunjung lain. Silakan pilih plot lain.');
+
+        return;
+    }
+
+    $this->cemeteryId = $cemeteryId;
+    $this->cemeteryPackageId = $cemeteryPackageId;
 }
 ```
 
-Verify `PlotReservation::activeForDraft()`'s `wasRecentlyCreated` semantics against the ORIGINAL `holdPlotForStep2()` code before this edit — the original checked `$hold->wasRecentlyCreated` on the hold object returned directly from `HoldPlotForDraft`'s own call in the SAME request; this rewritten version re-fetches via `activeForDraft()` in what may be a LATER request (since the save is now deferred), so `wasRecentlyCreated` (an Eloquent flag scoped to the object instance that performed the insert, not a persisted column) will ALWAYS be false on a re-fetched model. Read `HoldPlotForDraft` and `PlotReservation` to confirm whether a persisted "who/when created this hold" signal exists to substitute for the flag (e.g. a `created_at` recency check, or an audit trail keyed by session) — if not, this is a real design gap this task must resolve honestly (e.g. by keeping the hold's own return value in a Livewire property across the two calls within the same request lifecycle, since Livewire component state persists across method calls within one page session) rather than by guessing `wasRecentlyCreated` still works.
+Confirm `currentOrNewDraft()`'s real body during implementation (already read for this plan — it checks `$this->draftId !== null` and resolves via `resolveDraftById()` first, falling back to `(new StartBookingDraft)(auth()->id())` — a genuinely empty new draft, no arguments about DISCOVERY fields) still behaves correctly when called from this new call site rather than only from `saveStep1()`.
 
-- [ ] **Step 6: Update `wire:click` targets in `wizard.blade.php` for the renamed/merged methods** (the Blade edits themselves are Task 6 — this step is a cross-reference note: search the blade file for `wire:click="saveStep1"`, `wire:click="saveStep2"`, `wire:click="saveStep3"`, `continueFromStep4`, `holdPlotForStep2` and list every match so Task 6 has the exact call sites; do not edit the Blade file in this task).
+- [ ] **Step 6: Update the call-site targets in `wizard.blade.php` for the renamed/merged methods** (the Blade edits themselves are Task 6 — this step is a cross-reference note only; do not edit the Blade file in this task). Search for every occurrence of the old method names in ALL their Livewire directive forms, not just `wire:click` — the real file uses `wire:submit="saveStep6"`/`wire:submit="saveStep7"` for the customer/deceased-data forms (Task 5's territory) and, specific to this task's methods, both `wire:click` AND `wire:target` (which drives loading-spinner state and does not imply a click) reference `saveStep1`/`saveStep2`/`saveStep3`/`saveStep4`/`continueFromStep4`/`holdPlotForStep2` in multiple places. Grep the real file for all four patterns — `wire:click="saveStep1"` through `saveStep4"`, `continueFromStep4`, `holdPlotForStep2`, and `wire:target="` followed by any of those same names — and list every match (file:line) so Task 6 has the complete, real set of call sites, not just the `wire:click` ones.
 
 - [ ] **Step 7: Run tests to verify they pass**
 
@@ -1174,15 +1239,106 @@ to:
 
 `$currentStep` needs NO other change here — because booking's steps and screens now converge 1:1 (Task 5, Step 5), the raw `$currentStep` value (1-4 post-renumbering) already matches `BookingWizardScreen::labels()`'s 1-4 keys directly. No `currentScreen()`-based prop is needed for the stepper specifically, even though `currentScreen()` still exists for the Blade `@if` screen-gating blocks elsewhere in this file.
 
-- [ ] **Step 4: Update the `@if ($this->currentScreen() === N)` blocks and their internal step-label markup**
+- [ ] **Step 4: Redesign Screen 1/DISCOVERY's progressive-reveal gates — real design gap found post-audit, not a mechanical rename**
 
-Read the full file (1667 lines) and update every reference to the removed constants/methods found: the `wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::SUMMARY }})"` call (previously line 876 — `SUMMARY` no longer exists; since Ringkasan is now an unconditional sidebar per Task 5 Step 7, this specific "go to Ringkasan" link/button should be removed entirely, not repointed — there is no step to navigate to), the "Langkah 5 — Ringkasan Pesanan" heading text (previously line 627, part of the sidebar markup — keep the Ringkasan CONTENT, drop the "Langkah 5" step-number framing since it's not a numbered step anymore), and every `wire:click="saveStep1"`/`"saveStep2"`/`"saveStep3"`/`"saveStep4"`/`"saveStep6"`/`"saveStep7"`/`"saveStep8"`/`"continueFromStep4"`/`"holdPlotForStep2"` call site found via Task 4 Step 6's cross-reference list — repoint each to its new method name (`saveStep1` with the new 5-arg signature, `continueFromDiscovery`, `holdPlotForDiscovery`, `saveStep2` for customer/deceased, `saveStep3` for payment).
+**This is the largest, most important correction in this whole plan.** An earlier draft of this task assumed the sub-choice buttons inside the merged DISCOVERY step could simply be "repointed to their new method name." That doesn't work. Read the real current file (confirmed by direct grep, current line numbers as of this correction pass — re-confirm exact numbers during implementation since earlier tasks' edits shift them):
 
-- [ ] **Step 5: Run tests to verify they pass**
+- Line 114: `@if ($currentStep === BookingWizardStep::LOCATION || in_array(BookingWizardStep::LOCATION, $completedSteps, true))` gates the city section.
+- Line 137: `wire:click="saveStep1('{{ $cityOption['code'] }}')"` — the city buttons, which TODAY persist and advance `$currentStep` to `CEMETERY`, which is what reveals the next section.
+- Line 153: `@if ($currentStep === BookingWizardStep::CEMETERY || ...)` gates the cemetery section — only reveals because the city button above just advanced `$currentStep`.
+- Lines 284/313: `wire:click="saveStep2(...)"` — cemetery/package buttons, same persist-and-advance pattern.
+- Line 369: `wire:click="holdPlotForStep2(...)"` — the plot-picker's confirm button (renamed `holdPlotForDiscovery` per Task 4).
+- Line 418: `@if ($currentStep === BookingWizardStep::SERVICE_TYPE || ...)` gates the service-type section.
+- Line 429: `wire:click="saveStep3('{{ $type }}')"` — service-type buttons, same pattern.
+- Line 448: `@if ($currentStep === BookingWizardStep::SERVICES || ...)` gates the services section.
+- Line 603: `wire:click="continueFromStep4"` — the final "Lanjutkan" button.
 
-Run both files in this task's Files section, plus `BookingWizardEndToEndTest.php` (this is the most likely file to catch any missed Blade call-site rename via a real end-to-end journey failing partway through).
+Every one of `LOCATION`/`CEMETERY`/`SERVICE_TYPE`/`SERVICES` is DELETED by Task 1 — these `@if` blocks reference constants that no longer exist, so this is not a soft UX regression to leave for later, it is a guaranteed fatal error (`Undefined constant`) the moment Task 1 lands without this fix. And even setting the compile error aside: under the merge, `$currentStep` never advances until the ONE final `continueFromDiscovery()` → `saveStep1()` call succeeds (Task 4) — so a currentStep-driven gate would stay frozen after the very first sub-choice even if it somehow still compiled.
 
-- [ ] **Step 6: Commit**
+**The fix: mirror `RenewalStart.php`'s already-proven pattern exactly** — local, non-persisting property-driven reveal, not step-driven reveal. `RenewalStart.php` already solves this identical problem for its own merged search step: `selectCity(string $city): void`/`resetCity(): void`/`selectCemetery(string $cemeteryId): void`/`resetCemetery(): void` (methods) paired with `@if ($city !== '')`/`@if ($selectedCemetery !== null)` (Blade gates) — read that file's real methods and `resources/views/livewire/public/renewal/start.blade.php`'s real gates before writing this task's edits, and copy the shape.
+
+Add three new lightweight, non-persisting setter methods to `BookingWizard.php` (near `openPickerFor()`/`holdPlotForDiscovery()`):
+
+```php
+public function selectCity(string $cityCode): void
+{
+    $this->city = $cityCode;
+}
+
+/**
+ * Non-picker cemetery selection (a cemetery with no active packages, or a
+ * package chosen directly without the plot picker) — sets the confirmed
+ * selection properties directly. `holdPlotForDiscovery()` (Task 4) sets
+ * these same two properties for the picker path, so both paths converge
+ * on the same reveal-gate condition below.
+ */
+public function selectCemetery(string $cemeteryId, ?int $cemeteryPackageId = null): void
+{
+    $this->cemeteryId = $cemeteryId;
+    $this->cemeteryPackageId = $cemeteryPackageId;
+}
+
+public function selectServiceType(string $serviceType): void
+{
+    $this->serviceType = $serviceType;
+}
+```
+
+Update the Blade gates and buttons:
+
+```blade
+{{-- was: @if ($currentStep === BookingWizardStep::LOCATION || in_array(BookingWizardStep::LOCATION, $completedSteps, true)) --}}
+{{-- The city section is the first thing in DISCOVERY — always visible, no gate needed. Remove the @if/@endif wrapper entirely (keep its content). --}}
+```
+
+```blade
+{{-- city buttons: was wire:click="saveStep1('{{ $cityOption['code'] }}')" --}}
+wire:click="selectCity('{{ $cityOption['code'] }}')"
+```
+
+```blade
+{{-- was: @if ($currentStep === BookingWizardStep::CEMETERY || in_array(BookingWizardStep::CEMETERY, $completedSteps, true)) --}}
+@if ($city !== '')
+```
+
+```blade
+{{-- non-picker cemetery/package buttons: was wire:click="saveStep2('{{ $cemetery->id }}')" / wire:click="saveStep2('{{ $cemetery->id }}', {{ $package->id }})" --}}
+wire:click="selectCemetery('{{ $cemetery->id }}')"
+{{-- and --}}
+wire:click="selectCemetery('{{ $cemetery->id }}', {{ $package->id }})"
+```
+
+```blade
+{{-- plot-picker confirm button: was wire:click="holdPlotForStep2('{{ $this->pickerCemeteryId }}', {{ $this->pickerCemeteryPackageId ?? 'null' }}, '{{ $plot->id }}')" --}}
+wire:click="holdPlotForDiscovery('{{ $this->pickerCemeteryId }}', {{ $this->pickerCemeteryPackageId ?? 'null' }}, '{{ $plot->id }}')"
+```
+
+```blade
+{{-- was: @if ($currentStep === BookingWizardStep::SERVICE_TYPE || in_array(BookingWizardStep::SERVICE_TYPE, $completedSteps, true)) --}}
+@if ($cemeteryId !== null)
+```
+
+```blade
+{{-- service-type buttons: was wire:click="saveStep3('{{ $type }}')" --}}
+wire:click="selectServiceType('{{ $type }}')"
+```
+
+```blade
+{{-- was: @if ($currentStep === BookingWizardStep::SERVICES || in_array(BookingWizardStep::SERVICES, $completedSteps, true)) --}}
+@if ($serviceType !== null)
+```
+
+The final "Lanjutkan" button (line 603) keeps its position at the end of the services section, `wire:click="continueFromDiscovery"` (renamed per Task 4) — this is the ONLY control in the whole DISCOVERY screen that actually calls `SaveBookingDraftStep`, validates, and persists; everything above it is now local UI state.
+
+- [ ] **Step 5: Update the remaining `@if ($this->currentScreen() === N)` blocks and their internal step-label markup**
+
+Read the full file and update every remaining reference to removed constants/methods: the `wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::SUMMARY }})"` call (previously line 876 — `SUMMARY` no longer exists; since Ringkasan is now an unconditional sidebar per Task 5 Step 7, this specific "go to Ringkasan" link/button should be removed entirely, not repointed — there is no step to navigate to), the "Langkah 5 — Ringkasan Pesanan" heading text (previously line 627, part of the sidebar markup — keep the Ringkasan CONTENT, drop the "Langkah 5" step-number framing since it's not a numbered step anymore), and every remaining `wire:click`/`wire:submit`/`wire:target="saveStep6"`/`"saveStep7"`/`"saveStep8"` call site found via Task 4 Step 6's broadened cross-reference list — repoint each to its new method name (`saveStep2` for customer/deceased, `saveStep3` for payment).
+
+- [ ] **Step 6: Run tests to verify they pass**
+
+Run both files in this task's Files section, plus `BookingWizardEndToEndTest.php` (this is the most likely file to catch any missed Blade call-site rename via a real end-to-end journey failing partway through) and `BookingWizardProgressiveRevealTest.php` (Task 5's file — the new local-property reveal gates this task adds are exactly what that file's own name suggests it should also verify; check whether it needs new assertions for the `selectCity`/`selectCemetery`/`selectServiceType` reveal chain).
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add resources/views/livewire/public/booking/wizard.blade.php \
@@ -1196,7 +1352,7 @@ git commit -m "fix(booking): pass BookingWizardScreen labels to the stepper, upd
 
 **Files:**
 - Modify: `app/Livewire/Public/Renewal/RenewalStart.php`, `app/Livewire/Public/Renewal/RenewalPayment.php`, `app/Livewire/Public/Renewal/RenewalConfirmation.php`
-- Test: `tests/Feature/Livewire/Public/Renewal/RenewalStartTest.php` (existing — update), plus new coverage for `RenewalPayment`/`RenewalConfirmation` if no existing feature test file covers their step-label rendering (confirm during implementation — `grep -rl RenewalPayment tests/Feature/Livewire/Public/Renewal/` first; if a `RenewalPaymentTest.php` exists it was not caught by this plan's earlier grep because it may not reference the OLD constants by name — check regardless and add coverage there if missing)
+- Test: `tests/Feature/Livewire/Public/Renewal/RenewalStartTest.php` (existing — update, including a stale test that asserts the OLD 6-label set, see Step 7), `tests/Feature/Livewire/Public/Renewal/RenewalPaymentTest.php` (existing, real file, confirmed to assert the OLD 6-label set at two points — see Step 6), and any `RenewalConfirmation` test file found during Step 5's read (this file's own `stepLabels` reference was also missed in an earlier draft of this task — see Step 5).
 
 **Interfaces:**
 - Consumes: `RenewalJourneyStep::SEARCH`/`FEE_AND_PAYMENT`/`CONFIRMATION` (Task 2), `RenewalWizardScreen::labels()` (Task 2).
@@ -1264,15 +1420,34 @@ Read the file in full (363 lines). The one match found (`'currentStep' => $state
 
 (Both the fee sub-view and the payment sub-view are now the SAME step — `FEE_AND_PAYMENT` — so the `$state['mode'] === 'fee' ? ... : ...` ternary collapses to the single constant.) Add the `use App\Domain\Renewal\RenewalWizardScreen;` import. Search the rest of the file for any other `RenewalJourneyStep::FEE`/`RenewalJourneyStep::PAYMENT` reference beyond this one match (the earlier grep found exactly one line, but re-grep after opening the file in full in case the single-line match combined two references on one line, as shown above).
 
-- [ ] **Step 5: Update `RenewalConfirmation.php`**
+- [ ] **Step 5: Update `RenewalConfirmation.php` — real missed reference (post-audit)**
 
-Read the file (50 lines) — no `RenewalJourneyStep::` matches were found by this plan's grep for this file specifically, but the file was listed among the spec's files-to-check; confirm it reads `RenewalJourneyStep::CONFIRMATION` (now value 3, was 6) correctly with no other change needed, since only the constant's underlying value changes, not its name.
+An earlier draft of this task claimed no `RenewalJourneyStep::` matches existed in this 50-line file. That was wrong — line 44 reads `'stepLabels' => RenewalJourneyStep::labels(),`, the same pattern already fixed in `RenewalStart.php`/`RenewalPayment.php` above, just missed here. `RenewalJourneyStep::CONFIRMATION` (line 43, correctly unaffected by the value change) stays as-is. Fix:
 
-- [ ] **Step 6: Run tests to verify they pass**
+```php
+return view('livewire.public.renewal.confirmation', [
+    'renewal' => $renewal,
+    'errorMessage' => $renewal instanceof Renewal ? '' : 'Data perpanjangan tidak ditemukan.',
+    'currentStep' => RenewalJourneyStep::CONFIRMATION,
+    'stepLabels' => RenewalWizardScreen::labels(),
+])->layout('layouts.app', [
+```
 
-Run `RenewalStartTest.php` and any `RenewalPayment`/`RenewalConfirmation` test files found in Step 4/5's re-grep.
+Add `use App\Domain\Renewal\RenewalWizardScreen;` to this file's imports.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Fix `RenewalPaymentTest.php` — real file, breaks on the old 6-label assertion (post-audit)**
+
+An earlier draft of this task hedged "confirm during implementation" on whether this file exists. It does — `tests/Feature/Livewire/Public/Renewal/RenewalPaymentTest.php` — and it asserts the OLD 6-item label set at two points: line 162 and line 539, both something like `assertSame(['Kota', 'TPU/TPS', 'Cari Makam', 'Biaya', 'Pembayaran', 'Konfirmasi'], ...)` or equivalent `assertSee()` calls for each old label. Read both locations in full during implementation and update each to assert the new 3-item `RenewalWizardScreen::labels()` set (`'Cari Makam'`, `'Biaya & Bayar'`, `'Konfirmasi'`) instead — do not delete this coverage, update it to match what actually renders now.
+
+- [ ] **Step 7: Fix the stale conflicting test in `RenewalStartTest.php` — real, currently-passing test that this change breaks (post-audit)**
+
+`RenewalStartTest.php` (line ~222) has a real, currently-passing test — approximately named `test_the_stepper_shows_this_journeys_six_steps_not_the_nine_booking_ones` — asserting all 6 OLD labels render (`'Kota'`, `'TPU/TPS'`, `'Cari Makam'`, `'Biaya'`, `'Pembayaran'`, `'Konfirmasi'`). An earlier draft of this task only ADDED a new 3-label test (Step 1 above) and never touched this one — it would fail post-change since none of those 6 labels render anymore. Read the test's real name and full body during implementation; its actual intent (proving the renewal stepper never accidentally shows booking's labels, not the specific number six) survives this change perfectly well — rewrite it to assert the NEW 3-item label set instead of deleting the coverage, e.g. renaming it to something like `test_the_stepper_shows_this_journeys_three_steps_not_the_nine_booking_ones` and asserting `'Cari Makam'`/`'Biaya & Bayar'`/`'Konfirmasi'` render while a real booking-only label (e.g. `'Pilih Layanan'` or `'Data Pemesan'`, whichever this repo's real booking labels are post-Task-1) does not.
+
+- [ ] **Step 8: Run tests to verify they pass**
+
+Run `RenewalStartTest.php`, `RenewalPaymentTest.php`, and any `RenewalConfirmation` test file found during Step 5's re-check.
+
+- [ ] **Step 9: Commit**
 
 ```bash
 git add app/Livewire/Public/Renewal/RenewalStart.php app/Livewire/Public/Renewal/RenewalPayment.php \
@@ -1286,6 +1461,7 @@ git commit -m "feat(renewal): renumber to 3 steps, swap stepper labels to Renewa
 
 **Files:**
 - Modify (as needed, based on what each file actually contains): `tests/Feature/Domain/Booking/Actions/StartBookingDraftTest.php`, `tests/Feature/Domain/PlotReservation/HoldPlotForDraftTwoConnectionTest.php`, `HoldPlotForDraftTest.php`, `PlotReservationBookingDraftHoldTest.php`, `ConvertDraftHoldToOrderReservationTest.php`, `tests/Feature/Domain/Quotation/ComposeQuoteLinesFromBookingDraftTest.php`, `tests/Feature/Domain/PlotReservation/PlotReservationExpiryTest.php`, `tests/Feature/OrderWorkflow/SubmitBookingDraftConvertsPlotHoldTest.php`, `tests/Feature/Livewire/Public/Booking/BookingWizardDegradedReadsTest.php`, `BookingWizardSaveIntegrityTest.php`, `BookingWizardExpiredHoldOnSubmitTest.php`, `BookingWizardCheckboxStylingTest.php`, `tests/Feature/Livewire/Public/Akun/DraftListTest.php`
+- **`tests/Feature/Livewire/Public/Booking/BookingWizardStepsFourAndFiveTest.php` — real file, missed by earlier drafts of this plan (post-audit correction), covered by no other task.** Confirmed via direct read: uses `BookingWizardStep::LOCATION`/`CEMETERY`/`SERVICE_TYPE`/`SUMMARY` (all removed) and calls `saveStep4()`/`saveStep1()` with their OLD signatures throughout. This is squarely this task's territory — fix its fixture-building and method calls to the new `DISCOVERY`/merged-signature shape, same as the rest of this task's files.
 - Also review (not from the grep, but structurally certain to reference old numbering given their names/purpose): `tests/browser/e2e-booking-loading-states.spec.ts` (Playwright — a different test runner, confirm whether this plan's Postgres/CI verification covers it or whether it needs a separate note for whoever runs the Playwright suite)
 
 **This task exists because Task 1-7's own test updates only cover the files each task's Files section names directly — this task is the sweep for everything else the grep in this plan's research phase found.**
@@ -1330,13 +1506,15 @@ git commit -m "test(booking): update remaining fixture references to the new 4-s
 
 - [ ] **Step 1: Write the failing test**
 
+**Real-code correction (post-audit):** `BookingDraft` has no `HasFactory` trait and no factory class exists under `database/factories/` — confirmed by direct search. Every existing test builds a `BookingDraft` via direct `BookingDraft::create([...])`, e.g. `BookingWizardDraftBindingTest.php`'s own fixtures — use that pattern, not a factory.
+
 ```php
 public function test_a_draft_at_an_old_out_of_range_current_step_is_treated_as_unresumable(): void
 {
     // Simulate a draft that was mid-flow under the OLD 9-step numbering
     // when this change shipped — current_step = 8 (old PAYMENT) has no
     // meaning under the new 4-step BookingWizardStep::isKnown() range.
-    $draft = BookingDraft::factory()->create(['current_step' => 8, 'completed_steps' => [1, 2, 3, 4, 6, 7]]);
+    $draft = BookingDraft::create(['current_step' => 8, 'completed_steps' => [1, 2, 3, 4, 6, 7]]);
 
     $component = Livewire::test(BookingWizard::class, ['draftId' => $draft->id]);
 
@@ -1344,26 +1522,26 @@ public function test_a_draft_at_an_old_out_of_range_current_step_is_treated_as_u
 }
 ```
 
-Confirm `BookingDraft::factory()` exists and accepts `current_step`/`completed_steps` directly (read the factory file if uncertain) before relying on this exact call shape.
-
 - [ ] **Step 2: Run test to verify it fails**
 
 Expected: FAIL — today the component likely tries to hydrate `$currentStep = 8` directly and either 500s or renders a blank/incorrect screen, since nothing currently checks the resumed value against `BookingWizardStep::isKnown()`.
 
 - [ ] **Step 3: Add the guard**
 
-Locate where a resumed draft's `current_step` is read into the component (likely in `mount()`, near where `$this->draftId`/`$this->currentStep` get hydrated from a found draft — read the surrounding code first). Add:
+Locate where a resumed draft's `current_step` is read into the component — `mount(?string $draftId = null)`, after `$draft = $this->resolveDraftById($draftId);` resolves a non-null draft, before `$this->hydrateFrom($draft);` runs. `mount()`'s own two existing "no usable draft" branches (`$draftId === null`, and `$draft === null`) both set `$this->stagedServiceCodes = ServiceCode::BASIC_CODES;` before returning — this new branch is a third "no usable draft" case in the same family and must do the same, or a customer hitting it lands on an empty-checkbox discovery screen instead of the default pre-checked state (**real gap found post-audit** — an earlier draft of this task's guard omitted this reset). Add:
 
 ```php
 if (! BookingWizardStep::isKnown($draft->current_step)) {
+    BookingDraftBinding::forget($draftId);
     $this->draftId = null;
+    $this->stagedServiceCodes = ServiceCode::BASIC_CODES;
     $this->addError('draft', 'Sesi pemesanan Anda telah berakhir. Silakan mulai ulang.');
 
     return;
 }
 ```
 
-placed after the draft is resolved but before its `current_step`/other fields are hydrated into component state — mirroring the existing "session expired" pattern already used in `saveStepOrShowErrors()`/`saveStep1()`'s own null-draft branches, so this reads as the same family of error rather than a new one.
+placed immediately after `$draft = $this->resolveDraftById($draftId);` resolves a non-null `$draft`, before `$this->hydrateFrom($draft);` runs — mirroring the existing "session expired" pattern already used in `saveStepOrShowErrors()`/`saveStep1()`'s own null-draft branches (including the `BookingDraftBinding::forget()` call the adjacent `$draft === null` branch already makes, for the same reason: an old-numbered draft is being treated as equally unusable as a missing one, so it gets the same cleanup), so this reads as the same family of error rather than a new one.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1382,7 +1560,7 @@ git commit -m "feat(booking): treat an in-flight draft under the old step number
 
 **Files:**
 - Modify: `AGENTS.md`, `docs/design/design-system.md`, `docs/product/booking-wizard-fields.md`
-- Modify: `.kiro/specs/renewal-and-grave-registry/requirements.md` (or wherever AC1 actually lives — confirm exact filename via `ls .kiro/specs/renewal-and-grave-registry/` first, the spec cites "AC1" without naming the file)
+- Modify: `.kiro/specs/renewal-and-grave-registry/requirements.md` (AC1's real location, confirmed by direct read) and `.kiro/specs/renewal-and-grave-registry/tasks.md` (real, currently-uncovered content that becomes factually wrong by this plan — see Step 6 below; missed by an earlier draft of this task, which only listed `requirements.md`).
 
 **This task has no code dependency on Tasks 1-9 and can run any time** (though sequencing it last matches this plan's own narrative order).
 
@@ -1407,45 +1585,82 @@ to:
   Context section for the full record.
 ```
 
-- [ ] **Step 2: `docs/design/design-system.md` §3.9**
+- [ ] **Step 2: `docs/design/design-system.md` §3.9 — full real text read, every stale reference found (post-audit correction: an earlier draft of this task's edit list covered only 4 of the ~10 real stale references in this section)**
 
-Read the full section (lines 789-848 per this plan's research grep) before editing — it has multiple sub-parts (the stepper's prop table, the "nine-step default is normative" paragraph, the "labels is for a different journey" paragraph). Update:
-- The section heading `### 3.9 Stepper — <x-mk.stepper> (booking Steps 1–9)` → `(booking Steps 1–4)`.
-- The default `labels` array in the prose (wherever it's restated outside the component file itself) to the new 4-item map.
-- "The nine-step default is normative" paragraph → rewritten for 4, keeping the same "omitting `labels` renders exactly these N steps" contract language.
-- The renewal paragraph ("six visible steps") → rewritten for 3.
-- The `labels` carve-out paragraph (line 845) currently reads "Passing `labels` from a booking surface to rename, reorder, hide, or renumber a booking step is forbidden..." — add an explicit exception for `BookingWizardScreen`/`RenewalWizardScreen`'s SCREEN-vocabulary labels (which this whole plan requires booking to now pass), distinguishing "a screen-grouping label array, sanctioned by this section" from "an ad hoc rename of a step," so a future reader does not read Task 6's own `:labels="BookingWizardScreen::labels()"` call as the exact violation this paragraph warns against.
+Read the full section (real current lines 789-848) before editing. Every "9" / "1–9" / "six" reference found by direct read, each needing its own fix:
 
-- [ ] **Step 3: `docs/design/design-system.md` §9.2 MUST NOT 9**
+1. Line 789 heading: `### 3.9 Stepper — <x-mk.stepper> (booking Steps 1–9)` → `(booking Steps 1–4)`.
+2. Line 791: `` `booking-wizard-fields.md` requires progress shown as **1–9**, ... `` → `**1–4**`.
+3. Lines 793-796, the canonical labels block:
+   ```
+   1 Lokasi · 2 TPU/TPS · 3 Jenis Layanan · 4 Pilih Layanan · 5 Ringkasan
+   6 Data Pemesan · 7 Data Almarhum + Dokumen · 8 Pembayaran · 9 Konfirmasi
+   ```
+   → replace with the new 4 headings (matching `BookingWizardStep::LABELS`, Task 1):
+   ```
+   1 Cari & Pilih · 2 Data Pemesan & Data Almarhum · 3 Pembayaran · 4 Konfirmasi
+   ```
+4. Line 799: "A full 9-dot rail does not fit 360 px legibly." — the mobile-compact rationale itself (a 9-dot rail not fitting 360px) no longer applies verbatim once the rail is 4 dots; reword to something like "The compact mobile layout below still applies for any journey with more steps than fit legibly at 360px — not specific to booking's dot count." so the section doesn't imply a specific dot count drove the mobile design.
+5. Lines 800-806, the mobile mockup block — currently shows `Langkah 3 dari 9` / `Jenis Layanan` / a progress bar at roughly 1/3 fill. Update the worked example to a real 4-step value, e.g. `Langkah 2 dari 4` / `Data Pemesan & Data Almarhum` (screen 2's real new label) with the fill bar adjusted to roughly 1/2.
+6. Line 810: `` `aria-valuenow="3" aria-valuemin="1" aria-valuemax="9"` `` → update to a value consistent with the new mockup, e.g. `aria-valuenow="2" aria-valuemin="1" aria-valuemax="4"`.
+7. Line 832 (Urgent/Pre-Need branching paragraph): "the stepper still reads 1–9" → "the stepper still reads 1–4".
+8. Props table `labels` default: "**the nine booking labels above**" → "**the four booking labels above**".
+9. "The nine-step default is normative." paragraph → rewritten for four, keeping the same "omitting `labels` renders exactly these N steps" contract language — but note this paragraph's claim needs a further correction beyond the number: per this plan's Decision 5/Task 6, booking's Blade view is changing from OMITTING `labels` (relying on the default) to EXPLICITLY passing `BookingWizardScreen::labels()`. So the "normative default" now describes a fallback booking itself no longer actually relies on in practice — word this precisely (the default still exists and still matters as the safety net/contract for any future caller that omits `labels`, but booking's own real invocation no longer omits it after this change) rather than implying booking still depends on the omitted-prop default.
+10. The renewal paragraph ("`labels` is for a different journey... is **six** visible steps") → rewritten for **three**, and its citation of `.kiro/specs/renewal-and-grave-registry`'s `tasks.md` "requires this same primitive" stays accurate (the primitive itself — `<x-mk.stepper>`'s `labels` prop — is unchanged, only the count).
+11. The `labels` carve-out paragraph (same paragraph as #10, continuing) currently reads "Passing `labels` from a booking surface to rename, reorder, hide, or renumber a booking step is forbidden by `AGENTS.md` (§Mandatory MVP UX, \"Booking exposes Steps 1–9 exactly as documented\")..." — update the quoted `AGENTS.md` text to "Steps 1–4" (matching Step 1's edit above) and add an explicit exception distinguishing `BookingWizardScreen`/`RenewalWizardScreen`'s SCREEN-vocabulary labels (which this whole plan requires booking to now pass) from an ad hoc rename of a STEP — so a future reader does not read Task 6's own `:labels="BookingWizardScreen::labels()"` call as the exact violation this paragraph warns against. Also fix "Urgent / Pre-Need branches keep reading 1–9" (same paragraph, final sentence) → "1–4".
 
-Locate the exact MUST NOT 9 bullet (search `§9.2` region, line ~1527+ per this plan's grep of `## 9. Governance`). Rewrite from "hide/reorder/rename a booking step" (implicitly the old 9-step vocabulary) to the equivalent rule stated against the new 4-step vocabulary, plus the same `labels`-for-screens carve-out from Step 2.
+- [ ] **Step 3: `docs/design/design-system.md` §9.2 MUST NOT list, item 9 — real text is NOT step-count-specific, needs a different fix than "rewrite the number"**
 
-- [ ] **Step 4: `docs/product/booking-wizard-fields.md`**
+**Real-code correction (post-audit):** an earlier draft of this task assumed MUST NOT item 9 contains an embedded step count to rewrite (framed as "hide/reorder/rename a booking step, implicitly the old 9-step vocabulary"). Read directly (§9.2, MUST NOT list, item 9): `` ❌ Rename, reorder, or hide a product label, route, menu item, or booking step (§0.1). `` — this is a general prohibition with no number in it at all; there is nothing to numerically update. What it actually needs is the same kind of dated, explicit exception the SAME governance list already uses elsewhere for a deliberate, approved departure — the "Rules for developers" numbered list's own item 9 (a *different* item 9, in the adjacent list) already carries exactly this pattern: `` ~~Keep Filament's PHP colour array in sync...~~ **Superseded 26 Aug 2026:** admin/vendor Filament panels no longer consume this array at all... `` Add the equivalent note to the MUST NOT list's item 9, without striking through the rule itself (the rule still holds in general — this plan is the one, explicitly-authorized exception to it, not a repeal):
+
+```
+9. ❌ Rename, reorder, or hide a product label, route, menu item, or booking step (§0.1). **Exception, 2 Sep 2026:** the wizard step-count reduction (`docs/superpowers/specs/2026-09-02-wizard-step-reduction-design.md`) is a deliberate, project-owner-authorized departure — see §3.9's own updated step count and the `AGENTS.md` note this plan's Task 10 Step 1 adds. This item's general rule is otherwise unchanged.
+```
+
+- [ ] **Step 4: `docs/design/design-system.md` §3.2 — one more stale reference found (post-audit), not caught by earlier drafts of this task**
+
+Line 367 (§3.2, form-field rules): `` Optional fields are labelled `(opsional)` — for a 9-step form, marking the smaller set is kinder. `` → update "9-step form" to "4-step form" (this line is about booking's field-labelling convention specifically, confirmed by its surrounding context in §3.2's form-field rules).
+
+- [ ] **Step 5: `docs/product/booking-wizard-fields.md`**
 
 Read the full file (currently has 9 numbered `## Step N — <Name>` headings per this plan's research grep, lines 15-169). Restructure to 4 headings matching the new `BookingWizardStep::LABELS`: `## Step 1 — Cari & Pilih` (merging the content currently under the old Steps 1-4), `## Step 2 — Data Pemesan & Data Almarhum` (merging old Steps 6-7's content), `## Step 3 — Pembayaran` (old Step 8's content, unchanged), `## Step 4 — Konfirmasi` (old Step 9's content, unchanged). The OLD "## Step 5 — Ringkasan Pesanan" section's content becomes a non-numbered subsection (e.g. "### Ringkasan sidebar") describing it as a persistent display element, not a step — do not delete its field-level documentation, only its step-number framing.
 
-- [ ] **Step 5: `.kiro/specs/renewal-and-grave-registry`'s AC1**
+- [ ] **Step 6: `.kiro/specs/renewal-and-grave-registry` — AC1 in `requirements.md`, AND `tasks.md` (real, factually-broken content found post-audit, not covered by an earlier draft of this task)**
 
-Run `ls .kiro/specs/renewal-and-grave-registry/` to find the exact file AC1 lives in (likely `requirements.md`). Per this plan's research: no established convention was found in `docs/planning/kiro-specs-analysis.md` for editing a `.kiro` spec in place — but that same document (and others like it) uses a `> **Superseded, <date>.**` marker pattern (see `docs/planning/kiro-specs-analysis.md`'s own line 3) to record a document's content as historically-accurate-but-no-longer-current, WITHOUT rewriting the original text. Apply the same pattern: add a note directly above/near AC1 reading:
+**`requirements.md`'s real AC1** (line 9): `` 1. THE SYSTEM SHALL implement the public renewal flow as six visible steps: city, TPU/TPS, grave search, fee, payment, and confirmation/invoice. `` This repo's real, established convention for superseding a `.kiro` requirement in place — confirmed by reading `.kiro/specs/platform-identity-and-access/requirements.md` directly, not assumed — is strikethrough on the original line plus a pointer, plus a dedicated `## Superseded (DATE)` section (this file currently has none; add one). Apply the same shape:
 
 ```
-> **Step count superseded, 2 Sep 2026.** AC1's "six visible steps" is the
-> ORIGINAL count. The renewal journey now has 3 real steps —
-> see `docs/superpowers/specs/2026-09-02-wizard-step-reduction-design.md`.
-> This requirement is retained verbatim below for historical record.
+1. ~~THE SYSTEM SHALL implement the public renewal flow as six visible steps: city, TPU/TPS, grave search, fee, payment, and confirmation/invoice.~~ Superseded 2 Sep 2026 — see the `## Superseded` section below.
 ```
 
-Do not edit AC1's own text.
+Add, at the end of the file:
 
-- [ ] **Step 6: Run the docs verification gate**
+```
+## Superseded (2 Sep 2026)
+
+AC1's "six visible steps" is superseded by a deliberate, project-owner-authorized step-count
+reduction to three real steps (search, fee & payment, confirmation) — see
+`docs/superpowers/specs/2026-09-02-wizard-step-reduction-design.md` for the full record, including
+the explicit authorization to depart from the RKS-sourced step count this AC originally encoded.
+
+Per `AGENTS.md`'s source-precedence order, this spec outranks the code — this note is that
+approval, mirroring the shape `platform-identity-and-access/requirements.md`'s own
+`## Superseded (22 Aug 2026)` section uses for its MFA-removal precedent.
+```
+
+**`tasks.md` — real, currently-broken-by-this-plan content, missed entirely by an earlier draft of this task.** This file documents "six visible steps"/"six-step stepper" extensively (at minimum: a checked-off item citing "Implement the six visible journey steps," a comparison table row "Six-step progress | `<x-mk.stepper>` §3.9 ... six steps," and a checked-off item "Build the six-step stepper") AND cites exact test names as its own evidence — two of which this plan directly affects: `RenewalStartTest::test_the_stepper_shows_this_journeys_six_steps_not_the_nine_booking_ones` (Task 7 Step 7 rewrites this test for 3 steps, so the OLD name `tasks.md` cites stops existing) and `RenewalJourneyStepTest::test_the_renewal_labels_are_not_the_nine_booking_labels` (in the file Task 2 wholesale-replaces — this exact test is deleted). A third cited test, `GraveSearchStatesTest::test_the_stepper_shows_this_journeys_six_steps_and_not_the_nine_booking_ones`, already references a component (`GraveSearch`) that no longer exists from the PRIOR wizard-screen-consolidation redesign — already dead before this plan, not a new problem this plan introduces, but worth noting so it isn't mistaken for a fresh regression.
+
+Add a note near the top of `tasks.md` (same file-level convention as the `requirements.md` fix above — this repo has no per-line strikethrough convention established for `tasks.md` specifically, based on the `platform-payment-adapter/tasks.md` precedent, which uses an inline **Superseded DATE:** note directly after the affected item rather than a separate section): add an inline `**Superseded 2 Sep 2026:**` note directly after each of the three step-count-citing items identified above (the "six visible steps" implementation item, the "Six-step progress" table row, and the "six-step stepper" build item), each pointing at `docs/superpowers/specs/2026-09-02-wizard-step-reduction-design.md` and stating the two specific test names that no longer exist under their old names. Do not rewrite the historical narrative text itself (it stays accurate as a record of what was built in Sprint 4/L8) — only annotate that the step count and the two named tests are now superseded.
+
+- [ ] **Step 7: Run the docs verification gate**
 
 ```bash
 bash ci/verify-docs.sh
 ```
 
-Expected: all gates pass — this script scans for hardcoded design values and (per this repo's CLAUDE.md) content-survival rules; confirm none of Steps 1-5's edits trip a gate (e.g. accidentally introducing a hardcoded Tailwind value while editing Markdown near a code fence is an easy, unrelated mistake to avoid here).
+Expected: all gates pass — this script scans for hardcoded design values and (per this repo's CLAUDE.md) content-survival rules; confirm none of Steps 1-6's edits trip a gate (e.g. accidentally introducing a hardcoded Tailwind value while editing Markdown near a code fence is an easy, unrelated mistake to avoid here).
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add AGENTS.md docs/design/design-system.md docs/product/booking-wizard-fields.md .kiro/specs/renewal-and-grave-registry/
@@ -1456,12 +1671,16 @@ git commit -m "docs: amend step-count contracts for the wizard step reduction"
 
 ## Self-Review
 
-**Spec coverage:** Decision 1 (Ringkasan cut) → Task 5 Step 7. Decision 2/7/9 (booking DISCOVERY merge) → Tasks 1, 3, 4, 6. Decision 3/4 (renewal merges) → Tasks 2, 7. Decision 5 (stepper tracks screens) → Tasks 1, 2, 6 — corrected from the spec's inaccurate "already screen-based" framing per this plan's Global Constraints. Decision 6 (in-flight draft unresumable) → Task 9, corrected to booking-only per the renewal persistence finding. Decision 8 (customer+deceased merge, accepted trade-off) → Tasks 1, 3, 5. `AGENTS.md`/`design-system.md`/`booking-wizard-fields.md`/`.kiro` amendments → Task 10, with the `.kiro` convention question resolved via the `> **Superseded**` precedent rather than left open. Test-file sweep → Task 8, with the real grep-discovered file list, not a placeholder instruction.
+**Spec coverage:** Decision 1 (Ringkasan cut) → Task 5 Step 7. Decision 2/7/9 (booking DISCOVERY merge, including the now-4-way merge of Lokasi+TPU/TPS+Jenis Layanan+Pilih Layanan) → Tasks 1, 3, 4, 6. Decision 3/4 (renewal merges) → Tasks 2, 7. Decision 5 (stepper tracks screens) → Tasks 1, 2, 6 — corrected from the spec's inaccurate "already screen-based" framing per this plan's Global Constraints. Decision 6 (in-flight draft unresumable) → Task 9, corrected to booking-only per the renewal persistence finding. Decision 8 (customer+deceased merge, accepted trade-off) → Tasks 1, 3, 5. `AGENTS.md`/`design-system.md`/`booking-wizard-fields.md`/`.kiro` amendments → Task 10, with the `.kiro` convention question resolved via the real `~~strikethrough~~ Superseded DATE` / `## Superseded (DATE)` precedent (confirmed by direct read of `platform-identity-and-access/requirements.md`, not assumed) rather than left open. Test-file sweep → Task 8, with the real grep-discovered file list including `BookingWizardStepsFourAndFiveTest.php` (found in this correction pass). The progressive-reveal redesign inside DISCOVERY (a real gap the spec never named at all) → Task 6 Step 4.
 
-**Placeholder scan:** No "TBD"/"handle appropriately"/unshown code steps found on review — every code step above has real PHP, every test has real assertions against named fixtures (with explicit instructions to confirm exact fixture helper names against each file's current content, since this plan was written from partial-but-substantial reads, not the full 1500+/400+/360+-line files verbatim).
+**Placeholder scan:** No "TBD"/"handle appropriately"/unshown code steps found on review — every code step has real PHP, every test has real assertions against named fixtures verified against the actual current files (not guessed helper names or invented constant values — see the post-audit correction notes throughout Tasks 3, 4, 6, 7, 9, 10 for the specific fabrications this pass replaced with verified real ones).
 
-**Type consistency:** `saveStep1`'s new 5-arg signature is consistent between Task 4 (definition) and Task 6 (Blade call site update). `currentScreen(): int` return type consistent across Task 5 (definition) and Task 6 (consumption, unchanged signature). `BookingWizardScreen::labels()`/`RenewalWizardScreen::labels()` both return `array<int, string>`, consistent between Tasks 1/2 (definition) and Tasks 6/7 (consumption).
+**Type consistency:** `saveStep1`'s new 5-arg signature is consistent between Task 4 (definition) and Task 6 (Blade call site update). `currentScreen(): int` return type consistent across Task 5 (definition) and Task 6 (consumption, unchanged signature). `BookingWizardScreen::labels()`/`RenewalWizardScreen::labels()` both return `array<int, string>`, consistent between Tasks 1/2 (definition) and Tasks 6/7 (consumption). `RenewalWizardScreen`'s step-2 label is now consistently `'Biaya & Bayar'` everywhere in this document (matching the REAL, already-shipped screen title in `RenewalPayment.php`'s own doc block — `'Biaya & Pembayaran'` was an inconsistent leftover from an earlier draft, now corrected in every occurrence, including inside `RenewalJourneyStep::LABELS` itself, not just the screen-vocabulary class).
 
-**Two complications found during research that changed this plan's shape from the spec's own framing, flagged for the coordinator's attention before dispatching Task 4 specifically:**
-1. The plot-hold timing restructure (Task 4) is more invasive than "merge 4 calls into 1" — it moves WHEN a booking_drafts row gets its cemetery/service data written relative to when a real-world plot inventory hold is taken, and Task 4 Step 5 flags a genuine unresolved question about whether `PlotReservation::activeForDraft()`'s re-fetched model can still answer "did THIS request's hold succeed" the way the original `wasRecentlyCreated` flag could on the same-request object — this needs `HoldPlotForDraft`/`PlotReservation` read in full by Task 4's implementer before finalizing, not assumed from this plan's description alone.
-2. The spec's Decision 5 and Decision 6 both contained real inaccuracies about the current code (stepper already screen-based; renewal has a persisted current_step to worry about) that this plan's research corrected. The spec document itself was NOT re-edited to fix these — this plan's Global Constraints section documents the corrections so the discrepancy is visible to anyone comparing spec against plan, rather than silently diverging.
+**This is a post-audit correction pass** (three independent adversarial reviews of the original draft, one per task cluster) — every finding from all three reviews was re-verified independently against the real code/docs before being applied, not copy-pasted from the review reports. Two prior "unresolved, needs the implementer to investigate" items are now RESOLVED, not left open:
+
+1. **The plot-hold `wasRecentlyCreated` question is resolved, not open.** Confirmed by direct read of `HoldPlotForDraft.php` and `PlotReservation::activeForDraft()`: the flag is always `false` on a re-fetched model, so release-on-failure logic built on it would silently never fire. Resolution (Task 4 Step 5): drop release-on-failure entirely — an unrelated field's typo must not cost a customer their already-held plot — and rely on the confirmed-real, confirmed-scheduled `plot-reservation:expire-stale-draft-holds` command (`routes/console.php`: `->everyMinute()->withoutOverlapping()`) as the safety net for a genuinely abandoned attempt.
+2. **A second, deeper gap found during this correction pass (not in any of the three audit reports): `holdPlotForStep2()` REQUIRES a draft to already exist** (`if ($this->draftId === null) { ...error...; return; }`), which held under the old flow only because Step 1 always ran first. Under the DISCOVERY merge nothing creates the draft until the final combined save — strictly AFTER the plot pick — so the plot-hold method itself would always hit this guard and fail. Resolved (Task 4 Step 5): `holdPlotForDiscovery()` now lazily creates the draft itself via `currentOrNewDraft()` on first use, without persisting any DISCOVERY field or redirecting yet.
+3. **The progressive-reveal gating inside Screen 1/DISCOVERY was never actually resolved by the original spec or the original draft of this plan** — both hand-waved "the UI keeps its existing interaction, only the save call changes," which doesn't work: the existing `@if ($currentStep === X)` gates reference `BookingWizardStep` constants (`LOCATION`/`CEMETERY`/`SERVICE_TYPE`/`SERVICES`) that Task 1 deletes outright, and even if they compiled, `$currentStep` never advances mid-DISCOVERY under the merge. Resolved (Task 6 Step 4) by mirroring `RenewalStart.php`'s already-proven, already-shipped pattern: local, non-persisting property-driven reveal (`selectCity()`/`selectCemetery()`/`selectServiceType()` setters, `@if ($city !== '')`-style gates) instead of step-driven reveal.
+
+Nothing in this plan is now flagged as "genuinely unresolved, read more code before finalizing" — every real complication found across three independent audits plus this correction pass's own re-verification has a concrete resolution written into the relevant task, not a pointer to investigate further.
