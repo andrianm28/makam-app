@@ -12,8 +12,8 @@ use App\Platform\FinancialLedger\Exceptions\LedgerReadNotAuthorisedException;
 use App\Platform\IdentityAccess\ActorContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
-use Illuminate\Http\Response;
 use Livewire\Component;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * "Laporan Penerimaan" tab of `App\Filament\Admin\Pages\Reports`. Moved
@@ -95,7 +95,7 @@ final class ReceiptsReportPanel extends Component
         $this->totalMinor = $result->totalMinor;
     }
 
-    public function exportCsv(): Response
+    public function exportCsv(): StreamedResponse
     {
         try {
             $scope = app(LedgerReadAuthorizer::class)->authorize(

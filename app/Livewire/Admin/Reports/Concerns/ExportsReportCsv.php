@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Admin\Reports\Concerns;
 
-use Illuminate\Http\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Shared CSV line-building and streaming for the ADM-090 report tabs
@@ -43,8 +43,17 @@ trait ExportsReportCsv
     /**
      * @param  list<string>  $lines  Complete CSV lines, header first — each
      *                               one already built via `csvLine()`.
+     *
+     * Return type is `StreamedResponse`, not `Illuminate\Http\Response`
+     * (2 Sep 2026 UAT fix) — `response()->streamDownload()` returns the
+     * former, a sibling of the latter under `Symfony\Component\
+     * HttpFoundation\Response`, never the latter itself. The old hint made
+     * every CSV export on all five report tabs throw a `TypeError` on
+     * every real attempt (reproduced live via the Orders Report export
+     * button); every `exportCsv()` caller's own return type needed the
+     * same fix.
      */
-    private function streamCsv(array $lines, string $filename): Response
+    private function streamCsv(array $lines, string $filename): StreamedResponse
     {
         $contents = implode("\n", $lines)."\n";
 

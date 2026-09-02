@@ -12,8 +12,8 @@ use App\Platform\IdentityAccess\MasterData\Contracts\MasterDataAdminAuthorizerCo
 use App\Platform\IdentityAccess\MasterData\Exceptions\MasterDataNotAuthorisedException;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
-use Illuminate\Http\Response;
 use Livewire\Component;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * "Laporan Perpanjangan" tab of `App\Filament\Admin\Pages\Reports`. Moved
@@ -88,7 +88,7 @@ final class RenewalPeriodReportPanel extends Component
         $this->total = $result->total;
     }
 
-    public function exportCsv(): Response
+    public function exportCsv(): StreamedResponse
     {
         $lines = [$this->csvLine(['status', 'total'])];
 

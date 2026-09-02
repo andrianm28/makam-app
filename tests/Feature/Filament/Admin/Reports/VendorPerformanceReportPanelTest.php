@@ -18,6 +18,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Tests\Support\GrantsActorRoles;
 use Tests\TestCase;
 
@@ -65,6 +66,26 @@ final class VendorPerformanceReportPanelTest extends TestCase
         $this->assertSame(CarbonImmutable::now()->format('Y-m'), $component->get('period'));
         $component->assertSee('Belum ada pesanan vendor pada periode ini')
             ->assertCount('reportRows', 0);
+    }
+
+    /**
+     * 2 Sep 2026 UAT finding: `exportCsv()` was type-hinted
+     * `Illuminate\Http\Response`, but `response()->streamDownload()`
+     * returns `Symfony\Component\HttpFoundation\StreamedResponse` — a
+     * sibling type, never that one — so every real export attempt threw a
+     * `TypeError`. Reproduced live on the Orders Report tab; this trait is
+     * shared by all five report panels, never covered by a test before.
+     */
+    public function test_exporting_csv_does_not_throw_and_returns_a_csv_download(): void
+    {
+        $user = $this->authorisedUser();
+
+        $component = Livewire::actingAs($user)->test(VendorPerformanceReportPanel::class);
+
+        $response = $component->instance()->exportCsv();
+
+        $this->assertInstanceOf(StreamedResponse::class, $response);
+        $this->assertStringContainsString('text/csv', (string) $response->headers->get('Content-Type'));
     }
 
     public function test_vendor_orders_are_aggregated_into_a_completion_rate(): void
