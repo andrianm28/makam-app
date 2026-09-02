@@ -94,7 +94,7 @@ final class OrderListTest extends TestCase
         $response->assertSee($order->reference);
     }
 
-    public function test_row_shows_reference_humanized_product_type_and_status_badge_for_masuk(): void
+    public function test_row_shows_reference_localized_product_type_and_status_badge_for_masuk(): void
     {
         $user = User::factory()->create();
 
@@ -105,7 +105,7 @@ final class OrderListTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('MK-2026-MASUKONE');
-        $response->assertSee('At Need Service Order');
+        $response->assertSee('Pesanan Layanan At-Need');
         $response->assertSee('Masuk');
         // MASUK resolves to StatusIntent::INTENT_NEUTRAL — assert the actual
         // rendered badge CSS fragment badge.blade.php emits for that intent
