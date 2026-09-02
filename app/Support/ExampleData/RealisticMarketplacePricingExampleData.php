@@ -22,6 +22,24 @@ use Illuminate\Support\Str;
  * plausible pricing.
  *
  * ---------------------------------------------------------------------------
+ * Unit bug found in UAT (2 Sep 2026) — corrected in this revision
+ * ---------------------------------------------------------------------------
+ * `listings()`/`serviceAreas()` return plain rupiah figures (`price_idr`/
+ * `delivery_fee_idr` — see their own doc blocks), matching the researched
+ * amounts below verbatim. `seed()` is meant to be the ONE place that
+ * converts to `vendor_listings.price_minor`/`service_areas.delivery_fee_
+ * minor` (minor units, rupiah x 100 — `App\Platform\FinancialLedger\Money`,
+ * `config('money.minor_units') === 2`), but originally inserted the raw
+ * rupiah figures directly, unconverted. This made every price on beta 100x
+ * too low (e.g. "Karangan Bunga Papan" showed Rp 6.500 instead of the
+ * intended Rp 650.000) and every delivery fee 100x too low. Found live
+ * during UAT; the already-seeded beta/dev rows this bug produced are
+ * corrected by `database/migrations/2026_09_02_150000_fix_realistic_
+ * marketplace_pricing_unit_conversion.php`, not by this file — this file
+ * only fixes the bug for any environment that seeds fresh from here after
+ * this revision.
+ *
+ * ---------------------------------------------------------------------------
  * Fictional vendors, researched prices — the two are independent
  * ---------------------------------------------------------------------------
  * The vendor names are fictional, following this repository's established
@@ -96,12 +114,15 @@ final class RealisticMarketplacePricingExampleData
     }
 
     /**
-     * Shape: [product_code, vendor_name, price_minor, availability_mode,
+     * Shape: [product_code, vendor_name, price_idr, availability_mode,
      *         production_lead_time_days, cancellation_policy, evidence_requirement]
      * — one row per product, priced per the research recorded in the class
-     * doc block. No `stock_quantity`: nothing here is an off-the-shelf
-     * stocked item (flowers are arranged to order, monuments are carved to
-     * order, grave care is a scheduled recurring service), so every row is
+     * doc block. `price_idr` is a plain rupiah amount (matching how it is
+     * documented above and researched) — `seed()` is the one place that
+     * converts it to `vendor_listings.price_minor` (rupiah x 100). No
+     * `stock_quantity`: nothing here is an off-the-shelf stocked item
+     * (flowers are arranged to order, monuments are carved to order, grave
+     * care is a scheduled recurring service), so every row is
      * `MADE_TO_ORDER` or `SCHEDULED` and `stock_quantity` stays null,
      * satisfying `vendor_listings_stock_only_when_stocked` the same way
      * `VendorListingExampleData` does.
@@ -141,7 +162,10 @@ final class RealisticMarketplacePricingExampleData
      * the mason and care vendor's fee is nominal since their "delivery" is
      * really a site visit already priced into the listing).
      *
-     * Shape: [vendor_name, area_code, area_label, delivery_fee_minor].
+     * Shape: [vendor_name, area_code, area_label, delivery_fee_idr].
+     * `delivery_fee_idr` is a plain rupiah amount — `seed()` converts it to
+     * `service_areas.delivery_fee_minor` (rupiah x 100), same convention as
+     * `listings()`'s `price_idr`.
      *
      * @return list<array{0: string, 1: string, 2: string, 3: int}>
      */
@@ -200,7 +224,7 @@ final class RealisticMarketplacePricingExampleData
             ->whereIn('code', array_values(ProductCode::KNOWN_CODES))
             ->pluck('id', 'code');
 
-        foreach (self::listings() as [$code, $vendorName, $priceMinor, $mode, $leadTime, $policy, $evidence]) {
+        foreach (self::listings() as [$code, $vendorName, $priceIdr, $mode, $leadTime, $policy, $evidence]) {
             $productId = $productIds[$code] ?? null;
 
             // Same fail-open-on-missing-code guard `VendorListingExampleData`
@@ -213,7 +237,11 @@ final class RealisticMarketplacePricingExampleData
             DB::table('vendor_listings')->insert([
                 'vendor_id' => $vendorIds[$vendorName],
                 'product_id' => $productId,
-                'price_minor' => $priceMinor,
+                // vendor_listings.price_minor is minor units (rupiah x 100,
+                // App\Platform\FinancialLedger\Money / config('money.minor_
+                // units') === 2) — listings() documents price_idr as a plain
+                // rupiah amount, so it is converted here, not stored as-is.
+                'price_minor' => $priceIdr * 100,
                 'price_version' => 1,
                 'availability_mode' => $mode,
                 'stock_quantity' => null,
@@ -226,7 +254,7 @@ final class RealisticMarketplacePricingExampleData
             ]);
         }
 
-        foreach (self::serviceAreas() as [$vendorName, $areaCode, $areaLabel, $deliveryFeeMinor]) {
+        foreach (self::serviceAreas() as [$vendorName, $areaCode, $areaLabel, $deliveryFeeIdr]) {
             $vendorId = $vendorIds[$vendorName] ?? null;
 
             if ($vendorId === null) {
@@ -237,7 +265,8 @@ final class RealisticMarketplacePricingExampleData
                 'vendor_id' => $vendorId,
                 'area_code' => $areaCode,
                 'area_label' => $areaLabel,
-                'delivery_fee_minor' => $deliveryFeeMinor,
+                // Same rupiah -> minor-unit conversion as price_minor above.
+                'delivery_fee_minor' => $deliveryFeeIdr * 100,
                 'is_active' => true,
                 'created_at' => $now,
                 'updated_at' => $now,
