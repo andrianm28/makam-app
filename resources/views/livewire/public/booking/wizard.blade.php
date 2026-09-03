@@ -18,8 +18,19 @@
     `border-neutral-450` — NOT `neutral-300`, which measures 1.71:1 and fails
     WCAG 1.4.11 for a control boundary (design-system.md §7.1 finding #2).
     They live in one block instead of being retyped per field so the whole
-    step 6-8 form cannot drift field by field; they are still literal strings
-    in this file, which is what Tailwind's scanner needs.
+    screen 2-3 form cannot drift field by field; they are still literal
+    strings in this file, which is what Tailwind's scanner needs.
+
+    --- Never use the inline `@php(...)` shorthand in this file ---
+    Same trap `resources/views/livewire/public/renewal/start.blade.php`'s own
+    header documents, and it bit this file for real during the step
+    reduction: `BladeCompiler::storePhpBlocks()` extracts `@php` blocks with
+    `/(?<!@)@php(.*?)@endphp/s`, so an inline `@php($x = ...)` — which has no
+    `@endphp` of its own — pairs with the NEAREST `@endphp` anywhere later in
+    the file (here, the `$packages`/`$capabilities` block inside the TPU/TPS
+    loop) and swallows everything in between as literal PHP, failing with an
+    opaque "unexpected token" parse error. Use the block form with an
+    immediately-adjacent `@endphp`.
 --}}
 @php
     use App\Livewire\Public\Directory\Support\CemeteryAvailabilityIntent;
@@ -65,11 +76,22 @@
 
     <div class="mx-auto max-w-content px-4">
 
-        {{-- NO `:labels` — see stepper.blade.php's own file header: passing
-             `labels` from a booking screen is forbidden by AGENTS.md and
-             design-system.md §9.2 MUST-NOT 9. The primitive's default IS the
-             nine canonical booking labels. --}}
-        <x-mk.stepper :step="$currentStep" class="mb-8" />
+        {{-- `:labels` IS passed here, and that is not the re-labelling
+             stepper.blade.php's file header and design-system.md §9.2
+             MUST-NOT 9 forbid. Those forbid a booking screen rewording,
+             reordering or hiding a booking STEP; what is passed here is the
+             new canonical booking step vocabulary itself
+             (`BookingWizardScreen::labels()`), which replaced the nine-step
+             one wholesale — a deliberate, project-owner-authorized change
+             recorded in `docs/superpowers/specs/2026-09-02-wizard-step-
+             reduction-design.md`. The primitive's own nine-label default is
+             now the stale one, so omitting the prop is what would render a
+             journey this wizard no longer has. --}}
+        <x-mk.stepper
+            :step="$currentStep"
+            :labels="\App\Domain\Booking\BookingWizardScreen::labels()"
+            class="mb-8"
+        />
 
         {{-- Autosave indicator — design-system.md §3.9 ("a quiet inline
              indicator NEAR THE STEPPER, not a toast") and §7.4 ("Autosave:
@@ -111,18 +133,47 @@
         </div>
 
         @if ($this->currentScreen() === 1)
-        @if ($currentStep === \App\Domain\Booking\BookingWizardStep::LOCATION || in_array(\App\Domain\Booking\BookingWizardStep::LOCATION, $completedSteps, true))
             <section aria-labelledby="booking-step-1-heading">
                 <h2 id="booking-step-1-heading" class="mb-3 text-lg font-semibold text-neutral-900">
-                    Langkah 1 &mdash; Pilih Lokasi
+                    Langkah 1 &mdash; Cari &amp; Pilih
                 </h2>
+
+                {{-- ---------------------------------------------------------
+                     Progressive reveal inside DISCOVERY is driven by this
+                     component's own LOCAL selection properties, never by
+                     `$currentStep`/`$completedSteps`.
+
+                     Lokasi, TPU/TPS, Jenis Layanan and Pilih Layanan used to
+                     be four saved steps, and each section revealed because
+                     the previous one's save advanced `$currentStep`. Under
+                     the merge there is exactly ONE save for all four
+                     (`continueFromDiscovery()` -> `saveStep1()`, at the
+                     bottom of this screen), so a step-driven gate would
+                     freeze after the first sub-choice even if the deleted
+                     LOCATION/CEMETERY/SERVICE_TYPE/SERVICES constants still
+                     existed to reference.
+
+                     Same shape `RenewalStart` already uses for its own merged
+                     search screen: `selectCity()`/`selectCemetery()`/
+                     `selectServiceType()` set component state and nothing
+                     else, and each section gates on the property the section
+                     before it sets. Every one of those choices is
+                     re-validated server-side by `SaveBookingDraftStep` when
+                     the single DISCOVERY save finally runs — the gates below
+                     are reveal logic, never authorization.
+                     --------------------------------------------------------- --}}
+
+                <section aria-labelledby="discovery-city-heading" class="mb-10">
+                    <h3 id="discovery-city-heading" class="mb-3 text-base font-semibold text-neutral-900">
+                        Pilih Lokasi
+                    </h3>
 
                 @if ($cities === [])
                     <div class="flex flex-col items-center gap-3 py-12 text-center">
                         <x-dynamic-component component="icon.inbox" class="size-12 text-neutral-400" aria-hidden="true" />
-                        <h3 class="text-lg font-semibold text-neutral-800">
+                        <h4 class="text-lg font-semibold text-neutral-800">
                             Belum ada kota yang tersedia.
-                        </h3>
+                        </h4>
                         <p class="max-w-prose text-base text-neutral-600">
                             Saat ini belum ada kota yang melayani pemesanan. Silakan hubungi
                             <a href="/bantuan" class="underline">Bantuan</a> untuk informasi lebih lanjut.
@@ -131,12 +182,14 @@
                 @else
                     <ul class="flex flex-wrap gap-3" aria-label="Kota peluncuran">
                         @foreach ($cities as $cityOption)
+                            @php $isSelectedCity = $city === $cityOption['code']; @endphp
                             <li>
                                 <x-mk.button
-                                    variant="secondary"
-                                    wire:click="saveStep1('{{ $cityOption['code'] }}')"
+                                    :variant="$isSelectedCity ? 'primary' : 'secondary'"
+                                    wire:click="selectCity('{{ $cityOption['code'] }}')"
                                     wire:loading.attr="disabled"
-                                    wire:target="saveStep1"
+                                    wire:target="selectCity"
+                                    :aria-current="$isSelectedCity ? 'step' : null"
                                 >
                                     {{ $cityOption['label'] }}
                                 </x-mk.button>
@@ -148,13 +201,13 @@
                 @error('city_code')
                     <p class="mt-3 text-sm text-danger-700" role="alert">{{ $message }}</p>
                 @enderror
-            </section>
-        @endif
-        @if ($currentStep === \App\Domain\Booking\BookingWizardStep::CEMETERY || in_array(\App\Domain\Booking\BookingWizardStep::CEMETERY, $completedSteps, true))
-            <section aria-labelledby="booking-step-2-heading">
-                <h2 id="booking-step-2-heading" class="mb-3 text-lg font-semibold text-neutral-900">
-                    Langkah 2 &mdash; Pilih TPU/TPS
-                </h2>
+                </section>
+
+        @if ($city !== '')
+                <section aria-labelledby="discovery-cemetery-heading" class="mb-10">
+                    <h3 id="discovery-cemetery-heading" class="mb-3 text-base font-semibold text-neutral-900">
+                        Pilih TPU/TPS
+                    </h3>
 
                 @if ($cemeteryListUnavailable)
                     <x-mk.alert intent="pending" title="Daftar TPU/TPS sedang tidak dapat dimuat" live="polite">
@@ -166,9 +219,9 @@
                 @elseif ($cemeteries->isEmpty())
                     <div class="flex flex-col items-center gap-3 py-12 text-center">
                         <x-dynamic-component component="icon.inbox" class="size-12 text-neutral-400" aria-hidden="true" />
-                        <h3 class="text-lg font-semibold text-neutral-800">
+                        <h4 class="text-lg font-semibold text-neutral-800">
                             Belum ada TPU/TPS terdaftar di kota ini.
-                        </h3>
+                        </h4>
                         <p class="max-w-prose text-base text-neutral-600">
                             Data TPU/TPS untuk kota ini belum lengkap di sistem kami. Silakan pilih kota lain, atau
                             hubungi Bantuan agar petugas kami membantu pencarian Anda.
@@ -237,7 +290,7 @@
                                             </x-mk.badge>
                                         </div>
 
-                                        <h3 class="text-lg font-semibold text-neutral-900">{{ $cemetery->name }}</h3>
+                                        <h4 class="text-lg font-semibold text-neutral-900">{{ $cemetery->name }}</h4>
 
                                         <p class="text-base text-neutral-600">{{ $cemetery->address }}</p>
 
@@ -278,14 +331,16 @@
                                                 Pilih {{ $cemetery->name }} &mdash; Lihat Peta Plot
                                             </x-mk.button>
                                         @else
+                                            @php $isSelectedCemetery = $cemeteryId === $cemetery->id; @endphp
                                             <x-mk.button
                                                 variant="primary"
                                                 full
-                                                wire:click="saveStep2('{{ $cemetery->id }}')"
+                                                wire:click="selectCemetery('{{ $cemetery->id }}')"
                                                 wire:loading.attr="disabled"
-                                                wire:target="saveStep2"
+                                                wire:target="selectCemetery"
+                                                :aria-current="$isSelectedCemetery ? 'step' : null"
                                             >
-                                                Pilih {{ $cemetery->name }}
+                                                {{ $isSelectedCemetery ? 'Terpilih' : 'Pilih' }} {{ $cemetery->name }}
                                             </x-mk.button>
                                         @endif
                                     @else
@@ -308,11 +363,13 @@
                                                                 &mdash; Lihat Peta Plot
                                                             </x-mk.button>
                                                         @else
+                                                            @php $isSelectedPackage = $cemeteryId === $cemetery->id && $cemeteryPackageId === $package->id; @endphp
                                                             <x-mk.button
-                                                                variant="secondary"
-                                                                wire:click="saveStep2('{{ $cemetery->id }}', {{ $package->id }})"
+                                                                :variant="$isSelectedPackage ? 'primary' : 'secondary'"
+                                                                wire:click="selectCemetery('{{ $cemetery->id }}', {{ $package->id }})"
                                                                 wire:loading.attr="disabled"
-                                                                wire:target="saveStep2"
+                                                                wire:target="selectCemetery"
+                                                                :aria-current="$isSelectedPackage ? 'step' : null"
                                                             >
                                                                 {{ $package->name }}@if ($package->class_label) &mdash; {{ $package->class_label }}@endif
                                                             </x-mk.button>
@@ -328,80 +385,6 @@
                     </ul>
                 @endif
 
-                @if ($this->pickerCemeteryId !== null)
-                    <section aria-labelledby="plot-picker-heading" class="mt-6 border-t border-neutral-200 pt-6">
-                        <h3 id="plot-picker-heading" class="mb-3 text-lg font-semibold text-neutral-900">
-                            Pilih plot
-                        </h3>
-
-                        @php $hold = $this->activeDraftPlotHold(); @endphp
-
-                        @if ($hold !== null)
-                            <x-mk.alert intent="pending" title="Plot ditahan sementara" live="polite" wire:poll.5s>
-                                Plot Anda ditahan agar tidak diambil pengunjung lain
-                                @if ($hold->expires_at !== null)
-                                    hingga pukul {{ $hold->expires_at->format('H:i') }}.
-                                @else
-                                    untuk sementara waktu.
-                                @endif
-                                Selesaikan langkah berikutnya sebelum waktu habis.
-                                <x-mk.badge intent="{{ \App\Support\Design\StatusIntent::intent($hold->state, \App\Support\Design\StatusIntent::FAMILY_PLOT_RESERVATION) }}"
-                                            :icon="\App\Support\Design\StatusIntent::icon($hold->state, \App\Support\Design\StatusIntent::FAMILY_PLOT_RESERVATION)">
-                                    {{ \App\Support\Design\StatusIntent::label($hold->state, \App\Support\Design\StatusIntent::FAMILY_PLOT_RESERVATION) }}
-                                </x-mk.badge>
-                            </x-mk.alert>
-                        @endif
-
-                        @error('plot')
-                            <p class="mb-3 text-sm text-danger-700" role="alert">{{ $message }}</p>
-                        @enderror
-
-                        <div class="grid gap-y-6">
-                            @forelse ($this->pickerBlocks() as $block)
-                                <div>
-                                    <p class="mb-2 text-sm font-medium text-neutral-900">{{ $block->code }} &mdash; {{ $block->name }}</p>
-                                    <ul class="flex flex-wrap gap-2" aria-label="Plot di {{ $block->code }}">
-                                        @foreach ($block->plots as $plot)
-                                            <li wire:key="plot-{{ $plot->id }}">
-                                                <x-mk.button
-                                                    variant="secondary"
-                                                    :disabled="$plot->plot_state !== \App\Domain\PlotInventory\PlotState::AVAILABLE"
-                                                    wire:click="holdPlotForStep2('{{ $this->pickerCemeteryId }}', {{ $this->pickerCemeteryPackageId ?? 'null' }}, '{{ $plot->id }}')"
-                                                    wire:loading.attr="disabled"
-                                                    wire:target="holdPlotForStep2"
-                                                >
-                                                    {{ $plot->slot }}
-                                                    <x-mk.badge
-                                                        intent="{{ \App\Support\Design\StatusIntent::intent($plot->plot_state, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE) }}"
-                                                        :icon="\App\Support\Design\StatusIntent::icon($plot->plot_state, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE)"
-                                                        size="sm"
-                                                    >
-                                                        {{ \App\Support\Design\StatusIntent::label($plot->plot_state, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE) }}
-                                                    </x-mk.badge>
-                                                </x-mk.button>
-                                            </li>
-                                        @endforeach
-                                    </ul>
-                                </div>
-                            @empty
-                                <div class="flex flex-col items-center gap-3 py-12 text-center">
-                                    <x-dynamic-component component="icon.inbox" class="size-12 text-neutral-400" aria-hidden="true" />
-                                    <h4 class="text-lg font-semibold text-neutral-800">
-                                        Belum ada plot terdaftar untuk TPU/TPS ini.
-                                    </h4>
-                                    <p class="max-w-prose text-base text-neutral-600">
-                                        Data plot untuk TPU/TPS ini belum disiapkan di sistem kami. Silakan
-                                        hubungi Bantuan agar petugas kami membantu Anda, atau kembali dan pilih
-                                        TPU/TPS lain.
-                                    </p>
-                                    <x-mk.button variant="secondary" href="/bantuan" class="mt-2">
-                                        Hubungi Bantuan
-                                    </x-mk.button>
-                                </div>
-                            @endforelse
-                        </div>
-                    </section>
-                @endif
 
                 @error('cemetery_id')
                     <p class="mt-3 text-sm text-danger-700" role="alert">{{ $message }}</p>
@@ -409,26 +392,114 @@
                 @error('cemetery_package_id')
                     <p class="mt-3 text-sm text-danger-700" role="alert">{{ $message }}</p>
                 @enderror
-
-                <x-mk.button variant="tertiary" wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::LOCATION }})" class="mt-4">
-                    Kembali
-                </x-mk.button>
-            </section>
+                </section>
         @endif
-        @if ($currentStep === \App\Domain\Booking\BookingWizardStep::SERVICE_TYPE || in_array(\App\Domain\Booking\BookingWizardStep::SERVICE_TYPE, $completedSteps, true))
-            <section aria-labelledby="booking-step-3-heading">
-                <h2 id="booking-step-3-heading" class="mb-3 text-lg font-semibold text-neutral-900">
-                    Langkah 3 &mdash; Pilih Jenis Layanan
-                </h2>
+
+        {{-- The plot picker is deliberately NOT nested inside the city-gated
+             TPU/TPS section above. It is reached from that section's cards in
+             the normal flow, but `mount()` also reopens it on a resume with a
+             live plot hold — and a draft mid-DISCOVERY has NO `city_code`
+             written yet (that column is only set by the one save at the
+             bottom of this screen), so a city-gated picker would vanish on
+             exactly the reload the hold-recovery path exists to survive. Its
+             own state is the honest condition. --}}
+            @if ($this->pickerCemeteryId !== null)
+                <section aria-labelledby="plot-picker-heading" class="mt-6 border-t border-neutral-200 pt-6">
+                    <h4 id="plot-picker-heading" class="mb-3 text-lg font-semibold text-neutral-900">
+                        Pilih plot
+                    </h4>
+
+                    @php $hold = $this->activeDraftPlotHold(); @endphp
+
+                    @if ($hold !== null)
+                        <x-mk.alert intent="pending" title="Plot ditahan sementara" live="polite" wire:poll.5s>
+                            Plot Anda ditahan agar tidak diambil pengunjung lain
+                            @if ($hold->expires_at !== null)
+                                hingga pukul {{ $hold->expires_at->format('H:i') }}.
+                            @else
+                                untuk sementara waktu.
+                            @endif
+                            Selesaikan langkah berikutnya sebelum waktu habis.
+                            <x-mk.badge intent="{{ \App\Support\Design\StatusIntent::intent($hold->state, \App\Support\Design\StatusIntent::FAMILY_PLOT_RESERVATION) }}"
+                                        :icon="\App\Support\Design\StatusIntent::icon($hold->state, \App\Support\Design\StatusIntent::FAMILY_PLOT_RESERVATION)">
+                                {{ \App\Support\Design\StatusIntent::label($hold->state, \App\Support\Design\StatusIntent::FAMILY_PLOT_RESERVATION) }}
+                            </x-mk.badge>
+                        </x-mk.alert>
+                    @endif
+
+                    @error('plot')
+                        <p class="mb-3 text-sm text-danger-700" role="alert">{{ $message }}</p>
+                    @enderror
+
+                    <div class="grid gap-y-6">
+                        @forelse ($this->pickerBlocks() as $block)
+                            <div>
+                                <p class="mb-2 text-sm font-medium text-neutral-900">{{ $block->code }} &mdash; {{ $block->name }}</p>
+                                <ul class="flex flex-wrap gap-2" aria-label="Plot di {{ $block->code }}">
+                                    @foreach ($block->plots as $plot)
+                                        <li wire:key="plot-{{ $plot->id }}">
+                                            <x-mk.button
+                                                variant="secondary"
+                                                :disabled="$plot->plot_state !== \App\Domain\PlotInventory\PlotState::AVAILABLE"
+                                                wire:click="holdPlotForDiscovery('{{ $this->pickerCemeteryId }}', {{ $this->pickerCemeteryPackageId ?? 'null' }}, '{{ $plot->id }}')"
+                                                wire:loading.attr="disabled"
+                                                wire:target="holdPlotForDiscovery"
+                                            >
+                                                {{ $plot->slot }}
+                                                <x-mk.badge
+                                                    intent="{{ \App\Support\Design\StatusIntent::intent($plot->plot_state, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE) }}"
+                                                    :icon="\App\Support\Design\StatusIntent::icon($plot->plot_state, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE)"
+                                                    size="sm"
+                                                >
+                                                    {{ \App\Support\Design\StatusIntent::label($plot->plot_state, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE) }}
+                                                </x-mk.badge>
+                                            </x-mk.button>
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @empty
+                            <div class="flex flex-col items-center gap-3 py-12 text-center">
+                                <x-dynamic-component component="icon.inbox" class="size-12 text-neutral-400" aria-hidden="true" />
+                                <h5 class="text-lg font-semibold text-neutral-800">
+                                    Belum ada plot terdaftar untuk TPU/TPS ini.
+                                </h5>
+                                <p class="max-w-prose text-base text-neutral-600">
+                                    Data plot untuk TPU/TPS ini belum disiapkan di sistem kami. Silakan
+                                    hubungi Bantuan agar petugas kami membantu Anda, atau kembali dan pilih
+                                    TPU/TPS lain.
+                                </p>
+                                <x-mk.button variant="secondary" href="/bantuan" class="mt-2">
+                                    Hubungi Bantuan
+                                </x-mk.button>
+                            </div>
+                        @endforelse
+                    </div>
+                </section>
+            @endif
+
+        {{-- No intra-screen "Kembali" controls below any more: every section
+             of this screen stays on the page once revealed, with its own
+             choices still live, so going "back" is simply clicking a
+             different city/TPU-TPS/jenis layanan. A `goToStep()` button here
+             would target the step the customer is already on — a visible
+             control that does nothing. --}}
+        @if ($cemeteryId !== null)
+                <section aria-labelledby="discovery-service-type-heading" class="mb-10">
+                    <h3 id="discovery-service-type-heading" class="mb-3 text-base font-semibold text-neutral-900">
+                        Pilih Jenis Layanan
+                    </h3>
 
                 <ul class="flex flex-wrap gap-3" aria-label="Jenis layanan">
                     @foreach (\App\Domain\Booking\BookingServiceType::KNOWN_CODES as $type)
+                        @php $isSelectedServiceType = $serviceType === $type; @endphp
                         <li>
                             <x-mk.button
-                                variant="secondary"
-                                wire:click="saveStep3('{{ $type }}')"
+                                :variant="$isSelectedServiceType ? 'primary' : 'secondary'"
+                                wire:click="selectServiceType('{{ $type }}')"
                                 wire:loading.attr="disabled"
-                                wire:target="saveStep3"
+                                wire:target="selectServiceType"
+                                :aria-current="$isSelectedServiceType ? 'step' : null"
                             >
                                 {{ \App\Domain\Booking\BookingServiceType::label($type) }}
                             </x-mk.button>
@@ -439,17 +510,13 @@
                 @error('service_type')
                     <p class="mt-3 text-sm text-danger-700" role="alert">{{ $message }}</p>
                 @enderror
-
-                <x-mk.button variant="tertiary" wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::CEMETERY }})" class="mt-4">
-                    Kembali
-                </x-mk.button>
-            </section>
+                </section>
         @endif
-        @if ($currentStep === \App\Domain\Booking\BookingWizardStep::SERVICES || in_array(\App\Domain\Booking\BookingWizardStep::SERVICES, $completedSteps, true))
-            <section aria-labelledby="booking-step-4-heading">
-                <h2 id="booking-step-4-heading" class="mb-3 text-lg font-semibold text-neutral-900">
-                    Langkah 4 &mdash; Pilih Layanan
-                </h2>
+        @if ($serviceType !== null)
+                <section aria-labelledby="discovery-services-heading">
+                    <h3 id="discovery-services-heading" class="mb-3 text-base font-semibold text-neutral-900">
+                        Pilih Layanan
+                    </h3>
 
                 @if ($servicesCatalogUnavailable)
                     <x-mk.alert intent="pending" title="Daftar layanan sedang tidak dapat dimuat" live="polite">
@@ -466,17 +533,17 @@
                      quantity/variant control. Rows used to show only the
                      checkbox and service name, even though the price and
                      fulfillment-owner data was already sitting on the same
-                     `ServiceDefinition` rows Step 5's summary correctly
-                     reads (`ServiceDefinition::currentPriceVersion()` —
-                     see `BookingDraftQuery::summary()`, the exact method
-                     Step 5 calls). This block reuses that same method
+                     `ServiceDefinition` rows the Ringkasan summary
+                     correctly reads (`ServiceDefinition::currentPriceVersion()`
+                     — see `BookingDraftQuery::summary()`, the exact method
+                     Ringkasan calls). This block reuses that same method
                      rather than a new query. Quantity is fixed at 1 for
                      every row — the checkbox IS the quantity/variant
                      control this batch ships; a real quantity/variant
                      picker is out of scope here (see
-                     `BookingWizard::continueFromStep4()`'s own doc block,
-                     which already flags that scope line and predates this
-                     fix). --}}
+                     `BookingWizard::continueFromDiscovery()`'s own doc
+                     block, which already flags that scope line and predates
+                     this fix). --}}
                 <fieldset class="flex flex-col gap-6">
                     <legend class="sr-only">Pilih layanan</legend>
 
@@ -486,7 +553,8 @@
                         </p>
                         {{-- The catalogue's own `name` is the visible label;
                              `code` stays the submitted value, so the payload
-                             shape saveStep4() receives is unchanged. --}}
+                             shape `saveStep1()` receives for
+                             `selected_services` is unchanged. --}}
                         <ul class="flex flex-col gap-2">
                             @foreach ($basicServices as $service)
                                 @php($priceVersion = $service->currentPriceVersion())
@@ -581,50 +649,51 @@
                 @enderror
 
                 {{-- The `plot` error is the expired/lost-hold recovery state
-                     (`BookingWizard::routeBackToPlotPickerAfterExpiredHold()`):
-                     `$currentStep` is sent back to Step 2 so the customer
-                     re-picks a plot. Under this screen's progressive reveal
-                     that does NOT take Step 4 off the page — steps 1-4 are all
-                     Screen 1, and Step 4 is in `$completedSteps` — so its own
-                     forward control would otherwise still be sitting there,
-                     one click from Screen 2, saving step 4's still-valid data
-                     and carrying the customer straight past the re-pick the
-                     error exists to demand. While that error stands, the
-                     sections AFTER the plot picker do not offer a way forward;
-                     "Kembali" and the picker itself stay live, because those
-                     are the way out. --}}
-                <div class="mt-4 flex gap-3">
-                    <x-mk.button variant="tertiary" wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::SERVICE_TYPE }})">
-                        Kembali
-                    </x-mk.button>
-                    @unless ($errors->has('plot'))
+                     (`BookingWizard::routeBackToPlotPickerAfterExpiredHold()`),
+                     which reopens the plot picker higher up this same screen.
+                     The forward control is suppressed while it stands, so the
+                     customer cannot click straight past the re-pick the error
+                     exists to demand; the picker itself stays live, because
+                     that is the way out. --}}
+                @if ($errors->has('plot'))
+                    <p class="mt-4 text-sm text-danger-700" role="alert">
+                        Pilih plot terlebih dahulu pada bagian Pilih TPU/TPS di atas sebelum melanjutkan.
+                    </p>
+                @else
+                    {{-- The ONE control on this whole screen that persists
+                         anything: `continueFromDiscovery()` builds the merged
+                         payload out of the local selections above and makes
+                         the single `saveStep1()` call. --}}
+                    <div class="mt-4 flex gap-3">
                         <x-mk.button
                             variant="primary"
-                            wire:click="continueFromStep4"
+                            wire:click="continueFromDiscovery"
                             wire:loading.attr="disabled"
-                            wire:target="continueFromStep4"
+                            wire:target="continueFromDiscovery"
                         >
                             Lanjutkan
                         </x-mk.button>
-                    @endunless
-                </div>
-
-                @if ($errors->has('plot'))
-                    <p class="mt-3 text-sm text-danger-700" role="alert">
-                        Pilih plot terlebih dahulu pada Langkah 2 di atas sebelum melanjutkan.
-                    </p>
+                        <span wire:loading wire:target="continueFromDiscovery" role="status" class="flex items-center gap-2 text-sm text-neutral-600">
+                            <x-mk.spinner class="size-4" aria-hidden="true" />
+                            Menyimpan pilihan Anda&hellip;
+                        </span>
+                    </div>
                 @endif
+                </section>
+        @endif
             </section>
         @endif
-        @endif
         @if ($this->currentScreen() === 2)
-            {{-- Screen 2 "Detail Pemesanan": Ringkasan renders unconditionally
-                 here — reaching screen 2 at all already means step 4 is done,
-                 which is Ringkasan's only precondition — as a persistent
-                 summary card, not its own page. --}}
-            <section aria-labelledby="booking-step-5-heading">
-                <h2 id="booking-step-5-heading" class="mb-3 text-lg font-semibold text-neutral-900">
-                    Langkah 5 &mdash; Ringkasan Pesanan
+            {{-- Ringkasan is NOT a step any more (it was step 5 of nine; cut,
+                 not merged — see `BookingWizardStep`'s own doc block). It is a
+                 persistent summary card shown for the whole of this screen:
+                 reaching screen 2 at all already means DISCOVERY is saved,
+                 which is its only precondition. It keeps its heading and all
+                 of its content, and loses only the "Langkah 5" framing, since
+                 there is no stepper dot to navigate to it any more. --}}
+            <section aria-labelledby="booking-summary-heading">
+                <h2 id="booking-summary-heading" class="mb-3 text-lg font-semibold text-neutral-900">
+                    Ringkasan Pesanan
                 </h2>
 
                 @if ($summaryUnavailable)
@@ -660,22 +729,13 @@
                     </p>
                 @endif
 
-                <div class="mt-4 flex items-center gap-3">
-                    <x-mk.button variant="tertiary" wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::SERVICES }})">
-                        Kembali
-                    </x-mk.button>
-                    <x-mk.button
-                        variant="primary"
-                        wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::CUSTOMER_DATA }})"
-                    >
-                        Lanjut ke Data Pemesan
-                    </x-mk.button>
-                </div>
+                {{-- No forward control here: Data Pemesan and Data Almarhum
+                     are on this same screen, immediately below. --}}
             </section>
-        @if ($currentStep === \App\Domain\Booking\BookingWizardStep::CUSTOMER_DATA || in_array(\App\Domain\Booking\BookingWizardStep::CUSTOMER_DATA, $completedSteps, true))
-            <section aria-labelledby="booking-step-6-heading">
-                <h2 id="booking-step-6-heading" class="mb-3 text-lg font-semibold text-neutral-900">
-                    Langkah 6 &mdash; Data Pemesan
+
+            <section aria-labelledby="booking-step-2-heading" class="mt-10">
+                <h2 id="booking-step-2-heading" class="mb-3 text-lg font-semibold text-neutral-900">
+                    Langkah 2 &mdash; Data Pemesan &amp; Data Almarhum
                 </h2>
 
                 <p class="mb-5 max-w-prose text-base text-neutral-600">
@@ -683,7 +743,15 @@
                     Isian bertanda <span class="text-danger-600" aria-hidden="true">*</span> wajib diisi.
                 </p>
 
-                <form wire:submit="saveStep6" class="flex max-w-form flex-col gap-5">
+                {{-- ONE form for what used to be two steps. `saveStep2()`
+                     validates and persists the customer and deceased payloads
+                     together (`SaveBookingDraftStep`'s merged
+                     `CUSTOMER_AND_DECEASED_DATA` validator), so splitting them
+                     across two forms would mean either half's submit raising
+                     the other half's "wajib diisi" errors. --}}
+                <form wire:submit="saveStep2" class="flex max-w-form flex-col gap-5">
+                    <h3 class="text-base font-semibold text-neutral-900">Data Pemesan</h3>
+
                     <div class="flex flex-col gap-1.5">
                         <label for="customer-full-name" class="text-base font-medium text-neutral-800">
                             Nama Lengkap
@@ -869,50 +937,13 @@
                         @enderror
                     </div>
 
-                    <div class="flex flex-wrap items-center gap-3">
-                        <x-mk.button
-                            variant="tertiary"
-                            type="button"
-                            wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::SUMMARY }})"
-                            wire:loading.attr="disabled"
-                            wire:target="saveStep6"
-                        >
-                            Kembali
-                        </x-mk.button>
-                        {{-- `wire:target` names the method this control really
-                             calls. Without it the disable is either too broad
-                             or, worse, silently never applies — and a live
-                             submit button on a grief-adjacent form is a double
-                             submission waiting to happen. --}}
-                        <x-mk.button
-                            variant="primary"
-                            type="submit"
-                            wire:loading.attr="disabled"
-                            wire:target="saveStep6"
-                        >
-                            Lanjutkan
-                        </x-mk.button>
-                        <span wire:loading wire:target="saveStep6" role="status" class="flex items-center gap-2 text-sm text-neutral-600">
-                            <x-mk.spinner class="size-4" aria-hidden="true" />
-                            Menyimpan data pemesan&hellip;
-                        </span>
-                    </div>
-                </form>
-            </section>
-        @endif
-        @if ($currentStep === \App\Domain\Booking\BookingWizardStep::DECEASED_DATA || in_array(\App\Domain\Booking\BookingWizardStep::DECEASED_DATA, $completedSteps, true))
-            <section aria-labelledby="booking-step-7-heading">
-                <h2 id="booking-step-7-heading" class="mb-3 text-lg font-semibold text-neutral-900">
-                    Langkah 7 &mdash; Data Almarhum
-                </h2>
+                    <h3 class="mt-5 text-base font-semibold text-neutral-900">Data Almarhum</h3>
 
-                <p class="mb-5 max-w-prose text-base text-neutral-600">
-                    Isi sebisa Anda. Jika ada data yang belum Anda ketahui secara pasti, tim kami akan
-                    membantu melengkapinya saat menghubungi Anda.
-                    Isian bertanda <span class="text-danger-600" aria-hidden="true">*</span> wajib diisi.
-                </p>
+                    <p class="max-w-prose text-base text-neutral-600">
+                        Isi sebisa Anda. Jika ada data yang belum Anda ketahui secara pasti, tim kami akan
+                        membantu melengkapinya saat menghubungi Anda.
+                    </p>
 
-                <form wire:submit="saveStep7" class="flex max-w-form flex-col gap-5">
                     <div class="flex flex-col gap-1.5">
                         <label for="deceased-full-name" class="text-base font-medium text-neutral-800">
                             Nama Lengkap Almarhum
@@ -1032,7 +1063,7 @@
                     {{-- This block used to list a death certificate, a KTP and
                          a KK, and to say "Dokumen akan diunggah pada langkah
                          selanjutnya." There is no upload step anywhere in this
-                         wizard, and `saveStep7()` deliberately sends no
+                         wizard, and `saveStep2()` deliberately sends no
                          document keys at all. Telling a bereaved family to go
                          and find paperwork for a screen that does not exist is
                          a real cost paid by someone in the worst week of their
@@ -1048,33 +1079,37 @@
                         <x-mk.button
                             variant="tertiary"
                             type="button"
-                            wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::CUSTOMER_DATA }})"
+                            wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::DISCOVERY }})"
                             wire:loading.attr="disabled"
-                            wire:target="saveStep7"
+                            wire:target="saveStep2"
                         >
                             Kembali
                         </x-mk.button>
+                        {{-- `wire:target` names the method this control really
+                             calls. Without it the disable is either too broad
+                             or, worse, silently never applies — and a live
+                             submit button on a grief-adjacent form is a double
+                             submission waiting to happen. --}}
                         <x-mk.button
                             variant="primary"
                             type="submit"
                             wire:loading.attr="disabled"
-                            wire:target="saveStep7"
+                            wire:target="saveStep2"
                         >
                             Lanjutkan
                         </x-mk.button>
-                        <span wire:loading wire:target="saveStep7" role="status" class="flex items-center gap-2 text-sm text-neutral-600">
+                        <span wire:loading wire:target="saveStep2" role="status" class="flex items-center gap-2 text-sm text-neutral-600">
                             <x-mk.spinner class="size-4" aria-hidden="true" />
-                            Menyimpan data almarhum&hellip;
+                            Menyimpan data pemesan dan data almarhum&hellip;
                         </span>
                     </div>
                 </form>
             </section>
         @endif
-        @endif
         @if ($this->currentScreen() === 3)
-            <section aria-labelledby="booking-step-8-heading">
-                <h2 id="booking-step-8-heading" class="mb-3 text-lg font-semibold text-neutral-900">
-                    Langkah 8 &mdash; Pembayaran
+            <section aria-labelledby="booking-step-3-heading">
+                <h2 id="booking-step-3-heading" class="mb-3 text-lg font-semibold text-neutral-900">
+                    Langkah 3 &mdash; Pembayaran
                 </h2>
 
                 @if ($paymentMode !== \App\Platform\FeatureGate\Modes\PaymentMode::Online)
@@ -1112,7 +1147,7 @@
                                 >
                                     <p class="text-sm">
                                         Konfirmasi resmi dari penyedia pembayaran sudah kami terima.
-                                        Lanjutkan ke Langkah 9 untuk melihat ringkasan pemesanan Anda.
+                                        Lanjutkan ke Langkah 4 untuk melihat ringkasan pemesanan Anda.
                                     </p>
                                 </x-mk.alert>
                             </x-mk.card>
@@ -1321,9 +1356,9 @@
                             <div class="flex flex-wrap items-center gap-3">
                                 <x-mk.button
                                     variant="secondary"
-                                    wire:click="saveStep8('{{ \App\Domain\Booking\BookingPaymentMethod::MANUAL }}')"
+                                    wire:click="saveStep3('{{ \App\Domain\Booking\BookingPaymentMethod::MANUAL }}')"
                                     wire:loading.attr="disabled"
-                                    wire:target="saveStep8"
+                                    wire:target="saveStep3"
                                 >
                                     Saya Akan Bayar Manual
                                 </x-mk.button>
@@ -1331,11 +1366,11 @@
                         </x-mk.card>
 
                         {{-- One indicator for both buttons: they call the same
-                             method, and `wire:target="saveStep8"` is what keeps
+                             method, and `wire:target="saveStep3"` is what keeps
                              the disable attached to the request actually in
                              flight — the double-submission guard that matters
                              most on the payment step. --}}
-                        <span wire:loading wire:target="saveStep8" role="status" class="flex items-center gap-2 text-sm text-neutral-600">
+                        <span wire:loading wire:target="saveStep3" role="status" class="flex items-center gap-2 text-sm text-neutral-600">
                             <x-mk.spinner class="size-4" aria-hidden="true" />
                             Menyimpan pilihan pembayaran&hellip;
                         </span>
@@ -1351,9 +1386,9 @@
 
                 <x-mk.button
                     variant="tertiary"
-                    wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::DECEASED_DATA }})"
+                    wire:click="goToStep({{ \App\Domain\Booking\BookingWizardStep::CUSTOMER_AND_DECEASED_DATA }})"
                     wire:loading.attr="disabled"
-                    wire:target="saveStep8"
+                    wire:target="saveStep3"
                     class="mt-4"
                 >
                     Kembali
@@ -1361,9 +1396,9 @@
             </section>
         @endif
         @if ($this->currentScreen() === 4)
-            <section aria-labelledby="booking-step-9-heading">
-                <h2 id="booking-step-9-heading" class="mb-3 text-lg font-semibold text-neutral-900">
-                    Langkah 9 &mdash; Konfirmasi
+            <section aria-labelledby="booking-step-4-heading">
+                <h2 id="booking-step-4-heading" class="mb-3 text-lg font-semibold text-neutral-900">
+                    Langkah 4 &mdash; Konfirmasi
                 </h2>
 
                 {{-- The "Draft tersimpan" alert that used to sit here is gone,
@@ -1403,7 +1438,7 @@
                         >
                             <p class="text-base">
                                 Tidak ada pembayaran yang kami catat untuk transaksi ini. Anda dapat
-                                mencoba pembayaran online lagi dari Langkah 8, atau gunakan pembayaran
+                                mencoba pembayaran online lagi dari Langkah 3, atau gunakan pembayaran
                                 manual.
                             </p>
                         </x-mk.alert>
@@ -1417,7 +1452,7 @@
                         >
                             <p class="text-base">
                                 Sesi pembayaran Anda telah kedaluwarsa tanpa pembayaran yang kami
-                                terima. Gunakan pembayaran manual di Langkah 8, atau hubungi tim kami.
+                                terima. Gunakan pembayaran manual di Langkah 3, atau hubungi tim kami.
                             </p>
                         </x-mk.alert>
                     @elseif ($onlineSessionState !== null)
@@ -1439,7 +1474,7 @@
                     {{-- §6.7: "Pending is the most common state in this product
                          and the easiest to get wrong… Never style a pending
                          state as success." The order itself now exists as soon
-                         as a manual submission is saved (`saveStep8()`), but
+                         as a manual submission is saved (`saveStep3()`), but
                          payment has not been verified — that stays a separate,
                          later, staff-driven step — so this card keeps `pending`
                          intent and a clock icon either way. Only the COPY

@@ -311,6 +311,19 @@ final class BookingWizard extends Component
                 // the customer to re-pick one. That is an inline field error
                 // on a visible control, not a dead end.
                 $this->cemeteryId ??= $cemeteryId;
+
+                // ...and the CITY for the same reason, from the same
+                // evidence. `city_code` is unwritten mid-DISCOVERY exactly as
+                // `cemetery_id` is, and the view's TPU/TPS section reveals on
+                // `$city !== ''` — so without this a reload left the customer
+                // holding a plot in a cemetery they could no longer see, and
+                // re-picking their city would have cleared the restored
+                // cemetery (`selectCity()` drops a cross-city selection).
+                // Read through the same published-only seam
+                // `pickerAppliesTo()` above just used.
+                if ($this->city === '') {
+                    $this->city = CemeteryPublicQuery::findPublishedById($cemeteryId)?->city ?? '';
+                }
             }
         }
     }
@@ -560,6 +573,58 @@ final class BookingWizard extends Component
         $draft = BookingDraftQuery::findBound($this->draftId);
 
         return $draft === null ? null : PlotReservation::activeForDraft($draft);
+    }
+
+    /**
+     * DISCOVERY's city choice. Local, non-persisting UI state — the same
+     * shape `RenewalStart::selectCity()` established for its own merged
+     * screen, and the reason this screen's sections can reveal at all: the
+     * merged DISCOVERY step advances `$currentStep` exactly once, when
+     * `continueFromDiscovery()` succeeds, so a step-driven reveal would
+     * freeze after the first sub-choice.
+     *
+     * Changing the city drops the cemetery chosen under the previous one:
+     * `SaveBookingDraftStep::validateCemeteryAgainstPayloadCity()` rejects a
+     * cemetery outside the payload's city, so keeping it would reveal the
+     * rest of the screen against a pair that can only fail at "Lanjutkan".
+     * A plot already held for the dropped cemetery is left to the hold's own
+     * TTL, exactly as `holdPlotForDiscovery()`'s doc block describes for
+     * every other abandoned selection.
+     */
+    public function selectCity(string $cityCode): void
+    {
+        if ($cityCode === $this->city) {
+            return;
+        }
+
+        $this->city = $cityCode;
+        $this->cemeteryId = null;
+        $this->cemeteryPackageId = null;
+        $this->pickerCemeteryId = null;
+        $this->pickerCemeteryPackageId = null;
+    }
+
+    /**
+     * The non-picker cemetery selection — a cemetery with no active
+     * packages, or a package chosen directly on a cemetery that does not use
+     * the plot picker. `holdPlotForDiscovery()` sets these same two
+     * properties for the picker path, so both paths converge on the one
+     * reveal gate (`@if ($cemeteryId !== null)`) the view uses.
+     *
+     * Nothing is validated here and nothing is persisted: published status,
+     * city membership and package applicability are all re-checked
+     * server-side by `SaveBookingDraftStep` when the single DISCOVERY save
+     * runs.
+     */
+    public function selectCemetery(string $cemeteryId, ?int $cemeteryPackageId = null): void
+    {
+        $this->cemeteryId = $cemeteryId;
+        $this->cemeteryPackageId = $cemeteryPackageId;
+    }
+
+    public function selectServiceType(string $serviceType): void
+    {
+        $this->serviceType = $serviceType;
     }
 
     /**
