@@ -1434,7 +1434,7 @@ declare(strict_types=1);
 
 namespace App\Support\ExampleData;
 
-use App\Domain\CemeteryDirectory\Models\GraveRecord;
+use App\Domain\GraveRegistry\Models\GraveRecord;
 use App\Domain\Renewal\Actions\ExpireRenewal;
 use App\Domain\Renewal\Actions\MarkRenewalPaidExternally;
 use App\Domain\Renewal\Actions\OpenRenewal;
@@ -1672,7 +1672,7 @@ final class CareSubscriptionExampleDataTest extends TestCase
             'email' => 'demo.customer.care@example.com',
             'password' => \Illuminate\Support\Facades\Hash::make('DemoContoh2026!'),
         ]);
-        $grave = \App\Domain\CemeteryDirectory\Models\GraveRecord::query()->firstOrFail();
+        $grave = \App\Domain\GraveRegistry\Models\GraveRecord::query()->firstOrFail();
 
         $subscriptions = CareSubscriptionExampleData::seed($batchId, $customer->id, $grave->id);
 
@@ -2090,7 +2090,7 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Domain\CemeteryDirectory\Models\Cemetery;
-use App\Domain\CemeteryDirectory\Models\GraveRecord;
+use App\Domain\GraveRegistry\Models\GraveRecord;
 use App\Models\DemoDataBatch;
 use App\Models\User;
 use App\Platform\Notification\DemoDataSuppression;
