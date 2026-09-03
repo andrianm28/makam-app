@@ -96,15 +96,16 @@ final class BookingWizardOnlinePaymentTest extends TestCase
     }
 
     /**
-     * Drive the component's own save methods through Steps 1-7 so the draft
-     * is bound to this test session exactly as a real journey's is, ending on
-     * Step 8 (PAYMENT). `$services` selects Step 4's services — the two
-     * seeded BASIC services by default, plus any additional ones a test
-     * needs (Step 4 validation always requires the basics).
+     * Drive the component's own save methods through DISCOVERY and
+     * CUSTOMER_AND_DECEASED_DATA so the draft is bound to this test session
+     * exactly as a real journey's is, ending on PAYMENT. `$services` selects
+     * DISCOVERY's services — the two seeded BASIC services by default, plus
+     * any additional ones a test needs (DISCOVERY validation always requires
+     * the basics).
      *
      * @param  list<array{code: string, quantity: int}>  $services
      */
-    private function journeyToStepEight(array $services = [
+    private function journeyToPayment(array $services = [
         ['code' => 'DOCUMENT_PROCESSING', 'quantity' => 1],
         ['code' => 'GRAVE_DIGGING', 'quantity' => 1],
     ]): Testable
@@ -115,12 +116,14 @@ final class BookingWizardOnlinePaymentTest extends TestCase
             ->whereDoesntHave('packages')
             ->firstOrFail();
 
-        return Livewire::test(BookingWizard::class)
-            ->call('saveStep1', LaunchCityCode::JAKARTA)
-            ->call('saveStep2', $cemetery->id)
-            ->call('saveStep3', 'NEW_GRAVE')
-            ->call('saveStep4', $services)
-            ->call('goToStep', BookingWizardStep::CUSTOMER_DATA)
+        $draftId = Livewire::test(BookingWizard::class)
+            ->call('saveStep1', LaunchCityCode::JAKARTA, $cemetery->id, null, 'NEW_GRAVE', $services)
+            ->assertHasNoErrors()
+            ->get('draftId');
+
+        $this->assertIsString($draftId);
+
+        return Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->set('customerFullName', 'Test User')
             ->set('customerMobile', '081234567890')
             ->set('customerEmail', 'test@example.com')
@@ -128,13 +131,12 @@ final class BookingWizardOnlinePaymentTest extends TestCase
             ->set('customerRelationship', 'PASANGAN')
             ->set('customerContactChannel', 'WHATSAPP')
             ->set('privacyNoticeAccepted', true)
-            ->call('saveStep6')
             ->set('deceasedFullName', 'Almarhum Test')
             ->set('deceasedDateOfBirth', '1980-05-10')
             ->set('deceasedDateOfDeath', '2026-08-01')
             ->set('deceasedRelationship', 'PASANGAN')
             ->set('deceasedGender', 'LAKI_LAKI')
-            ->call('saveStep7')
+            ->call('saveStep2')
             ->assertSet('currentStep', BookingWizardStep::PAYMENT);
     }
 
@@ -359,7 +361,7 @@ final class BookingWizardOnlinePaymentTest extends TestCase
     {
         $this->withPaymentGate(open: true);
 
-        $this->journeyToStepEight()
+        $this->journeyToPayment()
             ->assertSee('Pembayaran Online')
             ->assertSee('Bayar Sekarang');
     }
@@ -379,7 +381,7 @@ final class BookingWizardOnlinePaymentTest extends TestCase
     {
         $this->withPaymentGate(open: true);
 
-        $this->journeyToStepEight()
+        $this->journeyToPayment()
             ->assertSee('Pembayaran Online')
             ->assertDontSee('Pembayaran Manual')
             ->assertDontSee('Saya Akan Bayar Manual');
@@ -396,7 +398,7 @@ final class BookingWizardOnlinePaymentTest extends TestCase
         $this->withPaymentGate(open: true);
         Http::fake();
 
-        $draftId = $this->journeyToStepEight()->get('draftId');
+        $draftId = $this->journeyToPayment()->get('draftId');
 
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->call('openOnlinePayment')
@@ -415,7 +417,7 @@ final class BookingWizardOnlinePaymentTest extends TestCase
     {
         $this->withPaymentGate(open: true);
 
-        $this->journeyToStepEight()
+        $this->journeyToPayment()
             ->assertSeeInOrder([
                 'ANDA TIDAK AKAN MENGIRIM UANG SUNGGUHAN',
                 'Bayar Sekarang',
@@ -430,7 +432,7 @@ final class BookingWizardOnlinePaymentTest extends TestCase
         // placeholder now that one exists.
         config(['payment.default' => PaymentProviders::SUMOPOD_LIVE]);
 
-        $this->journeyToStepEight()
+        $this->journeyToPayment()
             ->assertSee('Bayar Sekarang')
             ->assertDontSee('ANDA TIDAK AKAN MENGIRIM UANG SUNGGUHAN');
     }
@@ -440,7 +442,7 @@ final class BookingWizardOnlinePaymentTest extends TestCase
         $this->withPaymentGate(open: true);
         $this->fakeProviderSuccess();
 
-        $draftId = $this->journeyToStepEight()->get('draftId');
+        $draftId = $this->journeyToPayment()->get('draftId');
 
         // First click: the chain submits the draft and issues its quote.
         // The guard honestly denies a fresh submission (confirmation,
@@ -493,7 +495,7 @@ final class BookingWizardOnlinePaymentTest extends TestCase
         $this->withPaymentGate(open: true);
         Http::fake();
 
-        $draftId = $this->journeyToStepEight()->get('draftId');
+        $draftId = $this->journeyToPayment()->get('draftId');
 
         $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
         $component->call('openOnlinePayment')
@@ -530,7 +532,7 @@ final class BookingWizardOnlinePaymentTest extends TestCase
         $this->withPaymentGate(open: true);
         Http::fake();
 
-        $draftId = $this->journeyToStepEight()->get('draftId');
+        $draftId = $this->journeyToPayment()->get('draftId');
 
         $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
         $component->call('openOnlinePayment');
@@ -561,7 +563,7 @@ final class BookingWizardOnlinePaymentTest extends TestCase
         $this->withPaymentGate(open: true);
         Http::fake();
 
-        $draftId = $this->journeyToStepEight()->get('draftId');
+        $draftId = $this->journeyToPayment()->get('draftId');
 
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->call('openOnlinePayment')
@@ -594,7 +596,7 @@ final class BookingWizardOnlinePaymentTest extends TestCase
         $this->withPaymentGate(open: true);
         $this->fakeProviderSuccess();
 
-        $draftId = $this->journeyToStepEight()->get('draftId');
+        $draftId = $this->journeyToPayment()->get('draftId');
 
         $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
         $component->call('openOnlinePayment');
@@ -622,7 +624,7 @@ final class BookingWizardOnlinePaymentTest extends TestCase
         $this->withPaymentGate(open: true);
         $this->fakeProviderSuccess();
 
-        $draftId = $this->journeyToStepEight()->get('draftId');
+        $draftId = $this->journeyToPayment()->get('draftId');
 
         $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
         $component->call('openOnlinePayment');
@@ -645,11 +647,11 @@ final class BookingWizardOnlinePaymentTest extends TestCase
     {
         $this->withPaymentGate(open: false);
 
-        $this->journeyToStepEight()
+        $this->journeyToPayment()
             ->assertDontSee('Bayar Sekarang')
             ->assertDontSee('Pembayaran Online')
             ->assertSee('Pembayaran Manual')
-            ->call('saveStep8', BookingPaymentMethod::ONLINE)
+            ->call('saveStep3', BookingPaymentMethod::ONLINE)
             ->assertHasErrors(['payment_method']);
     }
 
@@ -674,7 +676,7 @@ final class BookingWizardOnlinePaymentTest extends TestCase
         $this->assertNotNull($flowersPrice);
         $flowersPrice->forceFill(['superseded_at' => CarbonImmutable::now()])->save();
 
-        $draftId = $this->journeyToStepEight([
+        $draftId = $this->journeyToPayment([
             ['code' => 'DOCUMENT_PROCESSING', 'quantity' => 1],
             ['code' => 'GRAVE_DIGGING', 'quantity' => 1],
             ['code' => 'FLOWERS', 'quantity' => 1],
@@ -702,7 +704,7 @@ final class BookingWizardOnlinePaymentTest extends TestCase
     {
         $this->withPaymentGate(open: true);
 
-        $draftId = $this->journeyToStepEight()->get('draftId');
+        $draftId = $this->journeyToPayment()->get('draftId');
 
         $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
         $component->call('openOnlinePayment');
@@ -795,7 +797,7 @@ final class BookingWizardOnlinePaymentTest extends TestCase
         $this->withPaymentGate(open: true);
         Http::fake();
 
-        $draftId = $this->journeyToStepEight()->get('draftId');
+        $draftId = $this->journeyToPayment()->get('draftId');
 
         $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
         // First click: the chain submits the draft and issues its quote.
@@ -843,30 +845,32 @@ final class BookingWizardOnlinePaymentTest extends TestCase
         $issuedFormatted = (new Money($issuedUnitPriceMinor))->format();
         $recomputedFormatted = (new Money($recomputedUnitPriceMinor))->format();
 
-        // Step 9 must show the OLD, issued amount and never the new one.
+        // CONFIRMATION must show the OLD, issued amount and never the new one.
         $component->call('goToStep', BookingWizardStep::CONFIRMATION)
             ->assertSet('currentStep', BookingWizardStep::CONFIRMATION)
             ->assertSee($issuedFormatted)
             ->assertDontSee($recomputedFormatted);
 
-        // Step 5, the pre-issuance summary, is unaffected and stays a live
-        // recompute — a fresh component (Step 5 is only shown before the
-        // draft has left SERVICES) proves the seam `BookingDraftQuery::
-        // summary()` still drives it directly, unchanged by this fix.
-        $summaryComponent = $this->componentAtSummaryFor($draftId);
+        // The Ringkasan card on CUSTOMER_AND_DECEASED_DATA — the
+        // pre-issuance summary, formerly Step 5 — is unaffected and stays a
+        // live recompute — navigating back to that screen proves the seam
+        // `BookingDraftQuery::summary()` still drives it directly, unchanged
+        // by this fix.
+        $summaryComponent = $this->componentAtCustomerAndDeceasedDataFor($draftId);
         $summaryComponent->assertSee($recomputedFormatted);
     }
 
     /**
-     * Step 5 is read-only and reachable once Step 4 is done — same
+     * CUSTOMER_AND_DECEASED_DATA is reachable once DISCOVERY is done — same
      * `canReachStep()` rule `BookingWizardStepsSixToNineEndToEndTest`
-     * exercises for Step 9. Used only to prove Step 5 still shows a live
-     * recompute, unaffected by the Step 9 fix above.
+     * exercises for CONFIRMATION. Used only to prove its Ringkasan card
+     * still shows a live recompute, unaffected by the CONFIRMATION fix
+     * above.
      */
-    private function componentAtSummaryFor(string $draftId): Testable
+    private function componentAtCustomerAndDeceasedDataFor(string $draftId): Testable
     {
         return Livewire::test(BookingWizard::class, ['draftId' => $draftId])
-            ->call('goToStep', BookingWizardStep::SUMMARY)
-            ->assertSet('currentStep', BookingWizardStep::SUMMARY);
+            ->call('goToStep', BookingWizardStep::CUSTOMER_AND_DECEASED_DATA)
+            ->assertSet('currentStep', BookingWizardStep::CUSTOMER_AND_DECEASED_DATA);
     }
 }
