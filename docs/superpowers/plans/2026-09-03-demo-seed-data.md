@@ -684,6 +684,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Support\ExampleData;
 
+use App\Domain\Marketplace\Models\Vendor;
 use App\Support\ExampleData\VendorAccountExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -713,10 +714,19 @@ final class VendorAccountExampleDataTest extends TestCase
 
         $this->assertDatabaseHas('vendor_users', [
             'vendor_id' => $vendor->id,
+            'demo_batch_id' => $batchId,
         ]);
         $this->assertDatabaseHas('actor_role_assignments', [
             'actor_identifier' => (string) $user->id,
             'role' => \App\Platform\IdentityAccess\Roles\ActorRole::VENDOR,
+            'demo_batch_id' => $batchId,
+        ]);
+        // The actual authorization grant — vendor_users alone is
+        // membership metadata only. Without this, the seeded account
+        // could not really log into /vendor.
+        $this->assertDatabaseHas('scope_assignments', [
+            'actor_identifier' => (string) $user->id,
+            'entity_id' => $vendor->id,
             'demo_batch_id' => $batchId,
         ]);
     }
@@ -725,8 +735,16 @@ final class VendorAccountExampleDataTest extends TestCase
     {
         $batchId = (string) Str::uuid();
 
+        // A raw assertDatabaseCount('vendors', ...) is wrong against this
+        // repo's real migrated schema: 2026_08_14_100000_seed_vendors_and_
+        // listings.php seeds 5 fixture vendors unconditionally on every
+        // RefreshDatabase run, so the table never starts empty. Scope to
+        // this batch instead.
         $first = VendorAccountExampleData::seed($batchId);
-        $this->assertDatabaseCount('vendors', count($first['vendors']));
+        $this->assertSame(
+            count($first['vendors']),
+            Vendor::query()->where('demo_batch_id', $batchId)->count(),
+        );
 
         // A second seed call with the SAME batch id and a fresh database
         // produces the same vendor names — proving no randomness, matching
@@ -757,6 +775,8 @@ use App\Domain\Marketplace\Models\VendorUser;
 use App\Models\User;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use App\Platform\IdentityAccess\Roles\Actions\GrantActorRole;
+use App\Platform\IdentityAccess\Scopes\Actions\GrantScopeAssignment;
+use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use App\Support\ExampleData\Concerns\TaggedAsDemoData;
 use Illuminate\Support\Facades\Hash;
 
@@ -767,6 +787,17 @@ use Illuminate\Support\Facades\Hash;
  * dedicated domain Action exists for any of the three anywhere in this
  * codebase (Filament's own CreateVendor page is a plain CreateRecord over
  * the Eloquent model).
+ *
+ * **Real gap this text corrects, found by Task 4's own implementer**:
+ * `VendorUser` is membership metadata only ("authorization is decided by
+ * `scope_assignments`, never by this table" — that model's own class doc
+ * block, and its migration's) — `VendorPanelAccessPolicy::allows()`
+ * genuinely requires BOTH the `ActorRole::VENDOR` role AND an active
+ * `vendor:`-prefixed scope grant read via `CurrentVendorScope`. A role
+ * grant alone (the earlier draft of this class) would create an account
+ * that cannot actually log into `/vendor` — a broken deliverable, since
+ * Task 12 documents this login as working. The `GrantScopeAssignment` call
+ * below is not optional decoration; it is the actual authorization grant.
  */
 final class VendorAccountExampleData
 {
@@ -794,10 +825,11 @@ final class VendorAccountExampleData
             ]);
             TaggedAsDemoData::tag($user, $batchId);
 
-            VendorUser::query()->create([
+            $vendorUser = VendorUser::query()->create([
                 'vendor_id' => $vendor->id,
                 'actor_identifier' => (string) $user->id,
             ]);
+            TaggedAsDemoData::tag($vendorUser, $batchId);
 
             $roleAssignment = (new GrantActorRole)(
                 actorIdentifier: (string) $user->id,
@@ -806,6 +838,16 @@ final class VendorAccountExampleData
                 grantedBy: null,
             );
             TaggedAsDemoData::tag($roleAssignment, $batchId);
+
+            $scopeAssignment = (new GrantScopeAssignment)(
+                actorIdentifier: (string) $user->id,
+                entityType: ScopeEntityType::VENDOR,
+                entityId: $vendor->id,
+                grantLevel: null,
+                reason: 'Demo seed data — the actual authorization grant for /vendor access (vendor_users is membership metadata only).',
+                grantedBy: null,
+            );
+            TaggedAsDemoData::tag($scopeAssignment, $batchId);
 
             $vendors[] = $vendor;
             $users[] = $user;
