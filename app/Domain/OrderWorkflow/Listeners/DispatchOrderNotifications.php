@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Domain\OrderWorkflow\Listeners;
 
 use App\Domain\OrderWorkflow\OrderStatus;
+use App\Platform\Notification\DemoDataSuppression;
 use App\Platform\Notification\Jobs\ConsumeOutboxNotificationJob;
 use App\Platform\Outbox\Events\OutboxEventPublished;
 use App\Platform\Outbox\OutboxQueueName;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Bridges the ONE canonical order outbox event — `order.status_changed.v1`
@@ -121,6 +123,15 @@ final class DispatchOrderNotifications
         $eventId = $event->envelope['event_id'] ?? null;
 
         if (! is_string($eventId)) {
+            return;
+        }
+
+        if (DemoDataSuppression::active()) {
+            Log::info('notification.suppressed_for_demo_seeding', [
+                'outbox_event_id' => $eventId,
+                'matrix_event_name' => $matrixEventName,
+            ]);
+
             return;
         }
 

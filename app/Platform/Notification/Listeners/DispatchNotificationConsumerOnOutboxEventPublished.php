@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Platform\Notification\Listeners;
 
+use App\Platform\Notification\DemoDataSuppression;
 use App\Platform\Notification\Jobs\ConsumeOutboxNotificationJob;
 use App\Platform\Outbox\Events\OutboxEventPublished;
 use App\Platform\Outbox\OutboxQueueName;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * task-3-brief.md D1: there is no notification classification in
@@ -43,6 +45,15 @@ final class DispatchNotificationConsumerOnOutboxEventPublished
             ->exists();
 
         if (! $isNotificationClassified) {
+            return;
+        }
+
+        if (DemoDataSuppression::active()) {
+            Log::info('notification.suppressed_for_demo_seeding', [
+                'outbox_event_id' => $eventId,
+                'matrix_event_name' => $eventName,
+            ]);
+
             return;
         }
 
