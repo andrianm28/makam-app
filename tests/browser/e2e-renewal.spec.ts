@@ -48,7 +48,7 @@ import { expect, Page, test } from '@playwright/test';
  *    nothing has been selected.
  */
 
-const STEP_LABELS = ['Kota', 'TPU/TPS', 'Cari Makam', 'Biaya', 'Pembayaran', 'Konfirmasi'];
+const STEP_LABELS = ['Cari Makam', 'Biaya & Bayar', 'Konfirmasi'];
 
 function stepperGroup(page: Page) {
     return page.getByRole('group', { name: 'Progres perpanjangan makam' });
@@ -115,7 +115,7 @@ async function findCemeteryButton(page: Page) {
     return null;
 }
 
-test('renewal journey renders the six documented steps, in order, on every screen', async ({ page }) => {
+test('renewal journey renders the three documented steps, in order, on every screen', async ({ page }) => {
     await page.goto('/perpanjangan');
 
     const items = stepperGroup(page).getByRole('listitem');
@@ -126,9 +126,9 @@ test('renewal journey renders the six documented steps, in order, on every scree
         expect(texts[index]).toContain(label);
     });
 
-    // AC1: step 1 (city) is current on a bare arrival.
+    // AC1: step 1 ("Cari Makam") is current on a bare arrival.
     const currentStepItem = items.filter({ has: page.locator('[aria-current="step"]') });
-    await expect(currentStepItem.getByText('Kota', { exact: true })).toBeVisible();
+    await expect(currentStepItem.getByText('Cari Makam', { exact: true })).toBeVisible();
 });
 
 test('city step lists all five MVP launch cities and TPU/TPS selection reaches a real cemetery', async ({ page }) => {
@@ -151,11 +151,13 @@ test('city step lists all five MVP launch cities and TPU/TPS selection reaches a
     const cemeteryButton = await findCemeteryButton(page);
     expect(cemeteryButton, 'expected at least one launch city to have a published TPU/TPS').not.toBeNull();
 
-    // Step 2 is now current (a city has been chosen).
+    // Screen 1 is a single journey step ("Cari Makam") regardless of how
+    // much of its own city/TPU-TPS/search sub-flow is filled in — choosing
+    // a city does not advance the stepper (wizard-step-reduction, Task 7).
     const currentStepItem = stepperGroup(page)
         .getByRole('listitem')
         .filter({ has: page.locator('[aria-current="step"]') });
-    await expect(currentStepItem.getByText('TPU/TPS', { exact: true })).toBeVisible();
+    await expect(currentStepItem.getByText('Cari Makam', { exact: true })).toBeVisible();
 
     // Selecting a TPU/TPS is now a same-page `wire:click` reveal (Task 4's
     // merge), not a navigation to a separate `/perpanjangan/cari` route —
