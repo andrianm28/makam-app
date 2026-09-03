@@ -3,23 +3,23 @@ import { expect, test } from '@playwright/test';
 import {
     CUSTOMER,
     DECEASED,
-    completeStep1,
-    completeStep2NoPackage,
-    completeStep3,
-    completeStep4,
-    completeStep6,
-    completeStep7,
-    completeStep8Manual,
+    completeStep2,
+    completeStep3Manual,
+    continueFromDiscovery,
+    selectCemeteryNoPackage,
+    selectCity,
+    selectServiceType,
     startAtStep1,
 } from './e2e-booking-helpers';
 
 /**
  * E2E-BOOK, mobile viewport — closes `docs/testing/release-gates.md`'s
- * "Booking Steps 1–9 pass desktop and mobile browser tests" box, whose
- * desktop half `e2e-booking.spec.ts` already covers and whose mobile half
- * had zero coverage anywhere in `tests/browser/` (verified 22 Aug 2026: the
- * only mobile-viewport test in the whole tree was `e2e-home.spec.ts`'s
- * single hamburger-nav resize, which never touches booking).
+ * "Booking Steps 1–9 pass desktop and mobile browser tests" box (now the
+ * 4-screen wizard — `App\Domain\Booking\BookingWizardStep`), whose desktop
+ * half `e2e-booking.spec.ts` already covers and whose mobile half had zero
+ * coverage anywhere in `tests/browser/` (verified 22 Aug 2026: the only
+ * mobile-viewport test in the whole tree was `e2e-home.spec.ts`'s single
+ * hamburger-nav resize, which never touches booking).
  *
  * Reuses `e2e-booking.spec.ts`'s own step-completion helpers and fixture
  * data rather than re-deriving them — this is the SAME real fixture data
@@ -39,54 +39,42 @@ import {
  * constraint-compliant way to keep one real source of truth.
  */
 test.describe('E2E-BOOK-MOBILE — full journey at a real mobile viewport', () => {
-    test('a visitor completes all 9 steps end to end on a mobile viewport', async ({ page }) => {
-        // Each step wrapped in its own `test.step()`, matching
+    test('a visitor completes all 4 screens end to end on a mobile viewport', async ({ page }) => {
+        // Each screen wrapped in its own `test.step()`, matching
         // `e2e-booking.spec.ts`'s desktop full-journey test — same step
         // names, so a failure's location is just as legible on mobile as it
         // is on desktop. Purely structural (no behavior change).
-        await test.step('Step 1 — location', async () => {
+        await test.step('Screen 1 — Cari & Pilih: location', async () => {
             await startAtStep1(page);
-            await completeStep1(page, 'Jakarta');
+            await selectCity(page, 'Jakarta');
         });
 
-        await test.step('Step 2 — TPU/TPS (no package cemetery)', async () => {
-            await completeStep2NoPackage(page, 'TPS Jakarta 2');
+        await test.step('Screen 1 — Cari & Pilih: TPU/TPS (no package cemetery)', async () => {
+            await selectCemeteryNoPackage(page, 'TPS Jakarta 2');
         });
 
-        await test.step('Step 3 — service type (Makam Baru / NEW_GRAVE)', async () => {
-            await completeStep3(page, 'Makam Baru');
+        await test.step('Screen 1 — Cari & Pilih: service type (Makam Baru / NEW_GRAVE)', async () => {
+            await selectServiceType(page, 'Makam Baru');
         });
 
-        await test.step('Step 4 — real service catalog, mandatory + one additional', async () => {
-            await completeStep4(page, 'AMBULANCE');
+        await test.step('Screen 1 — Cari & Pilih: real service catalog, mandatory + one additional, then save', async () => {
+            await continueFromDiscovery(page, 'AMBULANCE');
         });
 
-        await test.step('Step 5 — quote line items', async () => {
-            // Step 5 (quote summary) -> Step 6 (customer data): the button here
-            // is "Lanjut ke Data Pemesan" (wizard.blade.php), not "Lanjutkan" —
-            // "Lanjutkan" is Step 4's own button, already clicked inside
-            // completeStep4() above. Matches e2e-booking.spec.ts's own Step 5
-            // test.step block.
-            await page.getByRole('button', { name: 'Lanjut ke Data Pemesan' }).click();
-            await expect(page.locator('#booking-step-6-heading')).toBeVisible();
-        });
+        await test.step('Screen 2 — Detail Pemesanan: quote summary + customer & deceased form', async () => {
+            await expect(page.locator('#booking-step-2-heading')).toBeVisible();
 
-        await test.step('Step 6 — customer form', async () => {
             const axeResults = await new AxeBuilder({ page }).analyze();
             expect(axeResults.violations).toEqual([]);
 
-            await completeStep6(page);
+            await completeStep2(page);
         });
 
-        await test.step('Step 7 — deceased form, honest no-upload state', async () => {
-            await completeStep7(page);
+        await test.step('Screen 3 — Pembayaran, manual fallback', async () => {
+            await completeStep3Manual(page, 'BCA-TRF-000123-MOBILE');
         });
 
-        await test.step('Step 8 — payment, manual fallback', async () => {
-            await completeStep8Manual(page, 'BCA-TRF-000123-MOBILE');
-        });
-
-        await test.step('Step 9 — confirmation, invoice-equivalent summary, next action', async () => {
+        await test.step('Screen 4 — Konfirmasi, invoice-equivalent summary, next action', async () => {
             await expect(page.getByText('Menunggu diproses', { exact: true })).toBeVisible();
             await expect(page.getByText(CUSTOMER.fullName)).toBeVisible();
             await expect(page.getByText(DECEASED.fullName)).toBeVisible();

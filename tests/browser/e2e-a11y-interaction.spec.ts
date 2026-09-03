@@ -1,5 +1,13 @@
 import { test, expect, devices } from '@playwright/test';
-import { startAtStep1, completeStep1, completeStep2NoPackage, completeStep3, completeStep4, CUSTOMER } from './e2e-booking-helpers';
+import {
+    startAtStep1,
+    selectCity,
+    selectCemeteryNoPackage,
+    selectServiceType,
+    continueFromDiscovery,
+    CUSTOMER,
+    DECEASED,
+} from './e2e-booking-helpers';
 
 /**
  * §B-41 ("Keyboard navigation, focus, labels, and touch targets pass"). The
@@ -41,7 +49,7 @@ test.describe('E2E-A11Y — touch targets', () => {
     test('booking wizard Step 1 city selection button meets the 44px minimum touch target', async ({ page }) => {
         await startAtStep1(page);
 
-        // wizard.blade.php's Step 1 city buttons: <x-mk.button variant="secondary" ...>
+        // wizard.blade.php's DISCOVERY city buttons: <x-mk.button variant="secondary" ...>
         // — no `size` prop, so this exercises the md/44px default exactly at
         // the floor rather than the hero CTA's lg/52px, which is a
         // meaningfully different case.
@@ -54,17 +62,20 @@ test.describe('E2E-A11Y — touch targets', () => {
 });
 
 test.describe('E2E-A11Y — keyboard navigation', () => {
-    test('the customer-data step is fully reachable and completable by keyboard alone', async ({ page }) => {
-        // Reaching Step 6 by mouse click is fine -- this test's own claim is
-        // about the Step 6 form itself, not the whole wizard (per the plan
-        // brief). Same real path e2e-booking-loading-states.spec.ts uses.
+    test('the merged customer+deceased-data screen is fully reachable and completable by keyboard alone', async ({ page }) => {
+        // Reaching Screen 2 by mouse click is fine -- this test's own claim
+        // is about the Screen 2 form itself, not the whole wizard (per the
+        // plan brief). Same real path e2e-booking-loading-states.spec.ts
+        // uses. DISCOVERY's default mandatory services are already staged
+        // (BookingWizard::mount() defaults `stagedServiceCodes` to
+        // ServiceCode::BASIC_CODES), so no extra service pick is needed
+        // before saving.
         await startAtStep1(page);
-        await completeStep1(page, 'Jakarta');
-        await completeStep2NoPackage(page, 'TPS Jakarta 2');
-        await completeStep3(page, 'Makam Baru');
-        await completeStep4(page);
-        await page.getByRole('button', { name: 'Lanjut ke Data Pemesan' }).click();
-        await expect(page.locator('#booking-step-6-heading')).toBeVisible();
+        await selectCity(page, 'Jakarta');
+        await selectCemeteryNoPackage(page, 'TPS Jakarta 2');
+        await selectServiceType(page, 'Makam Baru');
+        await continueFromDiscovery(page);
+        await expect(page.locator('#booking-step-2-heading')).toBeVisible();
 
         const fullName = page.locator('#customer-full-name');
         const mobile = page.locator('#customer-mobile');
@@ -76,18 +87,22 @@ test.describe('E2E-A11Y — keyboard navigation', () => {
         // The checkbox's own <label> wraps a real <a> link ("Pemberitahuan
         // Privasi") AFTER the <input> in DOM order -- confirmed by reading
         // wizard.blade.php directly, not assumed -- so it is a genuine Tab
-        // stop between the checkbox and the "Kembali"/"Lanjutkan" buttons.
+        // stop between the checkbox and the deceased-data fields that follow
+        // it in this same merged form.
         const privacyLink = page.getByRole('link', { name: 'Pemberitahuan Privasi', exact: true });
-        // Progressive reveal keeps Step 5's own completed section (and its
-        // own "Kembali" button) visible alongside Step 6 here, so an
-        // unscoped `getByRole('button', { name: 'Kembali' })` now resolves
-        // to 2 elements. Scope to Step 6's own `<section aria-labelledby=
-        // "booking-step-6-heading">` (real heading text confirmed in
-        // wizard.blade.php) so this targets the step under test, not
-        // whichever "Kembali" happens to be first in the DOM.
-        const step6Section = page.getByLabel('Langkah 6 — Data Pemesan');
-        const back = step6Section.getByRole('button', { name: 'Kembali', exact: true });
-        const submit = step6Section.getByRole('button', { name: 'Lanjutkan', exact: true });
+        const deceasedFullName = page.locator('#deceased-full-name');
+        const deceasedDob = page.locator('#deceased-date-of-birth');
+        const deceasedDod = page.locator('#deceased-date-of-death');
+        const deceasedRelationship = page.locator('#deceased-relationship');
+        const deceasedGender = page.locator('#deceased-gender');
+        // Customer and deceased data are now ONE form on ONE screen
+        // (`BookingWizard::saveStep2()`, replacing the old separate Step 6/
+        // Step 7 forms), and this is the only screen rendered at a time
+        // (`currentScreen()` guards are mutually exclusive @if blocks), so
+        // there is exactly one "Kembali"/"Lanjutkan" pair on the page here
+        // -- no cross-step collision to scope around any more.
+        const back = page.getByRole('button', { name: 'Kembali', exact: true });
+        const submit = page.getByRole('button', { name: 'Lanjutkan', exact: true });
 
         await fullName.focus();
         await expect(fullName).toBeFocused();
@@ -133,6 +148,33 @@ test.describe('E2E-A11Y — keyboard navigation', () => {
         await expect(privacyLink).toBeFocused();
 
         await page.keyboard.press('Tab');
+        await expect(deceasedFullName).toBeFocused();
+        await page.keyboard.type(DECEASED.fullName);
+
+        // Native date inputs do not reliably accept `keyboard.type()` digit
+        // sequences the same way across locales/engines -- focus is still
+        // reached and asserted via Tab, but the value itself is set with
+        // `.fill()` on the already-focused control, the same approach
+        // `e2e-booking-helpers.ts` uses for these same fields.
+        await page.keyboard.press('Tab');
+        await expect(deceasedDob).toBeFocused();
+        await deceasedDob.fill(DECEASED.dob);
+
+        await page.keyboard.press('Tab');
+        await expect(deceasedDod).toBeFocused();
+        await deceasedDod.fill(DECEASED.dod);
+
+        await page.keyboard.press('Tab');
+        await expect(deceasedRelationship).toBeFocused();
+        await deceasedRelationship.selectOption(DECEASED.relationship);
+
+        // Gender is optional (`BookingGender` — no `*` marker in
+        // wizard.blade.php) — reached by keyboard but deliberately left
+        // unset, proving the form is completable without it.
+        await page.keyboard.press('Tab');
+        await expect(deceasedGender).toBeFocused();
+
+        await page.keyboard.press('Tab');
         await expect(back).toBeFocused();
 
         await page.keyboard.press('Tab');
@@ -146,6 +188,6 @@ test.describe('E2E-A11Y — keyboard navigation', () => {
         await expect(submit).toHaveClass(/focus-visible:ring-primary-600/);
 
         await page.keyboard.press('Enter');
-        await expect(page.locator('#booking-step-7-heading')).toBeVisible();
+        await expect(page.locator('#booking-step-3-heading')).toBeVisible();
     });
 });

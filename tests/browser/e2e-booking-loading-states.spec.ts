@@ -3,11 +3,10 @@ import {
     CUSTOMER,
     DECEASED,
     startAtStep1,
-    completeStep1,
-    completeStep2NoPackage,
-    completeStep3,
-    completeStep4,
-    completeStep6,
+    selectCity,
+    selectCemeteryNoPackage,
+    selectServiceType,
+    continueFromDiscovery,
 } from './e2e-booking-helpers';
 
 /**
@@ -16,20 +15,26 @@ import {
  * suite (empty/error/pending/success states are exercised across
  * e2e-booking.spec.ts, e2e-renewal.spec.ts, e2e-marketplace.spec.ts). This
  * file closes the one genuinely missing sub-state: the booking wizard's
- * `wire:loading` markup on Step 6 ("saveStep6") and Step 7 ("saveStep7"),
- * which real markup exists for (wizard.blade.php) but had no test asserting
- * it actually appears and disables the submit button.
+ * `wire:loading` markup on the merged customer+deceased-data screen
+ * ("saveStep2"), which real markup exists for (wizard.blade.php) but had no
+ * test asserting it actually appears and disables the submit button.
+ *
+ * Previously this covered two separate saves ("saveStep6"/"saveStep7", the
+ * old customer-data and deceased-data steps). The wizard-step-reduction
+ * merge collapsed both into ONE form and ONE save
+ * (`BookingWizard::saveStep2()`) with a single `wire:loading
+ * wire:target="saveStep2"` indicator, so there is now exactly one loading
+ * state to assert here, not two.
  */
 test.describe('E2E-BOOK — loading states', () => {
-    test('the customer-data step shows a loading indicator and disables the submit button while saving', async ({ page }) => {
+    test('the merged customer+deceased-data screen shows a loading indicator and disables the submit button while saving', async ({ page }) => {
         await startAtStep1(page);
-        await completeStep1(page, 'Jakarta');
-        await completeStep2NoPackage(page, 'TPS Jakarta 2');
-        await completeStep3(page, 'Makam Baru');
-        await completeStep4(page);
-        await page.getByRole('button', { name: 'Lanjut ke Data Pemesan' }).click();
+        await selectCity(page, 'Jakarta');
+        await selectCemeteryNoPackage(page, 'TPS Jakarta 2');
+        await selectServiceType(page, 'Makam Baru');
+        await continueFromDiscovery(page);
 
-        await expect(page.locator('#booking-step-6-heading')).toBeVisible();
+        await expect(page.locator('#booking-step-2-heading')).toBeVisible();
         await page.locator('#customer-full-name').fill(CUSTOMER.fullName);
         await page.locator('#customer-mobile').fill(CUSTOMER.mobile);
         await page.locator('#customer-email').fill(CUSTOMER.email);
@@ -37,14 +42,16 @@ test.describe('E2E-BOOK — loading states', () => {
         await page.locator('#customer-relationship').selectOption(CUSTOMER.relationship);
         await page.locator('#customer-contact-channel').selectOption(CUSTOMER.contactChannel);
         await page.locator('#privacy-notice-accepted').check();
+        await page.locator('#deceased-full-name').fill(DECEASED.fullName);
+        await page.locator('#deceased-date-of-birth').fill(DECEASED.dob);
+        await page.locator('#deceased-date-of-death').fill(DECEASED.dod);
+        await page.locator('#deceased-relationship').selectOption(DECEASED.relationship);
 
-        // Scoped to Step 6's own section: Step 5 stays visible alongside it
-        // (progressive reveal), but Step 5's own forward control is labelled
-        // "Lanjut ke Data Pemesan", not "Lanjutkan", so this particular
-        // locator is not actually ambiguous at this point in the flow.
-        // Scoping anyway keeps this consistent with the Step 7 test below,
-        // where the equivalent unscoped locator IS ambiguous.
-        const submit = page.getByLabel('Langkah 6 — Data Pemesan').getByRole('button', { name: 'Lanjutkan' });
+        // Only one "Lanjutkan" control exists on this screen (unlike the old
+        // nine-step model's progressive reveal, `currentScreen()` guards are
+        // mutually exclusive @if blocks, so no other screen's controls are
+        // in the DOM at the same time) -- no scoping needed to disambiguate.
+        const submit = page.getByRole('button', { name: 'Lanjutkan', exact: true });
 
         // Race the click against the loading assertions -- a local server
         // responds fast enough that a sequential `await` chain can miss the
@@ -52,43 +59,11 @@ test.describe('E2E-BOOK — loading states', () => {
         // retry internally, but only if the assertion is already in flight
         // before the state comes and goes.
         await Promise.all([
-            expect(page.getByRole('status').filter({ hasText: 'Menyimpan data pemesan' })).toBeVisible(),
+            expect(page.getByRole('status').filter({ hasText: 'Menyimpan data pemesan dan data almarhum' })).toBeVisible(),
             expect(submit).toBeDisabled(),
             submit.click(),
         ]);
 
-        await expect(page.locator('#booking-step-7-heading')).toBeVisible();
-    });
-
-    test('the deceased-data step shows a loading indicator and disables the submit button while saving', async ({ page }) => {
-        await startAtStep1(page);
-        await completeStep1(page, 'Jakarta');
-        await completeStep2NoPackage(page, 'TPS Jakarta 2');
-        await completeStep3(page, 'Makam Baru');
-        await completeStep4(page);
-        await page.getByRole('button', { name: 'Lanjut ke Data Pemesan' }).click();
-        await completeStep6(page);
-
-        await expect(page.locator('#booking-step-7-heading')).toBeVisible();
-        await page.locator('#deceased-full-name').fill(DECEASED.fullName);
-        await page.locator('#deceased-date-of-birth').fill(DECEASED.dob);
-        await page.locator('#deceased-date-of-death').fill(DECEASED.dod);
-        await page.locator('#deceased-relationship').selectOption(DECEASED.relationship);
-
-        // Step 6 stays visible alongside Step 7 here (progressive reveal),
-        // and BOTH sections' own forward controls are labelled "Lanjutkan"
-        // — `getByLabel('Langkah 6 — Data Pemesan').getByRole('button',
-        // {name: 'Lanjutkan'})` also matches. Scope to Step 7's own section
-        // (real heading text confirmed in wizard.blade.php) so this targets
-        // the step this test is actually about.
-        const submit = page.getByLabel('Langkah 7 — Data Almarhum').getByRole('button', { name: 'Lanjutkan' });
-
-        await Promise.all([
-            expect(page.getByRole('status').filter({ hasText: 'Menyimpan data almarhum' })).toBeVisible(),
-            expect(submit).toBeDisabled(),
-            submit.click(),
-        ]);
-
-        await expect(page.locator('#booking-step-8-heading')).toBeVisible();
+        await expect(page.locator('#booking-step-3-heading')).toBeVisible();
     });
 });
