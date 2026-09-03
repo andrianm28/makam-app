@@ -615,11 +615,27 @@ final class BookingWizard extends Component
      * city membership and package applicability are all re-checked
      * server-side by `SaveBookingDraftStep` when the single DISCOVERY save
      * runs.
+     *
+     * It DOES close any open plot picker, for the same class of reason
+     * `selectCity()` drops a cross-city cemetery. The picker renders from its
+     * own state, so a picker left open on cemetery A while this method moved
+     * the selection to cemetery B put two live, contradictory choices on one
+     * screen — including A's "plot ditahan" alert — and a click on any plot
+     * in that stale grid would silently flip the selection back to A.
+     *
+     * The reverse is deliberately NOT done: `openPickerFor()` leaves
+     * `$cemeteryId` alone, because merely opening a map is not a choice (only
+     * `holdPlotForDiscovery()` is), and clearing it there would collapse the
+     * already-revealed sections below just because the customer looked at
+     * another cemetery's plots.
      */
     public function selectCemetery(string $cemeteryId, ?int $cemeteryPackageId = null): void
     {
         $this->cemeteryId = $cemeteryId;
         $this->cemeteryPackageId = $cemeteryPackageId;
+
+        $this->pickerCemeteryId = null;
+        $this->pickerCemeteryPackageId = null;
     }
 
     public function selectServiceType(string $serviceType): void
@@ -1485,6 +1501,23 @@ final class BookingWizard extends Component
             }
         }
 
+        // The open picker's own cemetery name, so its heading can say WHICH
+        // cemetery's plots are on screen ("Pilih plot di TPU ..."). A bare
+        // "Pilih plot" left the one control that can change the cemetery
+        // selection unlabelled, which is exactly the confusion that made a
+        // stale picker dangerous before `selectCemetery()` started closing
+        // one. Same fail-honest discipline as every other read in this
+        // method: a failure degrades to the unqualified heading, never a 500.
+        $pickerCemeteryName = null;
+
+        if ($this->pickerCemeteryId !== null) {
+            try {
+                $pickerCemeteryName = CemeteryPublicQuery::findPublishedById($this->pickerCemeteryId)?->name;
+            } catch (Throwable $e) {
+                report($e);
+            }
+        }
+
         // Step 4 renders the REAL catalogue rows (`ServiceDefinition::name`),
         // not the bare `ServiceCode` strings — the same seeded Indonesian
         // names Step 5's summary already shows for the same services. The
@@ -1678,6 +1711,7 @@ final class BookingWizard extends Component
             'basicServices' => $basicServices,
             'additionalServices' => $additionalServices,
             'servicesCatalogUnavailable' => $servicesCatalogUnavailable,
+            'pickerCemeteryName' => $pickerCemeteryName,
             'summary' => $summary,
             'summaryUnavailable' => $summaryUnavailable,
             'confirmationData' => $confirmationData,

@@ -397,6 +397,113 @@ final class BookingWizardPlotPickerTest extends TestCase
     }
 
     /**
+     * A city can hold BOTH granular cemeteries (plot picker) and aggregate
+     * ones (a plain "Pilih" button), and the picker renders from its own
+     * state as a sibling of the TPU/TPS list. So choosing an aggregate
+     * cemetery after picking a plot in a granular one has to CLOSE that
+     * picker: otherwise the customer sees the other cemetery's grid, and its
+     * "plot ditahan" alert, sitting live under a selection that is no longer
+     * theirs — and one click in that stale grid silently flips the selection
+     * back.
+     */
+    public function test_choosing_another_cemetery_closes_a_picker_left_open_on_the_previous_one(): void
+    {
+        $granular = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+        $plot = $this->makePlotIn($granular);
+        $aggregate = $this->makeCemetery(PlotTrackingMode::AGGREGATE);
+
+        $component = Livewire::test(BookingWizard::class)
+            ->call('selectCity', LaunchCityCode::JAKARTA)
+            ->call('openPickerFor', $granular->id)
+            ->call('holdPlotForDiscovery', $granular->id, null, (string) $plot->getKey())
+            ->assertSet('cemeteryId', $granular->id)
+            ->assertSet('pickerCemeteryId', $granular->id);
+
+        $component->call('selectCemetery', $aggregate->id)
+            ->assertSet('cemeteryId', $aggregate->id)
+            ->assertSet('pickerCemeteryId', null)
+            ->assertSet('pickerCemeteryPackageId', null)
+            // No stale grid, and no hold alert for a cemetery the customer
+            // has just moved away from.
+            ->assertDontSee('BLOK-A')
+            ->assertDontSee('Plot ditahan sementara');
+    }
+
+    /**
+     * While a picker IS open, its heading names the cemetery — the selection
+     * it can change is otherwise unlabelled, which is what made a stale
+     * picker hard to notice in the first place.
+     */
+    public function test_the_picker_heading_names_the_cemetery_whose_plots_are_shown(): void
+    {
+        $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+        $this->makePlotIn($cemetery);
+
+        Livewire::test(BookingWizard::class)
+            ->call('selectCity', LaunchCityCode::JAKARTA)
+            ->call('openPickerFor', $cemetery->id)
+            ->assertSee('Pilih plot di '.$cemetery->name);
+    }
+
+    /**
+     * The other half of that recovery, which the test above does NOT cover:
+     * the CITY has to come back too.
+     *
+     * `city_code` is as unwritten as `cemetery_id` mid-DISCOVERY, and the
+     * TPU/TPS section reveals on `$city !== ''`, so without this the customer
+     * comes back to a screen offering only the city buttons — and clicking
+     * their city then runs `selectCity()`'s cross-city cascade (`''` is not
+     * the real code, so the early return does not save them), which clears
+     * `cemeteryId` and `pickerCemeteryId` and destroys exactly the state the
+     * reload recovered. The evidence for the city is the same evidence as for
+     * the cemetery: the live hold.
+     */
+    public function test_a_reload_with_a_live_hold_restores_the_city_so_the_screen_reveals(): void
+    {
+        $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR, city: LaunchCityCode::BOGOR);
+        $plot = $this->makePlotIn($cemetery);
+
+        $draftId = Livewire::test(BookingWizard::class)
+            ->call('openPickerFor', $cemetery->id)
+            ->call('holdPlotForDiscovery', $cemetery->id, null, (string) $plot->getKey())
+            ->get('draftId');
+
+        $this->assertIsString($draftId);
+        $this->assertNull(
+            BookingDraft::query()->findOrFail($draftId)->city_code,
+            'Fixture assumption: a hold alone persists no city_code — that is what makes the restore necessary.',
+        );
+
+        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->assertSet('city', LaunchCityCode::BOGOR)
+            // ...and the restored city really does reveal the section, which
+            // is the point of restoring it.
+            ->assertSee('Pilih TPU/TPS')
+            ->assertSee($cemetery->name);
+    }
+
+    /**
+     * And the recovered state survives the customer re-clicking the city they
+     * are already on — `selectCity()`'s early return is what protects the
+     * hold here, and it only fires because the city was restored above.
+     */
+    public function test_re_clicking_the_restored_city_does_not_wipe_the_recovered_hold_state(): void
+    {
+        $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR, city: LaunchCityCode::BOGOR);
+        $plot = $this->makePlotIn($cemetery);
+
+        $draftId = Livewire::test(BookingWizard::class)
+            ->call('openPickerFor', $cemetery->id)
+            ->call('holdPlotForDiscovery', $cemetery->id, null, (string) $plot->getKey())
+            ->get('draftId');
+
+        Livewire::test(BookingWizard::class, ['draftId' => (string) $draftId])
+            ->call('selectCity', LaunchCityCode::BOGOR)
+            ->assertSet('cemeteryId', $cemetery->id)
+            ->assertSet('pickerCemeteryId', $cemetery->id);
+    }
+
+    /**
      * And the journey still completes after that reload — the recovered draft
      * is the one DISCOVERY writes to.
      */

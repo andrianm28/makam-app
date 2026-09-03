@@ -406,7 +406,11 @@
             @if ($this->pickerCemeteryId !== null)
                 <section aria-labelledby="plot-picker-heading" class="mt-6 border-t border-neutral-200 pt-6">
                     <h4 id="plot-picker-heading" class="mb-3 text-lg font-semibold text-neutral-900">
-                        Pilih plot
+                        @if ($pickerCemeteryName !== null)
+                            Pilih plot di {{ $pickerCemeteryName }}
+                        @else
+                            Pilih plot
+                        @endif
                     </h4>
 
                     @php $hold = $this->activeDraftPlotHold(); @endphp
