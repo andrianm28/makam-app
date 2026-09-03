@@ -1017,23 +1017,27 @@ git commit -m "feat(demo-data): add vendor account and cemetery-operator account
   - DISCOVERY payload: `city_code`, `cemetery_id`, `cemetery_package_id` (null for a cemetery with no active packages — use `CemeteryPublicQuery::activePackages($cemetery)->isEmpty()` to pick one, or reuse an existing package-less demo cemetery), `service_type` (a `BookingServiceType` value), `selected_services` (must include every `ServiceCode::BASIC_CODES` value, `[{code, quantity: 1}, ...]`).
   - CUSTOMER_AND_DECEASED_DATA payload: `customer_full_name`, `customer_mobile` (digits only, e.g. `DemoContactData::phone($i)` as-is — no dashes), `customer_email` (`DemoContactData::email($i)`), `customer_address` (≥10 chars), `customer_relationship` (a `BookingRelationshipCode` value), `customer_contact_channel` (a `BookingContactChannel` value), `privacy_notice_accepted: true`, `deceased_full_name`, `deceased_date_of_birth`/`deceased_date_of_death` (DOB before DOD, DOD not in the future), `deceased_relationship`, `deceased_gender` (optional). The three `document_*_path` fields must be omitted/null.
   - PAYMENT payload: `payment_method: BookingPaymentMethod::MANUAL` (never `ONLINE` — that depends on the `G-PAY-01` gate's live state, an environment dependency this generator must not carry), `payment_reference` (non-blank string).
-- `SubmitBookingDraft::__invoke(BookingDraft $draft, string $idempotencyKey): Order`
+- `SubmitBookingDraft::__invoke(BookingDraft $draft, string $idempotencyKey): Order` — lands the order at `MASUK`, never `DIVERIFIKASI` — every state needs its own explicit `VerifyOrder` call, including "just submitted", confirmed by this task's own implementer running the code (a bare `submittedOnly()` state never actually reaches `DIVERIFIKASI`).
 - `VerifyOrder::__invoke(Order $order, string $actorRef, string $actorRole, ?string $reason = null, array $metadata = []): OrderStatusEvent`
 - `IssueOrderQuote::__invoke(Order $order, CarbonInterface $expiresAt, string $actorRef, string $actorRole, ?string $reason = null, array $metadata = []): OrderStatusEvent`
-- `ManualPaymentVerification::__invoke(Order $order, string $actorRef, string $actorRole, string $verificationNote, array $metadata = []): OrderStatusEvent`
+- `RecordBuyerApproval::__invoke(Order $order, string $actorRef, string $actorRole, ?string $reason = null, array $metadata = []): OrderStatusEvent` — the confirmed `PENAWARAN_TERKIRIM → DISETUJUI_PEMESAN` hop; internally calls `AcceptQuote` against `Quote::currentFor($order)`.
+- `GrantOrderPaymentOpening::__invoke(Order $order, int|string $granteeActorIdentifier, string $actorRef, string $actorRole, ?string $reason = null, array $metadata = []): OrderStatusEvent` — the confirmed `DISETUJUI_PEMESAN → MENUNGGU_PEMBAYARAN` hop; grants a `scope_assignments` row (self-granted here, the same pattern `TransitionOrderAction` uses for an admin authorizing themself — `scope_assignments.actor_identifier` has no FK, so this is safe).
+- `ManualPaymentVerification::__invoke(Order $order, string $actorRef, string $actorRole, string $verificationNote, array $metadata = []): OrderStatusEvent` — the confirmed `MENUNGGU_PEMBAYARAN → MENUNGGU_VERIFIKASI_PEMBAYARAN` hop (not directly reachable from `PENAWARAN_TERKIRIM` — see the `OrderTransition::ALLOWED` note below).
 - `MarkOrderPaid::__invoke(Order $order, string $actorRef, string $actorRole, ?string $reason = null): Order` — requires `IssueOrderQuote` to have already run (reads `Quote::currentFor($order)`); internally calls `ApplyPaidEffects`, which is the sole writer of `DIBAYAR` — **lands the order on `DIBAYAR`, not `SELESAI`**.
 - `ProcessOrder::__invoke(Order $order, string $actorRef, string $actorRole, ?string $reason = null, array $metadata = []): OrderStatusEvent` — the confirmed `DIBAYAR → DIPROSES` hop (read in full during this plan's own research to resolve exactly this gap).
 - `RejectOrder::__invoke(Order $order, string $actorRef, string $actorRole, string $reason, array $metadata = []): OrderStatusEvent` — `$reason` required.
 - `CompleteOrder::__invoke(Order $order, string $actorRef, string $actorRole, ?string $reason = null, array $metadata = []): OrderStatusEvent` — writes `SELESAI`, only legal from `DIPROSES` (`OrderTransition::ALLOWED['DIPROSES'] = ['SELESAI']`, confirmed by reading the transition table directly).
 - `OrderStatus` is a real backed enum: `MASUK, DIVERIFIKASI, MENUNGGU_KETERSEDIAAN, PENAWARAN_TERKIRIM, DISETUJUI_PEMESAN, MENUNGGU_PEMBAYARAN, MENUNGGU_VERIFIKASI_PEMBAYARAN, DIBAYAR, DIPROSES, SELESAI, DITOLAK, DIBATALKAN, KEDALUWARSA`.
-- `OrderTransition::ALLOWED` (confirmed verbatim): `DIBAYAR => [DIPROSES]`, `DIPROSES => [SELESAI]`, `SELESAI => []` — the full chain to a demo-complete order is `... → MarkOrderPaid (→DIBAYAR) → ProcessOrder (→DIPROSES) → CompleteOrder (→SELESAI)`, three hops, not two.
+- `OrderTransition::ALLOWED` (confirmed verbatim, and re-confirmed by this task's own implementer running the code against it): `PENAWARAN_TERKIRIM => [DISETUJUI_PEMESAN, KEDALUWARSA, DIBATALKAN]` (jumping straight to `ManualPaymentVerification` throws `IllegalOrderTransitionException` — `MENUNGGU_VERIFIKASI_PEMBAYARAN` is NOT directly reachable from `PENAWARAN_TERKIRIM`), `DISETUJUI_PEMESAN => [MENUNGGU_PEMBAYARAN, ...]`, `MENUNGGU_PEMBAYARAN => [MENUNGGU_VERIFIKASI_PEMBAYARAN, DIBAYAR, ...]`, `MENUNGGU_VERIFIKASI_PEMBAYARAN => [DIBAYAR, ...]`, `DIBAYAR => [DIPROSES]`, `DIPROSES => [SELESAI]`, `SELESAI => []` — the real chain to a demo-complete order is 6 hops: `... → RecordBuyerApproval (→DISETUJUI_PEMESAN) → GrantOrderPaymentOpening (→MENUNGGU_PEMBAYARAN) → ManualPaymentVerification (→MENUNGGU_VERIFIKASI_PEMBAYARAN) → MarkOrderPaid (→DIBAYAR) → ProcessOrder (→DIPROSES) → CompleteOrder (→SELESAI)`.
+- `Order::performUpdate()` throws `OrderIsGuardedException` for any write outside its own controlled paths — `TaggedAsDemoData::tag()` (Task 1) cannot tag an `Order` directly; this generator needs its own raw-query workaround (shown in the implementation below).
+- Real enum values confirmed for the CUSTOMER_AND_DECEASED_DATA payload: `BookingRelationshipCode::KNOWN_CODES` = `PASANGAN, ANAK, ORANG_TUA, SAUDARA, LAINNYA`; `BookingContactChannel::KNOWN_CODES` = `WHATSAPP, TELEPON, EMAIL`; `BookingGender::KNOWN_CODES` = `LAKI_LAKI, PEREMPUAN` (not used — `deceased_gender` is optional and omitted). `ServiceCode::BASIC_CODES` = exactly `[DOCUMENT_PROCESSING, GRAVE_DIGGING]`, 2 codes.
 
 **Demo variety (5 orders, one per named state — widened from the spec's 4 during this plan's own research: `CertificateType::OrderSettlement`'s eligibility rule, confirmed by reading `CertificateEligibilityPolicy` directly, requires an order at EXACTLY `DIBAYAR`, not `SELESAI` — Task 9's certificate generator needs an order that stops there, which is also a real, meaningful, independently demo-worthy state in its own right: "payment verified, awaiting processing"):**
-1. **Diverifikasi** — submitted, not yet verified. Stops after `SubmitBookingDraft`.
-2. **Penawaran terkirim** — verified + quoted. `SubmitBookingDraft` → `VerifyOrder` → `IssueOrderQuote`.
-3. **Dibayar** (paid, awaiting processing) — `SubmitBookingDraft` → `VerifyOrder` → `IssueOrderQuote` → `ManualPaymentVerification` → `MarkOrderPaid`. Stops here, at exactly `DIBAYAR` — this is the order Task 9's `CertificateExampleData` consumes.
+1. **Diverifikasi** — submitted and verified. `SubmitBookingDraft` → `VerifyOrder` (`verifiedOnly()` — a bare submission alone never reaches `DIVERIFIKASI`, see above).
+2. **Penawaran terkirim** — verified + quoted. `verifiedOnly()` → `IssueOrderQuote`.
+3. **Dibayar** (paid, awaiting processing) — the real 4-hop approach path: `quoted()` → `RecordBuyerApproval` → `GrantOrderPaymentOpening` → `ManualPaymentVerification` → `MarkOrderPaid`. Stops here, at exactly `DIBAYAR` — this is the order Task 9's `CertificateExampleData` consumes.
 4. **Selesai** (paid + processed + completed) — the full happy path, continuing past state 3: `ProcessOrder` → `CompleteOrder`.
-5. **Ditolak** — verified then rejected. `SubmitBookingDraft` → `VerifyOrder` → `RejectOrder`.
+5. **Ditolak** — verified then rejected. `verifiedOnly()` → `RejectOrder`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1114,12 +1118,13 @@ use App\Domain\Booking\BookingServiceType;
 use App\Domain\Booking\BookingWizardStep;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
-use App\Domain\CemeteryDirectory\Public\CemeteryPublicQuery;
 use App\Domain\OrderWorkflow\Actions\CompleteOrder;
+use App\Domain\OrderWorkflow\Actions\GrantOrderPaymentOpening;
 use App\Domain\OrderWorkflow\Actions\IssueOrderQuote;
 use App\Domain\OrderWorkflow\Actions\ManualPaymentVerification;
 use App\Domain\OrderWorkflow\Actions\MarkOrderPaid;
 use App\Domain\OrderWorkflow\Actions\ProcessOrder;
+use App\Domain\OrderWorkflow\Actions\RecordBuyerApproval;
 use App\Domain\OrderWorkflow\Actions\RejectOrder;
 use App\Domain\OrderWorkflow\Actions\SubmitBookingDraft;
 use App\Domain\OrderWorkflow\Actions\VerifyOrder;
@@ -1127,6 +1132,7 @@ use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\ServiceCatalog\ServiceCode;
 use App\Support\ExampleData\Concerns\TaggedAsDemoData;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 
 final class BookingOrderExampleData
 {
@@ -1142,7 +1148,7 @@ final class BookingOrderExampleData
         $cemetery = self::packagelessDemoCemetery();
         $orders = [];
 
-        $orders[] = self::submittedOnly($cemetery, $batchId, 0);
+        $orders[] = self::verifiedOnly($cemetery, $batchId, 0);
         $orders[] = self::quoted($cemetery, $batchId, 1);
         $orders[] = self::paid($cemetery, $batchId, 2);
         $orders[] = self::completed($cemetery, $batchId, 3);
@@ -1187,13 +1193,13 @@ final class BookingOrderExampleData
             'customer_mobile' => DemoContactData::phone($index),
             'customer_email' => DemoContactData::email($index),
             'customer_address' => 'Jl. Contoh Demo No. '.($index + 1),
-            'customer_relationship' => 'ANAK',
-            'customer_contact_channel' => 'WHATSAPP',
+            'customer_relationship' => \App\Domain\Booking\BookingRelationshipCode::ANAK,
+            'customer_contact_channel' => \App\Domain\Booking\BookingContactChannel::WHATSAPP,
             'privacy_notice_accepted' => true,
             'deceased_full_name' => 'Almarhum Contoh '.($index + 1),
             'deceased_date_of_birth' => '1950-01-01',
             'deceased_date_of_death' => '2026-08-01',
-            'deceased_relationship' => 'ORANG_TUA',
+            'deceased_relationship' => \App\Domain\Booking\BookingRelationshipCode::ORANG_TUA,
         ];
     }
 
@@ -1224,33 +1230,88 @@ final class BookingOrderExampleData
         );
     }
 
+    /**
+     * `TaggedAsDemoData::tag()` (Task 1) cannot tag an `Order` —
+     * `Order::performUpdate()` throws `OrderIsGuardedException` for any
+     * write outside its own controlled paths (`Order`'s own class doc
+     * block: "orders rows are written only by `RecordOrderStatusChange`").
+     * Found by this task's own implementer running the code against real
+     * Postgres, not by inspection. This raw query-builder update is the
+     * one route the guard cannot (and is not meant to) intercept — a
+     * narrow, `Order`-specific workaround local to this generator, not a
+     * change to the shared Task 1 helper (already merged, pinned by its
+     * own test). NOTE: `DB::table('orders')->whereKey(...)` does NOT
+     * behave like the Eloquent builder's `whereKey()` — on the base query
+     * builder it resolves to a literal column named `"key"`, which does
+     * not exist. Use `->where('id', ...)` explicitly.
+     */
+    private static function tagOrder(Order $order, string $batchId): void
+    {
+        DB::table('orders')->where('id', $order->getKey())->update(['demo_batch_id' => $batchId]);
+    }
+
     private static function submittedOnly(Cemetery $cemetery, string $batchId, int $index): Order
     {
         $draft = self::draftThroughPayment($cemetery, $index);
         TaggedAsDemoData::tag($draft, $batchId);
 
         $order = app(SubmitBookingDraft::class)($draft, "demo-submit-{$index}-{$draft->id}");
-        TaggedAsDemoData::tag($order, $batchId);
+        self::tagOrder($order, $batchId);
 
         return $order;
     }
 
-    private static function quoted(Cemetery $cemetery, string $batchId, int $index): Order
+    /**
+     * `SubmitBookingDraft` only ever reaches `MASUK` — never `DIVERIFIKASI`
+     * — so state 1 needs its own explicit `VerifyOrder` call. An earlier
+     * draft of this generator used `submittedOnly()` bare for state 1 and
+     * never actually reached `DIVERIFIKASI`; found by running the test
+     * (`Failed asserting that an array contains 'DIVERIFIKASI'`).
+     */
+    private static function verifiedOnly(Cemetery $cemetery, string $batchId, int $index): Order
     {
         $order = self::submittedOnly($cemetery, $batchId, $index);
 
         app(VerifyOrder::class)($order, self::ACTOR_REF, self::ACTOR_ROLE);
+
+        return $order->fresh();
+    }
+
+    private static function quoted(Cemetery $cemetery, string $batchId, int $index): Order
+    {
+        $order = self::verifiedOnly($cemetery, $batchId, $index);
+
         app(IssueOrderQuote::class)($order, CarbonImmutable::now()->addDays(7), self::ACTOR_REF, self::ACTOR_ROLE);
 
         return $order->fresh();
     }
 
+    /**
+     * `OrderTransition::ALLOWED['PENAWARAN_TERKIRIM']` is
+     * `[DISETUJUI_PEMESAN, KEDALUWARSA, DIBATALKAN]` — jumping straight to
+     * `ManualPaymentVerification` (which requires `MENUNGGU_PEMBAYARAN`)
+     * is illegal. The real path, confirmed by reading the one caller that
+     * drives every one of these transitions from the admin panel
+     * (`TransitionOrderAction::run()`), is
+     * `PENAWARAN_TERKIRIM --RecordBuyerApproval--> DISETUJUI_PEMESAN
+     * --GrantOrderPaymentOpening--> MENUNGGU_PEMBAYARAN
+     * --ManualPaymentVerification--> MENUNGGU_VERIFIKASI_PEMBAYARAN
+     * --MarkOrderPaid--> DIBAYAR`. `RecordBuyerApproval` internally calls
+     * `AcceptQuote` against `Quote::currentFor($order)`.
+     * `GrantOrderPaymentOpening` grants a `scope_assignments` row —
+     * self-granted here (`self::ACTOR_REF` as both grantee and actor ref,
+     * the same pattern `TransitionOrderAction` uses when an admin
+     * authorizes themself; `scope_assignments.actor_identifier` is a
+     * plain string column with no FK, so this is safe).
+     */
     private static function paid(Cemetery $cemetery, string $batchId, int $index): Order
     {
         $order = self::quoted($cemetery, $batchId, $index);
 
-        app(ManualPaymentVerification::class)($order, self::ACTOR_REF, self::ACTOR_ROLE, 'Bukti transfer demo diverifikasi.');
-        app(MarkOrderPaid::class)($order, self::ACTOR_REF, self::ACTOR_ROLE); // -> DIBAYAR
+        app(RecordBuyerApproval::class)($order, self::ACTOR_REF, self::ACTOR_ROLE); // -> DISETUJUI_PEMESAN
+        app(GrantOrderPaymentOpening::class)($order->fresh(), self::ACTOR_REF, self::ACTOR_REF, self::ACTOR_ROLE); // -> MENUNGGU_PEMBAYARAN
+        app(ManualPaymentVerification::class)($order->fresh(), self::ACTOR_REF, self::ACTOR_ROLE, 'Bukti transfer demo diverifikasi.'); // -> MENUNGGU_VERIFIKASI_PEMBAYARAN
+        app(MarkOrderPaid::class)($order->fresh(), self::ACTOR_REF, self::ACTOR_ROLE); // -> DIBAYAR
 
         return $order->fresh();
     }
@@ -1267,15 +1328,16 @@ final class BookingOrderExampleData
 
     private static function rejected(Cemetery $cemetery, string $batchId, int $index): Order
     {
-        $order = self::submittedOnly($cemetery, $batchId, $index);
+        $order = self::verifiedOnly($cemetery, $batchId, $index);
 
-        app(VerifyOrder::class)($order, self::ACTOR_REF, self::ACTOR_ROLE);
         app(RejectOrder::class)($order, self::ACTOR_REF, self::ACTOR_ROLE, 'Data pemesan demo tidak lengkap.');
 
         return $order->fresh();
     }
 }
 ```
+
+**Real corrections from this task's own implementer, applied throughout this task's text (not the original draft's code):** (1) the `tagOrder()` raw-update workaround for the `Order` write guard; (2) the `RecordBuyerApproval`/`GrantOrderPaymentOpening` hops the `paid()` chain was missing; (3) the new `verifiedOnly()` method so state 1 genuinely reaches `DIVERIFIKASI` rather than stopping at `MASUK` — `seed()`'s own orchestration call (earlier in this task) now calls `self::verifiedOnly($cemetery, $batchId, 0)` for index 0, not `submittedOnly()`.
 
 - [ ] **Step 4: Run to verify tests pass**
 
