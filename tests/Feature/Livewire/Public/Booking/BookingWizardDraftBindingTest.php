@@ -91,8 +91,11 @@ final class BookingWizardDraftBindingTest extends TestCase
 
     public function test_starting_a_booking_binds_the_new_draft_to_the_session_that_created_it(): void
     {
+        $cemetery = $this->jakartaCemeteryWithoutPackages();
+
         $draftId = Livewire::test(BookingWizard::class)
-            ->call('saveStep1', LaunchCityCode::JAKARTA)
+            ->call('saveStep1', LaunchCityCode::JAKARTA, $cemetery->id, null, BookingServiceType::NEW_GRAVE, $this->basicServicesPayload())
+            ->assertHasNoErrors()
             ->get('draftId');
 
         $this->assertIsString($draftId);
@@ -125,8 +128,10 @@ final class BookingWizardDraftBindingTest extends TestCase
         $user = User::factory()->create();
         $this->actingAs($user);
 
+        $cemetery = $this->jakartaCemeteryWithoutPackages();
+
         Livewire::test(BookingWizard::class)
-            ->call('saveStep1', LaunchCityCode::JAKARTA)
+            ->call('saveStep1', LaunchCityCode::JAKARTA, $cemetery->id, null, BookingServiceType::NEW_GRAVE, $this->basicServicesPayload())
             ->assertHasNoErrors();
 
         $draft = BookingDraft::query()->sole();
@@ -136,7 +141,7 @@ final class BookingWizardDraftBindingTest extends TestCase
 
     public function test_a_stranger_holding_the_draft_id_cannot_read_the_pii_on_it(): void
     {
-        $draftId = $this->victimDraftWithCustomerData();
+        $draftId = $this->victimDraftWithCustomerAndDeceasedData();
 
         $this->becomeADifferentVisitor();
 
@@ -150,7 +155,7 @@ final class BookingWizardDraftBindingTest extends TestCase
             ->assertSet('customerMobile', '')
             ->assertSet('customerAddress', '')
             ->assertSet('deceasedFullName', '')
-            ->assertSet('currentStep', BookingWizardStep::LOCATION);
+            ->assertSet('currentStep', BookingWizardStep::DISCOVERY);
 
         // Not merely absent from the bound properties — absent from the page.
         $stranger->assertDontSee(self::VICTIM_NAME)
@@ -162,7 +167,7 @@ final class BookingWizardDraftBindingTest extends TestCase
 
     public function test_a_stranger_holding_the_draft_id_cannot_write_to_it(): void
     {
-        $draftId = $this->victimDraftWithCustomerData();
+        $draftId = $this->victimDraftWithCustomerAndDeceasedData();
         $before = $this->rowSnapshotOf($draftId);
 
         $this->becomeADifferentVisitor();
@@ -175,14 +180,13 @@ final class BookingWizardDraftBindingTest extends TestCase
             ->set('customerRelationship', BookingRelationshipCode::LAINNYA)
             ->set('customerContactChannel', BookingContactChannel::EMAIL)
             ->set('privacyNoticeAccepted', true)
-            ->call('saveStep6')
             ->set('deceasedFullName', 'Nama Almarhum Palsu')
             ->set('deceasedDateOfBirth', '1950-01-01')
             ->set('deceasedDateOfDeath', '2026-01-01')
             ->set('deceasedRelationship', BookingRelationshipCode::LAINNYA)
-            ->call('saveStep7')
+            ->call('saveStep2')
             ->set('paymentReference', 'TRF-PENYERANG-0001')
-            ->call('saveStep8', BookingPaymentMethod::MANUAL)
+            ->call('saveStep3', BookingPaymentMethod::MANUAL)
             ->assertHasErrors(['draft'])
             ->assertSet('autosaveState', 'failed');
 
@@ -203,7 +207,7 @@ final class BookingWizardDraftBindingTest extends TestCase
      */
     public function test_a_component_that_loses_its_session_secret_cannot_write_to_the_draft_it_holds(): void
     {
-        $draftId = $this->victimDraftWithCustomerData();
+        $draftId = $this->victimDraftWithCustomerAndDeceasedData();
 
         $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->assertSet('draftId', $draftId);
@@ -219,7 +223,11 @@ final class BookingWizardDraftBindingTest extends TestCase
             ->set('customerRelationship', BookingRelationshipCode::LAINNYA)
             ->set('customerContactChannel', BookingContactChannel::EMAIL)
             ->set('privacyNoticeAccepted', true)
-            ->call('saveStep6')
+            ->set('deceasedFullName', 'Nama Almarhum Palsu')
+            ->set('deceasedDateOfBirth', '1950-01-01')
+            ->set('deceasedDateOfDeath', '2026-01-01')
+            ->set('deceasedRelationship', BookingRelationshipCode::LAINNYA)
+            ->call('saveStep2')
             ->assertHasErrors(['draft'])
             ->assertSet('autosaveState', 'failed');
 
@@ -238,7 +246,7 @@ final class BookingWizardDraftBindingTest extends TestCase
      */
     public function test_a_draft_with_no_resume_secret_hash_is_unreadable_even_by_its_own_session(): void
     {
-        $draftId = $this->victimDraftWithCustomerData();
+        $draftId = $this->victimDraftWithCustomerAndDeceasedData();
 
         // Same session throughout — the ONLY thing that changes is the hash.
         DB::table('booking_drafts')->where('id', $draftId)->update(['resume_secret_hash' => null]);
@@ -253,7 +261,7 @@ final class BookingWizardDraftBindingTest extends TestCase
 
     public function test_a_session_holding_the_wrong_secret_for_a_real_draft_is_rejected(): void
     {
-        $draftId = $this->victimDraftWithCustomerData();
+        $draftId = $this->victimDraftWithCustomerAndDeceasedData();
 
         $this->becomeADifferentVisitor();
         Session::put(self::SESSION_SECRETS_KEY.'.'.$draftId, 'bukan-rahasia-yang-diterbitkan');
@@ -272,7 +280,7 @@ final class BookingWizardDraftBindingTest extends TestCase
      */
     public function test_the_owning_session_can_still_resume_its_own_draft(): void
     {
-        $draftId = $this->victimDraftWithCustomerData();
+        $draftId = $this->victimDraftWithCustomerAndDeceasedData();
 
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->assertSet('draftId', $draftId)
@@ -282,7 +290,8 @@ final class BookingWizardDraftBindingTest extends TestCase
             ->assertSet('customerAddress', self::VICTIM_ADDRESS)
             ->assertSet('customerRelationship', BookingRelationshipCode::ANAK)
             ->assertSet('customerContactChannel', BookingContactChannel::WHATSAPP)
-            ->assertSet('currentStep', BookingWizardStep::DECEASED_DATA);
+            ->assertSet('deceasedFullName', self::VICTIM_DECEASED_NAME)
+            ->assertSet('currentStep', BookingWizardStep::PAYMENT);
     }
 
     public function test_a_stranger_does_not_reach_the_confirmation_screen_of_someone_elses_draft(): void
@@ -299,7 +308,7 @@ final class BookingWizardDraftBindingTest extends TestCase
 
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->assertSet('draftId', null)
-            ->assertSet('currentStep', BookingWizardStep::LOCATION)
+            ->assertSet('currentStep', BookingWizardStep::DISCOVERY)
             ->assertDontSee(self::VICTIM_NAME)
             ->assertDontSee(self::VICTIM_DECEASED_NAME)
             ->assertDontSee(self::VICTIM_PAYMENT_REFERENCE);
@@ -362,7 +371,7 @@ final class BookingWizardDraftBindingTest extends TestCase
     public function test_an_authenticated_owner_resumes_their_own_draft_via_mount_after_losing_the_session_secret(): void
     {
         $owner = User::factory()->create();
-        $draftId = $this->victimDraftWithCustomerData();
+        $draftId = $this->victimDraftWithCustomerAndDeceasedData();
 
         BookingDraft::query()->where('id', $draftId)->update(['user_id' => $owner->id]);
 
@@ -376,7 +385,7 @@ final class BookingWizardDraftBindingTest extends TestCase
             ->assertSet('customerMobile', self::VICTIM_MOBILE)
             ->assertSet('customerEmail', self::VICTIM_EMAIL)
             ->assertSet('customerAddress', self::VICTIM_ADDRESS)
-            ->assertSet('currentStep', BookingWizardStep::DECEASED_DATA);
+            ->assertSet('currentStep', BookingWizardStep::PAYMENT);
 
         $newHash = DB::table('booking_drafts')->where('id', $draftId)->value('resume_secret_hash');
 
@@ -391,7 +400,7 @@ final class BookingWizardDraftBindingTest extends TestCase
     public function test_an_authenticated_owner_resumes_their_own_draft_via_save_step_one_after_losing_the_session_secret(): void
     {
         $owner = User::factory()->create();
-        $draftId = $this->draftThroughStep4();
+        $draftId = $this->draftAtDiscoveryComplete();
 
         BookingDraft::query()->where('id', $draftId)->update(['user_id' => $owner->id]);
 
@@ -402,7 +411,9 @@ final class BookingWizardDraftBindingTest extends TestCase
 
         $this->becomeADifferentAuthenticatedVisitor($owner);
 
-        $component->call('saveStep1', LaunchCityCode::BOGOR)
+        $bogorCemetery = $this->cemeteryWithoutPackages(LaunchCityCode::BOGOR);
+
+        $component->call('saveStep1', LaunchCityCode::BOGOR, $bogorCemetery->id, null, BookingServiceType::NEW_GRAVE, $this->basicServicesPayload())
             ->assertHasNoErrors()
             ->assertSet('draftId', $draftId)
             ->assertSet('city', LaunchCityCode::BOGOR);
@@ -421,14 +432,16 @@ final class BookingWizardDraftBindingTest extends TestCase
 
     public function test_a_guest_who_loses_the_session_secret_still_gets_a_brand_new_draft_from_save_step_one(): void
     {
-        $draftId = $this->draftThroughStep4();
+        $draftId = $this->draftAtDiscoveryComplete();
 
         $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->assertSet('draftId', $draftId);
 
         $this->becomeADifferentVisitor();
 
-        $newDraftId = $component->call('saveStep1', LaunchCityCode::BOGOR)
+        $bogorCemetery = $this->cemeteryWithoutPackages(LaunchCityCode::BOGOR);
+
+        $newDraftId = $component->call('saveStep1', LaunchCityCode::BOGOR, $bogorCemetery->id, null, BookingServiceType::NEW_GRAVE, $this->basicServicesPayload())
             ->assertHasNoErrors()
             ->get('draftId');
 
@@ -450,7 +463,7 @@ final class BookingWizardDraftBindingTest extends TestCase
         $owner = User::factory()->create();
         $attacker = User::factory()->create();
 
-        $draftId = $this->victimDraftWithCustomerData();
+        $draftId = $this->victimDraftWithCustomerAndDeceasedData();
         BookingDraft::query()->where('id', $draftId)->update(['user_id' => $owner->id]);
 
         $this->becomeADifferentAuthenticatedVisitor($attacker);
@@ -462,7 +475,7 @@ final class BookingWizardDraftBindingTest extends TestCase
             ->assertSet('customerEmail', '')
             ->assertSet('customerMobile', '')
             ->assertSet('customerAddress', '')
-            ->assertSet('currentStep', BookingWizardStep::LOCATION);
+            ->assertSet('currentStep', BookingWizardStep::DISCOVERY);
 
         $stranger->assertDontSee(self::VICTIM_NAME)
             ->assertDontSee(self::VICTIM_MOBILE)
@@ -475,7 +488,7 @@ final class BookingWizardDraftBindingTest extends TestCase
         $owner = User::factory()->create();
         $attacker = User::factory()->create();
 
-        $draftId = $this->draftThroughStep4();
+        $draftId = $this->draftAtDiscoveryComplete();
         BookingDraft::query()->where('id', $draftId)->update(['user_id' => $owner->id]);
 
         $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
@@ -483,7 +496,9 @@ final class BookingWizardDraftBindingTest extends TestCase
 
         $this->becomeADifferentAuthenticatedVisitor($attacker);
 
-        $newDraftId = $component->call('saveStep1', LaunchCityCode::BOGOR)
+        $bogorCemetery = $this->cemeteryWithoutPackages(LaunchCityCode::BOGOR);
+
+        $newDraftId = $component->call('saveStep1', LaunchCityCode::BOGOR, $bogorCemetery->id, null, BookingServiceType::NEW_GRAVE, $this->basicServicesPayload())
             ->assertHasNoErrors()
             ->get('draftId');
 
@@ -497,36 +512,36 @@ final class BookingWizardDraftBindingTest extends TestCase
     }
 
     // =====================================================================
-    // Reaching (and re-reaching) the read-only steps
+    // Reaching (and re-reaching) the read-only CONFIRMATION step
     //
-    // Steps 5 and 9 are read-only and therefore never recorded in
+    // Under the nine-step model this section also covered the SUMMARY step
+    // (read-only, never recorded in `completed_steps`, so navigating away
+    // and back could strand a user). SUMMARY was CUT — not merged — by the
+    // step reduction (`BookingWizardStep`'s own doc block), so that whole
+    // bridge-step dead-end class of bug can no longer occur (same ruling
+    // `BookingWizardStepFiveToSixHandoffTest` already acted on: its own
+    // three SUMMARY dead-end regression tests were removed, not migrated).
+    // DISCOVERY and CUSTOMER_AND_DECEASED_DATA are both ordinary writable
+    // steps now, reachable only once genuinely completed or current — same
+    // as every other writable step — so there is no equivalent "reachable
+    // again after leaving" guarantee to pin for them.
+    //
+    // CONFIRMATION is read-only and therefore never recorded in
     // `completed_steps`, so a naive "have you completed it?" reachability
-    // test locks the user out of both the moment they navigate away. That
-    // matters here specifically because Step 9 is the screen the tests above
+    // test locks the user out the moment they navigate away. That matters
+    // here specifically because CONFIRMATION is the screen the tests above
     // use to prove the confirmation branch does not leak PII: if it became
     // unreachable, those tests would be guarding a screen nobody can open.
     // =====================================================================
 
-    public function test_the_summary_step_is_reachable_again_after_navigating_away_from_it(): void
-    {
-        $draftId = $this->draftThroughStep4();
-
-        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
-            ->assertSet('currentStep', BookingWizardStep::SUMMARY)
-            ->call('goToStep', BookingWizardStep::SERVICES)
-            ->assertSet('currentStep', BookingWizardStep::SERVICES)
-            ->call('goToStep', BookingWizardStep::SUMMARY)
-            ->assertSet('currentStep', BookingWizardStep::SUMMARY);
-    }
-
-    public function test_leaving_the_confirmation_step_to_check_step_6_does_not_lose_it_permanently(): void
+    public function test_leaving_the_confirmation_step_to_check_customer_and_deceased_data_does_not_lose_it_permanently(): void
     {
         $draftId = $this->victimDraftThroughPayment();
 
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->assertSet('currentStep', BookingWizardStep::CONFIRMATION)
-            ->call('goToStep', BookingWizardStep::CUSTOMER_DATA)
-            ->assertSet('currentStep', BookingWizardStep::CUSTOMER_DATA)
+            ->call('goToStep', BookingWizardStep::CUSTOMER_AND_DECEASED_DATA)
+            ->assertSet('currentStep', BookingWizardStep::CUSTOMER_AND_DECEASED_DATA)
             ->call('goToStep', BookingWizardStep::CONFIRMATION)
             ->assertSet('currentStep', BookingWizardStep::CONFIRMATION);
     }
@@ -542,7 +557,7 @@ final class BookingWizardDraftBindingTest extends TestCase
 
     public function test_step_6_without_consent_is_rejected_and_persists_no_customer_data(): void
     {
-        $draftId = $this->draftThroughStep4();
+        $draftId = $this->draftAtDiscoveryComplete();
 
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->set('customerFullName', self::VICTIM_NAME)
@@ -552,7 +567,12 @@ final class BookingWizardDraftBindingTest extends TestCase
             ->set('customerRelationship', BookingRelationshipCode::ANAK)
             ->set('customerContactChannel', BookingContactChannel::WHATSAPP)
             ->set('privacyNoticeAccepted', false)
-            ->call('saveStep6')
+            ->set('deceasedFullName', self::VICTIM_DECEASED_NAME)
+            ->set('deceasedDateOfBirth', '1948-03-12')
+            ->set('deceasedDateOfDeath', '2026-08-01')
+            ->set('deceasedRelationship', BookingRelationshipCode::ORANG_TUA)
+            ->set('deceasedGender', BookingGender::LAKI_LAKI)
+            ->call('saveStep2')
             ->assertHasErrors(['privacy_notice_accepted'])
             ->assertSet('autosaveState', 'failed');
 
@@ -565,7 +585,7 @@ final class BookingWizardDraftBindingTest extends TestCase
 
     public function test_step_6_with_consent_persists_the_customer_data_and_stamps_the_consent_time(): void
     {
-        $draftId = $this->draftThroughStep4();
+        $draftId = $this->draftAtDiscoveryComplete();
 
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->set('customerFullName', self::VICTIM_NAME)
@@ -575,7 +595,12 @@ final class BookingWizardDraftBindingTest extends TestCase
             ->set('customerRelationship', BookingRelationshipCode::ANAK)
             ->set('customerContactChannel', BookingContactChannel::WHATSAPP)
             ->set('privacyNoticeAccepted', true)
-            ->call('saveStep6')
+            ->set('deceasedFullName', self::VICTIM_DECEASED_NAME)
+            ->set('deceasedDateOfBirth', '1948-03-12')
+            ->set('deceasedDateOfDeath', '2026-08-01')
+            ->set('deceasedRelationship', BookingRelationshipCode::ORANG_TUA)
+            ->set('deceasedGender', BookingGender::LAKI_LAKI)
+            ->call('saveStep2')
             ->assertHasNoErrors()
             ->assertSet('autosaveState', 'saved');
 
@@ -583,12 +608,13 @@ final class BookingWizardDraftBindingTest extends TestCase
 
         $this->assertSame(self::VICTIM_NAME, $draft->customer_full_name);
         $this->assertSame(self::VICTIM_EMAIL, $draft->customer_email);
+        $this->assertSame(self::VICTIM_DECEASED_NAME, $draft->deceased_full_name);
         $this->assertNotNull($draft->privacy_notice_accepted_at, 'Consent given must be recorded, and only then.');
     }
 
     public function test_resuming_a_consented_draft_rehydrates_the_checkbox_as_ticked(): void
     {
-        $draftId = $this->victimDraftWithCustomerData();
+        $draftId = $this->victimDraftWithCustomerAndDeceasedData();
 
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->assertSet('privacyNoticeAccepted', true);
@@ -601,12 +627,12 @@ final class BookingWizardDraftBindingTest extends TestCase
     public function test_a_closed_payment_gate_rejects_a_direct_online_save_call(): void
     {
         $this->withClosedPaymentGate();
-        $draftId = $this->victimDraftThroughDeceasedData();
+        $draftId = $this->victimDraftWithCustomerAndDeceasedData();
 
         // Livewire exposes every public method to the client, so this IS the
         // bypass path — hiding the online button in Blade never closed it.
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
-            ->call('saveStep8', BookingPaymentMethod::ONLINE)
+            ->call('saveStep3', BookingPaymentMethod::ONLINE)
             ->assertHasErrors(['payment_method'])
             ->assertSet('autosaveState', 'failed');
 
@@ -619,11 +645,11 @@ final class BookingWizardDraftBindingTest extends TestCase
     public function test_a_closed_payment_gate_still_allows_the_manual_path_with_a_reference(): void
     {
         $this->withClosedPaymentGate();
-        $draftId = $this->victimDraftThroughDeceasedData();
+        $draftId = $this->victimDraftWithCustomerAndDeceasedData();
 
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->set('paymentReference', self::VICTIM_PAYMENT_REFERENCE)
-            ->call('saveStep8', BookingPaymentMethod::MANUAL)
+            ->call('saveStep3', BookingPaymentMethod::MANUAL)
             ->assertHasNoErrors()
             ->assertSet('autosaveState', 'saved');
 
@@ -640,11 +666,11 @@ final class BookingWizardDraftBindingTest extends TestCase
     public function test_the_manual_path_refuses_a_blank_payment_reference(): void
     {
         $this->withClosedPaymentGate();
-        $draftId = $this->victimDraftThroughDeceasedData();
+        $draftId = $this->victimDraftWithCustomerAndDeceasedData();
 
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->set('paymentReference', '   ')
-            ->call('saveStep8', BookingPaymentMethod::MANUAL)
+            ->call('saveStep3', BookingPaymentMethod::MANUAL)
             ->assertHasErrors(['payment_reference'])
             ->assertSet('autosaveState', 'failed');
 
@@ -703,51 +729,62 @@ final class BookingWizardDraftBindingTest extends TestCase
 
     private function jakartaCemeteryWithoutPackages(): Cemetery
     {
+        return $this->cemeteryWithoutPackages(LaunchCityCode::JAKARTA);
+    }
+
+    private function cemeteryWithoutPackages(string $cityCode): Cemetery
+    {
         return Cemetery::query()
-            ->where('city', LaunchCityCode::JAKARTA)
+            ->where('city', $cityCode)
             ->where('publication_status', 'published')
             ->whereDoesntHave('packages')
             ->firstOrFail();
     }
 
     /**
-     * A draft owned by the CURRENT session, with steps 1-4 complete — the
-     * point from which `SaveBookingDraftStep`'s sequencing rule lets step 6
-     * through.
-     *
-     * Steps 7 and 8 need MORE than this: that rule requires every writable
-     * step below the one being saved (step 5 is read-only and never enters
-     * `completed_steps`), so step 8 needs 1-4 plus 6 and 7. Hence the two
-     * further fixtures below rather than one shared "any old draft".
+     * @return list<array{code: string, quantity: int}>
      */
-    private function draftThroughStep4(): string
+    private function basicServicesPayload(): array
     {
+        return array_map(
+            static fn (string $code): array => ['code' => $code, 'quantity' => 1],
+            ServiceCode::BASIC_CODES,
+        );
+    }
+
+    /**
+     * A draft owned by the CURRENT session, with DISCOVERY complete — the
+     * merged step that used to be steps 1-4. `SaveBookingDraftStep`'s
+     * sequencing rule lets `CUSTOMER_AND_DECEASED_DATA` through once this
+     * one step is done.
+     */
+    private function draftAtDiscoveryComplete(): string
+    {
+        $cemetery = $this->jakartaCemeteryWithoutPackages();
+
         $draftId = Livewire::test(BookingWizard::class)
-            ->call('saveStep1', LaunchCityCode::JAKARTA)
+            ->call('saveStep1', LaunchCityCode::JAKARTA, $cemetery->id, null, BookingServiceType::NEW_GRAVE, $this->basicServicesPayload())
+            ->assertHasNoErrors()
             ->get('draftId');
 
         $this->assertIsString($draftId);
 
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
-            ->call('saveStep2', $this->jakartaCemeteryWithoutPackages()->id)
-            ->call('saveStep3', BookingServiceType::NEW_GRAVE)
-            ->call('saveStep4', array_map(
-                static fn (string $code): array => ['code' => $code, 'quantity' => 1],
-                ServiceCode::BASIC_CODES,
-            ))
-            ->assertHasNoErrors()
-            ->assertSet('currentStep', BookingWizardStep::SUMMARY);
+            ->assertSet('currentStep', BookingWizardStep::CUSTOMER_AND_DECEASED_DATA);
 
         return $draftId;
     }
 
     /**
-     * The same draft carried through Step 6, so the row actually holds the
-     * PII these tests are about. Owned by the current session.
+     * The same draft carried through `saveStep2()` — the merged
+     * customer+deceased save that REPLACES the old `saveStep6()`/
+     * `saveStep7()` pair. Lands directly on PAYMENT, the earliest point
+     * `saveStep3()` is allowed to be saved at all. Owned by the current
+     * session.
      */
-    private function victimDraftWithCustomerData(): string
+    private function victimDraftWithCustomerAndDeceasedData(): string
     {
-        $draftId = $this->draftThroughStep4();
+        $draftId = $this->draftAtDiscoveryComplete();
 
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->set('customerFullName', self::VICTIM_NAME)
@@ -757,27 +794,12 @@ final class BookingWizardDraftBindingTest extends TestCase
             ->set('customerRelationship', BookingRelationshipCode::ANAK)
             ->set('customerContactChannel', BookingContactChannel::WHATSAPP)
             ->set('privacyNoticeAccepted', true)
-            ->call('saveStep6')
-            ->assertHasNoErrors();
-
-        return $draftId;
-    }
-
-    /**
-     * The same draft carried through Step 7 — the earliest point step 8 is
-     * allowed to be saved at all.
-     */
-    private function victimDraftThroughDeceasedData(): string
-    {
-        $draftId = $this->victimDraftWithCustomerData();
-
-        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->set('deceasedFullName', self::VICTIM_DECEASED_NAME)
             ->set('deceasedDateOfBirth', '1948-03-12')
             ->set('deceasedDateOfDeath', '2026-08-01')
             ->set('deceasedRelationship', BookingRelationshipCode::ORANG_TUA)
             ->set('deceasedGender', BookingGender::LAKI_LAKI)
-            ->call('saveStep7')
+            ->call('saveStep2')
             ->assertHasNoErrors()
             ->assertSet('currentStep', BookingWizardStep::PAYMENT);
 
@@ -785,15 +807,15 @@ final class BookingWizardDraftBindingTest extends TestCase
     }
 
     /**
-     * Carried all the way to the Step 9 confirmation screen.
+     * Carried all the way to the CONFIRMATION screen.
      */
     private function victimDraftThroughPayment(): string
     {
-        $draftId = $this->victimDraftThroughDeceasedData();
+        $draftId = $this->victimDraftWithCustomerAndDeceasedData();
 
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->set('paymentReference', self::VICTIM_PAYMENT_REFERENCE)
-            ->call('saveStep8', BookingPaymentMethod::MANUAL)
+            ->call('saveStep3', BookingPaymentMethod::MANUAL)
             ->assertHasNoErrors()
             ->assertSet('currentStep', BookingWizardStep::CONFIRMATION);
 

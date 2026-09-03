@@ -6,11 +6,14 @@ namespace Tests\Feature\Livewire\Public\Booking;
 
 use App\Domain\Booking\Actions\SaveBookingDraftStep;
 use App\Domain\Booking\Actions\StartBookingDraft;
+use App\Domain\Booking\BookingServiceType;
 use App\Domain\Booking\BookingWizardStep;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\ServiceCatalog\ServiceCode;
 use App\Livewire\Public\Booking\BookingWizard;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -37,10 +40,36 @@ final class BookingWizardCheckboxStylingTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function draftAtStep4(): string
+    /**
+     * DISCOVERY's city/cemetery/service-type choices are client-side
+     * component state, not persisted, until the single `saveStep1()` save
+     * — the service checkboxes reveal once `$serviceType !== null`
+     * regardless of whether anything has been saved yet. No `BookingDraft`
+     * exists for this fixture at all.
+     */
+    private function wizardWithServiceTypeSelected(): Testable
+    {
+        $cemetery = Cemetery::query()
+            ->where('city', LaunchCityCode::JAKARTA)
+            ->where('publication_status', 'published')
+            ->whereDoesntHave('packages')
+            ->firstOrFail();
+
+        return Livewire::test(BookingWizard::class)
+            ->call('selectCity', LaunchCityCode::JAKARTA)
+            ->call('selectCemetery', $cemetery->id)
+            ->call('selectServiceType', BookingServiceType::NEW_GRAVE);
+    }
+
+    /**
+     * A real draft, saved all the way through DISCOVERY via the domain
+     * Action directly (not through the Livewire component), so the wizard
+     * renders the CUSTOMER_AND_DECEASED_DATA screen where the privacy
+     * consent checkbox lives.
+     */
+    private function draftAtCustomerAndDeceasedData(): string
     {
         $draft = (new StartBookingDraft)();
-        $draft = (new SaveBookingDraftStep)($draft, BookingWizardStep::LOCATION, ['city_code' => LaunchCityCode::JAKARTA], 'idem-a');
 
         $cemetery = Cemetery::query()
             ->where('city', LaunchCityCode::JAKARTA)
@@ -48,8 +77,16 @@ final class BookingWizardCheckboxStylingTest extends TestCase
             ->whereDoesntHave('packages')
             ->firstOrFail();
 
-        $draft = (new SaveBookingDraftStep)($draft, BookingWizardStep::CEMETERY, ['cemetery_id' => $cemetery->id], 'idem-b');
-        $draft = (new SaveBookingDraftStep)($draft, BookingWizardStep::SERVICE_TYPE, ['service_type' => 'NEW_GRAVE'], 'idem-c');
+        $draft = (new SaveBookingDraftStep)($draft, BookingWizardStep::DISCOVERY, [
+            'city_code' => LaunchCityCode::JAKARTA,
+            'cemetery_id' => $cemetery->id,
+            'cemetery_package_id' => null,
+            'service_type' => BookingServiceType::NEW_GRAVE,
+            'selected_services' => [
+                ['code' => ServiceCode::DOCUMENT_PROCESSING, 'quantity' => 1],
+                ['code' => ServiceCode::GRAVE_DIGGING, 'quantity' => 1],
+            ],
+        ], 'idem-discovery-'.$draft->id);
 
         return $draft->id;
     }
@@ -84,9 +121,7 @@ final class BookingWizardCheckboxStylingTest extends TestCase
 
     public function test_step_4_mandatory_service_checkbox_has_the_real_brand_accent_color_and_radius(): void
     {
-        $draftId = $this->draftAtStep4();
-
-        $html = (string) Livewire::test(BookingWizard::class, ['draftId' => $draftId])->html();
+        $html = (string) $this->wizardWithServiceTypeSelected()->html();
         $class = $this->checkboxClassAttribute($html, 'service-DOCUMENT_PROCESSING');
 
         $this->assertStringContainsString('accent-primary-600', $class);
@@ -96,9 +131,7 @@ final class BookingWizardCheckboxStylingTest extends TestCase
 
     public function test_step_4_additional_service_checkbox_has_the_real_brand_accent_color_and_radius(): void
     {
-        $draftId = $this->draftAtStep4();
-
-        $html = (string) Livewire::test(BookingWizard::class, ['draftId' => $draftId])->html();
+        $html = (string) $this->wizardWithServiceTypeSelected()->html();
         $class = $this->checkboxClassAttribute($html, 'service-AMBULANCE');
 
         $this->assertStringContainsString('accent-primary-600', $class);
@@ -117,9 +150,7 @@ final class BookingWizardCheckboxStylingTest extends TestCase
      */
     public function test_step_4_checkbox_row_meets_the_44px_touch_target_via_the_wrapping_label(): void
     {
-        $draftId = $this->draftAtStep4();
-
-        $html = (string) Livewire::test(BookingWizard::class, ['draftId' => $draftId])->html();
+        $html = (string) $this->wizardWithServiceTypeSelected()->html();
 
         $this->assertMatchesRegularExpression(
             '/<label\s+for="service-DOCUMENT_PROCESSING"\s+class="[^"]*min-h-11[^"]*"/s',
@@ -129,22 +160,9 @@ final class BookingWizardCheckboxStylingTest extends TestCase
 
     public function test_step_6_privacy_consent_checkbox_has_the_real_brand_accent_color_and_radius(): void
     {
-        $draftId = Livewire::test(BookingWizard::class)
-            ->call('saveStep1', LaunchCityCode::JAKARTA)
-            ->get('draftId');
-        $this->assertIsString($draftId);
+        $draftId = $this->draftAtCustomerAndDeceasedData();
 
-        $cemetery = Cemetery::query()
-            ->where('city', LaunchCityCode::JAKARTA)
-            ->where('publication_status', 'published')
-            ->whereDoesntHave('packages')
-            ->firstOrFail();
-
-        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
-            ->call('saveStep2', $cemetery->id)
-            ->call('saveStep3', 'NEW_GRAVE')
-            ->call('continueFromStep4')
-            ->call('goToStep', BookingWizardStep::CUSTOMER_DATA);
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
 
         $class = $this->checkboxClassAttribute((string) $component->html(), 'privacy-notice-accepted');
 
@@ -162,26 +180,14 @@ final class BookingWizardCheckboxStylingTest extends TestCase
      */
     public function test_step_6_privacy_consent_checkbox_switches_to_the_danger_accent_when_invalid(): void
     {
-        $draftId = Livewire::test(BookingWizard::class)
-            ->call('saveStep1', LaunchCityCode::JAKARTA)
-            ->get('draftId');
-        $this->assertIsString($draftId);
-
-        $cemetery = Cemetery::query()
-            ->where('city', LaunchCityCode::JAKARTA)
-            ->where('publication_status', 'published')
-            ->whereDoesntHave('packages')
-            ->firstOrFail();
+        $draftId = $this->draftAtCustomerAndDeceasedData();
 
         $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
-            ->call('saveStep2', $cemetery->id)
-            ->call('saveStep3', 'NEW_GRAVE')
-            ->call('continueFromStep4')
-            ->call('goToStep', BookingWizardStep::CUSTOMER_DATA)
-            // Submit Step 6 with everything blank, including the unticked
-            // privacy checkbox, so `privacy_notice_accepted` fails
-            // validation and the error-state class branch renders.
-            ->call('saveStep6');
+            // Submit the merged customer+deceased save with everything
+            // blank, including the unticked privacy checkbox, so
+            // `privacy_notice_accepted` fails validation and the
+            // error-state class branch renders.
+            ->call('saveStep2');
 
         $component->assertHasErrors(['privacy_notice_accepted']);
 

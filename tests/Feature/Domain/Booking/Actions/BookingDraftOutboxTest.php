@@ -6,8 +6,13 @@ namespace Tests\Feature\Domain\Booking\Actions;
 
 use App\Domain\Booking\Actions\SaveBookingDraftStep;
 use App\Domain\Booking\Actions\StartBookingDraft;
+use App\Domain\Booking\BookingServiceType;
+use App\Domain\Booking\BookingWizardStep;
 use App\Domain\Booking\Exceptions\BookingStepValidationException;
 use App\Domain\Booking\Models\BookingDraft;
+use App\Domain\CemeteryDirectory\LaunchCityCode;
+use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\ServiceCatalog\ServiceCode;
 use App\Models\User;
 use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\Outbox\Models\OutboxEvent;
@@ -38,6 +43,34 @@ final class BookingDraftOutboxTest extends TestCase
         AuditEvent::flushEventListeners();
 
         parent::tearDown();
+    }
+
+    /**
+     * A full, valid DISCOVERY payload — the merged step now requires
+     * cemetery/service-type/services alongside the city, not just
+     * `city_code` on its own. The cemetery must have no packages, or
+     * `cemetery_package_id` is required too.
+     *
+     * @return array<string, mixed>
+     */
+    private function discoveryPayload(): array
+    {
+        $cemetery = Cemetery::query()
+            ->where('city', LaunchCityCode::JAKARTA)
+            ->where('publication_status', 'published')
+            ->whereDoesntHave('packages')
+            ->firstOrFail();
+
+        return [
+            'city_code' => LaunchCityCode::JAKARTA,
+            'cemetery_id' => $cemetery->id,
+            'cemetery_package_id' => null,
+            'service_type' => BookingServiceType::NEW_GRAVE,
+            'selected_services' => [
+                ['code' => ServiceCode::DOCUMENT_PROCESSING, 'quantity' => 1],
+                ['code' => ServiceCode::GRAVE_DIGGING, 'quantity' => 1],
+            ],
+        ];
     }
 
     public function test_starting_a_draft_writes_one_outbox_event_with_the_agreed_shape(): void
@@ -77,15 +110,15 @@ final class BookingDraftOutboxTest extends TestCase
     {
         $draft = (new StartBookingDraft)(userId: null);
 
-        (new SaveBookingDraftStep)($draft, 1, ['city_code' => 'JAKARTA'], 'key-1');
+        (new SaveBookingDraftStep)($draft, BookingWizardStep::DISCOVERY, $this->discoveryPayload(), 'key-1');
 
         $event = OutboxEvent::query()->where('event_name', 'booking.draft_step_saved.v1')->sole();
 
         $this->assertSame('booking_draft', $event->aggregate_type);
         $this->assertSame((string) $draft->id, $event->aggregate_id);
-        $this->assertSame(1, $event->payload['step']);
+        $this->assertSame(BookingWizardStep::DISCOVERY, $event->payload['step']);
         $this->assertSame($draft->id, $event->payload['draft_id']);
-        $this->assertSame([1], $event->payload['completed_steps']);
+        $this->assertSame([BookingWizardStep::DISCOVERY], $event->payload['completed_steps']);
         // AC2: reference, never content. The city belongs to the draft row.
         $this->assertArrayNotHasKey('city_code', $event->payload);
     }
@@ -94,8 +127,8 @@ final class BookingDraftOutboxTest extends TestCase
     {
         $draft = (new StartBookingDraft)(userId: null);
 
-        $saved = (new SaveBookingDraftStep)($draft, 1, ['city_code' => 'JAKARTA'], 'replayed-key');
-        (new SaveBookingDraftStep)($saved, 1, ['city_code' => 'JAKARTA'], 'replayed-key');
+        $saved = (new SaveBookingDraftStep)($draft, BookingWizardStep::DISCOVERY, $this->discoveryPayload(), 'replayed-key');
+        (new SaveBookingDraftStep)($saved, BookingWizardStep::DISCOVERY, $this->discoveryPayload(), 'replayed-key');
 
         $this->assertSame(
             1,
@@ -108,7 +141,7 @@ final class BookingDraftOutboxTest extends TestCase
         $draft = (new StartBookingDraft)(userId: null);
 
         try {
-            (new SaveBookingDraftStep)($draft, 1, ['city_code' => 'NOT_A_CITY'], 'key-1');
+            (new SaveBookingDraftStep)($draft, BookingWizardStep::DISCOVERY, ['city_code' => 'NOT_A_CITY'], 'key-1');
             $this->fail('Expected the invalid city to be rejected.');
         } catch (BookingStepValidationException) {
             // expected
@@ -202,7 +235,7 @@ final class BookingDraftOutboxTest extends TestCase
         });
 
         try {
-            (new SaveBookingDraftStep)($draft, 1, ['city_code' => 'JAKARTA'], 'key-1');
+            (new SaveBookingDraftStep)($draft, BookingWizardStep::DISCOVERY, $this->discoveryPayload(), 'key-1');
             $this->fail('Expected the simulated audit failure to propagate.');
         } catch (RuntimeException $exception) {
             $this->assertSame('simulated audit write failure', $exception->getMessage());
