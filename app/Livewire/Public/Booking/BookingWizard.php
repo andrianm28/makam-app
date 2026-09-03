@@ -24,7 +24,6 @@ use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotReservation\Actions\HoldPlotForDraft;
-use App\Domain\PlotReservation\Actions\ReleasePlotReservation;
 use App\Domain\PlotReservation\Exceptions\DraftPlotHoldNoLongerValidException;
 use App\Domain\PlotReservation\Exceptions\PlotNotAvailableException;
 use App\Domain\PlotReservation\Models\PlotReservation;
@@ -36,7 +35,6 @@ use App\Domain\Quotation\Models\QuoteLine;
 use App\Domain\ServiceCatalog\ServiceCatalogQuery;
 use App\Domain\ServiceCatalog\ServiceCode;
 use App\Livewire\Public\Directory\Support\PublicCapabilityProjection;
-use App\Platform\Audit\AuditSource;
 use App\Platform\FeatureGate\ModeResolver;
 use App\Platform\FeatureGate\Modes\PaymentMode;
 use App\Platform\IdentityAccess\ActorContextResolver;
@@ -74,16 +72,21 @@ use Throwable;
  * `RenewalComingSoon`.
  *
  * `booking-wizard-fields.md` §Global behavior: "Draft created at first
- * meaningful input." No draft exists until `saveStep1()` is called — see
- * `mount()`, which only ever READS a draft (via `$draftId`), never creates
- * one.
+ * meaningful input." `mount()` still only ever READS a draft (via
+ * `$draftId`), never creates one — but there are now TWO places that create
+ * one, not one: `saveStep1()` (the DISCOVERY save) and, earlier,
+ * `holdPlotForDiscovery()`, because a plot hold's foreign key needs a real
+ * draft row and a plot pick precedes the completed DISCOVERY payload. Both
+ * go through `currentOrNewDraft()`, so at most one draft is ever created per
+ * journey.
  */
 final class BookingWizard extends Component
 {
     /**
-     * Set only when resuming via `/pemesanan-makam/draft/{draftId}`. `null`
-     * means no draft exists yet — step 1 is a bare city chooser with
-     * nothing persisted.
+     * Set when resuming via `/pemesanan-makam/draft/{draftId}`, and also set
+     * in-place by `holdPlotForDiscovery()` when it lazily creates the draft a
+     * plot hold needs. `null` means no draft exists yet — DISCOVERY is still
+     * a pure selection screen with nothing persisted.
      *
      * `#[Locked]` — a draft id is also this journey's anonymous resume
      * token; a client that could `$wire.set('draftId', ...)` could point the
@@ -101,10 +104,10 @@ final class BookingWizard extends Component
 
     /**
      * The cemetery a granular-tier picker is currently showing plots for.
-     * Distinct from `$this->cemeteryId` (the SAVED draft field, only set
-     * once `saveStep2()` actually runs) — this is picker-only, pre-save
-     * UI state, and untrusted client input like every other public
-     * property (see `resolvePickerPlot()`).
+     * Distinct from `$this->cemeteryId` (the customer's confirmed choice,
+     * persisted only once `saveStep1()` runs) — this is picker-only,
+     * pre-save UI state, and untrusted client input like every other public
+     * property.
      */
     public ?string $pickerCemeteryId = null;
 
@@ -143,7 +146,7 @@ final class BookingWizard extends Component
     public array $completedSteps = [];
 
     #[Locked]
-    public int $currentStep = BookingWizardStep::LOCATION;
+    public int $currentStep = BookingWizardStep::DISCOVERY;
 
     /**
      * The draft's optimistic-concurrency version as of the last hydrate,
@@ -351,10 +354,46 @@ final class BookingWizard extends Component
         return hash('sha256', ($this->draftId ?? '').':'.$step.':'.json_encode($payload));
     }
 
-    public function saveStep1(string $cityCode): void
-    {
-        $payload = ['city_code' => $cityCode];
-        $idempotencyKey = $this->idempotencyKeyFor(BookingWizardStep::LOCATION, $payload);
+    /**
+     * DISCOVERY — city, cemetery, package, service type and services, all
+     * validated and persisted in ONE call. Replaces the four separate saves
+     * the nine-step wizard had (`saveStep1()` city, `saveStep2()` cemetery,
+     * `saveStep3()` service type, `saveStep4()` services).
+     *
+     * Structurally this is still the OLD `saveStep1()`, not one of the
+     * `saveStepOrShowErrors()` callers: DISCOVERY is the step at which the
+     * draft may not exist yet, so it resolves-or-creates via
+     * `currentOrNewDraft()` and redirects to the resumable draft URL on
+     * success. What changed is only the payload's breadth.
+     *
+     * `$cemeteryId`/`$serviceType` are NULLABLE even though a complete
+     * DISCOVERY payload always carries both. This is a public Livewire
+     * method, so it is callable directly by any client no matter what Blade
+     * renders, and the component's own backing properties
+     * (`?string $cemeteryId`, `?string $serviceType`) are legitimately null
+     * until the customer picks. Non-nullable parameters would turn "clicked
+     * Lanjutkan too early" into a `TypeError` 500; nullable ones let
+     * `SaveBookingDraftStep`'s validators answer with the ordinary inline
+     * field errors this screen shows everywhere else. Nothing is trusted
+     * either way — the Action re-validates all five fields server-side.
+     *
+     * @param  list<array{code: string, quantity: int}>  $selectedServices
+     */
+    public function saveStep1(
+        string $cityCode,
+        ?string $cemeteryId,
+        ?int $cemeteryPackageId,
+        ?string $serviceType,
+        array $selectedServices,
+    ): void {
+        $payload = [
+            'city_code' => $cityCode,
+            'cemetery_id' => $cemeteryId,
+            'cemetery_package_id' => $cemeteryPackageId,
+            'service_type' => $serviceType,
+            'selected_services' => $selectedServices,
+        ];
+        $idempotencyKey = $this->idempotencyKeyFor(BookingWizardStep::DISCOVERY, $payload);
 
         try {
             $saved = DB::transaction(function () use ($payload, $idempotencyKey): BookingDraft {
@@ -368,11 +407,18 @@ final class BookingWizard extends Component
                 // and then a fresh version-1 row was checked against the
                 // version this tab last saw, so the visitor got "changed in
                 // another tab" instead of simply starting again.
+                //
+                // Still correct now that `holdPlotForDiscovery()` can have
+                // created the draft in an EARLIER request: that draft is
+                // re-fetched here (so `wasRecentlyCreated` is false) and
+                // `$this->version` was set from it at creation time, and
+                // `HoldPlotForDraft` never writes to the draft row itself —
+                // so the version this tab holds is still the live one.
                 $expectedVersion = $draft->wasRecentlyCreated ? null : $this->version;
 
                 return (new SaveBookingDraftStep)(
                     $draft,
-                    BookingWizardStep::LOCATION,
+                    BookingWizardStep::DISCOVERY,
                     $payload,
                     $idempotencyKey,
                     expectedVersion: $expectedVersion,
@@ -384,19 +430,45 @@ final class BookingWizard extends Component
 
             $this->redirect(route('pemesanan-makam.draft', ['draftId' => $saved->id]), navigate: false);
         } catch (BookingStepValidationException $e) {
+            // Every field key the merged validator can raise is surfaced, not
+            // just `city_code`: one call now covers four former steps, so
+            // hardcoding a single key (as the old city-only version did)
+            // would silently swallow a cemetery, service-type or services
+            // rejection and leave the customer with a button that did nothing.
+            //
+            // Deliberately NO hold release here — see
+            // `holdPlotForDiscovery()`'s doc block for why a failure on this
+            // path must not cost the customer their plot.
             $this->autosaveState = 'failed';
-            $this->addError('city_code', $e->getErrors()['city_code'][0] ?? 'Kota tidak valid.');
+
+            foreach ($e->getErrors() as $field => $messages) {
+                $this->addError($field, $messages[0]);
+            }
         } catch (BookingDraftVersionConflictException) {
             $this->handleVersionConflict();
         }
     }
 
-    public function saveStep2(string $cemeteryId, ?int $cemeteryPackageId = null): void
+    /**
+     * The Blade "Lanjutkan" trigger for DISCOVERY — replaces
+     * `continueFromStep4()`. A `wire:click` expression is evaluated
+     * client-side, so it cannot build the `list<array{code, quantity}>` shape
+     * `saveStep1()` needs out of `$stagedServiceCodes`; this zero-arg wrapper
+     * reads the component's own selection state server-side instead.
+     * Quantity is always 1 — there is no quantity/variant picker UI.
+     */
+    public function continueFromDiscovery(): void
     {
-        $this->saveStepOrShowErrors(BookingWizardStep::CEMETERY, [
-            'cemetery_id' => $cemeteryId,
-            'cemetery_package_id' => $cemeteryPackageId,
-        ]);
+        $this->saveStep1(
+            $this->city,
+            $this->cemeteryId,
+            $this->cemeteryPackageId,
+            $this->serviceType,
+            array_map(
+                static fn (string $code): array => ['code' => $code, 'quantity' => 1],
+                $this->stagedServiceCodes,
+            ),
+        );
     }
 
     /**
@@ -466,11 +538,10 @@ final class BookingWizard extends Component
 
     /**
      * Opens the picker for a cemetery/package the customer has not yet
-     * saved via `saveStep2()` — client-visible UI state only, nothing
-     * persisted. Called by the "Pilih {{ cemetery }}" buttons INSTEAD of
-     * `saveStep2()` when `pickerAppliesTo()` is true; `saveStep2()` still
-     * runs, just later — from `holdPlotForStep2()` below, once a plot is
-     * actually held.
+     * confirmed — client-visible UI state only, nothing persisted. Called by
+     * the "Pilih {{ cemetery }}" buttons when `pickerAppliesTo()` is true;
+     * the actual claim on a plot is made by `holdPlotForDiscovery()` below,
+     * and nothing reaches the draft until `saveStep1()` runs.
      */
     public function openPickerFor(string $cemeteryId, ?int $cemeteryPackageId = null): void
     {
@@ -479,43 +550,56 @@ final class BookingWizard extends Component
     }
 
     /**
-     * Holds the chosen plot for this draft, then saves Step 2 exactly the
-     * way the existing non-picker buttons already do — `saveStep2()` is
-     * called unchanged, so its own version-conflict/validation handling
-     * applies identically here.
+     * Holds the chosen plot for this draft. Renamed from
+     * `holdPlotForStep2()` — there is no numbered "step 2" to save any more.
      *
-     * The hold has to come FIRST (the customer's claim on a contended plot
-     * is the thing worth winning), but `saveStep2()` can still refuse the
-     * cemetery/package afterwards — `SaveBookingDraftStep` re-validates the
-     * cemetery against the draft's city, its publication status and the
-     * package id, and can also raise a version conflict. Either way the
-     * draft never advances, so a hold left standing would squat a real plot
-     * in `reserved` for the whole TTL on behalf of a step that did not
-     * happen. So a failed save releases the hold again.
+     * ---------------------------------------------------------------------------
+     * Why this no longer saves anything
+     * ---------------------------------------------------------------------------
+     * It used to hold the plot and then immediately call `saveStep2()` to
+     * persist `cemetery_id`/`cemetery_package_id`. Under the DISCOVERY merge
+     * that save cannot happen here: city, cemetery, service type and services
+     * are validated together in one payload, and the last two are not chosen
+     * yet at plot-pick time. So the chosen cemetery/package are held in
+     * component state and the one `saveStep1()` call — fired from
+     * `continueFromDiscovery()` once everything is chosen — is the only place
+     * `SaveBookingDraftStep` runs for this step.
      *
-     * Only a hold this call actually CREATED is released
-     * (`wasRecentlyCreated`): when `HoldPlotForDraft` returned an existing
-     * incumbent for the same plot, that hold predates this attempt and a
-     * spurious validation failure here must not take it away.
+     * The HOLD itself deliberately stays immediate. Deferring it to the final
+     * save would let two visitors both "browse" the same plot while one fills
+     * in the rest of the form, which defeats the entire purpose of holding
+     * scarce inventory.
+     *
+     * ---------------------------------------------------------------------------
+     * Why a failed DISCOVERY save no longer releases the hold
+     * ---------------------------------------------------------------------------
+     * The old release-on-failure block was correct for the old shape: the
+     * hold and the save were one atomic-ish user action, so a rejected save
+     * meant the hold had been taken for a step that never happened. Under the
+     * merge, four sub-choices share ONE save/validate unit, and the save
+     * happens in a LATER request — so "the DISCOVERY save failed" now usually
+     * means "the customer mistyped a field unrelated to the plot". Releasing
+     * their plot over that would be a worse outcome than holding it.
+     *
+     * It also could not have been implemented correctly here anyway: the old
+     * block discriminated on `$hold->wasRecentlyCreated`, which only means
+     * anything on the exact instance whose `create()` inserted the row. A
+     * release attempted from `saveStep1()` in a later request must re-fetch
+     * the hold via `PlotReservation::activeForDraft()`, and that flag is
+     * ALWAYS false on a re-fetched model — so the check would silently never
+     * fire.
+     *
+     * The safety net for a genuinely abandoned attempt is the hold's own TTL
+     * plus the scheduled `plot-reservation:expire-stale-draft-holds` command
+     * (`routes/console.php`, every minute). The one case that DOES still need
+     * an explicit release — the customer picking a DIFFERENT plot than one
+     * they already hold — is handled inside `HoldPlotForDraft` itself, under
+     * its draft-row lock, and is unaffected by this change.
      */
-    public function holdPlotForStep2(string $cemeteryId, ?int $cemeteryPackageId, string $plotId): void
+    public function holdPlotForDiscovery(string $cemeteryId, ?int $cemeteryPackageId, string $plotId): void
     {
-        if ($this->draftId === null) {
-            $this->autosaveState = 'failed';
-            $this->addError('draft', 'Sesi pemesanan Anda telah berakhir. Silakan mulai ulang.');
-
-            return;
-        }
-
-        $draft = BookingDraftQuery::findBound($this->draftId);
-
-        if ($draft === null) {
-            $this->autosaveState = 'failed';
-            $this->addError('draft', 'Sesi pemesanan Anda telah berakhir. Silakan mulai ulang.');
-
-            return;
-        }
-
+        // Cheap, draft-free rejections first, so a malformed or bogus pick
+        // never causes an empty draft row to be created as a side effect.
         if (! Str::isUuid($plotId) || ! $this->pickerAppliesTo($cemeteryId)) {
             $this->addError('plot', 'Plot tidak valid.');
 
@@ -532,59 +616,46 @@ final class BookingWizard extends Component
             return;
         }
 
+        if ($this->draftId === null) {
+            // This is now the FIRST point in the journey that needs a real
+            // `booking_drafts` row to exist — a hold's own foreign key
+            // requires one, and the merged `saveStep1()` that used to create
+            // it no longer runs until service type and services are chosen
+            // too. Create it silently, exactly as the old `saveStep1()` did
+            // (`StartBookingDraft` also issues the session binding, so the
+            // later `saveStep1()` resolves THIS draft rather than starting a
+            // second one) — but persist no DISCOVERY field onto it yet, and
+            // do not redirect: the customer is still mid-selection.
+            $draft = $this->currentOrNewDraft();
+            $this->draftId = $draft->getKey();
+            $this->version = $draft->version;
+        } else {
+            $draft = BookingDraftQuery::findBound($this->draftId);
+
+            if ($draft === null) {
+                // A draft id that no longer resolves means the resume token
+                // is gone. Deliberately NOT a silent fall-back to a new
+                // draft: that would strand whatever the customer had already
+                // filled in on the old one.
+                $this->autosaveState = 'failed';
+                $this->addError('draft', 'Sesi pemesanan Anda telah berakhir. Silakan mulai ulang.');
+
+                return;
+            }
+        }
+
         try {
-            $hold = (new HoldPlotForDraft)($plot, $draft, "booking_draft:{$draft->getKey()}");
+            (new HoldPlotForDraft)($plot, $draft, "booking_draft:{$draft->getKey()}");
         } catch (PlotNotAvailableException) {
             $this->addError('plot', 'Plot ini baru saja dipilih oleh pengunjung lain. Silakan pilih plot lain.');
 
             return;
         }
 
-        $this->saveStep2($cemeteryId, $cemeteryPackageId);
-
-        // `autosaveState` rather than a check on the `cemetery_id` /
-        // `cemetery_package_id` error keys: `saveStepOrShowErrors()` sets it
-        // to `failed` on BOTH of its failure branches, so this also covers
-        // the version conflict, whose message lands on the `draft` key.
-        if ($hold->wasRecentlyCreated && $this->autosaveState === 'failed') {
-            (new ReleasePlotReservation)(
-                $hold,
-                "booking_draft:{$draft->getKey()}",
-                'customer',
-                reason: 'step 2 was not saved after the hold was taken',
-                auditSource: AuditSource::Api,
-            );
-        }
-    }
-
-    public function saveStep3(string $serviceType): void
-    {
-        $this->saveStepOrShowErrors(BookingWizardStep::SERVICE_TYPE, ['service_type' => $serviceType]);
-    }
-
-    /**
-     * @param  list<array{code: string, quantity: int}>  $selectedServices
-     */
-    public function saveStep4(array $selectedServices): void
-    {
-        $this->saveStepOrShowErrors(BookingWizardStep::SERVICES, ['selected_services' => $selectedServices]);
-    }
-
-    /**
-     * The Blade "Lanjutkan" trigger for step 4 — `wire:click` cannot build
-     * the `list<array{code, quantity}>` shape `saveStep4()` needs directly
-     * from `$stagedServiceCodes` (a Livewire action-call expression is
-     * evaluated client-side, not PHP), so this zero-arg wrapper reads the
-     * checkbox-bound property server-side and calls `saveStep4()` with the
-     * shape it expects. Quantity is always 1 — this batch has no
-     * quantity/variant picker UI; see the task report for that scope note.
-     */
-    public function continueFromStep4(): void
-    {
-        $this->saveStep4(array_map(
-            static fn (string $code): array => ['code' => $code, 'quantity' => 1],
-            $this->stagedServiceCodes,
-        ));
+        // Client-visible selection state only — persisted later, by the one
+        // `saveStep1()` call, which re-validates both server-side.
+        $this->cemeteryId = $cemeteryId;
+        $this->cemeteryPackageId = $cemeteryPackageId;
     }
 
     public function saveStep6(): void
@@ -1048,14 +1119,17 @@ final class BookingWizard extends Component
     /**
      * Per the roadmap's decision #7: an expired/lost draft plot hold at
      * submission time does NOT fall back to submitting without a
-     * reservation — it blocks, and the customer is routed back to Step 2
-     * to re-pick. Reopens the picker for whichever cemetery the draft had
-     * saved, so the customer lands on a live grid rather than the bare
+     * reservation — it blocks, and the customer is routed back to the plot
+     * picker to re-pick. Reopens the picker for whichever cemetery the draft
+     * had saved, so the customer lands on a live grid rather than the bare
      * cemetery list.
+     *
+     * The picker lives on DISCOVERY now that the old CEMETERY step has been
+     * merged into it, so that is where this routes.
      */
     private function routeBackToPlotPickerAfterExpiredHold(): void
     {
-        $this->currentStep = BookingWizardStep::CEMETERY;
+        $this->currentStep = BookingWizardStep::DISCOVERY;
         $this->addError('plot', 'Plot yang Anda pilih sudah tidak lagi ditahan (kedaluwarsa atau diambil pengunjung lain). Silakan pilih plot lain.');
 
         if ($this->cemeteryId !== null && $this->pickerAppliesTo($this->cemeteryId)) {
