@@ -113,6 +113,7 @@ return new class extends Migration
         'agreements', 'certificates', 'vendors', 'vendor_users',
         'marketplace_orders', 'vendor_orders', 'visitation_bookings',
         'users', 'cemeteries', 'cemetery_visitation_policies',
+        'actor_role_assignments', 'scope_assignments',
     ];
 
     public function up(): void
@@ -716,6 +717,7 @@ final class VendorAccountExampleDataTest extends TestCase
         $this->assertDatabaseHas('actor_role_assignments', [
             'actor_identifier' => (string) $user->id,
             'role' => \App\Platform\IdentityAccess\Roles\ActorRole::VENDOR,
+            'demo_batch_id' => $batchId,
         ]);
     }
 
@@ -797,12 +799,13 @@ final class VendorAccountExampleData
                 'actor_identifier' => (string) $user->id,
             ]);
 
-            (new GrantActorRole)(
+            $roleAssignment = (new GrantActorRole)(
                 actorIdentifier: (string) $user->id,
                 role: ActorRole::VENDOR,
                 reason: 'Demo seed data — live demo vendor account.',
                 grantedBy: null,
             );
+            TaggedAsDemoData::tag($roleAssignment, $batchId);
 
             $vendors[] = $vendor;
             $users[] = $user;
@@ -860,10 +863,12 @@ final class CemeteryOperatorExampleDataTest extends TestCase
         $this->assertDatabaseHas('actor_role_assignments', [
             'actor_identifier' => (string) $user->id,
             'role' => ActorRole::CEMETERY_OPERATOR,
+            'demo_batch_id' => $batchId,
         ]);
         $this->assertDatabaseHas('scope_assignments', [
             'actor_identifier' => (string) $user->id,
             'entity_id' => $cemetery->id,
+            'demo_batch_id' => $batchId,
         ]);
     }
 }
@@ -911,14 +916,15 @@ final class CemeteryOperatorExampleData
         ]);
         TaggedAsDemoData::tag($user, $batchId);
 
-        (new GrantActorRole)(
+        $roleAssignment = (new GrantActorRole)(
             actorIdentifier: (string) $user->id,
             role: ActorRole::CEMETERY_OPERATOR,
             reason: 'Demo seed data — live demo cemetery-operator account.',
             grantedBy: null,
         );
+        TaggedAsDemoData::tag($roleAssignment, $batchId);
 
-        (new GrantScopeAssignment)(
+        $scopeAssignment = (new GrantScopeAssignment)(
             actorIdentifier: (string) $user->id,
             entityType: ScopeEntityType::CEMETERY,
             entityId: $cemeteryId,
@@ -926,6 +932,7 @@ final class CemeteryOperatorExampleData
             reason: 'Demo seed data — scoped to one demo cemetery.',
             grantedBy: null,
         );
+        TaggedAsDemoData::tag($scopeAssignment, $batchId);
 
         return $user;
     }
@@ -2037,7 +2044,21 @@ final class DemoDataSeedCommand extends Command
                 return MarketplaceOrderExampleData::seed($batchId, $vendor);
             });
 
-            $customer = User::query()->where('demo_batch_id', $batchId)->firstOrFail();
+            // A DEDICATED customer user, not an arbitrary demo_batch_id-tagged
+            // row — by this point Task 4 has already tagged 3 users (2 vendor
+            // accounts + 1 cemetery operator) with this same batch id, so
+            // `User::where('demo_batch_id', $batchId)->firstOrFail()` would
+            // non-deterministically hand one of THOSE personas to
+            // CareSubscriptionExampleData as "the customer". Found during
+            // this skill's own pre-flight cross-task scan, fixed before any
+            // implementer touched it.
+            $customer = User::query()->create([
+                'name' => \App\Support\ExampleData\DemoContactData::personName(300),
+                'email' => \App\Support\ExampleData\DemoContactData::email(300),
+                'password' => \Illuminate\Support\Facades\Hash::make('DemoContoh2026!'),
+            ]);
+            \App\Support\ExampleData\Concerns\TaggedAsDemoData::tag($customer, $batchId);
+
             $grave = $graveRecords[0] ?? GraveRecord::query()->firstOrFail();
             $summary['care_subscriptions'] = $this->runDomain('care subscriptions', function () use ($batchId, $customer, $grave) {
                 return CareSubscriptionExampleData::seed($batchId, $customer->id, $grave->id);
