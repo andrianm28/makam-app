@@ -10,6 +10,7 @@ use App\Livewire\Public\Booking\BookingWizard;
 use App\Livewire\Public\Directory\Support\CemeteryAvailabilityIntent;
 use App\Livewire\Public\Directory\Support\CemeteryPresenter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Tests\Support\CemeteryFixture;
 use Tests\TestCase;
@@ -30,15 +31,13 @@ final class BookingWizardStepTwoCardContentTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function draftAtStep2(string $cityCode): string
+    /**
+     * The TPU/TPS section reveals on the local city choice — the merged
+     * DISCOVERY step creates no draft until "Lanjutkan".
+     */
+    private function atCemeteryChoice(string $cityCode): Testable
     {
-        $draftId = Livewire::test(BookingWizard::class)
-            ->call('saveStep1', $cityCode)
-            ->get('draftId');
-
-        $this->assertIsString($draftId);
-
-        return $draftId;
+        return Livewire::test(BookingWizard::class)->call('selectCity', $cityCode);
     }
 
     /**
@@ -64,7 +63,7 @@ final class BookingWizardStepTwoCardContentTest extends TestCase
         $photoUrl = CemeteryPresenter::photoUrl($cemetery);
         $this->assertNotNull($photoUrl, 'Fixture assumption: the open example cemetery has a backfilled photo.');
 
-        Livewire::test(BookingWizard::class, ['draftId' => $this->draftAtStep2(LaunchCityCode::BOGOR)])
+        $this->atCemeteryChoice(LaunchCityCode::BOGOR)
             ->assertSeeHtml('src="'.$photoUrl.'"')
             ->assertSeeHtml('alt="Ilustrasi '.$cemetery->name.'"');
     }
@@ -73,7 +72,7 @@ final class BookingWizardStepTwoCardContentTest extends TestCase
     {
         $cemetery = $this->openCemetery();
 
-        Livewire::test(BookingWizard::class, ['draftId' => $this->draftAtStep2(LaunchCityCode::BOGOR)])
+        $this->atCemeteryChoice(LaunchCityCode::BOGOR)
             ->assertSee($cemetery->address);
     }
 
@@ -85,7 +84,7 @@ final class BookingWizardStepTwoCardContentTest extends TestCase
         $this->assertNotNull($priceRange, 'Fixture assumption: the open example cemetery has a backfilled price range.');
         $this->assertNotNull($priceAttribution);
 
-        Livewire::test(BookingWizard::class, ['draftId' => $this->draftAtStep2(LaunchCityCode::BOGOR)])
+        $this->atCemeteryChoice(LaunchCityCode::BOGOR)
             ->assertSee($priceRange)
             ->assertSee('Sumber: '.$priceAttribution['source']);
     }
@@ -96,7 +95,7 @@ final class BookingWizardStepTwoCardContentTest extends TestCase
         $facilities = CemeteryPresenter::facilities($cemetery);
         $this->assertNotEmpty($facilities, 'Fixture assumption: the open example cemetery has facilities.');
 
-        $component = Livewire::test(BookingWizard::class, ['draftId' => $this->draftAtStep2(LaunchCityCode::BOGOR)]);
+        $component = $this->atCemeteryChoice(LaunchCityCode::BOGOR);
 
         foreach ($facilities as $facility) {
             $component->assertSee($facility);
@@ -111,7 +110,7 @@ final class BookingWizardStepTwoCardContentTest extends TestCase
      */
     public function test_step_2_shows_the_honest_availability_status(): void
     {
-        Livewire::test(BookingWizard::class, ['draftId' => $this->draftAtStep2(LaunchCityCode::BOGOR)])
+        $this->atCemeteryChoice(LaunchCityCode::BOGOR)
             ->assertSee(CemeteryAvailabilityIntent::NEEDS_CONFIRMATION_LABEL);
     }
 
@@ -119,25 +118,26 @@ final class BookingWizardStepTwoCardContentTest extends TestCase
     {
         $cemetery = $this->openCemetery();
 
-        Livewire::test(BookingWizard::class, ['draftId' => $this->draftAtStep2(LaunchCityCode::BOGOR)])
+        $this->atCemeteryChoice(LaunchCityCode::BOGOR)
             ->assertSee($cemetery->type)
             ->assertSee($cemetery->name);
     }
 
     /**
      * The selection control itself must survive the richer content — the
-     * exact `saveStep2('<id>')` wire:click call `BookingWizardStepTwoPackagesTest`
-     * already asserts for the two-level (package) case must still work here
-     * for the single-choice (no package) case.
+     * exact `selectCemetery('<id>')` wire:click call
+     * `BookingWizardStepTwoPackagesTest` already asserts for the two-level
+     * (package) case must still work here for the single-choice case.
      */
-    public function test_step_2_selection_still_advances_to_step_3(): void
+    public function test_the_cemetery_selection_control_still_works(): void
     {
         $cemetery = $this->openCemetery();
 
-        Livewire::test(BookingWizard::class, ['draftId' => $this->draftAtStep2(LaunchCityCode::BOGOR)])
-            ->assertSeeHtml("saveStep2('{$cemetery->id}')")
-            ->call('saveStep2', $cemetery->id)
+        $this->atCemeteryChoice(LaunchCityCode::BOGOR)
+            ->assertSeeHtml("selectCemetery('{$cemetery->id}')")
+            ->call('selectCemetery', $cemetery->id)
             ->assertHasNoErrors()
-            ->assertSet('cemeteryId', $cemetery->id);
+            ->assertSet('cemeteryId', $cemetery->id)
+            ->assertSee('Pilih Jenis Layanan');
     }
 }
