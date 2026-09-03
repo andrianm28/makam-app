@@ -6,13 +6,15 @@
 - Autosave after every valid step change and at least every 10 seconds while dirty.
 - Draft resume works across sessions for authenticated users.
 - Anonymous draft uses secure opaque token and is attached after login/verification.
-- Progress displays 1–9.
+- Progress displays 1–4.
 - Back navigation preserves data.
 - Step completion is server-validated.
 - User cannot skip required upstream decisions.
 - Every save is idempotent and versioned.
 
-## Step 1 — Pilih Lokasi
+## Step 1 — Cari & Pilih
+
+### Pilih Lokasi
 
 Required:
 
@@ -26,7 +28,7 @@ Allowed MVP values:
 - `TANGERANG`
 - `BEKASI`
 
-## Step 2 — Pilih TPU/TPS
+### Pilih TPU/TPS
 
 Display:
 
@@ -46,7 +48,7 @@ Required input:
 - `cemetery_id`
 - package/class when applicable.
 
-## Step 3 — Pilih Jenis Layanan
+### Pilih Jenis Layanan
 
 Values:
 
@@ -61,7 +63,7 @@ Rules:
 - `URGENT_TODAY` checks service area, operating hours, and capacity.
 - `PRE_NEED` creates interest-only path while paid Pre-Need gate is closed.
 
-## Step 4 — Pilih Layanan
+### Pilih Layanan
 
 Basic:
 
@@ -83,7 +85,9 @@ Add-ons:
 
 Each line shows name, description, provider/fulfillment owner, price, availability, quantity/variant where relevant.
 
-## Step 5 — Ringkasan Pesanan
+### Ringkasan sidebar
+
+Not a step — a persistent display element that reflects the in-progress selection, not a numbered stop in the journey.
 
 Display:
 
@@ -103,7 +107,9 @@ Display:
 
 Price changes require explicit reconfirmation and new quote version.
 
-## Step 6 — Data Pemesan
+## Step 2 — Data Pemesan & Data Almarhum
+
+### Data Pemesan
 
 Required:
 
@@ -121,7 +127,7 @@ Optional/conditional:
 - alternate contact;
 - organization.
 
-## Step 7 — Data Almarhum and Documents
+### Data Almarhum and Documents
 
 Data:
 
@@ -147,7 +153,7 @@ Behavior:
 - signed URL max five minutes;
 - access audit.
 
-## Step 8 — Pembayaran
+## Step 3 — Pembayaran
 
 Online mode:
 
@@ -166,7 +172,7 @@ Manual fallback mode:
 - admin verification;
 - no false success.
 
-## Step 9 — Konfirmasi
+## Step 4 — Konfirmasi
 
 Display:
 
@@ -182,4 +188,4 @@ Display:
 
 ## Branching behavior
 
-The UI retains the stakeholder’s nine-step framing. Internal workflow may shorten operational data collection for Urgent or replace payment with interest registration for gated Pre-Need, but the user receives an explicit outcome and confirmation page.
+The UI retains the stakeholder’s four-step framing. Internal workflow may shorten operational data collection for Urgent or replace payment with interest registration for gated Pre-Need, but the user receives an explicit outcome and confirmation page.

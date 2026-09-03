@@ -76,7 +76,14 @@ Never remove a stakeholder MVP item merely because an external gate is closed. I
 ## Mandatory MVP UX
 
 - Homepage has exactly these four primary services: Pemesanan Makam, Layanan Pemakaman, Perpanjangan Makam, FAQ.
-- Booking exposes Steps 1–9 exactly as documented.
+- Booking exposes Steps 1–4 exactly as documented.
+- (2 Sep 2026) This is a deliberate departure from the original 9-step
+  count, which traced to RKS K23–K35 (the RKS source document itself is
+  not in this repository — see `docs/planning/kiro-specs-analysis.md`'s
+  "Conformance to RKS K23–K35 content: BLOCKED" note). Explicitly
+  authorized by the project owner; see
+  `docs/superpowers/specs/2026-09-02-wizard-step-reduction-design.md`
+  Context section for the full record.
 - Launch locations include Jakarta, Bogor, Depok, Tangerang, and Bekasi.
 - Use canonical service, marketplace, and FAQ catalogs; do not invent alternate labels without product change approval.
 - Google Maps/navigation link must be generated from approved URL/coordinate data.
@@ -87,7 +94,7 @@ Never remove a stakeholder MVP item merely because an external gate is closed. I
 
 - Never create payment before valid confirmation/reservation, accepted quote, and authorized opening.
 - Never mark paid from browser return URL.
-- Closed online-payment gate uses manual fallback in Step 8.
+- Closed online-payment gate uses manual fallback in Step 3.
 - Webhooks are durable, signed, merchant-scoped, amount-checked, replay-protected, and idempotent.
 - At-Need/Urgent creates or uses a FuneralCase.
 - Paid Pre-Need is impossible while legal gate is closed; register interest instead.
@@ -129,7 +136,7 @@ Never remove a stakeholder MVP item merely because an external gate is closed. I
 ## Testing
 
 - Every traceability item marked `Covered` needs test evidence.
-- Browser tests cover all four homepage routes, nine booking steps, marketplace flow, renewal flow, FAQ, admin, and vendor.
+- Browser tests cover all four homepage routes, four booking steps, marketplace flow, renewal flow, FAQ, admin, and vendor.
 - Test online and fallback payment modes.
 - Test notification recipient scope and channel failure.
 - Test mobile/responsive and accessibility behavior.

@@ -364,7 +364,7 @@ $classes = trim("$base {$sizes[$size]} {$variants[$variant]} " . ($full ? 'w-ful
 
 - Height `h-11` minimum (44 px). Font size **exactly 16 px** — see §1.4.
 - **Labels are always visible.** Placeholder-as-label is forbidden: it disappears on focus, fails 3.3.2, and is unusable on the deceased-data step where users re-check what they typed.
-- Required marker: the word `wajib` or a `*` **with** a legend. Optional fields are labelled `(opsional)` — for a 9-step form, marking the smaller set is kinder.
+- Required marker: the word `wajib` or a `*` **with** a legend. Optional fields are labelled `(opsional)` — for a 4-step form, marking the smaller set is kinder.
 - Error text sits **below** the field, `text-sm text-danger-700`, prefixed with an icon, and never replaces the hint — both can coexist.
 - Indonesian input hints: `inputmode="numeric"` for NIK/amount, `inputmode="tel"` + `autocomplete="tel"` for mobile number, `autocomplete="email"`, `autocomplete="street-address"`.
 
@@ -786,28 +786,27 @@ Left border uses the intent's `600`; background the `50`; text the `800`.
 
 **a11y** — errors appearing after submit: `role="alert"` (assertive). Ambient/pre-existing notices: `role="status"` `aria-live="polite"`. A dismissible alert's close button is a 44 px target with `aria-label="Tutup"`. Never auto-dismiss an error.
 
-### 3.9 Stepper — `<x-mk.stepper>` (booking Steps 1–9)
+### 3.9 Stepper — `<x-mk.stepper>` (booking Steps 1–4)
 
-`booking-wizard-fields.md` requires progress shown as **1–9**, back navigation that preserves data, server-side validation, and no skipping upstream decisions. Labels are canonical — **do not reword**:
+`booking-wizard-fields.md` requires progress shown as **1–4**, back navigation that preserves data, server-side validation, and no skipping upstream decisions. Labels are canonical — **do not reword**:
 
 ```
-1 Lokasi · 2 TPU/TPS · 3 Jenis Layanan · 4 Pilih Layanan · 5 Ringkasan
-6 Data Pemesan · 7 Data Almarhum + Dokumen · 8 Pembayaran · 9 Konfirmasi
+1 Cari & Pilih · 2 Detail Pemesanan · 3 Pembayaran · 4 Konfirmasi
 ```
 
-**Mobile (`< md`) — compact.** A full 9-dot rail does not fit 360 px legibly.
+**Mobile (`< md`) — compact.** The compact mobile layout below still applies for any journey with more steps than fit legibly at 360px — not specific to booking's dot count.
 
 ```
 ┌──────────────────────────────────────────┐
-│  Langkah 3 dari 9                        │  text-sm text-neutral-600
-│  Jenis Layanan                           │  text-xl font-semibold
-│  ████████░░░░░░░░░░░░░░░░░░░░░░░░        │  h-1 rounded-full
+│  Langkah 2 dari 4                        │  text-sm text-neutral-600
+│  Detail Pemesanan                        │  text-xl font-semibold
+│  ████████████████░░░░░░░░░░░░░░░░        │  h-1 rounded-full
 └──────────────────────────────────────────┘
 ```
 
 - Track `--mk-progress-track`, fill `--mk-progress-fill`, `h-1`.
 - Wrapper: `role="group"` `aria-label="Progres pemesanan"`.
-- Progress bar: `role="progressbar" aria-valuenow="3" aria-valuemin="1" aria-valuemax="9"`.
+- Progress bar: `role="progressbar" aria-valuenow="2" aria-valuemin="1" aria-valuemax="4"`.
 - Sticky at `z-sticky-cta` under the header; collapses to the numeric line on scroll.
 
 **Desktop (`md+`) — full rail.** Horizontal dots + labels.
@@ -829,7 +828,7 @@ Dot size `--mk-stepper-dot` (28 px) but the **clickable area is 44 px**. Connect
 
 Wrap it in `aria-live="polite"` so it is announced without stealing focus. **Never block the form on autosave.**
 
-**Urgent / Pre-Need branching** — internal workflow may differ, but the stepper still reads 1–9 and the user always reaches an explicit outcome (`booking-wizard-fields.md` §Branching). The stepper is a **presentation** contract; do not renumber it per branch.
+**Urgent / Pre-Need branching** — internal workflow may differ, but the stepper still reads 1–4 and the user always reaches an explicit outcome (`booking-wizard-fields.md` §Branching). The stepper is a **presentation** contract; do not renumber it per branch.
 
 **Props**
 
@@ -838,13 +837,13 @@ Wrap it in `aria-live="polite"` so it is announced without stealing focus. **Nev
 | `step` | `1` | Current step, clamped to `1..count($labels)` |
 | `errorSteps` | `[]` | Step numbers currently in the `error` state |
 | `stepMethod` | `'goToStep'` | Livewire method invoked as `stepMethod(n)` by a clickable dot |
-| `labels` | **the nine booking labels above** | Ordered step labels for the journey being rendered |
+| `labels` | **the four booking labels above** | Ordered step labels for the journey being rendered |
 
-**The nine-step default is normative.** Omitting `labels` renders exactly the nine canonical booking steps, in that order, with that wording — that is the contract quoted at the top of this section, and it is the *default value* of the prop precisely so that nothing can reword booking by accident. This is a component-contract change, not a token change, so [§9.4](#94-changing-a-token) does not apply and **no ADR is required**; §9.4 governs `tokens.css` only.
+**The four-step default is normative as a fallback contract, though booking's own call site no longer relies on it.** The component's default `labels` value still renders the canonical booking wording if a caller omits the prop, and that remains the safety net against an accidental reword for any future caller. In practice, booking's own Blade view (`resources/views/livewire/public/booking/wizard.blade.php`) now explicitly passes `:labels="\App\Domain\Booking\BookingWizardScreen::labels()"` rather than omitting the prop — so the default is no longer what booking is actually observed to render, but it is still the contract quoted at the top of this section, and omitting `labels` from any caller MUST still render exactly these four, in that order, with that wording. This is a component-contract change, not a token change, so [§9.4](#94-changing-a-token) does not apply and **no ADR is required**; §9.4 governs `tokens.css` only.
 
-**`labels` is for a different journey, never for re-labelling booking.** It exists because the renewal journey (`.kiro/specs/renewal-and-grave-registry` AC1) is **six** visible steps — city · TPU/TPS · grave search · fee · payment · confirmation/invoice — and its `tasks.md` requires this same primitive rather than a second stepper. Passing `labels` from a booking surface to rename, reorder, hide, or renumber a booking step is forbidden by `AGENTS.md` (§Mandatory MVP UX, "Booking exposes Steps 1–9 exactly as documented") and by [§9.2](#92-rules-for-developers-and-ai-agents-enforceable) MUST NOT 9. Urgent / Pre-Need branches keep reading 1–9; they do not supply `labels`.
+**`labels` is for a different journey, never for re-labelling booking.** It exists because the renewal journey (`.kiro/specs/renewal-and-grave-registry` AC1) is **three** visible steps — Cari Makam · Biaya & Bayar · Konfirmasi — and its `tasks.md` requires this same primitive rather than a second stepper. Passing `labels` from a booking surface to rename, reorder, hide, or renumber a booking step is forbidden by `AGENTS.md` (§Mandatory MVP UX, "Booking exposes Steps 1–4 exactly as documented") and by [§9.2](#92-rules-for-developers-and-ai-agents-enforceable) MUST NOT 9 — **except** that `BookingWizardScreen`/`RenewalWizardScreen`'s SCREEN-vocabulary labels (passed via `labels` from each journey's own screens, as booking's wizard view now does) are not an ad hoc rename of a step; they are the documented, deliberate step-count reduction this section's heading and canonical block already reflect. Urgent / Pre-Need branches keep reading 1–4; they do not supply their own divergent `labels`.
 
-Every count is derived from the supplied array, never from a literal 9 — the total, the mobile `Langkah N dari M` line, `aria-valuemin`/`aria-valuemax`, the `step` clamp, and the progress-bar percentage. A supplied array may be a 0-indexed list or an already-1-indexed map; it is re-keyed to a contiguous `1..N` sequence either way. `role="group"` and `aria-label="Progres pemesanan"` are merge defaults, so a non-booking journey supplies its own accessible group name alongside its own `labels`.
+Every count is derived from the supplied array, never from a literal 4 — the total, the mobile `Langkah N dari M` line, `aria-valuemin`/`aria-valuemax`, the `step` clamp, and the progress-bar percentage. A supplied array may be a 0-indexed list or an already-1-indexed map; it is re-keyed to a contiguous `1..N` sequence either way. `role="group"` and `aria-label="Progres pemesanan"` are merge defaults, so a non-booking journey supplies its own accessible group name alongside its own `labels`.
 
 ### 3.10 Header — `<x-mk.header>`
 
@@ -1563,7 +1562,7 @@ A conflict between ranks is a **defect**. Rank 1 wins for values; rank 2 wins fo
 6. ❌ Convey status by colour alone.
 7. ❌ Use `secondary` (**Leaf**) as a fill, badge, button, or alert. The rule stands from v0.1 — only the family changed (Sandstone → Leaf, ADR-0034). *(A `secondary-100`-tile-with-`secondary-800`-icon decorative medallion, §1.2(b), is a surface-tint usage already inside the cage — not an exception to this rule.)*
 8. ❌ Add `dark:` utilities before OQ-07 is resolved.
-9. ❌ Rename, reorder, or hide a product label, route, menu item, or booking step (§0.1).
+9. ❌ Rename, reorder, or hide a product label, route, menu item, or booking step (§0.1). **Exception, 2 Sep 2026:** the wizard step-count reduction (`docs/superpowers/specs/2026-09-02-wizard-step-reduction-design.md`) is a deliberate, project-owner-authorized departure — see §3.9's own updated step count and the `AGENTS.md` note this plan's Task 10 Step 1 adds. This item's general rule is otherwise unchanged.
 10. ❌ Style a pending state as success, or claim a notification delivery without delivery state.
 11. ❌ Preview, thumbnail, or link a quarantined document.
 12. ❌ Introduce a new token without §9.4.
