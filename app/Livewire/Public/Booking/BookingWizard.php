@@ -64,8 +64,11 @@ use Throwable;
 /**
  * `/pemesanan-makam` — Sprint 4 S4-T4/S4-T5 (resumed 08 Aug 2026 after
  * pausing 26 Jul), `.kiro/specs/public-booking-wizard` AC1-AC6, AC11-AC13
- * and `.kiro/specs/booking-and-order-orchestration` AC2, AC3. Steps 1-9
- * fully implemented.
+ * and `.kiro/specs/booking-and-order-orchestration` AC2, AC3. All four
+ * steps of `BookingWizardStep` — DISCOVERY, CUSTOMER_AND_DECEASED_DATA,
+ * PAYMENT, CONFIRMATION — are fully implemented. (This used to read "Steps
+ * 1-9"; the nine-step vocabulary was consolidated into those four by
+ * `docs/superpowers/specs/2026-09-02-wizard-step-reduction-design.md`.)
  *
  * REPLACES the `App\Livewire\Public\ComingSoon\BookingWizardComingSoon`
  * stub wholesale — same pattern as `RenewalStart` replacing
@@ -173,11 +176,11 @@ final class BookingWizard extends Component
     public string $autosaveState = 'idle';
 
     /**
-     * Step 4's checkbox staging area — every `ServiceCode` currently
+     * DISCOVERY's services checkbox staging area — every `ServiceCode` currently
      * checked in the UI, `wire:model`-bound one entry per checkbox.
      * `ServiceCode::BASIC_CODES` are always present here (mandatory,
      * non-removable per `service-catalog.md`) whether or not the draft has
-     * reached step 4 yet — see `mount()`/`hydrateFrom()`.
+     * reached that section yet — see `mount()`/`hydrateFrom()`.
      *
      * @var list<string>
      */
@@ -196,7 +199,8 @@ final class BookingWizard extends Component
     public string $customerContactChannel = '';
 
     /**
-     * Step 6's privacy consent. Bound to a real, initially-unticked checkbox
+     * CUSTOMER_AND_DECEASED_DATA's privacy consent. Bound to a real,
+     * initially-unticked checkbox
      * — NOT client-trusted evidence: it is sent to `SaveBookingDraftStep`,
      * which refuses the step unless it is `true` and only then stamps
      * `privacy_notice_accepted_at` server-side. Previously the component
@@ -964,7 +968,7 @@ final class BookingWizard extends Component
         // rather than creating a second one (`SubmitBookingDraft`'s own
         // unique-index-backed guarantee). A failure here is reported and
         // swallowed rather than shown as a step error: the draft is already
-        // saved and Step 9 renders correctly either way — with the real
+        // saved and CONFIRMATION renders correctly either way — with the real
         // order reference when this succeeded, or the honest "not yet
         // processed" copy when it did not (`render()`'s `confirmationData`
         // only carries an order reference when one really exists).
@@ -978,7 +982,7 @@ final class BookingWizard extends Component
     }
 
     /**
-     * Step 8's ONLINE branch (only rendered when `G-PAY-01` is open): persist
+     * PAYMENT's ONLINE branch (only rendered when `G-PAY-01` is open): persist
      * the online method choice, run the submission chain — submit the draft
      * as an Order, ensure a current Quote exists, then open the hosted
      * checkout for the quote total — and redirect the customer to the
@@ -996,7 +1000,8 @@ final class BookingWizard extends Component
      * quote from the off-screen confirmation journey always wins via
      * `Quote::currentFor()`. Quote lines are composed from the draft's
      * selected services through `ComposeQuoteLinesFromBookingDraft` (the
-     * same `currentPriceVersion()` seam Step 5's summary prices with), so
+     * same `currentPriceVersion()` seam the wizard's own line-item summary
+     * prices with), so
      * the amount snapshot is exactly what the customer saw; a service with
      * no current price fails closed honestly rather than quoting a
      * fabricated amount.
@@ -1349,7 +1354,7 @@ final class BookingWizard extends Component
         // Navigating away from a step must not carry that step's "Tersimpan"
         // (or "Gagal menyimpan") indicator with it — nothing has been saved
         // on the step being opened.
-        // EXCEPTION: Step 9 (CONFIRMATION) is the journey's terminus — the
+        // EXCEPTION: CONFIRMATION is the journey's terminus — the
         // user arrived there after a successful save and should keep seeing
         // the "draft saved" confirmation until they explicitly leave.
         if ($step !== BookingWizardStep::CONFIRMATION) {
@@ -1457,7 +1462,7 @@ final class BookingWizard extends Component
     }
 
     /**
-     * Step 9's line-item summary — the same `{lines: [{code, label,
+     * CONFIRMATION's line-item summary — the same `{lines: [{code, label,
      * quantity, unit_price, line_total}], total, all_prices_available}`
      * shape `BookingDraftQuery::summary()` produces, so the Blade table at
      * `wizard.blade.php`'s `$confirmationData['summary']` needs no shape
@@ -1581,9 +1586,10 @@ final class BookingWizard extends Component
             }
         }
 
-        // Step 4 renders the REAL catalogue rows (`ServiceDefinition::name`),
-        // not the bare `ServiceCode` strings — the same seeded Indonesian
-        // names Step 5's summary already shows for the same services. The
+        // DISCOVERY's services section renders the REAL catalogue rows
+        // (`ServiceDefinition::name`), not the bare `ServiceCode` strings — the
+        // same seeded Indonesian names CONFIRMATION's summary shows for the
+        // same services. The
         // basic/additional split is taken from `ServiceCode::isBasic()`
         // rather than from the catalogue's own `category` column so the
         // group labelled "Wajib" is exactly the set
@@ -1593,7 +1599,7 @@ final class BookingWizard extends Component
         $additionalServices = new Collection;
         $servicesCatalogUnavailable = false;
 
-        // Screen 1's Step 4 section can be visible while $currentStep has
+        // Screen 1's services section can be visible while $currentStep has
         // moved to an earlier step within the same screen (progressive
         // reveal keeps a completed section on screen after "Kembali") — see
         // BookingWizardProgressiveRevealTest and this method's own screen
@@ -1635,7 +1641,7 @@ final class BookingWizard extends Component
         // have: it now runs on three times as many renders, and
         // `BookingDraftQuery::summary()` reads the service catalogue for
         // every selected line, so a poisoned ambient transaction (SQLSTATE
-        // 25P02 — see the Step 4 comment above) reaches it exactly as it
+        // 25P02 — see the services-section comment above) reaches it exactly as it
         // reaches them. A silently-null summary would be the dishonest
         // outcome here: the Blade card would simply vanish with no
         // explanation, so the failure gets its own explicit flag.
@@ -1653,13 +1659,13 @@ final class BookingWizard extends Component
             }
         }
 
-        // Step 9's read gets the same guard, for the same reason — but its
+        // CONFIRMATION's read gets the same guard, for the same reason — but its
         // failure mode is NOT the same as a genuine "no order yet" state, and
         // must not be papered over with the same copy. `$confirmationData`
         // stays null in BOTH cases (order genuinely does not exist yet vs.
         // this render simply could not confirm one), so a second,
         // independent flag — `$confirmationUnavailable` — exists specifically
-        // to tell those two apart: by Step 9, `saveStep3()`'s submission
+        // to tell those two apart: by CONFIRMATION, `saveStep3()`'s submission
         // chain has USUALLY already created a real order (per Global
         // Constraint AC7/idempotency — `SubmitBookingDraft` keys its
         // uniqueness per DRAFT id), so if THIS read throws, we genuinely do
@@ -1688,7 +1694,7 @@ final class BookingWizard extends Component
                     // Only set once `saveStep3()`'s submission chain has
                     // actually created the order (the normal case) — a rare
                     // mid-request failure there is reported and swallowed, not
-                    // surfaced here, so this stays null and Step 9 falls back
+                    // surfaced here, so this stays null and CONFIRMATION falls back
                     // to its honest "not yet processed" copy rather than
                     // claiming an order that does not exist.
                     $order = Order::query()->where('booking_draft_id', $draft->id)->first();
@@ -1714,14 +1720,16 @@ final class BookingWizard extends Component
             }
         }
 
-        // `stepLabels`, `lastImplementedStep` and `allServiceCodes` used to
-        // be passed here and are gone deliberately, not by accident:
-        // `stepLabels` fed `<x-mk.stepper :labels>`, which that primitive's
-        // own doc header forbids a booking screen from passing (it must
-        // render its own canonical nine); `lastImplementedStep` was never
-        // read by the view; and `allServiceCodes` is replaced by the real
-        // `ServiceDefinition` rows below, so Step 4 shows catalogue names
-        // rather than raw enum codes.
+        // `stepLabels`, `lastImplementedStep` and `allServiceCodes` are not
+        // passed here, deliberately, not by accident: the stepper's labels
+        // are read straight from `BookingWizardScreen::labels()` in
+        // `wizard.blade.php` rather than round-tripped through a view
+        // variable (see that call site's own comment, and design-system.md
+        // §9.2, which was amended to permit a booking screen passing the new
+        // canonical step vocabulary); `lastImplementedStep` was never read by
+        // the view; and `allServiceCodes` is replaced by the real
+        // `ServiceDefinition` rows below, so the services section shows
+        // catalogue names rather than raw enum codes.
         // Read through `ModeResolver` rather than poking `G-PAY-01` directly:
         // AC7 wants the UI handed a named mode, and it keeps the view and
         // `SaveBookingDraftStep`'s server-side enforcement reading the same
@@ -1730,7 +1738,8 @@ final class BookingWizard extends Component
         $modes = app(ModeResolver::class);
         $paymentMode = $modes->paymentMode();
 
-        // Step 9 previously promised "email atau WhatsApp" unconditionally.
+        // The confirmation copy previously promised "email atau WhatsApp"
+        // unconditionally.
         // Whether WhatsApp is a channel we actually have is G-WA-01's answer,
         // not the copywriter's, so the confirmation reads the mode and says
         // only what is true.
@@ -1751,7 +1760,7 @@ final class BookingWizard extends Component
         // assumptions-and-gates.md §2: manual coordination is `G-PAY-01`'s
         // FALLBACK ("Manual coordination" column), not a second option
         // offered alongside online payment — `PaymentMode::ManualCoordination`'s
-        // own doc block: Step 8 "renders manual coordination INSTEAD OF a
+        // own doc block: PAYMENT "renders manual coordination INSTEAD OF a
         // payment form" while the gate is closed. So the manual card is
         // shown whenever the gate is closed, and otherwise ONLY as the
         // honest recovery route once the online path has actually failed —
@@ -1785,7 +1794,7 @@ final class BookingWizard extends Component
             'onlinePaymentLinkUrl' => $onlinePaymentState['link_url'],
             'isSandboxPayment' => $isSandboxPayment,
             'showManualPayment' => $showManualPayment,
-            // Step 8's "Pembayaran Manual" fallback card: admin-configured
+            // PAYMENT's "Pembayaran Manual" fallback card: admin-configured
             // via SiteSettingsResource (`App\Support\BankTransferInfo`'s own
             // doc block) — null fields mean the operator has not entered a
             // real destination yet, and the view must render an honest

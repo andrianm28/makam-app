@@ -377,7 +377,7 @@ final readonly class SaveBookingDraftStep
         // One row per service — quantity is what expresses "more than one",
         // never a repeated code. A duplicate would otherwise double-count in
         // `BookingDraftQuery::summary()`'s total and render the same line
-        // twice on Step 5.
+        // twice in CONFIRMATION's summary.
         if (count($selectedCodes) !== count(array_unique($selectedCodes))) {
             return ['selected_services' => ['Layanan tidak boleh dipilih lebih dari satu kali.']];
         }

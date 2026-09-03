@@ -94,11 +94,15 @@
     'errorSteps' => [],    // step numbers currently in the `error` state
     'stepMethod' => 'goToStep', // Livewire method invoked as stepMethod(n)
 
-    // NORMATIVE DEFAULT — the nine canonical booking steps
-    // (booking-wizard-fields.md, design-system.md §3.9). Omitting `labels`
-    // MUST keep rendering exactly these nine, in exactly this order, with
-    // exactly this wording. Override only for a different journey (see the
-    // file-header note), never to re-label booking.
+    // LEGACY FALLBACK — booking's OLD nine-step wording, left in place
+    // unchanged by the step-count reduction as a safety net against an
+    // accidental reword (see the file header ~90 lines above, which governs).
+    // It is NOT what booking renders any more: every real call site now
+    // passes an explicit `labels` array — booking passes
+    // `BookingWizardScreen::labels()` (four steps), renewal passes
+    // `RenewalWizardScreen::labels()` (three) — so this default is reached by
+    // nothing in the app. Do not treat it as the canonical booking
+    // vocabulary; `App\Domain\Booking\BookingWizardScreen` is.
     'labels' => [
         1 => 'Lokasi',
         2 => 'TPU/TPS',
