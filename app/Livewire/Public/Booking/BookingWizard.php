@@ -612,16 +612,30 @@ final class BookingWizard extends Component
      * §8.4: "the indicator is driven by a server-confirmed [value], never
      * by a local timer" — applied here to the hold countdown the same way
      * it already applies to the autosave indicator.
+     *
+     * SCOPED TO THE OPEN PICKER. A hold survives a cemetery change —
+     * `selectCity()` drops the cemetery but leaves the hold to its own TTL —
+     * so the customer can be holding a plot in cemetery A while the picker on
+     * screen is showing cemetery B. Rendering A's "Plot ditahan sementara"
+     * alert above B's plot grid told them a plot on the grid in front of them
+     * was theirs, which was never true. The alert belongs to the picker it is
+     * rendered inside, so an unrelated cemetery's hold does not raise it.
      */
     public function activeDraftPlotHold(): ?PlotReservation
     {
-        if ($this->draftId === null) {
+        if ($this->draftId === null || $this->pickerCemeteryId === null) {
             return null;
         }
 
         $draft = BookingDraftQuery::findBound($this->draftId);
 
-        return $draft === null ? null : PlotReservation::activeForDraft($draft);
+        $hold = $draft === null ? null : PlotReservation::activeForDraft($draft);
+
+        if ($hold === null || $hold->plot?->block?->cemetery_id !== $this->pickerCemeteryId) {
+            return null;
+        }
+
+        return $hold;
     }
 
     /**

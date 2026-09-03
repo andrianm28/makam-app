@@ -597,6 +597,43 @@ final class BookingWizardPlotPickerTest extends TestCase
         $this->assertSame(0, BookingDraft::query()->whereNotNull('city_code')->count());
     }
 
+    /**
+     * `selectCity()` closes the picker but deliberately leaves the hold in
+     * the old cemetery to its TTL. Opening a picker on a granular cemetery in
+     * the NEW city must not raise that hold's "Plot ditahan sementara" alert
+     * over a grid of plots none of which are held — the alert belongs to the
+     * picker it renders inside. Backend counterpart:
+     * `SubmitBookingDraftConvertsPlotHoldTest::
+     * test_a_hold_in_a_different_cemetery_than_the_draft_is_not_converted()`.
+     */
+    public function test_a_hold_in_another_cemetery_does_not_raise_the_alert_over_this_picker(): void
+    {
+        $jakarta = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+        $heldPlot = $this->makePlotIn($jakarta);
+
+        $bogor = $this->makeCemetery(PlotTrackingMode::GRANULAR, city: LaunchCityCode::BOGOR);
+        $this->makePlotIn($bogor);
+
+        $component = Livewire::test(BookingWizard::class)
+            ->call('selectCity', LaunchCityCode::JAKARTA)
+            ->call('openPickerFor', $jakarta->id)
+            ->call('holdPlotForDiscovery', $jakarta->id, null, (string) $heldPlot->getKey())
+            ->assertSee('Plot ditahan sementara');
+
+        $component->call('selectCity', LaunchCityCode::BOGOR)
+            ->assertSet('pickerCemeteryId', null)
+            ->call('openPickerFor', $bogor->id)
+            ->assertSet('pickerCemeteryId', $bogor->id)
+            ->assertDontSee('Plot ditahan sementara');
+
+        // The hold itself is untouched — only the alert is scoped.
+        $this->assertSame(
+            1,
+            PlotReservation::query()->where('plot_id', $heldPlot->getKey())->count(),
+            'Scoping the alert must not release the hold; its TTL still owns that.',
+        );
+    }
+
     public function test_resuming_the_wizard_shows_the_already_held_plot(): void
     {
         $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
