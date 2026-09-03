@@ -36,6 +36,7 @@ final class VendorAccountExampleDataTest extends TestCase
 
         $this->assertDatabaseHas('vendor_users', [
             'vendor_id' => $vendor->id,
+            'demo_batch_id' => $batchId,
         ]);
         $this->assertDatabaseHas('actor_role_assignments', [
             'actor_identifier' => (string) $user->id,

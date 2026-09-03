@@ -55,10 +55,11 @@ final class VendorAccountExampleData
             ]);
             TaggedAsDemoData::tag($user, $batchId);
 
-            VendorUser::query()->create([
+            $vendorUser = VendorUser::query()->create([
                 'vendor_id' => $vendor->id,
                 'actor_identifier' => (string) $user->id,
             ]);
+            TaggedAsDemoData::tag($vendorUser, $batchId);
 
             $roleAssignment = (new GrantActorRole)(
                 actorIdentifier: (string) $user->id,
