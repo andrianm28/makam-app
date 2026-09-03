@@ -381,7 +381,10 @@ final class BookingWizard extends Component
      * DISCOVERY — city, cemetery, package, service type and services, all
      * validated and persisted in ONE call. Replaces the four separate saves
      * the nine-step wizard had (`saveStep1()` city, `saveStep2()` cemetery,
-     * `saveStep3()` service type, `saveStep4()` services).
+     * the old `saveStep3()` service type, `saveStep4()` services — those
+     * method names have since been reused: the current `saveStep2()`/
+     * `saveStep3()` are the merged customer+deceased save and the payment
+     * save respectively, see their own doc blocks).
      *
      * Structurally this is still the OLD `saveStep1()`, not one of the
      * `saveStepOrShowErrors()` callers: DISCOVERY is the step at which the
@@ -714,9 +717,22 @@ final class BookingWizard extends Component
         ));
     }
 
-    public function saveStep6(): void
+    /**
+     * The merged customer+deceased save — REPLACES the old `saveStep6()`
+     * (customer data) and `saveStep7()` (deceased data), which used to be
+     * two separate saves against two now-deleted step constants. Under the
+     * `CUSTOMER_AND_DECEASED_DATA` merge (Task 1/3) both payloads are
+     * validated and persisted together in ONE call, matching
+     * `SaveBookingDraftStep`'s own merged validator.
+     *
+     * No document keys are sent for the deceased fields. Upload is out of
+     * scope for this lane and `SaveBookingDraftStep` now REFUSES
+     * caller-supplied document paths outright, so sending explicit nulls
+     * would only imply a capability that does not exist yet.
+     */
+    public function saveStep2(): void
     {
-        $this->saveStepOrShowErrors(BookingWizardStep::CUSTOMER_DATA, [
+        $this->saveStepOrShowErrors(BookingWizardStep::CUSTOMER_AND_DECEASED_DATA, [
             'customer_full_name' => $this->customerFullName,
             'customer_mobile' => $this->customerMobile,
             'customer_email' => $this->customerEmail,
@@ -724,21 +740,11 @@ final class BookingWizard extends Component
             'customer_relationship' => $this->customerRelationship,
             'customer_contact_channel' => $this->customerContactChannel,
             'privacy_notice_accepted' => $this->privacyNoticeAccepted,
-        ]);
-    }
-
-    public function saveStep7(): void
-    {
-        $this->saveStepOrShowErrors(BookingWizardStep::DECEASED_DATA, [
             'deceased_full_name' => $this->deceasedFullName,
             'deceased_date_of_birth' => $this->deceasedDateOfBirth,
             'deceased_date_of_death' => $this->deceasedDateOfDeath,
             'deceased_relationship' => $this->deceasedRelationship,
             'deceased_gender' => $this->deceasedGender !== '' ? $this->deceasedGender : null,
-            // No document keys are sent. Upload is out of scope for this lane
-            // and `SaveBookingDraftStep` now REFUSES caller-supplied document
-            // paths outright, so sending explicit nulls would only imply a
-            // capability that does not exist yet.
         ]);
     }
 
@@ -760,7 +766,7 @@ final class BookingWizard extends Component
      * shape, same Action), stopping after order creation since the manual
      * path has no quote/payment-session to open.
      */
-    public function saveStep8(string $paymentMethod): void
+    public function saveStep3(string $paymentMethod): void
     {
         if ($this->draftId === null) {
             $this->autosaveState = 'failed';
@@ -1212,43 +1218,38 @@ final class BookingWizard extends Component
     }
 
     /**
-     * Which of the four consolidated screens `$currentStep` belongs to — a
-     * pure function of the existing step state, not a second piece of
-     * tracked progress. Screen 1 (Cari & Pilih) = steps 1-4; Screen 2 (Detail
-     * Pemesanan) = steps 5-7; Screen 3 (Pembayaran) = step 8 alone (kept
-     * standalone — too much conditional online/manual/sandbox/session-
-     * recovery branching to merge safely); Screen 4 (Konfirmasi) = step 9
-     * alone (terminal). See `docs/superpowers/specs/
-     * 2026-08-29-wizard-screen-consolidation-design.md`.
+     * Screens and steps converge 1:1 post-step-reduction
+     * (`docs/superpowers/specs/2026-09-02-wizard-step-reduction-design.md`
+     * Decision 9) — kept as its own method (rather than inlining
+     * `$this->currentStep` at all 4 Blade call sites) so the Blade template's
+     * `@if ($this->currentScreen() === N)` guards read the same as before this
+     * change, and so a future re-divergence of screens from steps has one
+     * place to change.
      */
     public function currentScreen(): int
     {
-        return match (true) {
-            $this->currentStep <= BookingWizardStep::SERVICES => 1,
-            $this->currentStep <= BookingWizardStep::DECEASED_DATA => 2,
-            $this->currentStep === BookingWizardStep::PAYMENT => 3,
-            default => 4,
-        };
+        return $this->currentStep;
     }
 
     /**
-     * Steps 5 (SUMMARY) and 9 (CONFIRMATION) are READ-ONLY, so they are never
-     * written to `completed_steps` — which meant a "have you completed it?"
-     * reachability test locked the user out of both the moment they navigated
-     * away. Leaving step 9 to check something on step 6 lost the confirmation
-     * screen permanently, and made step 6's own "Kembali" button dead.
-     *
-     * A read-only step is instead reachable once the writable step BEFORE it
-     * is done: the summary once step 4 is saved, the confirmation once step 8
-     * is. That is the real precondition — those screens exist to show
+     * `CONFIRMATION` is the only remaining special case: it is READ-ONLY, so
+     * it is never written to `completed_steps`, which would otherwise lock
+     * the user out of it the moment they navigated away. It is instead
+     * reachable once the writable step before it (`PAYMENT`) is done — that
+     * is the real precondition, since the confirmation screen exists to show
      * accumulated state, and the state is there.
      *
-     * Step 6 (CUSTOMER_DATA) is the same hand-off the summary's forward
-     * control needs: it is reachable once the journey's decisions (Step 4)
-     * are complete, before its own form has been saved. Without this the
-     * summary dead-ended — a user on Step 5 could not enter Step 6 because
-     * `default => false` refused `goToStep(CUSTOMER_DATA)` until customer
-     * data was already saved, which could never happen first.
+     * The old `SUMMARY`/`CUSTOMER_DATA` special cases existed only because
+     * those were read-only-adjacent bridge steps in the nine-step model:
+     * `SUMMARY` was a read-only step between `SERVICES` and `CUSTOMER_DATA`,
+     * so `CUSTOMER_DATA` needed the same "reachable once its predecessor's
+     * predecessor is done" treatment as `SUMMARY` itself. `SUMMARY` is gone
+     * (cut, not merged — see `BookingWizardStep`'s own doc block), and
+     * `CUSTOMER_DATA` no longer exists as a distinct constant (merged into
+     * `CUSTOMER_AND_DECEASED_DATA`, which is a normal writable step already
+     * covered by the `completedSteps`/`currentStep` check above). Every
+     * remaining step's immediate predecessor is itself always a real,
+     * writable, saved step, so no other special case is needed.
      */
     private function canReachStep(int $step): bool
     {
@@ -1257,8 +1258,6 @@ final class BookingWizard extends Component
         }
 
         return match ($step) {
-            BookingWizardStep::SUMMARY => in_array(BookingWizardStep::SERVICES, $this->completedSteps, true),
-            BookingWizardStep::CUSTOMER_DATA => in_array(BookingWizardStep::SERVICES, $this->completedSteps, true),
             BookingWizardStep::CONFIRMATION => in_array(BookingWizardStep::PAYMENT, $this->completedSteps, true),
             default => false,
         };
@@ -1326,7 +1325,7 @@ final class BookingWizard extends Component
      * issuance and viewing this screen (unlike a live recompute, which
      * could silently drift). Falls back to the live recompute — exactly
      * today's behaviour — only when no quote has been issued yet, which is
-     * the normal case for a MANUAL-payment submission: `saveStep8()`'s
+     * the normal case for a MANUAL-payment submission: `saveStep3()`'s
      * chain calls `SubmitBookingDraft` but never `IssueQuote` (only the
      * ONLINE branch in `openOnlinePayment()` does), so there is nothing
      * "issued" to show for those orders and the live recompute is still the
@@ -1499,7 +1498,7 @@ final class BookingWizard extends Component
         // stays null in BOTH cases (order genuinely does not exist yet vs.
         // this render simply could not confirm one), so a second,
         // independent flag — `$confirmationUnavailable` — exists specifically
-        // to tell those two apart: by Step 9, `saveStep8()`'s submission
+        // to tell those two apart: by Step 9, `saveStep3()`'s submission
         // chain has USUALLY already created a real order (per Global
         // Constraint AC7/idempotency — `SubmitBookingDraft` keys its
         // uniqueness per DRAFT id), so if THIS read throws, we genuinely do
@@ -1525,7 +1524,7 @@ final class BookingWizard extends Component
 
             if ($draft !== null) {
                 try {
-                    // Only set once `saveStep8()`'s submission chain has
+                    // Only set once `saveStep3()`'s submission chain has
                     // actually created the order (the normal case) — a rare
                     // mid-request failure there is reported and swallowed, not
                     // surfaced here, so this stays null and Step 9 falls back
