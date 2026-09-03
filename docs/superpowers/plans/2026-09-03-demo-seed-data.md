@@ -1558,7 +1558,14 @@ final class MarketplaceOrderExampleDataTest extends TestCase
         foreach ($orders as $order) {
             $this->assertSame($vendor->id, $order->vendor_id);
             $this->assertSame($batchId, $order->fresh()->demo_batch_id);
-            $this->assertMatchesRegularExpression('/@example\.(com|org|net)$/', $order->recipient_email ?? '');
+            // MarketplaceOrder has no recipient_email column — this task's
+            // own implementer found the real place PlaceMarketplaceOrder
+            // writes the recipient contact fields is the CHILD
+            // vendor_orders row (customer_name/customer_phone/
+            // customer_email), confirmed by reading both the model's
+            // fillable list and PlaceMarketplaceOrder's own implementation.
+            $vendorOrder = $order->vendorOrders()->firstOrFail();
+            $this->assertMatchesRegularExpression('/@example\.(com|org|net)$/', $vendorOrder->customer_email);
         }
     }
 }
@@ -2390,6 +2397,15 @@ final class DemoDataPurgeCommand extends Command
      * list; this is the plan's best current ordering, not a guarantee no
      * table needs reordering once the real schema is checked table-by-table.
      *
+     * Deliberately EXCLUDES `vendor_listings` and `service_areas` (handled
+     * separately below — see `deleteVendorScopedTables()`) and
+     * `cart_items`/`carts` (deliberately NOT purged at all — see the note
+     * on that decision below). Every table listed here genuinely has the
+     * `demo_batch_id` column (Task 1's migration); this array must never
+     * grow a table that doesn't, or the uniform loop below throws a real
+     * "column does not exist" error and aborts the whole purge inside its
+     * one transaction.
+     *
      * @var list<string>
      */
     private const array DELETE_ORDER = [
@@ -2398,7 +2414,7 @@ final class DemoDataPurgeCommand extends Command
         'subscription_cycles', 'subscriptions', 'care_plans',
         'agreements', 'certificates', 'visitation_bookings', 'cemetery_visitation_policies',
         'vendor_order_evidences', 'vendor_orders', 'marketplace_order_items', 'marketplace_orders',
-        'cart_items', 'carts', 'vendor_listings', 'vendor_availability', 'vendor_users', 'vendors',
+        'vendor_availability', 'vendor_users', 'vendors',
         'orders', 'booking_drafts', 'renewals',
         'scope_assignments', 'actor_role_assignments',
         'users',
@@ -2421,6 +2437,8 @@ final class DemoDataPurgeCommand extends Command
         }
 
         DB::transaction(function () use ($batchId): void {
+            $this->deleteVendorScopedTables($batchId);
+
             foreach (self::DELETE_ORDER as $table) {
                 $count = DB::table($table)->where('demo_batch_id', $batchId)->delete();
 
@@ -2435,6 +2453,43 @@ final class DemoDataPurgeCommand extends Command
         $this->info("Purged demo data batch: {$batchId}");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * `vendor_listings` and `service_areas` have NO `demo_batch_id`
+     * column — found by Task 7's implementer while building
+     * `MarketplaceOrderExampleData`. This is coherent by design, not an
+     * oversight to fix by adding the column: both tables carry a
+     * `restrictOnDelete()` FK to `vendors` (which IS tagged), so deleting
+     * them by `vendor_id` first is both the correct removal path and a
+     * requirement of that FK regardless. Deleted here, before `vendors`
+     * itself is deleted in the main `DELETE_ORDER` loop.
+     *
+     * `cart_items`/`carts` are deliberately left alone — also untagged,
+     * but genuinely harmless to leave behind: `PlaceMarketplaceOrder`
+     * already clears a cart's items and vendor lock once an order is
+     * placed, so by the time purge runs, this subsystem's demo carts are
+     * empty, unlocked rows carrying only a batch-scoped `customer_ref`
+     * string — never rendered anywhere, never referenced by anything else
+     * this purge removes. Special-casing their removal (no vendor_id or
+     * other tagged-table FK to key off) was judged not worth the added
+     * complexity for a row with zero visible footprint.
+     */
+    private function deleteVendorScopedTables(string $batchId): void
+    {
+        $vendorIds = DB::table('vendors')->where('demo_batch_id', $batchId)->pluck('id');
+
+        if ($vendorIds->isEmpty()) {
+            return;
+        }
+
+        foreach (['vendor_listings', 'service_areas'] as $table) {
+            $count = DB::table($table)->whereIn('vendor_id', $vendorIds)->delete();
+
+            if ($count > 0) {
+                $this->line(sprintf('%-28s %d', $table, $count));
+            }
+        }
     }
 }
 ```
