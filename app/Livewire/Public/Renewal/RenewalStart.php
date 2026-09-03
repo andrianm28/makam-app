@@ -11,6 +11,7 @@ use App\Domain\GraveRegistry\GraveSearchCriteria;
 use App\Domain\GraveRegistry\GraveSearchOutcome;
 use App\Domain\Renewal\RenewalGraveSelection;
 use App\Domain\Renewal\RenewalJourneyStep;
+use App\Domain\Renewal\RenewalWizardScreen;
 use App\Platform\FeatureGate\ModeResolver;
 use App\Platform\FeatureGate\Modes\GraveSearchMode;
 use Illuminate\Contracts\View\View;
@@ -296,42 +297,26 @@ final class RenewalStart extends Component
     }
 
     /**
-     * Back-navigation target for a completed stepper dot. The allow-list
-     * covers the steps THIS component can own at once, which the merge
-     * widened from one to two: Screen 1 spans journey steps 1-3
-     * (`currentStep()`), so `<x-mk.stepper>` renders dot 1 as `complete`
-     * once a city is chosen AND dot 2 as `complete` once a TPU/TPS is —
-     * and a `complete` dot is a real `<button wire:click="goToStep(n)">`
-     * (see `stepper.blade.php`). A step left out of this list is therefore
-     * a visibly clickable dead control, not merely an unhandled case.
-     *
-     * Each arm reopens its step by resetting the state that step owns,
-     * reusing the very methods this screen's own in-page controls already
-     * call: dot 1 → `resetCity()` (which cascades through `resetCemetery()`
-     * to the search), dot 2 → `resetCemetery()` alone, leaving the chosen
-     * city standing. Steps 4-6 live on Screen 2/3 and can never render as
-     * `complete` here, so they stay a silent no-op rather than a 500.
+     * Back-navigation target for a completed stepper dot. Post wizard-step-
+     * reduction (`docs/superpowers/specs/2026-09-02-wizard-step-reduction-
+     * design.md`), this component IS journey step `RenewalJourneyStep::
+     * SEARCH` (screen 1 of 3) in full — there is no earlier step on this
+     * screen for `<x-mk.stepper>` to ever render `complete`, so this
+     * screen's own dot never becomes the clickable
+     * `<button wire:click="goToStep(n)">` `stepper.blade.php` renders for a
+     * `complete` step. The method survives anyway as the target a LATER
+     * screen's own step-1 dot calls by the stepper's `goToStep` naming
+     * convention, and reuses `resetCity()` (which cascades through
+     * `resetCemetery()` to the search) exactly as this screen's own
+     * "Ganti kota" control already does. Any other step number is a silent
+     * no-op rather than a 500 — the same dead-control safety this method
+     * has always had.
      */
     public function goToStep(int $step): void
     {
-        if ($step === RenewalJourneyStep::CITY) {
+        if ($step === RenewalJourneyStep::SEARCH) {
             $this->resetCity();
-
-            return;
         }
-
-        if ($step === RenewalJourneyStep::CEMETERY) {
-            $this->resetCemetery();
-        }
-    }
-
-    private function currentStep(): int
-    {
-        return match (true) {
-            $this->city === '' => RenewalJourneyStep::CITY,
-            $this->cemeteryId === '' => RenewalJourneyStep::CEMETERY,
-            default => RenewalJourneyStep::GRAVE_SEARCH,
-        };
     }
 
     public function render(): View
@@ -406,8 +391,8 @@ final class RenewalStart extends Component
             'cemeteries' => $cemeteries,
             'selectedCityLabel' => $selectedCityLabel,
             'selectedCemetery' => $selectedCemetery,
-            'currentStep' => $this->currentStep(),
-            'stepLabels' => RenewalJourneyStep::labels(),
+            'currentStep' => RenewalJourneyStep::SEARCH,
+            'stepLabels' => RenewalWizardScreen::labels(),
             'graveSearchMode' => $graveSearchMode,
             'gateClosed' => $gateClosed,
             'outcome' => $outcome,

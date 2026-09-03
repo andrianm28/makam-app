@@ -157,9 +157,9 @@ final class RenewalPaymentTest extends TestCase
 
         Livewire::test(RenewalPayment::class, ['perpanjangan' => $renewal->id])
             ->assertOk()
-            ->assertSee('Langkah 5 dari 6');
+            ->assertSee('Langkah 2 dari 3');
 
-        foreach (['Kota', 'TPU/TPS', 'Cari Makam', 'Biaya', 'Pembayaran', 'Konfirmasi'] as $label) {
+        foreach (['Cari Makam', 'Biaya & Bayar', 'Konfirmasi'] as $label) {
             Livewire::test(RenewalPayment::class, ['perpanjangan' => $renewal->id])
                 ->assertSee($label);
         }
@@ -523,9 +523,12 @@ final class RenewalPaymentTest extends TestCase
     }
 
     /**
-     * Migrated from RenewalFeeTest.
+     * Migrated from RenewalFeeTest — the fee section and the payment
+     * section are now the SAME journey step (`RenewalJourneyStep::
+     * FEE_AND_PAYMENT`, screen 2 of 3), so this asserts step 2 rather than
+     * the pre-consolidation step 4.
      */
-    public function test_the_stepper_shows_step_4_as_current(): void
+    public function test_the_stepper_shows_step_2_as_current(): void
     {
         $this->openTheDataGate();
         $cemetery = $this->cemeteryWithPrice();
@@ -534,9 +537,9 @@ final class RenewalPaymentTest extends TestCase
 
         $component = Livewire::test(RenewalPayment::class);
 
-        $component->assertSee('Langkah 4 dari 6');
+        $component->assertSee('Langkah 2 dari 3');
 
-        foreach (['Kota', 'TPU/TPS', 'Cari Makam', 'Biaya', 'Pembayaran', 'Konfirmasi'] as $label) {
+        foreach (['Cari Makam', 'Biaya & Bayar', 'Konfirmasi'] as $label) {
             $component->assertSee($label);
         }
     }

@@ -216,14 +216,14 @@ final class RenewalStartTest extends TestCase
     }
 
     // =====================================================================
-    // AC1 — the six-step stepper
+    // AC1 — the three-step stepper
     // =====================================================================
 
-    public function test_the_stepper_shows_this_journeys_six_steps_not_the_nine_booking_ones(): void
+    public function test_the_stepper_shows_this_journeys_three_steps_not_the_nine_booking_ones(): void
     {
         $component = Livewire::test(RenewalStart::class);
 
-        foreach (['Kota', 'TPU/TPS', 'Cari Makam', 'Biaya', 'Pembayaran', 'Konfirmasi'] as $label) {
+        foreach (['Cari Makam', 'Biaya & Bayar', 'Konfirmasi'] as $label) {
             $component->assertSee($label);
         }
 
@@ -233,60 +233,53 @@ final class RenewalStartTest extends TestCase
     }
 
     /**
-     * The current step is DERIVED from whether a city is selected, not
-     * tracked as a second piece of state that could drift out of sync.
+     * The brief's original draft for this test asserted `assertDontSee(
+     * 'TPU/TPS')`, but "TPU/TPS" is not actually removed from the page — it
+     * is still real prose in the closed-gate banner ("Anda tetap dapat
+     * memilih kota dan TPU/TPS di halaman ini.") and in this screen's own
+     * "Langkah 2 — Pilih TPU/TPS" progressive sub-section heading, both
+     * unrelated to the STEPPER's label set this test actually cares about.
+     * `assertDontSeeHtml('>TPU/TPS<')` targets the stepper's own rendered
+     * label markup specifically (`stepper.blade.php`'s
+     * `<span class="text-sm text-center ...">{{ $label }}</span>`), which
+     * the bare-substring assertion could never distinguish from prose.
      */
-    public function test_the_current_step_advances_from_one_to_two_when_a_city_is_chosen(): void
-    {
-        Livewire::test(RenewalStart::class)
-            ->assertSee('Langkah 1 dari 6')
-            ->call('selectCity', LaunchCityCode::JAKARTA)
-            ->assertSee('Langkah 2 dari 6');
-    }
-
-    /**
-     * `<x-mk.stepper>` defaults its click target to `goToStep`
-     * (design-system.md §3.9), so once step 1 renders as `complete` the
-     * dot becomes a live button calling a method THIS component must
-     * implement. The first assertion pins the seam — that the stepper
-     * still emits the default method name and that this component is the
-     * thing that must answer it; without it the test would pass even if
-     * the stepper stopped emitting the button, which is the drift that
-     * produced the original dead control. The last assertion pins that an
-     * unreachable step is a silent no-op and never a 500.
-     */
-    public function test_the_completed_step_one_dot_calls_a_method_this_component_implements(): void
+    public function test_the_stepper_renders_the_three_screen_labels(): void
     {
         $component = Livewire::test(RenewalStart::class);
-        $component->call('selectCity', LaunchCityCode::JAKARTA);
 
-        $component->assertSee('wire:click="goToStep(1)"', false);
-
-        $component->call('goToStep', RenewalJourneyStep::FEE)
-            ->assertOk()
-            ->assertSet('city', LaunchCityCode::JAKARTA)
-            ->assertSee('Langkah 2 dari 6');
-
-        $component->call('goToStep', RenewalJourneyStep::CITY)
-            ->assertSet('city', '')
-            ->assertSee('Langkah 1 dari 6');
+        $component->assertSee('Cari Makam');
+        $component->assertSee('Biaya & Bayar');
+        $component->assertDontSeeHtml('>TPU/TPS<');
     }
 
     /**
-     * The same drift-pin as the test above, one dot over — written because
-     * the `GraveSearch` merge widened this component from journey steps 1-2
-     * to 1-3, so for the first time TWO dots can render as `complete` here
-     * at once. Dot 2 (TPU/TPS) then becomes a live
-     * `<button wire:click="goToStep(2)">` exactly as dot 1 already was, and
-     * `goToStep()`'s allow-list has to have grown with it; it had not, which
-     * is precisely the dead-control defect the step-one test above exists to
-     * catch. The first assertion pins the seam (the stepper really does emit
-     * that button, so this test cannot pass while the control has silently
-     * stopped existing); the rest pin that clicking it genuinely reopens the
-     * TPU/TPS step, keeping the chosen city and dropping the search that
-     * belonged to the old cemetery.
+     * Post wizard-step-reduction, this whole screen IS journey step
+     * `RenewalJourneyStep::SEARCH` — there is nothing left within it for
+     * `currentStep()` to derive a later value from, so progressing through
+     * city/cemetery selection must never move the stepper off step 1. This
+     * replaces a pre-consolidation test that proved the opposite (the step
+     * used to advance from 1 to 2 once a city was chosen).
      */
-    public function test_the_completed_step_two_dot_reopens_the_cemetery_step(): void
+    public function test_the_current_step_stays_at_one_regardless_of_city_selection(): void
+    {
+        Livewire::test(RenewalStart::class)
+            ->assertSee('Langkah 1 dari 3')
+            ->call('selectCity', LaunchCityCode::JAKARTA)
+            ->assertSee('Langkah 1 dari 3');
+    }
+
+    /**
+     * `<x-mk.stepper>` only renders a step's dot as a clickable
+     * `<button wire:click="goToStep(n)">` once that step is `complete`
+     * (`n < $step`, design-system.md §3.9). This screen's own step
+     * (`RenewalJourneyStep::SEARCH`) is always the CURRENT step here, never
+     * `complete`, so its dot can never become that button on this screen —
+     * `goToStep()` survives only as the target a LATER screen's own step-1
+     * dot calls by the stepper's naming convention. It is exercised
+     * directly rather than through a locally-unreachable button click.
+     */
+    public function test_go_to_step_search_resets_the_chosen_city_and_cemetery(): void
     {
         $component = Livewire::test(RenewalStart::class, [
             'city' => LaunchCityCode::JAKARTA,
@@ -294,16 +287,26 @@ final class RenewalStartTest extends TestCase
             'name' => 'Contoh',
         ]);
 
-        $component->assertSee('Langkah 3 dari 6')
-            ->assertSee('wire:click="goToStep(2)"', false);
-
-        $component->call('goToStep', RenewalJourneyStep::CEMETERY)
+        $component->call('goToStep', RenewalJourneyStep::SEARCH)
             ->assertOk()
+            ->assertSet('city', '')
             ->assertSet('cemeteryId', '')
-            ->assertSet('city', LaunchCityCode::JAKARTA)
             ->assertSet('name', '')
             ->assertSet('searched', false)
-            ->assertSee('Langkah 2 dari 6');
+            ->assertSee('Langkah 1 dari 3');
+    }
+
+    /**
+     * A step number outside this screen's own single step is a silent
+     * no-op rather than a 500 — the same dead-control safety `goToStep()`
+     * has always had.
+     */
+    public function test_go_to_step_ignores_a_step_this_screen_does_not_own(): void
+    {
+        Livewire::test(RenewalStart::class, ['city' => LaunchCityCode::JAKARTA])
+            ->call('goToStep', RenewalJourneyStep::FEE_AND_PAYMENT)
+            ->assertOk()
+            ->assertSet('city', LaunchCityCode::JAKARTA);
     }
 
     /**
@@ -1008,7 +1011,7 @@ final class RenewalStartTest extends TestCase
             ->assertOk()
             ->assertSet('cemeteryId', '')
             // The stepper's own sr-only per-dot labels always mention every
-            // step number ("Langkah 3: Cari Makam (belum tersedia)"), so
+            // step number ("Langkah 1: Cari Makam (langkah saat ini)"), so
             // "Langkah 3" alone is not a safe absence marker — Step 3's own
             // section (heading, search form, gate-closed page) is.
             ->assertDontSee('Nama almarhum')
@@ -1060,11 +1063,13 @@ final class RenewalStartTest extends TestCase
     }
 
     /**
-     * AC1 — six visible steps, this journey's own labels, never the
-     * booking wizard's nine, and the stepper genuinely reaches step 3 once
-     * a city AND a published cemetery are both selected.
+     * AC1 — three visible steps, this journey's own labels, never the
+     * booking wizard's nine, and the stepper stays on step 1 even once a
+     * city AND a published cemetery are both selected — Screen 1 is a
+     * single journey step regardless of how much of its own sub-flow is
+     * filled in.
      */
-    public function test_the_stepper_reaches_step_three_once_a_cemetery_is_selected(): void
+    public function test_the_stepper_shows_the_three_screen_labels_and_stays_on_step_one_once_a_cemetery_is_selected(): void
     {
         $this->openTheDataGate();
 
@@ -1073,11 +1078,11 @@ final class RenewalStartTest extends TestCase
             'cemeteryId' => CemeteryFixture::id('package', 0),
         ]);
 
-        foreach (['Kota', 'TPU/TPS', 'Cari Makam', 'Biaya', 'Pembayaran', 'Konfirmasi'] as $label) {
+        foreach (['Cari Makam', 'Biaya & Bayar', 'Konfirmasi'] as $label) {
             $component->assertSee($label);
         }
 
-        $component->assertSee('Langkah 3 dari 6');
+        $component->assertSee('Langkah 1 dari 3');
 
         foreach (['Jenis Layanan', 'Data Almarhum + Dokumen', 'Data Pemesan'] as $bookingOnlyLabel) {
             $component->assertDontSee($bookingOnlyLabel);

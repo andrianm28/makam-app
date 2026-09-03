@@ -221,18 +221,59 @@ final readonly class SubmitBookingDraft
             'preferred_contact_channel' => $draft->customer_contact_channel,
         ]);
 
-        // Only when the customer actually went through the Step 2 picker
+        // Only when the customer actually went through the plot picker
         // (granular-tier cemetery) — most drafts have no hold at all, and
         // that is the normal case, not an error. See
         // `ConvertDraftHoldToOrderReservation`'s class doc block for the
-        // no-fallback failure mode this can throw.
+        // no-fallback failure mode this can throw, and
+        // `holdBelongsToDraftCemetery()` for the one hold this deliberately
+        // does NOT convert.
         $draftHold = PlotReservation::activeForDraft($draft);
 
-        if ($draftHold instanceof PlotReservation) {
+        if ($draftHold instanceof PlotReservation && self::holdBelongsToDraftCemetery($draftHold, $draft)) {
             ($this->convertDraftHold)($draftHold, $order);
         }
 
         return $order;
+    }
+
+    /**
+     * A draft's live plot hold is only this order's reservation if the held
+     * plot is actually IN the cemetery the draft finally saved.
+     *
+     * It can fail to be. `BookingWizard::selectCity()` deliberately drops the
+     * cemetery chosen under the previous city and leaves an already-placed
+     * hold to its own TTL (see that method's doc block); the customer can
+     * then pick a cemetery in the new city and finish the wizard without ever
+     * touching the picker again, because a plot pick is optional — an
+     * aggregate-tier cemetery has no picker at all, and even a granular one
+     * can be chosen through the plain "Pilih ..." button. Picking a plot in
+     * the NEW cemetery is safe on its own: `HoldPlotForDraft` releases the
+     * incumbent hold on a plot switch. It is only the never-re-picked case
+     * that reaches here, and without this check the order for cemetery B
+     * silently carries a reservation for a plot in cemetery A — inventory
+     * committed in a cemetery nobody ordered from.
+     *
+     * The failure mode is "do not convert", NOT
+     * `DraftPlotHoldNoLongerValidException`. That exception rolls the whole
+     * submission back and sends the customer to re-pick a plot, which is the
+     * right answer when the hold they still want has expired or been taken —
+     * but here the cemetery they want has no picker to re-pick in, so
+     * throwing would be an unrecoverable loop until the stale hold's TTL ran
+     * out. Not converting lands the order on the already-normal, already-
+     * supported "no plot picked" path instead, and the abandoned hold expires
+     * on its TTL exactly as `selectCity()` intends. The hold is left
+     * untouched rather than released here: releasing is a second write inside
+     * the submission transaction for no benefit the TTL does not already
+     * provide.
+     */
+    private static function holdBelongsToDraftCemetery(PlotReservation $hold, BookingDraft $draft): bool
+    {
+        // Same relation chain `BookingWizard::mount()` uses to derive a held
+        // plot's cemetery. A hold whose chain cannot be resolved is not
+        // provably this draft's, so it is not converted either.
+        return $draft->cemetery_id !== null
+            && $hold->plot?->block?->cemetery_id === $draft->cemetery_id;
     }
 
     private function findByIdempotencyKey(string $key): ?Order

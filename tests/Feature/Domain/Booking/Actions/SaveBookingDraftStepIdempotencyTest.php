@@ -5,9 +5,14 @@ declare(strict_types=1);
 namespace Tests\Feature\Domain\Booking\Actions;
 
 use App\Domain\Booking\Actions\SaveBookingDraftStep;
+use App\Domain\Booking\BookingContactChannel;
+use App\Domain\Booking\BookingGender;
+use App\Domain\Booking\BookingRelationshipCode;
+use App\Domain\Booking\BookingServiceType;
 use App\Domain\Booking\BookingWizardStep;
 use App\Domain\Booking\Exceptions\BookingDraftVersionConflictException;
 use App\Domain\Booking\Models\BookingDraft;
+use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -42,21 +47,74 @@ final class SaveBookingDraftStepIdempotencyTest extends TestCase
     {
         return Cemetery::query()
             ->where('city', LaunchCityCode::JAKARTA)
-            ->where('publication_status', 'published')
+            ->where('publication_status', CemeteryPublicationStatus::PUBLISHED)
             ->whereDoesntHave('packages')
             ->firstOrFail();
+    }
+
+    private function bogorCemeteryWithoutPackages(): Cemetery
+    {
+        return Cemetery::query()
+            ->where('city', LaunchCityCode::BOGOR)
+            ->where('publication_status', CemeteryPublicationStatus::PUBLISHED)
+            ->whereDoesntHave('packages')
+            ->firstOrFail();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function discoveryPayload(string $cityCode, string $cemeteryId): array
+    {
+        return [
+            'city_code' => $cityCode,
+            'cemetery_id' => $cemeteryId,
+            'cemetery_package_id' => null,
+            'service_type' => BookingServiceType::NEW_GRAVE,
+            'selected_services' => [
+                ['code' => 'DOCUMENT_PROCESSING', 'quantity' => 1],
+                ['code' => 'GRAVE_DIGGING', 'quantity' => 1],
+            ],
+        ];
+    }
+
+    /**
+     * A full, valid `CUSTOMER_AND_DECEASED_DATA` payload — used here only to
+     * prove a SECOND real save applies after DISCOVERY, not to exercise its
+     * own field-level validation (that belongs to
+     * `SaveBookingDraftStepSteps678Test`).
+     *
+     * @return array<string, mixed>
+     */
+    private function customerAndDeceasedDataPayload(): array
+    {
+        return [
+            'customer_full_name' => 'Budi Santoso',
+            'customer_mobile' => '081234567890',
+            'customer_email' => 'budi@example.test',
+            'customer_address' => 'Jl. Melati No. 12, Jakarta Selatan',
+            'customer_relationship' => BookingRelationshipCode::ANAK,
+            'customer_contact_channel' => BookingContactChannel::WHATSAPP,
+            'privacy_notice_accepted' => true,
+            'deceased_full_name' => 'Siti Rahayu',
+            'deceased_date_of_birth' => '1950-03-04',
+            'deceased_date_of_death' => '2026-01-15',
+            'deceased_relationship' => BookingRelationshipCode::ORANG_TUA,
+            'deceased_gender' => BookingGender::PEREMPUAN,
+        ];
     }
 
     public function test_replaying_the_same_idempotency_key_does_not_bump_the_version_twice(): void
     {
         $draft = BookingDraft::create([]);
+        $payload = $this->discoveryPayload(LaunchCityCode::JAKARTA, $this->jakartaCemeteryWithoutPackages()->id);
 
-        (new SaveBookingDraftStep)($draft, BookingWizardStep::LOCATION, ['city_code' => LaunchCityCode::JAKARTA], 'idem-replay-1');
+        (new SaveBookingDraftStep)($draft, BookingWizardStep::DISCOVERY, $payload, 'idem-replay-1');
 
         $afterFirst = $this->freshFromDatabase($draft->id);
         $this->assertSame(2, $afterFirst->version, 'A fresh draft starts at version 1; one applied save makes it 2.');
 
-        (new SaveBookingDraftStep)($afterFirst, BookingWizardStep::LOCATION, ['city_code' => LaunchCityCode::JAKARTA], 'idem-replay-1');
+        (new SaveBookingDraftStep)($afterFirst, BookingWizardStep::DISCOVERY, $payload, 'idem-replay-1');
 
         $afterReplay = $this->freshFromDatabase($draft->id);
         $this->assertSame(2, $afterReplay->version, 'A replayed key must not write, and therefore must not bump the version.');
@@ -71,44 +129,59 @@ final class SaveBookingDraftStepIdempotencyTest extends TestCase
         // "was this exact call already applied", not "does this payload
         // match".
         $draft = BookingDraft::create([]);
+        $jakarta = $this->jakartaCemeteryWithoutPackages();
+        $bogor = $this->bogorCemeteryWithoutPackages();
 
-        (new SaveBookingDraftStep)($draft, BookingWizardStep::LOCATION, ['city_code' => LaunchCityCode::JAKARTA], 'idem-replay-2');
+        (new SaveBookingDraftStep)($draft, BookingWizardStep::DISCOVERY, $this->discoveryPayload(LaunchCityCode::JAKARTA, $jakarta->id), 'idem-replay-2');
 
-        $second = (new SaveBookingDraftStep)($this->freshFromDatabase($draft->id), BookingWizardStep::LOCATION, ['city_code' => LaunchCityCode::BOGOR], 'idem-replay-2');
+        $second = (new SaveBookingDraftStep)(
+            $this->freshFromDatabase($draft->id),
+            BookingWizardStep::DISCOVERY,
+            $this->discoveryPayload(LaunchCityCode::BOGOR, $bogor->id),
+            'idem-replay-2'
+        );
 
-        $this->assertSame('JAKARTA', $second->city_code, 'A replayed key must not re-apply a changed payload.');
-        $this->assertSame('JAKARTA', $this->freshFromDatabase($draft->id)->city_code, 'And the change must not have reached the database either.');
+        $this->assertSame(LaunchCityCode::JAKARTA, $second->city_code, 'A replayed key must not re-apply a changed payload.');
+        $this->assertSame(LaunchCityCode::JAKARTA, $this->freshFromDatabase($draft->id)->city_code, 'And the change must not have reached the database either.');
     }
 
     public function test_a_new_idempotency_key_after_a_replay_applies_normally(): void
     {
         $draft = BookingDraft::create([]);
+        $jakarta = $this->jakartaCemeteryWithoutPackages();
+        $payload = $this->discoveryPayload(LaunchCityCode::JAKARTA, $jakarta->id);
 
-        (new SaveBookingDraftStep)($draft, BookingWizardStep::LOCATION, ['city_code' => LaunchCityCode::JAKARTA], 'idem-replay-3');
-        (new SaveBookingDraftStep)($this->freshFromDatabase($draft->id), BookingWizardStep::LOCATION, ['city_code' => LaunchCityCode::JAKARTA], 'idem-replay-3');
+        (new SaveBookingDraftStep)($draft, BookingWizardStep::DISCOVERY, $payload, 'idem-replay-3');
+        (new SaveBookingDraftStep)($this->freshFromDatabase($draft->id), BookingWizardStep::DISCOVERY, $payload, 'idem-replay-3');
 
         $afterReplay = $this->freshFromDatabase($draft->id);
 
-        (new SaveBookingDraftStep)($afterReplay, BookingWizardStep::CEMETERY, [
-            'cemetery_id' => $this->jakartaCemeteryWithoutPackages()->id,
-        ], 'idem-replay-4');
+        (new SaveBookingDraftStep)($afterReplay, BookingWizardStep::CUSTOMER_AND_DECEASED_DATA, $this->customerAndDeceasedDataPayload(), 'idem-replay-4');
 
         $afterNext = $this->freshFromDatabase($draft->id);
 
         $this->assertSame($afterReplay->version + 1, $afterNext->version);
-        $this->assertSame($this->jakartaCemeteryWithoutPackages()->id, $afterNext->cemetery_id);
+        $this->assertSame('Budi Santoso', $afterNext->customer_full_name);
     }
 
     public function test_saving_against_a_stale_expected_version_throws_a_conflict(): void
     {
         $draft = BookingDraft::create([]);
         $staleVersion = $draft->version;
+        $jakarta = $this->jakartaCemeteryWithoutPackages();
+        $bogor = $this->bogorCemeteryWithoutPackages();
 
         // Simulate a concurrent save from another tab bumping the version first.
-        (new SaveBookingDraftStep)($draft, BookingWizardStep::LOCATION, ['city_code' => LaunchCityCode::JAKARTA], 'idem-conflict-1');
+        (new SaveBookingDraftStep)($draft, BookingWizardStep::DISCOVERY, $this->discoveryPayload(LaunchCityCode::JAKARTA, $jakarta->id), 'idem-conflict-1');
 
         try {
-            (new SaveBookingDraftStep)($this->freshFromDatabase($draft->id), BookingWizardStep::LOCATION, ['city_code' => LaunchCityCode::BOGOR], 'idem-conflict-2', expectedVersion: $staleVersion);
+            (new SaveBookingDraftStep)(
+                $this->freshFromDatabase($draft->id),
+                BookingWizardStep::DISCOVERY,
+                $this->discoveryPayload(LaunchCityCode::BOGOR, $bogor->id),
+                'idem-conflict-2',
+                expectedVersion: $staleVersion
+            );
             $this->fail('Expected BookingDraftVersionConflictException.');
         } catch (BookingDraftVersionConflictException) {
             // Expected.
@@ -116,24 +189,28 @@ final class SaveBookingDraftStepIdempotencyTest extends TestCase
 
         $afterConflict = $this->freshFromDatabase($draft->id);
 
-        $this->assertSame('JAKARTA', $afterConflict->city_code, 'A rejected conflicting save must persist nothing.');
+        $this->assertSame(LaunchCityCode::JAKARTA, $afterConflict->city_code, 'A rejected conflicting save must persist nothing.');
         $this->assertSame(2, $afterConflict->version, 'A rejected conflicting save must not bump the version.');
     }
 
     public function test_saving_with_no_expected_version_never_conflicts(): void
     {
         $draft = BookingDraft::create([]);
+        $jakarta = $this->jakartaCemeteryWithoutPackages();
 
-        (new SaveBookingDraftStep)($draft, BookingWizardStep::LOCATION, ['city_code' => LaunchCityCode::JAKARTA], 'idem-conflict-3');
+        (new SaveBookingDraftStep)($draft, BookingWizardStep::DISCOVERY, $this->discoveryPayload(LaunchCityCode::JAKARTA, $jakarta->id), 'idem-conflict-3');
 
         // No $expectedVersion given — must not throw even though the
         // in-memory $draft is now stale relative to what a fresh read
         // would show, since this overload is opt-in.
-        (new SaveBookingDraftStep)($this->freshFromDatabase($draft->id), BookingWizardStep::CEMETERY, [
-            'cemetery_id' => $this->jakartaCemeteryWithoutPackages()->id,
-        ], 'idem-conflict-4');
+        (new SaveBookingDraftStep)(
+            $this->freshFromDatabase($draft->id),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->customerAndDeceasedDataPayload(),
+            'idem-conflict-4'
+        );
 
-        $this->assertNotNull($this->freshFromDatabase($draft->id)->cemetery_id);
+        $this->assertNotNull($this->freshFromDatabase($draft->id)->customer_full_name);
     }
 
     public function test_a_matching_expected_version_applies_normally(): void
@@ -142,12 +219,19 @@ final class SaveBookingDraftStepIdempotencyTest extends TestCase
         // version check that rejected EVERYTHING would still pass the two
         // tests above.
         $draft = BookingDraft::create([]);
+        $jakarta = $this->jakartaCemeteryWithoutPackages();
 
-        (new SaveBookingDraftStep)($draft, BookingWizardStep::LOCATION, ['city_code' => LaunchCityCode::JAKARTA], 'idem-conflict-5', expectedVersion: 1);
+        (new SaveBookingDraftStep)(
+            $draft,
+            BookingWizardStep::DISCOVERY,
+            $this->discoveryPayload(LaunchCityCode::JAKARTA, $jakarta->id),
+            'idem-conflict-5',
+            expectedVersion: 1
+        );
 
         $saved = $this->freshFromDatabase($draft->id);
 
-        $this->assertSame('JAKARTA', $saved->city_code);
+        $this->assertSame(LaunchCityCode::JAKARTA, $saved->city_code);
         $this->assertSame(2, $saved->version);
     }
 }

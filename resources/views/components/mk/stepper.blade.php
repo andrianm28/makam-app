@@ -1,31 +1,42 @@
 {{--
     resources/views/components/mk/stepper.blade.php
 
-    <x-mk.stepper> — design-system.md §3.9. Booking Steps 1-9 by default.
+    <x-mk.stepper> — design-system.md §3.9. Booking Steps 1-4 by default
+    (renumbered from nine to four,
+    docs/superpowers/specs/2026-09-02-wizard-step-reduction-design.md).
 
     LABELS ARE A PRODUCT CONTRACT (booking-wizard-fields.md, design-system.md
-    §3.9). The nine booking labels are the DEFAULT VALUE of the `labels` prop,
-    so a caller that passes nothing renders exactly the nine canonical booking
-    steps and nothing can reword them by accident.
+    §3.9). The `labels` prop's default value below still renders booking's
+    old nine-step wording if a caller omits it — that default is left
+    unchanged by the step-count reduction (this component derives everything
+    from whatever `labels` array is passed, so no code change was needed
+    here) and still serves as the safety net against an accidental reword.
+    In practice booking's own Blade view no longer relies on that default:
+    it now explicitly passes `:labels="BookingWizardScreen::labels()"` (the
+    four current booking screens), so what booking actually renders is that
+    array, not the default below.
 
     `labels` exists for a DIFFERENT JOURNEY, never for re-labelling booking.
-    The renewal journey (.kiro/specs/renewal-and-grave-registry, AC1) is six
-    visible steps — city, TPU/TPS, grave search, fee, payment, confirmation —
-    and its tasks.md requires this same primitive, which is the only reason
-    the prop exists. Passing `labels` from a booking screen to rename,
-    reorder, hide, or renumber a booking step is forbidden by AGENTS.md
-    ("Never rename, reorder, or hide a product label, route, menu item, or
-    booking step") and by design-system.md §9.2 MUST-NOT 9. Booking always
-    reads 1-9, including when the Urgent / Pre-Need branches diverge
+    The renewal journey (.kiro/specs/renewal-and-grave-registry, AC1,
+    superseded 2 Sep 2026) is now three visible steps — search, fee &
+    payment, confirmation — via `RenewalWizardScreen::labels()`, and its
+    tasks.md requires this same primitive, which is the only reason the prop
+    exists. Passing `labels` from a booking screen to rename, reorder, hide,
+    or renumber a booking step is forbidden by AGENTS.md ("Booking exposes
+    Steps 1-4 exactly as documented") and by design-system.md §9.2 MUST-NOT
+    9, except for the documented, deliberate screen-vocabulary labels
+    (`BookingWizardScreen`/`RenewalWizardScreen`) this step-count reduction
+    itself introduced — see §9.2 MUST-NOT 9's own exception note. Booking
+    always reads 1-4, including when the Urgent / Pre-Need branches diverge
     internally — the stepper is a PRESENTATION contract (§3.9), never
     renumbered per branch.
 
-    Every count is derived from the supplied array, never from a literal 9:
-    the total, the mobile "Langkah N dari M" line, `aria-valuemax`, the step
-    clamp, and the progress percentage. A supplied array may be a 0-indexed
-    list or an already-1-indexed map; it is re-keyed to a contiguous 1..N
-    sequence either way. An empty array renders an empty rail rather than
-    dividing by zero.
+    Every count is derived from the supplied array, never from a literal
+    step count: the total, the mobile "Langkah N dari M" line,
+    `aria-valuemax`, the step clamp, and the progress percentage. A supplied
+    array may be a 0-indexed list or an already-1-indexed map; it is
+    re-keyed to a contiguous 1..N sequence either way. An empty array
+    renders an empty rail rather than dividing by zero.
 
     Two genuinely different layouts (not a responsive class tweak on one
     markup tree), same reasoning the table/modal primitives use for their own
@@ -83,11 +94,15 @@
     'errorSteps' => [],    // step numbers currently in the `error` state
     'stepMethod' => 'goToStep', // Livewire method invoked as stepMethod(n)
 
-    // NORMATIVE DEFAULT — the nine canonical booking steps
-    // (booking-wizard-fields.md, design-system.md §3.9). Omitting `labels`
-    // MUST keep rendering exactly these nine, in exactly this order, with
-    // exactly this wording. Override only for a different journey (see the
-    // file-header note), never to re-label booking.
+    // LEGACY FALLBACK — booking's OLD nine-step wording, left in place
+    // unchanged by the step-count reduction as a safety net against an
+    // accidental reword (see the file header ~90 lines above, which governs).
+    // It is NOT what booking renders any more: every real call site now
+    // passes an explicit `labels` array — booking passes
+    // `BookingWizardScreen::labels()` (four steps), renewal passes
+    // `RenewalWizardScreen::labels()` (three) — so this default is reached by
+    // nothing in the app. Do not treat it as the canonical booking
+    // vocabulary; `App\Domain\Booking\BookingWizardScreen` is.
     'labels' => [
         1 => 'Lokasi',
         2 => 'TPU/TPS',

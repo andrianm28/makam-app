@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Livewire\Public\Booking;
 
+use App\Domain\Booking\BookingServiceType;
+use App\Domain\Booking\BookingWizardStep;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
+use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Livewire\Public\Booking\BookingWizard;
 use DOMDocument;
 use DOMElement;
@@ -62,19 +65,46 @@ final class BookingWizardAccessibilityTest extends TestCase
 
     public function test_each_step_heading_has_a_unique_id_targeted_by_aria_labelledby(): void
     {
-        // Heading ids carry a `booking-` prefix in the real Steps 1-3
-        // markup Task 9/10 actually shipped (`booking-step-N-heading`),
-        // not the bare `step-N-heading` this test originally assumed.
+        // Heading ids carry a `booking-` prefix in the real markup
+        // (`booking-step-N-heading`), not the bare `step-N-heading` this
+        // test originally assumed. N is now the SCREEN/step number 1-4, the
+        // merged DISCOVERY screen being 1.
         $component = Livewire::test(BookingWizard::class);
 
         $component->assertSeeHtml('aria-labelledby="booking-step-1-heading"');
         $component->assertSeeHtml('id="booking-step-1-heading"');
     }
 
+    /**
+     * The stepper must render the FOUR screen labels
+     * (`BookingWizardScreen::labels()`), not the nine-step rail the
+     * primitive still defaults to. Omitting `:labels` renders a journey this
+     * wizard no longer has — nine dots for four real steps, five of which
+     * can never become current.
+     */
+    public function test_the_stepper_renders_the_four_screen_labels_not_the_old_nine_step_labels(): void
+    {
+        $component = Livewire::test(BookingWizard::class);
+
+        $component->assertSee('Cari & Pilih');
+        $component->assertSee('Detail Pemesanan');
+        $component->assertSee('Pembayaran');
+        $component->assertSee('Konfirmasi');
+
+        // Old individual step labels that no longer exist as steps. 'Jenis
+        // Layanan' is also the DISCOVERY sub-section heading's wording, but
+        // that section is not revealed until a TPU/TPS is chosen, so on a
+        // fresh mount its absence really does prove the nine-dot rail is
+        // gone.
+        $component->assertDontSee('Jenis Layanan');
+        $component->assertDontSee('Ringkasan Pesanan');
+        $component->assertDontSee('Data Almarhum + Dokumen');
+    }
+
     public function test_a_field_error_carries_role_alert(): void
     {
         Livewire::test(BookingWizard::class)
-            ->call('saveStep1', '')
+            ->call('saveStep1', '', null, null, null, [])
             ->assertSeeHtml('role="alert"');
     }
 
@@ -154,7 +184,7 @@ final class BookingWizardAccessibilityTest extends TestCase
      */
     public function test_a_failed_autosave_is_announced_inside_the_polite_region(): void
     {
-        $component = Livewire::test(BookingWizard::class)->call('saveStep1', '');
+        $component = Livewire::test(BookingWizard::class)->call('saveStep1', '', null, null, null, []);
 
         $this->assertSame('failed', $component->get('autosaveState'));
 
@@ -205,27 +235,43 @@ final class BookingWizardAccessibilityTest extends TestCase
 
     /**
      * The region must survive step changes — it is the wizard's single
-     * autosave channel, not a per-step decoration. Step 1 redirects on
+     * autosave channel, not a per-step decoration. DISCOVERY redirects on
      * success (which suppresses that response's render), so the assertion
      * runs on the FOLLOWING request, which renders step 2.
      */
     public function test_the_live_region_is_still_present_after_advancing_a_step(): void
     {
-        $component = Livewire::test(BookingWizard::class)
-            ->call('saveStep1', LaunchCityCode::JAKARTA);
+        $cemetery = Cemetery::query()
+            ->where('city', LaunchCityCode::JAKARTA)
+            ->where('publication_status', 'published')
+            ->whereDoesntHave('packages')
+            ->firstOrFail();
 
-        $this->assertSame(2, $component->get('currentStep'));
+        $component = Livewire::test(BookingWizard::class)
+            ->call(
+                'saveStep1',
+                LaunchCityCode::JAKARTA,
+                $cemetery->id,
+                null,
+                BookingServiceType::NEW_GRAVE,
+                [
+                    ['code' => 'DOCUMENT_PROCESSING', 'quantity' => 1],
+                    ['code' => 'GRAVE_DIGGING', 'quantity' => 1],
+                ],
+            );
+
+        $this->assertSame(BookingWizardStep::CUSTOMER_AND_DECEASED_DATA, $component->get('currentStep'));
 
         $onStepTwo = $component->set('autosaveState', 'saved');
 
         $this->assertNotEmpty(
             $this->pageLevelLiveRegions($onStepTwo->html()),
-            'The autosave live region disappeared after the wizard advanced to step 2.'
+            'The autosave live region disappeared after the wizard advanced to screen 2.'
         );
 
         $this->assertTrue(
             $this->someLiveRegionHasText($onStepTwo->html()),
-            'The saved status was not announced inside the live region on step 2.'
+            'The saved status was not announced inside the live region on screen 2.'
         );
     }
 

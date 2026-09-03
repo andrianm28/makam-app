@@ -15,6 +15,7 @@ use App\Domain\Renewal\Models\Renewal;
 use App\Domain\Renewal\RenewalGraveSelection;
 use App\Domain\Renewal\RenewalJourneyStep;
 use App\Domain\Renewal\RenewalQuoteDraft;
+use App\Domain\Renewal\RenewalWizardScreen;
 use App\Platform\FeatureGate\ModeResolver;
 use App\Platform\FeatureGate\Modes\GraveSearchMode;
 use App\Platform\Payment\Actions\OpenPaymentSession;
@@ -95,8 +96,8 @@ final class RenewalPayment extends Component
         return view('livewire.public.renewal.payment', [
             ...$state,
             'paymentMode' => app(ModeResolver::class)->paymentMode(),
-            'currentStep' => $state['mode'] === 'fee' ? RenewalJourneyStep::FEE : RenewalJourneyStep::PAYMENT,
-            'stepLabels' => RenewalJourneyStep::labels(),
+            'currentStep' => RenewalJourneyStep::FEE_AND_PAYMENT,
+            'stepLabels' => RenewalWizardScreen::labels(),
             'checkoutError' => $this->checkoutError,
             'isSandboxPayment' => config('payment.default') === PaymentProviders::SUMOPOD_SANDBOX,
         ])->layout('layouts.app', [

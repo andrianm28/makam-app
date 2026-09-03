@@ -10,57 +10,45 @@ use PHPUnit\Framework\TestCase;
 
 final class BookingWizardStepTest extends TestCase
 {
-    public function test_there_are_nine_steps(): void
+    public function test_it_has_exactly_four_steps(): void
     {
-        $this->assertSame(9, BookingWizardStep::count());
+        $this->assertSame(4, BookingWizardStep::count());
     }
 
-    public function test_all_nine_steps_are_the_last_implemented_boundary(): void
+    public function test_the_constants_are_1_through_4_in_order(): void
+    {
+        $this->assertSame(1, BookingWizardStep::DISCOVERY);
+        $this->assertSame(2, BookingWizardStep::CUSTOMER_AND_DECEASED_DATA);
+        $this->assertSame(3, BookingWizardStep::PAYMENT);
+        $this->assertSame(4, BookingWizardStep::CONFIRMATION);
+    }
+
+    public function test_labels_match_the_four_screen_headings(): void
+    {
+        $this->assertSame([
+            1 => 'Cari & Pilih',
+            2 => 'Data Pemesan & Data Almarhum',
+            3 => 'Pembayaran',
+            4 => 'Konfirmasi',
+        ], BookingWizardStep::labels());
+    }
+
+    public function test_last_implemented_is_confirmation(): void
     {
         $this->assertSame(BookingWizardStep::CONFIRMATION, BookingWizardStep::LAST_IMPLEMENTED);
-        $this->assertSame(9, BookingWizardStep::LAST_IMPLEMENTED);
     }
 
-    public function test_every_step_one_through_nine_is_known(): void
+    public function test_is_known_rejects_the_old_nine_step_range(): void
     {
-        for ($step = 1; $step <= 9; $step++) {
-            $this->assertTrue(BookingWizardStep::isKnown($step), "Expected step [{$step}] to be known.");
-        }
-    }
-
-    public function test_step_zero_and_step_ten_are_not_known(): void
-    {
+        $this->assertTrue(BookingWizardStep::isKnown(4));
+        $this->assertFalse(BookingWizardStep::isKnown(5));
+        $this->assertFalse(BookingWizardStep::isKnown(9));
         $this->assertFalse(BookingWizardStep::isKnown(0));
-        $this->assertFalse(BookingWizardStep::isKnown(10));
     }
 
-    public function test_assert_known_throws_outside_the_range(): void
+    public function test_assert_known_throws_for_an_out_of_range_step(): void
     {
         $this->expectException(InvalidArgumentException::class);
-
-        BookingWizardStep::assertKnown(10);
-    }
-
-    public function test_labels_match_booking_wizard_fields_headings_in_order(): void
-    {
-        $this->assertSame(
-            [
-                1 => 'Pilih Lokasi',
-                2 => 'Pilih TPU/TPS',
-                3 => 'Pilih Jenis Layanan',
-                4 => 'Pilih Layanan',
-                5 => 'Ringkasan Pesanan',
-                6 => 'Data Pemesan',
-                7 => 'Data Almarhum and Documents',
-                8 => 'Pembayaran',
-                9 => 'Konfirmasi',
-            ],
-            BookingWizardStep::labels(),
-        );
-    }
-
-    public function test_label_of_a_known_step_matches_labels_map(): void
-    {
-        $this->assertSame('Pilih Jenis Layanan', BookingWizardStep::label(BookingWizardStep::SERVICE_TYPE));
+        BookingWizardStep::assertKnown(5);
     }
 }

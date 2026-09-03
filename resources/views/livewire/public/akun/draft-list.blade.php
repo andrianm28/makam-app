@@ -55,7 +55,7 @@
                                     @endif
                                 </p>
                                 <p class="mt-1 text-sm text-neutral-600">
-                                    Langkah {{ $draft->current_step }} dari 9
+                                    Langkah {{ $draft->current_step }} dari {{ \App\Domain\Booking\BookingWizardStep::count() }}
                                 </p>
                                 <p class="mt-1 text-sm text-neutral-500">
                                     Diperbarui {{ $draft->updated_at?->translatedFormat('d M Y, H:i') }}

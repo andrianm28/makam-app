@@ -44,7 +44,8 @@ final class ComposeQuoteLinesFromBookingDraftTest extends TestCase
     use RefreshDatabase;
 
     /**
-     * Drives a real draft through steps 1-4 of the wizard's own save path.
+     * Drives a real draft through the wizard's own DISCOVERY save — the
+     * merged step that used to be steps 1-4.
      *
      * @param  list<array{code: string, quantity: int}>  $services
      */
@@ -54,11 +55,13 @@ final class ComposeQuoteLinesFromBookingDraftTest extends TestCase
         $cemetery = CemeteryFixture::cemetery('package', 0);
         $package = CemeteryPublicQuery::activePackages($cemetery)->firstOrFail();
 
-        $draft = (new SaveBookingDraftStep)($draft, BookingWizardStep::LOCATION, ['city_code' => $cemetery->city], 'idem-s1');
-        $draft = (new SaveBookingDraftStep)($draft, BookingWizardStep::CEMETERY, ['cemetery_id' => $cemetery->id, 'cemetery_package_id' => $package->id], 'idem-s2');
-        $draft = (new SaveBookingDraftStep)($draft, BookingWizardStep::SERVICE_TYPE, ['service_type' => BookingServiceType::NEW_GRAVE], 'idem-s3');
-
-        return (new SaveBookingDraftStep)($draft, BookingWizardStep::SERVICES, ['selected_services' => $services], 'idem-s4');
+        return (new SaveBookingDraftStep)($draft, BookingWizardStep::DISCOVERY, [
+            'city_code' => $cemetery->city,
+            'cemetery_id' => $cemetery->id,
+            'cemetery_package_id' => $package->id,
+            'service_type' => BookingServiceType::NEW_GRAVE,
+            'selected_services' => $services,
+        ], 'idem-discovery');
     }
 
     public function test_it_maps_selected_services_to_service_version_quote_lines_with_current_prices(): void

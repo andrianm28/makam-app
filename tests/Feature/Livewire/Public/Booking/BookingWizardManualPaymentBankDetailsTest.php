@@ -6,9 +6,11 @@ namespace Tests\Feature\Livewire\Public\Booking;
 
 use App\Domain\Booking\Actions\SaveBookingDraftStep;
 use App\Domain\Booking\Actions\StartBookingDraft;
+use App\Domain\Booking\BookingServiceType;
 use App\Domain\Booking\BookingWizardStep;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\ServiceCatalog\ServiceCode;
 use App\Livewire\Public\Booking\BookingWizard;
 use App\Platform\SiteSettings\Models\SiteSetting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -29,10 +31,9 @@ final class BookingWizardManualPaymentBankDetailsTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function componentAtStepEight(): Testable
+    private function componentAtPayment(): Testable
     {
         $draft = (new StartBookingDraft)();
-        $draft = (new SaveBookingDraftStep)($draft, BookingWizardStep::LOCATION, ['city_code' => LaunchCityCode::JAKARTA], 'idem-a');
 
         $cemetery = Cemetery::query()
             ->where('city', LaunchCityCode::JAKARTA)
@@ -40,15 +41,18 @@ final class BookingWizardManualPaymentBankDetailsTest extends TestCase
             ->whereDoesntHave('packages')
             ->firstOrFail();
 
-        $draft = (new SaveBookingDraftStep)($draft, BookingWizardStep::CEMETERY, ['cemetery_id' => $cemetery->id], 'idem-b');
-        $draft = (new SaveBookingDraftStep)($draft, BookingWizardStep::SERVICE_TYPE, ['service_type' => 'NEW_GRAVE'], 'idem-c');
+        $draft = (new SaveBookingDraftStep)($draft, BookingWizardStep::DISCOVERY, [
+            'city_code' => LaunchCityCode::JAKARTA,
+            'cemetery_id' => $cemetery->id,
+            'cemetery_package_id' => null,
+            'service_type' => BookingServiceType::NEW_GRAVE,
+            'selected_services' => [
+                ['code' => ServiceCode::DOCUMENT_PROCESSING, 'quantity' => 1],
+                ['code' => ServiceCode::GRAVE_DIGGING, 'quantity' => 1],
+            ],
+        ], 'idem-discovery-'.$draft->id);
 
         $component = Livewire::test(BookingWizard::class, ['draftId' => $draft->id])
-            ->call('saveStep4', [
-                ['code' => 'DOCUMENT_PROCESSING', 'quantity' => 1],
-                ['code' => 'GRAVE_DIGGING', 'quantity' => 1],
-            ])
-            ->call('goToStep', BookingWizardStep::CUSTOMER_DATA)
             ->set('customerFullName', 'Test User')
             ->set('customerMobile', '081234567890')
             ->set('customerEmail', 'test@example.com')
@@ -56,13 +60,12 @@ final class BookingWizardManualPaymentBankDetailsTest extends TestCase
             ->set('customerRelationship', 'PASANGAN')
             ->set('customerContactChannel', 'WHATSAPP')
             ->set('privacyNoticeAccepted', true)
-            ->call('saveStep6')
             ->set('deceasedFullName', 'Almarhum Test')
             ->set('deceasedDateOfBirth', '1980-05-10')
             ->set('deceasedDateOfDeath', '2026-08-01')
             ->set('deceasedRelationship', 'PASANGAN')
             ->set('deceasedGender', 'LAKI_LAKI')
-            ->call('saveStep7');
+            ->call('saveStep2');
 
         $component->assertSet('currentStep', BookingWizardStep::PAYMENT);
 
@@ -71,7 +74,7 @@ final class BookingWizardManualPaymentBankDetailsTest extends TestCase
 
     public function test_it_shows_an_honest_not_configured_state_when_no_bank_details_are_set(): void
     {
-        $this->componentAtStepEight()
+        $this->componentAtPayment()
             ->assertSee('Pembayaran Manual')
             ->assertSee('Rekening tujuan belum dikonfigurasi')
             ->assertDontSee('Nomor Rekening');
@@ -83,7 +86,7 @@ final class BookingWizardManualPaymentBankDetailsTest extends TestCase
         SiteSetting::query()->create(['key' => SiteSetting::KEY_BANK_TRANSFER_ACCOUNT_NUMBER, 'value' => '1234567890']);
         SiteSetting::query()->create(['key' => SiteSetting::KEY_BANK_TRANSFER_ACCOUNT_HOLDER, 'value' => 'PT Makam Digital Nusantara']);
 
-        $this->componentAtStepEight()
+        $this->componentAtPayment()
             ->assertSee('Pembayaran Manual')
             ->assertSee('Bank Makam Sejahtera')
             ->assertSee('1234567890')
@@ -100,7 +103,7 @@ final class BookingWizardManualPaymentBankDetailsTest extends TestCase
     {
         SiteSetting::query()->create(['key' => SiteSetting::KEY_BANK_TRANSFER_BANK_NAME, 'value' => 'Bank Makam Sejahtera']);
 
-        $this->componentAtStepEight()
+        $this->componentAtPayment()
             ->assertSee('Rekening tujuan belum dikonfigurasi')
             ->assertDontSee('Nomor Rekening');
     }

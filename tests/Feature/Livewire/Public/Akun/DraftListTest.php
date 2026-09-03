@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Livewire\Public\Akun;
 
+use App\Domain\Booking\BookingWizardStep;
 use App\Domain\Booking\Models\BookingDraft;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\OrderStatus;
@@ -114,7 +115,12 @@ final class DraftListTest extends TestCase
         $response = $this->actingAs($user)->get('/akun/draft');
 
         $response->assertOk();
-        $response->assertSee('Langkah 4 dari 9');
+        // The denominator is read from `BookingWizardStep::count()`, not
+        // hardcoded: this assertion previously said "dari 9" and stayed green
+        // through the whole step reduction while the screen shipped a wrong
+        // step count to signed-in customers.
+        $this->assertSame(4, BookingWizardStep::count());
+        $response->assertSee('Langkah 4 dari 4');
         $response->assertSee('Lanjutkan');
         $response->assertSee('href="'.route('pemesanan-makam.draft', ['draftId' => $draft->id]).'"', false);
     }

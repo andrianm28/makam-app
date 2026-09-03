@@ -7,10 +7,12 @@ namespace Tests\Feature\Livewire\Public\Booking;
 use App\Domain\Booking\Actions\SaveBookingDraftStep;
 use App\Domain\Booking\Actions\StartBookingDraft;
 use App\Domain\Booking\BookingPaymentMethod;
+use App\Domain\Booking\BookingServiceType;
 use App\Domain\Booking\BookingWizardStep;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\OrderWorkflow\Models\Order;
+use App\Domain\ServiceCatalog\ServiceCode;
 use App\Livewire\Public\Booking\BookingWizard;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -63,10 +65,15 @@ final class BookingWizardDegradedReadsTest extends TestCase
         Schema::dropIfExists('service_definitions');
     }
 
-    private function componentAtStepThree(): Testable
+    /**
+     * DISCOVERY is one merged save now, so completing it lands the draft
+     * directly on CUSTOMER_AND_DECEASED_DATA (screen 2) — the same screen
+     * the old nine-step model's `driveToSummary()` used three separate
+     * saves to reach.
+     */
+    private function componentAtCustomerAndDeceasedData(): Testable
     {
         $draft = (new StartBookingDraft)();
-        $draft = (new SaveBookingDraftStep)($draft, BookingWizardStep::LOCATION, ['city_code' => LaunchCityCode::JAKARTA], 'idem-a');
 
         $cemetery = Cemetery::query()
             ->where('city', LaunchCityCode::JAKARTA)
@@ -74,26 +81,23 @@ final class BookingWizardDegradedReadsTest extends TestCase
             ->whereDoesntHave('packages')
             ->firstOrFail();
 
-        $draft = (new SaveBookingDraftStep)($draft, BookingWizardStep::CEMETERY, ['cemetery_id' => $cemetery->id], 'idem-b');
-        $draft = (new SaveBookingDraftStep)($draft, BookingWizardStep::SERVICE_TYPE, ['service_type' => 'NEW_GRAVE'], 'idem-c');
+        $draft = (new SaveBookingDraftStep)($draft, BookingWizardStep::DISCOVERY, [
+            'city_code' => LaunchCityCode::JAKARTA,
+            'cemetery_id' => $cemetery->id,
+            'cemetery_package_id' => null,
+            'service_type' => BookingServiceType::NEW_GRAVE,
+            'selected_services' => [
+                ['code' => ServiceCode::DOCUMENT_PROCESSING, 'quantity' => 1],
+                ['code' => ServiceCode::GRAVE_DIGGING, 'quantity' => 1],
+            ],
+        ], 'idem-discovery-'.$draft->id);
 
         return Livewire::test(BookingWizard::class, ['draftId' => $draft->id]);
     }
 
-    private function driveToSummary(Testable $component): Testable
-    {
-        return $component
-            ->call('saveStep4', [
-                ['code' => 'DOCUMENT_PROCESSING', 'quantity' => 1],
-                ['code' => 'GRAVE_DIGGING', 'quantity' => 1],
-            ])
-            ->assertSet('currentStep', BookingWizardStep::SUMMARY);
-    }
-
     private function driveToConfirmation(Testable $component): Testable
     {
-        return $this->driveToSummary($component)
-            ->call('goToStep', BookingWizardStep::CUSTOMER_DATA)
+        return $component
             ->set('customerFullName', 'Uji Coba')
             ->set('customerMobile', '081234567890')
             ->set('customerEmail', 'uji@example.com')
@@ -101,15 +105,14 @@ final class BookingWizardDegradedReadsTest extends TestCase
             ->set('customerRelationship', 'PASANGAN')
             ->set('customerContactChannel', 'WHATSAPP')
             ->set('privacyNoticeAccepted', true)
-            ->call('saveStep6')
             ->set('deceasedFullName', 'Almarhum Uji')
             ->set('deceasedDateOfBirth', '1980-05-10')
             ->set('deceasedDateOfDeath', '2026-08-01')
             ->set('deceasedRelationship', 'PASANGAN')
             ->set('deceasedGender', 'LAKI_LAKI')
-            ->call('saveStep7')
+            ->call('saveStep2')
             ->set('paymentReference', 'REF-001')
-            ->call('saveStep8', BookingPaymentMethod::MANUAL)
+            ->call('saveStep3', BookingPaymentMethod::MANUAL)
             ->assertSet('currentStep', BookingWizardStep::CONFIRMATION);
     }
 
@@ -124,14 +127,13 @@ final class BookingWizardDegradedReadsTest extends TestCase
      */
     public function test_a_failed_summary_read_degrades_honestly_instead_of_500ing(): void
     {
-        $component = $this->driveToSummary($this->componentAtStepThree());
+        $component = $this->componentAtCustomerAndDeceasedData();
 
         $this->makeServiceCatalogUnreadable();
 
-        $component->call('goToStep', BookingWizardStep::SUMMARY)
+        $component->call('goToStep', BookingWizardStep::CUSTOMER_AND_DECEASED_DATA)
             ->assertOk()
-            ->assertSee('Ringkasan pesanan sedang tidak dapat dimuat')
-            ->assertSee('Lanjut ke Data Pemesan');
+            ->assertSee('Ringkasan pesanan sedang tidak dapat dimuat');
 
         $this->assertSame(2, $component->instance()->currentScreen());
     }
@@ -150,7 +152,7 @@ final class BookingWizardDegradedReadsTest extends TestCase
      */
     public function test_a_failed_confirmation_read_degrades_honestly_instead_of_500ing(): void
     {
-        $component = $this->driveToConfirmation($this->componentAtStepThree());
+        $component = $this->driveToConfirmation($this->componentAtCustomerAndDeceasedData());
 
         $this->makeServiceCatalogUnreadable();
 
@@ -186,7 +188,7 @@ final class BookingWizardDegradedReadsTest extends TestCase
      */
     public function test_a_failed_confirmation_read_after_a_real_order_exists_never_suggests_starting_over(): void
     {
-        $component = $this->driveToConfirmation($this->componentAtStepThree());
+        $component = $this->driveToConfirmation($this->componentAtCustomerAndDeceasedData());
 
         $draftId = $component->get('draftId');
         $order = Order::query()

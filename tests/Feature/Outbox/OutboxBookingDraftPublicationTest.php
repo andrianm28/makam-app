@@ -6,6 +6,12 @@ namespace Tests\Feature\Outbox;
 
 use App\Domain\Booking\Actions\SaveBookingDraftStep;
 use App\Domain\Booking\Actions\StartBookingDraft;
+use App\Domain\Booking\BookingServiceType;
+use App\Domain\Booking\BookingWizardStep;
+use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
+use App\Domain\CemeteryDirectory\LaunchCityCode;
+use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\ServiceCatalog\ServiceCode;
 use App\Platform\Outbox\Jobs\PublishOutboxEventJob;
 use App\Platform\Outbox\Models\OutboxEvent;
 use App\Platform\Outbox\OutboxPublisher;
@@ -70,7 +76,28 @@ final class OutboxBookingDraftPublicationTest extends TestCase
         Queue::fake();
 
         $draft = (new StartBookingDraft)(userId: null);
-        $saved = (new SaveBookingDraftStep)($draft, 1, ['city_code' => 'JAKARTA'], 'step-1-key');
+
+        // DISCOVERY validates city, cemetery, service type and services as
+        // ONE payload — this used to pass the old bare-city step-1 payload
+        // (`['city_code' => 'JAKARTA']`), which the merged step rejects. This
+        // file is pgsql-only (see `setUp()`), so a SQLite-only run never
+        // executed it.
+        $cemetery = Cemetery::query()
+            ->where('city', LaunchCityCode::JAKARTA)
+            ->where('publication_status', CemeteryPublicationStatus::PUBLISHED)
+            ->whereDoesntHave('packages')
+            ->firstOrFail();
+
+        $saved = (new SaveBookingDraftStep)($draft, BookingWizardStep::DISCOVERY, [
+            'city_code' => LaunchCityCode::JAKARTA,
+            'cemetery_id' => $cemetery->id,
+            'cemetery_package_id' => null,
+            'service_type' => BookingServiceType::NEW_GRAVE,
+            'selected_services' => [
+                ['code' => ServiceCode::DOCUMENT_PROCESSING, 'quantity' => 1],
+                ['code' => ServiceCode::GRAVE_DIGGING, 'quantity' => 1],
+            ],
+        ], 'step-1-key');
 
         $this->assertSame(
             2,

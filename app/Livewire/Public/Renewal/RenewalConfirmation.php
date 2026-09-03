@@ -6,6 +6,7 @@ namespace App\Livewire\Public\Renewal;
 
 use App\Domain\Renewal\Models\Renewal;
 use App\Domain\Renewal\RenewalJourneyStep;
+use App\Domain\Renewal\RenewalWizardScreen;
 use Illuminate\Contracts\View\View;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -41,7 +42,7 @@ final class RenewalConfirmation extends Component
             'renewal' => $renewal,
             'errorMessage' => $renewal instanceof Renewal ? '' : 'Data perpanjangan tidak ditemukan.',
             'currentStep' => RenewalJourneyStep::CONFIRMATION,
-            'stepLabels' => RenewalJourneyStep::labels(),
+            'stepLabels' => RenewalWizardScreen::labels(),
         ])->layout('layouts.app', [
             'title' => 'Konfirmasi Perpanjangan Makam - Makam.co.id',
             'active' => 'perpanjangan',

@@ -114,12 +114,14 @@ Route::get('/', HomePage::class)->name('home');
 | Booking wizard — public-booking-wizard AC1-AC6, AC11-AC13 (S4-T4/S4-T5,
 | resumed 08 Aug 2026) + booking-and-order-orchestration AC2, AC3
 |--------------------------------------------------------------------------
-| All nine steps implemented. Steps 1-5 landed S4-T4/S4-T5 (resumed
-| 08 Aug 2026); steps 6-9 followed with lane/l6-booking-completion
-| (presentation) and lane/l7-order-orchestration (domain), both merged
-| 13 Aug 2026 — BookingWizardStep::LAST_IMPLEMENTED = CONFIRMATION,
-| saveStep6()/saveStep7()/saveStep8() are real Livewire actions over
-| SaveBookingDraftStep, and Step 9 renders the order read model.
+| All four steps implemented. The journey originally shipped as nine steps
+| (1-5 in S4-T4/S4-T5, resumed 08 Aug 2026; 6-9 with lane/l6-booking-
+| completion and lane/l7-order-orchestration, merged 13 Aug 2026) and was
+| reduced to four on 2 Sep 2026 — see `docs/superpowers/specs/
+| 2026-09-02-wizard-step-reduction-design.md`. BookingWizardStep::
+| LAST_IMPLEMENTED = CONFIRMATION, saveStep1()/saveStep2()/saveStep3() are
+| real Livewire actions over SaveBookingDraftStep, and the confirmation
+| step renders the order read model.
 | REPLACES the BookingWizardComingSoon stub — see that class's own doc
 | block and this file's top-of-file note on stub replacement.
 */
