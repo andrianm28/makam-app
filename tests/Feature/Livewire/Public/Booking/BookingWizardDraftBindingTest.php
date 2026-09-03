@@ -26,6 +26,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Session;
 use Livewire\Livewire;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -548,6 +549,90 @@ final class BookingWizardDraftBindingTest extends TestCase
             Session::has(self::SESSION_SECRETS_KEY.'.'.$draftId),
             'An old-numbering draft must be forgotten exactly like an unknown one.',
         );
+    }
+
+    /**
+     * The out-of-range case above is the EASY half. Old steps 1 (LOCATION),
+     * 2 (CEMETERY) and 3 (SERVICE_TYPE) leave `current_step` at 2, 3 and 4 —
+     * all IN range for the new vocabulary, so `isKnown()` waves them through.
+     * Resuming one walks the customer to CONFIRMATION with `cemetery_id` /
+     * `service_type` / `selected_services` never written, records a real
+     * payment reference, and then `SubmitBookingDraft` throws on the null
+     * `service_type` — swallowed by `saveStep3()`, so no order is created and
+     * staff never see the booking. The guard therefore checks the DATA, not
+     * just the number.
+     *
+     * @return iterable<string, array{int, list<int>, array<string, mixed>}>
+     */
+    public static function oldInRangeNumberingProvider(): iterable
+    {
+        // `current_step`, `completed_steps`, and the DISCOVERY columns the
+        // old numbering had NOT reached yet at that point.
+        yield 'old step 1 (LOCATION) complete' => [
+            2, [1], ['cemetery_id' => null, 'service_type' => null, 'selected_services' => '[]'],
+        ];
+
+        yield 'old step 2 (CEMETERY) complete' => [
+            3, [1, 2], ['service_type' => null, 'selected_services' => '[]'],
+        ];
+
+        yield 'old step 3 (SERVICE_TYPE) complete' => [
+            4, [1, 2, 3], ['selected_services' => '[]'],
+        ];
+    }
+
+    /**
+     * @param  list<int>  $completedSteps
+     * @param  array<string, mixed>  $clearedColumns
+     */
+    #[DataProvider('oldInRangeNumberingProvider')]
+    public function test_a_draft_at_an_old_in_range_current_step_is_treated_as_unresumable(
+        int $oldCurrentStep,
+        array $completedSteps,
+        array $clearedColumns,
+    ): void {
+        // Genuinely session-bound in every other respect — same construction
+        // as the out-of-range test above — then rewritten in the DB to the
+        // state the OLD numbering would really have left it in.
+        $draftId = $this->draftAtDiscoveryComplete();
+
+        BookingDraft::query()->where('id', $draftId)->update([
+            'current_step' => $oldCurrentStep,
+            'completed_steps' => json_encode($completedSteps),
+            ...$clearedColumns,
+        ]);
+
+        $this->assertTrue(
+            BookingWizardStep::isKnown($oldCurrentStep),
+            'This case only matters BECAUSE isKnown() accepts it — if that stops being true the test is proving nothing.',
+        );
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
+
+        $component->assertSee('Sesi pemesanan Anda telah berakhir')
+            ->assertSet('draftId', null)
+            ->assertSet('currentStep', BookingWizardStep::DISCOVERY)
+            ->assertSet('cemeteryId', null)
+            ->assertSet('serviceType', null)
+            ->assertSet('stagedServiceCodes', ServiceCode::BASIC_CODES);
+
+        $this->assertFalse(
+            Session::has(self::SESSION_SECRETS_KEY.'.'.$draftId),
+            'An old-numbering draft must be forgotten exactly like an unknown one.',
+        );
+    }
+
+    public function test_a_genuinely_complete_discovery_draft_still_resumes(): void
+    {
+        // The guard above must not be over-broad: a draft that really did
+        // complete the MERGED DISCOVERY step has all three columns written,
+        // and resuming it is the whole point of draft persistence.
+        $draftId = $this->draftAtDiscoveryComplete();
+
+        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->assertHasNoErrors()
+            ->assertSet('draftId', $draftId)
+            ->assertSet('currentStep', BookingWizardStep::CUSTOMER_AND_DECEASED_DATA);
     }
 
     // =====================================================================

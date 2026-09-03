@@ -275,14 +275,15 @@ final class BookingWizard extends Component
             return;
         }
 
-        if (! BookingWizardStep::isKnown($draft->current_step)) {
-            // A real, resolvable draft — but its `current_step` was written
-            // under the OLD 9-step numbering (or is otherwise out of range),
-            // which has no meaning against the new 4-step
-            // `BookingWizardStep::LABELS`. Spec Decision 6: no data
-            // migration, no dual-numbering compatibility layer — this draft
-            // is treated exactly like an unknown/purged one, not silently
-            // resumed at some arbitrary new step it was never saved under.
+        if (! BookingWizardStep::isKnown($draft->current_step) || ! $this->discoveryProgressIsSelfConsistent($draft)) {
+            // A real, resolvable draft — but its `current_step` /
+            // `completed_steps` were written under the OLD 9-step numbering
+            // (or are otherwise out of range), which has no meaning against
+            // the new 4-step `BookingWizardStep::LABELS`. Spec Decision 6: no
+            // data migration, no dual-numbering compatibility layer — this
+            // draft is treated exactly like an unknown/purged one, not
+            // silently resumed at some arbitrary new step it was never saved
+            // under.
             BookingDraftBinding::forget($draftId);
             $this->draftId = null;
             $this->stagedServiceCodes = ServiceCode::BASIC_CODES;
@@ -342,6 +343,38 @@ final class BookingWizard extends Component
                 }
             }
         }
+    }
+
+    /**
+     * `BookingWizardStep::isKnown()` alone does NOT catch every draft written
+     * under the old 9-step numbering, because three of those old values are
+     * also in range for the new one. A draft that finished old step 1
+     * (LOCATION), 2 (CEMETERY) or 3 (SERVICE_TYPE) sits at `current_step` 2,
+     * 3 or 4 with `completed_steps` of `[1]`, `[1,2]` or `[1,2,3]` — all
+     * "valid" against the new vocabulary, so it resumes, and
+     * `SaveBookingDraftStep::validateStepSequencing()` then accepts saves for
+     * later steps against a draft whose `cemetery_id`, `service_type` and
+     * `selected_services` were never written. It reaches CONFIRMATION with a
+     * recorded payment reference and `SubmitBookingDraft` throws on the null
+     * `service_type`, so no order is ever created and staff never see it.
+     *
+     * The discriminator is the data, not the number: the merged DISCOVERY
+     * step validates city, cemetery, service type AND services in one payload
+     * (`SaveBookingDraftStep::validateDiscovery()`), so a draft that genuinely
+     * completed it under the NEW numbering cannot have any of them empty. Any
+     * draft that claims DISCOVERY is complete while they are is, by
+     * construction, an old-numbering row — unresumable, exactly like the
+     * out-of-range case above.
+     */
+    private function discoveryProgressIsSelfConsistent(BookingDraft $draft): bool
+    {
+        if (! in_array(BookingWizardStep::DISCOVERY, $draft->completed_steps, true)) {
+            return true;
+        }
+
+        return $draft->cemetery_id !== null
+            && $draft->service_type !== null
+            && $draft->selected_services !== [];
     }
 
     private function hydrateFrom(BookingDraft $draft): void
