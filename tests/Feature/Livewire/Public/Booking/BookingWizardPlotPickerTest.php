@@ -23,6 +23,7 @@ use App\Domain\ServiceCatalog\ServiceCode;
 use App\Livewire\Public\Booking\BookingWizard;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -78,6 +79,28 @@ final class BookingWizardPlotPickerTest extends TestCase
     private function draftIdAtDiscovery(): string
     {
         return (new StartBookingDraft)(null)->id;
+    }
+
+    /**
+     * The JS expressions `$this->js()` queued during the last round-trip.
+     * Livewire surfaces them as the `xjs` effect
+     * (`SupportJsEvaluation::dehydrate()`), each entry carrying an
+     * `expression` key.
+     *
+     * @return list<string>
+     */
+    private function evaluatedJsFrom(Testable $component): array
+    {
+        $xjs = $component->effects['xjs'] ?? [];
+
+        if (! is_array($xjs)) {
+            return [];
+        }
+
+        return array_values(array_map(
+            static fn (array $entry): string => (string) ($entry['expression'] ?? ''),
+            $xjs,
+        ));
     }
 
     /**
@@ -282,6 +305,118 @@ final class BookingWizardPlotPickerTest extends TestCase
 
         $component
             ->call('saveStep1', LaunchCityCode::JAKARTA, $cemetery->id, null, BookingServiceType::NEW_GRAVE, $this->basicServiceSelections())
+            ->assertHasNoErrors();
+
+        $this->assertSame(1, BookingDraft::query()->count());
+
+        $draft = BookingDraft::query()->findOrFail($draftId);
+        $this->assertSame($cemetery->id, $draft->cemetery_id);
+        $this->assertSame(BookingWizardStep::CUSTOMER_AND_DECEASED_DATA, $draft->current_step);
+
+        $hold = PlotReservation::activeForDraft($draft);
+        $this->assertNotNull($hold);
+        $this->assertSame($plot->getKey(), $hold->plot_id);
+    }
+
+    /**
+     * Task-review finding I1. The nine-step flow guaranteed the draft id was
+     * in the browser URL before the picker was ever reachable, because the
+     * old `saveStep1($cityCode)` created the draft and redirected to
+     * `pemesanan-makam.draft`. Under the merge the draft is created lazily by
+     * `holdPlotForDiscovery()` and there is deliberately no redirect (it would
+     * remount the component and wipe the customer's staged selections) — so
+     * something else has to put the id in the address bar.
+     *
+     * Without it, a reload is unrecoverable: `BookingDraftBinding` keys its
+     * session secret BY draft id (`Session::put(KEY.'.'.$draft->id, ...)`),
+     * so an id the browser no longer remembers cannot be enumerated back out
+     * of the session. The customer would then create a SECOND draft, fail to
+     * re-hold their own plot (`PlotNotAvailableException`), and be told the
+     * plot "was just taken by another visitor" while it stayed squatted under
+     * the orphaned first draft until the TTL sweep.
+     */
+    public function test_holding_a_plot_puts_the_resumable_draft_url_in_the_address_bar(): void
+    {
+        $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+        $plot = $this->makePlotIn($cemetery);
+
+        $component = Livewire::test(BookingWizard::class)
+            ->call('openPickerFor', $cemetery->id)
+            ->call('holdPlotForDiscovery', $cemetery->id, null, (string) $plot->getKey());
+
+        $draftId = $component->get('draftId');
+        $this->assertIsString($draftId);
+
+        $expectedUrl = route('pemesanan-makam.draft', ['draftId' => $draftId]);
+        $scripts = $this->evaluatedJsFrom($component);
+
+        $this->assertNotSame([], $scripts, 'The hold must push the resumable URL to the browser.');
+        $this->assertStringContainsString('history.replaceState', implode("\n", $scripts));
+        $this->assertStringContainsString($expectedUrl, implode("\n", $scripts));
+    }
+
+    /**
+     * The end-to-end proof of the same finding: a REAL page load between the
+     * plot hold and the DISCOVERY save (a fresh component instance with no
+     * carried-over Livewire state, which is what F5 / back-navigation
+     * produces) must recover the hold rather than orphan it.
+     */
+    public function test_a_reload_between_the_hold_and_the_discovery_save_recovers_the_hold(): void
+    {
+        $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+        $plot = $this->makePlotIn($cemetery);
+
+        $draftId = Livewire::test(BookingWizard::class)
+            ->call('openPickerFor', $cemetery->id)
+            ->call('holdPlotForDiscovery', $cemetery->id, null, (string) $plot->getKey())
+            ->get('draftId');
+
+        $this->assertIsString($draftId);
+
+        // The reload. Nothing from the previous component instance survives
+        // except what the URL carries.
+        $reloaded = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
+
+        $reloaded->assertSet('draftId', $draftId)
+            // The picker reopens on the live hold, and the cemetery the
+            // customer already committed to is restored — even though the
+            // draft has NO cemetery_id yet (DISCOVERY is still unsaved).
+            ->assertSet('pickerCemeteryId', $cemetery->id)
+            ->assertSet('cemeteryId', $cemetery->id)
+            ->assertSee('Ditahan');
+
+        // Re-picking the same plot is the incumbent fast path, NOT
+        // "this plot was just taken by another visitor".
+        $reloaded->call('holdPlotForDiscovery', $cemetery->id, null, (string) $plot->getKey())
+            ->assertHasNoErrors();
+
+        // The decisive assertion: still ONE draft, so the hold was never
+        // orphaned onto an abandoned row.
+        $this->assertSame(1, BookingDraft::query()->count());
+        $this->assertSame(PlotState::RESERVED, $plot->fresh()->plot_state);
+    }
+
+    /**
+     * And the journey still completes after that reload — the recovered draft
+     * is the one DISCOVERY writes to.
+     */
+    public function test_discovery_completes_normally_after_a_reload_mid_selection(): void
+    {
+        $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+        $plot = $this->makePlotIn($cemetery);
+
+        $draftId = Livewire::test(BookingWizard::class)
+            ->call('openPickerFor', $cemetery->id)
+            ->call('holdPlotForDiscovery', $cemetery->id, null, (string) $plot->getKey())
+            ->get('draftId');
+
+        $this->assertIsString($draftId);
+
+        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->set('city', LaunchCityCode::JAKARTA)
+            ->set('serviceType', BookingServiceType::NEW_GRAVE)
+            ->set('stagedServiceCodes', ServiceCode::BASIC_CODES)
+            ->call('continueFromDiscovery')
             ->assertHasNoErrors();
 
         $this->assertSame(1, BookingDraft::query()->count());

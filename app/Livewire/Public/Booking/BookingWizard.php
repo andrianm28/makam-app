@@ -282,13 +282,36 @@ final class BookingWizard extends Component
         // mount() only (not every hydrateFrom() call from an autosave
         // tick elsewhere in the wizard) — reopening on every save would
         // re-fight a customer who deliberately closed the picker.
-        if (
-            $draft->cemetery_id !== null
-            && $this->pickerAppliesTo($draft->cemetery_id)
-            && PlotReservation::activeForDraft($draft) !== null
-        ) {
-            $this->pickerCemeteryId = $draft->cemetery_id;
-            $this->pickerCemeteryPackageId = $draft->cemetery_package_id;
+        $hold = PlotReservation::activeForDraft($draft);
+
+        if ($hold !== null) {
+            // This used to read `$draft->cemetery_id` alone. That was correct
+            // when the cemetery was persisted by its own step BEFORE a plot
+            // could be picked — but DISCOVERY now saves city, cemetery,
+            // service type and services as ONE payload, so a draft carrying a
+            // live hold has NO cemetery_id yet in the normal case: the
+            // customer held a plot and has not finished the step. Reading
+            // only the column meant a reload mid-selection silently dropped
+            // both the picker and the cemetery the customer had already
+            // committed to, leaving them unable to complete DISCOVERY at all.
+            //
+            // So fall back to the cemetery the HELD PLOT itself belongs to —
+            // the hold is server-side proof of that choice, and it outranks
+            // an as-yet-unwritten column.
+            $cemeteryId = $draft->cemetery_id ?? $hold->plot?->block?->cemetery_id;
+
+            if ($cemeteryId !== null && $this->pickerAppliesTo($cemeteryId)) {
+                $this->pickerCemeteryId = $cemeteryId;
+                $this->pickerCemeteryPackageId = $draft->cemetery_package_id;
+                // Restore the confirmed selection too, not just the open
+                // picker, so `continueFromDiscovery()` still has a cemetery
+                // to send. The PACKAGE id is genuinely unrecoverable here —
+                // it is picker-only state that DISCOVERY never persists until
+                // the final save — so a cemetery that HAS packages will ask
+                // the customer to re-pick one. That is an inline field error
+                // on a visible control, not a dead end.
+                $this->cemeteryId ??= $cemeteryId;
+            }
         }
     }
 
@@ -656,6 +679,39 @@ final class BookingWizard extends Component
         // `saveStep1()` call, which re-validates both server-side.
         $this->cemeteryId = $cemeteryId;
         $this->cemeteryPackageId = $cemeteryPackageId;
+
+        // Put the resumable draft URL in the address bar WITHOUT navigating.
+        //
+        // The nine-step flow got this for free: the old `saveStep1($cityCode)`
+        // created the draft and redirected to `pemesanan-makam.draft`, so the
+        // customer was already on `/pemesanan-makam/draft/{id}` before the
+        // picker was reachable. Here the draft is created lazily above and
+        // there is deliberately no redirect — a redirect would remount the
+        // component and wipe the staged selections the customer is still
+        // filling in. That left NOTHING carrying the draft id across a page
+        // load: `#[Locked]` state survives Livewire round-trips but not F5 or
+        // back-navigation, and `BookingDraftBinding` keys its session secret
+        // BY draft id, so an id the browser has forgotten cannot be recovered
+        // from the session. The customer would start a SECOND draft, fail to
+        // re-hold their OWN plot (`PlotNotAvailableException`), and be told it
+        // was "just taken by another visitor" while it stayed squatted under
+        // the orphaned first draft for the whole TTL.
+        //
+        // `history.replaceState` rather than `pushState`: taking a hold is not
+        // a new history entry the Back button should walk through, it is the
+        // same screen acquiring an identity. Idempotent — replacing the URL
+        // with the one already shown is a no-op.
+        $this->js(sprintf(
+            'history.replaceState(null, "", %s)',
+            // `json_encode` (not string interpolation) is what makes this
+            // injection-safe: the id is quoted and escaped as a JS string
+            // literal rather than pasted into source. UNESCAPED_SLASHES only
+            // keeps the emitted URL readable; both forms are valid JSON.
+            json_encode(
+                route('pemesanan-makam.draft', ['draftId' => $draft->getKey()]),
+                JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES,
+            ),
+        ));
     }
 
     public function saveStep6(): void
