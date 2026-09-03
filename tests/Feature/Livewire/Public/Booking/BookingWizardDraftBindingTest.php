@@ -512,6 +512,45 @@ final class BookingWizardDraftBindingTest extends TestCase
     }
 
     // =====================================================================
+    // Old step numbering — an in-flight draft under the pre-reduction
+    // numbering is unresumable, never silently mapped forward
+    //
+    // A real `booking_drafts` row created before this branch's changes
+    // landed can carry a `current_step` value from the old 1-9 vocabulary
+    // (`BookingWizardStep` used to have nine constants; it now has four,
+    // `DISCOVERY=1..CONFIRMATION=4`). Spec Decision 6: no data migration, no
+    // dual-numbering compatibility layer — such a draft is treated exactly
+    // like an unknown/purged one, not silently resumed at some arbitrary new
+    // step it was never saved under.
+    // =====================================================================
+
+    public function test_a_draft_at_an_old_out_of_range_current_step_is_treated_as_unresumable(): void
+    {
+        // A draft genuinely bound to THIS session (a real resumable draft in
+        // every other respect), but whose `current_step` was written under
+        // the old 9-step numbering — 8 was PAYMENT there, which is out of
+        // range for the new `BookingWizardStep::isKnown()` (1-4).
+        $draftId = $this->draftAtDiscoveryComplete();
+
+        BookingDraft::query()->where('id', $draftId)->update(['current_step' => 8]);
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
+
+        $component->assertSee('Sesi pemesanan Anda telah berakhir')
+            ->assertSet('draftId', null)
+            ->assertSet('currentStep', BookingWizardStep::DISCOVERY)
+            ->assertSet('stagedServiceCodes', ServiceCode::BASIC_CODES);
+
+        // The same cleanup the adjacent "unknown draft" branch performs: the
+        // stale binding is forgotten from the session, mirroring
+        // `BookingDraftBinding::forget()`'s own effect.
+        $this->assertFalse(
+            Session::has(self::SESSION_SECRETS_KEY.'.'.$draftId),
+            'An old-numbering draft must be forgotten exactly like an unknown one.',
+        );
+    }
+
+    // =====================================================================
     // Reaching (and re-reaching) the read-only CONFIRMATION step
     //
     // Under the nine-step model this section also covered the SUMMARY step

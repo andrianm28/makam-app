@@ -275,6 +275,22 @@ final class BookingWizard extends Component
             return;
         }
 
+        if (! BookingWizardStep::isKnown($draft->current_step)) {
+            // A real, resolvable draft — but its `current_step` was written
+            // under the OLD 9-step numbering (or is otherwise out of range),
+            // which has no meaning against the new 4-step
+            // `BookingWizardStep::LABELS`. Spec Decision 6: no data
+            // migration, no dual-numbering compatibility layer — this draft
+            // is treated exactly like an unknown/purged one, not silently
+            // resumed at some arbitrary new step it was never saved under.
+            BookingDraftBinding::forget($draftId);
+            $this->draftId = null;
+            $this->stagedServiceCodes = ServiceCode::BASIC_CODES;
+            $this->addError('draft', 'Sesi pemesanan Anda telah berakhir. Silakan mulai ulang.');
+
+            return;
+        }
+
         $this->hydrateFrom($draft);
 
         // A genuine page reload/resume with a live plot hold should show
