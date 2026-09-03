@@ -16,6 +16,7 @@ use App\Domain\CemeteryDirectory\PlotTrackingMode;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotReservation\Actions\HoldPlotForDraft;
+use App\Domain\ServiceCatalog\ServiceCode;
 use App\Livewire\Public\Booking\BookingWizard;
 use App\Platform\FeatureGate\Contracts\GateRegistrySource;
 use App\Platform\FeatureGate\FeatureGateResolver;
@@ -63,10 +64,29 @@ final class BookingWizardExpiredHoldOnSubmitTest extends TestCase
         );
     }
 
-    private function draftIdAtStep2(): string
+    /**
+     * A real, bound draft with DISCOVERY complete. The cemetery/service
+     * fields this creates are irrelevant to every test below — each one
+     * immediately `forceFill()`s its own cemetery/plot fixture over the
+     * top — this call exists only to create and bind the draft, since
+     * `saveStep1()` rolls back its own `currentOrNewDraft()` insert on any
+     * validation failure and so needs a genuinely valid DISCOVERY payload
+     * to create anything at all.
+     */
+    private function draftIdAtDiscovery(): string
     {
+        $cemetery = Cemetery::query()
+            ->where('city', LaunchCityCode::JAKARTA)
+            ->where('publication_status', 'published')
+            ->whereDoesntHave('packages')
+            ->firstOrFail();
+
         $draftId = Livewire::test(BookingWizard::class)
-            ->call('saveStep1', LaunchCityCode::JAKARTA)
+            ->call('saveStep1', LaunchCityCode::JAKARTA, $cemetery->id, null, BookingServiceType::NEW_GRAVE, array_map(
+                static fn (string $code): array => ['code' => $code, 'quantity' => 1],
+                ServiceCode::BASIC_CODES,
+            ))
+            ->assertHasNoErrors()
             ->get('draftId');
 
         $this->assertIsString($draftId);
@@ -87,7 +107,7 @@ final class BookingWizardExpiredHoldOnSubmitTest extends TestCase
         ]);
         $block = CemeteryBlock::query()->create(['cemetery_id' => $cemetery->getKey(), 'code' => 'BLOK-A', 'name' => 'Blok A', 'capacity' => 1]);
         $plot = GravePlot::query()->create(['block_id' => $block->getKey(), 'slot' => '001', 'plot_state' => 'available']);
-        $draftId = $this->draftIdAtStep2();
+        $draftId = $this->draftIdAtDiscovery();
         $draft = BookingDraft::query()->findOrFail($draftId);
         $draft->forceFill([
             'cemetery_id' => $cemetery->id,
@@ -97,21 +117,17 @@ final class BookingWizardExpiredHoldOnSubmitTest extends TestCase
             'customer_relationship' => 'anak',
             'current_step' => BookingWizardStep::PAYMENT,
             'completed_steps' => [
-                BookingWizardStep::LOCATION,
-                BookingWizardStep::CEMETERY,
-                BookingWizardStep::SERVICE_TYPE,
-                BookingWizardStep::SERVICES,
-                BookingWizardStep::CUSTOMER_DATA,
-                BookingWizardStep::DECEASED_DATA,
+                BookingWizardStep::DISCOVERY,
+                BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
             ],
         ])->saveQuietly();
         app(HoldPlotForDraft::class)($plot, $draft, "booking_draft:{$draft->getKey()}", ttlMinutes: -1);
 
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->set('paymentReference', 'BCA 123456789 a.n. Uji Coba')
-            ->call('saveStep8', BookingPaymentMethod::MANUAL) // reaching this line at all proves no 500 / uncaught exception
+            ->call('saveStep3', BookingPaymentMethod::MANUAL) // reaching this line at all proves no 500 / uncaught exception
             ->assertHasErrors('plot') // the honest "hold expired, pick again" copy, not a swallowed failure
-            ->assertSet('currentStep', BookingWizardStep::CEMETERY);
+            ->assertSet('currentStep', BookingWizardStep::DISCOVERY);
     }
 
     /**
@@ -158,7 +174,7 @@ final class BookingWizardExpiredHoldOnSubmitTest extends TestCase
         ]);
         $block = CemeteryBlock::query()->create(['cemetery_id' => $cemetery->getKey(), 'code' => 'BLOK-A', 'name' => 'Blok A', 'capacity' => 1]);
         $plot = GravePlot::query()->create(['block_id' => $block->getKey(), 'slot' => '001', 'plot_state' => 'available']);
-        $draftId = $this->draftIdAtStep2();
+        $draftId = $this->draftIdAtDiscovery();
         $draft = BookingDraft::query()->findOrFail($draftId);
         $draft->forceFill([
             'cemetery_id' => $cemetery->id,
@@ -168,38 +184,34 @@ final class BookingWizardExpiredHoldOnSubmitTest extends TestCase
             'customer_relationship' => 'anak',
             'current_step' => BookingWizardStep::PAYMENT,
             'completed_steps' => [
-                BookingWizardStep::LOCATION,
-                BookingWizardStep::CEMETERY,
-                BookingWizardStep::SERVICE_TYPE,
-                BookingWizardStep::SERVICES,
-                BookingWizardStep::CUSTOMER_DATA,
-                BookingWizardStep::DECEASED_DATA,
+                BookingWizardStep::DISCOVERY,
+                BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
             ],
         ])->saveQuietly();
         app(HoldPlotForDraft::class)($plot, $draft, "booking_draft:{$draft->getKey()}", ttlMinutes: -1);
 
         $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->set('paymentReference', 'BCA 123456789 a.n. Uji Coba')
-            ->call('saveStep8', BookingPaymentMethod::MANUAL)
+            ->call('saveStep3', BookingPaymentMethod::MANUAL)
             ->assertHasErrors('plot')
-            ->assertSet('currentStep', BookingWizardStep::CEMETERY);
+            ->assertSet('currentStep', BookingWizardStep::DISCOVERY);
 
-        // Step 4's section is genuinely on screen — this is Screen 1, and
-        // step 4 is completed — so the assertion below is about the forward
-        // CONTROL being withheld, not about the section being absent.
+        // DISCOVERY's services section is genuinely on screen — the forward
+        // control being withheld is what is on trial, not the section being
+        // absent.
         $this->assertSame(1, $component->instance()->currentScreen());
-        $component->assertSee('Langkah 4');
+        $component->assertSee('Pilih Layanan');
 
-        $component->assertDontSeeHtml('wire:click="continueFromStep4"')
-            ->assertSee('Pilih plot terlebih dahulu pada Langkah 2');
+        $component->assertDontSeeHtml('wire:click="continueFromDiscovery"')
+            ->assertSee('Pilih plot terlebih dahulu pada bagian Pilih TPU/TPS di atas sebelum melanjutkan.');
 
         // Re-picking a plot is the way out, and it must actually be one:
         // once the hold is real again the forward control returns.
         $freshPlot = GravePlot::query()->create(['block_id' => $block->getKey(), 'slot' => '002', 'plot_state' => 'available']);
 
-        $component->call('holdPlotForStep2', $cemetery->id, null, $freshPlot->id)
+        $component->call('holdPlotForDiscovery', $cemetery->id, null, $freshPlot->id)
             ->assertHasNoErrors('plot')
-            ->assertSeeHtml('wire:click="continueFromStep4"');
+            ->assertSeeHtml('wire:click="continueFromDiscovery"');
     }
 
     public function test_online_submission_with_an_expired_hold_routes_back_to_step_2(): void
@@ -217,7 +229,7 @@ final class BookingWizardExpiredHoldOnSubmitTest extends TestCase
         ]);
         $block = CemeteryBlock::query()->create(['cemetery_id' => $cemetery->getKey(), 'code' => 'BLOK-A', 'name' => 'Blok A', 'capacity' => 1]);
         $plot = GravePlot::query()->create(['block_id' => $block->getKey(), 'slot' => '001', 'plot_state' => 'available']);
-        $draftId = $this->draftIdAtStep2();
+        $draftId = $this->draftIdAtDiscovery();
         $draft = BookingDraft::query()->findOrFail($draftId);
         $draft->forceFill([
             'cemetery_id' => $cemetery->id,
@@ -227,18 +239,14 @@ final class BookingWizardExpiredHoldOnSubmitTest extends TestCase
             'customer_relationship' => 'anak',
             'current_step' => BookingWizardStep::PAYMENT,
             'completed_steps' => [
-                BookingWizardStep::LOCATION,
-                BookingWizardStep::CEMETERY,
-                BookingWizardStep::SERVICE_TYPE,
-                BookingWizardStep::SERVICES,
-                BookingWizardStep::CUSTOMER_DATA,
-                BookingWizardStep::DECEASED_DATA,
+                BookingWizardStep::DISCOVERY,
+                BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
             ],
         ])->saveQuietly();
         app(HoldPlotForDraft::class)($plot, $draft, "booking_draft:{$draft->getKey()}", ttlMinutes: -1);
 
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->call('openOnlinePayment')
-            ->assertSet('currentStep', BookingWizardStep::CEMETERY);
+            ->assertSet('currentStep', BookingWizardStep::DISCOVERY);
     }
 }
