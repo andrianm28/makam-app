@@ -2397,23 +2397,34 @@ final class DemoDataPurgeCommand extends Command
      * list; this is the plan's best current ordering, not a guarantee no
      * table needs reordering once the real schema is checked table-by-table.
      *
-     * Deliberately EXCLUDES `vendor_listings` and `service_areas` (handled
-     * separately below — see `deleteVendorScopedTables()`) and
-     * `cart_items`/`carts` (deliberately NOT purged at all — see the note
-     * on that decision below). Every table listed here genuinely has the
+     * Deliberately EXCLUDES every table that has no `demo_batch_id` column
+     * at all (Task 1's migration only tags a subset of what this
+     * subsystem's generators actually write to — found piecemeal by
+     * Tasks 7 and 8's own implementers reading the real migrations):
+     * `vendor_listings`/`service_areas` (see `deleteVendorScopedTables()`),
+     * `marketplace_order_items`/`vendor_order_evidences` (see
+     * `deleteOrderScopedTables()`), the whole care-subscription/
+     * vendor-fulfillment child chain — `subscription_cycles`,
+     * `subscription_invoices`, `subscription_payment_references`,
+     * `work_orders`, `work_order_tasks`, `work_evidence`,
+     * `service_acceptances`, `service_complaints` (see
+     * `deleteCareSubscriptionScopedTables()`) — and `cart_items`/`carts`
+     * (deliberately NOT purged at all — see the note on that decision
+     * below). Every table listed in THIS array genuinely has the
      * `demo_batch_id` column (Task 1's migration); this array must never
      * grow a table that doesn't, or the uniform loop below throws a real
      * "column does not exist" error and aborts the whole purge inside its
-     * one transaction.
+     * one transaction. Given how many times this exact mistake nearly
+     * happened while this plan was being written, treat any new table a
+     * future generator writes to as untagged by default — confirm it's
+     * actually in Task 1's migration before adding it here.
      *
      * @var list<string>
      */
     private const array DELETE_ORDER = [
-        'work_evidence', 'service_acceptances', 'service_complaints', 'work_order_tasks',
-        'work_orders', 'subscription_invoices', 'subscription_payment_references',
-        'subscription_cycles', 'subscriptions', 'care_plans',
+        'subscriptions', 'care_plans',
         'agreements', 'certificates', 'visitation_bookings', 'cemetery_visitation_policies',
-        'vendor_order_evidences', 'vendor_orders', 'marketplace_order_items', 'marketplace_orders',
+        'vendor_orders', 'marketplace_orders',
         'vendor_availability', 'vendor_users', 'vendors',
         'orders', 'booking_drafts', 'renewals',
         'scope_assignments', 'actor_role_assignments',
@@ -2438,6 +2449,8 @@ final class DemoDataPurgeCommand extends Command
 
         DB::transaction(function () use ($batchId): void {
             $this->deleteVendorScopedTables($batchId);
+            $this->deleteOrderScopedTables($batchId);
+            $this->deleteCareSubscriptionScopedTables($batchId);
 
             foreach (self::DELETE_ORDER as $table) {
                 $count = DB::table($table)->where('demo_batch_id', $batchId)->delete();
@@ -2488,6 +2501,116 @@ final class DemoDataPurgeCommand extends Command
 
             if ($count > 0) {
                 $this->line(sprintf('%-28s %d', $table, $count));
+            }
+        }
+    }
+
+    /**
+     * `marketplace_order_items` and `vendor_order_evidences` — the same
+     * untagged-child-table shape as `vendor_listings`/`service_areas`
+     * above, found the same way (reading the migration directly): neither
+     * has a `demo_batch_id` column, but both have a direct parent FK to an
+     * already-tagged table (`marketplace_order_id` on the first,
+     * `vendor_order_id` on the second — following this schema's
+     * consistent `<parent>_id` naming convention; CONFIRM both exact
+     * column names against the real migrations before shipping, they
+     * were not independently re-verified when this method was written).
+     */
+    private function deleteOrderScopedTables(string $batchId): void
+    {
+        $marketplaceOrderIds = DB::table('marketplace_orders')->where('demo_batch_id', $batchId)->pluck('id');
+        $vendorOrderIds = DB::table('vendor_orders')->where('demo_batch_id', $batchId)->pluck('id');
+
+        if ($marketplaceOrderIds->isNotEmpty()) {
+            $count = DB::table('marketplace_order_items')->whereIn('marketplace_order_id', $marketplaceOrderIds)->delete();
+            if ($count > 0) {
+                $this->line(sprintf('%-28s %d', 'marketplace_order_items', $count));
+            }
+        }
+
+        if ($vendorOrderIds->isNotEmpty()) {
+            $count = DB::table('vendor_order_evidences')->whereIn('vendor_order_id', $vendorOrderIds)->delete();
+            if ($count > 0) {
+                $this->line(sprintf('%-28s %d', 'vendor_order_evidences', $count));
+            }
+        }
+    }
+
+    /**
+     * The care-subscription/vendor-fulfillment chain — the largest block
+     * of untagged child tables in this subsystem, found by Task 8's own
+     * implementer (`CareSubscriptionExampleData`) reading every migration
+     * it writes to directly: `subscription_cycles`, `subscription_invoices`,
+     * `subscription_payment_references`, `work_orders`, `work_order_tasks`,
+     * `work_evidence`, `service_acceptances`, `service_complaints` — NONE
+     * of these eight has a `demo_batch_id` column. Only `subscriptions`
+     * and `care_plans` (the two roots) are tagged.
+     *
+     * Deletion walks the FK chain from those two tagged roots:
+     * `subscription_cycles.subscription_id` and `work_orders.care_plan_id`
+     * are both confirmed real FKs (this plan's own earlier research, Task
+     * 8's brief). `subscription_cycles.invoice_id` (nullable, pointing AT
+     * `subscription_invoices`, not the reverse) is also confirmed.
+     * `subscription_payment_references`' real FK column was never
+     * confirmed anywhere in this plan's research — the column name used
+     * below (`subscription_invoice_id`, following this schema's
+     * consistent `<parent>_id` convention) is a best guess, NOT verified
+     * against the real migration. CONFIRM this exact column name for real
+     * before shipping — do not trust this plan text over the actual
+     * schema.
+     */
+    private function deleteCareSubscriptionScopedTables(string $batchId): void
+    {
+        $carePlanIds = DB::table('care_plans')->where('demo_batch_id', $batchId)->pluck('id');
+        $subscriptionIds = DB::table('subscriptions')->where('demo_batch_id', $batchId)->pluck('id');
+
+        $cycleIds = $subscriptionIds->isEmpty()
+            ? collect()
+            : DB::table('subscription_cycles')->whereIn('subscription_id', $subscriptionIds)->pluck('id');
+        $invoiceIds = $cycleIds->isEmpty()
+            ? collect()
+            : DB::table('subscription_cycles')->whereIn('id', $cycleIds)->whereNotNull('invoice_id')->pluck('invoice_id');
+        $workOrderIds = $carePlanIds->isEmpty()
+            ? collect()
+            : DB::table('work_orders')->whereIn('care_plan_id', $carePlanIds)->pluck('id');
+
+        foreach ([
+            'work_evidence' => $workOrderIds, 'service_acceptances' => $workOrderIds,
+            'service_complaints' => $workOrderIds, 'work_order_tasks' => $workOrderIds,
+        ] as $table => $ids) {
+            if ($ids->isEmpty()) {
+                continue;
+            }
+            $count = DB::table($table)->whereIn('work_order_id', $ids)->delete();
+            if ($count > 0) {
+                $this->line(sprintf('%-28s %d', $table, $count));
+            }
+        }
+
+        if ($workOrderIds->isNotEmpty()) {
+            $count = DB::table('work_orders')->whereIn('id', $workOrderIds)->delete();
+            if ($count > 0) {
+                $this->line(sprintf('%-28s %d', 'work_orders', $count));
+            }
+        }
+
+        if ($invoiceIds->isNotEmpty()) {
+            // Column name unconfirmed — see this method's own doc block.
+            $count = DB::table('subscription_payment_references')->whereIn('subscription_invoice_id', $invoiceIds)->delete();
+            if ($count > 0) {
+                $this->line(sprintf('%-28s %d', 'subscription_payment_references', $count));
+            }
+
+            $count = DB::table('subscription_invoices')->whereIn('id', $invoiceIds)->delete();
+            if ($count > 0) {
+                $this->line(sprintf('%-28s %d', 'subscription_invoices', $count));
+            }
+        }
+
+        if ($cycleIds->isNotEmpty()) {
+            $count = DB::table('subscription_cycles')->whereIn('id', $cycleIds)->delete();
+            if ($count > 0) {
+                $this->line(sprintf('%-28s %d', 'subscription_cycles', $count));
             }
         }
     }
