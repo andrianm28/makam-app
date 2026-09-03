@@ -156,15 +156,25 @@ test.describe('E2E-A11Y — keyboard navigation', () => {
         // reached and asserted via Tab, but the value itself is set with
         // `.fill()` on the already-focused control, the same approach
         // `e2e-booking-helpers.ts` uses for these same fields.
+        //
+        // A filled `<input type="date">` in Chromium consumes ONE extra Tab
+        // press internally (CI-verified, first run of this test) before
+        // focus actually leaves the control -- CDP's `.fill()` sets the
+        // value without simulating real keystrokes, and Chromium's native
+        // date control still treats the (now-populated) value/spinner UI as
+        // its own internal tab stop on the way out. A second, compensating
+        // Tab press is required after each `.fill()` on these two fields;
+        // no other field in this form is a native date input, so nothing
+        // else needs this.
         await page.keyboard.press('Tab');
         await expect(deceasedDob).toBeFocused();
         await deceasedDob.fill(DECEASED.dob);
-
         await page.keyboard.press('Tab');
+
         await expect(deceasedDod).toBeFocused();
         await deceasedDod.fill(DECEASED.dod);
-
         await page.keyboard.press('Tab');
+
         await expect(deceasedRelationship).toBeFocused();
         await deceasedRelationship.selectOption(DECEASED.relationship);
 
