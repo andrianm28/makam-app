@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Livewire\Public\Booking;
 
-use App\Domain\Booking\Actions\SaveBookingDraftStep;
-use App\Domain\Booking\Actions\StartBookingDraft;
+use App\Domain\Booking\BookingServiceType;
 use App\Domain\Booking\BookingWizardStep;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
@@ -19,6 +18,7 @@ use App\Livewire\Public\Booking\BookingWizard;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
+use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -26,21 +26,40 @@ final class BookingWizardStepsFourAndFiveTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function draftAtStep4(): string
+    private function jakartaCemeteryWithoutPackages(): Cemetery
     {
-        $draft = (new StartBookingDraft)();
-        $draft = (new SaveBookingDraftStep)($draft, BookingWizardStep::LOCATION, ['city_code' => LaunchCityCode::JAKARTA], 'idem-a');
-
-        $cemetery = Cemetery::query()
+        return Cemetery::query()
             ->where('city', LaunchCityCode::JAKARTA)
             ->where('publication_status', 'published')
             ->whereDoesntHave('packages')
             ->firstOrFail();
+    }
 
-        $draft = (new SaveBookingDraftStep)($draft, BookingWizardStep::CEMETERY, ['cemetery_id' => $cemetery->id], 'idem-b');
-        $draft = (new SaveBookingDraftStep)($draft, BookingWizardStep::SERVICE_TYPE, ['service_type' => 'NEW_GRAVE'], 'idem-c');
+    /**
+     * @return list<array{code: string, quantity: int}>
+     */
+    private function basicServicesPayload(): array
+    {
+        return array_map(
+            static fn (string $code): array => ['code' => $code, 'quantity' => 1],
+            ServiceCode::BASIC_CODES,
+        );
+    }
 
-        return $draft->id;
+    /**
+     * DISCOVERY's service-selection section (the old Step 4) reveals once
+     * city, cemetery and service type are all chosen — client-side
+     * component state, not persisted until the single `saveStep1()` save.
+     * No `BookingDraft` exists for this fixture at all.
+     */
+    private function wizardWithServiceTypeSelected(): Testable
+    {
+        $cemetery = $this->jakartaCemeteryWithoutPackages();
+
+        return Livewire::test(BookingWizard::class)
+            ->call('selectCity', LaunchCityCode::JAKARTA)
+            ->call('selectCemetery', $cemetery->id)
+            ->call('selectServiceType', BookingServiceType::NEW_GRAVE);
     }
 
     /**
@@ -72,12 +91,10 @@ final class BookingWizardStepsFourAndFiveTest extends TestCase
 
     public function test_step_4_offers_every_basic_and_additional_service(): void
     {
-        $draftId = $this->draftAtStep4();
-
-        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
+        $component = $this->wizardWithServiceTypeSelected();
 
         // Asserted as the submitted VALUE, not as visible text: the code is
-        // what reaches `saveStep4()`, while the visible label is now the
+        // what reaches `saveStep1()`, while the visible label is now the
         // catalogue's own name (see the next test).
         foreach (ServiceCode::KNOWN_CODES as $code) {
             $component->assertSeeHtml('value="'.$code.'"');
@@ -92,9 +109,7 @@ final class BookingWizardStepsFourAndFiveTest extends TestCase
      */
     public function test_step_4_labels_each_service_with_its_real_catalogue_name(): void
     {
-        $draftId = $this->draftAtStep4();
-
-        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
+        $component = $this->wizardWithServiceTypeSelected();
 
         foreach (ServiceCatalogQuery::allActive() as $definition) {
             $component->assertSee($definition->name);
@@ -166,16 +181,11 @@ final class BookingWizardStepsFourAndFiveTest extends TestCase
         $this->assertSame(1, $component->instance()->currentScreen());
     }
 
-    public function test_saving_step_4_with_both_basics_advances_to_step_5(): void
+    public function test_completing_discovery_with_both_basics_advances_to_customer_and_deceased_data(): void
     {
-        $draftId = $this->draftAtStep4();
-
-        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
-            ->call('saveStep4', [
-                ['code' => 'DOCUMENT_PROCESSING', 'quantity' => 1],
-                ['code' => 'GRAVE_DIGGING', 'quantity' => 1],
-            ])
-            ->assertSet('currentStep', BookingWizardStep::SUMMARY);
+        $this->wizardWithServiceTypeSelected()
+            ->call('continueFromDiscovery')
+            ->assertSet('currentStep', BookingWizardStep::CUSTOMER_AND_DECEASED_DATA);
     }
 
     /**
@@ -203,13 +213,18 @@ final class BookingWizardStepsFourAndFiveTest extends TestCase
         $this->setTestOwnedPrice(ServiceCode::DOCUMENT_PROCESSING, '350000.00');
         $this->setTestOwnedPrice(ServiceCode::GRAVE_DIGGING, '750000.00');
 
-        $draftId = $this->draftAtStep4();
+        // `saveStep1()`/`continueFromDiscovery()` redirect to the resumable
+        // draft URL on success, so the assertions below need a FRESH
+        // component instance resumed by draft id — not a further assertion
+        // chained onto the same (now-redirecting) instance.
+        $draftId = $this->wizardWithServiceTypeSelected()
+            ->call('continueFromDiscovery')
+            ->assertHasNoErrors()
+            ->get('draftId');
+
+        $this->assertIsString($draftId);
 
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
-            ->call('saveStep4', [
-                ['code' => 'DOCUMENT_PROCESSING', 'quantity' => 1],
-                ['code' => 'GRAVE_DIGGING', 'quantity' => 1],
-            ])
             ->assertSee('Rp 350.000')
             ->assertSee('Rp 750.000')
             ->assertSee('Rp 1.100.000')
@@ -218,15 +233,17 @@ final class BookingWizardStepsFourAndFiveTest extends TestCase
 
     public function test_the_autosave_indicator_shows_saved_after_a_successful_step_save(): void
     {
+        $cemetery = $this->jakartaCemeteryWithoutPackages();
+
         Livewire::test(BookingWizard::class)
-            ->call('saveStep1', LaunchCityCode::JAKARTA)
+            ->call('saveStep1', LaunchCityCode::JAKARTA, $cemetery->id, null, BookingServiceType::NEW_GRAVE, $this->basicServicesPayload())
             ->assertSet('autosaveState', 'saved');
     }
 
     public function test_the_autosave_indicator_shows_failed_after_a_rejected_step(): void
     {
         Livewire::test(BookingWizard::class)
-            ->call('saveStep1', '')
+            ->call('saveStep1', '', null, null, null, [])
             ->assertSet('autosaveState', 'failed');
     }
 
@@ -245,9 +262,7 @@ final class BookingWizardStepsFourAndFiveTest extends TestCase
     {
         $this->setTestOwnedPrice(ServiceCode::DOCUMENT_PROCESSING, '350000.00');
 
-        $draftId = $this->draftAtStep4();
-
-        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+        $this->wizardWithServiceTypeSelected()
             ->assertSee('Rp 350.000');
     }
 
@@ -262,9 +277,7 @@ final class BookingWizardStepsFourAndFiveTest extends TestCase
      */
     public function test_step_4_shows_the_fulfillment_owner_for_each_service_row(): void
     {
-        $draftId = $this->draftAtStep4();
-
-        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
+        $component = $this->wizardWithServiceTypeSelected();
 
         $component->assertSee(FulfillmentOwner::label(FulfillmentOwner::PLATFORM));
         $component->assertSee(FulfillmentOwner::label(FulfillmentOwner::CEMETERY_OPERATOR));
@@ -283,9 +296,7 @@ final class BookingWizardStepsFourAndFiveTest extends TestCase
         ServiceDefinition::findByCode(ServiceCode::AMBULANCE)
             ->update(['description' => 'Layanan ambulans untuk pemindahan jenazah.']);
 
-        $draftId = $this->draftAtStep4();
-
-        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+        $this->wizardWithServiceTypeSelected()
             ->assertSee('Layanan ambulans untuk pemindahan jenazah.');
     }
 
@@ -305,9 +316,7 @@ final class BookingWizardStepsFourAndFiveTest extends TestCase
             ->where('priceable_id', $service->id)
             ->delete();
 
-        $draftId = $this->draftAtStep4();
-
-        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+        $this->wizardWithServiceTypeSelected()
             ->assertSee('Harga belum tersedia');
     }
 }
