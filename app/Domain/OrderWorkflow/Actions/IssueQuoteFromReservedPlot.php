@@ -53,14 +53,14 @@ use InvalidArgumentException;
  * is an EXPLICIT, ENFORCED check, deliberately not an assumption. An
  * earlier draft of this class asserted that aggregate-tier cemeteries
  * structurally cannot have `GravePlot` rows and therefore cannot reach
- * precondition 2 at all; that assertion is FALSE in the codebase as it
- * stands. `App\Domain\PlotInventory\Actions\CreateCemeteryBlock` does not
- * in fact refuse a block on an aggregate-tier cemetery (contrary to
- * `PlotTrackingMode::GRANULAR`'s own doc block), so aggregate-tier
- * cemeteries can accumulate real per-plot inventory and real reservations
- * against it. That gap belongs to a different, already-merged module and
- * is tracked as separate follow-up work — it is NOT fixed here, and this
- * class must not depend on it being fixed. Hence the tier is read from the
+ * precondition 2 at all; that assertion was FALSE when this class was
+ * written. `App\Domain\PlotInventory\Actions\CreateCemeteryBlock` did not
+ * yet refuse a block on an aggregate-tier cemetery at that point (contrary
+ * to `PlotTrackingMode::GRANULAR`'s own doc block); that gap was closed
+ * shortly after, in a separate, already-merged PR
+ * (`CreateCemeteryBlock::__invoke()` now guards it directly). This class's
+ * own check is kept regardless, as defense-in-depth: it must not depend on
+ * the other module's guard staying in place. Hence the tier is read from the
  * RESERVATION's own chain (`plot -> block -> cemetery`), not from the
  * order's booking draft, so that a divergent `booking_drafts.cemetery_id`
  * cannot decide a question about the plot actually being reserved. The

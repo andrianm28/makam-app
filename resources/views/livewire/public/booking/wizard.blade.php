@@ -435,8 +435,23 @@
                         <p class="mb-3 text-sm text-danger-700" role="alert">{{ $message }}</p>
                     @enderror
 
+                    @php $pickerBlocksResult = $this->pickerBlocks(); @endphp
+
+                    {{-- $this-> is deliberate, not $pickerBlocksUnavailable: Livewire
+                         extracts public properties into local Blade variables ONCE, at
+                         the start of render(), before this template runs. This flag is
+                         set later, inside pickerBlocks() above, so the bare local copy
+                         would still read its pre-call value here. --}}
+                    @if ($this->pickerBlocksUnavailable)
+                        <x-mk.alert intent="pending" title="Peta plot sedang tidak dapat dimuat" live="polite">
+                            Kami tidak dapat memuat peta plot untuk TPU/TPS ini saat ini. Silakan coba beberapa
+                            saat lagi, atau
+                            <a href="/bantuan" class="font-medium underline underline-offset-2">hubungi Bantuan</a>
+                            agar petugas kami membantu langsung.
+                        </x-mk.alert>
+                    @else
                     <div class="grid gap-y-6">
-                        @forelse ($this->pickerBlocks() as $block)
+                        @forelse ($pickerBlocksResult as $block)
                             <div>
                                 <p class="mb-2 text-sm font-medium text-neutral-900">{{ $block->code }} &mdash; {{ $block->name }}</p>
                                 <ul class="flex flex-wrap gap-2" aria-label="Plot di {{ $block->code }}">
@@ -479,6 +494,7 @@
                             </div>
                         @endforelse
                     </div>
+                    @endif
                 </section>
             @endif
 
