@@ -24,8 +24,10 @@ use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotReservation\Actions\HoldPlotForDraft;
+use App\Domain\PlotReservation\Actions\ReleasePlotReservation;
 use App\Domain\PlotReservation\Exceptions\DraftPlotHoldNoLongerValidException;
 use App\Domain\PlotReservation\Exceptions\PlotNotAvailableException;
+use App\Domain\PlotReservation\Exceptions\PlotReservationTransitionException;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\Quotation\Actions\ComposeQuoteLinesFromBookingDraft;
 use App\Domain\Quotation\Actions\IssueQuote;
@@ -35,6 +37,7 @@ use App\Domain\Quotation\Models\QuoteLine;
 use App\Domain\ServiceCatalog\ServiceCatalogQuery;
 use App\Domain\ServiceCatalog\ServiceCode;
 use App\Livewire\Public\Directory\Support\PublicCapabilityProjection;
+use App\Platform\Audit\AuditSource;
 use App\Platform\FeatureGate\ModeResolver;
 use App\Platform\FeatureGate\Modes\PaymentMode;
 use App\Platform\IdentityAccess\ActorContextResolver;
@@ -975,7 +978,7 @@ final class BookingWizard extends Component
         try {
             app(SubmitBookingDraft::class)($saved, 'booking:'.$saved->id.':submit');
         } catch (DraftPlotHoldNoLongerValidException) {
-            $this->routeBackToPlotPickerAfterExpiredHold();
+            $this->routeBackToPlotPickerAfterExpiredHold($saved);
         } catch (UnroutableProductTypeException|InvalidArgumentException $e) {
             report($e);
         }
@@ -1137,7 +1140,7 @@ final class BookingWizard extends Component
 
             return;
         } catch (DraftPlotHoldNoLongerValidException) {
-            $this->routeBackToPlotPickerAfterExpiredHold();
+            $this->routeBackToPlotPickerAfterExpiredHold($saved);
 
             return;
         } catch (InvalidArgumentException|OverflowException) {
@@ -1328,7 +1331,7 @@ final class BookingWizard extends Component
     }
 
     /**
-     * Per the roadmap's decision #7: an expired/lost draft plot hold at
+     * Per the roadmap's decision #7: an invalid draft plot hold at
      * submission time does NOT fall back to submitting without a
      * reservation — it blocks, and the customer is routed back to the plot
      * picker to re-pick. Reopens the picker for whichever cemetery the draft
@@ -1337,11 +1340,44 @@ final class BookingWizard extends Component
      *
      * The picker lives on DISCOVERY now that the old CEMETERY step has been
      * merged into it, so that is where this routes.
+     *
+     * `DraftPlotHoldNoLongerValidException` now covers two distinct causes
+     * (2 Sep 2026, post-merge): the hold expired/was taken by another
+     * visitor (already not `HELD` by the time this fires — nothing to
+     * release), or the hold's plot is in a cemetery the draft no longer
+     * saved (`SubmitBookingDraft::holdBelongsToDraftCemetery()` — still
+     * genuinely `HELD`, just orphaned). Attempting a release here handles
+     * both uniformly: a harmless no-op for the first (caught below), and
+     * the fix that actually closes the second — without it, the SAME stale
+     * hold would still be `activeForDraft($draft)`'s answer on retry, and
+     * `SubmitBookingDraft` would throw this exact same exception again,
+     * forever, until the hold's own TTL finally swept it. Released here,
+     * not inside `SubmitBookingDraft`'s own transaction: that transaction
+     * has already rolled back by the time this catch handler runs, so a
+     * release attempted inside it would roll back right along with it.
      */
-    private function routeBackToPlotPickerAfterExpiredHold(): void
+    private function routeBackToPlotPickerAfterExpiredHold(BookingDraft $draft): void
     {
         $this->currentStep = BookingWizardStep::DISCOVERY;
-        $this->addError('plot', 'Plot yang Anda pilih sudah tidak lagi ditahan (kedaluwarsa atau diambil pengunjung lain). Silakan pilih plot lain.');
+        $this->addError('plot', 'Plot yang Anda pilih tidak lagi berlaku untuk pemesanan ini. Silakan pilih plot lain jika diperlukan.');
+
+        $hold = PlotReservation::activeForDraft($draft);
+
+        if ($hold instanceof PlotReservation) {
+            try {
+                (new ReleasePlotReservation)(
+                    $hold,
+                    "booking_draft:{$draft->getKey()}",
+                    'customer',
+                    reason: 'draft plot hold no longer valid for this submission',
+                    auditSource: AuditSource::Api,
+                );
+            } catch (PlotReservationTransitionException) {
+                // Already not `held` (expired, taken, or already released) —
+                // exactly the pre-existing "nothing to release" case this
+                // handler already covered before the cemetery-mismatch fix.
+            }
+        }
 
         if ($this->cemeteryId !== null && $this->pickerAppliesTo($this->cemeteryId)) {
             $this->pickerCemeteryId = $this->cemeteryId;

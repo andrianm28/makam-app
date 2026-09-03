@@ -92,13 +92,18 @@ final class SubmitBookingDraftConvertsPlotHoldTest extends TestCase
      * on cemetery B without ever opening a picker again. Converting that hold
      * would anchor a plot in A onto an order for B.
      *
-     * The failure mode is "do not convert", not a thrown exception: B may be
-     * aggregate-tier with no picker at all, so blocking the submission and
-     * telling the customer to re-pick would be an unrecoverable loop until
-     * the stale hold's TTL expired. The order lands on the ordinary "no plot
-     * picked" path instead.
+     * The failure mode is a thrown exception and a rolled-back submission,
+     * the SAME as an expired hold (`test_an_expired_hold_blocks_the_whole_
+     * submission` below) — a deliberate product decision (2 Sep 2026,
+     * post-merge) over the alternative of silently landing on the ordinary
+     * "no plot picked" path. The known cost, accepted explicitly: cemetery B
+     * may be aggregate-tier with no picker at all, so the customer is routed
+     * back to Step 2 with nothing new to pick, and the ordinary path forward
+     * from there is simply re-completing the wizard on cemetery B WITHOUT a
+     * plot hold — the abandoned hold in A is untouched and still expires on
+     * its own TTL regardless.
      */
-    public function test_a_hold_in_a_different_cemetery_than_the_draft_is_not_converted(): void
+    public function test_a_hold_in_a_different_cemetery_than_the_draft_blocks_the_whole_submission(): void
     {
         $abandoned = $this->makeCemetery();
         $chosen = $this->makeCemetery();
@@ -110,23 +115,22 @@ final class SubmitBookingDraftConvertsPlotHoldTest extends TestCase
         $draft = $this->makeDraft($chosen);
         $held = (new HoldPlotForDraft)($plot, $draft, "booking_draft:{$draft->getKey()}");
 
-        $order = app(SubmitBookingDraft::class)($draft, 'idem-'.Str::random(8));
+        $this->expectException(DraftPlotHoldNoLongerValidException::class);
 
-        $this->assertSame(
-            0,
-            PlotReservation::query()->whereNotNull('order_id')->count(),
-            'An order for cemetery B must never carry a reservation for a plot in cemetery A.',
-        );
-        $this->assertNotNull($order->fresh(), 'The submission itself must still succeed.');
+        try {
+            app(SubmitBookingDraft::class)($draft, 'idem-'.Str::random(8));
+        } finally {
+            $this->assertSame(0, Order::query()->count(), 'the whole transaction must roll back — no orphaned order');
 
-        // The abandoned hold is left exactly as it was, to expire on its own
-        // TTL — the same disposal `selectCity()` already relies on.
-        $this->assertSame(PlotReservationState::HELD, $held->fresh()->state);
-        $this->assertSame(
-            1,
-            PlotReservation::query()->count(),
-            'Nothing is written for the mismatched hold — not a conversion, not a release.',
-        );
+            // The abandoned hold is left exactly as it was, to expire on its
+            // own TTL — the same disposal `selectCity()` already relies on.
+            $this->assertSame(PlotReservationState::HELD, $held->fresh()->state);
+            $this->assertSame(
+                1,
+                PlotReservation::query()->count(),
+                'Nothing is written for the mismatched hold — not a conversion, not a release.',
+            );
+        }
     }
 
     public function test_an_expired_hold_blocks_the_whole_submission(): void

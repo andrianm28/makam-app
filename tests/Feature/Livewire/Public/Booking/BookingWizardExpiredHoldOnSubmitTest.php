@@ -13,9 +13,13 @@ use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\CemeteryDirectory\PlotTrackingMode;
+use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
+use App\Domain\PlotInventory\PlotState;
 use App\Domain\PlotReservation\Actions\HoldPlotForDraft;
+use App\Domain\PlotReservation\Models\PlotReservation;
+use App\Domain\PlotReservation\PlotReservationState;
 use App\Domain\ServiceCatalog\ServiceCode;
 use App\Livewire\Public\Booking\BookingWizard;
 use App\Platform\FeatureGate\Contracts\GateRegistrySource;
@@ -248,5 +252,110 @@ final class BookingWizardExpiredHoldOnSubmitTest extends TestCase
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->call('openOnlinePayment')
             ->assertSet('currentStep', BookingWizardStep::DISCOVERY);
+    }
+
+    /**
+     * The cemetery-mismatch case (2 Sep 2026, post-merge): a genuinely
+     * still-`held` plot in cemetery A, but the draft finally saved cemetery
+     * B — `selectCity()`'s own documented consequence of dropping the
+     * cemetery under a city change while leaving the old hold to its TTL.
+     * `SubmitBookingDraft` now throws for this too, the same as an expired
+     * hold, and `routeBackToPlotPickerAfterExpiredHold()` releases the
+     * mismatched hold as part of handling it.
+     *
+     * The release is the point of this test, not the routing (already
+     * covered above for the expired case): without it, `activeForDraft()`
+     * would still find the SAME stale hold on a retry, and the customer
+     * would be stuck resubmitting into the same exception forever. Proven
+     * two ways — the hold's own state, and that a genuine retry actually
+     * creates the order.
+     */
+    public function test_a_hold_in_a_different_cemetery_is_released_so_a_retry_actually_succeeds(): void
+    {
+        $abandoned = Cemetery::query()->create([
+            'type' => CemeteryType::TPU,
+            'publication_status' => CemeteryPublicationStatus::PUBLISHED,
+            'name' => 'TPU Ditinggalkan',
+            'slug' => 'tpu-ditinggalkan-'.Str::lower(Str::random(6)),
+            'city' => LaunchCityCode::JAKARTA,
+            'address' => 'Jl. Contoh No. 1',
+            'plot_tracking_mode' => PlotTrackingMode::GRANULAR,
+        ]);
+        $chosen = Cemetery::query()->create([
+            'type' => CemeteryType::TPU,
+            'publication_status' => CemeteryPublicationStatus::PUBLISHED,
+            'name' => 'TPU Dipilih',
+            'slug' => 'tpu-dipilih-'.Str::lower(Str::random(6)),
+            'city' => LaunchCityCode::JAKARTA,
+            'address' => 'Jl. Contoh No. 2',
+            // Aggregate-tier and no packages: the "no picker to re-pick in"
+            // case the doc block on `holdBelongsToDraftCemetery()`
+            // describes — the retry below must succeed on the ordinary
+            // "no plot picked" path, not by re-holding anything in B.
+            'plot_tracking_mode' => PlotTrackingMode::AGGREGATE,
+        ]);
+        $block = CemeteryBlock::query()->create(['cemetery_id' => $abandoned->getKey(), 'code' => 'BLOK-A', 'name' => 'Blok A', 'capacity' => 1]);
+        $plot = GravePlot::query()->create(['block_id' => $block->getKey(), 'slot' => '001', 'plot_state' => 'available']);
+
+        $draftId = $this->draftIdAtDiscovery();
+        $draft = BookingDraft::query()->findOrFail($draftId);
+        // The hold is taken against $abandoned's plot, but the draft finally
+        // saves $chosen — exactly `selectCity()`'s documented divergence.
+        $draft->forceFill([
+            'cemetery_id' => $chosen->id,
+            'service_type' => BookingServiceType::NEW_GRAVE,
+            'customer_full_name' => 'Uji Coba',
+            'customer_mobile' => '081200000000',
+            'customer_relationship' => 'anak',
+            'current_step' => BookingWizardStep::PAYMENT,
+            'completed_steps' => [
+                BookingWizardStep::DISCOVERY,
+                BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            ],
+        ])->saveQuietly();
+        $held = app(HoldPlotForDraft::class)($plot, $draft, "booking_draft:{$draft->getKey()}");
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->set('paymentReference', 'BCA 123456789 a.n. Uji Coba')
+            ->call('saveStep3', BookingPaymentMethod::MANUAL) // reaching this line at all proves no 500
+            ->assertHasErrors('plot')
+            ->assertSet('currentStep', BookingWizardStep::DISCOVERY);
+
+        $this->assertSame(0, Order::query()->count(), 'the first, mismatched attempt must not create an order');
+
+        // The point of this test: the mismatched hold is genuinely released,
+        // not left `held` to squat until its TTL. `PlotReservation` is
+        // append-only (same discipline `SubmitBookingDraftConvertsPlotHoldTest`
+        // documents for a converted hold) — the ORIGINAL row never mutates,
+        // so `$held->fresh()->state` stays `held` forever by design. The
+        // release is visible two other ways instead: a new `released` row is
+        // appended for the same draft, and `activeForDraft()` — which only
+        // ever considers `held`/`confirmed` the active states — no longer
+        // finds anything for this draft.
+        $this->assertSame(PlotReservationState::HELD, $held->fresh()->state, 'append-only: original row unchanged');
+        $latestForDraft = PlotReservation::query()
+            ->where('booking_draft_id', $draft->getKey())
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->first();
+        $this->assertNotNull($latestForDraft);
+        $this->assertSame(PlotReservationState::RELEASED, $latestForDraft->state);
+        $this->assertNull(PlotReservation::activeForDraft($draft->fresh()), 'the released row must not be findable as an active hold — this is what closes the retry loop');
+        $this->assertSame(PlotState::AVAILABLE, $plot->fresh()->plot_state);
+
+        // The real proof: a retry now succeeds, because `activeForDraft()`
+        // no longer finds the released hold. Cemetery B is aggregate-tier
+        // (no picker), so the customer's only recovery action is clicking
+        // Lanjutkan again from where the wizard left them — resubmitting
+        // the same payment reference, no new plot pick required.
+        $component->call('saveStep3', BookingPaymentMethod::MANUAL)
+            ->assertHasNoErrors('plot');
+
+        $this->assertSame(1, Order::query()->count(), 'the retry must actually create the order — the whole point of releasing the hold');
+        $this->assertSame(
+            2,
+            PlotReservation::query()->count(),
+            'append-only history for the abandoned hold: the original `held` row plus the `released` row — the retry must not create a THIRD reservation for a cemetery the order has no plot in',
+        );
     }
 }

@@ -13,6 +13,7 @@ use App\Domain\OrderWorkflow\OrderPartyRole;
 use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\OrderWorkflow\ProductType;
 use App\Domain\PlotReservation\Actions\ConvertDraftHoldToOrderReservation;
+use App\Domain\PlotReservation\Exceptions\DraftPlotHoldNoLongerValidException;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PreNeed\Actions\RegisterPreNeedInterest;
 use Illuminate\Database\QueryException;
@@ -226,11 +227,18 @@ final readonly class SubmitBookingDraft
         // that is the normal case, not an error. See
         // `ConvertDraftHoldToOrderReservation`'s class doc block for the
         // no-fallback failure mode this can throw, and
-        // `holdBelongsToDraftCemetery()` for the one hold this deliberately
-        // does NOT convert.
+        // `holdBelongsToDraftCemetery()` for why a mismatched hold ALSO
+        // throws now, the same as an expired one.
         $draftHold = PlotReservation::activeForDraft($draft);
 
-        if ($draftHold instanceof PlotReservation && self::holdBelongsToDraftCemetery($draftHold, $draft)) {
+        if ($draftHold instanceof PlotReservation) {
+            if (! self::holdBelongsToDraftCemetery($draftHold, $draft)) {
+                throw DraftPlotHoldNoLongerValidException::forHold(
+                    (string) $draftHold->getKey(),
+                    'held plot is not in the cemetery this draft finally saved'
+                );
+            }
+
             ($this->convertDraftHold)($draftHold, $order);
         }
 
@@ -254,18 +262,21 @@ final readonly class SubmitBookingDraft
      * silently carries a reservation for a plot in cemetery A — inventory
      * committed in a cemetery nobody ordered from.
      *
-     * The failure mode is "do not convert", NOT
-     * `DraftPlotHoldNoLongerValidException`. That exception rolls the whole
-     * submission back and sends the customer to re-pick a plot, which is the
-     * right answer when the hold they still want has expired or been taken —
-     * but here the cemetery they want has no picker to re-pick in, so
-     * throwing would be an unrecoverable loop until the stale hold's TTL ran
-     * out. Not converting lands the order on the already-normal, already-
-     * supported "no plot picked" path instead, and the abandoned hold expires
-     * on its TTL exactly as `selectCity()` intends. The hold is left
-     * untouched rather than released here: releasing is a second write inside
-     * the submission transaction for no benefit the TTL does not already
-     * provide.
+     * A mismatch throws `DraftPlotHoldNoLongerValidException`, the SAME
+     * failure mode as an expired hold — the whole submission rolls back and
+     * the customer is routed back to re-pick (`BookingWizard`'s existing
+     * catch handlers, unchanged by this decision). Deliberate choice (2 Sep
+     * 2026, post-merge) over silently landing on the ordinary "no plot
+     * picked" path: a wrong-cemetery reservation is a real inventory/money
+     * correctness issue, and this repo's own established policy for a
+     * plot-hold problem at submission time is "block, never silently
+     * proceed" (`DraftPlotHoldNoLongerValidException`'s own class doc block,
+     * roadmap decision #7). Known, accepted cost: cemetery B may be
+     * aggregate-tier with no picker to re-pick in, so the customer's actual
+     * recovery path from Step 2 is completing the wizard again on cemetery B
+     * without a plot hold, not literally "pick a different plot" — the
+     * abandoned hold in A is left untouched either way and still expires on
+     * its own TTL.
      */
     private static function holdBelongsToDraftCemetery(PlotReservation $hold, BookingDraft $draft): bool
     {
