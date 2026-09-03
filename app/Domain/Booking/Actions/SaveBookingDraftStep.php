@@ -34,10 +34,11 @@ use InvalidArgumentException;
  * client already checked — `booking-and-order-orchestration` AC3.
  * Idempotent and versioned — AC2.
  *
- * Steps 1-4 (location, cemetery, service type, services) were built in
- * the prior batch; this batch completes Steps 6-8 (customer data,
- * deceased data + documents, payment). Step 5 (summary) and Step 9
- * (confirmation) are read-only and have no save action.
+ * The wizard has four steps (see `BookingWizardStep`'s own doc block for the
+ * renumbering this class implements): `DISCOVERY` (merged location +
+ * cemetery + service type + services), `CUSTOMER_AND_DECEASED_DATA` (merged
+ * customer data + deceased data and documents), and `PAYMENT`.
+ * `CONFIRMATION` is read-only and has no save action.
  *
  * Never `SensitiveActions`-listed — a booking step save is routine
  * customer input, not a privileged action.
@@ -46,28 +47,17 @@ final readonly class SaveBookingDraftStep
 {
     public function __invoke(BookingDraft $draft, int $step, array $payload, string $idempotencyKey, ?int $expectedVersion = null): BookingDraft
     {
-        // `assertKnown` already rejects anything outside 1-9, and
-        // `LAST_IMPLEMENTED` is now 9 (CONFIRMATION), so the old
-        // "not implemented yet" branch that sat here became unreachable the
-        // moment this lane completed the wizard. It was removed rather than
-        // left in place: a guard that cannot fire reads as protection that
-        // does not exist, and its test was deleted for the same reason.
-        // Out-of-range steps are rejected by `assertKnown` alone.
+        // `assertKnown` already rejects anything outside 1-4. Out-of-range
+        // steps are rejected by `assertKnown` alone.
         BookingWizardStep::assertKnown($step);
 
-        // Step 5 (SUMMARY) and Step 9 (CONFIRMATION) are READ-ONLY — no write
-        // action and no payload. Without this guard, either falls through both
-        // `match`es' `default` arms: no validation, no attributes, but a version
-        // bump and `current_step = step + 1` — permanently stranding the draft
-        // with no way forward or back. Rejected here in the same boundary-check
-        // style rather than given a silent no-op arm, because no valid caller
-        // exists for either read-only step.
-        if ($step === BookingWizardStep::SUMMARY) {
-            throw new InvalidArgumentException(
-                'Step ['.BookingWizardStep::SUMMARY.'] (Ringkasan Pesanan) is read-only and has no save action.'
-            );
-        }
-
+        // CONFIRMATION is READ-ONLY — no write action and no payload.
+        // Without this guard it falls through both `match`es' `default`
+        // arms: no validation, no attributes, but a version bump and
+        // `current_step = step + 1` — permanently stranding the draft with
+        // no way forward or back. Rejected here in the same boundary-check
+        // style rather than given a silent no-op arm, because no valid
+        // caller exists for this read-only step.
         if ($step === BookingWizardStep::CONFIRMATION) {
             throw new InvalidArgumentException(
                 'Step ['.BookingWizardStep::CONFIRMATION.'] (Konfirmasi) is read-only and has no save action.'
@@ -93,12 +83,11 @@ final readonly class SaveBookingDraftStep
         }
 
         $errors = match ($step) {
-            BookingWizardStep::LOCATION => self::validateLocation($payload),
-            BookingWizardStep::CEMETERY => self::validateCemetery($payload, $draft),
-            BookingWizardStep::SERVICE_TYPE => self::validateServiceType($payload),
-            BookingWizardStep::SERVICES => self::validateServices($payload),
-            BookingWizardStep::CUSTOMER_DATA => self::validateCustomerData($payload),
-            BookingWizardStep::DECEASED_DATA => self::validateDeceasedData($payload),
+            BookingWizardStep::DISCOVERY => self::validateDiscovery($payload),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA => [
+                ...self::validateCustomerData($payload),
+                ...self::validateDeceasedData($payload),
+            ],
             BookingWizardStep::PAYMENT => self::validatePayment($payload, app(ModeResolver::class)->paymentMode()),
             default => [],
         };
@@ -115,19 +104,19 @@ final readonly class SaveBookingDraftStep
             $current = BookingDraft::query()->findOrFail($draft->id);
 
             $attributes = match ($step) {
-                BookingWizardStep::LOCATION => ['city_code' => $payload['city_code']],
-                BookingWizardStep::CEMETERY => [
+                BookingWizardStep::DISCOVERY => [
+                    'city_code' => $payload['city_code'],
                     'cemetery_id' => $payload['cemetery_id'],
                     'cemetery_package_id' => $payload['cemetery_package_id'] ?? null,
+                    'service_type' => $payload['service_type'],
+                    'selected_services' => $payload['selected_services'],
                 ],
-                BookingWizardStep::SERVICE_TYPE => ['service_type' => $payload['service_type']],
-                BookingWizardStep::SERVICES => ['selected_services' => $payload['selected_services']],
                 // Persist the TRIMMED value, because that is the value that
                 // was validated. Storing the raw payload while length-checking
                 // `trim()`'d text let padding slip past the bound and reach a
                 // varchar(191) column as an over-long string — a driver error
                 // on a public form instead of a clean validation message.
-                BookingWizardStep::CUSTOMER_DATA => [
+                BookingWizardStep::CUSTOMER_AND_DECEASED_DATA => [
                     'customer_full_name' => self::trimmed($payload['customer_full_name']),
                     'customer_mobile' => self::trimmed($payload['customer_mobile']),
                     'customer_email' => self::trimmed($payload['customer_email']),
@@ -139,8 +128,6 @@ final readonly class SaveBookingDraftStep
                     // record that consent happened, so its time must come
                     // from us, not from whoever sent the request.
                     'privacy_notice_accepted_at' => Carbon::now()->toDateTimeString(),
-                ],
-                BookingWizardStep::DECEASED_DATA => [
                     'deceased_full_name' => self::trimmed($payload['deceased_full_name']),
                     'deceased_date_of_birth' => $payload['deceased_date_of_birth'],
                     'deceased_date_of_death' => $payload['deceased_date_of_death'],
@@ -228,47 +215,22 @@ final readonly class SaveBookingDraftStep
      * hand-crafted request straight to this Action must be rejected on the
      * draft's own record regardless of what any client claims.
      *
-     * Step 5 (SUMMARY) is read-only and never appears in `completed_steps`.
-     * For steps 6-8, we require that ALL steps 1-4 are complete, not just
-     * the immediately preceding step (which for Step 6 would be Step 5, which
-     * is never saved). This is the "all upstream decisions" rule applied to
-     * the non-read-only steps that bracket the read-only Step 5.
+     * A plain "step − 1 must be complete" check is sufficient now that the
+     * wizard has four steps and no read-only step sits between any two
+     * writable ones. The old nine-step version of this method needed extra
+     * complexity here because the read-only SUMMARY step sat between
+     * SERVICES (old step 4) and CUSTOMER_DATA (old step 6): step 6's true
+     * predecessor (step 5) was never saved, so steps 6-8 each required "all
+     * of 1-4 done" instead of "the immediately preceding step done". SUMMARY
+     * was CUT in this batch, not merged into an adjacent step (per the
+     * spec's Decision 1) — so that gap no longer exists, and every step's
+     * immediate predecessor is itself always a real, writable, saved step.
      *
      * @return array<string, list<string>>
      */
     private static function validateStepSequencing(int $step, BookingDraft $draft): array
     {
-        if ($step === BookingWizardStep::LOCATION) {
-            return [];
-        }
-
-        if ($step >= BookingWizardStep::CUSTOMER_DATA) {
-            // Every writable step BELOW this one must already be done, not
-            // merely steps 1-4. An earlier version required only 1-4 for all
-            // of 6, 7 and 8, which let a caller jump straight to step 8 and
-            // land on Confirmation with an em dash for every customer and
-            // deceased field — `public-booking-wizard` AC13's "unskippable"
-            // rule broken for exactly the steps that carry the PII.
-            //
-            // Step 5 (SUMMARY) is excluded because it is read-only and
-            // therefore never appears in `completed_steps`.
-            $required = array_values(array_filter(
-                [
-                    BookingWizardStep::LOCATION,
-                    BookingWizardStep::CEMETERY,
-                    BookingWizardStep::SERVICE_TYPE,
-                    BookingWizardStep::SERVICES,
-                    BookingWizardStep::CUSTOMER_DATA,
-                    BookingWizardStep::DECEASED_DATA,
-                ],
-                static fn (int $candidate): bool => $candidate < $step,
-            ));
-
-            $missing = array_diff($required, $draft->completed_steps);
-            if ($missing !== []) {
-                return ['step' => ['Selesaikan semua langkah sebelumnya terlebih dahulu.']];
-            }
-
+        if ($step === BookingWizardStep::DISCOVERY) {
             return [];
         }
 
@@ -299,10 +261,35 @@ final readonly class SaveBookingDraftStep
     }
 
     /**
+     * The merged step: location + cemetery + service type + services, all
+     * validated from ONE payload in ONE call.
+     *
      * @param  array<string, mixed>  $payload
      * @return array<string, list<string>>
      */
-    private static function validateCemetery(array $payload, BookingDraft $draft): array
+    private static function validateDiscovery(array $payload): array
+    {
+        $errors = [
+            ...self::validateLocation($payload),
+            ...self::validateCemeteryAgainstPayloadCity($payload),
+            ...self::validateServiceType($payload),
+            ...self::validateServices($payload),
+        ];
+
+        return $errors;
+    }
+
+    /**
+     * Same rules as the old `validateCemetery(array $payload, BookingDraft
+     * $draft)`, except the city cross-check reads `$payload['city_code']`
+     * directly instead of `$draft->city_code` — in the merged DISCOVERY step
+     * city and cemetery arrive in the SAME payload, before either is
+     * persisted, so there is no draft column to read yet.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, list<string>>
+     */
+    private static function validateCemeteryAgainstPayloadCity(array $payload): array
     {
         $errors = [];
 
@@ -318,10 +305,10 @@ final readonly class SaveBookingDraftStep
             return ['cemetery_id' => ['TPU/TPS yang dipilih tidak tersedia.']];
         }
 
-        if ($draft->city_code !== null && $cemetery->city !== $draft->city_code) {
-            $errors['cemetery_id'] = ['TPU/TPS yang dipilih berada di luar kota yang dipilih pada langkah 1.'];
+        $cityCode = $payload['city_code'] ?? null;
 
-            return $errors;
+        if ($cityCode !== null && $cityCode !== '' && $cemetery->city !== $cityCode) {
+            return ['cemetery_id' => ['TPU/TPS yang dipilih berada di luar kota yang dipilih.']];
         }
 
         $activePackages = CemeteryPublicQuery::activePackages($cemetery);

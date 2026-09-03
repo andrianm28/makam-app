@@ -22,11 +22,12 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * Server-side validation for the three steps this batch completes —
- * Step 6 (Data Pemesan), Step 7 (Data Almarhum and Documents) and Step 8
- * (Pembayaran) — plus the read-only/boundary guards that now sit around
- * them. `SaveBookingDraftStepTest` covers Steps 1-4 and sequencing for
- * them; this file is the same contract one batch later.
+ * Server-side validation for the two steps this batch completes —
+ * `CUSTOMER_AND_DECEASED_DATA` (the merged old Step 6 "Data Pemesan" + Step 7
+ * "Data Almarhum dan Dokumen") and `PAYMENT` (old Step 8, unchanged in
+ * shape) — plus the read-only/boundary guards that now sit around them.
+ * `SaveBookingDraftStepTest` covers `DISCOVERY` and its own sequencing; this
+ * file is the same contract one step later.
  *
  * Three of the sections here are security assertions, not field-validation
  * bookkeeping, and are the reason this file exists as a separate suite:
@@ -42,12 +43,16 @@ use Tests\TestCase;
  *      gate state. A closed gate must reject `ONLINE` even though the
  *      Blade view would not have rendered the control that produces it.
  *
+ * `CUSTOMER_AND_DECEASED_DATA` validates the customer half and the deceased
+ * half of its payload TOGETHER, in one call — every fixture below therefore
+ * supplies a full, valid combined payload and varies only the one field
+ * under test, so a rejection can be pinned to that field rather than to
+ * "the other half was also missing".
+ *
  * Every fixture seeds `completed_steps` with all the WRITABLE steps below
- * the one under test, because `validateStepSequencing()` requires exactly
- * that for any step >= 6: step 6 needs 1-4, step 7 needs 1-4 and 6, step 8
- * needs 1-4, 6 and 7. Step 5 (SUMMARY) is read-only and never appears in
- * `completed_steps`, so it is never required. Dedicated sequencing coverage
- * lives in the last section.
+ * the one under test: `CUSTOMER_AND_DECEASED_DATA` needs `DISCOVERY`,
+ * `PAYMENT` needs `DISCOVERY` and `CUSTOMER_AND_DECEASED_DATA`. Dedicated
+ * sequencing coverage lives in the last section.
  */
 final class SaveBookingDraftStepSteps678Test extends TestCase
 {
@@ -58,53 +63,27 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
     // =====================================================================
 
     /**
-     * A draft that has legitimately completed steps 1-4, which is the
-     * server-side precondition for saving step 6.
+     * A draft that has legitimately completed DISCOVERY, which is the
+     * server-side precondition for saving CUSTOMER_AND_DECEASED_DATA.
      */
-    private function draftReadyForStepSix(): BookingDraft
+    private function draftReadyForCustomerAndDeceasedData(): BookingDraft
     {
         return BookingDraft::create([
-            'completed_steps' => [
-                BookingWizardStep::LOCATION,
-                BookingWizardStep::CEMETERY,
-                BookingWizardStep::SERVICE_TYPE,
-                BookingWizardStep::SERVICES,
-            ],
+            'completed_steps' => [BookingWizardStep::DISCOVERY],
         ]);
     }
 
     /**
-     * Step 7 additionally requires step 6 — a caller must not reach the
-     * deceased/document step without having supplied the customer data.
+     * PAYMENT additionally requires CUSTOMER_AND_DECEASED_DATA — a caller
+     * must not reach payment without having supplied customer and deceased
+     * data.
      */
-    private function draftReadyForStepSeven(): BookingDraft
+    private function draftReadyForPayment(): BookingDraft
     {
         return BookingDraft::create([
             'completed_steps' => [
-                BookingWizardStep::LOCATION,
-                BookingWizardStep::CEMETERY,
-                BookingWizardStep::SERVICE_TYPE,
-                BookingWizardStep::SERVICES,
-                BookingWizardStep::CUSTOMER_DATA,
-            ],
-        ]);
-    }
-
-    /**
-     * Step 8 requires every writable step below it — 1-4, 6 and 7. Jumping
-     * straight to payment would otherwise land the draft on Confirmation
-     * with an em dash for every customer and deceased field.
-     */
-    private function draftReadyForStepEight(): BookingDraft
-    {
-        return BookingDraft::create([
-            'completed_steps' => [
-                BookingWizardStep::LOCATION,
-                BookingWizardStep::CEMETERY,
-                BookingWizardStep::SERVICE_TYPE,
-                BookingWizardStep::SERVICES,
-                BookingWizardStep::CUSTOMER_DATA,
-                BookingWizardStep::DECEASED_DATA,
+                BookingWizardStep::DISCOVERY,
+                BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
             ],
         ]);
     }
@@ -170,6 +149,16 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
     }
 
     /**
+     * @param  array<string, mixed>  $customerOverrides
+     * @param  array<string, mixed>  $deceasedOverrides
+     * @return array<string, mixed>
+     */
+    private function combinedPayload(array $customerOverrides = [], array $deceasedOverrides = []): array
+    {
+        return [...$this->customerPayload($customerOverrides), ...$this->deceasedPayload($deceasedOverrides)];
+    }
+
+    /**
      * Drives `G-PAY-01` from an in-memory registry source, the same
      * mechanism `PaymentGuardFailClosedTest` and `ModeResolverTest` use.
      * The Action resolves `ModeResolver` out of the container per
@@ -219,14 +208,14 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
     }
 
     // =====================================================================
-    // Step 6 — customer data, happy path
+    // CUSTOMER_AND_DECEASED_DATA — happy path
     // =====================================================================
 
-    public function test_step_6_accepts_a_fully_valid_customer_payload(): void
+    public function test_customer_and_deceased_data_step_accepts_a_fully_valid_combined_payload(): void
     {
-        $draft = $this->draftReadyForStepSix();
+        $draft = $this->draftReadyForCustomerAndDeceasedData();
 
-        $saved = (new SaveBookingDraftStep)($draft, BookingWizardStep::CUSTOMER_DATA, $this->customerPayload(), 'idem-s6-happy');
+        $saved = (new SaveBookingDraftStep)($draft, BookingWizardStep::CUSTOMER_AND_DECEASED_DATA, $this->combinedPayload(), 'idem-cadd-happy');
 
         $this->assertSame('Budi Santoso', $saved->customer_full_name);
         $this->assertSame('081234567890', $saved->customer_mobile);
@@ -234,66 +223,85 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
         $this->assertSame('Jl. Melati No. 12, Jakarta Selatan', $saved->customer_address);
         $this->assertSame(BookingRelationshipCode::ANAK, $saved->customer_relationship);
         $this->assertSame(BookingContactChannel::WHATSAPP, $saved->customer_contact_channel);
-        $this->assertContains(BookingWizardStep::CUSTOMER_DATA, $saved->completed_steps);
-        $this->assertSame(BookingWizardStep::DECEASED_DATA, $saved->current_step);
+        $this->assertSame('Siti Rahayu', $saved->deceased_full_name);
+        $this->assertSame('1950-03-04', $saved->deceased_date_of_birth->toDateString());
+        $this->assertSame('2026-01-15', $saved->deceased_date_of_death->toDateString());
+        $this->assertSame(BookingRelationshipCode::ORANG_TUA, $saved->deceased_relationship);
+        $this->assertSame(BookingGender::PEREMPUAN, $saved->deceased_gender);
+        $this->assertContains(BookingWizardStep::CUSTOMER_AND_DECEASED_DATA, $saved->completed_steps);
+        $this->assertSame(BookingWizardStep::PAYMENT, $saved->current_step);
+    }
+
+    public function test_customer_and_deceased_data_step_rejects_when_either_half_is_invalid(): void
+    {
+        $draft = $this->draftReadyForCustomerAndDeceasedData();
+
+        $this->expectException(BookingStepValidationException::class);
+
+        (new SaveBookingDraftStep)(
+            $draft,
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(customerOverrides: ['customer_full_name' => '']),
+            'idem-cadd-either-invalid'
+        );
     }
 
     // =====================================================================
-    // Step 6 — customer_full_name
+    // CUSTOMER_AND_DECEASED_DATA — customer_full_name
     // =====================================================================
 
-    public function test_step_6_rejects_a_missing_full_name(): void
+    public function test_customer_and_deceased_data_step_rejects_a_missing_full_name(): void
     {
         $this->assertRejectedWithKey(
             'customer_full_name',
-            $this->draftReadyForStepSix(),
-            BookingWizardStep::CUSTOMER_DATA,
-            $this->customerPayloadWithout('customer_full_name'),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            [...$this->customerPayloadWithout('customer_full_name'), ...$this->deceasedPayload()],
             'idem-s6-name-missing'
         );
     }
 
-    public function test_step_6_rejects_a_blank_full_name(): void
+    public function test_customer_and_deceased_data_step_rejects_a_blank_full_name(): void
     {
         $this->assertRejectedWithKey(
             'customer_full_name',
-            $this->draftReadyForStepSix(),
-            BookingWizardStep::CUSTOMER_DATA,
-            $this->customerPayload(['customer_full_name' => '   ']),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(customerOverrides: ['customer_full_name' => '   ']),
             'idem-s6-name-blank'
         );
     }
 
-    public function test_step_6_rejects_a_full_name_under_three_characters(): void
+    public function test_customer_and_deceased_data_step_rejects_a_full_name_under_three_characters(): void
     {
         $this->assertRejectedWithKey(
             'customer_full_name',
-            $this->draftReadyForStepSix(),
-            BookingWizardStep::CUSTOMER_DATA,
-            $this->customerPayload(['customer_full_name' => 'Bu']),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(customerOverrides: ['customer_full_name' => 'Bu']),
             'idem-s6-name-short'
         );
     }
 
-    public function test_step_6_rejects_a_full_name_over_191_characters(): void
+    public function test_customer_and_deceased_data_step_rejects_a_full_name_over_191_characters(): void
     {
         $this->assertRejectedWithKey(
             'customer_full_name',
-            $this->draftReadyForStepSix(),
-            BookingWizardStep::CUSTOMER_DATA,
-            $this->customerPayload(['customer_full_name' => str_repeat('a', 192)]),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(customerOverrides: ['customer_full_name' => str_repeat('a', 192)]),
             'idem-s6-name-long'
         );
     }
 
-    public function test_step_6_accepts_a_full_name_at_the_191_character_boundary(): void
+    public function test_customer_and_deceased_data_step_accepts_a_full_name_at_the_191_character_boundary(): void
     {
         $name = str_repeat('a', 191);
 
         $saved = (new SaveBookingDraftStep)(
-            $this->draftReadyForStepSix(),
-            BookingWizardStep::CUSTOMER_DATA,
-            $this->customerPayload(['customer_full_name' => $name]),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(customerOverrides: ['customer_full_name' => $name]),
             'idem-s6-name-boundary'
         );
 
@@ -301,32 +309,32 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
     }
 
     // =====================================================================
-    // Step 6 — customer_mobile (Indonesian format)
+    // CUSTOMER_AND_DECEASED_DATA — customer_mobile (Indonesian format)
     // =====================================================================
 
-    public function test_step_6_rejects_a_missing_mobile(): void
+    public function test_customer_and_deceased_data_step_rejects_a_missing_mobile(): void
     {
         $this->assertRejectedWithKey(
             'customer_mobile',
-            $this->draftReadyForStepSix(),
-            BookingWizardStep::CUSTOMER_DATA,
-            $this->customerPayloadWithout('customer_mobile'),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            [...$this->customerPayloadWithout('customer_mobile'), ...$this->deceasedPayload()],
             'idem-s6-mobile-missing'
         );
     }
 
-    public function test_step_6_rejects_a_blank_mobile(): void
+    public function test_customer_and_deceased_data_step_rejects_a_blank_mobile(): void
     {
         $this->assertRejectedWithKey(
             'customer_mobile',
-            $this->draftReadyForStepSix(),
-            BookingWizardStep::CUSTOMER_DATA,
-            $this->customerPayload(['customer_mobile' => '   ']),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(customerOverrides: ['customer_mobile' => '   ']),
             'idem-s6-mobile-blank'
         );
     }
 
-    public function test_step_6_accepts_the_three_indonesian_mobile_prefixes(): void
+    public function test_customer_and_deceased_data_step_accepts_the_three_indonesian_mobile_prefixes(): void
     {
         $accepted = [
             'local zero prefix' => '081234567890',
@@ -336,9 +344,9 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
 
         foreach ($accepted as $label => $mobile) {
             $saved = (new SaveBookingDraftStep)(
-                $this->draftReadyForStepSix(),
-                BookingWizardStep::CUSTOMER_DATA,
-                $this->customerPayload(['customer_mobile' => $mobile]),
+                $this->draftReadyForCustomerAndDeceasedData(),
+                BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+                $this->combinedPayload(customerOverrides: ['customer_mobile' => $mobile]),
                 'idem-s6-mobile-ok-'.md5($mobile)
             );
 
@@ -346,7 +354,7 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
         }
     }
 
-    public function test_step_6_rejects_mobiles_outside_the_indonesian_pattern(): void
+    public function test_customer_and_deceased_data_step_rejects_mobiles_outside_the_indonesian_pattern(): void
     {
         $rejected = [
             'too short' => '0812345',
@@ -359,9 +367,9 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
         foreach ($rejected as $label => $mobile) {
             $errors = $this->assertRejectedWithKey(
                 'customer_mobile',
-                $this->draftReadyForStepSix(),
-                BookingWizardStep::CUSTOMER_DATA,
-                $this->customerPayload(['customer_mobile' => $mobile]),
+                $this->draftReadyForCustomerAndDeceasedData(),
+                BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+                $this->combinedPayload(customerOverrides: ['customer_mobile' => $mobile]),
                 'idem-s6-mobile-bad-'.md5($mobile)
             );
 
@@ -370,28 +378,28 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
     }
 
     // =====================================================================
-    // Step 6 — customer_email
+    // CUSTOMER_AND_DECEASED_DATA — customer_email
     // =====================================================================
 
-    public function test_step_6_rejects_a_missing_email(): void
+    public function test_customer_and_deceased_data_step_rejects_a_missing_email(): void
     {
         $this->assertRejectedWithKey(
             'customer_email',
-            $this->draftReadyForStepSix(),
-            BookingWizardStep::CUSTOMER_DATA,
-            $this->customerPayloadWithout('customer_email'),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            [...$this->customerPayloadWithout('customer_email'), ...$this->deceasedPayload()],
             'idem-s6-email-missing'
         );
     }
 
-    public function test_step_6_rejects_a_malformed_email(): void
+    public function test_customer_and_deceased_data_step_rejects_a_malformed_email(): void
     {
         foreach (['not-an-email', 'budi@', '@example.test', 'budi example.test'] as $email) {
             $this->assertRejectedWithKey(
                 'customer_email',
-                $this->draftReadyForStepSix(),
-                BookingWizardStep::CUSTOMER_DATA,
-                $this->customerPayload(['customer_email' => $email]),
+                $this->draftReadyForCustomerAndDeceasedData(),
+                BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+                $this->combinedPayload(customerOverrides: ['customer_email' => $email]),
                 'idem-s6-email-bad-'.md5($email)
             );
         }
@@ -402,26 +410,26 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
      * address must come back as a field-keyed message, not as a driver
      * error raised from a public form.
      */
-    public function test_step_6_rejects_a_well_formed_email_over_191_characters(): void
+    public function test_customer_and_deceased_data_step_rejects_a_well_formed_email_over_191_characters(): void
     {
         $email = str_repeat('e', 180).'@example.test';
         $this->assertGreaterThan(191, mb_strlen($email));
 
         $this->assertRejectedWithKey(
             'customer_email',
-            $this->draftReadyForStepSix(),
-            BookingWizardStep::CUSTOMER_DATA,
-            $this->customerPayload(['customer_email' => $email]),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(customerOverrides: ['customer_email' => $email]),
             'idem-s6-email-long'
         );
     }
 
-    public function test_step_6_accepts_a_well_formed_email(): void
+    public function test_customer_and_deceased_data_step_accepts_a_well_formed_email(): void
     {
         $saved = (new SaveBookingDraftStep)(
-            $this->draftReadyForStepSix(),
-            BookingWizardStep::CUSTOMER_DATA,
-            $this->customerPayload(['customer_email' => 'siti.rahayu+booking@example.test']),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(customerOverrides: ['customer_email' => 'siti.rahayu+booking@example.test']),
             'idem-s6-email-ok'
         );
 
@@ -429,37 +437,37 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
     }
 
     // =====================================================================
-    // Step 6 — customer_address
+    // CUSTOMER_AND_DECEASED_DATA — customer_address
     // =====================================================================
 
-    public function test_step_6_rejects_a_missing_address(): void
+    public function test_customer_and_deceased_data_step_rejects_a_missing_address(): void
     {
         $this->assertRejectedWithKey(
             'customer_address',
-            $this->draftReadyForStepSix(),
-            BookingWizardStep::CUSTOMER_DATA,
-            $this->customerPayloadWithout('customer_address'),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            [...$this->customerPayloadWithout('customer_address'), ...$this->deceasedPayload()],
             'idem-s6-address-missing'
         );
     }
 
-    public function test_step_6_rejects_an_address_under_ten_characters(): void
+    public function test_customer_and_deceased_data_step_rejects_an_address_under_ten_characters(): void
     {
         $this->assertRejectedWithKey(
             'customer_address',
-            $this->draftReadyForStepSix(),
-            BookingWizardStep::CUSTOMER_DATA,
-            $this->customerPayload(['customer_address' => 'Jl. Kecil']),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(customerOverrides: ['customer_address' => 'Jl. Kecil']),
             'idem-s6-address-short'
         );
     }
 
-    public function test_step_6_accepts_an_address_at_the_ten_character_boundary(): void
+    public function test_customer_and_deceased_data_step_accepts_an_address_at_the_ten_character_boundary(): void
     {
         $saved = (new SaveBookingDraftStep)(
-            $this->draftReadyForStepSix(),
-            BookingWizardStep::CUSTOMER_DATA,
-            $this->customerPayload(['customer_address' => 'Jl. Besar1']),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(customerOverrides: ['customer_address' => 'Jl. Besar1']),
             'idem-s6-address-boundary'
         );
 
@@ -467,38 +475,38 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
     }
 
     // =====================================================================
-    // Step 6 — customer_relationship
+    // CUSTOMER_AND_DECEASED_DATA — customer_relationship
     // =====================================================================
 
-    public function test_step_6_rejects_a_missing_relationship(): void
+    public function test_customer_and_deceased_data_step_rejects_a_missing_customer_relationship(): void
     {
         $this->assertRejectedWithKey(
             'customer_relationship',
-            $this->draftReadyForStepSix(),
-            BookingWizardStep::CUSTOMER_DATA,
-            $this->customerPayloadWithout('customer_relationship'),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            [...$this->customerPayloadWithout('customer_relationship'), ...$this->deceasedPayload()],
             'idem-s6-rel-missing'
         );
     }
 
-    public function test_step_6_rejects_a_relationship_outside_the_closed_list(): void
+    public function test_customer_and_deceased_data_step_rejects_a_customer_relationship_outside_the_closed_list(): void
     {
         $this->assertRejectedWithKey(
             'customer_relationship',
-            $this->draftReadyForStepSix(),
-            BookingWizardStep::CUSTOMER_DATA,
-            $this->customerPayload(['customer_relationship' => 'TETANGGA']),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(customerOverrides: ['customer_relationship' => 'TETANGGA']),
             'idem-s6-rel-unknown'
         );
     }
 
-    public function test_step_6_accepts_every_known_relationship_code(): void
+    public function test_customer_and_deceased_data_step_accepts_every_known_customer_relationship_code(): void
     {
         foreach (BookingRelationshipCode::KNOWN_CODES as $code) {
             $saved = (new SaveBookingDraftStep)(
-                $this->draftReadyForStepSix(),
-                BookingWizardStep::CUSTOMER_DATA,
-                $this->customerPayload(['customer_relationship' => $code]),
+                $this->draftReadyForCustomerAndDeceasedData(),
+                BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+                $this->combinedPayload(customerOverrides: ['customer_relationship' => $code]),
                 'idem-s6-rel-ok-'.$code
             );
 
@@ -507,38 +515,38 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
     }
 
     // =====================================================================
-    // Step 6 — customer_contact_channel
+    // CUSTOMER_AND_DECEASED_DATA — customer_contact_channel
     // =====================================================================
 
-    public function test_step_6_rejects_a_missing_contact_channel(): void
+    public function test_customer_and_deceased_data_step_rejects_a_missing_contact_channel(): void
     {
         $this->assertRejectedWithKey(
             'customer_contact_channel',
-            $this->draftReadyForStepSix(),
-            BookingWizardStep::CUSTOMER_DATA,
-            $this->customerPayloadWithout('customer_contact_channel'),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            [...$this->customerPayloadWithout('customer_contact_channel'), ...$this->deceasedPayload()],
             'idem-s6-channel-missing'
         );
     }
 
-    public function test_step_6_rejects_a_contact_channel_outside_the_closed_list(): void
+    public function test_customer_and_deceased_data_step_rejects_a_contact_channel_outside_the_closed_list(): void
     {
         $this->assertRejectedWithKey(
             'customer_contact_channel',
-            $this->draftReadyForStepSix(),
-            BookingWizardStep::CUSTOMER_DATA,
-            $this->customerPayload(['customer_contact_channel' => 'SMS']),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(customerOverrides: ['customer_contact_channel' => 'SMS']),
             'idem-s6-channel-unknown'
         );
     }
 
-    public function test_step_6_accepts_every_known_contact_channel(): void
+    public function test_customer_and_deceased_data_step_accepts_every_known_contact_channel(): void
     {
         foreach (BookingContactChannel::KNOWN_CODES as $code) {
             $saved = (new SaveBookingDraftStep)(
-                $this->draftReadyForStepSix(),
-                BookingWizardStep::CUSTOMER_DATA,
-                $this->customerPayload(['customer_contact_channel' => $code]),
+                $this->draftReadyForCustomerAndDeceasedData(),
+                BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+                $this->combinedPayload(customerOverrides: ['customer_contact_channel' => $code]),
                 'idem-s6-channel-ok-'.$code
             );
 
@@ -547,7 +555,7 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
     }
 
     // =====================================================================
-    // Step 6 — privacy consent (security-critical)
+    // CUSTOMER_AND_DECEASED_DATA — privacy consent (security-critical)
     //
     // `privacy_notice_accepted` is the caller's BOOLEAN assertion that the
     // box was ticked. `privacy_notice_accepted_at` is the server's record
@@ -555,24 +563,24 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
     // the caller may supply the first and must never supply the second.
     // =====================================================================
 
-    public function test_step_6_rejects_a_payload_with_no_privacy_consent_key(): void
+    public function test_customer_and_deceased_data_step_rejects_a_payload_with_no_privacy_consent_key(): void
     {
         $this->assertRejectedWithKey(
             'privacy_notice_accepted',
-            $this->draftReadyForStepSix(),
-            BookingWizardStep::CUSTOMER_DATA,
-            $this->customerPayloadWithout('privacy_notice_accepted'),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            [...$this->customerPayloadWithout('privacy_notice_accepted'), ...$this->deceasedPayload()],
             'idem-s6-consent-missing'
         );
     }
 
-    public function test_step_6_rejects_privacy_consent_of_false(): void
+    public function test_customer_and_deceased_data_step_rejects_privacy_consent_of_false(): void
     {
         $this->assertRejectedWithKey(
             'privacy_notice_accepted',
-            $this->draftReadyForStepSix(),
-            BookingWizardStep::CUSTOMER_DATA,
-            $this->customerPayload(['privacy_notice_accepted' => false]),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(customerOverrides: ['privacy_notice_accepted' => false]),
             'idem-s6-consent-false'
         );
     }
@@ -583,7 +591,7 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
      * the string `'1'`, a JSON `1`, the literal text `'true'` — and record
      * consent on evidence that is not a genuine boolean acceptance.
      */
-    public function test_step_6_rejects_truthy_junk_in_place_of_a_real_boolean_consent(): void
+    public function test_customer_and_deceased_data_step_rejects_truthy_junk_in_place_of_a_real_boolean_consent(): void
     {
         $junk = [
             'string true' => 'true',
@@ -594,9 +602,9 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
         foreach ($junk as $label => $value) {
             $errors = $this->assertRejectedWithKey(
                 'privacy_notice_accepted',
-                $this->draftReadyForStepSix(),
-                BookingWizardStep::CUSTOMER_DATA,
-                $this->customerPayload(['privacy_notice_accepted' => $value]),
+                $this->draftReadyForCustomerAndDeceasedData(),
+                BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+                $this->combinedPayload(customerOverrides: ['privacy_notice_accepted' => $value]),
                 'idem-s6-consent-junk-'.md5($label)
             );
 
@@ -606,28 +614,31 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
         $this->assertCount(3, $junk);
     }
 
-    public function test_step_6_rejects_a_payload_that_asserts_consent_only_through_a_timestamp(): void
+    public function test_customer_and_deceased_data_step_rejects_a_payload_that_asserts_consent_only_through_a_timestamp(): void
     {
         // The consent column is not the consent assertion. Supplying only
         // the timestamp must not stand in for ticking the box.
-        $payload = $this->customerPayloadWithout('privacy_notice_accepted');
+        $payload = [
+            ...$this->customerPayloadWithout('privacy_notice_accepted'),
+            ...$this->deceasedPayload(),
+        ];
         $payload['privacy_notice_accepted_at'] = Carbon::now()->toIso8601String();
 
         $this->assertRejectedWithKey(
             'privacy_notice_accepted',
-            $this->draftReadyForStepSix(),
-            BookingWizardStep::CUSTOMER_DATA,
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
             $payload,
             'idem-s6-consent-timestamp-only'
         );
     }
 
-    public function test_step_6_stamps_the_consent_timestamp_from_the_server_clock(): void
+    public function test_customer_and_deceased_data_step_stamps_the_consent_timestamp_from_the_server_clock(): void
     {
         $saved = (new SaveBookingDraftStep)(
-            $this->draftReadyForStepSix(),
-            BookingWizardStep::CUSTOMER_DATA,
-            $this->customerPayload(),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(),
             'idem-s6-consent-stamped'
         );
 
@@ -644,11 +655,11 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
      * `privacy_notice_accepted_at` must not be able to move the recorded
      * moment of consent — the persisted value is the server's now, always.
      */
-    public function test_step_6_ignores_a_caller_supplied_consent_timestamp(): void
+    public function test_customer_and_deceased_data_step_ignores_a_caller_supplied_consent_timestamp(): void
     {
-        $draft = $this->draftReadyForStepSix();
+        $draft = $this->draftReadyForCustomerAndDeceasedData();
 
-        (new SaveBookingDraftStep)($draft, BookingWizardStep::CUSTOMER_DATA, $this->customerPayload([
+        (new SaveBookingDraftStep)($draft, BookingWizardStep::CUSTOMER_AND_DECEASED_DATA, $this->combinedPayload(customerOverrides: [
             'privacy_notice_accepted' => true,
             'privacy_notice_accepted_at' => '1999-01-01T00:00:00+00:00',
         ]), 'idem-s6-consent-backdate');
@@ -669,105 +680,86 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
     }
 
     // =====================================================================
-    // Step 7 — deceased data, happy path
+    // CUSTOMER_AND_DECEASED_DATA — deceased_full_name
     // =====================================================================
 
-    public function test_step_7_accepts_a_fully_valid_deceased_payload(): void
-    {
-        $draft = $this->draftReadyForStepSeven();
-
-        $saved = (new SaveBookingDraftStep)($draft, BookingWizardStep::DECEASED_DATA, $this->deceasedPayload(), 'idem-s7-happy');
-
-        $this->assertSame('Siti Rahayu', $saved->deceased_full_name);
-        $this->assertSame('1950-03-04', $saved->deceased_date_of_birth->toDateString());
-        $this->assertSame('2026-01-15', $saved->deceased_date_of_death->toDateString());
-        $this->assertSame(BookingRelationshipCode::ORANG_TUA, $saved->deceased_relationship);
-        $this->assertSame(BookingGender::PEREMPUAN, $saved->deceased_gender);
-        $this->assertContains(BookingWizardStep::DECEASED_DATA, $saved->completed_steps);
-        $this->assertSame(BookingWizardStep::PAYMENT, $saved->current_step);
-    }
-
-    // =====================================================================
-    // Step 7 — deceased_full_name
-    // =====================================================================
-
-    public function test_step_7_rejects_a_missing_deceased_name(): void
+    public function test_customer_and_deceased_data_step_rejects_a_missing_deceased_name(): void
     {
         $this->assertRejectedWithKey(
             'deceased_full_name',
-            $this->draftReadyForStepSeven(),
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayloadWithout('deceased_full_name'),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            [...$this->customerPayload(), ...$this->deceasedPayloadWithout('deceased_full_name')],
             'idem-s7-name-missing'
         );
     }
 
-    public function test_step_7_rejects_a_deceased_name_under_three_characters(): void
+    public function test_customer_and_deceased_data_step_rejects_a_deceased_name_under_three_characters(): void
     {
         $this->assertRejectedWithKey(
             'deceased_full_name',
-            $this->draftReadyForStepSeven(),
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayload(['deceased_full_name' => 'Si']),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(deceasedOverrides: ['deceased_full_name' => 'Si']),
             'idem-s7-name-short'
         );
     }
 
-    public function test_step_7_rejects_a_deceased_name_over_191_characters(): void
+    public function test_customer_and_deceased_data_step_rejects_a_deceased_name_over_191_characters(): void
     {
         $this->assertRejectedWithKey(
             'deceased_full_name',
-            $this->draftReadyForStepSeven(),
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayload(['deceased_full_name' => str_repeat('b', 192)]),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(deceasedOverrides: ['deceased_full_name' => str_repeat('b', 192)]),
             'idem-s7-name-long'
         );
     }
 
     // =====================================================================
-    // Step 7 — dates of birth and death
+    // CUSTOMER_AND_DECEASED_DATA — dates of birth and death
     // =====================================================================
 
-    public function test_step_7_rejects_a_missing_date_of_birth(): void
+    public function test_customer_and_deceased_data_step_rejects_a_missing_date_of_birth(): void
     {
         $this->assertRejectedWithKey(
             'deceased_date_of_birth',
-            $this->draftReadyForStepSeven(),
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayloadWithout('deceased_date_of_birth'),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            [...$this->customerPayload(), ...$this->deceasedPayloadWithout('deceased_date_of_birth')],
             'idem-s7-dob-missing'
         );
     }
 
-    public function test_step_7_rejects_a_missing_date_of_death(): void
+    public function test_customer_and_deceased_data_step_rejects_a_missing_date_of_death(): void
     {
         $this->assertRejectedWithKey(
             'deceased_date_of_death',
-            $this->draftReadyForStepSeven(),
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayloadWithout('deceased_date_of_death'),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            [...$this->customerPayload(), ...$this->deceasedPayloadWithout('deceased_date_of_death')],
             'idem-s7-dod-missing'
         );
     }
 
-    public function test_step_7_rejects_an_unparseable_date_of_birth(): void
+    public function test_customer_and_deceased_data_step_rejects_an_unparseable_date_of_birth(): void
     {
         $this->assertRejectedWithKey(
             'deceased_date_of_birth',
-            $this->draftReadyForStepSeven(),
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayload(['deceased_date_of_birth' => 'not-a-date']),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(deceasedOverrides: ['deceased_date_of_birth' => 'not-a-date']),
             'idem-s7-dob-unparseable'
         );
     }
 
-    public function test_step_7_rejects_an_unparseable_date_of_death(): void
+    public function test_customer_and_deceased_data_step_rejects_an_unparseable_date_of_death(): void
     {
         $this->assertRejectedWithKey(
             'deceased_date_of_death',
-            $this->draftReadyForStepSeven(),
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayload(['deceased_date_of_death' => '31-31-2020']),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(deceasedOverrides: ['deceased_date_of_death' => '31-31-2020']),
             'idem-s7-dod-unparseable'
         );
     }
@@ -779,35 +771,35 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
      * on an unauthenticated public form. Arrays are exactly what a crafted
      * `?deceased_date_of_birth[]=x` query string produces.
      */
-    public function test_step_7_rejects_an_array_valued_date_of_birth_without_crashing(): void
+    public function test_customer_and_deceased_data_step_rejects_an_array_valued_date_of_birth_without_crashing(): void
     {
         $this->assertRejectedWithKey(
             'deceased_date_of_birth',
-            $this->draftReadyForStepSeven(),
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayload(['deceased_date_of_birth' => ['1950-03-04']]),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(deceasedOverrides: ['deceased_date_of_birth' => ['1950-03-04']]),
             'idem-s7-dob-array'
         );
     }
 
-    public function test_step_7_rejects_an_array_valued_date_of_death_without_crashing(): void
+    public function test_customer_and_deceased_data_step_rejects_an_array_valued_date_of_death_without_crashing(): void
     {
         $this->assertRejectedWithKey(
             'deceased_date_of_death',
-            $this->draftReadyForStepSeven(),
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayload(['deceased_date_of_death' => ['2026-01-15']]),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(deceasedOverrides: ['deceased_date_of_death' => ['2026-01-15']]),
             'idem-s7-dod-array'
         );
     }
 
-    public function test_step_7_rejects_a_date_of_birth_after_the_date_of_death(): void
+    public function test_customer_and_deceased_data_step_rejects_a_date_of_birth_after_the_date_of_death(): void
     {
         $this->assertRejectedWithKey(
             'deceased_date_of_birth',
-            $this->draftReadyForStepSeven(),
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayload([
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(deceasedOverrides: [
                 'deceased_date_of_birth' => '2020-05-05',
                 'deceased_date_of_death' => '2010-05-05',
             ]),
@@ -815,13 +807,13 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
         );
     }
 
-    public function test_step_7_rejects_a_date_of_birth_equal_to_the_date_of_death(): void
+    public function test_customer_and_deceased_data_step_rejects_a_date_of_birth_equal_to_the_date_of_death(): void
     {
         $this->assertRejectedWithKey(
             'deceased_date_of_birth',
-            $this->draftReadyForStepSeven(),
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayload([
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(deceasedOverrides: [
                 'deceased_date_of_birth' => '2010-05-05',
                 'deceased_date_of_death' => '2010-05-05',
             ]),
@@ -829,13 +821,13 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
         );
     }
 
-    public function test_step_7_rejects_a_date_of_death_in_the_future(): void
+    public function test_customer_and_deceased_data_step_rejects_a_date_of_death_in_the_future(): void
     {
         $this->assertRejectedWithKey(
             'deceased_date_of_death',
-            $this->draftReadyForStepSeven(),
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayload([
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(deceasedOverrides: [
                 'deceased_date_of_birth' => '1950-03-04',
                 'deceased_date_of_death' => Carbon::today()->addDay()->toDateString(),
             ]),
@@ -843,14 +835,14 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
         );
     }
 
-    public function test_step_7_accepts_a_date_of_death_of_today(): void
+    public function test_customer_and_deceased_data_step_accepts_a_date_of_death_of_today(): void
     {
         $today = Carbon::today()->toDateString();
 
         $saved = (new SaveBookingDraftStep)(
-            $this->draftReadyForStepSeven(),
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayload([
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(deceasedOverrides: [
                 'deceased_date_of_birth' => '1950-03-04',
                 'deceased_date_of_death' => $today,
             ]),
@@ -860,12 +852,12 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
         $this->assertSame($today, $saved->deceased_date_of_death->toDateString());
     }
 
-    public function test_step_7_accepts_a_birth_date_strictly_before_the_death_date(): void
+    public function test_customer_and_deceased_data_step_accepts_a_birth_date_strictly_before_the_death_date(): void
     {
         $saved = (new SaveBookingDraftStep)(
-            $this->draftReadyForStepSeven(),
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayload([
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(deceasedOverrides: [
                 'deceased_date_of_birth' => '2010-05-04',
                 'deceased_date_of_death' => '2010-05-05',
             ]),
@@ -877,38 +869,38 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
     }
 
     // =====================================================================
-    // Step 7 — deceased_relationship and deceased_gender
+    // CUSTOMER_AND_DECEASED_DATA — deceased_relationship and deceased_gender
     // =====================================================================
 
-    public function test_step_7_rejects_a_missing_relationship(): void
+    public function test_customer_and_deceased_data_step_rejects_a_missing_deceased_relationship(): void
     {
         $this->assertRejectedWithKey(
             'deceased_relationship',
-            $this->draftReadyForStepSeven(),
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayloadWithout('deceased_relationship'),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            [...$this->customerPayload(), ...$this->deceasedPayloadWithout('deceased_relationship')],
             'idem-s7-rel-missing'
         );
     }
 
-    public function test_step_7_rejects_a_relationship_outside_the_closed_list(): void
+    public function test_customer_and_deceased_data_step_rejects_a_deceased_relationship_outside_the_closed_list(): void
     {
         $this->assertRejectedWithKey(
             'deceased_relationship',
-            $this->draftReadyForStepSeven(),
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayload(['deceased_relationship' => 'REKAN_KERJA']),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(deceasedOverrides: ['deceased_relationship' => 'REKAN_KERJA']),
             'idem-s7-rel-unknown'
         );
     }
 
-    public function test_step_7_accepts_every_known_relationship_code(): void
+    public function test_customer_and_deceased_data_step_accepts_every_known_deceased_relationship_code(): void
     {
         foreach (BookingRelationshipCode::KNOWN_CODES as $code) {
             $saved = (new SaveBookingDraftStep)(
-                $this->draftReadyForStepSeven(),
-                BookingWizardStep::DECEASED_DATA,
-                $this->deceasedPayload(['deceased_relationship' => $code]),
+                $this->draftReadyForCustomerAndDeceasedData(),
+                BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+                $this->combinedPayload(deceasedOverrides: ['deceased_relationship' => $code]),
                 'idem-s7-rel-ok-'.$code
             );
 
@@ -916,20 +908,20 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
         }
     }
 
-    public function test_step_7_treats_gender_as_optional(): void
+    public function test_customer_and_deceased_data_step_treats_gender_as_optional(): void
     {
         $omitted = (new SaveBookingDraftStep)(
-            $this->draftReadyForStepSeven(),
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayloadWithout('deceased_gender'),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            [...$this->customerPayload(), ...$this->deceasedPayloadWithout('deceased_gender')],
             'idem-s7-gender-omitted'
         );
         $this->assertNull($omitted->deceased_gender);
 
         $explicitNull = (new SaveBookingDraftStep)(
-            $this->draftReadyForStepSeven(),
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayload(['deceased_gender' => null]),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(deceasedOverrides: ['deceased_gender' => null]),
             'idem-s7-gender-null'
         );
         $this->assertNull($explicitNull->deceased_gender);
@@ -938,29 +930,29 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
         // "Not stated" has exactly one representation in this column, so no
         // reader has to test for both.
         $emptyString = (new SaveBookingDraftStep)(
-            $this->draftReadyForStepSeven(),
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayload(['deceased_gender' => '']),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(deceasedOverrides: ['deceased_gender' => '']),
             'idem-s7-gender-empty'
         );
         $this->assertNull($emptyString->deceased_gender);
 
         $whitespaceOnly = (new SaveBookingDraftStep)(
-            $this->draftReadyForStepSeven(),
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayload(['deceased_gender' => '   ']),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(deceasedOverrides: ['deceased_gender' => '   ']),
             'idem-s7-gender-whitespace'
         );
         $this->assertNull($whitespaceOnly->deceased_gender);
     }
 
-    public function test_step_7_rejects_a_gender_outside_the_closed_list(): void
+    public function test_customer_and_deceased_data_step_rejects_a_gender_outside_the_closed_list(): void
     {
         $this->assertRejectedWithKey(
             'deceased_gender',
-            $this->draftReadyForStepSeven(),
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayload(['deceased_gender' => 'PRIA']),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(deceasedOverrides: ['deceased_gender' => 'PRIA']),
             'idem-s7-gender-unknown'
         );
     }
@@ -970,24 +962,24 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
      * would raise a `TypeError` before the closed-list check ran — same 500
      * on a public form as the dates above.
      */
-    public function test_step_7_rejects_an_array_valued_gender_without_crashing(): void
+    public function test_customer_and_deceased_data_step_rejects_an_array_valued_gender_without_crashing(): void
     {
         $this->assertRejectedWithKey(
             'deceased_gender',
-            $this->draftReadyForStepSeven(),
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayload(['deceased_gender' => [BookingGender::PEREMPUAN]]),
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(deceasedOverrides: ['deceased_gender' => [BookingGender::PEREMPUAN]]),
             'idem-s7-gender-array'
         );
     }
 
-    public function test_step_7_accepts_every_known_gender_code(): void
+    public function test_customer_and_deceased_data_step_accepts_every_known_gender_code(): void
     {
         foreach (BookingGender::KNOWN_CODES as $code) {
             $saved = (new SaveBookingDraftStep)(
-                $this->draftReadyForStepSeven(),
-                BookingWizardStep::DECEASED_DATA,
-                $this->deceasedPayload(['deceased_gender' => $code]),
+                $this->draftReadyForCustomerAndDeceasedData(),
+                BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+                $this->combinedPayload(deceasedOverrides: ['deceased_gender' => $code]),
                 'idem-s7-gender-ok-'.$code
             );
 
@@ -996,7 +988,7 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
     }
 
     // =====================================================================
-    // Step 7 — document paths are REFUSED (path-injection guard)
+    // CUSTOMER_AND_DECEASED_DATA — document paths are REFUSED (path-injection guard)
     //
     // Upload belongs to `App\Platform\DocumentVault` and is out of scope
     // for this lane, so there is NO legitimate caller with a path to
@@ -1007,52 +999,52 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
     // caller-supplied path at all", not "no obviously hostile path".
     // =====================================================================
 
-    public function test_step_7_refuses_a_caller_supplied_ktp_path(): void
+    public function test_customer_and_deceased_data_step_refuses_a_caller_supplied_ktp_path(): void
     {
         foreach (['../../etc/passwd', 'quarantine/abc.jpg'] as $path) {
             $this->assertRejectedWithKey(
                 'document_ktp_path',
-                $this->draftReadyForStepSeven(),
-                BookingWizardStep::DECEASED_DATA,
-                $this->deceasedPayload(['document_ktp_path' => $path]),
+                $this->draftReadyForCustomerAndDeceasedData(),
+                BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+                $this->combinedPayload(deceasedOverrides: ['document_ktp_path' => $path]),
                 'idem-s7-ktp-'.md5($path)
             );
         }
     }
 
-    public function test_step_7_refuses_a_caller_supplied_kk_path(): void
+    public function test_customer_and_deceased_data_step_refuses_a_caller_supplied_kk_path(): void
     {
         foreach (['../../etc/passwd', 'quarantine/abc.jpg'] as $path) {
             $this->assertRejectedWithKey(
                 'document_kk_path',
-                $this->draftReadyForStepSeven(),
-                BookingWizardStep::DECEASED_DATA,
-                $this->deceasedPayload(['document_kk_path' => $path]),
+                $this->draftReadyForCustomerAndDeceasedData(),
+                BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+                $this->combinedPayload(deceasedOverrides: ['document_kk_path' => $path]),
                 'idem-s7-kk-'.md5($path)
             );
         }
     }
 
-    public function test_step_7_refuses_a_caller_supplied_death_certificate_path(): void
+    public function test_customer_and_deceased_data_step_refuses_a_caller_supplied_death_certificate_path(): void
     {
         foreach (['../../etc/passwd', 'quarantine/abc.jpg'] as $path) {
             $this->assertRejectedWithKey(
                 'document_death_certificate_path',
-                $this->draftReadyForStepSeven(),
-                BookingWizardStep::DECEASED_DATA,
-                $this->deceasedPayload(['document_death_certificate_path' => $path]),
+                $this->draftReadyForCustomerAndDeceasedData(),
+                BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+                $this->combinedPayload(deceasedOverrides: ['document_death_certificate_path' => $path]),
                 'idem-s7-akta-'.md5($path)
             );
         }
     }
 
-    public function test_step_7_refuses_a_payload_carrying_all_three_document_paths(): void
+    public function test_customer_and_deceased_data_step_refuses_a_payload_carrying_all_three_document_paths(): void
     {
         $errors = $this->assertRejectedWithKey(
             'document_ktp_path',
-            $this->draftReadyForStepSeven(),
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayload([
+            $this->draftReadyForCustomerAndDeceasedData(),
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(deceasedOverrides: [
                 'document_ktp_path' => 'quarantine/ktp.jpg',
                 'document_kk_path' => 'quarantine/kk.jpg',
                 'document_death_certificate_path' => 'quarantine/akta.pdf',
@@ -1064,11 +1056,11 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
         $this->assertArrayHasKey('document_death_certificate_path', $errors);
     }
 
-    public function test_step_7_leaves_all_document_columns_null_after_a_successful_save(): void
+    public function test_customer_and_deceased_data_step_leaves_all_document_columns_null_after_a_successful_save(): void
     {
-        $draft = $this->draftReadyForStepSeven();
+        $draft = $this->draftReadyForCustomerAndDeceasedData();
 
-        (new SaveBookingDraftStep)($draft, BookingWizardStep::DECEASED_DATA, $this->deceasedPayload(), 'idem-s7-docs-null');
+        (new SaveBookingDraftStep)($draft, BookingWizardStep::CUSTOMER_AND_DECEASED_DATA, $this->combinedPayload(), 'idem-s7-docs-null');
 
         $persisted = BookingDraft::query()->findOrFail($draft->id);
 
@@ -1078,42 +1070,42 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
     }
 
     // =====================================================================
-    // Step 8 — payment method and reference
+    // PAYMENT — payment method and reference
     // =====================================================================
 
-    public function test_step_8_rejects_a_missing_payment_method(): void
+    public function test_payment_step_rejects_a_missing_payment_method(): void
     {
         $this->bindPaymentGate(open: false);
 
         $this->assertRejectedWithKey(
             'payment_method',
-            $this->draftReadyForStepEight(),
+            $this->draftReadyForPayment(),
             BookingWizardStep::PAYMENT,
             [],
             'idem-s8-method-missing'
         );
     }
 
-    public function test_step_8_rejects_a_blank_payment_method(): void
+    public function test_payment_step_rejects_a_blank_payment_method(): void
     {
         $this->bindPaymentGate(open: false);
 
         $this->assertRejectedWithKey(
             'payment_method',
-            $this->draftReadyForStepEight(),
+            $this->draftReadyForPayment(),
             BookingWizardStep::PAYMENT,
             ['payment_method' => ''],
             'idem-s8-method-blank'
         );
     }
 
-    public function test_step_8_rejects_a_payment_method_outside_the_closed_list(): void
+    public function test_payment_step_rejects_a_payment_method_outside_the_closed_list(): void
     {
         $this->bindPaymentGate(open: false);
 
         $this->assertRejectedWithKey(
             'payment_method',
-            $this->draftReadyForStepEight(),
+            $this->draftReadyForPayment(),
             BookingWizardStep::PAYMENT,
             ['payment_method' => 'CRYPTO'],
             'idem-s8-method-unknown'
@@ -1121,19 +1113,19 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
     }
 
     // =====================================================================
-    // Step 8 — G-PAY-01 (gate-bypass guard)
+    // PAYMENT — G-PAY-01 (gate-bypass guard)
     //
     // The single most important assertion in this file. Hiding the online
-    // control in Blade is presentation; `saveStep8('ONLINE')` is a plain
-    // client-callable Livewire method, so the closed gate has to be
-    // enforced right here, on the authoritative gate state.
+    // control in Blade is presentation; a direct client-callable save is a
+    // plain server call, so the closed gate has to be enforced right here,
+    // on the authoritative gate state.
     // =====================================================================
 
-    public function test_step_8_rejects_online_payment_while_the_gate_is_closed(): void
+    public function test_payment_step_rejects_online_payment_while_the_gate_is_closed(): void
     {
         $this->bindPaymentGate(open: false);
 
-        $draft = $this->draftReadyForStepEight();
+        $draft = $this->draftReadyForPayment();
 
         $this->assertRejectedWithKey(
             'payment_method',
@@ -1150,12 +1142,12 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
         $this->assertNotContains(BookingWizardStep::PAYMENT, $persisted->completed_steps);
     }
 
-    public function test_step_8_accepts_online_payment_once_the_gate_is_open(): void
+    public function test_payment_step_accepts_online_payment_once_the_gate_is_open(): void
     {
         $this->bindPaymentGate(open: true);
 
         $saved = (new SaveBookingDraftStep)(
-            $this->draftReadyForStepEight(),
+            $this->draftReadyForPayment(),
             BookingWizardStep::PAYMENT,
             ['payment_method' => BookingPaymentMethod::ONLINE],
             'idem-s8-online-gate-open'
@@ -1165,12 +1157,12 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
         $this->assertContains(BookingWizardStep::PAYMENT, $saved->completed_steps);
     }
 
-    public function test_step_8_accepts_manual_payment_with_a_reference_while_the_gate_is_closed(): void
+    public function test_payment_step_accepts_manual_payment_with_a_reference_while_the_gate_is_closed(): void
     {
         $this->bindPaymentGate(open: false);
 
         $saved = (new SaveBookingDraftStep)(
-            $this->draftReadyForStepEight(),
+            $this->draftReadyForPayment(),
             BookingWizardStep::PAYMENT,
             [
                 'payment_method' => BookingPaymentMethod::MANUAL,
@@ -1186,16 +1178,16 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
     }
 
     /**
-     * §6.9: "Step 8 is never removed." Manual coordination is the closed-gate
+     * §6.9: "Manual coordination is never removed." It is the closed-gate
      * fallback, not a closed-gate-only path — it must stay available when the
      * gate opens.
      */
-    public function test_step_8_keeps_manual_payment_available_once_the_gate_is_open(): void
+    public function test_payment_step_keeps_manual_payment_available_once_the_gate_is_open(): void
     {
         $this->bindPaymentGate(open: true);
 
         $saved = (new SaveBookingDraftStep)(
-            $this->draftReadyForStepEight(),
+            $this->draftReadyForPayment(),
             BookingWizardStep::PAYMENT,
             [
                 'payment_method' => BookingPaymentMethod::MANUAL,
@@ -1209,30 +1201,30 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
     }
 
     // =====================================================================
-    // Step 8 — payment_reference is mandatory for manual coordination
+    // PAYMENT — payment_reference is mandatory for manual coordination
     // =====================================================================
 
-    public function test_step_8_rejects_manual_payment_without_a_reference(): void
+    public function test_payment_step_rejects_manual_payment_without_a_reference(): void
     {
         $this->bindPaymentGate(open: false);
 
         $this->assertRejectedWithKey(
             'payment_reference',
-            $this->draftReadyForStepEight(),
+            $this->draftReadyForPayment(),
             BookingWizardStep::PAYMENT,
             ['payment_method' => BookingPaymentMethod::MANUAL],
             'idem-s8-manual-ref-missing'
         );
     }
 
-    public function test_step_8_rejects_manual_payment_with_a_blank_or_whitespace_only_reference(): void
+    public function test_payment_step_rejects_manual_payment_with_a_blank_or_whitespace_only_reference(): void
     {
         $this->bindPaymentGate(open: false);
 
         foreach (['' => 'blank', '   ' => 'spaces', "\t\n " => 'tabs and newlines'] as $reference => $label) {
             $errors = $this->assertRejectedWithKey(
                 'payment_reference',
-                $this->draftReadyForStepEight(),
+                $this->draftReadyForPayment(),
                 BookingWizardStep::PAYMENT,
                 [
                     'payment_method' => BookingPaymentMethod::MANUAL,
@@ -1245,13 +1237,13 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
         }
     }
 
-    public function test_step_8_rejects_a_manual_payment_reference_over_191_characters(): void
+    public function test_payment_step_rejects_a_manual_payment_reference_over_191_characters(): void
     {
         $this->bindPaymentGate(open: false);
 
         $this->assertRejectedWithKey(
             'payment_reference',
-            $this->draftReadyForStepEight(),
+            $this->draftReadyForPayment(),
             BookingWizardStep::PAYMENT,
             [
                 'payment_method' => BookingPaymentMethod::MANUAL,
@@ -1262,35 +1254,30 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
     }
 
     // =====================================================================
-    // Read-only steps and the boundary beyond the last implemented step
+    // Read-only step and the boundary beyond the last implemented step
     //
-    // `LAST_IMPLEMENTED` moved from 5 to 9 in this batch, so the previous
-    // "beyond the batch boundary" test no longer describes a real boundary
-    // and was deleted. Equivalent coverage is re-established here at the NEW
-    // boundary: the wizard has exactly nine steps, and `assertKnown()` is
-    // now the sole thing standing between a caller and step 10.
+    // `SUMMARY` no longer exists as a step at all (it was cut, not merged —
+    // see the spec's Decision 1), so the old "read-only summary step" test
+    // is gone; only `CONFIRMATION`'s read-only guard remains.
     // =====================================================================
-
-    public function test_the_read_only_summary_step_has_no_save_action(): void
-    {
-        $this->expectException(\InvalidArgumentException::class);
-
-        (new SaveBookingDraftStep)($this->draftReadyForStepSix(), BookingWizardStep::SUMMARY, [], 'idem-readonly-5');
-    }
 
     public function test_the_read_only_confirmation_step_has_no_save_action(): void
     {
         $this->expectException(\InvalidArgumentException::class);
 
-        (new SaveBookingDraftStep)($this->draftReadyForStepSix(), BookingWizardStep::CONFIRMATION, [], 'idem-readonly-9');
+        (new SaveBookingDraftStep)($this->draftReadyForCustomerAndDeceasedData(), BookingWizardStep::CONFIRMATION, [], 'idem-readonly-confirmation');
     }
 
-    public function test_a_step_beyond_the_new_last_implemented_boundary_is_rejected(): void
+    public function test_a_step_beyond_the_last_implemented_boundary_is_rejected(): void
     {
-        $draft = $this->draftReadyForStepSix();
+        $draft = BookingDraft::create(['completed_steps' => [
+            BookingWizardStep::DISCOVERY,
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            BookingWizardStep::PAYMENT,
+        ]]);
 
         try {
-            (new SaveBookingDraftStep)($draft, BookingWizardStep::LAST_IMPLEMENTED + 1, [], 'idem-boundary-10');
+            (new SaveBookingDraftStep)($draft, BookingWizardStep::LAST_IMPLEMENTED + 1, [], 'idem-boundary');
             $this->fail('Expected InvalidArgumentException for a step beyond the implemented boundary.');
         } catch (\InvalidArgumentException) {
             // Expected.
@@ -1299,23 +1286,23 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
         $persisted = BookingDraft::query()->findOrFail($draft->id);
 
         $this->assertSame(1, $persisted->version, 'A rejected step must never bump the version.');
-        $this->assertSame([1, 2, 3, 4], $persisted->completed_steps);
+        $this->assertSame([1, 2, 3], $persisted->completed_steps);
     }
 
     // =====================================================================
-    // Step sequencing for steps 6-8 — AC13's "unskippable" half
+    // Step sequencing — AC13's "unskippable" half
     // =====================================================================
 
-    public function test_step_6_cannot_be_saved_on_a_draft_missing_steps_1_to_4(): void
+    public function test_customer_and_deceased_data_cannot_be_saved_on_a_draft_missing_discovery(): void
     {
         $draft = BookingDraft::create([]);
 
         $this->assertRejectedWithKey(
             'step',
             $draft,
-            BookingWizardStep::CUSTOMER_DATA,
-            $this->customerPayload(),
-            'idem-seq-s6'
+            BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
+            $this->combinedPayload(),
+            'idem-seq-cadd'
         );
 
         $persisted = BookingDraft::query()->findOrFail($draft->id);
@@ -1326,15 +1313,15 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
     }
 
     /**
-     * The skippability hole this rule closes: with only steps 1-4 complete a
-     * caller could save step 8 and land on Confirmation with NO customer and
+     * The skippability hole this rule closes: with only DISCOVERY complete a
+     * caller could save PAYMENT and land on Confirmation with NO customer and
      * NO deceased data at all — every PII field an em dash.
      */
-    public function test_step_8_cannot_be_saved_on_a_draft_that_only_completed_steps_1_to_4(): void
+    public function test_payment_cannot_be_saved_on_a_draft_that_only_completed_discovery(): void
     {
         $this->bindPaymentGate(open: false);
 
-        $draft = $this->draftReadyForStepSix();
+        $draft = $this->draftReadyForCustomerAndDeceasedData();
 
         $this->assertRejectedWithKey(
             'step',
@@ -1344,47 +1331,7 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
                 'payment_method' => BookingPaymentMethod::MANUAL,
                 'payment_reference' => 'TRF-2026-0003',
             ],
-            'idem-seq-s8'
-        );
-
-        $this->assertNull(BookingDraft::query()->findOrFail($draft->id)->payment_method);
-    }
-
-    /**
-     * Steps 6 and 7 are the two that carry the PII. Requiring only steps 1-4
-     * for all of 6, 7 and 8 would let a caller jump straight to payment and
-     * reach Confirmation with no customer and no deceased on record.
-     */
-    public function test_step_7_cannot_be_saved_before_step_6(): void
-    {
-        $draft = $this->draftReadyForStepSix();
-
-        $this->assertRejectedWithKey(
-            'step',
-            $draft,
-            BookingWizardStep::DECEASED_DATA,
-            $this->deceasedPayload(),
-            'idem-seq-s7-no-s6'
-        );
-
-        $this->assertNull(BookingDraft::query()->findOrFail($draft->id)->deceased_full_name);
-    }
-
-    public function test_step_8_cannot_be_saved_before_step_7(): void
-    {
-        $this->bindPaymentGate(open: false);
-
-        $draft = $this->draftReadyForStepSeven();
-
-        $this->assertRejectedWithKey(
-            'step',
-            $draft,
-            BookingWizardStep::PAYMENT,
-            [
-                'payment_method' => BookingPaymentMethod::MANUAL,
-                'payment_reference' => 'TRF-2026-0004',
-            ],
-            'idem-seq-s8-no-s7'
+            'idem-seq-payment'
         );
 
         $this->assertNull(BookingDraft::query()->findOrFail($draft->id)->payment_method);
