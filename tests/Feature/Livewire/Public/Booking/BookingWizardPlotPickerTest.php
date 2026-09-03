@@ -21,7 +21,9 @@ use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PlotReservation\PlotReservationState;
 use App\Domain\ServiceCatalog\ServiceCode;
 use App\Livewire\Public\Booking\BookingWizard;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
@@ -61,6 +63,21 @@ final class BookingWizardPlotPickerTest extends TestCase
             'slot' => '001',
             'plot_state' => PlotState::AVAILABLE,
         ]);
+    }
+
+    /**
+     * Same technique `BookingWizardDegradedReadsTest::
+     * makeServiceCatalogUnreadable()` established for the services
+     * catalogue: drop the one FK pointing at the table `pickerBlocks()`'s
+     * query reaches, then drop the table itself, so the read genuinely
+     * fails at the database rather than merely returning nothing.
+     */
+    private function makeCemeteryBlocksUnreadable(): void
+    {
+        Schema::table('grave_plots', function (Blueprint $table): void {
+            $table->dropForeign(['block_id']);
+        });
+        Schema::dropIfExists('cemetery_blocks');
     }
 
     /**
@@ -134,6 +151,34 @@ final class BookingWizardPlotPickerTest extends TestCase
 
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->assertDontSee('Lihat Peta Plot');
+    }
+
+    /**
+     * `pickerBlocks()` previously had no guard around its own query — a
+     * genuine DB failure (found in an audit of the shipped Phase E work,
+     * 3 Sep 2026) would throw straight to a 500 instead of degrading, the
+     * one query in this file `render()`'s own reads were already careful
+     * about. Real data exists for this cemetery (`makePlotIn()`), so
+     * `assertDontSee('Belum ada plot terdaftar')` proves this is genuinely
+     * the FAILURE state, not the pre-existing empty state reusing the same
+     * render path.
+     */
+    public function test_a_failed_picker_blocks_read_degrades_honestly_instead_of_500ing(): void
+    {
+        $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+        $this->makePlotIn($cemetery);
+        $draftId = $this->draftIdAtDiscovery();
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
+
+        $this->makeCemeteryBlocksUnreadable();
+
+        $component->call('openPickerFor', $cemetery->id)
+            ->assertOk()
+            ->assertSee('Peta plot sedang tidak dapat dimuat')
+            ->assertDontSee('Belum ada plot terdaftar');
+
+        $this->assertTrue($component->instance()->pickerBlocksUnavailable);
     }
 
     /**

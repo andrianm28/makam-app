@@ -168,6 +168,16 @@ final class BookingWizard extends Component
     public bool $cemeteryListUnavailable = false;
 
     /**
+     * Set by `pickerBlocks()` itself (not `render()` — the picker's own
+     * query is called directly from the Blade view, not staged as a
+     * `render()` local) on a query failure, so the view can show
+     * design-system.md §6.5's "failed to load" state for the plot grid
+     * instead of an uncaught exception. Mirrors `$cemeteryListUnavailable`'s
+     * shape one level down.
+     */
+    public bool $pickerBlocksUnavailable = false;
+
+    /**
      * `idle` before any save, `saving` never actually observed server-side
      * (Livewire round-trips are synchronous from this class's perspective;
      * the Blade view's `wire:loading` targets the transient in-flight
@@ -598,18 +608,36 @@ final class BookingWizard extends Component
      * selected or the cemetery is not granular-tier — mirrors
      * `App\Filament\Shared\PlotFloorMap\BasePlotFloorMapPage::blocks()`'s
      * own fail-empty shape.
+     *
+     * A genuine query failure ALSO degrades to empty, but sets
+     * `$pickerBlocksUnavailable` first — the same fail-honest discipline
+     * `render()` already applies to the cemetery list and the picker's own
+     * cemetery-name lookup (design-system.md §6.5): a DB hiccup here must
+     * not throw straight to a generic error page for a customer mid-booking.
+     * Reset to false on every call rather than in `render()`, since the
+     * Blade view calls this method directly, not through a `render()`
+     * local.
      */
     public function pickerBlocks(): \Illuminate\Support\Collection
     {
+        $this->pickerBlocksUnavailable = false;
+
         if ($this->pickerCemeteryId === null || ! $this->pickerAppliesTo($this->pickerCemeteryId)) {
             return new \Illuminate\Support\Collection;
         }
 
-        return CemeteryBlock::query()
-            ->where('cemetery_id', $this->pickerCemeteryId)
-            ->with(['plots' => fn ($query) => $query->orderBy('slot')])
-            ->orderBy('code')
-            ->get();
+        try {
+            return CemeteryBlock::query()
+                ->where('cemetery_id', $this->pickerCemeteryId)
+                ->with(['plots' => fn ($query) => $query->orderBy('slot')])
+                ->orderBy('code')
+                ->get();
+        } catch (Throwable $e) {
+            report($e);
+            $this->pickerBlocksUnavailable = true;
+
+            return new \Illuminate\Support\Collection;
+        }
     }
 
     /**

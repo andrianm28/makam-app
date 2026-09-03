@@ -12,8 +12,10 @@ use App\Platform\IdentityAccess\MasterData\Exceptions\MasterDataNotAuthorisedExc
 
 /**
  * `/admin` Plot Availability dashboard. One of exactly two subclasses of
- * `BasePlotFloorMapPage`, differing from the `/operator` one in
- * `cemeteryOptions()` alone.
+ * `BasePlotFloorMapPage`, differing from the `/operator` one in exactly
+ * two members: `cemeteryOptions()` and `canAccess()` — locked structurally
+ * by `PlotFloorMapPageTest::test_the_two_subclasses_override_only_the_options_source_and_access_gate`,
+ * which fails CI if either subclass declares any other method.
  *
  * Access is the shared four-back-office-role master-data gate — the same
  * `canAccess()` `GravePlotsResource` and `FeatureGateAdmin` carry, so this
@@ -21,8 +23,9 @@ use App\Platform\IdentityAccess\MasterData\Exceptions\MasterDataNotAuthorisedExc
  * already denies.
  *
  * Options are UNSCOPED on purpose: an `/admin` actor works across the
- * whole directory, and the roadmap names cemetery-options scoping as the
- * single intended difference between the two panels.
+ * whole directory, and the roadmap names cemetery-options scoping as one
+ * of the two intended differences between the two panels — the other
+ * being which access gate each carries.
  */
 final class PlotFloorMap extends BasePlotFloorMapPage
 {

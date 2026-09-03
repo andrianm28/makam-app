@@ -39,8 +39,11 @@ use App\Filament\Shared\PlotFloorMap\BasePlotFloorMapPage;
  * not on it. A bare cemetery-operator therefore gets a complete, correct,
  * READ-ONLY map here. Admitting them to plot state changes is a real
  * authorization decision needing product sign-off and human review, and is
- * out of Phase D's read-mostly scope — the same deliberate incompleteness
- * Phase A already recorded on `ReservePlotAction::ALLOWED_ROLES`.
+ * out of Phase D's read-mostly scope. (Phase A shipped a comparable
+ * incompleteness on `ReservePlotAction`, gating it behind an admin-only
+ * `canAccess()` composition; Phase C later widened that action to
+ * `cemetery_operator` via `CemeteryOrderActionGate` — this page's write
+ * gate has had no equivalent follow-up and remains admin-only today.)
  */
 final class PlotFloorMap extends BasePlotFloorMapPage
 {
