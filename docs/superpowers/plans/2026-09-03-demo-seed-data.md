@@ -1918,9 +1918,19 @@ final class DemoDataSeedCommandTest extends TestCase
         $this->assertGreaterThan(0, \App\Domain\Visitation\Models\VisitationBooking::query()->where('demo_batch_id', $batchId)->count());
     }
 
+    /**
+     * A bare `Queue::fake()` also fakes `PublishOutboxEventJob` — the job
+     * that actually fires `OutboxEventPublished` in the first place (see
+     * Task 3's own real finding, and `handle()`'s doc comment on why the
+     * command forces `queue.default` to `sync` and drains the outbox
+     * itself). Faking it would mean nothing ever reaches the two
+     * suppression-guarded listeners at all, and this test would pass for
+     * the wrong reason — proving nothing ran, not that suppression
+     * worked. Scope the fake to the one job that must never be queued.
+     */
     public function test_seeding_never_queues_a_real_notification_job(): void
     {
-        \Illuminate\Support\Facades\Queue::fake();
+        \Illuminate\Support\Facades\Queue::fake([\App\Platform\Notification\Jobs\ConsumeOutboxNotificationJob::class]);
 
         $this->artisan('demo-data:seed')->assertSuccessful();
 
@@ -1995,8 +2005,13 @@ use Throwable;
 
 /**
  * Orchestrates every demo generator (Tasks 4-9) in dependency order, inside
- * one call to `DemoDataSuppression::run()` so nothing this run writes ever
- * queues a real notification. Each domain runs in its own DB::transaction()
+ * one call to `DemoDataSuppression::run()`, with `queue.default` forced to
+ * `sync` and the outbox drained in-process before the run ends — see the
+ * comment above `handle()`'s body for why all three are necessary together
+ * (a real finding from Task 3's own implementation: a domain write alone
+ * never synchronously fires `OutboxEventPublished`, so without the
+ * sync-forcing and the drain, the suppression guard is correctly placed
+ * but unreachable on a real host). Each domain runs in its own DB::transaction()
  * so one domain's failure never corrupts an earlier domain's already-
  * committed data — see docs/superpowers/specs/2026-09-03-demo-seed-data-design.md
  * §Error handling.
@@ -2019,7 +2034,31 @@ final class DemoDataSeedCommand extends Command
         $batchId = (string) Str::uuid();
         $summary = [];
 
-        DemoDataSuppression::run(function () use ($batchId, &$summary): void {
+        // Real finding from Task 3's implementer, confirmed independently
+        // (2026_09_03): a domain write does NOT synchronously fire
+        // OutboxEventPublished. It only writes an outbox_events row;
+        // `PublishOutboxEventJob` — the thing that actually fires that
+        // event — is itself `ShouldQueue`, dispatched only by
+        // `OutboxPublisher::publishBatch()`, whose only real caller is the
+        // `outbox:publish` scheduled command running EVERY MINUTE IN A
+        // SEPARATE PROCESS. On beta, `QUEUE_CONNECTION=database` (real,
+        // async) — so even calling `publishBatch()` from inside this
+        // command would just enqueue the job for a separate `queue:work`
+        // worker to pick up later, in a process where
+        // `DemoDataSuppression::active()` has already gone back to false.
+        // Task 3's guard is correctly placed, but nothing reaches it at
+        // all on beta without this fix: force the queue driver to `sync`
+        // for the whole run (so every job this run dispatches — including
+        // PublishOutboxEventJob, ConsumeOutboxNotificationJob if the guard
+        // were ever bypassed, and anything else in the chain — executes
+        // immediately, in-process, in the SAME process the suppression
+        // flag is true in), and drain the outbox ourselves rather than
+        // waiting for the scheduler.
+        $originalQueueDriver = config('queue.default');
+        config(['queue.default' => 'sync']);
+
+        try {
+            DemoDataSuppression::run(function () use ($batchId, &$summary): void {
             $summary['vendor_accounts'] = $this->runDomain('vendor accounts', function () use ($batchId) {
                 return VendorAccountExampleData::seed($batchId);
             });
@@ -2072,7 +2111,22 @@ final class DemoDataSeedCommand extends Command
             $summary['visitation'] = $this->runDomain('visitation', function () use ($batchId, $cemetery) {
                 return VisitationExampleData::seed($batchId, $cemetery);
             });
+
+            // Drain the outbox OURSELVES, in-process, still inside the
+            // suppression window — see the comment above handle()'s start
+            // for why this is load-bearing, not defensive. Loop until a
+            // batch comes back empty rather than trusting one call: this
+            // run's own record count is small (well under the 50-row
+            // default batch size) but looping is what actually GUARANTEES
+            // full drainage regardless of volume, rather than assuming it.
+            $publisher = new \App\Platform\Outbox\OutboxPublisher;
+            while ($publisher->publishBatch() > 0) {
+                // keep draining
+            }
         });
+        } finally {
+            config(['queue.default' => $originalQueueDriver]);
+        }
 
         DemoDataBatch::query()->create([
             'id' => (string) Str::uuid(),
