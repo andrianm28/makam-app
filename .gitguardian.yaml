@@ -34,3 +34,13 @@ secret:
       match: 'E2eAdminPassword!1'
     - name: E2E-ADMIN/VENDOR suite fixed test-only vendor password
       match: 'E2eVendorPassword!1'
+    # Demo seed-data subsystem's fixed, deliberately weak password for
+    # every vendor/cemetery-operator/customer account `demo-data:seed`
+    # creates (`App\Support\ExampleData\DemoContactData::DEMO_PASSWORD`,
+    # docs/operations/demo-data.md). Protects nothing — these are
+    # single-purpose demo accounts, purged along with everything else by
+    # `demo-data:purge`, and this value is the single source of truth all
+    # 3 generator call sites reference (never reused for a real account).
+    # GitGuardian incident 36899355 (occurrences 295664476/477/479).
+    - name: demo-data:seed fixed demo-account password
+      match: 'DemoContoh2026!'

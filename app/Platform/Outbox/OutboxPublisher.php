@@ -109,18 +109,40 @@ final class OutboxPublisher
     }
 
     /**
+     * A scoped variant of `publishBatch()` for a caller that already knows
+     * exactly which rows it is allowed to touch (`demo-data:seed` — see
+     * `DemoDataSeedCommand`'s own doc block for why the unscoped
+     * `publishBatch()`/`CLAIM_QUERY` claim is unsafe for that caller: it
+     * would claim ANY unclaimed row in the table, including a real
+     * customer's concurrently-arriving event). Still claims via
+     * `SELECT ... FOR UPDATE SKIP LOCKED` — restricted to `$ids` — so this
+     * never double-dispatches against the real `outbox:publish` scheduled
+     * command running concurrently. Returns the number of rows claimed
+     * (dispatched or not, same contract as `publishBatch()`).
+     *
+     * @param  list<string>  $ids
+     */
+    public function publishSpecificIds(array $ids, int $batchSize = self::DEFAULT_BATCH_SIZE): int
+    {
+        if ($ids === []) {
+            return 0;
+        }
+
+        $claimedIds = $this->claimSpecific($ids, $batchSize);
+
+        foreach ($claimedIds as $id) {
+            $this->dispatchOne($id);
+        }
+
+        return count($claimedIds);
+    }
+
+    /**
      * @return list<string>
      */
     private function claim(int $batchSize): array
     {
-        if (DB::connection()->getDriverName() !== 'pgsql') {
-            throw new RuntimeException(
-                'OutboxPublisher::claim() requires a real row-locking RDBMS (Postgres) for '.
-                'SELECT ... FOR UPDATE SKIP LOCKED. Active connection driver is ['.
-                DB::connection()->getDriverName().']. Run with DB_CONNECTION=pgsql — see '.
-                'this class\'s own doc block.'
-            );
-        }
+        $this->assertPgsql();
 
         $staleBefore = CarbonImmutable::now()->subSeconds(self::STALE_CLAIM_SECONDS);
         $now = CarbonImmutable::now();
@@ -138,6 +160,54 @@ final class OutboxPublisher
 
             return $ids;
         });
+    }
+
+    /**
+     * @param  list<string>  $ids
+     * @return list<string>
+     */
+    private function claimSpecific(array $ids, int $batchSize): array
+    {
+        $this->assertPgsql();
+
+        $now = CarbonImmutable::now();
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+
+        return DB::transaction(function () use ($ids, $batchSize, $now, $placeholders): array {
+            $rows = DB::select(
+                <<<SQL
+                    SELECT id FROM outbox_events
+                    WHERE id IN ({$placeholders})
+                      AND dispatched_at IS NULL
+                    ORDER BY occurred_at ASC
+                    LIMIT ?
+                    FOR UPDATE SKIP LOCKED
+                    SQL,
+                [...$ids, $batchSize],
+            );
+
+            $claimedIds = array_map(static fn (object $row): string => (string) $row->id, $rows);
+
+            if ($claimedIds !== []) {
+                DB::table('outbox_events')->whereIn('id', $claimedIds)->update([
+                    'locked_at' => $now,
+                ]);
+            }
+
+            return $claimedIds;
+        });
+    }
+
+    private function assertPgsql(): void
+    {
+        if (DB::connection()->getDriverName() !== 'pgsql') {
+            throw new RuntimeException(
+                'OutboxPublisher requires a real row-locking RDBMS (Postgres) for '.
+                'SELECT ... FOR UPDATE SKIP LOCKED. Active connection driver is ['.
+                DB::connection()->getDriverName().']. Run with DB_CONNECTION=pgsql — see '.
+                'this class\'s own doc block.'
+            );
+        }
     }
 
     private function dispatchOne(string $id): void
