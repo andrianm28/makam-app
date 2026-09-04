@@ -68,14 +68,23 @@ use Throwable;
  * (which rows a drain touches) — this command owns the latter.
  *
  * `drainThisRunsOutboxEvents()` instead publishes only rows it can
- * positively correlate to this run's own `demo_batch_id`-tagged aggregates:
- * every aggregate type a generator invoked by this command can write an
+ * positively correlate to this run's own `demo_batch_id`-tagged aggregates.
+ * Most aggregate types a generator invoked by this command can write an
  * outbox row for (`booking_draft`, `order`, `renewal`, `certificate`,
- * `agreement`, `marketplace_order`, `vendor_order`, `visitation_booking` —
- * confirmed by reading every `Outbox::record()` call site reachable from
- * this command's domains) maps 1:1 onto an already-tagged table, so
- * `(aggregate_type, aggregate_id)` pairs pulled from those tables are a
- * real correlation, not a guess. A UUIDv7 high-water mark captured before
+ * `agreement`, `marketplace_order`, `vendor_order`, `visitation_booking`)
+ * map 1:1 onto an already-tagged table. NOT ALL of them do — `quote`,
+ * `funeral_case`, `subscription_cycle`, `work_order`, and
+ * `service_complaint` back untagged tables reachable only by walking a
+ * real FK chain from a tagged parent, the same technique
+ * `DemoDataPurgeCommand` already uses for its own untagged children — see
+ * `drainThisRunsOutboxEvents()`'s own doc block for the full list, how
+ * each was confirmed (by running a real seed and inspecting
+ * `outbox_events` grouped by `aggregate_type`, not by reading source
+ * alone — that is how `funeral_case` was found after the first
+ * correction round missed it), and why `plot_reservation` is deliberately
+ * excluded. Either way, every `(aggregate_type, aggregate_id)` pair this
+ * method ends up checking against is a real correlation, never a guess. A
+ * UUIDv7 high-water mark captured before
  * any domain runs (`outbox_events.id` is time-ordered, so `id > $floor`
  * excludes anything that existed before this run started) is a second,
  * independent layer — belt-and-suspenders, since a real row can never
@@ -222,7 +231,7 @@ final class DemoDataSeedCommand extends Command
                 ]);
                 TaggedAsDemoData::tag($customer, $batchId);
 
-                $grave = $graveRecords[0] ?? GraveRecord::query()->firstOrFail();
+                $grave = $graveRecords[0] ?? GraveRecord::query()->orderBy('id')->firstOrFail();
                 $summary['care_subscriptions'] = $this->runDomain('care subscriptions', function () use ($batchId, $customer, $grave) {
                     return CareSubscriptionExampleData::seed($batchId, $customer->id, $grave->id);
                 });
@@ -264,20 +273,71 @@ final class DemoDataSeedCommand extends Command
      * See this class's own doc block ("Draining the outbox NEVER calls
      * OutboxPublisher::publishBatch()") for the full reasoning. Publishes
      * only `outbox_events` rows whose `(aggregate_type, aggregate_id)`
-     * matches an entity THIS batch tagged, and whose `id` is newer than the
-     * pre-run floor — never the unscoped shared claim.
+     * matches an entity THIS batch tagged (or an untagged child reachable
+     * by walking the real FK chain from a tagged parent, the exact
+     * technique `DemoDataPurgeCommand` already uses to find untagged
+     * children), and whose `id` is newer than the pre-run floor — never
+     * the unscoped shared claim.
+     *
+     * Not every aggregate type a generator can produce backs a
+     * `demo_batch_id`-tagged table — five do not, confirmed empirically by
+     * running a real seed and inspecting `outbox_events` grouped by
+     * `aggregate_type` (not by reading source alone, which missed
+     * `funeral_case` even after the first correction round): `quote`
+     * (`IssueQuote`/`AcceptQuote`, via `IssueOrderQuote`/
+     * `RecordBuyerApproval` — fires on 3-5 of the 5 booking orders every
+     * run), `funeral_case` (`OpenFuneralCase`, called unconditionally by
+     * `SubmitBookingDraft` for every order — 5/5 orders), `subscription_cycle`
+     * (`MarkCyclePaid`), `work_order` (`CreateWorkOrderFromCycle`), and
+     * `service_complaint` (`FileComplaint`) — the last three all via
+     * `CareSubscriptionExampleData`. Each is correlated below by the same
+     * FK-walk `deleteCareSubscriptionScopedTables()`/
+     * `deleteBookingOrderScopedTables()` already use. `plot_reservation`
+     * (`ConvertDraftHoldToOrderReservation`) is NOT included: confirmed
+     * empirically (0 rows in `plot_reservations` after a full seed run)
+     * that no generator in this subsystem ever creates a plot hold for a
+     * draft — `HoldPlotForDraft` is only ever called from the public
+     * Livewire booking wizard, never from any Action this subsystem's
+     * generators drive directly — so `SubmitBookingDraft`'s conditional
+     * conversion branch never fires here. If a future generator change
+     * ever starts creating plot holds, this method must be extended too.
      */
     private function drainThisRunsOutboxEvents(string $batchId, string $outboxFloorId): void
     {
+        $orderIds = DB::table('orders')->where('demo_batch_id', $batchId)->pluck('id');
+        $carePlanIds = DB::table('care_plans')->where('demo_batch_id', $batchId)->pluck('id');
+        $subscriptionIds = DB::table('subscriptions')->where('demo_batch_id', $batchId)->pluck('id');
+
+        $quoteIds = $orderIds->isEmpty()
+            ? collect()
+            : DB::table('quotes')->whereIn('order_id', $orderIds)->pluck('id');
+        $funeralCaseIds = $orderIds->isEmpty()
+            ? collect()
+            : DB::table('orders')->whereIn('id', $orderIds)->whereNotNull('funeral_case_id')->pluck('funeral_case_id');
+        $subscriptionCycleIds = $subscriptionIds->isEmpty()
+            ? collect()
+            : DB::table('subscription_cycles')->whereIn('subscription_id', $subscriptionIds)->pluck('id');
+        $workOrderIds = $carePlanIds->isEmpty()
+            ? collect()
+            : DB::table('work_orders')->whereIn('care_plan_id', $carePlanIds)->pluck('id');
+        $serviceComplaintIds = $workOrderIds->isEmpty()
+            ? collect()
+            : DB::table('service_complaints')->whereIn('work_order_id', $workOrderIds)->pluck('id');
+
         $aggregateIdsByType = [
             'booking_draft' => DB::table('booking_drafts')->where('demo_batch_id', $batchId)->pluck('id'),
-            'order' => DB::table('orders')->where('demo_batch_id', $batchId)->pluck('id'),
+            'order' => $orderIds,
             'renewal' => DB::table('renewals')->where('demo_batch_id', $batchId)->pluck('id'),
             'certificate' => DB::table('certificates')->where('demo_batch_id', $batchId)->pluck('id'),
             'agreement' => DB::table('agreements')->where('demo_batch_id', $batchId)->pluck('id'),
             'marketplace_order' => DB::table('marketplace_orders')->where('demo_batch_id', $batchId)->pluck('id'),
             'vendor_order' => DB::table('vendor_orders')->where('demo_batch_id', $batchId)->pluck('id'),
             'visitation_booking' => DB::table('visitation_bookings')->where('demo_batch_id', $batchId)->pluck('id'),
+            'quote' => $quoteIds,
+            'funeral_case' => $funeralCaseIds,
+            'subscription_cycle' => $subscriptionCycleIds,
+            'work_order' => $workOrderIds,
+            'service_complaint' => $serviceComplaintIds,
         ];
 
         $ids = DB::table('outbox_events')

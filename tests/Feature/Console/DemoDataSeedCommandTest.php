@@ -98,4 +98,52 @@ final class DemoDataSeedCommandTest extends TestCase
         $this->assertNull($fresh->dispatched_at, 'a real, pre-existing outbox event must never be marked dispatched by demo-data:seed');
         $this->assertNull($fresh->locked_at, 'a real, pre-existing outbox event must never even be claimed by demo-data:seed');
     }
+
+    /**
+     * Fix-round regression test: `drainThisRunsOutboxEvents()`'s
+     * correlation map originally only covered aggregate types that back a
+     * `demo_batch_id`-tagged table. Five real aggregate types this run's
+     * own generators produce back UNTAGGED tables instead (`quote` — via
+     * `IssueOrderQuote`/`RecordBuyerApproval` on 3-5 of the 5 seeded
+     * booking orders; `funeral_case` — via `SubmitBookingDraft`,
+     * unconditionally, on every order; `subscription_cycle`, `work_order`,
+     * `service_complaint` — via `CareSubscriptionExampleData`'s real
+     * Action chain), so their outbox rows were silently left
+     * `dispatched_at IS NULL` when this command exited — the real,
+     * separately-scheduled `outbox:publish` job would pick them up about a
+     * minute later, OUTSIDE the suppression window, which is exactly the
+     * guarantee this command's own doc block and `DemoDataSuppression`'s
+     * doc block both claim to provide. Confirmed empirically (not just by
+     * reading source) by seeding once and inspecting `outbox_events`
+     * grouped by `aggregate_type` before writing this test.
+     */
+    public function test_seeding_drains_every_untagged_child_aggregate_types_outbox_events_too(): void
+    {
+        if (DB::connection()->getDriverName() !== 'pgsql') {
+            $this->markTestSkipped(
+                'OutboxPublisher requires real Postgres row locking (SELECT ... FOR UPDATE SKIP LOCKED).'
+            );
+        }
+
+        $this->artisan('demo-data:seed')->assertSuccessful();
+
+        $untaggedChildTypes = ['quote', 'funeral_case', 'subscription_cycle', 'work_order', 'service_complaint'];
+
+        $stillPending = DB::table('outbox_events')
+            ->whereIn('aggregate_type', $untaggedChildTypes)
+            ->whereNull('dispatched_at')
+            ->pluck('aggregate_type');
+
+        $this->assertCount(
+            0,
+            $stillPending,
+            'every outbox event produced by an untagged-child aggregate type must be drained by demo-data:seed, not left for the real scheduler: still pending '.$stillPending->implode(', ')
+        );
+
+        // Sanity check: this run really does produce events for these
+        // types (so the assertion above is proving something, not
+        // vacuously passing because none exist).
+        $totalForThoseTypes = DB::table('outbox_events')->whereIn('aggregate_type', $untaggedChildTypes)->count();
+        $this->assertGreaterThan(0, $totalForThoseTypes);
+    }
 }
