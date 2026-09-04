@@ -31,8 +31,6 @@ use Illuminate\Support\Facades\Hash;
  */
 final class VendorAccountExampleData
 {
-    private const string DEMO_PASSWORD = 'DemoContoh2026!';
-
     /**
      * @return array{vendors: list<Vendor>, users: list<User>}
      */
@@ -51,7 +49,7 @@ final class VendorAccountExampleData
             $user = User::query()->create([
                 'name' => DemoContactData::personName($index),
                 'email' => DemoContactData::email($index),
-                'password' => Hash::make(self::DEMO_PASSWORD),
+                'password' => Hash::make(DemoContactData::DEMO_PASSWORD),
             ]);
             TaggedAsDemoData::tag($user, $batchId);
 

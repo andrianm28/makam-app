@@ -20,7 +20,7 @@ The user asked for a full, deep end-to-end UAT sweep across all 9 user roles and
 
 ### Generator classes — extend the existing `App\Support\ExampleData` namespace, not a new one
 
-One class per domain, matching the existing `CemeteryExampleData`/`VendorListingExampleData` shape exactly (deterministic, index-driven, zero `random()`/`time()`, so re-seeding with the same batch produces byte-identical records):
+One class per domain, matching the existing `CemeteryExampleData`/`VendorListingExampleData` shape exactly (deterministic, index-driven, zero `random()`/`time()` in this subsystem's own generator/selection logic). This determinism claim is about each generator's own field derivation, not a guarantee that a full `demo-data:seed` run is byte-identical end to end: several of the real domain Actions these generators drive (e.g. `CreateSubscription`/`CreateCarePlan`'s `Str::random(8)` reference suffix, and any Action reading wall-clock `now()`) are themselves non-deterministic, and this subsystem intentionally never bypasses those real Actions to force determinism it does not own.
 
 - `BookingOrderExampleData` — booking drafts + orders across states, via `StartBookingDraft`, `SaveBookingDraftStep`, `SubmitBookingDraft`, `VerifyOrder`, `IssueQuoteFromReservedPlot` / `IssueOrderQuote`, `ManualPaymentVerification` / `MarkOrderPaid`, `RejectOrder`, `CompleteOrder` — never a raw `Order::create()`.
 - `RenewalExampleData` — via `OpenRenewal`, `QuoteRenewal`, `MarkRenewalPaidExternally` / `MarkRenewalPaidOnline`, `ExpireRenewal` for a mix of live and expired renewal states.

@@ -31,17 +31,36 @@ table) to purge an older batch instead.
 
 ## Demo account credentials
 
-Every demo vendor and cemetery-operator account uses the same fixed,
-deliberately weak password, defined once as the `DEMO_PASSWORD` constant
-in `VendorAccountExampleData` and `CemeteryOperatorExampleData` (both
-under `app/Support/ExampleData/`) — read it there rather than duplicating
-the literal value in this doc, so there is exactly one place it can drift
-out of date. This is deliberate — these are single-purpose demo accounts,
-not real user accounts, and they are purged along with everything else
-after the demo. **Never reuse this password for a real account.** Demo
-account emails follow the pattern `demo.contoh<N>@example.com` — find the
-exact seeded addresses via the `demo-data:seed` command's own summary
-output, or by querying `users` `WHERE demo_batch_id = '<batch id>'`.
+Every demo account this subsystem creates — vendor accounts, the
+cemetery-operator account, and the dedicated demo customer — uses the same
+fixed, deliberately weak password, defined once as the `DEMO_PASSWORD`
+constant on `DemoContactData` (`app/Support/ExampleData/DemoContactData.php`)
+— read it there rather than duplicating the literal value in this doc, so
+there is exactly one place it can drift out of date. This is deliberate —
+these are single-purpose demo accounts, not real user accounts, and they
+are purged along with everything else after the demo. **Never reuse this
+password for a real account.** Demo account emails do NOT all share one
+domain — `DemoContactData::email()` rotates `@example.com`/`.org`/`.net`
+per record — find the exact seeded addresses via the `demo-data:seed`
+command's own summary output, or by querying `users`
+`WHERE demo_batch_id = '<batch id>'`.
+
+## Purge only removes what the seeder itself wrote
+
+`demo-data:purge` removes exactly the rows `demo-data:seed` created for a
+batch — it has no way to know about, and will never touch, anything a real
+person did with that seeded data afterward. If a demo cemetery, vendor, or
+order was actually used between seed and purge (the whole point of a live
+demo) — someone added a demo vendor listing to a cart, a demo vendor set
+their availability, an admin reserved a plot against a demo order, a
+manual payment was recorded on a demo marketplace order — that real usage
+can create a real row with a `restrictOnDelete()` foreign key back to the
+demo data purge is trying to remove. Purge runs as one transaction, so
+this fails safely: the whole purge rolls back, nothing is deleted, and you
+get an error naming the table that still has a real reference into the
+batch. There is no automatic cleanup for this case — manually inspect and
+remove (or reassign) the blocking row yourself, then re-run
+`demo-data:purge` for the same batch id.
 
 ## Known, deliberate scope limits
 

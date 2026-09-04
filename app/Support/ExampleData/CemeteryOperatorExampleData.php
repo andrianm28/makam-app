@@ -20,8 +20,6 @@ use Illuminate\Support\Facades\Hash;
  */
 final class CemeteryOperatorExampleData
 {
-    private const string DEMO_PASSWORD = 'DemoContoh2026!';
-
     private const int INDEX = 0;
 
     public static function seed(string $batchId, string $cemeteryId): User
@@ -29,7 +27,7 @@ final class CemeteryOperatorExampleData
         $user = User::query()->create([
             'name' => DemoContactData::personName(self::INDEX + 100),
             'email' => DemoContactData::email(self::INDEX + 100),
-            'password' => Hash::make(self::DEMO_PASSWORD),
+            'password' => Hash::make(DemoContactData::DEMO_PASSWORD),
         ]);
         TaggedAsDemoData::tag($user, $batchId);
 

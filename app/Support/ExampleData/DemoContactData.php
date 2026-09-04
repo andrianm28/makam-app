@@ -32,6 +32,19 @@ namespace App\Support\ExampleData;
  */
 final class DemoContactData
 {
+    /**
+     * The one fixed, deliberately weak password every demo account this
+     * subsystem creates uses (vendor accounts, the cemetery-operator
+     * account, the dedicated demo customer) — defined exactly once here so
+     * `VendorAccountExampleData`, `CemeteryOperatorExampleData`, and
+     * `DemoDataSeedCommand`'s own dedicated-customer creation cannot drift
+     * out of sync with each other or with
+     * `docs/operations/demo-data.md`, which points here rather than
+     * restating the literal value. **Never reuse this password for a real
+     * account.**
+     */
+    public const string DEMO_PASSWORD = 'DemoContoh2026!';
+
     private const array EMAIL_DOMAINS = ['example.com', 'example.org', 'example.net'];
 
     private const array GIVEN_NAMES = [

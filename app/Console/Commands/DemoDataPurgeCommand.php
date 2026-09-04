@@ -6,6 +6,7 @@ namespace App\Console\Commands;
 
 use App\Models\DemoDataBatch;
 use Illuminate\Console\Command;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -133,6 +134,15 @@ final class DemoDataPurgeCommand extends Command
         'orders', 'booking_drafts', 'renewals',
         'scope_assignments', 'actor_role_assignments',
         'users',
+        // `cemeteries` last: `visitation_bookings.cemetery_id` and
+        // `cemetery_visitation_policies.cemetery_id` both restrictOnDelete
+        // on it, but both tables are already emptied by
+        // `DELETE_ORDER_BEFORE_VENDOR_CHILDREN`, which always runs first —
+        // see `createDemoCemetery()`'s own doc block in
+        // `DemoDataSeedCommand` for why a dedicated, tagged demo cemetery
+        // exists to purge here at all (C2's fix: never adopt an arbitrary
+        // real one).
+        'cemeteries',
     ];
 
     public function handle(): int
@@ -151,28 +161,64 @@ final class DemoDataPurgeCommand extends Command
             return self::FAILURE;
         }
 
-        DB::transaction(function () use ($batchId): void {
-            $this->deleteCareSubscriptionScopedTables($batchId);
-            $this->deleteOrderScopedTables($batchId);
-            $this->deleteBookingOrderScopedTables($batchId);
-            $this->deleteRenewalScopedTables($batchId);
+        try {
+            DB::transaction(function () use ($batchId): void {
+                $this->deleteCareSubscriptionScopedTables($batchId);
+                $this->deleteOrderScopedTables($batchId);
+                $this->deleteBookingOrderScopedTables($batchId);
+                $this->deleteRenewalScopedTables($batchId);
 
-            foreach (self::DELETE_ORDER_BEFORE_VENDOR_CHILDREN as $table) {
-                $this->deleteTagged($table, $batchId);
-            }
+                foreach (self::DELETE_ORDER_BEFORE_VENDOR_CHILDREN as $table) {
+                    $this->deleteTagged($table, $batchId);
+                }
 
-            $this->deleteVendorScopedTables($batchId);
+                $this->deleteVendorScopedTables($batchId);
 
-            foreach (self::DELETE_ORDER_AFTER_VENDOR_CHILDREN as $table) {
-                $this->deleteTagged($table, $batchId);
-            }
+                foreach (self::DELETE_ORDER_AFTER_VENDOR_CHILDREN as $table) {
+                    $this->deleteTagged($table, $batchId);
+                }
 
-            DemoDataBatch::query()->where('batch_id', $batchId)->delete();
-        });
+                DemoDataBatch::query()->where('batch_id', $batchId)->delete();
+            });
+        } catch (QueryException $exception) {
+            $this->reportForeignKeyViolation($batchId, $exception);
+
+            return self::FAILURE;
+        }
 
         $this->info("Purged demo data batch: {$batchId}");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * The whole purge runs in one `DB::transaction()`, so a real FK
+     * violation (a real person extended the demo data between seed and
+     * purge — see `docs/operations/demo-data.md`) fails safely: nothing is
+     * deleted. Postgres's own error names the table being deleted FROM
+     * ("update or delete on table X") and, separately, the table whose row
+     * is still pointing at it ("violates foreign key constraint ... on
+     * table Y") — Y, the second one, is the actually-useful "what's
+     * blocking this" answer; surface that plainly instead of letting the
+     * raw driver exception (with its interpolated SQL) reach the operator
+     * unexplained.
+     */
+    private function reportForeignKeyViolation(string $batchId, QueryException $exception): void
+    {
+        $blockedTable = null;
+
+        if (preg_match('/violates foreign key constraint "[^"]+" on table "([a-z_]+)"/', $exception->getMessage(), $matches) === 1) {
+            $blockedTable = $matches[1];
+        }
+
+        $this->error(
+            $blockedTable !== null
+                ? "Purge of batch [{$batchId}] refused: a real row in [{$blockedTable}] still references this ".
+                    'batch\'s demo data (likely created by real usage after the demo was seeded). Nothing was '.
+                    'deleted — see docs/operations/demo-data.md for how to resolve this, then re-run purge.'
+                : "Purge of batch [{$batchId}] failed with a database constraint error and nothing was deleted: ".
+                    $exception->getMessage()
+        );
     }
 
     private function deleteTagged(string $table, string $batchId): void
@@ -352,8 +398,18 @@ final class DemoDataPurgeCommand extends Command
      * are both confirmed FK-shaped columns (`work_orders.care_plan_id` is
      * a plain `foreignUuid()` with no `->constrained()`, so it carries no
      * actual DB constraint, but is still the correct real relationship to
-     * walk). `subscription_cycles.invoice_id` (nullable, pointing AT
-     * `subscription_invoices`) is confirmed too.
+     * walk). `subscription_invoices` is purged by its own real FK column,
+     * `subscription_cycle_id` (confirmed against
+     * `database/migrations/..._create_subscription_invoices_table.php`:
+     * `$table->foreign('subscription_cycle_id')->references('id')->on('subscription_cycles');`)
+     * — NOT via `subscription_cycles.invoice_id`, a plain unconstrained
+     * column with no DB-level FK either direction. An earlier version of
+     * this method queried invoices by matching `subscription_cycles.
+     * invoice_id` against `subscription_invoices.id`; that happened to
+     * work because `GenerateCycle` always writes exactly one invoice per
+     * cycle and mirrors its id back onto the cycle, but it was keyed off
+     * the wrong/unconstrained column and would silently miss any future
+     * cycle with zero or more than one invoice.
      *
      * `subscription_payment_references` FKs directly to `subscriptions`
      * via a `subscription_id` column
@@ -373,9 +429,6 @@ final class DemoDataPurgeCommand extends Command
         $cycleIds = $subscriptionIds->isEmpty()
             ? collect()
             : DB::table('subscription_cycles')->whereIn('subscription_id', $subscriptionIds)->pluck('id');
-        $invoiceIds = $cycleIds->isEmpty()
-            ? collect()
-            : DB::table('subscription_cycles')->whereIn('id', $cycleIds)->whereNotNull('invoice_id')->pluck('invoice_id');
         $workOrderIds = $carePlanIds->isEmpty()
             ? collect()
             : DB::table('work_orders')->whereIn('care_plan_id', $carePlanIds)->pluck('id');
@@ -407,8 +460,8 @@ final class DemoDataPurgeCommand extends Command
             }
         }
 
-        if ($invoiceIds->isNotEmpty()) {
-            $count = DB::table('subscription_invoices')->whereIn('id', $invoiceIds)->delete();
+        if ($cycleIds->isNotEmpty()) {
+            $count = DB::table('subscription_invoices')->whereIn('subscription_cycle_id', $cycleIds)->delete();
             if ($count > 0) {
                 $this->line(sprintf('%-28s %d', 'subscription_invoices', $count));
             }

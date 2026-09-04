@@ -69,13 +69,17 @@ final class MarketplaceOrderExampleData
     public static function seed(string $batchId, Vendor $vendor): array
     {
         // `PlaceMarketplaceOrder` refuses to run without a configured badan
-        // usaha ref (`BadanUsahaNotConfiguredException`); nothing in this
-        // test/demo environment sets one otherwise (no `site_settings` row,
-        // no `MARKETPLACE_BADAN_USAHA_REF` env var) — same fallback
-        // `PlaceMarketplaceOrderTest::setUp()` already relies on.
-        config(['marketplace.badan_usaha_ref' => 'demo-badan-usaha-contoh']);
+        // usaha ref (`BadanUsahaNotConfiguredException`). A FALLBACK only —
+        // never overwrite a real value the live beta host may already have
+        // configured (`MARKETPLACE_BADAN_USAHA_REF` env var / a real
+        // `site_settings` row). Clobbering a real operator's configured ref,
+        // even for the duration of one seed run, is not something this
+        // subsystem should ever do.
+        if (! config('marketplace.badan_usaha_ref')) {
+            config(['marketplace.badan_usaha_ref' => 'demo-badan-usaha-contoh']);
+        }
 
-        $listing = self::demoListing($vendor, $batchId);
+        $listing = self::demoListing($vendor);
         $area = self::demoServiceArea($vendor);
 
         return [
@@ -84,7 +88,7 @@ final class MarketplaceOrderExampleData
         ];
     }
 
-    private static function demoListing(Vendor $vendor, string $batchId): VendorListing
+    private static function demoListing(Vendor $vendor): VendorListing
     {
         $product = Product::findByCode(ProductCode::FLOWER_BOARD);
 

@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Tests\Feature\Console;
 
 use App\Domain\CareSubscription\Models\Subscription;
+use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\Marketplace\Models\MarketplaceOrder;
 use App\Domain\Marketplace\Models\Vendor;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\Renewal\Models\Renewal;
+use App\Domain\Visitation\Models\CemeteryVisitationPolicy;
 use App\Models\DemoDataBatch;
 use App\Models\User;
 use Illuminate\Database\QueryException;
@@ -39,7 +41,7 @@ final class DemoDataPurgeCommandTest extends TestCase
     public function test_seed_then_purge_returns_the_database_to_its_pre_seed_state(): void
     {
         $tables = [
-            'orders', 'renewals', 'vendors', 'users', 'vendor_users',
+            'cemeteries', 'orders', 'renewals', 'vendors', 'users', 'vendor_users',
             'care_plans', 'subscriptions', 'subscription_cycles', 'subscription_invoices',
             'subscription_payment_references', 'work_orders', 'work_order_tasks',
             'work_evidence', 'service_acceptances', 'service_complaints',
@@ -133,7 +135,71 @@ final class DemoDataPurgeCommandTest extends TestCase
         $this->assertSame(0, DB::table('subscriptions')->count());
         $this->assertSame(0, Subscription::query()->count());
 
-        // `DemoDataBatch::create()` only runs after every domain succeeds.
-        $this->assertSame(0, DemoDataBatch::query()->count());
+        // I2: the `demo_data_batches` row is written UP FRONT, before any
+        // domain runs, specifically so a partial failure like this one
+        // still leaves the batch id discoverable (`demo-data:purge`'s
+        // no-argument "most recent batch" lookup reads this table) —
+        // see `DemoDataSeedCommand::handle()`'s own comment. `summary`
+        // stays null: it is only filled in once every domain has actually
+        // succeeded, which never happened here.
+        $this->assertSame(1, DemoDataBatch::query()->count());
+        $this->assertNull(DemoDataBatch::query()->value('summary'));
+    }
+
+    /**
+     * C2 regression test: proves `demo-data:seed` + `demo-data:purge
+     * --force` never adopts, tags, or deletes a REAL, pre-existing
+     * `CemeteryVisitationPolicy` — the exact live-host defect this test
+     * exists to catch. `VisitationExampleData` used to be handed whatever
+     * cemetery `DemoDataSeedCommand` selected via
+     * `Cemetery::query()->firstOrFail()` — an arbitrary, possibly-real
+     * cemetery — and `firstOrCreate()` there returns (and then tags) an
+     * EXISTING policy rather than creating a new one when one already
+     * exists for that cemetery. `cemetery_visitation_policies` sits in
+     * `DemoDataPurgeCommand::DELETE_ORDER_BEFORE_VENDOR_CHILDREN`, so a
+     * purge would delete this real, pre-existing policy (and cascade its
+     * capacity/blackout rows) as a side effect of removing demo data.
+     *
+     * `Cemetery::query()->firstOrFail()` below deliberately mirrors the
+     * exact pre-fix selection query — this test creates its policy on
+     * whichever cemetery that arbitrary query resolves to (one of the real,
+     * migration-seeded example cemeteries; no writes to `cemeteries` happen
+     * between this call and `demo-data:seed`'s own internal selection, so
+     * both queries see the same unchanged table and resolve to the same
+     * row), so the test reproduces the exact real-world collision rather
+     * than a synthetic one.
+     */
+    public function test_purge_never_deletes_a_real_pre_existing_visitation_policy(): void
+    {
+        $targetCemetery = Cemetery::query()->firstOrFail();
+
+        // Every weekday open — `RequestVisitation` throws
+        // `VisitationClosedDayException` for a date the policy's own
+        // `operating_hours` marks closed, so a narrower policy (e.g. only
+        // `mon`) would make `demo-data:seed`'s own visitation step fail for
+        // an unrelated reason (an arbitrarily-chosen visit date landing on
+        // a day this policy has closed) rather than exercising the real
+        // purge-deletion risk this test targets.
+        $policy = CemeteryVisitationPolicy::query()->create([
+            'cemetery_id' => $targetCemetery->id,
+            'operating_hours' => [
+                'mon' => ['open' => '08:00', 'close' => '17:00'],
+                'tue' => ['open' => '08:00', 'close' => '17:00'],
+                'wed' => ['open' => '08:00', 'close' => '17:00'],
+                'thu' => ['open' => '08:00', 'close' => '17:00'],
+                'fri' => ['open' => '08:00', 'close' => '17:00'],
+                'sat' => ['open' => '08:00', 'close' => '15:00'],
+                'sun' => ['open' => '08:00', 'close' => '15:00'],
+            ],
+            'daily_capacity' => 7,
+        ]);
+
+        $this->artisan('demo-data:seed')->assertSuccessful();
+        $this->artisan('demo-data:purge --force')->assertSuccessful();
+
+        $fresh = $policy->fresh();
+        $this->assertNotNull($fresh, 'a real, pre-existing visitation policy must survive demo-data:seed + demo-data:purge');
+        $this->assertNull($fresh->demo_batch_id, 'a real, pre-existing visitation policy must never be tagged as demo data');
+        $this->assertSame(7, $fresh->daily_capacity);
     }
 }

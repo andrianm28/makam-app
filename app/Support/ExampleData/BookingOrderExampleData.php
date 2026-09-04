@@ -72,6 +72,7 @@ final class BookingOrderExampleData
             ->where('city', LaunchCityCode::JAKARTA)
             ->where('publication_status', CemeteryPublicationStatus::PUBLISHED)
             ->whereDoesntHave('packages')
+            ->orderBy('id')
             ->firstOrFail();
     }
 

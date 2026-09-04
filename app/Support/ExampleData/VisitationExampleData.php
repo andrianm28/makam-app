@@ -19,6 +19,15 @@ use App\Support\ExampleData\Concerns\TaggedAsDemoData;
  * 'daily_capacity']`, no companion Action file exists). Direct model
  * creation here is the same kind of confirmed exception as
  * `Vendor`/`VendorUser`/`User` in Task 4, not a plan defect.
+ *
+ * `$cemetery` is expected to be a dedicated demo cemetery this run itself
+ * created (`DemoDataSeedCommand::createDemoCemetery()`) — never an
+ * arbitrary real one. `firstOrCreate()` below is still guarded with
+ * `wasRecentlyCreated` before tagging (rather than trusting the caller's
+ * cemetery choice alone) as a second, independent layer: even if a future
+ * caller ever passes a real cemetery again, this class must never adopt,
+ * tag, or put a real operator's pre-existing `CemeteryVisitationPolicy` at
+ * risk of `demo-data:purge` deleting it.
  */
 final class VisitationExampleData
 {
@@ -46,7 +55,12 @@ final class VisitationExampleData
                 'daily_capacity' => 50,
             ],
         );
-        TaggedAsDemoData::tag($policy, $batchId);
+
+        // Never tag (and so never let purge delete) a policy that already
+        // existed for this cemetery — see this class's own doc block.
+        if ($policy->wasRecentlyCreated) {
+            TaggedAsDemoData::tag($policy, $batchId);
+        }
 
         $bookings = [];
 
