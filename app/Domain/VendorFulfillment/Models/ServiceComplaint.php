@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Domain\VendorFulfillment\Models;
 
 use App\Domain\VendorFulfillment\ComplaintStatus;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Eloquent model for `service_complaints` — customer-filed complaints
@@ -31,6 +33,7 @@ final class ServiceComplaint extends Model
         'resolution_notes',
         'resolved_at',
         'filed_at',
+        'make_good_order_id',
     ];
 
     /**
@@ -48,5 +51,17 @@ final class ServiceComplaint extends Model
     public function status(): ComplaintStatus
     {
         return ComplaintStatus::from($this->status);
+    }
+
+    /** @return BelongsTo<WorkOrder, $this> */
+    public function workOrder(): BelongsTo
+    {
+        return $this->belongsTo(WorkOrder::class, 'work_order_id');
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'customer_id');
     }
 }
