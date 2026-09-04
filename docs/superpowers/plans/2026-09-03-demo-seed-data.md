@@ -2301,6 +2301,8 @@ git commit -m "feat(demo-data): add demo-data:seed orchestration command"
 
 - [ ] **Step 1: Write the failing tests**
 
+> **The draft test code below is superseded by the real, merged, reviewed test at `tests/Feature/Console/DemoDataPurgeCommandTest.php` (commit `ec51ca03`).** Three real corrections from the draft: (1) the round-trip test snapshots and re-asserts 38 tables, not 4 — every table any generator or any real domain Action writes to, tagged and untagged, FK-blocking and not; (2) the partial-failure test drops `care_plans` (after dropping `subscriptions.care_plan_id`'s FK first), not `users` — `users` is written by the very first domain (`vendor_accounts`), so dropping it would fail seeding immediately rather than after vendor/booking/renewal/marketplace domains have already committed, which is what the test needs to prove per-domain transactional isolation; (3) `DemoDataSeedCommand::runDomain()` re-throws rather than returning `Command::FAILURE`, so `$this->artisan(...)->assertFailed()` does not work as drafted below — `Illuminate\Testing\PendingCommand::run()` drives the command through `Artisan::call()`, which does not catch a generic `Throwable` into an exit code the way the real CLI entry point does. The real test wraps the failing-seed call in `try`/`catch (\Illuminate\Database\QueryException $e)` instead. This is a minor, pre-existing polish gap in Task 10's `DemoDataSeedCommand` (out of this task's file scope, not fixed here) — flagged for the final whole-branch review's awareness.
+
 ```php
 <?php
 
@@ -2372,7 +2374,9 @@ Expected: FAIL — command does not exist.
 
 - [ ] **Step 3: Implement `demo-data:purge`**
 
-Read `PurgeExampleDataCommand.php`'s exact code style (confirmed during this plan's research: `--force`-required, `DB::transaction()`-wrapped, FK-respecting deletion order, per-table count summary) and mirror it, extended to every table this subsystem's generators write to. Delete in FK-safe reverse-dependency order: work-order-related rows before work orders, subscription cycles before subscriptions, agreements/certificates/visitation bookings/marketplace orders (leaf tables) before vendors/vendor_users, orders before booking_drafts, then role/scope assignments before users, then users, then any demo-created cemetery/grave-record rows last. Default to the most recent `demo_data_batches` row when no `{batchId}` argument is given.
+> **This step's original draft code below undersold the real scope — corrected here to match the actual merged implementation** (commit `ec51ca03`, task review clean). The draft only named three untagged-child-table groups (vendor-listing, order-scoped, care-subscription) and missed a fourth, larger one entirely: `orders`/`renewals` themselves have several untagged, `restrictOnDelete` children written by real domain Actions during seeding (`order_status_events`, `order_parties`, `quotes`+`quote_lines`, `order_invoices`, `funeral_cases`, an untagged order-scoped `scope_assignments` row from `GrantOrderPaymentOpening`, `renewal_quotes`, `renewal_external_markings`). It also carried three real bugs that would have aborted the purge transaction on its first live run: `vendor_availability` listed in the delete loop despite having no `demo_batch_id` column at all; `vendor_listings`/`service_areas` deleted before `vendor_orders`/`marketplace_order_items` despite both `restrictOnDelete()`-ing on `vendor_listings`; and `subscription_payment_references` guessed to FK via `subscription_invoice_id` when its real column is `subscription_id`, direct to `subscriptions`. All of this was found empirically — seeding a fresh database, snapshotting every `public` table's row count, running `demo-data:seed`, and diffing — not by reading source first. See `deleteBookingOrderScopedTables()` and `deleteRenewalScopedTables()` below, both new relative to this step's original draft.
+
+Read `PurgeExampleDataCommand.php`'s exact code style (`--force`-required, `DB::transaction()`-wrapped, FK-respecting deletion order, per-table count summary) and mirror it, extended to every table this subsystem's generators — and the real domain Actions they drive — write to. Default to the most recent `demo_data_batches` row when no `{batchId}` argument is given.
 
 ```php
 <?php
@@ -2385,6 +2389,92 @@ use App\Models\DemoDataBatch;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * `php artisan demo-data:purge {batchId?} --force`
+ *
+ * Removes every row `demo-data:seed` (Task 10) wrote for one batch,
+ * defaulting to the most recently seeded batch when no id is given.
+ *
+ * ---------------------------------------------------------------------------
+ * Two kinds of tables this subsystem writes to — only one kind is tagged
+ * ---------------------------------------------------------------------------
+ * `2026_09_03_150000_add_demo_batch_id_for_demo_seed_data.php` adds
+ * `demo_batch_id` to a SUBSET of the tables the generators write to —
+ * `DELETE_ORDER_*` below lists exactly that subset, confirmed against that
+ * migration's own `TABLES` constant. The rest have no such column at all
+ * and are purged by walking a real FK chain from an already-tagged parent:
+ *
+ *   - `vendor_listings`/`service_areas` — via `vendors.id` (see
+ *     `deleteVendorScopedTables()`).
+ *   - `marketplace_order_items`/`vendor_order_evidences` — via
+ *     `marketplace_orders.id`/`vendor_orders.id` (see
+ *     `deleteOrderScopedTables()`).
+ *   - The care-subscription/vendor-fulfillment child chain
+ *     (`subscription_cycles`, `subscription_invoices`,
+ *     `subscription_payment_references`, `work_orders`, `work_order_tasks`,
+ *     `work_evidence`, `service_acceptances`, `service_complaints`) — via
+ *     `care_plans.id`/`subscriptions.id` (see
+ *     `deleteCareSubscriptionScopedTables()`).
+ *   - `order_status_events`/`order_parties`/`quotes`(+`quote_lines`)/
+ *     `order_invoices`/`funeral_cases` — via `orders.id` (see
+ *     `deleteBookingOrderScopedTables()`). NONE of this group was named in
+ *     an earlier draft of this task — every one of these tables is a real
+ *     `restrictOnDelete()` (or, for `funeral_cases`, an unconstrained but
+ *     still real) child of `orders` that the real `OrderWorkflow` Actions
+ *     `BookingOrderExampleData` drives (`RecordOrderStatusChange`,
+ *     `IssueOrderQuote`, `SubmitBookingDraft`, ...) write to.
+ *   - `renewal_quotes`/`renewal_external_markings` — via `renewals.id`
+ *     (see `deleteRenewalScopedTables()`), found the same empirical way.
+ *
+ * `vendor_payables.vendor_id` is a plain string column with no DB-level FK
+ * (confirmed against
+ * `2026_08_09_120000_create_vendor_payables_table.php`) — it never blocks
+ * a delete, so it is purged as a courtesy cleanup (matched against tagged
+ * `vendors.id`) rather than a FK-chain necessity; see
+ * `deleteVendorScopedTables()`.
+ *
+ * `visitation_date_capacities.policy_id` DOES `cascadeOnDelete()` on
+ * `cemetery_visitation_policies` (confirmed against
+ * `2026_08_16_110030_create_visitation_date_capacities_table.php`) — no
+ * explicit code purges it; deleting the tagged `cemetery_visitation_policies`
+ * row in `DELETE_ORDER_BEFORE_VENDOR_CHILDREN` removes it automatically.
+ *
+ * `audit_events`/`outbox_events` carry only plain string references
+ * (confirmed against their own migrations), never a real FK to anything
+ * this command deletes — left untouched deliberately, the same way a
+ * production audit trail is never deleted by a data-cleanup operation.
+ *
+ * `cart_items`/`carts` are deliberately NOT purged — also untagged, but
+ * harmless to leave behind: `PlaceMarketplaceOrder` already empties a
+ * cart's items and vendor lock once an order is placed, so by the time
+ * purge runs, this subsystem's demo carts are inert rows carrying only a
+ * batch-scoped `customer_ref` string, never rendered or referenced by
+ * anything else this command removes.
+ *
+ * Every table in `DELETE_ORDER_*` genuinely has the `demo_batch_id`
+ * column — that array must never grow a table that doesn't, or the
+ * uniform loop below throws a real "column does not exist" error and
+ * aborts the whole purge inside its one transaction. `vendor_availability`
+ * is a real example of the trap: no generator in this subsystem writes to
+ * it, and it carries no `demo_batch_id` column (confirmed against
+ * `2026_09_03_150000_add_demo_batch_id_for_demo_seed_data.php`'s `TABLES`
+ * list), so it is not listed below at all.
+ *
+ * ---------------------------------------------------------------------------
+ * Why the vendor-order/vendor-listing deletes are split into two passes
+ * ---------------------------------------------------------------------------
+ * `vendor_orders.listing_id` and `marketplace_order_items.vendor_listing_id`
+ * both `restrictOnDelete()` on `vendor_listings`
+ * (`2026_08_12_110000_create_vendor_orders_table.php`,
+ * `2026_08_12_100080_create_marketplace_order_items_table.php`) — deleting
+ * a demo vendor's `vendor_listings` row while a `vendor_orders`/
+ * `marketplace_order_items` row still references it fails the whole
+ * transaction. `deleteOrderScopedTables()` (which removes those two leaf
+ * tables) and the `vendor_orders`/`marketplace_orders` deletes in
+ * `DELETE_ORDER_BEFORE_VENDOR_CHILDREN` therefore both run BEFORE
+ * `deleteVendorScopedTables()`, which is what actually removes
+ * `vendor_listings`/`service_areas`.
+ */
 final class DemoDataPurgeCommand extends Command
 {
     protected $signature = 'demo-data:purge {batchId?} {--force : Required. Purges without this flag are refused.}';
@@ -2392,40 +2482,30 @@ final class DemoDataPurgeCommand extends Command
     protected $description = 'Remove every row tagged with a demo_batch_id, defaulting to the most recently seeded batch.';
 
     /**
-     * FK-safe reverse-dependency order — confirm each table's real
-     * incoming foreign keys at implementation time before finalizing this
-     * list; this is the plan's best current ordering, not a guarantee no
-     * table needs reordering once the real schema is checked table-by-table.
-     *
-     * Deliberately EXCLUDES every table that has no `demo_batch_id` column
-     * at all (Task 1's migration only tags a subset of what this
-     * subsystem's generators actually write to — found piecemeal by
-     * Tasks 7 and 8's own implementers reading the real migrations):
-     * `vendor_listings`/`service_areas` (see `deleteVendorScopedTables()`),
-     * `marketplace_order_items`/`vendor_order_evidences` (see
-     * `deleteOrderScopedTables()`), the whole care-subscription/
-     * vendor-fulfillment child chain — `subscription_cycles`,
-     * `subscription_invoices`, `subscription_payment_references`,
-     * `work_orders`, `work_order_tasks`, `work_evidence`,
-     * `service_acceptances`, `service_complaints` (see
-     * `deleteCareSubscriptionScopedTables()`) — and `cart_items`/`carts`
-     * (deliberately NOT purged at all — see the note on that decision
-     * below). Every table listed in THIS array genuinely has the
-     * `demo_batch_id` column (Task 1's migration); this array must never
-     * grow a table that doesn't, or the uniform loop below throws a real
-     * "column does not exist" error and aborts the whole purge inside its
-     * one transaction. Given how many times this exact mistake nearly
-     * happened while this plan was being written, treat any new table a
-     * future generator writes to as untagged by default — confirm it's
-     * actually in Task 1's migration before adding it here.
+     * Tagged tables safe to delete before `vendor_listings`/`service_areas`
+     * are removed — none of these carries a `restrictOnDelete()` FK back to
+     * a `vendor_listings`/`service_areas` row. `subscriptions`/`care_plans`
+     * come first since `deleteCareSubscriptionScopedTables()` has already
+     * cleared every untagged child referencing them by this point.
      *
      * @var list<string>
      */
-    private const array DELETE_ORDER = [
+    private const array DELETE_ORDER_BEFORE_VENDOR_CHILDREN = [
         'subscriptions', 'care_plans',
         'agreements', 'certificates', 'visitation_bookings', 'cemetery_visitation_policies',
         'vendor_orders', 'marketplace_orders',
-        'vendor_availability', 'vendor_users', 'vendors',
+    ];
+
+    /**
+     * Tagged tables deleted after `deleteVendorScopedTables()` has removed
+     * `vendor_listings`/`service_areas` — `vendor_users`/`vendors` can only
+     * be removed once nothing with a `restrictOnDelete()` FK still points
+     * at them.
+     *
+     * @var list<string>
+     */
+    private const array DELETE_ORDER_AFTER_VENDOR_CHILDREN = [
+        'vendor_users', 'vendors',
         'orders', 'booking_drafts', 'renewals',
         'scope_assignments', 'actor_role_assignments',
         'users',
@@ -2448,16 +2528,19 @@ final class DemoDataPurgeCommand extends Command
         }
 
         DB::transaction(function () use ($batchId): void {
-            $this->deleteVendorScopedTables($batchId);
-            $this->deleteOrderScopedTables($batchId);
             $this->deleteCareSubscriptionScopedTables($batchId);
+            $this->deleteOrderScopedTables($batchId);
+            $this->deleteBookingOrderScopedTables($batchId);
+            $this->deleteRenewalScopedTables($batchId);
 
-            foreach (self::DELETE_ORDER as $table) {
-                $count = DB::table($table)->where('demo_batch_id', $batchId)->delete();
+            foreach (self::DELETE_ORDER_BEFORE_VENDOR_CHILDREN as $table) {
+                $this->deleteTagged($table, $batchId);
+            }
 
-                if ($count > 0) {
-                    $this->line(sprintf('%-28s %d', $table, $count));
-                }
+            $this->deleteVendorScopedTables($batchId);
+
+            foreach (self::DELETE_ORDER_AFTER_VENDOR_CHILDREN as $table) {
+                $this->deleteTagged($table, $batchId);
             }
 
             DemoDataBatch::query()->where('batch_id', $batchId)->delete();
@@ -2468,25 +2551,22 @@ final class DemoDataPurgeCommand extends Command
         return self::SUCCESS;
     }
 
+    private function deleteTagged(string $table, string $batchId): void
+    {
+        $count = DB::table($table)->where('demo_batch_id', $batchId)->delete();
+
+        if ($count > 0) {
+            $this->line(sprintf('%-28s %d', $table, $count));
+        }
+    }
+
     /**
-     * `vendor_listings` and `service_areas` have NO `demo_batch_id`
-     * column — found by Task 7's implementer while building
-     * `MarketplaceOrderExampleData`. This is coherent by design, not an
-     * oversight to fix by adding the column: both tables carry a
-     * `restrictOnDelete()` FK to `vendors` (which IS tagged), so deleting
-     * them by `vendor_id` first is both the correct removal path and a
-     * requirement of that FK regardless. Deleted here, before `vendors`
-     * itself is deleted in the main `DELETE_ORDER` loop.
-     *
-     * `cart_items`/`carts` are deliberately left alone — also untagged,
-     * but genuinely harmless to leave behind: `PlaceMarketplaceOrder`
-     * already clears a cart's items and vendor lock once an order is
-     * placed, so by the time purge runs, this subsystem's demo carts are
-     * empty, unlocked rows carrying only a batch-scoped `customer_ref`
-     * string — never rendered anywhere, never referenced by anything else
-     * this purge removes. Special-casing their removal (no vendor_id or
-     * other tagged-table FK to key off) was judged not worth the added
-     * complexity for a row with zero visible footprint.
+     * `vendor_listings` and `service_areas` have no `demo_batch_id` column
+     * — both carry a `restrictOnDelete()` FK to `vendors` (which IS
+     * tagged), so deleting them by `vendor_id` first is both the correct
+     * removal path and a requirement of that FK regardless. Must run after
+     * `vendor_orders`/`marketplace_order_items` have already been removed
+     * — see this class's own doc block.
      */
     private function deleteVendorScopedTables(string $batchId): void
     {
@@ -2503,18 +2583,119 @@ final class DemoDataPurgeCommand extends Command
                 $this->line(sprintf('%-28s %d', $table, $count));
             }
         }
+
+        // No DB-level FK — courtesy cleanup, not a constraint requirement.
+        // See this class's own doc block.
+        $count = DB::table('vendor_payables')->whereIn('vendor_id', $vendorIds->map(static fn ($id): string => (string) $id))->delete();
+        if ($count > 0) {
+            $this->line(sprintf('%-28s %d', 'vendor_payables', $count));
+        }
     }
 
     /**
-     * `marketplace_order_items` and `vendor_order_evidences` — the same
-     * untagged-child-table shape as `vendor_listings`/`service_areas`
-     * above, found the same way (reading the migration directly): neither
-     * has a `demo_batch_id` column, but both have a direct parent FK to an
-     * already-tagged table (`marketplace_order_id` on the first,
-     * `vendor_order_id` on the second — following this schema's
-     * consistent `<parent>_id` naming convention; CONFIRM both exact
-     * column names against the real migrations before shipping, they
-     * were not independently re-verified when this method was written).
+     * `order_status_events`, `order_parties`, `quotes` (and its own child
+     * `quote_lines`), and `order_invoices` all `restrictOnDelete()` on
+     * `orders` — confirmed against
+     * `2026_08_12_100010_create_order_status_events_table.php`,
+     * `2026_08_12_100020_create_order_parties_table.php`,
+     * `2026_08_12_100040_create_quotes_table.php` (`quote_lines.quote_id`
+     * restricts on `quotes` too, so it is deleted first),
+     * `2026_08_26_100000_create_order_invoices_table.php`. None of the
+     * four carries a `demo_batch_id` column.
+     *
+     * `funeral_cases` is different: `orders.funeral_case_id` has no DB-level
+     * FK at all (confirmed: `2026_08_12_100000_create_orders_table.php`'s
+     * own doc block — "no FK ... A later lane that creates those tables is
+     * expected to add the constraint then, not this one"), so a demo
+     * funeral case is looked up by reading the tagged orders' own
+     * `funeral_case_id` values before they are deleted, not by an inbound
+     * constraint. Deleting it never blocks on `orders` either way.
+     *
+     * `GrantOrderPaymentOpening` (called for the `paid`/`completed` demo
+     * orders) also writes a `scope_assignments` row with
+     * `entity_type = 'order'`, `entity_id = <order id>` — untagged, since
+     * `scope_assignments`' own `demo_batch_id` is only ever set by the
+     * generators themselves, not by this real domain Action. Found
+     * empirically (the same row-count-diff technique that found the rest
+     * of this method), not by reading `GrantOrderPaymentOpening` first.
+     * Purged here by `entity_id`, never by the main `DELETE_ORDER_*`
+     * loop's blanket `demo_batch_id` filter, which cannot see it.
+     */
+    private function deleteBookingOrderScopedTables(string $batchId): void
+    {
+        $orders = DB::table('orders')->where('demo_batch_id', $batchId)->get(['id', 'funeral_case_id']);
+        $orderIds = $orders->pluck('id');
+
+        if ($orderIds->isEmpty()) {
+            return;
+        }
+
+        $quoteIds = DB::table('quotes')->whereIn('order_id', $orderIds)->pluck('id');
+
+        if ($quoteIds->isNotEmpty()) {
+            $count = DB::table('quote_lines')->whereIn('quote_id', $quoteIds)->delete();
+            if ($count > 0) {
+                $this->line(sprintf('%-28s %d', 'quote_lines', $count));
+            }
+        }
+
+        foreach (['order_status_events', 'order_parties', 'quotes', 'order_invoices'] as $table) {
+            $count = DB::table($table)->whereIn('order_id', $orderIds)->delete();
+            if ($count > 0) {
+                $this->line(sprintf('%-28s %d', $table, $count));
+            }
+        }
+
+        $funeralCaseIds = $orders->pluck('funeral_case_id')->filter()->values();
+
+        if ($funeralCaseIds->isNotEmpty()) {
+            $count = DB::table('funeral_cases')->whereIn('id', $funeralCaseIds)->delete();
+            if ($count > 0) {
+                $this->line(sprintf('%-28s %d', 'funeral_cases', $count));
+            }
+        }
+
+        $count = DB::table('scope_assignments')
+            ->where('entity_type', 'order')
+            ->whereIn('entity_id', $orderIds)
+            ->delete();
+        if ($count > 0) {
+            $this->line(sprintf('%-28s %d', 'scope_assignments', $count));
+        }
+    }
+
+    /**
+     * `renewal_quotes` and `renewal_external_markings` both
+     * `restrictOnDelete()` on `renewals` — confirmed against
+     * `2026_08_12_100010_create_renewal_quotes_table.php` and
+     * `2026_08_12_100020_create_renewal_external_markings_table.php`.
+     * Neither carries a `demo_batch_id` column.
+     */
+    private function deleteRenewalScopedTables(string $batchId): void
+    {
+        $renewalIds = DB::table('renewals')->where('demo_batch_id', $batchId)->pluck('id');
+
+        if ($renewalIds->isEmpty()) {
+            return;
+        }
+
+        foreach (['renewal_quotes', 'renewal_external_markings'] as $table) {
+            $count = DB::table($table)->whereIn('renewal_id', $renewalIds)->delete();
+            if ($count > 0) {
+                $this->line(sprintf('%-28s %d', $table, $count));
+            }
+        }
+    }
+
+    /**
+     * `marketplace_order_items` and `vendor_order_evidences` have no
+     * `demo_batch_id` column — the same untagged-child-table shape as
+     * `vendor_listings`/`service_areas` above. Both real FK columns
+     * confirmed against the migrations directly:
+     * `marketplace_order_items.marketplace_order_id`
+     * (`2026_08_12_100080_create_marketplace_order_items_table.php`) and
+     * `vendor_order_evidences.vendor_order_id`
+     * (`2026_08_12_110010_create_vendor_order_evidences_table.php`).
      */
     private function deleteOrderScopedTables(string $batchId): void
     {
@@ -2537,27 +2718,26 @@ final class DemoDataPurgeCommand extends Command
     }
 
     /**
-     * The care-subscription/vendor-fulfillment chain — the largest block
-     * of untagged child tables in this subsystem, found by Task 8's own
-     * implementer (`CareSubscriptionExampleData`) reading every migration
-     * it writes to directly: `subscription_cycles`, `subscription_invoices`,
-     * `subscription_payment_references`, `work_orders`, `work_order_tasks`,
-     * `work_evidence`, `service_acceptances`, `service_complaints` — NONE
-     * of these eight has a `demo_batch_id` column. Only `subscriptions`
-     * and `care_plans` (the two roots) are tagged.
+     * The care-subscription/vendor-fulfillment chain — the largest block of
+     * untagged child tables in this subsystem. Only `care_plans` and
+     * `subscriptions` (the two roots) are tagged; deletion walks the real
+     * FK chain from them.
      *
-     * Deletion walks the FK chain from those two tagged roots:
      * `subscription_cycles.subscription_id` and `work_orders.care_plan_id`
-     * are both confirmed real FKs (this plan's own earlier research, Task
-     * 8's brief). `subscription_cycles.invoice_id` (nullable, pointing AT
-     * `subscription_invoices`, not the reverse) is also confirmed.
-     * `subscription_payment_references`' real FK column was never
-     * confirmed anywhere in this plan's research — the column name used
-     * below (`subscription_invoice_id`, following this schema's
-     * consistent `<parent>_id` convention) is a best guess, NOT verified
-     * against the real migration. CONFIRM this exact column name for real
-     * before shipping — do not trust this plan text over the actual
-     * schema.
+     * are both confirmed FK-shaped columns (`work_orders.care_plan_id` is
+     * a plain `foreignUuid()` with no `->constrained()`, so it carries no
+     * actual DB constraint, but is still the correct real relationship to
+     * walk). `subscription_cycles.invoice_id` (nullable, pointing AT
+     * `subscription_invoices`) is confirmed too.
+     *
+     * `subscription_payment_references` FKs directly to `subscriptions`
+     * via a `subscription_id` column
+     * (`database/migrations/2026_08_17_110040_create_subscription_payment_references_table.php`:
+     * `$table->uuid('subscription_id'); ... $table->foreign('subscription_id')->references('id')->on('subscriptions');`).
+     * An earlier draft of this task guessed `subscription_invoice_id` off
+     * `subscription_invoices`, following this schema's `<parent>_id`
+     * naming convention — that guess was wrong; the table has no
+     * `subscription_invoice_id` column at all.
      */
     private function deleteCareSubscriptionScopedTables(string $batchId): void
     {
@@ -2594,13 +2774,14 @@ final class DemoDataPurgeCommand extends Command
             }
         }
 
-        if ($invoiceIds->isNotEmpty()) {
-            // Column name unconfirmed — see this method's own doc block.
-            $count = DB::table('subscription_payment_references')->whereIn('subscription_invoice_id', $invoiceIds)->delete();
+        if ($subscriptionIds->isNotEmpty()) {
+            $count = DB::table('subscription_payment_references')->whereIn('subscription_id', $subscriptionIds)->delete();
             if ($count > 0) {
                 $this->line(sprintf('%-28s %d', 'subscription_payment_references', $count));
             }
+        }
 
+        if ($invoiceIds->isNotEmpty()) {
             $count = DB::table('subscription_invoices')->whereIn('id', $invoiceIds)->delete();
             if ($count > 0) {
                 $this->line(sprintf('%-28s %d', 'subscription_invoices', $count));
