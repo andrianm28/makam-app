@@ -68,37 +68,81 @@ Contents (narrowest working scope — confirm `docker compose` really needs no o
 ubuntu ALL=(root) NOPASSWD: /usr/bin/docker compose -f /opt/makam/compose/compose.yml *
 ```
 
-## Step 5 — Bring `/opt/makam/compose` under git and refactor to `${APP_IMAGE}`
+## Step 5 — Bring `/opt/makam/compose` under git and refactor to `${APP_IMAGE_DEV}`/`${APP_IMAGE_BETA}`
 
 Take a real backup first, matching the existing convention one last time:
 
 ```bash
 cd /opt/makam/compose
 cp compose.yml compose.yml.bak-$(date +%Y%m%d%H%M%S)-pre-git-init
+```
+
+Capture what is actually running RIGHT NOW, before touching anything — the compose file still has its old hardcoded `image:` lines at this point, so `docker compose ps`/`docker inspect` work normally:
+
+```bash
+DEV_DIGEST=$(docker inspect --format='{{.Image}}' $(docker compose ps -q dev-web) | xargs docker inspect --format='{{index .RepoDigests 0}}')
+BETA_DIGEST=$(docker inspect --format='{{.Image}}' $(docker compose ps -q beta-web) | xargs docker inspect --format='{{index .RepoDigests 0}}')
+echo "Currently running — dev: $DEV_DIGEST"
+echo "Currently running — beta: $BETA_DIGEST"
+```
+
+Now bring the directory under git and record a snapshot of the pre-refactor rendered config, to compare the refactor against afterward:
+
+```bash
 git init
 git add -A
 git commit -m "chore: bring compose.yml under version control (was hand-timestamped .bak copies)"
+docker compose config > /tmp/compose-config-before-refactor.yml
 ```
 
-Then edit `compose.yml`: for each of `dev-web`, `beta-web`, `beta-worker`, `beta-scheduler`, replace the hardcoded `image: ghcr.io/andrianm28/makam-app@sha256:...` line (each currently preceded by a long inline comment recording that promotion's history) with:
+Add a `.gitignore` **before** any further `git add` — this directory's `secrets/` subdirectory holds real database passwords, and `.env.dev`/`.env.beta` hold `APP_KEY`/`DB_PASSWORD`. None of that may ever enter git history:
+
+```bash
+cat > .gitignore <<'GITIGNORE'
+secrets/
+.env.dev
+.env.beta
+*.bak-*
+GITIGNORE
+git add .gitignore
+git commit -m "chore: exclude secrets/, env files, and backup snapshots from version control"
+```
+
+Now edit `compose.yml`: for `dev-web`, replace its hardcoded `image: ghcr.io/andrianm28/makam-app@sha256:...` line with:
 
 ```yaml
-    image: ${APP_IMAGE:?APP_IMAGE is required}
+    image: ${APP_IMAGE_DEV:?APP_IMAGE_DEV is required}
 ```
 
-Keep each service's own large historical comment block above the `image:` line as-is — it is now the last entry in that inline history; all future promotions are recorded as real git commits instead (per `deploy-dev`/`deploy-beta`'s own `git commit` step). Validate before touching any running container:
+For `beta-web`, `beta-worker`, and `beta-scheduler` (all three), replace their hardcoded `image:` lines with:
 
-```bash
-export APP_IMAGE="$(docker inspect --format='{{.Config.Image}}' $(docker compose ps -q dev-web))"
-docker compose config > /tmp/compose-config-check.yml
-diff <(docker compose config) /tmp/compose-config-check.yml  # sanity: config is stable/idempotent
+```yaml
+    image: ${APP_IMAGE_BETA:?APP_IMAGE_BETA is required}
 ```
 
-Confirm the rendered config's `dev-web`/`beta-web`/`beta-worker`/`beta-scheduler` image references match what is currently actually running (via `docker compose ps` / `docker inspect`) before committing:
+**Two separate variables, not one shared `${APP_IMAGE}`** — dev and beta are promoted independently (dev first, then the identical digest to beta only after a passing smoke test), and a future manual `docker compose up -d` targeting just one environment must not be able to accidentally move the other. Keep each service's own large historical comment block above the `image:` line as-is — it is now the last entry in that inline history; all future promotions are recorded as real git commits instead.
+
+Create `.env` (auto-loaded by `docker compose` for variable substitution — no `--env-file` flag needed by any future command, automated or manual) seeded with the digests you captured a moment ago, so the very first commit already reflects reality rather than starting empty:
 
 ```bash
-git add compose.yml
-git commit -m "refactor: parameterize image digests via \${APP_IMAGE} (cicd-automation-design.md decision 3)"
+cat > .env <<ENV
+APP_IMAGE_DEV=${DEV_DIGEST}
+APP_IMAGE_BETA=${BETA_DIGEST}
+ENV
+```
+
+Validate before touching any running container — compare the refactored file's rendered config against the snapshot you took before editing:
+
+```bash
+docker compose config > /tmp/compose-config-after-refactor.yml
+diff /tmp/compose-config-before-refactor.yml /tmp/compose-config-after-refactor.yml
+```
+
+The only differences should be cosmetic (e.g. how the image reference was spelled) — the resolved `image:` values for `dev-web`/`beta-web`/`beta-worker`/`beta-scheduler` must be byte-identical to what was running before. If anything else differs, stop and investigate before committing.
+
+```bash
+git add compose.yml .env
+git commit -m "refactor: parameterize image digests via \${APP_IMAGE_DEV}/\${APP_IMAGE_BETA} (cicd-automation-design.md decision 3, corrected post-final-review to two variables — see plan ledger)"
 ```
 
 ## Step 6 — Branch protection on `docs/design-system-and-planning`
@@ -126,7 +170,13 @@ Confirm afterward:
 gh api repos/andrianm28/makam-app/branches/docs%2Fdesign-system-and-planning/protection
 ```
 
-## Step 7 — First real activation
+## Step 7 — Arm the activation gate, then trigger first real activation
+
+Both `deploy-dev` and `deploy-beta`'s `if:` conditions require the repository variable `MAKAM_DEPLOY_RUNNER_ACTIVE` to equal `true` before they will ever run — until now it has never been set, so every trunk push has been safely skipping both jobs outright (not hanging, not failing) rather than queuing for a runner that didn't exist. Set it now, only once the runner (Steps 2-3) is confirmed running and (if needed) the sudoers grant (Step 4) is in place:
+
+```bash
+gh variable set MAKAM_DEPLOY_RUNNER_ACTIVE --body true --repo andrianm28/makam-app
+```
 
 Merge any small PR to `docs/design-system-and-planning` (or push a trivial change directly, if branch protection from Step 6 permits a final unprotected test push before it's confirmed active) and watch the real run:
 
@@ -139,7 +189,7 @@ Confirm `deploy-dev` and `deploy-beta` both appear and complete, and that `https
 
 ## Step 8 — Record evidence and close this runbook
 
-Record: Step 1's real permission-check output (and whether Step 4 was needed), the registered runner's name/labels, `compose.yml`'s first real git commit hash, Step 6's confirmed protection settings, and Step 7's first real run URL. Update this runbook's own Status line from "Prepared, not executed" only after Step 7 has genuinely completed — not before.
+Record: Step 1's real permission-check output (and whether Step 4 was needed), the registered runner's name/labels, `compose.yml`'s first real git commit hash, Step 6's confirmed protection settings, the `MAKAM_DEPLOY_RUNNER_ACTIVE` repository variable was set (Step 7), and Step 7's first real run URL. Update this runbook's own Status line from "Prepared, not executed" only after Step 7 has genuinely completed — not before.
 
 ## Rollback
 
