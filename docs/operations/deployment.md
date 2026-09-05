@@ -70,6 +70,14 @@ Secrets come from protected secret management, never committed `.env` files.
 7. Run public/admin/vendor smoke tests and provider sandbox checks.
 8. Observe host memory, swap, queue wait, PostgreSQL, Redis, and disk.
 
+> **Updated 5 Sep 2026.** Steps 2-7 above are now
+> automated by `deploy-dev`/`deploy-beta` in `.github/workflows/ci.yml` —
+> see `dev-staging-environment.md` §10's own note for the same caveat: the
+> jobs exist but cannot run for real until `docs/operations/runbooks/setup-
+> cicd-self-hosted-runner.md` has been executed. This procedure's steps
+> remain the correct manual fallback if the automated pipeline is ever
+> unavailable or intentionally bypassed.
+
 ## 6. Production deployment procedure
 
 The canonical process is `ci-cd-and-release.md`. Database recovery follows `database-backup-and-recovery.md`.

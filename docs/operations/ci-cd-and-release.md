@@ -132,6 +132,15 @@ Some releases need an operator action inside the same change window as the deplo
 - test outbox publisher and queue workers.
 - provider sandbox/synthetic webhook test in staging.
 - confirm every release-specific manual step in §5.1 that applies to this release was executed; for privileged-role grants, confirm the intended operator can still complete the flow rather than assuming the grant landed.
+- Since `docs/superpowers/specs/2026-09-05-cicd-automation-design.md`: the
+  first four bullets above (`/health/live`, `/health/ready`, homepage) run
+  automatically as part of `deploy-dev`/`deploy-beta`'s own smoke-test
+  steps once the self-hosted runner is active (see
+  `dev-staging-environment.md` §10's note on activation status). The
+  remaining bullets — authenticated Filament smoke checks, outbox/queue
+  confirmation, provider-sandbox webhook checks, and §5.1 manual-step
+  confirmation — are not automated by this pipeline and remain a human's
+  responsibility after an automated deploy, exactly as after a manual one.
 
 ## 9. Dependency updates
 
