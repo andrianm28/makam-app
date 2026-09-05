@@ -821,3 +821,53 @@ jobs:
           curl -sf https://dev.makam.co.id/health/ready
           code=$(curl -sf -o /dev/null -w '%{http_code}' https://dev.makam.co.id/)
           [ "$code" = "200" ] || { echo "dev homepage returned $code, expected 200"; exit 1; }
+
+  # ---------------------------------------------------------------------------
+  # Promote the identical digest to makam.co.id (cicd-automation-design.md
+  # §3.3). `beta` is real, live production traffic (ADR-0027's "production
+  # graduation" decision; confirmed live during this design's own validation
+  # pass — https://makam.co.id/health/live already serves this exact stack).
+  # `needs` lists BOTH build-image and deploy-dev explicitly: GitHub Actions
+  # job outputs are not transitive, so `needs.build-image.outputs.*` would be
+  # unavailable here if only `deploy-dev` were listed (spec §1.3 finding 4).
+  # No `horizon:terminate`/`horizon:pause-supervisor` anywhere below —
+  # beta-worker runs plain `php artisan queue:work`, not Horizon (confirmed
+  # against the real compose.yml; several docs, including
+  # ci-cd-and-release.md §5 and deploy-production.md, describe a
+  # Horizon-based restart that does not apply to what is actually deployed —
+  # spec §1.3 finding 3). `docker compose up -d` alone is sufficient: queue:
+  # work's own SIGTERM handler finishes its in-flight job within the
+  # already-configured `stop_grace_period: 90s` before the container is
+  # recreated.
+  # ---------------------------------------------------------------------------
+  deploy-beta:
+    name: Promote to makam.co.id (beta/production)
+    needs: [build-image, deploy-dev]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/docs/design-system-and-planning'
+    runs-on: [self-hosted, makam-deploy]
+    concurrency:
+      group: makam-deploy
+      cancel-in-progress: false
+    steps:
+      - name: Promote the same artifact to beta
+        working-directory: /opt/makam/compose
+        run: |
+          export APP_IMAGE="${{ needs.build-image.outputs.image }}@${{ needs.build-image.outputs.digest }}"
+          docker compose up -d beta-web beta-worker beta-scheduler
+          git add -A
+          git commit -m "deploy(beta): ${{ needs.build-image.outputs.sha_tag }}" || true
+
+      - name: Run beta migrations
+        working-directory: /opt/makam/compose
+        run: docker compose exec -T beta-web php artisan migrate --force
+
+      - name: Smoke-test beta (live production domain)
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf https://makam.co.id/health/live > /dev/null && break
+            sleep 2
+          done
+          curl -sf https://makam.co.id/health/live
+          curl -sf https://makam.co.id/health/ready
+          code=$(curl -sf -o /dev/null -w '%{http_code}' https://makam.co.id/)
+          [ "$code" = "200" ] || { echo "beta homepage returned $code, expected 200"; exit 1; }
