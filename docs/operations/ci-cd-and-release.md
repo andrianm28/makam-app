@@ -68,6 +68,7 @@ Use expand/contract:
 ### Release C — contract
 
 - remove old column/path only after evidence and separate approval.
+- A migration that must perform a genuinely destructive operation directly in `up()` (not deferred through expand/contract) needs a `// contract-approved: <PR-or-ticket-reference>` comment on the line immediately before the destructive call — the automated gate (`php artisan migrations:verify-no-destructive-changes`, spec §3.4) requires this marker before it will allow the migration through; its absence is what "separate approval," above, is enforced as in practice.
 
 Production rollback must not depend on destructive `down()` migrations.
 
@@ -132,6 +133,7 @@ Some releases need an operator action inside the same change window as the deplo
 - test outbox publisher and queue workers.
 - provider sandbox/synthetic webhook test in staging.
 - confirm every release-specific manual step in §5.1 that applies to this release was executed; for privileged-role grants, confirm the intended operator can still complete the flow rather than assuming the grant landed.
+- Since `docs/superpowers/specs/2026-09-05-cicd-automation-design.md`: the first two bullets above (`/health/live`, `/health/ready`) and the public-homepage half of the fourth bullet run automatically as part of `deploy-dev`/`deploy-beta`'s own smoke-test steps once the self-hosted runner is active (see `dev-staging-environment.md` §10's note on activation status). The booking-draft half of that same bullet, the third bullet (authenticated Filament smoke checks), and the remaining bullets — outbox/queue confirmation, provider-sandbox webhook checks, and §5.1 manual-step confirmation — are not automated by this pipeline and remain a human's responsibility after an automated deploy, exactly as after a manual one.
 
 ## 9. Dependency updates
 
