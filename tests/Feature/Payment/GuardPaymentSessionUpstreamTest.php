@@ -402,6 +402,40 @@ final class GuardPaymentSessionUpstreamTest extends TestCase
         $this->assertSame(GuardDenialReason::DomainDenied, $denial->reason);
     }
 
+    /**
+     * FIXED 5 Sep 2026 (real bug, found by independent code audit):
+     * `OrderTransitionAuthorizer::MONEY_TRANSITIONS` explicitly permits a
+     * FINANCE actor to perform the `authorize_payment_opening` transition
+     * (`TransitionOrderAction` grants the real scope to whichever actor —
+     * admin or finance — actually performed it), but this class's own
+     * qualifying-grantor query previously looked for `ActorRole::ADMIN`
+     * only. A finance-only staff member's real, correctly-created order
+     * grant was invisible to condition 4 — the admin panel reported the
+     * transition as successful, but the customer's own online-payment
+     * attempt then failed silently. Same guest-evaluator shape as
+     * `test_condition_4_passes_for_a_guest_actor_once_an_admin_has_
+     * authorized_the_order` above, with a FINANCE grantor instead of ADMIN.
+     */
+    public function test_condition_4_passes_for_a_guest_actor_once_a_finance_actor_has_authorized_the_order(): void
+    {
+        $order = $this->makeOrder(OrderStatus::PENAWARAN_TERKIRIM);
+        $this->acceptedQuote($order, 1_500_000_00);
+
+        $financeActor = User::factory()->create();
+        app(GrantActorRole::class)($financeActor->id, ActorRole::FINANCE, 'test', 1);
+        $this->grantOrderScope((string) $financeActor->id, $order);
+
+        $result = ($this->guardWithPaymentGate(open: true))($order, $this->amount(1_500_000_00));
+
+        foreach ($result->denials() as $denial) {
+            $this->assertNotSame(
+                GuardCondition::AuthorizedOpening,
+                $denial->condition,
+                'Condition 4 must not deny a guest actor once a FINANCE actor has authorized this order — MONEY_TRANSITIONS permits FINANCE to grant this transition, and this check must recognize that grant.',
+            );
+        }
+    }
+
     public function test_condition_5_denies_for_an_amount_differing_by_one_minor_unit(): void
     {
         $order = $this->makeOrder(OrderStatus::PENAWARAN_TERKIRIM);

@@ -52,27 +52,55 @@ use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
  * ---------------------------------------------------------------------------
  * An active (`revoked_at` null) `ScopeAssignment` for
  * `ScopeEntityType::ORDER` / `entity_id` = this order must exist, held by
- * an `actor_identifier` that currently holds `ActorRole::ADMIN` (an active
- * `ActorRoleAssignment` row, same "currently holds," not "held at grant
- * time," posture the original check used for the caller). This represents
- * "an admin reviewed and authorized THIS ORDER for payment" as a property
- * of the order — independent of who is now creating the payment session.
- * `$actor` is retained in the signature (call sites are unchanged, and a
- * future privileged-actor fast path may want it) but is no longer read.
+ * an `actor_identifier` that currently holds a role permitted to grant this
+ * transition (an active `ActorRoleAssignment` row, same "currently holds,"
+ * not "held at grant time," posture the original check used for the
+ * caller). This represents "an authorized staff member reviewed and
+ * authorized THIS ORDER for payment" as a property of the order —
+ * independent of who is now creating the payment session. `$actor` is
+ * retained in the signature (call sites are unchanged, and a future
+ * privileged-actor fast path may want it) but is no longer read.
+ *
+ * ---------------------------------------------------------------------------
+ * FIXED 5 Sep 2026 — FINANCE-role grantors were silently excluded
+ * ---------------------------------------------------------------------------
+ * `App\Domain\OrderWorkflow\Authorization\OrderTransitionAuthorizer::
+ * MONEY_TRANSITIONS` explicitly permits BOTH `ActorRole::ADMIN` and
+ * `ActorRole::FINANCE` to perform the `authorize_payment_opening`
+ * transition (`TransitionOrderAction::__invoke()` passes the real acting
+ * finance staff member's own identity to `GrantOrderPaymentOpening`, which
+ * correctly creates a real `ScopeAssignment` for them). But this class's
+ * qualifying-grantor query only ever looked for `ActorRole::ADMIN` — a
+ * finance-only staff member's own real, correctly-created grant was
+ * invisible to it. The admin panel reported the transition as successful
+ * (it was — `GrantOrderPaymentOpening`/`RecordOrderStatusChange` both
+ * completed), but the customer's own `openOnlinePayment()` call then
+ * failed condition 4 with no visible cause to the finance actor who
+ * "already did this." Widened the qualifying-role set to match
+ * `MONEY_TRANSITIONS`'s own real permitted-grantor set for this specific
+ * transition, rather than re-deriving a second, narrower list here.
  */
 final readonly class AuthorizeOrderPaymentOpening
 {
+    /** Mirrors OrderTransitionAuthorizer::MONEY_TRANSITIONS' own permitted
+     * grantor roles for the `authorize_payment_opening` transition
+     * specifically — not every MONEY_TRANSITIONS entry, just this one.
+     *
+     * @var list<string>
+     */
+    private const array QUALIFYING_GRANTOR_ROLES = [ActorRole::ADMIN, ActorRole::FINANCE];
+
     public function __invoke(ActorContext $actor, Order $order): string
     {
-        $authorizingAdminIds = ActorRoleAssignment::query()
-            ->where('role', ActorRole::ADMIN)
+        $authorizingIds = ActorRoleAssignment::query()
+            ->whereIn('role', self::QUALIFYING_GRANTOR_ROLES)
             ->whereNull('revoked_at')
             ->pluck('actor_identifier');
 
         $hasOrderGrant = ScopeAssignment::query()
             ->where('entity_type', ScopeEntityType::ORDER)
             ->where('entity_id', $order->getKey())
-            ->whereIn('actor_identifier', $authorizingAdminIds)
+            ->whereIn('actor_identifier', $authorizingIds)
             ->whereNull('revoked_at')
             ->exists();
 
