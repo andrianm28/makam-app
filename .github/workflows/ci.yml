@@ -779,3 +779,45 @@ jobs:
           echo "${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
           echo "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # Deploy to dev.makam.co.id (cicd-automation-design.md §3.2). Runs on the
+  # self-hosted runner living on this same host (docs/operations/runbooks/
+  # setup-cicd-self-hosted-runner.md — NOT yet executed as of this job's
+  # addition; this job cannot run for real until that runbook is). Gated
+  # explicitly on the real trunk ref — deliberately NOT inherited from
+  # build-image's own `if: github.event_name == 'push'`, which has no ref
+  # check at all and would otherwise deploy on every branch push (spec §1.3
+  # finding 1).
+  # ---------------------------------------------------------------------------
+  deploy-dev:
+    name: Deploy to dev.makam.co.id
+    needs: [build-image]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/docs/design-system-and-planning'
+    runs-on: [self-hosted, makam-deploy]
+    concurrency:
+      group: makam-deploy
+      cancel-in-progress: false
+    steps:
+      - name: Promote the artifact to dev
+        working-directory: /opt/makam/compose
+        run: |
+          export APP_IMAGE="${{ needs.build-image.outputs.image }}@${{ needs.build-image.outputs.digest }}"
+          docker compose up -d dev-web
+          git add -A
+          git commit -m "deploy(dev): ${{ needs.build-image.outputs.sha_tag }}" || true
+
+      - name: Run dev migrations
+        working-directory: /opt/makam/compose
+        run: docker compose exec -T dev-web php artisan migrate --force
+
+      - name: Smoke-test dev
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf https://dev.makam.co.id/health/live > /dev/null && break
+            sleep 2
+          done
+          curl -sf https://dev.makam.co.id/health/live
+          curl -sf https://dev.makam.co.id/health/ready
+          code=$(curl -sf -o /dev/null -w '%{http_code}' https://dev.makam.co.id/)
+          [ "$code" = "200" ] || { echo "dev homepage returned $code, expected 200"; exit 1; }
