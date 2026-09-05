@@ -51,9 +51,15 @@ final class VerifyNoDestructiveMigrationsCommand extends Command
                 continue;
             }
 
-            foreach ($scanner->scan($path) as $violation) {
+            foreach ($scanner->scan($path) as $finding) {
+                if ($finding['status'] === 'overridden') {
+                    $this->info("{$file}:{$finding['line']}: contract-phase override present for `{$finding['pattern']}` — allowed, not counted as a violation");
+
+                    continue;
+                }
+
                 $failed = true;
-                $this->error("{$file}:{$violation['line']}: `{$violation['pattern']}` inside up() with no contract-approved override on the preceding line");
+                $this->error("{$file}:{$finding['line']}: `{$finding['pattern']}` inside up() with no contract-approved override on the preceding line");
             }
         }
 

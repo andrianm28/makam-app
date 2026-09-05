@@ -32,7 +32,7 @@ final class DestructiveMigrationScanner
     ];
 
     /**
-     * @return list<array{line: int, pattern: string}>
+     * @return list<array{line: int, pattern: string, status: 'violation'|'overridden'}>
      */
     public function scan(string $path): array
     {
@@ -57,7 +57,7 @@ final class DestructiveMigrationScanner
         $upBodyStartLine = substr_count($stripped, "\n", 0, $upStart) + 1;
         $originalLines = explode("\n", $original);
 
-        $violations = [];
+        $findings = [];
 
         foreach (explode("\n", $upBody) as $offset => $lineText) {
             foreach (self::DESTRUCTIVE_PATTERNS as $pattern) {
@@ -67,16 +67,17 @@ final class DestructiveMigrationScanner
 
                 $lineNumber = $upBodyStartLine + $offset;
                 $precedingLine = $originalLines[$lineNumber - 2] ?? '';
+                $overridden = str_contains($precedingLine, 'contract-approved');
 
-                if (str_contains($precedingLine, 'contract-approved')) {
-                    continue;
-                }
-
-                $violations[] = ['line' => $lineNumber, 'pattern' => $pattern];
+                $findings[] = [
+                    'line' => $lineNumber,
+                    'pattern' => $pattern,
+                    'status' => $overridden ? 'overridden' : 'violation',
+                ];
             }
         }
 
-        return $violations;
+        return $findings;
     }
 
     private function findFunctionOffset(string $source, string $name): ?int

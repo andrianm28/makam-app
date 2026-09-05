@@ -92,4 +92,30 @@ PHP);
             '--repo' => $this->repo,
         ])->assertExitCode(0);
     }
+
+    public function test_it_passes_and_logs_a_notice_when_a_destructive_up_call_has_a_contract_approved_override(): void
+    {
+        file_put_contents($this->repo.'/database/migrations/2026_01_01_000002_overridden.php', <<<'PHP'
+<?php
+return new class extends \Illuminate\Database\Migrations\Migration {
+    public function up(): void
+    {
+        \Illuminate\Support\Facades\Schema::table('foo', function ($table) {
+            // contract-approved: PR-999
+            $table->dropColumn('legacy_bar');
+        });
+    }
+    public function down(): void {}
+};
+PHP);
+        $this->git('add -A');
+        $this->git('commit -q -m "add overridden migration"');
+
+        $this->artisan('migrations:verify-no-destructive-changes', [
+            'base-ref' => 'trunk~1',
+            '--repo' => $this->repo,
+        ])
+            ->expectsOutputToContain('contract-phase override present')
+            ->assertExitCode(0);
+    }
 }

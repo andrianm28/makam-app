@@ -57,6 +57,7 @@ PHP);
 
         $this->assertCount(1, $violations);
         $this->assertSame('dropColumn', $violations[0]['pattern']);
+        $this->assertSame('violation', $violations[0]['status']);
     }
 
     public function test_it_does_not_flag_a_dropcolumn_call_confined_to_down(): void
@@ -136,7 +137,9 @@ PHP);
 
         $violations = (new DestructiveMigrationScanner)->scan($path);
 
-        $this->assertSame([], $violations);
+        $this->assertCount(1, $violations);
+        $this->assertSame('dropColumn', $violations[0]['pattern']);
+        $this->assertSame('overridden', $violations[0]['status']);
     }
 
     public function test_it_still_flags_a_destructive_up_call_with_no_override_even_when_a_down_exists(): void
@@ -162,5 +165,6 @@ PHP);
 
         $this->assertCount(1, $violations);
         $this->assertSame('dropTable', $violations[0]['pattern']);
+        $this->assertSame('violation', $violations[0]['status']);
     }
 }
