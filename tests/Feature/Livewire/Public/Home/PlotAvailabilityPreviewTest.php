@@ -88,4 +88,62 @@ final class PlotAvailabilityPreviewTest extends TestCase
         Livewire::test(PlotAvailabilityPreview::class)
             ->assertDontSee('Lihat Contoh Ketersediaan Plot');
     }
+
+    public function test_a_second_render_within_the_cache_ttl_does_not_re_query(): void
+    {
+        $cemetery = $this->makeCemetery('tpu-granular-cache-check', PlotTrackingMode::GRANULAR);
+
+        $block = CemeteryBlock::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'code' => 'BLOK-A',
+            'name' => 'Blok A',
+            'capacity' => 1,
+        ]);
+
+        GravePlot::query()->create([
+            'block_id' => $block->getKey(),
+            'slot' => '001',
+            'plot_state' => PlotState::AVAILABLE,
+        ]);
+
+        config(['marketing.homepage_plot_preview_cemetery_slugs' => ['tpu-granular-cache-check']]);
+
+        Livewire::test(PlotAvailabilityPreview::class)->assertSee('BLOK-A');
+
+        \Illuminate\Support\Facades\DB::enableQueryLog();
+
+        Livewire::test(PlotAvailabilityPreview::class)->assertSee('BLOK-A');
+
+        $queries = \Illuminate\Support\Facades\DB::getQueryLog();
+
+        $this->assertEmpty(
+            array_filter($queries, static fn (array $q): bool => str_contains($q['query'], 'cemetery_blocks')),
+            'Expected the second render within the cache TTL to read from cache, not re-query cemetery_blocks.',
+        );
+    }
+
+    public function test_changing_the_configured_slug_list_bypasses_the_stale_cache_key(): void
+    {
+        $first = $this->makeCemetery('tpu-cache-key-a', PlotTrackingMode::GRANULAR);
+        CemeteryBlock::query()->create([
+            'cemetery_id' => $first->getKey(),
+            'code' => 'BLOK-A',
+            'name' => 'Blok A',
+            'capacity' => 1,
+        ])->plots()->create(['slot' => '001', 'plot_state' => PlotState::AVAILABLE]);
+
+        $second = $this->makeCemetery('tpu-cache-key-b', PlotTrackingMode::GRANULAR);
+        CemeteryBlock::query()->create([
+            'cemetery_id' => $second->getKey(),
+            'code' => 'BLOK-B',
+            'name' => 'Blok B',
+            'capacity' => 1,
+        ])->plots()->create(['slot' => '001', 'plot_state' => PlotState::AVAILABLE]);
+
+        config(['marketing.homepage_plot_preview_cemetery_slugs' => ['tpu-cache-key-a']]);
+        Livewire::test(PlotAvailabilityPreview::class)->assertSee('BLOK-A')->assertDontSee('BLOK-B');
+
+        config(['marketing.homepage_plot_preview_cemetery_slugs' => ['tpu-cache-key-b']]);
+        Livewire::test(PlotAvailabilityPreview::class)->assertSee('BLOK-B')->assertDontSee('BLOK-A');
+    }
 }

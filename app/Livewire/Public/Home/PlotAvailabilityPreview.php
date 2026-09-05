@@ -10,6 +10,7 @@ use App\Domain\CemeteryDirectory\PlotTrackingMode;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Livewire\Component;
 use Throwable;
 
@@ -31,6 +32,8 @@ final class PlotAvailabilityPreview extends Component
 
     private const int MAX_PLOTS_PER_BLOCK = 12;
 
+    private const int CACHE_TTL_SECONDS = 60;
+
     public function render(): View
     {
         $slugs = array_slice(
@@ -44,7 +47,13 @@ final class PlotAvailabilityPreview extends Component
 
         if ($slugs !== []) {
             try {
-                $showcase = $this->buildShowcase($slugs);
+                $cacheKey = 'homepage:plot-availability-preview:'.md5(implode(',', $slugs));
+
+                $showcase = Cache::remember(
+                    $cacheKey,
+                    self::CACHE_TTL_SECONDS,
+                    fn (): Collection => $this->buildShowcase($slugs),
+                );
             } catch (Throwable $e) {
                 report($e);
                 $unavailable = true;
