@@ -10,9 +10,17 @@ use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\GraveRegistry\Models\GraveRecord;
 use App\Domain\Memorial\Actions\CreateMemorialProfile;
+use App\Domain\Memorial\Actions\LogMemorialVisitCheckIn;
+use App\Domain\Memorial\Actions\PublishMemorial;
+use App\Domain\Memorial\Exceptions\MemorialNotVisibleException;
+use App\Domain\Memorial\MemorialAuditActions;
 use App\Domain\Memorial\MemorialModerationState;
+use App\Domain\Memorial\MemorialPrivacyMode;
 use App\Domain\Memorial\Models\MemorialProfile;
+use App\Domain\Memorial\Models\MemorialQrToken;
 use App\Domain\Memorial\Models\MemorialVisitCheckin;
+use App\Platform\FeatureGate\FeatureGateResolver;
+use App\Platform\FeatureGate\Models\FeatureGate;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -43,6 +51,12 @@ final class MemorialVisitCheckInTest extends TestCase
         $grave = GraveRecord::factory()->create(['cemetery_id' => $this->cemetery()->getKey()]);
 
         return app(CreateMemorialProfile::class)($grave, 'user:1', 'operator');
+    }
+
+    private function openMemorialGate(): void
+    {
+        FeatureGate::query()->where('gate_id', 'G-MEM-01')->update(['state' => 'open']);
+        app(FeatureGateResolver::class)->forget();
     }
 
     /**
@@ -76,5 +90,58 @@ final class MemorialVisitCheckInTest extends TestCase
             'memorial_profile_id' => $profile->getKey(),
             'checked_in_at' => now(),
         ])->visitor_label, 'visitor_label and note must both be optional.');
+    }
+
+    public function test_a_successful_check_in_creates_a_row_and_one_audit_event(): void
+    {
+        $this->openMemorialGate();
+        $profile = app(PublishMemorial::class)($this->profile(), 'user:1', 'operator');
+        $profile->forceFill(['privacy_mode' => MemorialPrivacyMode::PUBLIC->value])->save();
+        $token = MemorialQrToken::issueFor($profile);
+
+        $checkIn = app(LogMemorialVisitCheckIn::class)(
+            $token->token,
+            null,
+            'Anak',
+            'Terima kasih sudah dirawat.',
+            'visit_session:test-session',
+            'guest',
+        );
+
+        $this->assertSame($profile->getKey(), $checkIn->memorial_profile_id);
+        $this->assertSame('Anak', $checkIn->visitor_label);
+        $this->assertSame('Terima kasih sudah dirawat.', $checkIn->note);
+        $this->assertNotNull($checkIn->checked_in_at);
+        $this->assertDatabaseHas('audit_events', [
+            'action' => MemorialAuditActions::MEMORIAL_VISIT_CHECKED_IN,
+            'subject_id' => $checkIn->getKey(),
+        ]);
+    }
+
+    public function test_closed_gate_and_revoked_token_deny_the_check_in_with_the_same_exception_as_the_direct_resolve(): void
+    {
+        $profile = app(PublishMemorial::class)($this->profile(), 'user:1', 'operator');
+        $profile->forceFill(['privacy_mode' => MemorialPrivacyMode::PUBLIC->value])->save();
+        $token = MemorialQrToken::issueFor($profile);
+
+        try {
+            app(LogMemorialVisitCheckIn::class)($token->token, null, null, null, 'visit_session:test', 'guest');
+            $this->fail('A closed gate must deny the check-in path.');
+        } catch (MemorialNotVisibleException) {
+            // expected — the SAME class ResolveMemorialQr throws directly.
+        }
+
+        $this->openMemorialGate();
+        $token->revoke();
+
+        try {
+            app(LogMemorialVisitCheckIn::class)($token->token, null, null, null, 'visit_session:test', 'guest');
+            $this->fail('A revoked token must deny the check-in path.');
+        } catch (MemorialNotVisibleException) {
+            // expected — same class again, no second oracle.
+        }
+
+        $this->assertDatabaseMissing('memorial_visit_checkins', ['memorial_profile_id' => $profile->getKey()]);
+        $this->assertDatabaseMissing('audit_events', ['action' => MemorialAuditActions::MEMORIAL_VISIT_CHECKED_IN]);
     }
 }
