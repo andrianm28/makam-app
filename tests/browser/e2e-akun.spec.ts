@@ -1,21 +1,37 @@
-import * as os from 'node:os';
-import * as path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 /**
  * `/akun` customer account area — login/registration, index, draft list,
  * order list, and the two gate-closed stub pages (perpanjangan, dokumen).
  *
- * THIS FILE WAS NOT EXECUTED. There is no `node_modules`/browser available
- * in this environment (confirmed: `ls node_modules` -> "No such file or
- * directory"). Every string and route asserted below was read directly from
- * the real, current source at the time this file was written — see this
- * task's own report (`.superpowers/sdd/2026-09-04-pre-demo-known-gaps/
- * task-6-report.md`) for file:line citations. If a real run of this file
- * (once a browser/node_modules environment exists) fails on a string
- * mismatch, re-read the live source before assuming this file is wrong — it
- * may simply have drifted from a later UI change, same discipline
- * `e2e-admin-vendor.spec.ts`'s own header comment documents.
+ * This file was originally written without a browser/node_modules available
+ * to run it (no local environment could execute Playwright — confirmed
+ * repeatedly: `ls node_modules` -> "No such file or directory"). Every
+ * string and route asserted below was read directly from the real, current
+ * source at the time it was written — see the original task's own report
+ * (`.superpowers/sdd/2026-09-04-pre-demo-known-gaps/task-6-report.md`) for
+ * file:line citations. If a future run fails on a string mismatch, re-read
+ * the live source before assuming this file is wrong — it may simply have
+ * drifted from a later UI change, same discipline `e2e-admin-vendor.spec.ts`'s
+ * own header comment documents.
+ *
+ * It HAS since been executed for real, in this repo's actual CI (PR #226,
+ * 5 Sep 2026) — and found a real bug the no-execution-environment
+ * constraint above could never have caught: the original 'with an
+ * authenticated customer session' describe block cached one login via a
+ * `beforeAll` that wrote a `TEST_PARALLEL_INDEX`-keyed storage-state file
+ * to `os.tmpdir()`, mirroring `e2e-admin-vendor.spec.ts`'s own
+ * admin/vendor session-caching pattern — but in real CI the file the
+ * `beforeAll` wrote was not visible to the following test's own context
+ * fixture setup (`ENOENT`), a real cross-process/timing failure this
+ * design could not be proven safe or unsafe without actually running it.
+ * Fixed by replacing that whole mechanism with a per-test `beforeEach`
+ * login (see that describe block's own comment for why this is safe
+ * against the login rate limiter). This fix itself has NOT yet been
+ * re-executed in CI — confirm the next real run is green before trusting
+ * it fully; the same "verify by reading, not assuming" discipline applies
+ * to this fix as it did to the file's own original, since no local
+ * execution environment exists here either.
  *
  * ---------------------------------------------------------------------------
  * Customer-account E2E fixture strategy — resolved by reading real source
@@ -94,7 +110,7 @@ type CustomerCredentials = {
 // block below and read by every later describe block in this file.
 // `test.describe.configure({ mode: 'serial' })` (below) is what makes this
 // safe: it forces the whole file onto one worker, in declaration order, so
-// `customer` is always assigned before any later block's `beforeAll`/test
+// `customer` is always assigned before any later block's `beforeEach`/test
 // reads it — same "whole-file serial mode for a cross-describe dependency"
 // reasoning `e2e-admin-vendor.spec.ts`'s own header comment documents for
 // its two admin-needing describe blocks sharing one login.
@@ -129,21 +145,6 @@ async function loginAsCustomer(page: Page, credentials: CustomerCredentials): Pr
     await page.waitForLoadState('networkidle');
 }
 
-function parallelSlot(): string {
-    return process.env.TEST_PARALLEL_INDEX ?? '0';
-}
-
-// One file, one fresh customer per run — no cross-run freshness caching the
-// way `admin-session.ts`'s `adminStorageStatePath()` needs, since a fixed
-// admin/vendor login is reused across runs but a fresh registration is
-// deliberately NOT (see this file's header comment on why the email is
-// generated, not fixed). This path only needs to be unique per concurrent
-// worker slot within a single run, same `TEST_PARALLEL_INDEX` reasoning
-// `e2e-admin-vendor.spec.ts` uses for its own storage-state paths.
-function customerStorageStatePath(): string {
-    return path.join(os.tmpdir(), `e2e-akun-customer-storage-state-${parallelSlot()}.json`);
-}
-
 test.describe.configure({ mode: 'serial' });
 
 test.describe('akun — registration and login', () => {
@@ -173,15 +174,29 @@ test.describe('akun — registration and login', () => {
 });
 
 test.describe('akun — with an authenticated customer session', () => {
-    const storageStatePath = customerStorageStatePath();
-    test.use({ storageState: storageStatePath });
-
-    test.beforeAll(async ({ browser }) => {
-        const context = await browser.newContext();
-        const page = await context.newPage();
+    // Each test logs in fresh via /masuk in its own beforeEach, rather than
+    // sharing one login across tests via a beforeAll-written storage-state
+    // file. A prior version of this file used a `TEST_PARALLEL_INDEX`-keyed
+    // storage-state file (mirroring `e2e-admin-vendor.spec.ts`'s own
+    // admin/vendor session-caching pattern) — that pattern is only safe when
+    // the login it caches is expensive and stable across many runs; it
+    // proved unreliable here in real CI (the beforeAll's written file was not
+    // consistently visible to the following test's own fixture setup — a
+    // file-name mismatch, so real CI is authoritative over the theory,
+    // which the file's own header comment already anticipated). This
+    // account is a fresh, cheap, throwaway registration already (unlike the
+    // admin/vendor fixture), so re-logging in per test (a ~1-2s round trip,
+    // per this file's own passing "can log in" test timing) is a simpler,
+    // more robust trade than debugging cross-worker file-handoff timing.
+    // Checked against LoginPage's real rate limiter (5 attempts/60s per
+    // email+IP, `app/Livewire/Public/Auth/LoginPage.php:51-65`): it only
+    // calls `RateLimiter::hit()` on a FAILED attempt; a successful login
+    // calls `RateLimiter::clear()` instead (`:73-75`). Every login in this
+    // file uses the real, valid credentials, so each one clears the
+    // counter before the next fires — repeated logins here can never
+    // accumulate toward the limit.
+    test.beforeEach(async ({ page }) => {
         await loginAsCustomer(page, customer);
-        await context.storageState({ path: storageStatePath });
-        await context.close();
     });
 
     test('draft list shows the real empty state when there are no drafts', async ({ page }) => {
