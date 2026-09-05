@@ -70,13 +70,7 @@ Secrets come from protected secret management, never committed `.env` files.
 7. Run public/admin/vendor smoke tests and provider sandbox checks.
 8. Observe host memory, swap, queue wait, PostgreSQL, Redis, and disk.
 
-> **Updated 5 Sep 2026.** Steps 2-7 above are now
-> automated by `deploy-dev`/`deploy-beta` in `.github/workflows/ci.yml` —
-> see `dev-staging-environment.md` §10's own note for the same caveat: the
-> jobs exist but cannot run for real until `docs/operations/runbooks/setup-
-> cicd-self-hosted-runner.md` has been executed. This procedure's steps
-> remain the correct manual fallback if the automated pipeline is ever
-> unavailable or intentionally bypassed.
+> **Updated 5 Sep 2026.** Steps 2-5 above are now automated by `deploy-dev`/`deploy-beta` in `.github/workflows/ci.yml` — see `dev-staging-environment.md` §10's own note for the same caveat: the jobs exist but cannot run for real until `docs/operations/runbooks/setup-cicd-self-hosted-runner.md` has been executed. Step 6 ("Gracefully restart staging Horizon") does not apply — `beta-worker` runs plain `php artisan queue:work`, not Horizon (spec §1.3 finding 3); the automated pipeline's own restart relies on the already-configured `stop_grace_period: 90s` instead. Step 7 (smoke tests, provider sandbox checks) remains manual — the automated pipeline only checks `/health/live`, `/health/ready`, and the homepage. This procedure's steps remain the correct manual fallback if the automated pipeline is ever unavailable or intentionally bypassed.
 
 ## 6. Production deployment procedure
 

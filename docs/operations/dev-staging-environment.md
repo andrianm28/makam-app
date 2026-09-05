@@ -198,22 +198,7 @@ Git push
 -> staging smoke/UAT checks
 ```
 
-> **Updated 5 Sep 2026 — automated via CI.** The sequence
-> above is now implemented as `deploy-dev`/`deploy-beta` jobs in
-> `.github/workflows/ci.yml` (`docs/superpowers/specs/2026-09-05-cicd-
-> automation-design.md`), running on a self-hosted GitHub Actions runner on
-> this same host once `docs/operations/runbooks/setup-cicd-self-hosted-
-> runner.md` has been executed. **As of this note, that runbook has not yet
-> been executed** — the jobs exist in `ci.yml` but cannot run until the
-> runner is registered. Do not assume this pipeline is live without checking
-> whether that runbook's own completion evidence has been recorded. Once
-> active: a push to `docs/design-system-and-planning` deploys to dev, smoke-
-> tests it, and — only if that passes — automatically promotes the identical
-> digest to beta and smoke-tests it too, with no human approval step in
-> between (an explicit decision, matching the same self-hosted-runner model
-> `galangdana`, an unrelated project on this host, already uses in
-> production). A failed smoke test fails the job and stops; nothing rolls
-> back automatically (see `runbooks/rollback-deploy.md`).
+> **Updated 5 Sep 2026 — automated via CI.** The sequence above is now implemented as `deploy-dev`/`deploy-beta` jobs in `.github/workflows/ci.yml` (`docs/superpowers/specs/2026-09-05-cicd-automation-design.md`), running on a self-hosted GitHub Actions runner on this same host once `docs/operations/runbooks/setup-cicd-self-hosted-runner.md` has been executed. **As of this note, that runbook has not yet been executed** — the jobs exist in `ci.yml` but cannot run until the runner is registered. Do not assume this pipeline is live without checking whether that runbook's own completion evidence has been recorded. Once active: a push to `docs/design-system-and-planning` deploys to dev, smoke-tests it, and — only if that passes — automatically promotes the identical digest to beta and smoke-tests it too, with no human approval step in between (an explicit decision, matching the same self-hosted-runner model `galangdana`, an unrelated project on this host, already uses in production). Both jobs additionally require the `MAKAM_DEPLOY_RUNNER_ACTIVE` repository variable to be set to `true` — set once, by the runbook's own final activation step — so a trunk push before that point safely skips both jobs rather than queuing indefinitely for a runner that doesn't exist yet. A failed smoke test fails the job and stops; nothing rolls back automatically (see `runbooks/rollback-deploy.md`).
 
 Do not run routine `composer update`, frontend production build, or large dependency compilation on the host.
 
