@@ -4,19 +4,24 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Livewire\Public\CareSubscription;
 
+use App\Domain\CareSubscription\CarePlanFrequency;
+use App\Domain\CareSubscription\Models\CarePlan;
+use App\Domain\CareSubscription\Models\Subscription;
+use App\Domain\CareSubscription\Models\SubscriptionCycle;
+use App\Domain\VendorFulfillment\Models\WorkOrder;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
- * `/riwayat-perawatan/{customerId}` — route-level behaviour only. This route
- * carried no `auth` middleware until the accept/complaint write surface
- * landed (`CareHistoryPage`'s own doc block: "a route middleware gap this
- * component cannot close on its own"); the middleware was added alongside
- * that write surface in the same batch. `CareHistoryPageTest`/
- * `CareHistoryPageActionsTest` exercise the component's own content and
- * write actions via `Livewire::test()`, which bypasses route middleware
- * entirely — this file is what actually proves the route itself is gated.
+ * `/riwayat-perawatan/{customerId}` — route-level behaviour only.
+ * `CareHistoryPageTest`/`CareHistoryPageActionsTest` exercise the
+ * component's own content and write actions via `Livewire::test()`, which
+ * bypasses route middleware entirely — this file is what actually proves
+ * the route itself is gated, and (since the 5 Sep 2026 IDOR fix) that the
+ * `auth` middleware being satisfied is not by itself enough: the
+ * authenticated actor must also BE the customer the URL names.
  */
 final class CareHistoryPageRouteTest extends TestCase
 {
@@ -63,5 +68,70 @@ final class CareHistoryPageRouteTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Belum ada riwayat perawatan');
+    }
+
+    /**
+     * The real, live cross-customer IDOR this fix closes, proven at the
+     * actual HTTP/route level (not just via `Livewire::test()`, which
+     * bypasses middleware entirely) — see
+     * `CareHistoryPageTest::test_an_authenticated_customer_cannot_see_
+     * another_customers_care_history()` for the component-level version of
+     * this same proof. Before 5 Sep 2026, satisfying `auth` middleware was
+     * enough: any logged-in customer visiting another customer's real
+     * `/riwayat-perawatan/{customerId}` URL saw that customer's real
+     * work-order history. Now the wrong viewer gets the exact same honest
+     * "no history" state a genuinely history-less customer sees — never a
+     * distinguishing 403/404 (see `CareHistoryPage`'s own class doc block
+     * for why a 403 here would itself be an existence-leak).
+     */
+    public function test_an_authenticated_customer_visiting_another_customers_url_gets_the_honest_empty_state_not_their_real_history(): void
+    {
+        $victim = User::factory()->create();
+
+        $carePlan = CarePlan::query()->create([
+            'reference' => 'CP-'.Str::upper(Str::random(8)),
+            'name' => 'Perawatan Bulanan Standar',
+            'product_code' => 'GRAVE_CARE_MONTHLY',
+            'frequency' => CarePlanFrequency::Monthly->value,
+            'price_minor' => 150000,
+            'currency' => 'IDR',
+            'checklist_template' => ['membersihkan makam'],
+            'status' => 'active',
+        ]);
+
+        $subscription = Subscription::query()->create([
+            'reference' => 'SUB-'.Str::upper(Str::random(8)),
+            'grave_id' => (string) Str::uuid(),
+            'care_plan_id' => $carePlan->getKey(),
+            'customer_id' => $victim->id,
+            'status' => 'active',
+            'frequency' => CarePlanFrequency::Monthly->value,
+            'price_minor' => 150000,
+            'currency' => 'IDR',
+            'current_cycle_number' => 2,
+            'started_at' => now()->subMonths(2),
+        ]);
+
+        $cycle = SubscriptionCycle::query()->create([
+            'subscription_id' => $subscription->getKey(),
+            'cycle_start' => now()->subMonth()->startOfMonth()->toDateString(),
+            'cycle_end' => now()->subMonth()->endOfMonth()->toDateString(),
+            'status' => 'COMPLETED',
+        ]);
+
+        $victimsWorkOrder = WorkOrder::query()->create([
+            'reference' => 'WO-'.Str::upper(Str::random(8)),
+            'care_plan_id' => $subscription->getKey(),
+            'subscription_cycle_id' => $cycle->getKey(),
+            'status' => 'completed',
+        ]);
+
+        $attacker = User::factory()->create();
+
+        $response = $this->actingAs($attacker)->get('/riwayat-perawatan/'.$victim->getAuthIdentifier());
+
+        $response->assertOk();
+        $response->assertSee('Belum ada riwayat perawatan');
+        $response->assertDontSee($victimsWorkOrder->reference);
     }
 }

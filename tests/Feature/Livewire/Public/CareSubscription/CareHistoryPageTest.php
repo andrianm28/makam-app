@@ -35,7 +35,16 @@ final class CareHistoryPageTest extends TestCase
 
         // `subscriptions.customer_id` is a real bigint FK to `users` (fixed
         // 22 Aug 2026) -- a random uuid is no longer a valid fixture value.
-        $this->customerId = (string) User::factory()->create()->id;
+        $customer = User::factory()->create();
+        $this->customerId = (string) $customer->id;
+
+        // Every test below asserts the page's REAL content for its own
+        // customer -- since the IDOR fix (5 Sep 2026), resolveWorkOrders()
+        // returns nothing at all unless the viewer IS this customer (see
+        // CareHistoryPage's own class doc block), so every content
+        // assertion needs a real authenticated actor now, not just a
+        // customerId prop.
+        $this->actingAs($customer);
     }
 
     private function createCarePlan(): CarePlan
@@ -182,5 +191,45 @@ final class CareHistoryPageTest extends TestCase
         $this->assertStringContainsString('Paid', $html);
         // Work order shows "Pending", NOT "Completed"
         $this->assertStringContainsString('Pending', $html);
+    }
+
+    /**
+     * The real, live cross-customer IDOR this fix closes: before 5 Sep
+     * 2026, `resolveWorkOrders()` trusted the raw `customerId` route
+     * segment directly, so any authenticated customer could view another
+     * customer's full work-order/billing/complaint history by visiting
+     * `/riwayat-perawatan/{someone_elses_id}`. Same test shape as
+     * `App\Livewire\Public\Memorial\MemorialFamilyPageTest`'s own
+     * cross-family denial test: the wrong viewer gets the SAME uniform
+     * "no history" empty state a genuinely history-less customer would see
+     * — never a distinguishing 403/404, which would itself leak which
+     * customer ids are real.
+     */
+    public function test_an_authenticated_customer_cannot_see_another_customers_care_history(): void
+    {
+        // $this->customerId (from setUp) is the VICTIM -- it already has a
+        // real subscription with a real, identifiable work order.
+        $subscription = $this->createSubscription();
+
+        $cycle = SubscriptionCycle::query()->create([
+            'subscription_id' => $subscription->getKey(),
+            'cycle_start' => now()->subMonth()->startOfMonth()->toDateString(),
+            'cycle_end' => now()->subMonth()->endOfMonth()->toDateString(),
+            'status' => 'COMPLETED',
+        ]);
+        $victimsWorkOrder = $this->createWorkOrderForCycle($cycle, 'completed');
+
+        // A completely unrelated, real, authenticated customer -- the
+        // attacker -- logs in as themselves and requests the VICTIM's
+        // customerId directly.
+        $attacker = User::factory()->create();
+        $this->actingAs($attacker);
+
+        Livewire::test(CareHistoryPage::class, [
+            'customerId' => $this->customerId,
+        ])
+            ->assertOk()
+            ->assertSee('Belum ada riwayat perawatan')
+            ->assertDontSee($victimsWorkOrder->reference);
     }
 }
