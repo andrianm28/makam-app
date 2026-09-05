@@ -142,6 +142,14 @@ final class MemorialProfile extends Model
     }
 
     /**
+     * @return HasMany<MemorialVisitCheckin, $this>
+     */
+    public function visitCheckIns(): HasMany
+    {
+        return $this->hasMany(MemorialVisitCheckin::class, 'memorial_profile_id');
+    }
+
+    /**
      * @return HasMany<ModerationCase, $this>
      */
     public function moderationCases(): HasMany
