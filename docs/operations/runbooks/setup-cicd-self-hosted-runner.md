@@ -86,18 +86,10 @@ echo "Currently running — dev: $DEV_DIGEST"
 echo "Currently running — beta: $BETA_DIGEST"
 ```
 
-Now bring the directory under git and record a snapshot of the pre-refactor rendered config, to compare the refactor against afterward:
+Bring the directory under git — but the FIRST thing tracked must be a `.gitignore` excluding this directory's real secrets, before any `git add -A` ever runs. `secrets/` holds real database passwords (`postgres_admin_password.txt` and friends), and `.env.dev`/`.env.beta` hold `APP_KEY`/`DB_PASSWORD`. Git history is append-only — a `.gitignore` added *after* a `git add -A` cannot retroactively remove an already-committed blob, so the ordering below is not optional:
 
 ```bash
 git init
-git add -A
-git commit -m "chore: bring compose.yml under version control (was hand-timestamped .bak copies)"
-docker compose config > /tmp/compose-config-before-refactor.yml
-```
-
-Add a `.gitignore` **before** any further `git add` — this directory's `secrets/` subdirectory holds real database passwords, and `.env.dev`/`.env.beta` hold `APP_KEY`/`DB_PASSWORD`. None of that may ever enter git history:
-
-```bash
 cat > .gitignore <<'GITIGNORE'
 secrets/
 .env.dev
@@ -106,6 +98,15 @@ secrets/
 GITIGNORE
 git add .gitignore
 git commit -m "chore: exclude secrets/, env files, and backup snapshots from version control"
+```
+
+Only now is it safe to bring the rest of the directory under git and record a snapshot of the pre-refactor rendered config, to compare the refactor against afterward:
+
+```bash
+git add -A
+git commit -m "chore: bring compose.yml under version control (was hand-timestamped .bak copies)"
+git status --porcelain  # confirm secrets/, .env.dev, .env.beta, *.bak-* are NOT listed — .gitignore is working
+docker compose config > /tmp/compose-config-before-refactor.yml
 ```
 
 Now edit `compose.yml`: for `dev-web`, replace its hardcoded `image: ghcr.io/andrianm28/makam-app@sha256:...` line with:
@@ -193,4 +194,4 @@ Record: Step 1's real permission-check output (and whether Step 4 was needed), t
 
 ## Rollback
 
-Activating this runbook does not itself require a rollback procedure — it only adds automation around an already-existing manual process. If `deploy-dev`/`deploy-beta`'s first real run (Step 7) causes a bad deploy, use the existing `docs/operations/runbooks/rollback-deploy.md` exactly as if the bad deploy had been manual — the mechanism it rolls back (`APP_IMAGE` re-pin) is unchanged by this runbook.
+Activating this runbook does not itself require a rollback procedure — it only adds automation around an already-existing manual process. If `deploy-dev`/`deploy-beta`'s first real run (Step 7) causes a bad deploy, use the existing `docs/operations/runbooks/rollback-deploy.md` exactly as if the bad deploy had been manual — the mechanism it rolls back (`APP_IMAGE_DEV`/`APP_IMAGE_BETA` re-pin) is unchanged by this runbook.
