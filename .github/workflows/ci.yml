@@ -48,6 +48,28 @@ jobs:
         run: bash ci/verify-docs.sh
 
   # ---------------------------------------------------------------------------
+  # Destructive-migration gate (cicd-automation-design.md §3.4). A required PR
+  # status check — the automated replacement for the manual "read every
+  # migration before running it" step every deploy has needed by hand so far.
+  # ---------------------------------------------------------------------------
+  verify-migrations:
+    name: Verify no unapproved destructive migrations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          tools: composer:v2
+          coverage: none
+      - name: Install dependencies from lockfile
+        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Run the destructive-migration gate
+        run: php artisan migrations:verify-no-destructive-changes "origin/${{ github.event.pull_request.base.ref || 'docs/design-system-and-planning' }}"
+
+  # ---------------------------------------------------------------------------
   # Assert the running toolchain matches ci/version-matrix.yml, so the pipeline
   # never silently drifts off the accepted baseline (technology-baseline.md §5).
   # ---------------------------------------------------------------------------
@@ -686,6 +708,10 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      sha_tag: ${{ steps.meta.outputs.sha_tag }}
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
 
