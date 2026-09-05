@@ -172,6 +172,15 @@
         </p>
     </x-mk.hero>
 
+    {{-- Plot-availability preview — NEW section, not a tenth entry in IA §3's normative nine-section
+         list (same non-renumbering precedent as "Kehangatan Keluarga" below, added 26 Aug 2026 —
+         see that section's own comment and this file's top doc block). Sits directly under the
+         hero, ahead of the four service cards, per
+         docs/superpowers/specs/2026-09-05-marketing-hero-plot-preview-design.md. Renders nothing
+         when no showcase cemetery has real per-plot data yet or the read fails (component's own
+         try/catch) — never a broken or empty-looking box on the highest-traffic page. --}}
+    <livewire:public.home.plot-availability-preview />
+
     {{-- Section 3: four service cards — AC1's exact order, from
          HomePage::PRIMARY_MENUS (see that class's own doc block for why
          this is a second hardcoded copy of header.blade.php's $navItems,
