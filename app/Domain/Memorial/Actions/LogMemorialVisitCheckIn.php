@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Memorial\Actions;
 
+use App\Domain\Memorial\Exceptions\MemorialVisitCheckInThrottledException;
 use App\Domain\Memorial\MemorialAuditActions;
 use App\Domain\Memorial\MemorialModerationState;
 use App\Domain\Memorial\Models\MemorialVisitCheckin;
@@ -13,6 +14,7 @@ use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\AuditSubject;
 use App\Platform\Correlation\CorrelationContext;
 use App\Platform\IdentityAccess\ActorContext;
+use Illuminate\Support\Facades\RateLimiter;
 
 /**
  * The self-service "Catat kunjungan" write path
@@ -24,6 +26,15 @@ use App\Platform\IdentityAccess\ActorContext;
  */
 final readonly class LogMemorialVisitCheckIn
 {
+    /**
+     * Concrete, load-bearing (there is no auth to rely on for abuse
+     * prevention) — §4.3: enough for a handful of family members tapping
+     * during one visit, not enough for sustained/scripted repetition.
+     */
+    public const int MAX_ATTEMPTS = 5;
+
+    public const int DECAY_SECONDS = 900;
+
     public function __construct(
         private ResolveMemorialQr $resolveMemorialQr,
     ) {}
@@ -38,6 +49,14 @@ final readonly class LogMemorialVisitCheckIn
         ?AuditSource $auditSource = null,
     ): MemorialVisitCheckin {
         $projection = ($this->resolveMemorialQr)($token, $actor);
+
+        $key = 'memorial-visit-checkin:'.$token;
+
+        if (RateLimiter::tooManyAttempts($key, self::MAX_ATTEMPTS)) {
+            throw MemorialVisitCheckInThrottledException::forToken($token, RateLimiter::availableIn($key));
+        }
+
+        RateLimiter::hit($key, self::DECAY_SECONDS);
 
         return Audit::wrap(
             mutation: function () use ($projection, $visitorLabel, $note): MemorialVisitCheckin {

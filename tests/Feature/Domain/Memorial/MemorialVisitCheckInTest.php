@@ -13,6 +13,7 @@ use App\Domain\Memorial\Actions\CreateMemorialProfile;
 use App\Domain\Memorial\Actions\LogMemorialVisitCheckIn;
 use App\Domain\Memorial\Actions\PublishMemorial;
 use App\Domain\Memorial\Exceptions\MemorialNotVisibleException;
+use App\Domain\Memorial\Exceptions\MemorialVisitCheckInThrottledException;
 use App\Domain\Memorial\MemorialAuditActions;
 use App\Domain\Memorial\MemorialModerationState;
 use App\Domain\Memorial\MemorialPrivacyMode;
@@ -143,5 +144,65 @@ final class MemorialVisitCheckInTest extends TestCase
 
         $this->assertDatabaseMissing('memorial_visit_checkins', ['memorial_profile_id' => $profile->getKey()]);
         $this->assertDatabaseMissing('audit_events', ['action' => MemorialAuditActions::MEMORIAL_VISIT_CHECKED_IN]);
+    }
+
+    public function test_the_sixth_attempt_within_the_window_is_throttled_but_a_different_token_is_unaffected(): void
+    {
+        $this->openMemorialGate();
+        $profileA = app(PublishMemorial::class)($this->profile(), 'user:1', 'operator');
+        $profileA->forceFill(['privacy_mode' => MemorialPrivacyMode::PUBLIC->value])->save();
+        $tokenA = MemorialQrToken::issueFor($profileA);
+
+        $profileB = app(PublishMemorial::class)($this->profile(), 'user:1', 'operator');
+        $profileB->forceFill(['privacy_mode' => MemorialPrivacyMode::PUBLIC->value])->save();
+        $tokenB = MemorialQrToken::issueFor($profileB);
+
+        for ($i = 0; $i < LogMemorialVisitCheckIn::MAX_ATTEMPTS; $i++) {
+            app(LogMemorialVisitCheckIn::class)($tokenA->token, null, null, null, 'visit_session:test', 'guest');
+        }
+
+        $thrown = null;
+
+        try {
+            app(LogMemorialVisitCheckIn::class)($tokenA->token, null, null, null, 'visit_session:test', 'guest');
+        } catch (MemorialVisitCheckInThrottledException $exception) {
+            $thrown = $exception;
+        }
+
+        $this->assertNotNull($thrown, 'The attempt beyond MAX_ATTEMPTS within the window must be throttled.');
+        $this->assertGreaterThan(0, $thrown->retryAfterSeconds);
+        $this->assertSame(
+            LogMemorialVisitCheckIn::MAX_ATTEMPTS,
+            MemorialVisitCheckin::query()->where('memorial_profile_id', $profileA->getKey())->count(),
+            'The throttled attempt must not have written a row.'
+        );
+
+        $fromB = app(LogMemorialVisitCheckIn::class)($tokenB->token, null, null, null, 'visit_session:test', 'guest');
+        $this->assertInstanceOf(MemorialVisitCheckin::class, $fromB, 'A different token must have its own, unaffected bucket.');
+    }
+
+    public function test_the_limit_resets_once_the_decay_window_has_elapsed(): void
+    {
+        $this->openMemorialGate();
+        $profile = app(PublishMemorial::class)($this->profile(), 'user:1', 'operator');
+        $profile->forceFill(['privacy_mode' => MemorialPrivacyMode::PUBLIC->value])->save();
+        $token = MemorialQrToken::issueFor($profile);
+
+        for ($i = 0; $i < LogMemorialVisitCheckIn::MAX_ATTEMPTS; $i++) {
+            app(LogMemorialVisitCheckIn::class)($token->token, null, null, null, 'visit_session:test', 'guest');
+        }
+
+        try {
+            app(LogMemorialVisitCheckIn::class)($token->token, null, null, null, 'visit_session:test', 'guest');
+            $this->fail('The 6th attempt inside the window must still be throttled before we travel forward.');
+        } catch (MemorialVisitCheckInThrottledException) {
+            // expected — confirms the bucket really was exhausted before the time travel below.
+        }
+
+        $this->travel(LogMemorialVisitCheckIn::DECAY_SECONDS + 1)->seconds();
+
+        $afterDecay = app(LogMemorialVisitCheckIn::class)($token->token, null, null, null, 'visit_session:test', 'guest');
+
+        $this->assertInstanceOf(MemorialVisitCheckin::class, $afterDecay, 'Once the decay window elapses, the same token must be allowed to check in again.');
     }
 }
