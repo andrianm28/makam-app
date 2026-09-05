@@ -34,6 +34,16 @@ final class ServiceComplaintsResource extends Resource
 {
     protected static ?string $model = ServiceComplaint::class;
 
+    /**
+     * `ServiceComplaint` has no short human-readable reference column
+     * (unlike `WorkOrder::$recordTitleAttribute = 'reference'`) — its real
+     * columns are `id`/`work_order_id`/`customer_id`/`complaint_text`/
+     * `status`/`resolution_notes`/`resolved_at`/`filed_at`/
+     * `make_good_order_id`. `id` is used as-is rather than adding a new
+     * accessor for a cosmetic breadcrumb label.
+     */
+    protected static ?string $recordTitleAttribute = 'id';
+
     protected static ?string $slug = 'keluhan-layanan';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedExclamationTriangle;

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Admin\Resources\ServiceComplaints\Schemas;
 
+use App\Domain\VendorFulfillment\MakeGoodStatus;
 use App\Filament\Admin\Resources\ServiceComplaints\Tables\ServiceComplaintsTable;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
@@ -51,8 +52,25 @@ final class ServiceComplaintInfolist
                             ->dateTime('d M Y H:i')
                             ->placeholder('—'),
 
-                        TextEntry::make('make_good_order_id')
-                            ->label('Pesanan Perbaikan (Make-Good)')
+                        TextEntry::make('makeGood.status')
+                            ->label('Status Pesanan Perbaikan (Make-Good)')
+                            ->badge()
+                            ->formatStateUsing(fn (?string $state): ?string => $state === null ? null : match ($state) {
+                                MakeGoodStatus::Pending->value => 'Menunggu',
+                                MakeGoodStatus::InProgress->value => 'Dikerjakan',
+                                MakeGoodStatus::Completed->value => 'Selesai',
+                                default => $state,
+                            })
+                            ->color(fn (?string $state): string => match ($state) {
+                                MakeGoodStatus::Pending->value => 'warning',
+                                MakeGoodStatus::InProgress->value => 'info',
+                                MakeGoodStatus::Completed->value => 'success',
+                                default => 'gray',
+                            })
+                            ->placeholder('—'),
+
+                        TextEntry::make('makeGood.replacementWorkOrder.reference')
+                            ->label('Pesanan Kerja Pengganti')
                             ->placeholder('—'),
                     ]),
             ]);

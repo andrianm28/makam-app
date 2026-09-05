@@ -64,4 +64,10 @@ final class ServiceComplaint extends Model
     {
         return $this->belongsTo(User::class, 'customer_id');
     }
+
+    /** @return BelongsTo<MakeGoodOrder, $this> */
+    public function makeGood(): BelongsTo
+    {
+        return $this->belongsTo(MakeGoodOrder::class, 'make_good_order_id');
+    }
 }
