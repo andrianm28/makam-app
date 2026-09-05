@@ -41,23 +41,28 @@ use Livewire\Component;
  * client-supplied parameter influences the rendered state.
  *
  * ---------------------------------------------------------------------------
- * Write surface authorization — a route middleware gap this component
- * cannot close on its own
+ * `$customerId` is an untrusted URL segment — read path, not just writes
  * ---------------------------------------------------------------------------
- * `routes/web.php`'s `riwayat-perawatan.index` route carries no `auth`
- * middleware today (it predates this write surface, when the route's own
- * comment could truthfully say "read-only GETs; no write surface exists").
- * `$customerId` is therefore an untrusted URL segment, not a verified
- * identity. Every write method here re-derives authorization itself
- * (`isAuthorizedCustomer()`: the request must be authenticated AND
- * `auth()->id()` must equal the route's `$customerId`) rather than trusting
- * the segment, and `ownedWorkOrder()` re-checks that the target work order
- * actually belongs to that customer's own subscription before any action
- * runs — an IDOR backstop independent of which work orders happen to be
- * rendered in `$workOrders`. This is defense in depth, not a substitute for
- * the real fix: the route should carry `->middleware('auth')` (routes/web.php
- * is a single-writer file this batch does not touch — flagged in the task
- * report instead).
+ * FIXED 5 Sep 2026: `resolveWorkOrders()` used to trust the raw route
+ * segment directly, so any authenticated customer could read any OTHER
+ * customer's full work-order/billing/complaint history by editing the
+ * integer in `/riwayat-perawatan/{customerId}` — a real, live cross-tenant
+ * IDOR (the route's own `->middleware('auth')` only proves *someone* is
+ * logged in, never that they own this history). `isAuthorizedCustomer()`
+ * existed but was wired only to the write actions (`acceptService()`,
+ * `fileComplaint()`) and to `canAct`, never to the read query itself.
+ *
+ * Fixed by folding `isAuthorizedCustomer()` into `resolveWorkOrders()`'s own
+ * early-return guard, collapsing "wrong viewer" into the exact same honest
+ * "Belum ada riwayat perawatan" empty state already used for "no history
+ * yet" — never a distinguishing 403/404, matching this codebase's own
+ * established anti-enumeration convention for this exact shape of problem
+ * (`App\Livewire\Public\Memorial\MemorialFamilyPage`: "anyone else... gets
+ * the SAME uniform state... cross-family access must not reveal whether the
+ * memorial exists"). A 403 here would itself leak which customer ids are
+ * real; the uniform empty state leaks nothing. `ownedWorkOrder()`'s
+ * subscription-chain re-check on the write actions is unaffected and still
+ * stands as its own independent backstop.
  */
 final class CareHistoryPage extends Component
 {
@@ -318,13 +323,17 @@ final class CareHistoryPage extends Component
      *
      * A non-numeric `$customerId` (see class doc block / `isNumericCustomerId()`)
      * returns an empty collection rather than querying — the honest "no
-     * history" state, not a crash.
+     * history" state, not a crash. The viewer failing `isAuthorizedCustomer()`
+     * (not logged in as this exact customer) collapses into the SAME empty
+     * state — see the class doc block's IDOR-fix note. Never treat these as
+     * two different outcomes: a distinguishable response here is exactly
+     * the existence-leak this fix closes.
      *
      * @return Collection<int, object>
      */
     private function resolveWorkOrders(): Collection
     {
-        if (! $this->isNumericCustomerId()) {
+        if (! $this->isNumericCustomerId() || ! $this->isAuthorizedCustomer()) {
             return new Collection;
         }
 
