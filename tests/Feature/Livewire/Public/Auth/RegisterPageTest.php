@@ -30,6 +30,21 @@ final class RegisterPageTest extends TestCase
         $this->withoutVite();
     }
 
+    /**
+     * A newly registered user holds zero `ActorRole` grants (see
+     * `test_newly_registered_user_has_no_panel_access` below and
+     * `RegisterPage`'s own doc block) — this asserts the page says so in
+     * plain Indonesian, so a visitor never mistakes `/daftar` for a vendor
+     * or operator sign-up.
+     */
+    public function test_the_page_states_that_registering_here_creates_a_customer_account_only(): void
+    {
+        $response = $this->get('/daftar');
+
+        $response->assertOk();
+        $response->assertSee('Akun yang dibuat di halaman ini adalah akun Pelanggan.');
+    }
+
     public function test_valid_registration_creates_a_user_and_authenticates_immediately(): void
     {
         Livewire::test(RegisterPage::class)

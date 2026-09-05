@@ -1120,6 +1120,19 @@ Placement: directly below the header, above `<main>`, full-bleed background with
 
 Required on **every** transactional screen (`AGENTS.md`, `screen-inventory.md` §D). Implementation: persistent `Bantuan` in the header (IA §2) **plus** a contextual support link in the footer of every wizard step, checkout, payment, and order-status screen. It must state channels and operating hours ([`faq-catalog.md`](../product/faq-catalog.md) §Customer Service) and carry the emergency disclaimer on PUB-060. Never a chat-bubble-only affordance — it must work with JS disabled.
 
+### 6.11 Actor-segmented copy on shared entry screens
+
+The platform has 3 real login surfaces — public customer login at `/masuk`, and separate Filament panel logins for vendor and cemetery-operator staff at `/vendor/login` and `/operator/login` — but only `/masuk` is linked from anywhere in the public site. Left unlabelled, `/masuk` gives a visitor no indication which account type it authenticates, and the other two portals are undiscoverable.
+
+**Rule:** `/masuk` and `/daftar` must each name, in one short line near the existing subhead, which account type they act on and, on `/masuk`, link the other two portal logins. Never imply a public form creates or authenticates anything other than a Pelanggan (customer) account.
+
+| Screen | Line | Style |
+|---|---|---|
+| `/masuk` | "Halaman ini untuk masuk sebagai Pelanggan. Vendor Jasa masuk di [sini], Pengelola TPU masuk di [sini]." — both `[sini]` link to the respective panel login route | `text-sm text-neutral-500`, links `font-medium text-primary-700 underline underline-offset-2` (§3.1 link style) |
+| `/daftar` | "Akun yang dibuat di halaman ini adalah akun Pelanggan." | `text-sm text-neutral-500` |
+
+This is a copy/routing convention, not one of the ten mandatory states in §6's table — it applies specifically to the two guest-only account-entry screens, not to transactional flows generally.
+
 ---
 
 ## 7. Accessibility

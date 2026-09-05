@@ -26,6 +26,12 @@
                 <p class="mt-2 text-base text-neutral-600">
                     Masuk ke akun Anda untuk melanjutkan.
                 </p>
+                <p class="mt-2 text-sm text-neutral-500">
+                    Halaman ini untuk masuk sebagai Pelanggan. Vendor Jasa masuk di
+                    <a href="{{ route('filament.vendor.auth.login') }}" class="font-medium text-primary-700 underline underline-offset-2">sini</a>,
+                    Pengelola TPU masuk di
+                    <a href="{{ route('filament.operator.auth.login') }}" class="font-medium text-primary-700 underline underline-offset-2">sini</a>.
+                </p>
             </div>
 
             @if (session('status'))
