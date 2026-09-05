@@ -25,7 +25,7 @@ final class VerifyNoDestructiveMigrationsCommand extends Command
     public function handle(DestructiveMigrationScanner $scanner): int
     {
         $baseRef = (string) $this->argument('base-ref');
-        $repo = $this->option('repo') ?? base_path();
+        $repo = $this->option('repo') ?: base_path();
 
         $diff = new Process(['git', 'diff', '--name-only', '--diff-filter=ACMR', "{$baseRef}...HEAD", '--', 'database/migrations']);
         $diff->setWorkingDirectory($repo);
