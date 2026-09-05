@@ -19,6 +19,7 @@ use App\Domain\Memorial\MemorialModerationState;
 use App\Domain\Memorial\MemorialPrivacyMode;
 use App\Domain\Memorial\Models\MemorialProfile;
 use App\Domain\Memorial\Models\MemorialQrToken;
+use App\Domain\Memorial\Models\MemorialVisitCheckin;
 use App\Livewire\Public\Memorial\MemorialFamilyPage;
 use App\Livewire\Public\Memorial\MemorialPublicPage;
 use App\Models\User;
@@ -305,6 +306,98 @@ final class MemorialPublicPageTest extends TestCase
             ->assertOk()
             ->assertSee(self::UNIFORM_NOT_VISIBLE)
             ->assertDontSee('Almarhum Ahmad Uji');
+    }
+
+    // =====================================================================
+    // PUBLIC PAGE — visit check-in ("Catat kunjungan")
+    // =====================================================================
+
+    public function test_the_check_in_button_renders_only_when_the_memorial_is_visible(): void
+    {
+        $this->openMemorialGate();
+        $profile = $this->profile(MemorialPrivacyMode::PUBLIC->value);
+        app(PublishMemorial::class)($profile, 'moderator:1', 'moderator');
+        $token = $this->tokenFor($profile);
+
+        Livewire::test(MemorialPublicPage::class, ['token' => $token->token])
+            ->assertOk()
+            ->assertSee('Catat kunjungan');
+
+        // The seeded-closed-gate case from the top of this file must NOT
+        // show the button on the uniform not-visible state.
+        FeatureGate::query()->where('gate_id', 'G-MEM-01')->update(['state' => 'closed']);
+        app(FeatureGateResolver::class)->forget();
+
+        Livewire::test(MemorialPublicPage::class, ['token' => $token->token])
+            ->assertOk()
+            ->assertSee(self::UNIFORM_NOT_VISIBLE)
+            ->assertDontSee('Catat kunjungan');
+    }
+
+    public function test_logging_a_visit_creates_a_row_and_shows_the_confirmation(): void
+    {
+        $this->openMemorialGate();
+        $profile = $this->profile(MemorialPrivacyMode::PUBLIC->value);
+        app(PublishMemorial::class)($profile, 'moderator:1', 'moderator');
+        $token = $this->tokenFor($profile);
+
+        Livewire::test(MemorialPublicPage::class, ['token' => $token->token])
+            ->set('visitorLabel', 'Cucu')
+            ->call('logVisit')
+            ->assertHasNoErrors()
+            ->assertSee('Kunjungan dicatat. Terima kasih.');
+
+        $this->assertDatabaseHas('memorial_visit_checkins', [
+            'memorial_profile_id' => $profile->getKey(),
+            'visitor_label' => 'Cucu',
+        ]);
+    }
+
+    public function test_logging_a_visit_after_the_gate_closes_mid_session_writes_no_row(): void
+    {
+        $this->openMemorialGate();
+        $profile = $this->profile(MemorialPrivacyMode::PUBLIC->value);
+        app(PublishMemorial::class)($profile, 'moderator:1', 'moderator');
+        $token = $this->tokenFor($profile);
+
+        $component = Livewire::test(MemorialPublicPage::class, ['token' => $token->token])->assertOk();
+
+        FeatureGate::query()->where('gate_id', 'G-MEM-01')->update(['state' => 'closed']);
+        app(FeatureGateResolver::class)->forget();
+
+        $component->call('logVisit');
+
+        $this->assertDatabaseMissing('memorial_visit_checkins', ['memorial_profile_id' => $profile->getKey()]);
+    }
+
+    /**
+     * The 6th attempt within the window (`LogMemorialVisitCheckIn::MAX_ATTEMPTS`
+     * is 5) is throttled; the retry-seconds copy must read as a real wait,
+     * and the throttled call must not add a 6th row.
+     */
+    public function test_a_throttled_attempt_shows_a_retry_message_and_writes_no_extra_row(): void
+    {
+        $this->openMemorialGate();
+        $profile = $this->profile(MemorialPrivacyMode::PUBLIC->value);
+        app(PublishMemorial::class)($profile, 'moderator:1', 'moderator');
+        $token = $this->tokenFor($profile);
+
+        for ($i = 0; $i < 5; $i++) {
+            Livewire::test(MemorialPublicPage::class, ['token' => $token->token])
+                ->call('logVisit')
+                ->assertHasNoErrors();
+        }
+
+        Livewire::test(MemorialPublicPage::class, ['token' => $token->token])
+            ->call('logVisit')
+            ->assertHasNoErrors()
+            ->assertSee('Coba lagi');
+
+        $this->assertSame(
+            5,
+            MemorialVisitCheckin::query()->where('memorial_profile_id', $profile->getKey())->count(),
+            'The throttled 6th attempt must not have written a row.'
+        );
     }
 
     // =====================================================================
