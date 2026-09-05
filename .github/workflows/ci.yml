@@ -24,7 +24,7 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/docs/design-system-and-planning' }}
 
 permissions:
   contents: read
@@ -62,10 +62,15 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: "8.5"
+          extensions: pdo_pgsql, pgsql, redis, zip, intl, bcmath
           tools: composer:v2
           coverage: none
       - name: Install dependencies from lockfile
         run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Prepare test environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
       - name: Run the destructive-migration gate
         run: php artisan migrations:verify-no-destructive-changes "origin/${{ github.event.pull_request.base.ref || 'docs/design-system-and-planning' }}"
 
@@ -704,7 +709,7 @@ jobs:
     name: Build and push image
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
-    needs: [docs-gates, verify-versions, php, frontend, contracts, security-audit]
+    needs: [docs-gates, verify-versions, php, frontend, contracts, security-audit, verify-migrations]
     permissions:
       contents: read
       packages: write
@@ -788,28 +793,49 @@ jobs:
   # explicitly on the real trunk ref — deliberately NOT inherited from
   # build-image's own `if: github.event_name == 'push'`, which has no ref
   # check at all and would otherwise deploy on every branch push (spec §1.3
-  # finding 1).
+  # finding 1) — AND gated on the `MAKAM_DEPLOY_RUNNER_ACTIVE` repository
+  # variable, which stays unset (falsy) until the runbook's own final
+  # activation step sets it — until then, this job is correctly SKIPPED
+  # (not queued-then-timed-out) on every trunk push.
+  #
+  # APP_IMAGE_DEV is written to /opt/makam/compose/.env (auto-loaded by
+  # `docker compose` for variable substitution, no --env-file flag needed)
+  # rather than exported as a shell variable — a plain `export` does not
+  # survive past the step that sets it, which would break every later
+  # `docker compose` call in this same job once compose.yml is refactored
+  # to reference ${APP_IMAGE_DEV}. Writing to a real file also means the
+  # `git commit` below genuinely records what was deployed (post-final-
+  # review correction — see plan ledger for the original bug).
   # ---------------------------------------------------------------------------
   deploy-dev:
     name: Deploy to dev.makam.co.id
     needs: [build-image]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/docs/design-system-and-planning'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/docs/design-system-and-planning' && vars.MAKAM_DEPLOY_RUNNER_ACTIVE == 'true'
     runs-on: [self-hosted, makam-deploy]
     concurrency:
       group: makam-deploy
       cancel-in-progress: false
     steps:
-      - name: Promote the artifact to dev
+      - name: Persist the new digest and promote to dev
         working-directory: /opt/makam/compose
         run: |
-          export APP_IMAGE="${{ needs.build-image.outputs.image }}@${{ needs.build-image.outputs.digest }}"
+          NEW_IMAGE="${{ needs.build-image.outputs.image }}@${{ needs.build-image.outputs.digest }}"
+          if grep -q '^APP_IMAGE_DEV=' .env 2>/dev/null; then
+            sed -i "s|^APP_IMAGE_DEV=.*|APP_IMAGE_DEV=${NEW_IMAGE}|" .env
+          else
+            echo "APP_IMAGE_DEV=${NEW_IMAGE}" >> .env
+          fi
           docker compose up -d dev-web
-          git add -A
+          git add .env
           git commit -m "deploy(dev): ${{ needs.build-image.outputs.sha_tag }}" || true
 
       - name: Run dev migrations
         working-directory: /opt/makam/compose
         run: docker compose exec -T dev-web php artisan migrate --force
+
+      - name: Record what is actually running
+        working-directory: /opt/makam/compose
+        run: docker compose images dev-web
 
       - name: Smoke-test dev
         run: |
@@ -839,27 +865,42 @@ jobs:
   # work's own SIGTERM handler finishes its in-flight job within the
   # already-configured `stop_grace_period: 90s` before the container is
   # recreated.
+  #
+  # APP_IMAGE_BETA (not a shared APP_IMAGE with dev) is written to
+  # /opt/makam/compose/.env for the same reason deploy-dev writes
+  # APP_IMAGE_DEV there — see that job's own comment for the full
+  # explanation (a shell `export` does not survive past one step; a real
+  # file does, and makes the git commit genuinely meaningful).
   # ---------------------------------------------------------------------------
   deploy-beta:
     name: Promote to makam.co.id (beta/production)
     needs: [build-image, deploy-dev]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/docs/design-system-and-planning'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/docs/design-system-and-planning' && vars.MAKAM_DEPLOY_RUNNER_ACTIVE == 'true'
     runs-on: [self-hosted, makam-deploy]
     concurrency:
       group: makam-deploy
       cancel-in-progress: false
     steps:
-      - name: Promote the same artifact to beta
+      - name: Persist the new digest and promote to beta
         working-directory: /opt/makam/compose
         run: |
-          export APP_IMAGE="${{ needs.build-image.outputs.image }}@${{ needs.build-image.outputs.digest }}"
+          NEW_IMAGE="${{ needs.build-image.outputs.image }}@${{ needs.build-image.outputs.digest }}"
+          if grep -q '^APP_IMAGE_BETA=' .env 2>/dev/null; then
+            sed -i "s|^APP_IMAGE_BETA=.*|APP_IMAGE_BETA=${NEW_IMAGE}|" .env
+          else
+            echo "APP_IMAGE_BETA=${NEW_IMAGE}" >> .env
+          fi
           docker compose up -d beta-web beta-worker beta-scheduler
-          git add -A
+          git add .env
           git commit -m "deploy(beta): ${{ needs.build-image.outputs.sha_tag }}" || true
 
       - name: Run beta migrations
         working-directory: /opt/makam/compose
         run: docker compose exec -T beta-web php artisan migrate --force
+
+      - name: Record what is actually running
+        working-directory: /opt/makam/compose
+        run: docker compose images beta-web beta-worker beta-scheduler
 
       - name: Smoke-test beta (live production domain)
         run: |
