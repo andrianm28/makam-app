@@ -11,6 +11,7 @@ use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\GraveRegistry\Models\GraveRecord;
 use App\Domain\Memorial\Actions\CreateMemorialProfile;
 use App\Domain\Memorial\Actions\GrantMemorialEditor;
+use App\Domain\Memorial\Actions\LogMemorialVisitCheckIn;
 use App\Domain\Memorial\Actions\ModerateMemorialContent;
 use App\Domain\Memorial\Actions\PublishMemorial;
 use App\Domain\Memorial\Actions\SubmitMemorialContent;
@@ -398,6 +399,54 @@ final class MemorialPublicPageTest extends TestCase
             MemorialVisitCheckin::query()->where('memorial_profile_id', $profile->getKey())->count(),
             'The throttled 6th attempt must not have written a row.'
         );
+    }
+
+    /**
+     * `logVisit()` must clear the OPPOSITE outcome's state on every call —
+     * otherwise a stale success banner and a new error banner (or vice
+     * versa) render together in the same component instance. Reproduces
+     * both directions on one `$component`: success clears a prior throttle
+     * error, and a later throttle clears a prior success notice.
+     */
+    public function test_logging_a_visit_clears_the_opposite_outcomes_state_on_each_attempt(): void
+    {
+        $this->openMemorialGate();
+        $profile = $this->profile(MemorialPrivacyMode::PUBLIC->value);
+        app(PublishMemorial::class)($profile, 'moderator:1', 'moderator');
+        $token = $this->tokenFor($profile);
+
+        $component = Livewire::test(MemorialPublicPage::class, ['token' => $token->token])->assertOk();
+
+        // 1st attempt succeeds — sets the success state.
+        $component->call('logVisit')
+            ->assertSet('checkedIn', true)
+            ->assertSet('checkInError', '')
+            ->assertSee('Kunjungan dicatat. Terima kasih.');
+
+        // 4 more successful attempts exhaust the 5-attempt bucket
+        // (LogMemorialVisitCheckIn::MAX_ATTEMPTS) on the SAME component
+        // instance, so its success state is still set going into the 6th.
+        for ($i = 0; $i < 4; $i++) {
+            $component->call('logVisit')->assertHasNoErrors();
+        }
+
+        // 6th attempt is throttled — must clear the success state, not sit
+        // alongside it.
+        $component->call('logVisit')
+            ->assertSet('checkedIn', false)
+            ->assertSet('checkInNotice', '')
+            ->assertDontSee('Kunjungan dicatat. Terima kasih.')
+            ->assertSee('Coba lagi');
+
+        $this->travel(LogMemorialVisitCheckIn::DECAY_SECONDS + 1)->seconds();
+
+        // A later successful attempt must clear the throttle error, not
+        // render both banners together.
+        $component->call('logVisit')
+            ->assertSet('checkedIn', true)
+            ->assertSet('checkInError', '')
+            ->assertSee('Kunjungan dicatat. Terima kasih.')
+            ->assertDontSee('Coba lagi');
     }
 
     // =====================================================================

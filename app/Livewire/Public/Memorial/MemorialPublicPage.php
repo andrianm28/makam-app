@@ -108,11 +108,14 @@ final class MemorialPublicPage extends Component
             $this->visitNote = '';
             $this->checkedIn = true;
             $this->checkInNotice = 'Kunjungan dicatat. Terima kasih.';
+            $this->checkInError = '';
         } catch (MemorialNotVisibleException) {
             // render() re-checks and already shows the uniform not-visible
             // state on this same request — no $denialReason branch here,
             // per this class's own doc block.
         } catch (MemorialVisitCheckInThrottledException $exception) {
+            $this->checkedIn = false;
+            $this->checkInNotice = '';
             $this->checkInError = $exception->retryAfterSeconds > 0
                 ? "Kunjungan baru saja dicatat. Coba lagi dalam {$exception->retryAfterSeconds} detik."
                 : 'Kunjungan baru saja dicatat. Coba lagi sesaat lagi.';
