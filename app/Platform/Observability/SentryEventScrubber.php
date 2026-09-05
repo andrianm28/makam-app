@@ -38,6 +38,28 @@ use Sentry\Event;
  * signed-URL scrubbing, same correlation id / image digest tagging. See
  * `config/sentry.php`'s own doc block for why this scrubbing exists
  * (AGENTS.md §Observability).
+ *
+ * ---------------------------------------------------------------------------
+ * FIXED 5 Sep 2026 — the scrubber never ran on the real exception path
+ * ---------------------------------------------------------------------------
+ * `$event->getMessage()` is populated only for a manually logged Sentry
+ * message; the standard `report()`/`captureException()` path used
+ * throughout this app never sets it (confirmed against
+ * `vendor/sentry/sentry/src/Client.php`) — the exception's text lives in
+ * `$event->getExceptions()` instead, which this class never read. So every
+ * real captured exception reached Sentry with an unscrubbed message, and
+ * with its stack frames' local variables (`Frame::getVars()`) untouched.
+ *
+ * Separately, `Sentry\Integration\RequestIntegration::processEvent()`
+ * unconditionally sets `$requestData['url']` / `['query_string']` from the
+ * live request URI — that assignment is not inside its
+ * `shouldSendDefaultPii()` branch (only `cookies`/`headers`/`env` are), and
+ * it runs before `before_send`. A request URL or query string carrying a
+ * NIK/KK or a signed DocumentVault URL therefore reached Sentry regardless
+ * of `config('sentry.send_default_pii')`.
+ *
+ * Fixed by also scrubbing every exception's message and stack-frame vars,
+ * and the request's `url`/`query_string`, through the same two patterns.
  */
 final class SentryEventScrubber
 {
@@ -77,6 +99,47 @@ final class SentryEventScrubber
             $event->setMessage($scrub($message));
         }
 
+        foreach ($event->getExceptions() as $exception) {
+            $exception->setValue($scrub($exception->getValue()));
+
+            $stacktrace = $exception->getStacktrace();
+
+            if ($stacktrace === null) {
+                continue;
+            }
+
+            foreach ($stacktrace->getFrames() as $frame) {
+                $frame->setVars(self::scrubVars($frame->getVars(), $scrub));
+            }
+        }
+
+        $request = $event->getRequest();
+
+        foreach (['url', 'query_string'] as $key) {
+            if (isset($request[$key]) && is_string($request[$key])) {
+                $request[$key] = $scrub($request[$key]);
+            }
+        }
+
+        $event->setRequest($request);
+
         return $event;
+    }
+
+    /**
+     * Recurses into nested arrays (e.g. a frame-local variable holding an
+     * array of request params); scalars are passed through `$scrub`
+     * unchanged if they're not strings, matching `$scrub`'s own contract.
+     *
+     * @param  array<array-key, mixed>  $vars
+     * @return array<array-key, mixed>
+     */
+    private static function scrubVars(array $vars, callable $scrub): array
+    {
+        foreach ($vars as $key => $value) {
+            $vars[$key] = is_array($value) ? self::scrubVars($value, $scrub) : $scrub($value);
+        }
+
+        return $vars;
     }
 }
