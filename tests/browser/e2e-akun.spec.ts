@@ -125,6 +125,8 @@ async function loginAsCustomer(page: Page, credentials: CustomerCredentials): Pr
     await page.getByLabel('Email').fill(credentials.email);
     await page.getByLabel('Kata Sandi').fill(credentials.password);
     await page.getByRole('button', { name: 'Masuk' }).click();
+    await page.waitForURL(/\/akun\/?$/);
+    await page.waitForLoadState('networkidle');
 }
 
 function parallelSlot(): string {

@@ -104,9 +104,9 @@ final class ServiceComplaintsResourceTest extends TestCase
         }
     }
 
-    public function test_vendor_and_cemetery_operator_and_customer_are_denied(): void
+    public function test_vendor_and_cemetery_operator_and_customer_and_case_manager_are_denied(): void
     {
-        foreach ([ActorRole::VENDOR, ActorRole::CEMETERY_OPERATOR, ActorRole::CUSTOMER] as $role) {
+        foreach ([ActorRole::VENDOR, ActorRole::CEMETERY_OPERATOR, ActorRole::CUSTOMER, ActorRole::CASE_MANAGER] as $role) {
             $user = User::factory()->create();
             $this->grantRoleTo($user, $role);
             $this->actingAs($user);

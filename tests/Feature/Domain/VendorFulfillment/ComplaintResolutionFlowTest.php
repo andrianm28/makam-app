@@ -20,6 +20,7 @@ use App\Domain\VendorFulfillment\Models\ServiceComplaint;
 use App\Domain\VendorFulfillment\Models\WorkOrder;
 use App\Models\User;
 use App\Platform\Audit\AuditSource;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -97,7 +98,7 @@ final class ComplaintResolutionFlowTest extends TestCase
         app(StartInvestigatingComplaint::class)($complaint->fresh());
     }
 
-    public function test_resolve_without_make_good_sets_resolved_and_notes(): void
+    public function test_resolve_transitions_open_to_resolved_without_make_good(): void
     {
         $complaint = $this->fileComplaint();
 
@@ -117,6 +118,17 @@ final class ComplaintResolutionFlowTest extends TestCase
             'aggregate_type' => 'service_complaint',
             'aggregate_id' => (string) $complaint->getKey(),
         ]);
+    }
+
+    public function test_resolve_transitions_investigating_to_resolved_without_make_good(): void
+    {
+        $complaint = $this->fileComplaint();
+        app(StartInvestigatingComplaint::class)($complaint);
+
+        $result = app(ResolveComplaint::class)($complaint->fresh(), 'Talked to the vendor, agreed to redo next visit.', false);
+
+        $this->assertSame(ComplaintStatus::Resolved->value, $result->status);
+        $this->assertSame('Talked to the vendor, agreed to redo next visit.', $result->resolution_notes);
     }
 
     public function test_resolve_with_make_good_creates_and_links_a_make_good_order(): void
@@ -158,7 +170,7 @@ final class ComplaintResolutionFlowTest extends TestCase
         app(ResolveComplaint::class)($complaint->fresh(), 'Too late', false);
     }
 
-    public function test_dismiss_transitions_open_or_investigating_to_dismissed_with_reason(): void
+    public function test_dismiss_transitions_open_to_dismissed_with_reason(): void
     {
         $complaint = $this->fileComplaint();
 
@@ -179,6 +191,17 @@ final class ComplaintResolutionFlowTest extends TestCase
         ]);
     }
 
+    public function test_dismiss_transitions_investigating_to_dismissed_with_reason(): void
+    {
+        $complaint = $this->fileComplaint();
+        app(StartInvestigatingComplaint::class)($complaint);
+
+        $result = app(DismissComplaint::class)($complaint->fresh(), 'Vendor evidence shows service was completed correctly.');
+
+        $this->assertSame(ComplaintStatus::Dismissed->value, $result->status);
+        $this->assertSame('Vendor evidence shows service was completed correctly.', $result->resolution_notes);
+    }
+
     public function test_dismiss_refuses_an_already_resolved_complaint(): void
     {
         $complaint = $this->fileComplaint();
@@ -187,5 +210,23 @@ final class ComplaintResolutionFlowTest extends TestCase
         $this->expectException(InvalidComplaintTransitionException::class);
 
         app(DismissComplaint::class)($complaint->fresh(), 'Too late');
+    }
+
+    public function test_resolve_with_make_good_rolls_back_entirely_when_the_work_order_lookup_fails(): void
+    {
+        $complaint = $this->fileComplaint();
+        $complaint->forceFill(['work_order_id' => (string) Str::uuid()])->save();
+
+        try {
+            app(ResolveComplaint::class)($complaint->fresh(), 'Issuing a redo.', true, 'Redo the cleaning pass.');
+            $this->fail('Expected the missing work order to abort the resolve.');
+        } catch (ModelNotFoundException) {
+            // Expected: WorkOrder::firstOrFail() inside the mutation closure throws.
+        }
+
+        $this->assertSame(0, MakeGoodOrder::query()->count());
+        $this->assertSame(ComplaintStatus::Open->value, $complaint->fresh()->status);
+        $this->assertNull($complaint->fresh()->resolved_at);
+        $this->assertNull($complaint->fresh()->make_good_order_id);
     }
 }
