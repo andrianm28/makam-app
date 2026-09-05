@@ -26,6 +26,12 @@ final class VendorFulfillmentAuditActions
 
     public const string MAKE_GOOD_CREATED = 'MAKE_GOOD_CREATED';
 
+    public const string COMPLAINT_INVESTIGATING = 'COMPLAINT_INVESTIGATING';
+
+    public const string COMPLAINT_RESOLVED = 'COMPLAINT_RESOLVED';
+
+    public const string COMPLAINT_DISMISSED = 'COMPLAINT_DISMISSED';
+
     public const string VENDOR_REPLACED = 'VENDOR_REPLACED';
 
     public const string TASK_COMPLETED = 'TASK_COMPLETED';

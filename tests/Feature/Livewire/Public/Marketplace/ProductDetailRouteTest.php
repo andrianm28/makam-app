@@ -414,6 +414,67 @@ final class ProductDetailRouteTest extends TestCase
         $response->assertSee('(vendor contoh)');
     }
 
+    public function test_the_detail_page_shows_availability_stock_lead_time_evidence_and_cancellation_policy_for_a_stocked_listing(): void
+    {
+        // Task 4: `availability_mode`, `stock_quantity`,
+        // `production_lead_time_days`, `evidence_requirement`, and
+        // `cancellation_policy` were already columns on `vendor_listings`
+        // but never rendered — this covers the STOCKED branch, where stock
+        // is shown alongside the badge.
+        $this->seededListing(ProductCode::FLOWER_BOARD)->update(['is_active' => false]);
+
+        $vendor = Vendor::create(['name' => 'Vendor Bunga Segar', 'is_active' => true]);
+        VendorListing::create([
+            'vendor_id' => $vendor->id,
+            'product_id' => Product::findByCode(ProductCode::FLOWER_BOARD)->id,
+            'price_minor' => 500_000,
+            'price_version' => 1,
+            'availability_mode' => AvailabilityMode::STOCKED,
+            'stock_quantity' => 4,
+            'evidence_requirement' => EvidenceRequirement::PHOTO,
+            'cancellation_policy' => 'Dapat dibatalkan hingga 24 jam sebelum jadwal.',
+            'is_active' => true,
+        ]);
+
+        $response = $this->get('/marketplace/produk/'.ProductCode::FLOWER_BOARD);
+
+        $response->assertOk();
+        $response->assertSee('Tersedia (stok)');
+        $response->assertSee('4 unit');
+        $response->assertSee('Vendor mengunggah foto');
+        $response->assertSee('Dapat dibatalkan hingga 24 jam sebelum jadwal.');
+    }
+
+    public function test_the_detail_page_hides_stock_and_evidence_lines_for_a_made_to_order_listing_with_no_evidence_requirement(): void
+    {
+        // The MADE_TO_ORDER branch: stock_quantity is meaningless here (the
+        // field is null and the "Stok" row must not render), lead time
+        // still shows, and NONE evidence requirement suppresses that row
+        // entirely rather than printing "NONE".
+        $this->seededListing(ProductCode::GRAVE_CARE_ANNUAL)->update(['is_active' => false]);
+
+        $vendor = Vendor::create(['name' => 'Vendor Perawatan Prima', 'is_active' => true]);
+        VendorListing::create([
+            'vendor_id' => $vendor->id,
+            'product_id' => Product::findByCode(ProductCode::GRAVE_CARE_ANNUAL)->id,
+            'price_minor' => 750_000,
+            'price_version' => 1,
+            'availability_mode' => AvailabilityMode::MADE_TO_ORDER,
+            'stock_quantity' => null,
+            'production_lead_time_days' => 5,
+            'evidence_requirement' => EvidenceRequirement::NONE,
+            'is_active' => true,
+        ]);
+
+        $response = $this->get('/marketplace/produk/'.ProductCode::GRAVE_CARE_ANNUAL);
+
+        $response->assertOk();
+        $response->assertSee('Dibuat sesuai pesanan');
+        $response->assertSee('5 hari');
+        $response->assertDontSee('Stok');
+        $response->assertDontSee('Bukti penyelesaian');
+    }
+
     public function test_viewing_a_product_never_mutates_the_catalogue(): void
     {
         // §6.6 — a detail page is a pure read; repeated views are safe.
