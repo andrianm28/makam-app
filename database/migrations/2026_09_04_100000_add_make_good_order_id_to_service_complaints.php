@@ -15,20 +15,24 @@ use Illuminate\Support\Facades\Schema;
  * complaint to its make-good"). Only `ResolveComplaint` (Task 2) ever
  * writes this column.
  *
- * No explicit `.constrained()`/FK constraint, matching this table's own
- * existing `work_order_id`/`customer_id` columns
- * (`2026_08_17_120040_create_service_complaints_table.php`) — neither of
- * those carries a DB-level FK constraint either, despite being declared
- * `foreignUuid`; this migration follows the same established (if
- * debatable) shape for consistency rather than introducing a new
- * constraint discipline mid-table.
+ * Explicit `->constrained()->restrictOnDelete()` FK to `make_good_orders.id`,
+ * per spec §1. `work_order_id` on this same table
+ * (`2026_08_17_120040_create_service_complaints_table.php`) genuinely lacks
+ * a DB-level FK constraint, but `customer_id` is not a second example of
+ * that pattern: `2026_08_22_100000_fix_customer_and_uploader_identity_columns.php`
+ * already gave `customer_id` a real `foreignId('customer_id')->constrained('users')`
+ * FK (and fixed its type from `uuid` to bigint) 13 days before this
+ * migration was written. `customer_id` is the one column on this table that
+ * *does* carry a real FK — this migration follows that precedent, not the
+ * `work_order_id` gap.
  */
 return new class extends Migration
 {
     public function up(): void
     {
         Schema::table('service_complaints', function (Blueprint $table): void {
-            $table->foreignUuid('make_good_order_id')->nullable()->after('resolved_at');
+            $table->foreignUuid('make_good_order_id')->nullable()->after('resolved_at')
+                ->constrained('make_good_orders')->restrictOnDelete();
         });
     }
 
