@@ -9,6 +9,7 @@ use App\Domain\Marketplace\Models\Product;
 use App\Domain\Marketplace\ProductCode;
 use App\Livewire\Public\Marketplace\MarketplaceIndex;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
 use ReflectionClass;
@@ -72,6 +73,28 @@ final class MarketplaceIndexRouteTest extends TestCase
         foreach (ProductCode::KNOWN_CODES as $code) {
             $response->assertSee("/marketplace/produk/{$code}");
         }
+    }
+
+    /**
+     * The go-live photo gate (`Product::booted()`'s `saving` hook) only
+     * refuses a NEW save with a blank `photo_path`; it cannot retroactively
+     * fix a row already in that state. This uses a raw `DB::table()` update
+     * — the same bypass-the-model convention the seed/backfill migrations
+     * themselves use — to simulate that legacy state without going through
+     * `save()`, and asserts the catalogue card renders the honest
+     * placeholder rather than a broken `<img>`.
+     */
+    public function test_a_legacy_product_with_no_photo_shows_an_honest_placeholder_card(): void
+    {
+        $product = Product::findByCode(ProductCode::FLOWER_BOARD);
+        $this->assertNotNull($product);
+
+        DB::table('products')->where('code', $product->code)->update(['photo_path' => null]);
+
+        $response = $this->get('/marketplace');
+
+        $response->assertOk();
+        $response->assertSee('Foto belum tersedia');
     }
 
     public function test_the_unfiltered_landing_page_shows_the_menu_label_in_its_own_heading(): void

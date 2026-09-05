@@ -206,6 +206,7 @@
                     @foreach ($products as $product)
                         @php
                             $price = MarketplacePresenter::priceAttribution($product);
+                            $photoUrl = MarketplacePresenter::photoUrl($product);
                         @endphp
                         <li wire:key="product-{{ $product->code }}">
                             {{-- One focusable anchor per card: the card
@@ -218,20 +219,31 @@
                                 :href="route('marketplace.product', ['productCode' => $product->code])"
                                 class="h-full touch-target"
                             >
-                                @if ($product->photo_path)
-                                    <x-slot:media>
+                                <x-slot:media>
+                                    @if ($photoUrl)
                                         {{-- Decorative: the product name
                                              is the adjacent heading, so
                                              an alt repeating it would be
                                              announced twice. --}}
                                         <img
-                                            src="{{ asset($product->photo_path) }}"
+                                            src="{{ $photoUrl }}"
                                             alt=""
                                             class="h-40 w-full object-cover"
                                             loading="lazy"
                                         >
-                                    </x-slot:media>
-                                @endif
+                                    @else
+                                        {{-- No photo is a real, gated state
+                                             now (Product's saving hook
+                                             refuses is_active=true without
+                                             one) — a labelled placeholder
+                                             beats a broken <img> or a
+                                             silent gap, same convention as
+                                             the cemetery directory card. --}}
+                                        <div class="flex h-40 w-full items-center justify-center bg-neutral-100">
+                                            <span class="text-sm text-neutral-600">Foto belum tersedia</span>
+                                        </div>
+                                    @endif
+                                </x-slot:media>
 
                                 <div>
                                     <x-mk.badge intent="neutral">{{ $product->categoryLabel() }}</x-mk.badge>

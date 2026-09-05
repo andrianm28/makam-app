@@ -56,8 +56,10 @@
     PLACEHOLDER STRINGS ONLY — no file exists at that path in any storage
     disk in this batch."* An `<img src>` pointing at them would render a
     broken image on every gravestone page. The product-level `photo_path`
-    IS rendered, because `public/images/marketplace/*.svg` are real files
-    that exist on disk.
+    IS rendered — via `MarketplacePresenter::photoUrl()`, which resolves
+    both the seeded `public/images/marketplace/*.svg` convention and an
+    admin-uploaded `FileUpload` path — with a labelled placeholder for the
+    (now go-live-gated, so only a pre-existing/legacy) no-photo state.
 
     --- <x-mk.button> ---
     Same reasoning as `index.blade.php`'s own doc comment: N-14 is fixed and
@@ -79,17 +81,25 @@
             </a>
         </nav>
 
+        @php
+            $photoUrl = MarketplacePresenter::photoUrl($product);
+        @endphp
+
         <div class="grid grid-cols-1 gap-6 md:gap-8 lg:grid-cols-2">
-            @if ($product->photo_path)
-                <div class="overflow-hidden rounded-lg border border-neutral-200 bg-neutral-0">
+            <div class="overflow-hidden rounded-lg border border-neutral-200 bg-neutral-0">
+                @if ($photoUrl)
                     {{-- Decorative: <h1> below names the product. --}}
                     <img
-                        src="{{ asset($product->photo_path) }}"
+                        src="{{ $photoUrl }}"
                         alt=""
                         class="h-64 w-full object-cover md:h-80"
                     >
-                </div>
-            @endif
+                @else
+                    <div class="flex h-64 w-full items-center justify-center bg-neutral-100 md:h-80">
+                        <span class="text-sm text-neutral-600">Foto belum tersedia</span>
+                    </div>
+                @endif
+            </div>
 
             <div class="space-y-4">
                 <div>
