@@ -1544,6 +1544,30 @@ final class BookingWizard extends Component
      * "issued" to show for those orders and the live recompute is still the
      * honest answer.
      */
+    /**
+     * The grave-plot detail Ringkasan shows for a hold, shared by Screen 2
+     * (draft-anchored, `activeForDraft()`) and CONFIRMATION (order-anchored
+     * once the order exists, per `ConvertDraftHoldToOrderReservation` —
+     * `activeForOrder()`). Aggregate-tier bookings, and any granular one
+     * with no plot chosen, have no hold at all: `$hold` is null there, not
+     * an error.
+     *
+     * @return array{cemetery_name: string, block_code: string, block_name: string, slot: string}|null
+     */
+    private function plotDetailFor(?PlotReservation $hold): ?array
+    {
+        if ($hold === null || $hold->plot?->block?->cemetery === null) {
+            return null;
+        }
+
+        return [
+            'cemetery_name' => $hold->plot->block->cemetery->name,
+            'block_code' => $hold->plot->block->code,
+            'block_name' => $hold->plot->block->name,
+            'slot' => $hold->plot->slot,
+        ];
+    }
+
     private function confirmationSummary(?Order $order, BookingDraft $draft): array
     {
         $quote = $order !== null ? Quote::currentFor($order) : null;
@@ -1709,13 +1733,23 @@ final class BookingWizard extends Component
         // reaches them. A silently-null summary would be the dishonest
         // outcome here: the Blade card would simply vanish with no
         // explanation, so the failure gets its own explicit flag.
+        // `$selectedPlot` shares this same read and the same fail-honest
+        // guard as `$summary`: both describe what Ringkasan shows for this
+        // draft, and a poisoned ambient transaction that would blank the
+        // service table would just as dishonestly blank a real plot hold.
+        // `PlotReservation::activeForDraft()`, not `activeDraftPlotHold()` —
+        // that method is deliberately scoped to Screen 1's open picker
+        // (requires `$this->pickerCemeteryId`, which Screen 2 has no reason
+        // to hold), so it returns null here even when a real hold exists.
         $summary = null;
         $summaryUnavailable = false;
+        $selectedPlot = null;
         if ($this->currentScreen() === 2 && $this->draftId !== null) {
             try {
                 $draft = BookingDraftQuery::findBound($this->draftId);
                 if ($draft !== null) {
                     $summary = BookingDraftQuery::summary($draft);
+                    $selectedPlot = $this->plotDetailFor(PlotReservation::activeForDraft($draft));
                 }
             } catch (Throwable $e) {
                 report($e);
@@ -1767,6 +1801,11 @@ final class BookingWizard extends Component
                         'draft_id' => $draft->id,
                         'order_reference' => $order?->reference,
                         'summary' => $this->confirmationSummary($order, $draft),
+                        'selected_plot' => $this->plotDetailFor(
+                            $order !== null
+                                ? PlotReservation::activeForOrder($order)
+                                : PlotReservation::activeForDraft($draft),
+                        ),
                         'customer_name' => $draft->customer_full_name,
                         'customer_mobile' => $draft->customer_mobile,
                         'customer_email' => $draft->customer_email,
@@ -1850,6 +1889,7 @@ final class BookingWizard extends Component
             'pickerCemeteryName' => $pickerCemeteryName,
             'summary' => $summary,
             'summaryUnavailable' => $summaryUnavailable,
+            'selectedPlot' => $selectedPlot,
             'confirmationData' => $confirmationData,
             'confirmationUnavailable' => $confirmationUnavailable,
             'paymentMode' => $paymentMode,

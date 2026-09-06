@@ -716,6 +716,18 @@
                     Ringkasan Pesanan
                 </h2>
 
+                {{-- Independent of $summary/$summaryUnavailable: a selected
+                     plot is a real fact about this draft whether or not the
+                     pricing summary itself loaded, so it renders on its own
+                     condition rather than being gated behind either. --}}
+                @if ($selectedPlot !== null)
+                    <p class="mb-4 text-base text-neutral-700">
+                        <span class="font-medium text-neutral-900">Petak:</span>
+                        Blok {{ $selectedPlot['block_code'] }} ({{ $selectedPlot['block_name'] }}), Slot {{ $selectedPlot['slot'] }}
+                        &mdash; {{ $selectedPlot['cemetery_name'] }}
+                    </p>
+                @endif
+
                 @if ($summaryUnavailable)
                     <x-mk.alert intent="pending" title="Ringkasan pesanan sedang tidak dapat dimuat" live="polite">
                         Kami tidak dapat memuat ringkasan layanan Anda saat ini. Pilihan Anda tetap tersimpan.
@@ -1594,6 +1606,15 @@
                         @if ($confirmationData['summary'] !== null)
                             <x-mk.card>
                                 <h3 class="text-base font-semibold text-neutral-900">Ringkasan Pesanan</h3>
+
+                                @if ($confirmationData['selected_plot'] !== null)
+                                    <p class="mb-4 text-base text-neutral-700">
+                                        <span class="font-medium text-neutral-900">Petak:</span>
+                                        Blok {{ $confirmationData['selected_plot']['block_code'] }} ({{ $confirmationData['selected_plot']['block_name'] }}), Slot {{ $confirmationData['selected_plot']['slot'] }}
+                                        &mdash; {{ $confirmationData['selected_plot']['cemetery_name'] }}
+                                    </p>
+                                @endif
+
                                 <x-mk.table
                                     caption="Ringkasan layanan yang dipilih beserta jumlah dan biayanya"
                                     :headers="[

@@ -9,13 +9,21 @@ use App\Domain\Booking\Actions\StartBookingDraft;
 use App\Domain\Booking\BookingPaymentMethod;
 use App\Domain\Booking\BookingServiceType;
 use App\Domain\Booking\BookingWizardStep;
+use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
+use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\CemeteryDirectory\PlotTrackingMode;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\OrderStatus;
+use App\Domain\PlotInventory\Models\CemeteryBlock;
+use App\Domain\PlotInventory\Models\GravePlot;
+use App\Domain\PlotInventory\PlotState;
+use App\Domain\PlotReservation\Actions\HoldPlotForDraft;
 use App\Domain\ServiceCatalog\ServiceCode;
 use App\Livewire\Public\Booking\BookingWizard;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -171,5 +179,82 @@ final class BookingWizardStepsSixToNineEndToEndTest extends TestCase
         $draftId = $c->get('draftId');
 
         $this->assertSame(1, Order::query()->where('booking_draft_id', $draftId)->count());
+    }
+
+    /**
+     * `BookingWizard::plotDetailFor()` is shared between Screen 2 (draft-
+     * anchored) and CONFIRMATION (order-anchored, once
+     * `ConvertDraftHoldToOrderReservation` runs inside `saveStep3()`'s
+     * submission chain). This proves the CONFIRMATION side of that sharing:
+     * a plot held before DISCOVERY is still named correctly on the final
+     * confirmation screen, after the hold has moved from the draft to the
+     * real order.
+     */
+    private function componentAtCustomerAndDeceasedDataWithHeldPlot(): Testable
+    {
+        $cemetery = Cemetery::query()->create([
+            'type' => CemeteryType::TPU,
+            'publication_status' => CemeteryPublicationStatus::PUBLISHED,
+            'name' => 'TPU Uji Coba Konfirmasi',
+            'slug' => 'tpu-uji-coba-konfirmasi-'.Str::lower(Str::random(6)),
+            'city' => LaunchCityCode::JAKARTA,
+            'address' => 'Jl. Contoh No. 1',
+            'plot_tracking_mode' => PlotTrackingMode::GRANULAR,
+        ]);
+
+        $block = CemeteryBlock::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'code' => 'BLOK-K',
+            'name' => 'Blok K',
+            'capacity' => 1,
+        ]);
+
+        $plot = GravePlot::query()->create([
+            'block_id' => $block->getKey(),
+            'slot' => '007',
+            'plot_state' => PlotState::AVAILABLE,
+        ]);
+
+        $draft = (new StartBookingDraft)();
+
+        app(HoldPlotForDraft::class)($plot, $draft, "booking_draft:{$draft->getKey()}");
+
+        $draft = (new SaveBookingDraftStep)($draft, BookingWizardStep::DISCOVERY, [
+            'city_code' => LaunchCityCode::JAKARTA,
+            'cemetery_id' => $cemetery->id,
+            'cemetery_package_id' => null,
+            'service_type' => BookingServiceType::NEW_GRAVE,
+            'selected_services' => [
+                ['code' => ServiceCode::DOCUMENT_PROCESSING, 'quantity' => 1],
+                ['code' => ServiceCode::GRAVE_DIGGING, 'quantity' => 1],
+            ],
+        ], 'idem-discovery-'.$draft->id);
+
+        return Livewire::test(BookingWizard::class, ['draftId' => $draft->id]);
+    }
+
+    public function test_confirmation_shows_the_selected_plot_detail_after_the_hold_converts_to_the_order(): void
+    {
+        $c = $this->componentAtCustomerAndDeceasedDataWithHeldPlot()
+            ->set('customerFullName', 'Test User')
+            ->set('customerMobile', '081234567890')
+            ->set('customerEmail', 'test@example.com')
+            ->set('customerAddress', 'Jl. Contoh No. 1')
+            ->set('customerRelationship', 'PASANGAN')
+            ->set('customerContactChannel', 'WHATSAPP')
+            ->set('privacyNoticeAccepted', true)
+            ->set('deceasedFullName', 'Almarhum Test')
+            ->set('deceasedDateOfBirth', '1980-05-10')
+            ->set('deceasedDateOfDeath', '2026-08-01')
+            ->set('deceasedRelationship', 'PASANGAN')
+            ->set('deceasedGender', 'LAKI_LAKI')
+            ->call('saveStep2')
+            ->set('paymentReference', 'REF-001')
+            ->call('saveStep3', BookingPaymentMethod::MANUAL)
+            ->assertSet('currentStep', BookingWizardStep::CONFIRMATION)
+            ->assertSee('Petak:')
+            ->assertSee('BLOK-K')
+            ->assertSee('007')
+            ->assertSee('TPU Uji Coba Konfirmasi');
     }
 }
