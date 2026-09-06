@@ -18,6 +18,7 @@ use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use Filament\Forms\Components\Select;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Support\GrantsActorRoles;
@@ -239,6 +240,7 @@ final class ProductResourceTest extends TestCase
                 'vendor_name' => 'CV Kembang Sepatu',
                 'base_price_idr' => 1_250_000,
                 'is_active' => true,
+                'photo_path' => $this->productPhoto(),
                 'sort_order' => 10,
             ])
             ->call('create')
@@ -309,5 +311,89 @@ final class ProductResourceTest extends TestCase
 
         $this->assertSame(2, $product->refresh()->price_version);
         $this->assertDatabaseMissing('audit_events', ['action' => ProductAuditActions::UPDATED]);
+    }
+
+    // -----------------------------------------------------------------------
+    // Go-live photo gate (`ProductForm`'s `photo_path` `requiredIf('is_active')`)
+    // -----------------------------------------------------------------------
+
+    /**
+     * The go-live photo gate's primary UX: `Product::booted()`'s `saving`
+     * hook is the backstop invariant, but an admin should see a real form
+     * validation error, not a 500, the moment they try to activate a
+     * photo-less product.
+     */
+    public function test_creating_an_active_product_without_a_photo_shows_a_form_validation_error(): void
+    {
+        $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
+        $this->actingAs($user);
+
+        $seeded = Product::findByCode(ProductCode::FLOWER_BOARD);
+        assert($seeded instanceof Product);
+        VendorListing::query()->forProduct($seeded->id)->delete();
+        $seeded->delete();
+
+        Livewire::test(CreateProduct::class)
+            ->fillForm([
+                'code' => ProductCode::FLOWER_BOARD,
+                'category' => MarketplaceProductCategory::FLOWERS,
+                'name' => 'Karangan Bunga Duka',
+                'description' => 'Karangan bunga duka untuk upacara pemakaman.',
+                'is_active' => true,
+                'sort_order' => 10,
+            ])
+            ->call('create')
+            ->assertHasFormErrors(['photo_path' => 'required']);
+
+        $this->assertNull(Product::findByCode(ProductCode::FLOWER_BOARD));
+    }
+
+    public function test_creating_an_inactive_draft_product_without_a_photo_succeeds(): void
+    {
+        $user = User::factory()->create();
+        $this->grantRoleTo($user, ActorRole::ADMIN);
+        $this->actingAs($user);
+
+        $seeded = Product::findByCode(ProductCode::FLOWER_BOARD);
+        assert($seeded instanceof Product);
+        VendorListing::query()->forProduct($seeded->id)->delete();
+        $seeded->delete();
+
+        Livewire::test(CreateProduct::class)
+            ->fillForm([
+                'code' => ProductCode::FLOWER_BOARD,
+                'category' => MarketplaceProductCategory::FLOWERS,
+                'name' => 'Karangan Bunga Duka',
+                'description' => 'Karangan bunga duka untuk upacara pemakaman.',
+                'is_active' => false,
+                'sort_order' => 10,
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $product = Product::findByCode(ProductCode::FLOWER_BOARD);
+        assert($product instanceof Product);
+        $this->assertFalse($product->is_active);
+        $this->assertNull($product->photo_path);
+    }
+
+    /**
+     * The DocumentVault feature-test file fixture shape
+     * (`CertificateAdminTest::vaultPdf()`/`WorkOrderEvidenceUploadTest::
+     * evidencePng()`): a real, minimal, readable 1x1 PNG upload, built
+     * through `UploadedFile::fake()->createWithContent()` rather than
+     * `UploadedFile::fake()->image()`, which needs the `gd` extension this
+     * test environment does not reliably have.
+     */
+    private function productPhoto(): UploadedFile
+    {
+        return UploadedFile::fake()->createWithContent(
+            'karangan-bunga-duka.png',
+            base64_decode(
+                'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+                true,
+            ),
+        );
     }
 }

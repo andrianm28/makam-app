@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Domain\Marketplace;
 
+use App\Domain\Marketplace\Exceptions\ProductMustHavePhotoToActivateException;
 use App\Domain\Marketplace\MarketplaceProductCategory;
 use App\Domain\Marketplace\Models\Product;
 use App\Domain\Marketplace\ProductCode;
@@ -182,6 +183,77 @@ final class ProductCatalogueSeedTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
 
         $product->save();
+    }
+
+    /**
+     * The go-live photo gate (Product's `saving` hook): a competitive scan
+     * of makamia.id found real, priced, purchasable listings live with
+     * placeholder/missing photos — the same latent gap this catalogue's own
+     * `is_active`/`photo_path` had, since `photo_path` is a hand-typed
+     * free-text field with no relation to `is_active`. Fired through the
+     * model's own saving path, same style as the code/category guard tests
+     * above.
+     */
+    public function test_activating_a_product_without_a_photo_is_refused(): void
+    {
+        $product = Product::findByCode(ProductCode::FLOWER_BOARD);
+        $this->assertNotNull($product);
+
+        $product->is_active = true;
+        $product->photo_path = null;
+
+        $this->expectException(ProductMustHavePhotoToActivateException::class);
+
+        $product->save();
+    }
+
+    public function test_activating_a_product_with_a_blank_photo_path_is_refused(): void
+    {
+        // Whitespace-only is not a real photo path either — the guard trims
+        // before checking, so this must fail the same way `null` does.
+        $product = Product::findByCode(ProductCode::FLOWER_BOARD);
+        $this->assertNotNull($product);
+
+        $product->is_active = true;
+        $product->photo_path = '   ';
+
+        $this->expectException(ProductMustHavePhotoToActivateException::class);
+
+        $product->save();
+    }
+
+    public function test_activating_a_product_with_a_real_photo_succeeds(): void
+    {
+        $product = Product::findByCode(ProductCode::FLOWER_BOARD);
+        $this->assertNotNull($product);
+
+        $product->is_active = true;
+        $product->photo_path = 'images/marketplace/flower-board.svg';
+        $product->save();
+
+        $this->assertDatabaseHas('products', [
+            'code' => ProductCode::FLOWER_BOARD,
+            'is_active' => true,
+            'photo_path' => 'images/marketplace/flower-board.svg',
+        ]);
+    }
+
+    public function test_a_draft_product_can_be_saved_with_no_photo(): void
+    {
+        // is_active=false stays unblocked — a product being drafted/edited
+        // before it has a real photo must not be forced to fabricate one.
+        $product = Product::findByCode(ProductCode::FLOWER_BOARD);
+        $this->assertNotNull($product);
+
+        $product->is_active = false;
+        $product->photo_path = null;
+        $product->save();
+
+        $this->assertDatabaseHas('products', [
+            'code' => ProductCode::FLOWER_BOARD,
+            'is_active' => false,
+            'photo_path' => null,
+        ]);
     }
 
     /**

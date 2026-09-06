@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Marketplace\Models;
 
+use App\Domain\Marketplace\Exceptions\ProductMustHavePhotoToActivateException;
 use App\Domain\Marketplace\MarketplaceProductCategory;
 use App\Domain\Marketplace\ProductCode;
 use Illuminate\Database\Eloquent\Builder;
@@ -33,6 +34,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * create/delete action for the same reason `FaqCategory` builds none: the
  * catalogue is master data owned by a product decision, not free-form
  * admin-editable content, at this stage of the build.
+ *
+ * The `saving` hook also refuses `is_active = true` with a blank
+ * `photo_path` (`ProductMustHavePhotoToActivateException`) — a go-live
+ * photo gate, closing the latent gap a competitive scan of makamia.id found
+ * live there: real, priced, purchasable listings with placeholder/missing
+ * photos. `photo_path` being a hand-typed free-text field with no relation
+ * to `is_active` meant nothing here prevented the same thing.
  */
 final class Product extends Model
 {
@@ -72,7 +80,16 @@ final class Product extends Model
         self::saving(function (self $product): void {
             ProductCode::assertKnown($product->code);
             MarketplaceProductCategory::assertKnown($product->category);
+
+            if ($product->is_active && ! self::hasPhoto($product)) {
+                throw ProductMustHavePhotoToActivateException::forProduct($product->code);
+            }
         });
+    }
+
+    private static function hasPhoto(self $product): bool
+    {
+        return $product->photo_path !== null && trim($product->photo_path) !== '';
     }
 
     /**

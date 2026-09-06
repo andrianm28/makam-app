@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Livewire\Public\Marketplace\Support;
 
 use App\Domain\Marketplace\Models\Product;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Presentation helpers shared by the marketplace list card (PUB-020) and the
@@ -100,5 +101,38 @@ final class MarketplacePresenter
             'amount' => 'Rp '.number_format((float) $product->base_price_idr, 0, ',', '.'),
             'source' => self::PRICE_SOURCE,
         ];
+    }
+
+    /**
+     * The product's photo URL, or `null` when `photo_path` is blank —
+     * `null` is a real state the views render as a labelled placeholder
+     * rather than a broken `<img>` (same convention
+     * `CemeteryPresenter::photoUrl()` uses for `primary_photo_path`).
+     *
+     * `photo_path` carries two conventions depending on how it was
+     * populated. The nine seeded rows are literal paths relative to the
+     * `public/` web root — committed static assets
+     * (`2026_08_24_110000_backfill_photo_path_for_real_products.php`),
+     * resolved with `asset()` directly, exactly like `CemeteryPresenter`
+     * does for `primary_photo_path`. `ProductForm`'s `FileUpload`, added
+     * alongside this method, instead saves through the `public` disk, so an
+     * admin-uploaded photo's stored value is disk-relative and must be
+     * resolved through `Storage::disk('public')->url()`. Checking existence
+     * on the storage disk first — rather than guessing from the string's
+     * shape — honours both without the two paths ever colliding.
+     */
+    public static function photoUrl(Product $product): ?string
+    {
+        $path = $product->photo_path;
+
+        if ($path === null || trim($path) === '') {
+            return null;
+        }
+
+        if (Storage::disk('public')->exists($path)) {
+            return Storage::disk('public')->url($path);
+        }
+
+        return asset($path);
     }
 }
