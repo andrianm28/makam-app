@@ -55,11 +55,16 @@ return new class extends Migration
             // and session rows may be pruned by the session garbage
             // collector independently of actor_sessions bookkeeping.
             //
-            // Nullable + best-effort: `RecordActorSessionOnLogin` falls
+            // Best-effort, not nullable: `RecordActorSessionOnLogin` falls
             // back to a generated UUID when the `Login` event fires outside
             // an HTTP request with a bound session (e.g. a console-context
-            // login) — see that listener's doc block. So this column is
-            // "best correlation available", not a guaranteed 1:1 join key.
+            // login) — see that listener's doc block — so a value is always
+            // written, just not always a real framework session id. This
+            // column is "best correlation available", not a guaranteed 1:1
+            // join key. (Corrected 6 Sep 2026, finding SEC-05: an earlier
+            // version of this comment called the column "Nullable", which
+            // was never true of the `string()` declaration below — the
+            // fallback UUID is what keeps it always populated.)
             $table->string('session_id');
 
             // Which auth guard authenticated this session. Only the `web`

@@ -12,13 +12,17 @@ use App\Domain\AgreementCertificate\Exceptions\CertificateIssuerNotAuthorisedExc
 use App\Domain\AgreementCertificate\Models\Certificate;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\OrderStatus;
+use App\Filament\Admin\Pages\PasswordReauthentication;
 use App\Filament\Admin\Resources\Certificates\CertificatesResource;
+use App\Http\Middleware\RequireRecentAuthentication;
 use App\Platform\DocumentVault\Actions\PromoteDocument;
 use App\Platform\DocumentVault\Actions\ScanDocument;
 use App\Platform\DocumentVault\Actions\UploadDocument;
 use App\Platform\DocumentVault\DocumentKind;
 use App\Platform\DocumentVault\Models\Document;
 use App\Platform\IdentityAccess\ActorContext;
+use App\Platform\IdentityAccess\Reauthentication\Exceptions\ReauthenticationRequiredException;
+use App\Platform\IdentityAccess\Reauthentication\ReauthenticationGuard;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use Filament\Actions\Action;
 use Filament\Forms\Components\FileUpload;
@@ -172,6 +176,17 @@ final class CreateCertificateAction
 
         if (! self::isIssuer()) {
             self::deny('Anda tidak berwenang menerbitkan sertifikat.');
+
+            return;
+        }
+
+        try {
+            app(ReauthenticationGuard::class)->assertFresh($actor);
+        } catch (ReauthenticationRequiredException) {
+            session()->put(RequireRecentAuthentication::REASON_SESSION_KEY, 'certificate_issue');
+            session()->put('url.intended', route('filament.admin.resources.sertifikat.index'));
+            Notification::make()->warning()->title('Perlu verifikasi ulang')->send();
+            redirect()->route(PasswordReauthentication::ROUTE_NAME);
 
             return;
         }

@@ -10,6 +10,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Session\Middleware\AuthenticateSession;
 use Sentry\Laravel\Integration;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -85,6 +86,23 @@ return Application::configure(basePath: dirname(__DIR__))
         // AuthenticateSession's session-recording path sits later in that
         // same array (see AdminPanelProvider's comment).
         $middleware->appendToGroup('web', AssignCorrelationId::class);
+
+        // Finding SEC-04 (6 Sep 2026 audit): the three Filament panels
+        // (Admin/Operator/Vendor) already register AuthenticateSession on
+        // their own middleware arrays (see AdminPanelProvider's comment at
+        // the AssignCorrelationId reference above), but the plain `web`
+        // group used by the public /akun account area and /masuk, /daftar,
+        // and the password-reset flow never did. Without it, a
+        // pre-existing authenticated session survives a password reset
+        // indefinitely — a stolen session cookie keeps authenticating even
+        // after the account holder "secures" their account by changing
+        // their password. This middleware compares the session's stored
+        // password hash against the user's current one on every request
+        // and logs out any session where they diverge — no code change
+        // needed in ResetPasswordPage itself, since it already rotates the
+        // password hash (and remember_token) on a successful reset; this
+        // is the missing enforcement point that acts on that rotation.
+        $middleware->appendToGroup('web', AuthenticateSession::class);
 
         // Public-beta readiness: every public journey is unthrottled and
         // anonymous today — see the `public-guest` limiter's own doc block
