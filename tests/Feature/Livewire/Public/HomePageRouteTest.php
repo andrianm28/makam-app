@@ -5,6 +5,12 @@ declare(strict_types=1);
 namespace Tests\Feature\Livewire\Public;
 
 use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
+use App\Domain\CemeteryDirectory\CemeteryType;
+use App\Domain\CemeteryDirectory\LaunchCityCode;
+use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\CemeteryDirectory\PlotTrackingMode;
+use App\Domain\PlotInventory\Models\CemeteryBlock;
+use App\Domain\PlotInventory\PlotState;
 use App\Platform\Analytics\Models\MenuInteractionEvent;
 use App\Platform\FeatureGate\Models\FeatureGate;
 use App\Support\ExampleData\CemeteryExampleData;
@@ -396,5 +402,69 @@ final class HomePageRouteTest extends TestCase
         $columns = array_keys($events->first()->getAttributes());
         $this->assertSame(['id', 'menu_key', 'route', 'interaction', 'occurred_at'], $columns);
         $this->assertSame([], array_intersect($columns, ['user_id', 'session_id', 'ip_address', 'ip', 'user_agent']));
+    }
+
+    /**
+     * NOT proof that a published-but-aggregate-tier cemetery is correctly
+     * hidden — that's a different code path (the tier guard in
+     * PlotAvailabilityPreview::buildShowcase(), covered at the component
+     * level by PlotAvailabilityPreviewTest::
+     * test_renders_nothing_when_no_configured_cemetery_is_granular()).
+     * The default config's slugs (`tpu-petamburan`, `tpu-karet-bivak`) are
+     * NOT created by any migration/seeder under RefreshDatabase — they only
+     * exist on real dev/stg/beta via an UPDATE-only backfill migration
+     * against operator-created rows — so under test this only exercises the
+     * unresolvable-slug path (CemeteryPublicQuery::findPublishedBySlug()
+     * returning null), already covered by
+     * test_skips_a_configured_slug_that_does_not_resolve() at the component
+     * level. This test's only distinct value is confirming that path stays
+     * silent at the real homepage-route level too.
+     */
+    public function test_plot_availability_preview_is_absent_when_no_configured_slug_resolves_under_test_seed_data(): void
+    {
+        $response = $this->get('/');
+        $response->assertOk();
+
+        $response->assertDontSeeText('Lihat Contoh Ketersediaan Plot');
+    }
+
+    public function test_plot_availability_preview_renders_between_the_hero_and_the_service_cards_when_data_exists(): void
+    {
+        $cemetery = Cemetery::query()->create([
+            'type' => CemeteryType::TPU,
+            'publication_status' => CemeteryPublicationStatus::PUBLISHED,
+            'name' => 'TPU Pratinjau Homepage',
+            'slug' => 'tpu-pratinjau-homepage',
+            'city' => LaunchCityCode::JAKARTA,
+            'address' => 'Jl. Contoh No. 1',
+            'plot_tracking_mode' => PlotTrackingMode::GRANULAR,
+        ]);
+
+        $block = CemeteryBlock::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'code' => 'BLOK-A',
+            'name' => 'Blok A',
+            'capacity' => 1,
+        ]);
+
+        $block->plots()->create(['slot' => '001', 'plot_state' => PlotState::AVAILABLE]);
+
+        config(['marketing.homepage_plot_preview_cemetery_slugs' => ['tpu-pratinjau-homepage']]);
+
+        $response = $this->get('/');
+        $response->assertOk();
+
+        $body = $response->getContent();
+        $this->assertNotFalse($body);
+
+        $heroEnd = strpos($body, 'Pesan Makam');
+        $servicesHeading = strpos($body, 'id="services-heading"');
+        $previewHeading = strpos($body, 'id="plot-preview-heading"');
+
+        $this->assertNotFalse($heroEnd);
+        $this->assertNotFalse($servicesHeading);
+        $this->assertNotFalse($previewHeading);
+        $this->assertGreaterThan($heroEnd, $previewHeading, 'Preview section must render after the hero.');
+        $this->assertLessThan($servicesHeading, $previewHeading, 'Preview section must render before the service cards.');
     }
 }
