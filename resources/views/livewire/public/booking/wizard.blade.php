@@ -196,6 +196,10 @@
                             </li>
                         @endforeach
                     </ul>
+                    <span wire:loading wire:target="selectCity" role="status" class="mt-2 flex items-center gap-2 text-sm text-neutral-600">
+                        <x-mk.spinner class="size-4" aria-hidden="true" />
+                        Memproses&hellip;
+                    </span>
                 @endif
 
                 @error('city_code')
@@ -383,6 +387,14 @@
                             </li>
                         @endforeach
                     </ul>
+                    <span wire:loading wire:target="openPickerFor" role="status" class="mt-2 flex items-center gap-2 text-sm text-neutral-600">
+                        <x-mk.spinner class="size-4" aria-hidden="true" />
+                        Memproses&hellip;
+                    </span>
+                    <span wire:loading wire:target="selectCemetery" role="status" class="mt-2 flex items-center gap-2 text-sm text-neutral-600">
+                        <x-mk.spinner class="size-4" aria-hidden="true" />
+                        Memproses&hellip;
+                    </span>
                 @endif
 
 
@@ -494,6 +506,10 @@
                             </div>
                         @endforelse
                     </div>
+                    <span wire:loading wire:target="holdPlotForDiscovery" role="status" class="mt-2 flex items-center gap-2 text-sm text-neutral-600">
+                        <x-mk.spinner class="size-4" aria-hidden="true" />
+                        Memproses&hellip;
+                    </span>
                     @endif
                 </section>
             @endif
@@ -526,6 +542,10 @@
                         </li>
                     @endforeach
                 </ul>
+                <span wire:loading wire:target="selectServiceType" role="status" class="mt-2 flex items-center gap-2 text-sm text-neutral-600">
+                    <x-mk.spinner class="size-4" aria-hidden="true" />
+                    Memproses&hellip;
+                </span>
 
                 @error('service_type')
                     <p class="mt-3 text-sm text-danger-700" role="alert">{{ $message }}</p>

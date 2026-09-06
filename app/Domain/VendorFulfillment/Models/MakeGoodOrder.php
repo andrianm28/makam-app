@@ -7,6 +7,7 @@ namespace App\Domain\VendorFulfillment\Models;
 use App\Domain\VendorFulfillment\MakeGoodStatus;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Eloquent model for `make_good_orders` — replacement work orders issued
@@ -34,5 +35,11 @@ final class MakeGoodOrder extends Model
     public function status(): MakeGoodStatus
     {
         return MakeGoodStatus::from($this->status);
+    }
+
+    /** @return BelongsTo<WorkOrder, $this> */
+    public function replacementWorkOrder(): BelongsTo
+    {
+        return $this->belongsTo(WorkOrder::class, 'replacement_work_order_id');
     }
 }

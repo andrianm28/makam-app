@@ -14,22 +14,29 @@
     delivery fee rule, production lead time, cancellation policy, and
     evidence requirement.
 
-    NONE of those are columns on `products` or `product_variants`.
+    NONE of those were columns on `products` or `product_variants`.
     `2026_07_26_180000_create_products_table.php`'s own doc block calls the
     absence of stock/schedule/service-area columns deliberate and still open
     ("future vendor-listing-table concerns"). The `vendor_listings` table now
     EXISTS (L10) and carries most of them; the bootstrap seed ships one
     example listing per product, so a fresh install has an offer behind every
-    product. This page therefore cannot render a schedule, a delivery fee, or
-    a real §6.2 "area unavailable" state — there is no data behind any of
-    them.
-    Rendering a plausible-looking one would fabricate a commercial fact the
-    repository does not hold, which is the exact failure
+    product.
+
+    UPDATE (this batch): availability mode, stock quantity (when
+    `availability_mode` is STOCKED), production lead time, evidence
+    requirement, and cancellation policy are now rendered from `$listing`,
+    directly under the vendor line in the summary column above. This page
+    still cannot render a real schedule (an actual delivery/service date) or
+    a delivery fee — both genuinely depend on a service area the shopper has
+    not yet chosen, and rendering either would fabricate a commercial fact
+    the repository does not hold, which is the exact failure
     `2026_07_26_200200_seed_marketplace_products_and_variants.php` avoided by
-    seeding `base_price_idr` NULL rather than guessing. The page instead says
-    plainly, once, that schedule and service area are confirmed with the
-    vendor and are not shown here. AC2 therefore remains PARTIAL after this
-    batch; it is reported as such, not ticked.
+    seeding `base_price_idr` NULL rather than guessing. The "ordering status"
+    section below says plainly, once, that schedule and delivery fee are
+    confirmed with the vendor and are not shown here. AC2 is therefore MORE
+    COMPLETE after this batch (5 of 7 named fields now render) but still not
+    FULL — schedule and delivery fee remain open — and is reported that way,
+    not ticked as done.
 
     --- The two ordering states ---
     When the product has NO active `vendor_listings` row (deactivated or
@@ -38,16 +45,18 @@
     customer-service escape hatch and the one-vendor-per-checkout note.
 
     When an active listing exists, the summary column renders the REAL offer
-    — the listing's price (not the catalogue's dummy `base_price_idr`) and
-    the listing's vendor name — with the "Tambah ke Keranjang" primary
-    button, and the ordering section becomes a neutral note that schedule,
-    area, and delivery fee are confirmed with the vendor, carrying the same
-    §6.10 customer-service escape hatch as the pending state. The dummy
-    price's attribution line and the dummy `products.vendor_name` are
-    suppressed in this state because they are fabricated values that would
-    contradict the real offer standing right next to them; they remain, with
-    their markers, when there is no listing to be truthful about. The
-    one-vendor constraint sentence is stated in BOTH states (AC4).
+    — the listing's price (not the catalogue's dummy `base_price_idr`), the
+    listing's vendor name, and (this batch) its availability mode, stock,
+    production lead time, evidence requirement, and cancellation policy —
+    with the "Tambah ke Keranjang" primary button, and the ordering section
+    becomes a neutral note that schedule and delivery fee are confirmed with
+    the vendor, carrying the same §6.10 customer-service escape hatch as the
+    pending state. The dummy price's attribution line and the dummy
+    `products.vendor_name` are suppressed in this state because they are
+    fabricated values that would contradict the real offer standing right
+    next to them; they remain, with their markers, when there is no listing
+    to be truthful about. The one-vendor constraint sentence is stated in
+    BOTH states (AC4).
 
     --- `preview_image_path` is deliberately not rendered ---
     The six seeded `product_variants` rows carry
@@ -121,6 +130,57 @@
                     <p class="text-sm text-neutral-600">
                         Ditawarkan oleh {{ $listing->vendor->name }}
                     </p>
+
+                    <dl class="mt-3 space-y-2 text-sm text-neutral-700">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <dt class="text-neutral-600">Ketersediaan</dt>
+                            <dd>
+                                <x-mk.badge :intent="match ($listing->availability_mode) {
+                                    \App\Domain\Marketplace\AvailabilityMode::STOCKED => 'success',
+                                    \App\Domain\Marketplace\AvailabilityMode::MADE_TO_ORDER => 'info',
+                                    \App\Domain\Marketplace\AvailabilityMode::SCHEDULED => 'info',
+                                    default => 'neutral',
+                                }">
+                                    {{ match ($listing->availability_mode) {
+                                        \App\Domain\Marketplace\AvailabilityMode::STOCKED => 'Tersedia (stok)',
+                                        \App\Domain\Marketplace\AvailabilityMode::MADE_TO_ORDER => 'Dibuat sesuai pesanan',
+                                        \App\Domain\Marketplace\AvailabilityMode::SCHEDULED => 'Dijadwalkan',
+                                        default => $listing->availability_mode,
+                                    } }}
+                                </x-mk.badge>
+                            </dd>
+                        </div>
+
+                        @if ($listing->availability_mode === \App\Domain\Marketplace\AvailabilityMode::STOCKED && $listing->stock_quantity !== null)
+                            <div class="flex flex-wrap items-center gap-2">
+                                <dt class="text-neutral-600">Stok</dt>
+                                <dd class="font-medium text-neutral-900">{{ $listing->stock_quantity }} unit</dd>
+                            </div>
+                        @endif
+
+                        @if ($listing->production_lead_time_days !== null)
+                            <div class="flex flex-wrap items-center gap-2">
+                                <dt class="text-neutral-600">Waktu pengerjaan</dt>
+                                <dd class="font-medium text-neutral-900">{{ $listing->production_lead_time_days }} hari</dd>
+                            </div>
+                        @endif
+
+                        @if ($listing->evidence_requirement !== \App\Domain\Marketplace\EvidenceRequirement::NONE)
+                            <div class="flex flex-wrap items-center gap-2">
+                                <dt class="text-neutral-600">Bukti penyelesaian</dt>
+                                <dd class="font-medium text-neutral-900">
+                                    {{ $listing->evidence_requirement === \App\Domain\Marketplace\EvidenceRequirement::PHOTO ? 'Vendor mengunggah foto' : 'Vendor mengunggah dokumen' }}
+                                </dd>
+                            </div>
+                        @endif
+
+                        @if ($listing->cancellation_policy)
+                            <div>
+                                <dt class="text-neutral-600">Kebijakan pembatalan</dt>
+                                <dd class="mt-1 text-neutral-700">{{ $listing->cancellation_policy }}</dd>
+                            </div>
+                        @endif
+                    </dl>
                 @else
                     @php
                         $price = MarketplacePresenter::priceAttribution($product);
@@ -279,7 +339,7 @@
             @if ($listing !== null)
                 <x-mk.alert intent="neutral" title="Detail pesanan dikonfirmasi bersama vendor" live="off">
                     <p>
-                        Jadwal pengiriman atau pengerjaan, area layanan, dan biaya pengiriman dikonfirmasi bersama vendor setelah pesanan dibuat dan belum ditampilkan di halaman ini.
+                        Jadwal pengiriman atau pengerjaan dan biaya pengiriman ke area Anda dikonfirmasi bersama vendor setelah pesanan dibuat.
                     </p>
                     {{-- §6.10 support escape hatch — same affordance as the
                          pending state below; online ordering being AVAILABLE

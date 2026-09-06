@@ -153,4 +153,26 @@ final class ComplaintFlowTest extends TestCase
             'subject_id' => (string) $workOrder->getKey(),
         ]);
     }
+
+    public function test_service_complaint_has_a_nullable_make_good_order_id_column_and_real_relations(): void
+    {
+        $workOrder = $this->makeWorkOrder();
+
+        $complaint = app(FileComplaint::class)(
+            $workOrder,
+            User::factory()->create()->id,
+            'Grass was not trimmed.',
+        );
+
+        $this->assertNull($complaint->make_good_order_id);
+        $this->assertTrue($complaint->workOrder()->exists());
+        $this->assertSame((string) $workOrder->getKey(), (string) $complaint->workOrder->getKey());
+        $this->assertTrue($complaint->customer()->exists());
+
+        $makeGood = app(CreateMakeGood::class)($workOrder);
+
+        $complaint->forceFill(['make_good_order_id' => $makeGood->getKey()])->save();
+
+        $this->assertSame((string) $makeGood->getKey(), (string) $complaint->fresh()->make_good_order_id);
+    }
 }

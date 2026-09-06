@@ -28,6 +28,9 @@ final readonly class CreateMakeGood
     public function __invoke(
         WorkOrder $originalWorkOrder,
         ?string $notes = null,
+        ?string $actorRole = null,
+        ?AuditSource $source = null,
+        ?string $actorRef = null,
     ): MakeGoodOrder {
         return Audit::wrap(
             mutation: function () use ($originalWorkOrder, $notes): MakeGoodOrder {
@@ -76,9 +79,9 @@ final readonly class CreateMakeGood
             action: VendorFulfillmentAuditActions::MAKE_GOOD_CREATED,
             subject: new AuditSubject('work_order', $originalWorkOrder->getKey()),
             outcome: AuditOutcome::Allowed,
-            actorRef: null,
-            actorRole: 'system',
-            source: AuditSource::Job,
+            actorRef: $actorRef,
+            actorRole: $actorRole ?? 'system',
+            source: $source ?? AuditSource::Job,
             correlationId: app(CorrelationContext::class)->current()?->value,
         );
     }
