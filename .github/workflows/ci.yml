@@ -20,7 +20,9 @@ on:
   push:
     branches: ["**"]
   pull_request:
-    branches: [master]
+    # master is retired; docs/design-system-and-planning is trunk (CI-05,
+    # docs/superpowers/plans/2026-09-06-batch2g-cicd-hardening.md).
+    branches: [docs/design-system-and-planning]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -331,13 +333,71 @@ jobs:
           php-version: "8.5"
           tools: composer:v2
           coverage: none
-      - name: Composer audit
-        run: composer audit --locked
+      # COORD-08 (docs/superpowers/plans/2026-09-06-batch2g-cicd-hardening.md):
+      # `composer audit --locked` returns the same non-zero exit code whether
+      # a real advisory was found or Packagist's advisory database was just
+      # unreachable (DNS blip, rate limit, outage). A flaky network failure
+      # should retry-then-warn, not block every PR; a real advisory must
+      # still fail the build closed. This distinguishes the two by parsing
+      # `--format=json`: a real finding has a non-empty `advisories` object,
+      # which is retried too (in case it's a transient duplicate) but treated
+      # as fail-closed on its own attempt rather than folded into the
+      # generic retry-then-warn path below.
+      - name: Composer audit (retry on advisory-database outage, fail closed on a real finding)
+        run: |
+          set +e
+          max_attempts=3
+          attempt=1
+          while [ "$attempt" -le "$max_attempts" ]; do
+            output=$(composer audit --locked --format=json 2>&1)
+            status=$?
+            if [ "$status" -eq 0 ]; then
+              echo "$output"
+              exit 0
+            fi
+            if printf '%s' "$output" | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get('advisories') else 1)" 2>/dev/null; then
+              echo "$output"
+              echo "::error::composer audit found a real security advisory — failing closed."
+              exit 1
+            fi
+            echo "$output"
+            echo "::warning::composer audit attempt ${attempt}/${max_attempts} returned no parseable advisory report (advisory database likely unreachable). Retrying..."
+            attempt=$((attempt + 1))
+            sleep $((attempt * 5))
+          done
+          echo "::warning::composer audit could not reach the advisory database after ${max_attempts} attempts and returned nothing parseable as a real finding. Treating this as a soft failure (WARN, not FAIL) rather than risk blocking every PR on an upstream outage."
+          exit 0
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - name: npm audit
-        run: npm audit --audit-level=high
+      # Same rationale as the composer audit step above, applied to npm's
+      # registry advisory feed. `npm audit --json`'s
+      # `metadata.vulnerabilities.{high,critical}` counts are what
+      # `--audit-level=high` actually gates on.
+      - name: npm audit (retry on registry outage, fail closed on a real finding)
+        run: |
+          set +e
+          max_attempts=3
+          attempt=1
+          while [ "$attempt" -le "$max_attempts" ]; do
+            output=$(npm audit --audit-level=high --json 2>&1)
+            status=$?
+            if [ "$status" -eq 0 ]; then
+              echo "$output"
+              exit 0
+            fi
+            if printf '%s' "$output" | python3 -c "import json,sys; d=json.load(sys.stdin); m=d.get('metadata',{}).get('vulnerabilities',{}); sys.exit(0 if (m.get('high',0) or m.get('critical',0)) else 1)" 2>/dev/null; then
+              echo "$output"
+              echo "::error::npm audit found a real high/critical advisory — failing closed."
+              exit 1
+            fi
+            echo "$output"
+            echo "::warning::npm audit attempt ${attempt}/${max_attempts} returned no parseable advisory report (registry likely unreachable). Retrying..."
+            attempt=$((attempt + 1))
+            sleep $((attempt * 5))
+          done
+          echo "::warning::npm audit could not reach the registry after ${max_attempts} attempts and returned nothing parseable as a real finding. Treating this as a soft failure (WARN, not FAIL) rather than risk blocking every PR on an upstream outage."
+          exit 0
 
   # ---------------------------------------------------------------------------
   # Browser + accessibility smoke test (Playwright + @axe-core/playwright).

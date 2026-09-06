@@ -324,6 +324,41 @@ else
   else fail "sql/revoke-journal-mutations.sql drifted from the canonical shape"; fi
 fi
 
+# ---------------------------------------------------------------------------
+head2 "GATE 14 — image weight budget (DS-01, docs/superpowers/plans/2026-09-06-batch2g-cicd-hardening.md)"
+# ---------------------------------------------------------------------------
+# DS-01 replaced the 7.2MB public/images/hero/cemetery-garden-daylight.jpg
+# with responsive AVIF/WebP derivatives (see hero.blade.php's <picture>
+# markup). This gate keeps the mistake from recurring: no image checked
+# into public/images or resources/images may exceed 300KB (comfortably
+# above the largest single derivative, ~110KB, while still catching an
+# accidentally-committed full-resolution photo), and AVIF/WebP derivatives
+# specifically (the ones actually served to most browsers) must stay
+# under the 120KB budget DS-01 set.
+img_fail=0
+while IFS= read -r -d '' f; do
+  sz=$(stat -c%s "$f" 2>/dev/null || stat -f%z "$f" 2>/dev/null)
+  [ -z "$sz" ] && continue
+  case "$f" in
+    *.avif|*.webp)
+      if [ "$sz" -gt 122880 ]; then
+        echo "    $f is $((sz / 1024))KB, exceeds the 120KB AVIF/WebP budget" >&2
+        img_fail=1
+      fi
+      ;;
+    *)
+      if [ "$sz" -gt 307200 ]; then
+        echo "    $f is $((sz / 1024))KB, exceeds the 300KB general image budget" >&2
+        img_fail=1
+      fi
+      ;;
+  esac
+done < <(find public/images resources/images -type f \
+    \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.avif' -o -iname '*.gif' \) \
+    -print0 2>/dev/null)
+if [ "$img_fail" -eq 0 ]; then pass "no oversized images under public/images or resources/images"
+else fail "image weight budget exceeded"; fi
+
 printf '\n'
 if [ "$FAIL" -eq 0 ]; then
   printf '\033[32mRESULT: ALL DOC GATES PASS\033[0m\n'; exit 0
