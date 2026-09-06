@@ -404,7 +404,23 @@ final class HomePageRouteTest extends TestCase
         $this->assertSame([], array_intersect($columns, ['user_id', 'session_id', 'ip_address', 'ip', 'user_agent']));
     }
 
-    public function test_plot_availability_preview_is_absent_by_default_against_real_seed_data(): void
+    /**
+     * NOT proof that a published-but-aggregate-tier cemetery is correctly
+     * hidden — that's a different code path (the tier guard in
+     * PlotAvailabilityPreview::buildShowcase(), covered at the component
+     * level by PlotAvailabilityPreviewTest::
+     * test_renders_nothing_when_no_configured_cemetery_is_granular()).
+     * The default config's slugs (`tpu-petamburan`, `tpu-karet-bivak`) are
+     * NOT created by any migration/seeder under RefreshDatabase — they only
+     * exist on real dev/stg/beta via an UPDATE-only backfill migration
+     * against operator-created rows — so under test this only exercises the
+     * unresolvable-slug path (CemeteryPublicQuery::findPublishedBySlug()
+     * returning null), already covered by
+     * test_skips_a_configured_slug_that_does_not_resolve() at the component
+     * level. This test's only distinct value is confirming that path stays
+     * silent at the real homepage-route level too.
+     */
+    public function test_plot_availability_preview_is_absent_when_no_configured_slug_resolves_under_test_seed_data(): void
     {
         $response = $this->get('/');
         $response->assertOk();

@@ -14,6 +14,21 @@
       8. Customer-service CTA
       9. Footer                 -> rendered by layouts/app.blade.php, not here
 
+    --- ADDED 5 Sep 2026: plot-availability preview, between Section 2 and
+    Section 3 (not renumbered above) ---
+    This is deliberately NOT a tenth entry in the NORMATIVE nine-section
+    list above, for the same reason the "Kehangatan Keluarga" entry below
+    is not: it is not part of information-architecture.md §3's contract, so
+    nothing there needed to change. It renders `<livewire:public.home.plot-
+    availability-preview />` directly under the hero, ahead of the four
+    service cards, per docs/superpowers/specs/2026-09-05-marketing-hero-
+    plot-preview-design.md. The component is read-only (see its own doc
+    block — no wire:click/wire:model target, ever) and renders nothing when
+    no configured showcase cemetery has real per-plot data yet or the read
+    fails, so it never leaves a broken or empty-looking box on the
+    highest-traffic page. See this section's own inline comment below for
+    the placement reasoning.
+
     --- ADDED 26 Aug 2026: "Kehangatan Keluarga" supporting photo section,
     between 6 and 7 (not renumbered above) ---
     This is deliberately NOT a tenth entry in the NORMATIVE nine-section

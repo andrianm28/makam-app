@@ -14,6 +14,7 @@ use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotInventory\PlotState;
 use App\Livewire\Public\Home\PlotAvailabilityPreview;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -37,7 +38,20 @@ final class PlotAvailabilityPreviewTest extends TestCase
 
     public function test_renders_nothing_when_no_configured_cemetery_is_granular(): void
     {
-        $this->makeCemetery('tpu-aggregate-only', PlotTrackingMode::AGGREGATE);
+        // The cemetery has a real block with a real plot, so the ONLY thing
+        // that can hide it is the tier guard itself — a cemetery with no
+        // blocks would also be filtered out by the unrelated
+        // $blocks->isEmpty() check below it, hiding a deleted tier guard
+        // (verified: this test failed once, against a mutant with the tier
+        // guard removed, before this block/plot setup was added).
+        $aggregate = $this->makeCemetery('tpu-aggregate-only', PlotTrackingMode::AGGREGATE);
+
+        CemeteryBlock::query()->create([
+            'cemetery_id' => $aggregate->getKey(),
+            'code' => 'BLOK-A',
+            'name' => 'Blok A',
+            'capacity' => 1,
+        ])->plots()->create(['slot' => '001', 'plot_state' => PlotState::AVAILABLE]);
 
         config(['marketing.homepage_plot_preview_cemetery_slugs' => ['tpu-aggregate-only']]);
 
@@ -110,11 +124,11 @@ final class PlotAvailabilityPreviewTest extends TestCase
 
         Livewire::test(PlotAvailabilityPreview::class)->assertSee('BLOK-A');
 
-        \Illuminate\Support\Facades\DB::enableQueryLog();
+        DB::enableQueryLog();
 
         Livewire::test(PlotAvailabilityPreview::class)->assertSee('BLOK-A');
 
-        $queries = \Illuminate\Support\Facades\DB::getQueryLog();
+        $queries = DB::getQueryLog();
 
         $this->assertEmpty(
             array_filter($queries, static fn (array $q): bool => str_contains($q['query'], 'cemetery_blocks')),
