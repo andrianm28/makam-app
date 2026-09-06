@@ -16,6 +16,9 @@
                 <p class="mt-2 text-base text-neutral-600">
                     Buat akun untuk melanjutkan.
                 </p>
+                <p class="mt-2 text-sm text-neutral-500">
+                    Akun yang dibuat di halaman ini adalah akun Pelanggan.
+                </p>
             </div>
 
             <x-mk.card class="flex flex-col gap-4 p-6">

@@ -46,6 +46,23 @@ final class LoginPageTest extends TestCase
         $response->assertSee('Kata sandi berhasil direset. Silakan masuk.');
     }
 
+    /**
+     * `/masuk` gives no indication which of the platform's 3 real account
+     * types it authenticates — vendor and cemetery-operator staff sign in
+     * at `/vendor/login` and `/operator/login` instead, and neither is
+     * linked from anywhere in the public site. This asserts the actor-
+     * clarifying line and both portal links are present.
+     */
+    public function test_the_page_names_all_three_account_types_and_links_the_other_two_portals(): void
+    {
+        $response = $this->get('/masuk');
+
+        $response->assertOk();
+        $response->assertSee('Halaman ini untuk masuk sebagai Pelanggan.', false);
+        $response->assertSee(route('filament.vendor.auth.login'), false);
+        $response->assertSee(route('filament.operator.auth.login'), false);
+    }
+
     public function test_correct_credentials_authenticate_and_redirect_to_akun(): void
     {
         $user = User::factory()->create(['password' => 'password']);
