@@ -462,33 +462,131 @@
                             agar petugas kami membantu langsung.
                         </x-mk.alert>
                     @else
+                    @php
+                        // Floor/Block Map — mirrors the Filament admin reference at
+                        // resources/views/filament/shared/plot-floor-map/granular.blade.php,
+                        // adapted for the public design system (mobile-first, capped
+                        // max-w-form width, tokens.css semantic intents). Cell colour
+                        // comes from StatusIntent::FAMILY_PLOT_STATE, exactly as the
+                        // admin map and the homepage preview both already do.
+
+                        // Static literal strings, one per intent — same discipline as
+                        // badge.blade.php / card.blade.php. Never interpolate $intent
+                        // into a class string: Tailwind's @source scanner reads literal
+                        // file text, so an interpolated class generates no CSS at all.
+                        $plotTileSurfaces = [
+                            'neutral' => 'bg-[var(--mk-intent-neutral-bg)] text-[var(--mk-intent-neutral-fg)] border-[var(--mk-intent-neutral-border)]',
+                            'info'    => 'bg-[var(--mk-intent-info-bg)] text-[var(--mk-intent-info-fg)] border-[var(--mk-intent-info-border)]',
+                            'pending' => 'bg-[var(--mk-intent-pending-bg)] text-[var(--mk-intent-pending-fg)] border-[var(--mk-intent-pending-border)]',
+                            'success' => 'bg-[var(--mk-intent-success-bg)] text-[var(--mk-intent-success-fg)] border-[var(--mk-intent-success-border)]',
+                            'danger'  => 'bg-[var(--mk-intent-danger-bg)] text-[var(--mk-intent-danger-fg)] border-[var(--mk-intent-danger-border)]',
+                            'urgent'  => 'bg-[var(--mk-intent-urgent-bg)] text-[var(--mk-intent-urgent-fg)] border-[var(--mk-intent-urgent-border)]',
+                        ];
+
+                        // Hand-reproduces button.blade.php's sanctioned focus ring,
+                        // transition, and disabled recipe — there is no tile variant
+                        // in the component system, and x-mk.button hard-codes
+                        // h-11 px-4 inline-flex, incompatible with a stacked grid cell.
+                        $plotTileBase = 'flex h-16 md:h-20 w-full flex-col items-center justify-center gap-1
+                            rounded-md border text-base font-semibold tabular-nums leading-none
+                            transition-[color,background-color,border-color,box-shadow]
+                            duration-fast ease-standard select-none
+                            focus-visible:outline-none focus-visible:ring-2
+                            focus-visible:ring-primary-600 focus-visible:ring-offset-2
+                            disabled:cursor-not-allowed disabled:bg-neutral-100
+                            disabled:text-neutral-500 disabled:border-neutral-300';
+
+                        $plotTileActionable = 'cursor-pointer hover:border-primary-600 hover:bg-primary-50
+                            hover:text-primary-800 active:bg-primary-100';
+
+                        // activeDraftPlotHold() already traverses ->plot->block->cemetery,
+                        // so the relation is loaded — this costs no extra query.
+                        $heldPlotId = $hold?->plot?->id;
+                    @endphp
+
+                    @if ($pickerBlocksResult->isNotEmpty())
+                        <div class="mb-6 flex flex-wrap items-center gap-2 rounded-md border border-neutral-200 bg-neutral-50 p-3">
+                            <span class="text-sm font-medium text-neutral-700">Keterangan:</span>
+                            <ul class="flex flex-wrap items-center gap-2" aria-label="Keterangan status plot">
+                                @foreach (\App\Domain\PlotInventory\PlotState::KNOWN_STATES as $legendState)
+                                    <li>
+                                        <x-mk.badge
+                                            intent="{{ \App\Support\Design\StatusIntent::intent($legendState, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE) }}"
+                                            :icon="\App\Support\Design\StatusIntent::icon($legendState, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE)"
+                                        >
+                                            {{ \App\Support\Design\StatusIntent::label($legendState, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE) }}
+                                        </x-mk.badge>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
+
                     <div class="grid gap-y-6">
                         @forelse ($pickerBlocksResult as $block)
-                            <div>
-                                <p class="mb-2 text-sm font-medium text-neutral-900">{{ $block->code }} &mdash; {{ $block->name }}</p>
-                                <ul class="flex flex-wrap gap-2" aria-label="Plot di {{ $block->code }}">
-                                    @foreach ($block->plots as $plot)
-                                        <li wire:key="plot-{{ $plot->id }}">
-                                            <x-mk.button
-                                                variant="secondary"
-                                                :disabled="$plot->plot_state !== \App\Domain\PlotInventory\PlotState::AVAILABLE"
-                                                wire:click="holdPlotForDiscovery('{{ $this->pickerCemeteryId }}', {{ $this->pickerCemeteryPackageId ?? 'null' }}, '{{ $plot->id }}')"
-                                                wire:loading.attr="disabled"
-                                                wire:target="holdPlotForDiscovery"
-                                            >
-                                                {{ $plot->slot }}
-                                                <x-mk.badge
-                                                    intent="{{ \App\Support\Design\StatusIntent::intent($plot->plot_state, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE) }}"
-                                                    :icon="\App\Support\Design\StatusIntent::icon($plot->plot_state, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE)"
-                                                    size="sm"
+                            @php
+                                $availableCount = $block->plots
+                                    ->where('plot_state', \App\Domain\PlotInventory\PlotState::AVAILABLE)
+                                    ->count();
+                            @endphp
+                            <x-mk.card wire:key="picker-block-{{ $block->id }}" aria-labelledby="picker-block-{{ $block->id }}-heading">
+                                <x-slot name="header">
+                                    <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                                        <h5 id="picker-block-{{ $block->id }}-heading" class="text-base font-semibold text-neutral-900">
+                                            {{ $block->code }} &mdash; {{ $block->name }}
+                                        </h5>
+                                        <p class="text-sm text-neutral-600">
+                                            Kapasitas {{ $block->capacity }} &middot; {{ $availableCount }} tersedia
+                                        </p>
+                                    </div>
+                                </x-slot>
+
+                                @if ($block->plots->isEmpty())
+                                    <p class="text-base text-neutral-600">Blok ini belum memiliki plot.</p>
+                                @else
+                                    <ul class="grid grid-cols-3 gap-2 sm:grid-cols-5 sm:gap-3 md:grid-cols-6"
+                                        aria-label="Plot di blok {{ $block->code }}">
+                                        @foreach ($block->plots as $plot)
+                                            @php
+                                                $plotIntent = \App\Support\Design\StatusIntent::intent($plot->plot_state, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE);
+                                                $plotIcon   = \App\Support\Design\StatusIntent::icon($plot->plot_state, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE);
+                                                $plotLabel  = \App\Support\Design\StatusIntent::label($plot->plot_state, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE);
+
+                                                $isAvailable = $plot->plot_state === \App\Domain\PlotInventory\PlotState::AVAILABLE;
+                                                $isHeldByMe  = $heldPlotId !== null && $heldPlotId === $plot->id;
+
+                                                $tileClasses = trim(
+                                                    $plotTileBase . ' '
+                                                    . ($plotTileSurfaces[$plotIntent] ?? $plotTileSurfaces['neutral']) . ' '
+                                                    . ($isAvailable ? $plotTileActionable : 'cursor-default') . ' '
+                                                    . ($isHeldByMe ? 'ring-2 ring-primary-600 ring-offset-2' : '')
+                                                );
+
+                                                $tileAria = 'Plot ' . $block->code . ' ' . $plot->slot . ' — ' . $plotLabel
+                                                    . ($isHeldByMe ? ' — plot pilihan Anda' : ($isAvailable ? '' : ' — tidak dapat dipilih'));
+                                            @endphp
+                                            <li wire:key="picker-plot-{{ $plot->id }}">
+                                                <button
+                                                    type="button"
+                                                    class="{{ $tileClasses }}"
+                                                    aria-label="{{ $tileAria }}"
+                                                    @if ($isHeldByMe) aria-current="true" @endif
+                                                    @if ($isAvailable)
+                                                        wire:click="holdPlotForDiscovery('{{ $this->pickerCemeteryId }}', {{ $this->pickerCemeteryPackageId ?? 'null' }}, '{{ $plot->id }}')"
+                                                        wire:loading.attr="disabled"
+                                                        wire:target="holdPlotForDiscovery"
+                                                    @else
+                                                        aria-disabled="true"
+                                                    @endif
                                                 >
-                                                    {{ \App\Support\Design\StatusIntent::label($plot->plot_state, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE) }}
-                                                </x-mk.badge>
-                                            </x-mk.button>
-                                        </li>
-                                    @endforeach
-                                </ul>
-                            </div>
+                                                    <span>{{ $plot->slot }}</span>
+                                                    <x-dynamic-component :component="'icon.' . $plotIcon" class="size-4 shrink-0" aria-hidden="true" />
+                                                </button>
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                @endif
+                            </x-mk.card>
                         @empty
                             <div class="flex flex-col items-center gap-3 py-12 text-center">
                                 <x-dynamic-component component="icon.inbox" class="size-12 text-neutral-400" aria-hidden="true" />
