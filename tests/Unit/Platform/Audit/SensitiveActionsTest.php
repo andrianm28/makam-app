@@ -131,6 +131,16 @@ final class SensitiveActionsTest extends TestCase
      * mandatory-reason category as `GATE_CHANGE`/`TARIFF_SOURCE_CHANGE`
      * already on this list. See `ServiceCatalogAuditActions`'s doc block
      * for the full judgement call.
+     *
+     * UPDATED 6 Sep 2026 — finding SEC-02 (full audit remediation, Task 1.3
+     * of `docs/superpowers/plans/2026-09-06-remediasi-audit-makam.md`) added
+     * `SITE_SETTING_BANK_TRANSFER_UPDATED`: the only write path for the
+     * manual-payment destination bank account
+     * (`App\Filament\Admin\Resources\SiteSettings\Pages\
+     * EditSiteSettings::save()`). Redirecting real customer funeral
+     * payments to the wrong account with no recorded justification is the
+     * same risk category as `PAYMENT_REFUND`/`VENDOR_PAYOUT` already on
+     * this list.
      */
     public function test_the_list_contains_the_requirements_named_actions_plus_the_documented_additions(): void
     {
@@ -161,6 +171,7 @@ final class SensitiveActionsTest extends TestCase
                 'PRODUCT_UPDATED',
                 'SUBSCRIPTION_PAUSED',
                 'SUBSCRIPTION_CANCELLED',
+                'SITE_SETTING_BANK_TRANSFER_UPDATED',
             ],
             SensitiveActions::ACTIONS
         );

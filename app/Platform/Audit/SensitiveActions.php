@@ -143,6 +143,15 @@ final class SensitiveActions
         // payment-state changes above.
         'SUBSCRIPTION_PAUSED',
         'SUBSCRIPTION_CANCELLED',
+
+        // Added for finding SEC-02 (6 Sep 2026 audit). Written by
+        // `App\Filament\Admin\Resources\SiteSettings\Pages\EditSiteSettings`
+        // whenever a save touches any `bank_transfer_*` key — the manual-
+        // payment destination account shown on the booking wizard's Step 8
+        // fallback card. Redirecting real customer payments to the wrong
+        // account with no recorded justification is the same risk category
+        // as `PAYMENT_REFUND`/`VENDOR_PAYOUT` above.
+        'SITE_SETTING_BANK_TRANSFER_UPDATED',
     ];
 
     public static function requiresReason(string $action): bool
