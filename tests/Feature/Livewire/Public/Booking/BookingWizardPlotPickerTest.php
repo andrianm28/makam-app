@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Livewire\Public\Booking;
 
+use App\Domain\Booking\Actions\SaveBookingDraftStep;
 use App\Domain\Booking\Actions\StartBookingDraft;
 use App\Domain\Booking\BookingServiceType;
 use App\Domain\Booking\BookingWizardStep;
@@ -695,5 +696,65 @@ final class BookingWizardPlotPickerTest extends TestCase
         // the picker and show the live hold on its own.
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->assertSee('Ditahan');
+    }
+
+    /**
+     * Ringkasan Pesanan (Screen 2's persistent summary card) previously
+     * showed only the priced service lines — nothing told the customer
+     * WHICH grave plot they had just chosen. This proves the new "Petak:"
+     * line names the real block/slot/cemetery for a draft with a live
+     * hold.
+     *
+     * `continueFromDiscovery()` (via `saveStep1()`) redirects on success
+     * (`$this->redirect(route('pemesanan-makam.draft', ...))`), so the HTML
+     * captured in THAT SAME response is the pre-redirect Screen 1 render —
+     * this builds DISCOVERY state directly via `SaveBookingDraftStep`
+     * (same technique `BookingWizardStepsSixToNineEndToEndTest::
+     * componentAtCustomerAndDeceasedData()` uses for the same reason) and
+     * mounts a FRESH component afterward, matching what a real browser
+     * shows after following the redirect.
+     */
+    public function test_ringkasan_shows_the_selected_plot_detail_on_screen_two(): void
+    {
+        $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+        $plot = $this->makePlotIn($cemetery);
+        $draft = (new StartBookingDraft)(null);
+        app(HoldPlotForDraft::class)($plot, $draft, "booking_draft:{$draft->getKey()}");
+
+        $draft = (new SaveBookingDraftStep)($draft, BookingWizardStep::DISCOVERY, [
+            'city_code' => LaunchCityCode::JAKARTA,
+            'cemetery_id' => $cemetery->id,
+            'cemetery_package_id' => null,
+            'service_type' => BookingServiceType::NEW_GRAVE,
+            'selected_services' => $this->basicServiceSelections(),
+        ], 'idem-discovery-'.$draft->id);
+
+        Livewire::test(BookingWizard::class, ['draftId' => $draft->id])
+            ->assertSee('Petak:')
+            ->assertSee('BLOK-A')
+            ->assertSee('001')
+            ->assertSee('TPU Uji Coba');
+    }
+
+    /**
+     * The symmetric case: an aggregate-tier cemetery never shows a picker
+     * (`test_the_picker_never_renders_for_an_aggregate_cemetery` above), so
+     * there is no hold and Ringkasan must not claim a plot was chosen.
+     */
+    public function test_ringkasan_shows_no_plot_detail_when_none_was_selected(): void
+    {
+        $cemetery = $this->makeCemetery(PlotTrackingMode::AGGREGATE);
+        $draft = (new StartBookingDraft)(null);
+
+        $draft = (new SaveBookingDraftStep)($draft, BookingWizardStep::DISCOVERY, [
+            'city_code' => LaunchCityCode::JAKARTA,
+            'cemetery_id' => $cemetery->id,
+            'cemetery_package_id' => null,
+            'service_type' => BookingServiceType::NEW_GRAVE,
+            'selected_services' => $this->basicServiceSelections(),
+        ], 'idem-discovery-'.$draft->id);
+
+        Livewire::test(BookingWizard::class, ['draftId' => $draft->id])
+            ->assertDontSee('Petak:');
     }
 }
