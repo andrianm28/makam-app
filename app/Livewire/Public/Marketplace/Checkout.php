@@ -7,6 +7,7 @@ namespace App\Livewire\Public\Marketplace;
 use App\Domain\Marketplace\Actions\PlaceMarketplaceOrder;
 use App\Domain\Marketplace\Exceptions\BadanUsahaNotConfiguredException;
 use App\Domain\Marketplace\Exceptions\CartPricingChangedException;
+use App\Domain\Marketplace\MarketplaceOrderQuery;
 use App\Domain\Marketplace\Models\Cart;
 use App\Domain\Marketplace\Models\MarketplaceOrder;
 use App\Domain\Marketplace\Models\ServiceArea;
@@ -31,6 +32,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 use Throwable;
 
@@ -99,15 +101,28 @@ final class Checkout extends Component
      */
     public string $manualPaymentAmount = '';
 
+    // MKT-01: minted once server-side in `mount()` (`$idempotencyKey`) or
+    // written only from within `placeOrder()`/`mount()`
+    // (`$onlinePaymentAllowed`, `$orderPlaced`, `$placedOrderNumber`) — none
+    // of the four is ever meant to change via a client-supplied
+    // `/livewire/update` payload. `#[Locked]` rejects any such attempt,
+    // matching `BookingWizard::$draftId`/`$currentStep`'s established
+    // pattern. Without it, a forged `placedOrderNumber` combined with a
+    // forged `orderPlaced=true` would let a client point `submitManualProof()`
+    // or `payOnline()` at an arbitrary order number.
+    #[Locked]
     public string $idempotencyKey;
 
     /** @var list<array{id: int, area_code: string, area_label: string, delivery_fee_minor: int}> */
     public array $serviceAreas = [];
 
+    #[Locked]
     public bool $onlinePaymentAllowed = false;
 
+    #[Locked]
     public bool $orderPlaced = false;
 
+    #[Locked]
     public ?string $placedOrderNumber = null;
 
     public ?string $manualSubmissionError = null;
@@ -198,7 +213,7 @@ final class Checkout extends Component
         try {
             $order = (new PlaceMarketplaceOrder)->handle(
                 cart: $cart,
-                customerRef: auth()->check() ? (string) auth()->id() : session()->getId(),
+                customerRef: $this->resolveCustomerRef(),
                 area: $area,
                 idempotencyKey: $this->idempotencyKey,
                 recipientName: $validated['recipientName'],
@@ -230,6 +245,15 @@ final class Checkout extends Component
     public function submitManualProof(): void
     {
         if (! $this->orderPlaced || $this->placedOrderNumber === null) {
+            return;
+        }
+
+        // MKT-01 defence-in-depth: re-derive the customer's identity fresh
+        // from `auth()`/`session()` and re-confirm `$placedOrderNumber`
+        // still belongs to it, rather than trusting the (already
+        // `#[Locked]`) property alone. Mirrors `OrderTracking`'s
+        // `resolveCustomerRef()`/`findForCustomer()` ownership re-check.
+        if (MarketplaceOrderQuery::findForCustomer($this->placedOrderNumber, $this->resolveCustomerRef()) === null) {
             return;
         }
 
@@ -406,5 +430,16 @@ final class Checkout extends Component
             'customer_ref' => $authenticated ? (string) auth()->id() : null,
             'session_ref' => $authenticated ? null : session()->getId(),
         ]);
+    }
+
+    /**
+     * MKT-01: the single point resolving the acting customer's identity from
+     * `auth()`/`session()` — never from a Livewire property — so every
+     * caller (order placement, manual-proof ownership re-check) always
+     * re-derives it fresh rather than trusting stored state.
+     */
+    private function resolveCustomerRef(): string
+    {
+        return auth()->check() ? (string) auth()->id() : session()->getId();
     }
 }

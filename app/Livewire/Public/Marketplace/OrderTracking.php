@@ -11,6 +11,7 @@ use App\Domain\Marketplace\VendorProcessingStatus;
 use App\Platform\Audit\AuditSource;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Validator;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 
 /**
@@ -56,8 +57,18 @@ use Livewire\Component;
  */
 final class OrderTracking extends Component
 {
+    // MKT-01: both properties are set once, server-side, in `mount()` and
+    // never legitimately need to change from a client request. `#[Locked]`
+    // rejects any `/livewire/update` payload that tries to overwrite them —
+    // the same pattern already established by `BookingWizard::$draftId`/
+    // `$currentStep`. `$customerRef` also gets a second, independent layer
+    // of defence: `resolveCustomerRef()` re-derives it fresh from
+    // `auth()`/`session()` at the point of use in `render()` and
+    // `fileComplaint()`, rather than trusting the property value at all.
+    #[Locked]
     public string $orderNumber = '';
 
+    #[Locked]
     public string $customerRef = '';
 
     public ?MarketplaceOrder $order = null;
@@ -76,6 +87,22 @@ final class OrderTracking extends Component
         }
     }
 
+    /**
+     * MKT-01 defence-in-depth: an AUTHENTICATED actor's identity is always
+     * re-derived fresh from `auth()->id()` here, in `render()` and
+     * `fileComplaint()`, rather than trusted from `$this->customerRef` —
+     * even though `#[Locked]` already blocks a client from overwriting that
+     * property, so correctness for the sensitive (signed-in) case never
+     * depends on that single mechanism. A guest has no `auth()` identity to
+     * re-derive from, so the guest branch reads the property set once,
+     * server-side, in `mount()` (from that request's own session id) —
+     * `#[Locked]` is what protects it.
+     */
+    private function resolveCustomerRef(): string
+    {
+        return auth()->check() ? (string) auth()->id() : $this->customerRef;
+    }
+
     public function fileComplaint(): void
     {
         $this->complaintError = null;
@@ -85,7 +112,7 @@ final class OrderTracking extends Component
             ['complaintReason' => ['required', 'string', 'min:10', 'max:2000']],
         )->validate();
 
-        $order = MarketplaceOrderQuery::findForCustomer($this->orderNumber, $this->customerRef);
+        $order = MarketplaceOrderQuery::findForCustomer($this->orderNumber, $this->resolveCustomerRef());
 
         if ($order === null) {
             // Enumeration-safe: identical outcome to "order not found" —
@@ -117,7 +144,7 @@ final class OrderTracking extends Component
 
     public function render(): View
     {
-        $this->order = MarketplaceOrderQuery::findForCustomer($this->orderNumber, $this->customerRef);
+        $this->order = MarketplaceOrderQuery::findForCustomer($this->orderNumber, $this->resolveCustomerRef());
 
         $vendorStatus = null;
         $canFileComplaint = false;
