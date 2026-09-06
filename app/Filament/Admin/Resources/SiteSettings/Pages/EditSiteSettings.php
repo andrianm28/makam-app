@@ -123,14 +123,14 @@ final class EditSiteSettings extends Page implements HasForms
         $changed = $this->computeChangedKeys();
         $bankKeysChanged = array_values(array_intersect($changed, self::BANK_TRANSFER_KEYS));
 
-        if ($bankKeysChanged !== [] && ! $this->guardBankTransferChange()) {
+        if ($bankKeysChanged !== [] && ! $this->guardBankAccountChange()) {
             // The guard already sent a notification (and, for a stale
             // session, issued the redirect) — stop here with nothing
             // written.
             return;
         }
 
-        $this->assertBankTransferFieldsAreCompleteOrEmpty();
+        $this->assertBankAccountFieldsAreCompleteOrEmpty();
 
         $actor = app(ActorContext::class);
         $actorRef = $actor->identityReference;
@@ -227,7 +227,7 @@ final class EditSiteSettings extends Page implements HasForms
      * mid-edit), whereas authorization and freshness genuinely stop the
      * flow.
      */
-    private function guardBankTransferChange(): bool
+    private function guardBankAccountChange(): bool
     {
         $actor = app(ActorContext::class);
 
@@ -281,7 +281,7 @@ final class EditSiteSettings extends Page implements HasForms
      * rather than silently saving a combination the public side will just
      * hide.
      */
-    private function assertBankTransferFieldsAreCompleteOrEmpty(): void
+    private function assertBankAccountFieldsAreCompleteOrEmpty(): void
     {
         $values = array_map(
             fn (string $key): string => trim((string) ($this->data[$key] ?? '')),
