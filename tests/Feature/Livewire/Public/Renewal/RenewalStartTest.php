@@ -430,7 +430,7 @@ final class RenewalStartTest extends TestCase
         Schema::dropIfExists('cemetery_visitation_policies');
         // P4 memorial tables (16 Aug 2026) come before the plot tables:
         // every memorial table FK-references `memorial_profiles`, which
-        // FK-references `grave_records` (restrictOnDelete), so all seven
+        // FK-references `grave_records` (restrictOnDelete), so all eight
         // must precede `grave_records` below (2BP01).
         Schema::dropIfExists('abuse_reports');
         Schema::dropIfExists('moderation_cases');
@@ -438,6 +438,7 @@ final class RenewalStartTest extends TestCase
         Schema::dropIfExists('memorial_media');
         Schema::dropIfExists('memorial_contents');
         Schema::dropIfExists('memorial_editors');
+        Schema::dropIfExists('memorial_visit_checkins');
         Schema::dropIfExists('memorial_profiles');
         Schema::dropIfExists('plot_reservations');
         Schema::dropIfExists('grave_plots');
@@ -965,6 +966,7 @@ final class RenewalStartTest extends TestCase
         DB::statement('DROP TABLE IF EXISTS memorial_media');
         DB::statement('DROP TABLE IF EXISTS memorial_contents');
         DB::statement('DROP TABLE IF EXISTS memorial_editors');
+        DB::statement('DROP TABLE IF EXISTS memorial_visit_checkins');
         DB::statement('DROP TABLE IF EXISTS memorial_profiles');
         DB::statement('DROP TABLE IF EXISTS renewal_external_markings');
         DB::statement('DROP TABLE IF EXISTS renewal_quotes');
@@ -1310,6 +1312,7 @@ final class RenewalStartTest extends TestCase
         Schema::dropIfExists('memorial_media');
         Schema::dropIfExists('memorial_contents');
         Schema::dropIfExists('memorial_editors');
+        Schema::dropIfExists('memorial_visit_checkins');
         Schema::dropIfExists('memorial_profiles');
         Schema::dropIfExists('renewal_external_markings');
         Schema::dropIfExists('renewal_quotes');

@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace App\Livewire\Public\Memorial;
 
+use App\Domain\Memorial\Actions\LogMemorialVisitCheckIn;
 use App\Domain\Memorial\Actions\ResolveMemorialQr;
 use App\Domain\Memorial\Exceptions\MemorialNotVisibleException;
+use App\Domain\Memorial\Exceptions\MemorialVisitCheckInThrottledException;
+use App\Platform\Audit\AuditSource;
 use App\Platform\IdentityAccess\ActorContext;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 use Livewire\Component;
 
 /**
@@ -53,9 +57,69 @@ final class MemorialPublicPage extends Component
      */
     public string $token = '';
 
+    /**
+     * The "Catat kunjungan" self-service form — an unverified, self-reported
+     * affirmation of a visit (`docs/superpowers/specs/
+     * 2026-09-05-memorial-visit-checkin-design.md` §4.2), not proof of
+     * location. `logVisit()` re-runs `ResolveMemorialQr` inside
+     * `LogMemorialVisitCheckIn` before writing anything, so a gate closed
+     * (or any other denial) mid-session writes no row — the SAME
+     * `MemorialNotVisibleException` this class already renders the uniform
+     * state for on the read path; render() re-checking on the same request
+     * means that uniform state is already what the caller sees, so this
+     * catch needs no extra branch.
+     */
+    public string $visitorLabel = '';
+
+    public string $visitNote = '';
+
+    public bool $checkedIn = false;
+
+    public string $checkInNotice = '';
+
+    public string $checkInError = '';
+
     public function mount(string $token): void
     {
         $this->token = $token;
+    }
+
+    public function logVisit(): void
+    {
+        $validated = Validator::make(
+            ['visitorLabel' => $this->visitorLabel, 'visitNote' => $this->visitNote],
+            ['visitorLabel' => ['nullable', 'string', 'max:120'], 'visitNote' => ['nullable', 'string', 'max:500']],
+        )->validate();
+
+        $actor = app(ActorContext::class);
+
+        try {
+            app(LogMemorialVisitCheckIn::class)(
+                $this->token,
+                $actor,
+                filled($validated['visitorLabel']) ? trim((string) $validated['visitorLabel']) : null,
+                filled($validated['visitNote']) ? trim((string) $validated['visitNote']) : null,
+                $actor->identityReference ?? 'visit_session:'.session()->getId(),
+                $actor->isAuthenticated() ? 'authenticated_actor' : 'guest',
+                AuditSource::Api,
+            );
+
+            $this->visitorLabel = '';
+            $this->visitNote = '';
+            $this->checkedIn = true;
+            $this->checkInNotice = 'Kunjungan dicatat. Terima kasih.';
+            $this->checkInError = '';
+        } catch (MemorialNotVisibleException) {
+            // render() re-checks and already shows the uniform not-visible
+            // state on this same request — no $denialReason branch here,
+            // per this class's own doc block.
+        } catch (MemorialVisitCheckInThrottledException $exception) {
+            $this->checkedIn = false;
+            $this->checkInNotice = '';
+            $this->checkInError = $exception->retryAfterSeconds > 0
+                ? "Kunjungan baru saja dicatat. Coba lagi dalam {$exception->retryAfterSeconds} detik."
+                : 'Kunjungan baru saja dicatat. Coba lagi sesaat lagi.';
+        }
     }
 
     public function render(): View

@@ -48,4 +48,12 @@ final class MemorialAuditActions
     public const string MEMORIAL_MODERATION_CASE_RESOLVED = 'MEMORIAL_MODERATION_CASE_RESOLVED';
 
     public const string MEMORIAL_MODERATION_CASE_DISMISSED = 'MEMORIAL_MODERATION_CASE_DISMISSED';
+
+    /**
+     * Added for the visit check-in self-affirmation
+     * (`docs/superpowers/specs/2026-09-05-memorial-visit-checkin-design.md`)
+     * — the module's first unauthenticated public write path. Not on
+     * `SensitiveActions::ACTIONS`, same reasoning as every constant above.
+     */
+    public const string MEMORIAL_VISIT_CHECKED_IN = 'MEMORIAL_VISIT_CHECKED_IN';
 }

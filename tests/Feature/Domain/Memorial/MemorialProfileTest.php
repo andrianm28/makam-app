@@ -21,6 +21,7 @@ use App\Domain\Memorial\Models\MemorialEditor;
 use App\Domain\Memorial\Models\MemorialMedia;
 use App\Domain\Memorial\Models\MemorialProfile;
 use App\Domain\Memorial\Models\MemorialQrToken;
+use App\Domain\Memorial\Models\MemorialVisitCheckin;
 use App\Platform\DocumentVault\DocumentKind;
 use App\Platform\DocumentVault\DocumentState;
 use App\Platform\DocumentVault\Models\Document;
@@ -138,6 +139,18 @@ final class MemorialProfileTest extends TestCase
     {
         $profile = app(CreateMemorialProfile::class)($this->grave(), 'user:1', 'operator');
         MemorialQrToken::issueFor($profile);
+
+        $this->expectException(InvalidArgumentException::class);
+        $profile->delete();
+    }
+
+    public function test_profile_with_a_visit_checkin_cannot_be_deleted(): void
+    {
+        $profile = app(CreateMemorialProfile::class)($this->grave(), 'user:1', 'operator');
+        MemorialVisitCheckin::query()->create([
+            'memorial_profile_id' => $profile->getKey(),
+            'checked_in_at' => now(),
+        ]);
 
         $this->expectException(InvalidArgumentException::class);
         $profile->delete();

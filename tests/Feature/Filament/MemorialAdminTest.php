@@ -11,6 +11,8 @@ use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\GraveRegistry\Models\GraveRecord;
 use App\Domain\Memorial\Actions\CreateMemorialProfile;
 use App\Domain\Memorial\Actions\GrantMemorialEditor;
+use App\Domain\Memorial\Actions\LogMemorialVisitCheckIn;
+use App\Domain\Memorial\Actions\PublishMemorial;
 use App\Domain\Memorial\Actions\ReportMemorialContent;
 use App\Domain\Memorial\Actions\SubmitMemorialContent;
 use App\Domain\Memorial\Exceptions\MemorialConsentMissingException;
@@ -26,6 +28,7 @@ use App\Filament\Admin\Resources\MemorialProfiles\Pages\ViewMemorialProfile;
 use App\Filament\Admin\Resources\MemorialProfiles\RelationManagers\ContentsRelationManager;
 use App\Filament\Admin\Resources\MemorialProfiles\RelationManagers\EditorsRelationManager;
 use App\Filament\Admin\Resources\MemorialProfiles\RelationManagers\QrTokensRelationManager;
+use App\Filament\Admin\Resources\MemorialProfiles\RelationManagers\VisitCheckInsRelationManager;
 use App\Filament\Admin\Resources\ModerationCases\ModerationCaseResource;
 use App\Filament\Admin\Resources\ModerationCases\Pages\ListModerationCases;
 use App\Filament\Admin\Resources\ModerationCases\Pages\ViewModerationCase;
@@ -33,6 +36,8 @@ use App\Models\User;
 use App\Platform\DocumentVault\DocumentKind;
 use App\Platform\DocumentVault\DocumentState;
 use App\Platform\DocumentVault\Models\Document;
+use App\Platform\FeatureGate\FeatureGateResolver;
+use App\Platform\FeatureGate\Models\FeatureGate;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use App\Platform\IdentityAccess\Scopes\Actions\GrantScopeAssignment;
 use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
@@ -318,6 +323,46 @@ final class MemorialAdminTest extends TestCase
             'event_name' => 'memorial.content_moderated.v1',
             'aggregate_id' => $content->getKey(),
         ]);
+    }
+
+    // =====================================================================
+    // Visit check-ins — read-only visibility of notes
+    // =====================================================================
+
+    /**
+     * An admin can view check-in notes (which are never shown on the public
+     * page or family dashboard) through the relation manager.
+     */
+    public function test_admin_can_view_check_in_notes_read_only(): void
+    {
+        $cemetery = $this->cemetery();
+        $profile = $this->profile($cemetery, MemorialPrivacyMode::PUBLIC->value);
+        app(PublishMemorial::class)($profile, 'moderator:1', 'moderator');
+        $token = MemorialQrToken::issueFor($profile);
+
+        FeatureGate::query()->where('gate_id', 'G-MEM-01')->update(['state' => 'open']);
+        app(FeatureGateResolver::class)->forget();
+
+        app(LogMemorialVisitCheckIn::class)(
+            $token->token,
+            null,
+            'Cucu',
+            'Berkunjung setiap minggu.',
+            'visit_session:test',
+            'guest',
+        );
+
+        $this->admin();
+        $this->forgetResolvedActorContext();
+
+        Livewire::test(VisitCheckInsRelationManager::class, [
+            'ownerRecord' => $profile,
+            'pageClass' => ViewMemorialProfile::class,
+        ])
+            ->assertOk()
+            ->assertSee('Cucu')
+            ->assertSee('Berkunjung setiap minggu.')
+            ->assertSee('Menunggu');
     }
 
     // =====================================================================

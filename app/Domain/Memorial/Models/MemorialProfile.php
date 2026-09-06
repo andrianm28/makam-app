@@ -89,13 +89,14 @@ final class MemorialProfile extends Model
                 + (int) DB::table('memorial_contents')->where('memorial_profile_id', $profile->getKey())->count()
                 + (int) DB::table('memorial_media')->where('memorial_profile_id', $profile->getKey())->count()
                 + (int) DB::table('memorial_qr_tokens')->where('memorial_profile_id', $profile->getKey())->count()
-                + (int) DB::table('moderation_cases')->where('memorial_profile_id', $profile->getKey())->count();
+                + (int) DB::table('moderation_cases')->where('memorial_profile_id', $profile->getKey())->count()
+                + (int) DB::table('memorial_visit_checkins')->where('memorial_profile_id', $profile->getKey())->count();
 
             if ($child > 0) {
                 throw new InvalidArgumentException(
                     "Cannot delete memorial profile [{$profile->getKey()}]: editors, contents, media, ".
-                    'QR tokens, or moderation cases exist for it. Deletion follows the approved '.
-                    'retention policy (memorial-and-qr AC8), not a plain delete.'
+                    'QR tokens, moderation cases, or visit check-ins exist for it. Deletion follows the '.
+                    'approved retention policy (memorial-and-qr AC8), not a plain delete.'
                 );
             }
         });
@@ -139,6 +140,14 @@ final class MemorialProfile extends Model
     public function qrTokens(): HasMany
     {
         return $this->hasMany(MemorialQrToken::class, 'memorial_profile_id');
+    }
+
+    /**
+     * @return HasMany<MemorialVisitCheckin, $this>
+     */
+    public function visitCheckIns(): HasMany
+    {
+        return $this->hasMany(MemorialVisitCheckin::class, 'memorial_profile_id');
     }
 
     /**

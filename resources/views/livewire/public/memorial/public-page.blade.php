@@ -99,6 +99,27 @@
                     </x-mk.card>
                 @endif
 
+                <x-mk.card>
+                    <h2 class="text-base font-semibold text-neutral-800">Catat kunjungan</h2>
+                    <p class="mt-1 max-w-prose text-sm text-neutral-600">
+                        Tandai bahwa Anda baru saja berkunjung ke sini. Ini adalah catatan
+                        mandiri, bukan bukti lokasi terverifikasi.
+                    </p>
+
+                    @if ($checkedIn)
+                        <x-mk.alert intent="success" class="mt-3">{{ $checkInNotice }}</x-mk.alert>
+                    @endif
+                    @if ($checkInError !== '')
+                        <x-mk.alert intent="danger" class="mt-3">{{ $checkInError }}</x-mk.alert>
+                    @endif
+
+                    <form class="mt-4 space-y-3" wire:submit="logVisit">
+                        <x-mk.field label="Nama Anda (opsional)" name="visitorLabel" type="text" wire:model="visitorLabel" :error="$errors->first('visitorLabel')" />
+                        <x-mk.field label="Catatan (opsional)" name="visitNote" type="textarea" wire:model="visitNote" :error="$errors->first('visitNote')" />
+                        <x-mk.button type="submit" variant="secondary">Catat kunjungan</x-mk.button>
+                    </form>
+                </x-mk.card>
+
                 <p class="text-xs text-neutral-400">
                     Halaman ini hanya dapat diakses melalui kode QR yang sah.
                 </p>

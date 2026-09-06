@@ -163,6 +163,30 @@
                 @endif
             </section>
 
+            {{-- ============ Visit history (read-only) ============ --}}
+            <section class="mt-6">
+                <x-mk.card>
+                    <h2 class="text-lg font-semibold text-neutral-900">Riwayat kunjungan</h2>
+                    <p class="mt-1 max-w-prose text-sm text-neutral-600">
+                        Kunjungan yang dicatat sendiri oleh pengunjung; bukan bukti lokasi
+                        terverifikasi. Total: {{ $visitCheckInCount }}.
+                    </p>
+
+                    @if (count($visitCheckIns) > 0)
+                        <ul class="mt-3 space-y-1">
+                            @foreach ($visitCheckIns as $checkIn)
+                                <li class="text-sm text-neutral-600">
+                                    {{ $checkIn->checked_in_at->translatedFormat('d F Y H:i') }}
+                                    — {{ $checkIn->visitor_label ?? 'Tanpa nama' }}
+                                </li>
+                            @endforeach
+                        </ul>
+                    @else
+                        <p class="mt-3 text-sm text-neutral-600">Belum ada kunjungan yang dicatat.</p>
+                    @endif
+                </x-mk.card>
+            </section>
+
             {{-- ============ QR token (AC4/AC5) ============ --}}
             <section class="mt-6">
                 <x-mk.card>
