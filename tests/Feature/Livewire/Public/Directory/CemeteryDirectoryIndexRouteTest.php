@@ -421,7 +421,7 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
         // → `grave_plots` → `cemetery_blocks`, each before its parents.
         // P4 memorial tables (16 Aug 2026) come before the plot tables:
         // every memorial table FK-references `memorial_profiles`, which
-        // FK-references `grave_records` (restrictOnDelete), so all seven
+        // FK-references `grave_records` (restrictOnDelete), so all eight
         // must precede `grave_records` below (2BP01).
         Schema::dropIfExists('abuse_reports');
         Schema::dropIfExists('moderation_cases');
@@ -429,6 +429,7 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
         Schema::dropIfExists('memorial_media');
         Schema::dropIfExists('memorial_contents');
         Schema::dropIfExists('memorial_editors');
+        Schema::dropIfExists('memorial_visit_checkins');
         Schema::dropIfExists('memorial_profiles');
         Schema::dropIfExists('plot_reservations');
         Schema::dropIfExists('grave_plots');
