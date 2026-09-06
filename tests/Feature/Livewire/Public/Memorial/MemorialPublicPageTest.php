@@ -34,6 +34,7 @@ use App\Platform\FeatureGate\Models\FeatureGate;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Validator as ValidatorFacade;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
 use Tests\Support\GrantsActorRoles;
@@ -354,6 +355,39 @@ final class MemorialPublicPageTest extends TestCase
         ]);
     }
 
+    /**
+     * `logVisit()` validates via `Validator::make(...)->validate()`, which
+     * throws a `ValidationException` on failure — but the Blade form's
+     * `<x-mk.field>` calls only render an error when the `:error` prop is
+     * explicitly given (see that component's doc block: no automatic
+     * `$errors` bag fallback). Without wiring `:error`, a visitor who types
+     * past the character limit gets total silence: no error shown, no row
+     * written. This pins both halves of the fix.
+     */
+    public function test_a_too_long_note_shows_a_validation_error_and_writes_no_row(): void
+    {
+        $this->openMemorialGate();
+        $profile = $this->profile(MemorialPrivacyMode::PUBLIC->value);
+        app(PublishMemorial::class)($profile, 'moderator:1', 'moderator');
+        $token = $this->tokenFor($profile);
+
+        // Computed via the SAME validation call `logVisit()` makes, rather
+        // than a hardcoded literal — this repo's default locale is `id`
+        // (lang/id/validation.php), so the rendered message is Indonesian.
+        $expectedError = ValidatorFacade::make(
+            ['visitNote' => str_repeat('a', 501)],
+            ['visitNote' => ['nullable', 'string', 'max:500']],
+        )->errors()->first('visitNote');
+
+        Livewire::test(MemorialPublicPage::class, ['token' => $token->token])
+            ->set('visitNote', str_repeat('a', 501))
+            ->call('logVisit')
+            ->assertHasErrors(['visitNote' => 'max'])
+            ->assertSee($expectedError);
+
+        $this->assertDatabaseMissing('memorial_visit_checkins', ['memorial_profile_id' => $profile->getKey()]);
+    }
+
     public function test_logging_a_visit_after_the_gate_closes_mid_session_writes_no_row(): void
     {
         $this->openMemorialGate();
@@ -625,6 +659,35 @@ final class MemorialPublicPageTest extends TestCase
         Livewire::test(MemorialFamilyPage::class, ['profileId' => $profile->getKey()])
             ->assertOk()
             ->assertSee('Cucu');
+    }
+
+    /**
+     * The spec's central privacy invariant: `note` is an anonymous,
+     * unauthenticated visitor's free text and must NEVER render on the
+     * family dashboard, even to the dashboard's own active editor —
+     * only `checked_in_at`/`visitor_label` are surfaced there. Distinct
+     * from `test_family_dashboard_never_reveals_visit_data_to_a_non_editor`
+     * below, which covers the uniform not-visible denial for a stranger;
+     * this test proves the note text is absent from an editor's own
+     * rendered view, not merely absent from a denied one.
+     */
+    public function test_family_dashboard_never_renders_the_visit_note_to_an_active_editor(): void
+    {
+        $this->openMemorialGate();
+        $profile = $this->profile(MemorialPrivacyMode::PUBLIC->value);
+        app(PublishMemorial::class)($profile, 'moderator:1', 'moderator');
+        $token = $this->tokenFor($profile);
+        $editor = User::factory()->create();
+        $this->editorFor($profile, $editor);
+
+        app(LogMemorialVisitCheckIn::class)($token->token, null, 'Cucu', 'RahasiaCatatanKeluarga', 'visit_session:test', 'guest');
+
+        $this->actingAs($editor);
+
+        Livewire::test(MemorialFamilyPage::class, ['profileId' => $profile->getKey()])
+            ->assertOk()
+            ->assertSee('Cucu')
+            ->assertDontSee('RahasiaCatatanKeluarga');
     }
 
     public function test_family_dashboard_never_reveals_visit_data_to_a_non_editor(): void

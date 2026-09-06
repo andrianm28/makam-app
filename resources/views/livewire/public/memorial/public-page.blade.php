@@ -114,8 +114,8 @@
                     @endif
 
                     <form class="mt-4 space-y-3" wire:submit="logVisit">
-                        <x-mk.field label="Nama Anda (opsional)" name="visitorLabel" type="text" wire:model="visitorLabel" />
-                        <x-mk.field label="Catatan (opsional)" name="visitNote" type="textarea" wire:model="visitNote" />
+                        <x-mk.field label="Nama Anda (opsional)" name="visitorLabel" type="text" wire:model="visitorLabel" :error="$errors->first('visitorLabel')" />
+                        <x-mk.field label="Catatan (opsional)" name="visitNote" type="textarea" wire:model="visitNote" :error="$errors->first('visitNote')" />
                         <x-mk.button type="submit" variant="secondary">Catat kunjungan</x-mk.button>
                     </form>
                 </x-mk.card>
