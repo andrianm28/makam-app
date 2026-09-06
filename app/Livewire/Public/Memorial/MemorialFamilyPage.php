@@ -342,6 +342,8 @@ final class MemorialFamilyPage extends Component
                 'pendingUploads' => [],
                 'qrSvg' => null,
                 'activeToken' => null,
+                'visitCheckIns' => [],
+                'visitCheckInCount' => 0,
             ];
         }
 
@@ -360,12 +362,17 @@ final class MemorialFamilyPage extends Component
             ? app(MemorialQrImage::class)->svg(route('memorial.show', ['token' => $activeToken->token]))
             : null;
 
+        $visitCheckIns = $this->profile->visitCheckIns()->orderByDesc('checked_in_at')->limit(20)->get();
+        $visitCheckInCount = $this->profile->visitCheckIns()->count();
+
         return [
             'contents' => $contents,
             'media' => $media,
             'pendingUploads' => $pendingUploads,
             'qrSvg' => $qrSvg,
             'activeToken' => $activeToken,
+            'visitCheckIns' => $visitCheckIns,
+            'visitCheckInCount' => $visitCheckInCount,
         ];
     }
 }

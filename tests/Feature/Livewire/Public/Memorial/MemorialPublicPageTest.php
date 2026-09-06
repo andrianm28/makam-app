@@ -609,6 +609,41 @@ final class MemorialPublicPageTest extends TestCase
             ->assertSee('Catatan keluarga.');
     }
 
+    public function test_family_dashboard_shows_the_visit_count_and_history_to_an_active_editor(): void
+    {
+        $this->openMemorialGate();
+        $profile = $this->profile(MemorialPrivacyMode::PUBLIC->value);
+        app(PublishMemorial::class)($profile, 'moderator:1', 'moderator');
+        $token = $this->tokenFor($profile);
+        $editor = User::factory()->create();
+        $this->editorFor($profile, $editor);
+
+        app(LogMemorialVisitCheckIn::class)($token->token, null, 'Cucu', null, 'visit_session:test', 'guest');
+
+        $this->actingAs($editor);
+
+        Livewire::test(MemorialFamilyPage::class, ['profileId' => $profile->getKey()])
+            ->assertOk()
+            ->assertSee('Cucu');
+    }
+
+    public function test_family_dashboard_never_reveals_visit_data_to_a_non_editor(): void
+    {
+        $this->openMemorialGate();
+        $profile = $this->profile(MemorialPrivacyMode::PUBLIC->value);
+        app(PublishMemorial::class)($profile, 'moderator:1', 'moderator');
+        $token = $this->tokenFor($profile);
+        app(LogMemorialVisitCheckIn::class)($token->token, null, 'RahasiaKeluarga', null, 'visit_session:test', 'guest');
+
+        $stranger = User::factory()->create();
+        $this->actingAs($stranger);
+
+        Livewire::test(MemorialFamilyPage::class, ['profileId' => $profile->getKey()])
+            ->assertOk()
+            ->assertSee(self::UNIFORM_NOT_VISIBLE)
+            ->assertDontSee('RahasiaKeluarga');
+    }
+
     /**
      * An accepted (scanned) upload attaches as a PENDING memorial_media row
      * on the next family render — the media lifecycle completes:
