@@ -584,7 +584,16 @@ final class RecordPaymentReversalRouteTest extends TestCase
             'reason' => 'Second refund attempt, must not be allowed',
         ]);
 
-        $response->assertStatus(500);
+        // FIL-04 remediation: this used to be an uncaught 500 — acceptable
+        // only while "no admin UI exists yet" for this endpoint justified
+        // leaving `PaymentReversalAlreadyRecordedException` unhandled (this
+        // controller's own former doc block). The Filament refund/chargeback
+        // action added alongside that admin UI made a double submit (a
+        // re-click, a retried form) a realistic, human-triggerable path, so
+        // the controller now catches the domain exception and responds a
+        // clean 409 with a safe-to-surface message (see
+        // `RecordPaymentReversalController::__invoke()`).
+        $response->assertStatus(409);
         $this->assertSame(1, PaymentReversal::query()->where('reference', 'TRX-route-duplicate')->count());
     }
 
