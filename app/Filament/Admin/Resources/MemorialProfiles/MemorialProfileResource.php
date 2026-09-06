@@ -7,6 +7,7 @@ namespace App\Filament\Admin\Resources\MemorialProfiles;
 use App\Domain\Memorial\Models\MemorialProfile;
 use App\Filament\Admin\Resources\MemorialProfiles\Pages\ListMemorialProfiles;
 use App\Filament\Admin\Resources\MemorialProfiles\Pages\ViewMemorialProfile;
+use App\Filament\Admin\Resources\MemorialProfiles\Schemas\MemorialProfileInfolist;
 use App\Filament\Admin\Resources\MemorialProfiles\Tables\MemorialProfilesTable;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\MasterData\Contracts\MasterDataAdminAuthorizerContract;
@@ -16,6 +17,7 @@ use App\Platform\IdentityAccess\Scopes\ScopeAssignmentReader;
 use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use BackedEnum;
 use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Auth\Access\Response;
@@ -131,6 +133,18 @@ final class MemorialProfileResource extends Resource
     public static function table(Table $table): Table
     {
         return MemorialProfilesTable::configure($table);
+    }
+
+    /**
+     * 2 Sep 2026 UAT finding: this method did not exist at all — the view
+     * page rendered its four relation-manager tabs with a completely
+     * empty body above them, because `ViewMemorialProfile` never had a
+     * schema to render either. See `MemorialProfileInfolist`'s own doc
+     * block.
+     */
+    public static function infolist(Schema $schema): Schema
+    {
+        return MemorialProfileInfolist::configure($schema);
     }
 
     /**

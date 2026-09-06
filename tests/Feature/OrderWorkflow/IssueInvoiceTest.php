@@ -53,6 +53,25 @@ final class IssueInvoiceTest extends TestCase
         self::assertStringContainsString($order->reference, $invoice->summary);
     }
 
+    /**
+     * 2 Sep 2026 UAT finding: the summary interpolated `orders.product_type`
+     * raw (`Order MK-... (AT_NEED_SERVICE_ORDER)`) — the public
+     * /kwitansi/{reference} receipt page renders this string verbatim, so an
+     * English enum name landed on an otherwise fully-Indonesian public
+     * screen. Same bug class as the /akun/pesanan fix earlier this session,
+     * found independently here since the summary is baked in at issuance
+     * time rather than humanized at display time.
+     */
+    public function test_the_summary_uses_the_localized_product_type_label_not_the_raw_enum(): void
+    {
+        $order = $this->makeOrder();
+
+        $invoice = app(IssueInvoice::class)($order, $this->trigger());
+
+        self::assertStringContainsString(ProductType::AT_NEED_SERVICE_ORDER->label(), $invoice->summary);
+        self::assertStringNotContainsString('AT_NEED_SERVICE_ORDER', $invoice->summary);
+    }
+
     public function test_it_writes_one_audit_row_for_a_real_issuance(): void
     {
         $order = $this->makeOrder();

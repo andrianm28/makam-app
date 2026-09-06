@@ -15,6 +15,7 @@ use App\Platform\IdentityAccess\Scopes\ScopeGrantLevel;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Tests\TestCase;
 
 /**
@@ -71,6 +72,27 @@ final class ReceiptsReportPanelTest extends TestCase
 
         $component->assertCount('reportRows', 1)
             ->assertSet('totalMinor', 100_000);
+    }
+
+    /**
+     * 2 Sep 2026 UAT finding: `exportCsv()` was type-hinted
+     * `Illuminate\Http\Response`, but `response()->streamDownload()`
+     * returns `Symfony\Component\HttpFoundation\StreamedResponse` — a
+     * sibling type, never that one — so every real export attempt threw a
+     * `TypeError`. Reproduced live on the Orders Report tab; this trait is
+     * shared by all five report panels, never covered by a test before.
+     */
+    public function test_exporting_csv_does_not_throw_and_returns_a_csv_download(): void
+    {
+        $user = $this->authorisedFinanceUser();
+        $this->seedReceipt();
+
+        $component = Livewire::actingAs($user)->test(ReceiptsReportPanel::class);
+
+        $response = $component->instance()->exportCsv();
+
+        $this->assertInstanceOf(StreamedResponse::class, $response);
+        $this->assertStringContainsString('text/csv', (string) $response->headers->get('Content-Type'));
     }
 
     public function test_the_report_covers_only_the_badan_usaha_the_actor_is_granted(): void

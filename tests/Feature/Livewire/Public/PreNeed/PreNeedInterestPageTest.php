@@ -197,6 +197,55 @@ final class PreNeedInterestPageTest extends TestCase
         $this->assertStringNotContainsString((string) $order->getKey(), $html);
     }
 
+    /**
+     * 2 Sep 2026 UAT finding: the field's own label ("ID subjek / nomor
+     * pesanan") invites a customer to type the order's human-facing
+     * reference (e.g. "MK-2026-XXXXXXXX") — the only identifier a real
+     * customer ever sees — but the lookup used `find()` (primary-key UUID
+     * only), which throws `SQLSTATE 22P02` (invalid UUID) for any non-UUID
+     * string. Reproduced live as a real HTTP 500 on the public page, with
+     * both a real order's reference and a fake one. Proves the reference
+     * path now works.
+     */
+    public function test_the_certificate_status_section_accepts_the_human_facing_order_reference(): void
+    {
+        $order = $this->makePaidOrder();
+        $document = $this->makeAcceptedDocument();
+
+        app(IssueCertificate::class)(
+            CertificateType::OrderSettlement,
+            $order,
+            'user:1',
+            'admin',
+            $document->getKey(),
+        );
+
+        $html = Livewire::test(PreNeedInterestPage::class)
+            ->set('certSubjectType', 'order')
+            ->set('certSubjectId', $order->reference)
+            ->call('checkCertificateStatus')
+            ->html();
+
+        $this->assertStringContainsString('ORDER_SETTLEMENT', $html);
+    }
+
+    /**
+     * The other half of the same UAT finding: a reference that matches
+     * NEITHER a UUID NOR any real order's reference must degrade to the
+     * honest empty state — never a crash, never a 500. This is the exact
+     * "fake order number" case reproduced live.
+     */
+    public function test_an_unknown_reference_degrades_honestly_instead_of_crashing(): void
+    {
+        $this->makePaidOrder();
+
+        Livewire::test(PreNeedInterestPage::class)
+            ->set('certSubjectType', 'order')
+            ->set('certSubjectId', 'MK-0000-FAKEUAT2')
+            ->call('checkCertificateStatus')
+            ->assertOk();
+    }
+
     private function makePaidOrder(): Order
     {
         $order = Order::query()->create([

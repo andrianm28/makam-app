@@ -12,6 +12,7 @@ use App\Platform\IdentityAccess\Roles\ActorRole;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Tests\Support\GrantsActorRoles;
 use Tests\TestCase;
 
@@ -82,6 +83,28 @@ final class OrdersReportPanelTest extends TestCase
 
         $component->assertCount('reportRows', 2)
             ->assertSet('total', 3);
+    }
+
+    /**
+     * 2 Sep 2026 UAT finding: `exportCsv()` (and every other report tab's
+     * own copy of it, via the shared `ExportsReportCsv` trait) was
+     * type-hinted `Illuminate\Http\Response`, but `response()->
+     * streamDownload()` actually returns `Symfony\Component\
+     * HttpFoundation\StreamedResponse` — a sibling type, never that one —
+     * so every real export attempt threw a `TypeError`, reproduced live on
+     * this exact report tab. Never covered by a test before this.
+     */
+    public function test_exporting_csv_does_not_throw_and_returns_a_csv_download(): void
+    {
+        $user = $this->authorisedUser();
+        $this->makeOrder(OrderStatus::MASUK);
+
+        $component = Livewire::actingAs($user)->test(OrdersReportPanel::class);
+
+        $response = $component->instance()->exportCsv();
+
+        $this->assertInstanceOf(StreamedResponse::class, $response);
+        $this->assertStringContainsString('text/csv', (string) $response->headers->get('Content-Type'));
     }
 
     public function test_an_order_outside_the_period_is_excluded(): void

@@ -98,7 +98,12 @@ final class MarketplaceOrderResource extends Resource
     public static function getEloquentQuery(): Builder
     {
         return MarketplaceOrder::query()
-            ->with(['items', 'vendor', 'vendorOrders'])
+            // 2 Sep 2026 UAT fix: 'items' alone left the infolist's
+            // items.variant.product.name path lazy-loading per row (an
+            // N+1) AND meant the fallback items.listing.product.name path
+            // (see MarketplaceOrderInfolist's own doc block on why the
+            // fallback exists) had nothing eager-loaded either.
+            ->with(['items.variant.product', 'items.listing.product', 'vendor', 'vendorOrders'])
             ->withCount('items');
     }
 

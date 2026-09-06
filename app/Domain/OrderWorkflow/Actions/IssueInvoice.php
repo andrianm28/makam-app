@@ -9,6 +9,7 @@ use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\Models\OrderInvoice;
 use App\Domain\OrderWorkflow\OrderWorkflowAuditActions;
 use App\Domain\OrderWorkflow\PaidTrigger;
+use App\Domain\OrderWorkflow\ProductType;
 use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
@@ -44,6 +45,16 @@ use Illuminate\Support\Str;
  * tax calculation, no sequential legal invoice numbering scheme — none of
  * those were asked for, and guessing at Indonesian tax/invoice-numbering
  * compliance rules is explicitly out of scope for this task.
+ *
+ * The summary line goes through `ProductType::label()` (2 Sep 2026 UAT
+ * finding), not the raw `orders.product_type` enum value — the public
+ * `/kwitansi/{reference}` receipt page renders this string verbatim, and
+ * the earlier version put "AT_NEED_SERVICE_ORDER" straight onto a public,
+ * otherwise-Indonesian screen. Same fix already applied to `/akun/pesanan`
+ * this session; this is the same bug class in a second, independently
+ * discovered place — the summary is baked into the stored row at issuance
+ * time, not a display-layer humanization, so existing invoices issued
+ * before this fix keep their old raw-enum summary text.
  *
  * ---------------------------------------------------------------------------
  * Idempotent two ways, matching this codebase's established shape
@@ -109,7 +120,7 @@ final readonly class IssueInvoice
                 'reference' => 'INV-'.Str::upper(Str::random(10)),
                 'amount_minor' => $trigger->amount->toMinorInt(),
                 'currency' => $trigger->currency,
-                'summary' => "Order {$order->reference} ({$order->product_type})",
+                'summary' => "Order {$order->reference} (".ProductType::from($order->product_type)->label().')',
                 'issued_at' => CarbonImmutable::now(),
             ]),
             action: OrderWorkflowAuditActions::INVOICE_ISSUED,

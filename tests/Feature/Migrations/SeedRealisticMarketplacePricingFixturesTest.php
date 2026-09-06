@@ -34,21 +34,29 @@ final class SeedRealisticMarketplacePricingFixturesTest extends TestCase
         $this->assertDatabaseHas('vendors', ['name' => 'UD Perawatan Makam Contoh Damai Nusantara']);
     }
 
+    /**
+     * `listings()` documents its prices in plain rupiah (`price_idr`);
+     * `vendor_listings.price_minor` is minor units (rupiah x 100 — see
+     * `RealisticMarketplacePricingExampleData`'s own class doc block on the
+     * unit bug found in UAT 2 Sep 2026, now fixed). Expected values here are
+     * the researched rupiah figures x 100, not the raw figures — asserting
+     * the raw figures is exactly what let the original bug ship undetected.
+     */
     public function test_it_seeds_researched_prices_for_every_known_product_code(): void
     {
         config(['example_data.seed_realistic_marketplace_pricing' => true]);
         (require database_path(self::MIGRATION_PATH))->up();
 
         $expected = [
-            ProductCode::FLOWER_BOARD => 650_000,
-            ProductCode::FLOWER_PETAL_PACKAGE => 150_000,
-            ProductCode::GRAVESTONE_GRANITE => 2_500_000,
-            ProductCode::GRAVESTONE_MARBLE => 1_200_000,
-            ProductCode::GRAVESTONE_CALLIGRAPHY => 7_500_000,
-            ProductCode::GRAVE_CARE_MONTHLY => 150_000,
-            ProductCode::GRAVE_CARE_QUARTERLY => 400_000,
-            ProductCode::GRAVE_CARE_SEMIANNUAL => 750_000,
-            ProductCode::GRAVE_CARE_ANNUAL => 1_350_000,
+            ProductCode::FLOWER_BOARD => 650_000 * 100,
+            ProductCode::FLOWER_PETAL_PACKAGE => 150_000 * 100,
+            ProductCode::GRAVESTONE_GRANITE => 2_500_000 * 100,
+            ProductCode::GRAVESTONE_MARBLE => 1_200_000 * 100,
+            ProductCode::GRAVESTONE_CALLIGRAPHY => 7_500_000 * 100,
+            ProductCode::GRAVE_CARE_MONTHLY => 150_000 * 100,
+            ProductCode::GRAVE_CARE_QUARTERLY => 400_000 * 100,
+            ProductCode::GRAVE_CARE_SEMIANNUAL => 750_000 * 100,
+            ProductCode::GRAVE_CARE_ANNUAL => 1_350_000 * 100,
         ];
 
         foreach ($expected as $code => $priceMinor) {
@@ -60,6 +68,31 @@ final class SeedRealisticMarketplacePricingFixturesTest extends TestCase
                 'price_minor' => $priceMinor,
             ]);
         }
+    }
+
+    /**
+     * Same rupiah -> minor-unit conversion bug as prices (class doc block),
+     * for `service_areas.delivery_fee_minor` — previously untested, which is
+     * how it shipped alongside the price bug undetected.
+     */
+    public function test_it_seeds_delivery_fees_in_minor_units_not_raw_rupiah(): void
+    {
+        config(['example_data.seed_realistic_marketplace_pricing' => true]);
+        (require database_path(self::MIGRATION_PATH))->up();
+
+        $floristId = DB::table('vendors')->where('name', 'Toko Bunga Contoh Melati Sejahtera')->value('id');
+        $this->assertNotNull($floristId);
+
+        $this->assertDatabaseHas('service_areas', [
+            'vendor_id' => $floristId,
+            'area_code' => 'RP-JKT-01',
+            'delivery_fee_minor' => 100_000 * 100,
+        ]);
+        $this->assertDatabaseHas('service_areas', [
+            'vendor_id' => $floristId,
+            'area_code' => 'RP-JKT-03',
+            'delivery_fee_minor' => 150_000 * 100,
+        ]);
     }
 
     /**
