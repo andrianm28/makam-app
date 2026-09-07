@@ -212,7 +212,7 @@ final readonly class MarkRenewalPaidOnline
 
                 // References only (`AGENTS.md` §Observability, AC7): no amount.
                 // `paid_source_ref` (the provider transaction id) matches
-                // `MarkCyclePaid`'s own `care.cycle_created.v1` payload
+                // `MarkCyclePaid`'s own `care.cycle_paid.v1` payload
                 // convention exactly — it is not on
                 // `PayloadClassification::DENYLISTED_KEYS`, so it is permitted in
                 // an outbox payload even though the SAME value stays out of the

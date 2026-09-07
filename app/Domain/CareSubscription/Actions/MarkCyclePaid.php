@@ -94,7 +94,7 @@ final readonly class MarkCyclePaid
             }
 
             Outbox::record(
-                eventName: 'care.cycle_created.v1',
+                eventName: 'care.cycle_paid.v1',
                 eventVersion: 1,
                 aggregateType: 'subscription_cycle',
                 aggregateId: $cycle->getKey(),
