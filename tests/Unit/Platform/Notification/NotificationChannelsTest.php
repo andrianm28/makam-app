@@ -16,7 +16,14 @@ use Tests\TestCase;
 
 final class NotificationChannelsTest extends TestCase
 {
-    public function test_log_channel_logs_rendered_body_and_returns_sent_with_synthetic_reference(): void
+    /**
+     * NOTIF-07, 07 Sep 2026: the LOG channel must never report `Sent` —
+     * nothing actually left the system, so it now reports `Unavailable`
+     * with a non-null `failure_message` (`LogChannel::LOG_ONLY_MESSAGE`),
+     * which `DeliveryState::presentation()` renders as the neutral
+     * "Notifikasi tidak tersedia" — never "Terkirim".
+     */
+    public function test_log_channel_logs_rendered_body_and_returns_unavailable_never_sent(): void
     {
         Log::spy();
         $delivery = new NotificationDelivery;
@@ -35,13 +42,23 @@ final class NotificationChannelsTest extends TestCase
 
         $result = (new LogChannel(new TemplateRenderer))->send($delivery, $version, RecipientSet::empty());
 
-        $this->assertSame(DeliveryState::Sent, $result->state);
+        $this->assertSame(DeliveryState::Unavailable, $result->state);
+        $this->assertSame(LogChannel::LOG_ONLY_MESSAGE, $result->message);
         $this->assertStringStartsWith('log-', (string) $result->providerRef);
         Log::shouldHaveReceived('info')->once()->withArgs(function (string $message, array $context): bool {
             return $message === 'Notification written to development log.'
                 && $context['body'] === 'Notification body'
                 && $context['channel'] === 'EMAIL';
         });
+
+        // The finding's own concrete target: a LOG-channel delivery must
+        // present as the neutral "Notifikasi tidak tersedia", never
+        // "Terkirim" — the WA-gate branch of `Unavailable` requires a NULL
+        // `failure_message` to render its own copy instead, so a non-null
+        // message here must take the OTHER branch.
+        $presentation = $result->state->presentation($result->message);
+        $this->assertSame('Notifikasi tidak tersedia', $presentation['label']);
+        $this->assertNotSame('Terkirim', $presentation['label']);
     }
 
     public function test_null_channel_returns_unavailable_without_claiming_sent(): void

@@ -315,6 +315,10 @@ final class NotificationTemplatePersistenceTest extends TestCase
             'Vendor evidence uploaded' => 'vendor.evidence_uploaded.v1',
             'Renewal submitted' => 'renewal.submitted.v1',
             'Renewal paid/verified' => 'renewal.paid_online.v1',
+            // NOTIF-13, Batch M8b, 07 Sep 2026 — wired by
+            // 2026_09_07_120000_add_visitation_booking_notification_templates.php.
+            'Visitation booking requested' => 'visit.booking_requested.v1',
+            'Visitation booking confirmed' => 'visit.booking_confirmed.v1',
             default => null,
         };
     }

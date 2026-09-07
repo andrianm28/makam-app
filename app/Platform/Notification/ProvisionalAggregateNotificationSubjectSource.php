@@ -138,6 +138,32 @@ use Illuminate\Support\Facades\DB;
  * that does not exist.
  *
  * ---------------------------------------------------------------------------
+ * `business_entity` admin scope, and `visitation_booking` — added 07 Sep
+ * 2026, Batch M8b (NOTIF-01, NOTIF-13)
+ * ---------------------------------------------------------------------------
+ * NOTIF-01: no in-app notification was ever written for a platform admin
+ * or a vendor, because `RecipientResolutionSubject` could carry only ONE
+ * scope entity and every method above filled that single slot with the
+ * record's OWN cemetery/vendor scope, leaving no room for the platform's
+ * own `business_entity` scope. `RecipientResolutionSubject` now accepts
+ * `additionalScopeEntities` (see its own doc block) and `orderSubject()`/
+ * `renewalSubject()` both now add the platform's singleton
+ * `business_entity` fixture (`PLATFORM_BUSINESS_ENTITY_ID`) as a second
+ * scope entity, so a platform admin holding that grant finally resolves as
+ * a recipient wherever the matrix's "Admin platform" column already said
+ * `IN_APP` — the matrix column did not change, only the subject's ability
+ * to reach it. `bookingDraftSubject()` deliberately does NOT gain this:
+ * the matrix's "Booking draft created" row is `none` across every column,
+ * so there is no admin recipient the matrix asks for at that stage.
+ * `vendorOrderSubject()`/`marketplaceOrderSubject()` do not exist in this
+ * branch yet (see PR #248, not merged as of this fix) — whichever of that
+ * PR or this one merges second resolves the conflict; this fix only
+ * changes the SHAPE the vendor mapping will need to conform to.
+ *
+ * NOTIF-13: `visitation_booking` was entirely unmapped — see
+ * `visitationBookingSubject()`'s own doc block for the full reasoning.
+ *
+ * ---------------------------------------------------------------------------
  * Failure mode
  * ---------------------------------------------------------------------------
  * An unmapped `$aggregateType`, or a `booking_draft` id with no matching
@@ -155,6 +181,16 @@ final class ProvisionalAggregateNotificationSubjectSource implements Notificatio
      */
     public const string GUEST_ORDER_PARTY_PREFIX = 'guest_order_party:';
 
+    /**
+     * The one platform business-entity fixture every admin `business_entity`
+     * scope grant in this codebase is scoped against — see
+     * `tests/browser/e2e-admin-vendor.spec.ts` and every
+     * `ScopeEntityType::BUSINESS_ENTITY` grant fixture under
+     * `tests/Feature/Filament/**`. There is exactly one business entity in
+     * this codebase today, so this is a literal, not a lookup.
+     */
+    private const string PLATFORM_BUSINESS_ENTITY_ID = '1';
+
     public function subjectFor(string $aggregateType, int|string $aggregateId): ?RecipientResolutionSubject
     {
         return match ($aggregateType) {
@@ -162,6 +198,7 @@ final class ProvisionalAggregateNotificationSubjectSource implements Notificatio
             'order' => $this->orderSubject((string) $aggregateId),
             'quote' => $this->quoteSubject((string) $aggregateId),
             'renewal' => $this->renewalSubject((string) $aggregateId),
+            'visitation_booking' => $this->visitationBookingSubject((string) $aggregateId),
             default => null,
         };
     }
@@ -202,6 +239,7 @@ final class ProvisionalAggregateNotificationSubjectSource implements Notificatio
             ownerRef: $this->ownerRefForParty($party),
             scopeEntityType: $cemeteryId !== null ? ScopeEntityType::CEMETERY : null,
             scopeEntityId: $cemeteryId,
+            additionalScopeEntities: [$this->platformBusinessEntity()],
         );
     }
 
@@ -237,7 +275,59 @@ final class ProvisionalAggregateNotificationSubjectSource implements Notificatio
             ownerRef: null,
             scopeEntityType: $cemeteryId !== null ? ScopeEntityType::CEMETERY : null,
             scopeEntityId: $cemeteryId,
+            additionalScopeEntities: [$this->platformBusinessEntity()],
         );
+    }
+
+    /**
+     * NOTIF-13, 07 Sep 2026 — `visitation_booking` was completely unmapped
+     * before this fix: `RequestVisitation::book()` and
+     * `ChangeVisitationBookingStatus::__invoke()` both already record
+     * `visit.booking_requested.v1`/`visit.booking_confirmed.v1` onto the
+     * outbox with `aggregate_type = 'visitation_booking'`, but with no
+     * subject mapping this class's own `default => null` arm swallowed
+     * both events into zero recipients, exactly like `order`/`renewal` did
+     * before their own fixes.
+     *
+     * `ownerRef` is always `null` — `visitation_bookings` carries inline
+     * `contact_phone`/`contact_email`, but neither is a
+     * `scope_assignments.actor_identifier`-shaped reference to a real
+     * actor (there is no visitor account concept anywhere in this
+     * codebase), matching the `renewal` precedent above rather than
+     * inventing a new prefixed-ownerRef convention for a channel this fix
+     * does not wire.
+     *
+     * The scope entity (the booking's own cemetery, `NOT NULL` on
+     * `visitation_bookings`) is what makes this mapping worth having: it
+     * is what finally gives a cemetery operator a real in-app row for a
+     * visit request, closing NOTIF-13's "the operator has NO surface to
+     * see the request at all."
+     */
+    private function visitationBookingSubject(string $bookingId): ?RecipientResolutionSubject
+    {
+        $booking = DB::table('visitation_bookings')->where('id', $bookingId)->first();
+
+        if ($booking === null) {
+            return null;
+        }
+
+        return new RecipientResolutionSubject(
+            ownerRef: null,
+            scopeEntityType: ScopeEntityType::CEMETERY,
+            scopeEntityId: $booking->cemetery_id,
+        );
+    }
+
+    /**
+     * The platform's own `business_entity` scope, as an ADDITIONAL scope
+     * entity — NOTIF-01. Added to every subject a platform admin should be
+     * able to see in-app regardless of which cemetery/vendor it also
+     * scopes to (see this class's own doc block's NOTIF-01 section for
+     * which aggregate types gain this and which deliberately do not).
+     */
+    private function platformBusinessEntity(): ScopeEntityReference
+    {
+        return new ScopeEntityReference(ScopeEntityType::BUSINESS_ENTITY, self::PLATFORM_BUSINESS_ENTITY_ID);
     }
 
     /**

@@ -1678,26 +1678,45 @@
 
                     <div class="mt-6 flex flex-col gap-4">
                         {{-- §6.8 / AGENTS.md: "Do not claim WhatsApp/email
-                             delivery without delivery state." No delivery
-                             record exists anywhere in this lane, so no channel
-                             may be shown as "Terkirim"; each one is shown as
-                             not yet sent. Whether WhatsApp is a channel we have
-                             at all is G-WA-01's answer, read server-side and
+                             delivery without delivery state." NOTIF-09
+                             (`docs/superpowers/plans/2026-09-07-batchm8b-
+                             notification-completeness.md`): `$customerDeliveries`
+                             now carries this order's REAL
+                             `notification_deliveries` row per channel, when
+                             one already exists — rendered through the exact
+                             same `delivery-state-chip` partial the admin
+                             inbox uses, never a second rendering of the same
+                             states. The static "Belum dikirim" pending badge
+                             is kept ONLY for the genuine race where no
+                             delivery row exists yet (the outbox has not been
+                             drained in the few seconds since submission) —
+                             it is not a permanent placeholder any more.
+                             Whether WhatsApp is a channel we have at all is
+                             still G-WA-01's answer, read server-side and
                              handed here as `$whatsAppMode` — when it is the
-                             fallback mode, WhatsApp is not promised. --}}
+                             fallback mode, WhatsApp is not promised and no
+                             delivery row can ever exist for it. --}}
                         <x-mk.card>
                             <h3 class="text-base font-semibold text-neutral-900">Pemberitahuan</h3>
 
                             <ul class="flex flex-col gap-3">
                                 <li class="flex flex-wrap items-center justify-between gap-2">
                                     <span class="text-sm text-neutral-700">Email ke alamat yang Anda isi</span>
-                                    <x-mk.badge intent="pending" icon="clock">Belum dikirim</x-mk.badge>
+                                    @if ($customerDeliveries['EMAIL'] !== null)
+                                        @include('filament.admin.notifications.partials.delivery-state-chip', ['delivery' => $customerDeliveries['EMAIL']])
+                                    @else
+                                        <x-mk.badge intent="pending" icon="clock">Belum dikirim</x-mk.badge>
+                                    @endif
                                 </li>
 
                                 @if ($whatsAppMode === \App\Platform\FeatureGate\Modes\WhatsAppMode::WhatsApp)
                                     <li class="flex flex-wrap items-center justify-between gap-2">
                                         <span class="text-sm text-neutral-700">WhatsApp ke nomor yang Anda isi</span>
-                                        <x-mk.badge intent="pending" icon="clock">Belum dikirim</x-mk.badge>
+                                        @if ($customerDeliveries['WA'] !== null)
+                                            @include('filament.admin.notifications.partials.delivery-state-chip', ['delivery' => $customerDeliveries['WA']])
+                                        @else
+                                            <x-mk.badge intent="pending" icon="clock">Belum dikirim</x-mk.badge>
+                                        @endif
                                     </li>
                                 @else
                                     <li class="flex flex-wrap items-center justify-between gap-2">

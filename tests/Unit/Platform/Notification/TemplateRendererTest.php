@@ -75,9 +75,12 @@ final class TemplateRendererTest extends TestCase
      * cell count differs, so a note that snuck into the table (or a row
      * added with the wrong column count) must fail loudly here rather than
      * silently skewing the seed and every recipient-resolution decision.
-     * The 17-row count and the live `forEvent()` lookup pin the canonical
+     * The row count and the live `forEvent()` lookup pin the canonical
      * event set and the header-derived recipient columns without restating
-     * the full event list as a second source of truth.
+     * the full event list as a second source of truth. Raised 17 -> 19 on
+     * 07 Sep 2026 (NOTIF-13, Batch M8b): "Visitation booking requested" and
+     * "Visitation booking confirmed" were added additively at the end of
+     * the table — every row this test already depended on is unchanged.
      */
     public function test_the_reconciled_matrix_parses_end_to_end(): void
     {
@@ -85,7 +88,7 @@ final class TemplateRendererTest extends TestCase
 
         $rows = $source->rows();
 
-        $this->assertCount(17, $rows);
+        $this->assertCount(19, $rows);
 
         $headerColumns = array_keys($rows[0]['recipients']);
         foreach ($rows as $row) {

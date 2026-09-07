@@ -568,12 +568,17 @@ final class NotificationDispatchPipelineTest extends TestCase
         $this->assertSame(DeliveryState::Queued, $delivery->fresh()->state);
         Queue::assertPushed(SendNotificationChannelJob::class);
 
-        (new SendNotificationChannelJob($delivery->id))->handle($dispatcher, $channel);
-        (new RetryFailedDeliveryJob($delivery->id))->handle($dispatcher);
-        (new SendNotificationChannelJob($delivery->id))->handle($dispatcher, $channel);
-        (new RetryFailedDeliveryJob($delivery->id))->handle($dispatcher);
+        // NOTIF-05: MAX_ATTEMPTS is now 6, not 3 — loop until it is reached
+        // rather than hardcoding a stale attempt count. One send+retry pair
+        // was already run above (attempt_count === 1); run the remaining
+        // pairs to reach MAX_ATTEMPTS.
+        for ($attempt = 2; $attempt <= RetryFailedDeliveryJob::MAX_ATTEMPTS; $attempt++) {
+            (new SendNotificationChannelJob($delivery->id))->handle($dispatcher, $channel);
+            (new RetryFailedDeliveryJob($delivery->id))->handle($dispatcher);
+        }
 
         $this->assertSame(DeliveryState::Failed, $delivery->fresh()->state);
+        $this->assertSame(RetryFailedDeliveryJob::MAX_ATTEMPTS, $delivery->fresh()->attempt_count);
         Queue::assertPushed(RetryFailedDeliveryJob::class, fn (RetryFailedDeliveryJob $job): bool => $job->operationalEscalation && $job->queue === 'default');
     }
 

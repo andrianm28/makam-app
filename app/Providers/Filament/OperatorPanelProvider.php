@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Providers\Filament;
 
 use App\Filament\Operator\Pages\Dashboard;
+use App\Filament\Operator\Pages\InAppNotifications;
 use App\Filament\Operator\Pages\PlotFloorMap;
 use App\Filament\Operator\Resources\CemeteryOrders\CemeteryOrderResource;
 use App\Http\Middleware\AssignCorrelationId;
@@ -66,6 +67,7 @@ final class OperatorPanelProvider extends PanelProvider
             ])
             ->pages([
                 Dashboard::class,
+                InAppNotifications::class,
                 PlotFloorMap::class,
             ])
             ->widgets([

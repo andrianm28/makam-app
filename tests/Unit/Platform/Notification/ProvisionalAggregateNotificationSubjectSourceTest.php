@@ -17,6 +17,8 @@ use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\OrderWorkflow\ProductType;
 use App\Domain\Quotation\Models\Quote;
 use App\Domain\Quotation\QuoteStatus;
+use App\Domain\Visitation\Actions\RequestVisitation;
+use App\Domain\Visitation\Models\CemeteryVisitationPolicy;
 use App\Models\User;
 use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use App\Platform\Notification\ProvisionalAggregateNotificationSubjectSource;
@@ -174,16 +176,47 @@ final class ProvisionalAggregateNotificationSubjectSourceTest extends TestCase
 
     /**
      * An order with no backing booking draft (a Funeral-Case/Pre-Need-only
-     * submission) has no scope entity — never an error.
+     * submission) has no CEMETERY scope entity — never an error. It still
+     * carries the platform's own `business_entity` scope (NOTIF-01,
+     * `ProvisionalAggregateNotificationSubjectSource`'s own doc block) —
+     * every order gets that one unconditionally, regardless of whether it
+     * has a backing booking draft — so `hasScopeEntity()` is `true` here,
+     * and the assertion is on the ABSENCE of a cemetery entity specifically,
+     * not on the subject carrying zero scope entities.
      */
-    public function test_an_order_with_no_booking_draft_has_no_scope_entity(): void
+    public function test_an_order_with_no_booking_draft_has_no_cemetery_scope_entity(): void
     {
         $order = $this->makeOrder();
 
         $subject = (new ProvisionalAggregateNotificationSubjectSource)->subjectFor('order', $order->getKey());
 
         $this->assertNotNull($subject);
-        $this->assertFalse($subject->hasScopeEntity());
+        $this->assertTrue($subject->hasScopeEntity());
+        $this->assertNull($subject->scopeEntityType);
+        $this->assertCount(1, $subject->scopeEntities);
+        $this->assertSame(ScopeEntityType::BUSINESS_ENTITY, $subject->scopeEntities[0]->type);
+    }
+
+    /**
+     * NOTIF-01: every order subject also carries the platform's own
+     * `business_entity` scope as a SECOND scope entity, alongside the
+     * order's own cemetery scope — this is the load-bearing case that lets
+     * a platform admin resolve as a recipient for the first time.
+     */
+    public function test_an_order_with_a_cemetery_also_carries_the_platform_business_entity_scope(): void
+    {
+        $cemetery = $this->createCemetery();
+        $draft = BookingDraft::query()->create(['cemetery_id' => $cemetery->id]);
+        $order = $this->makeOrder($draft->id);
+
+        $subject = (new ProvisionalAggregateNotificationSubjectSource)->subjectFor('order', $order->getKey());
+
+        $this->assertNotNull($subject);
+        $this->assertCount(2, $subject->scopeEntities);
+
+        $types = array_map(static fn ($ref) => $ref->type, $subject->scopeEntities);
+        $this->assertContains(ScopeEntityType::CEMETERY, $types);
+        $this->assertContains(ScopeEntityType::BUSINESS_ENTITY, $types);
     }
 
     public function test_a_missing_order_row_resolves_to_null(): void
@@ -238,6 +271,58 @@ final class ProvisionalAggregateNotificationSubjectSourceTest extends TestCase
     {
         $subject = (new ProvisionalAggregateNotificationSubjectSource)
             ->subjectFor('quote', '00000000-0000-0000-0000-000000000000');
+
+        $this->assertNull($subject);
+    }
+
+    /**
+     * NOTIF-13: a visitation booking resolves the CEMETERY scope entity
+     * from `visitation_bookings.cemetery_id` — no owner reference exists
+     * (see `visitationBookingSubject()`'s own doc block for why, matching
+     * the `renewal` precedent).
+     */
+    public function test_a_visitation_booking_resolves_its_cemetery_scope_with_no_owner(): void
+    {
+        $cemetery = $this->createCemetery();
+
+        CemeteryVisitationPolicy::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'operating_hours' => [
+                'mon' => ['open' => '08:00', 'close' => '17:00'],
+                'tue' => ['open' => '08:00', 'close' => '17:00'],
+                'wed' => ['open' => '08:00', 'close' => '17:00'],
+                'thu' => ['open' => '08:00', 'close' => '17:00'],
+                'fri' => ['open' => '08:00', 'close' => '17:00'],
+                'sat' => ['open' => '08:00', 'close' => '17:00'],
+                'sun' => ['open' => '08:00', 'close' => '17:00'],
+            ],
+            'daily_capacity' => 10,
+        ]);
+
+        $booking = app(RequestVisitation::class)(
+            $cemetery,
+            CarbonImmutable::now()->addDays(3)->toDateString(),
+            2,
+            '0812-3456-7890',
+            'visitor@example.test',
+            null,
+            [],
+            'subject-source-test-'.Str::random(8),
+            'actor:customer',
+        );
+
+        $subject = (new ProvisionalAggregateNotificationSubjectSource)->subjectFor('visitation_booking', $booking->getKey());
+
+        $this->assertNotNull($subject);
+        $this->assertNull($subject->ownerRef);
+        $this->assertSame(ScopeEntityType::CEMETERY, $subject->scopeEntityType);
+        $this->assertSame((string) $cemetery->id, (string) $subject->scopeEntityId);
+    }
+
+    public function test_a_missing_visitation_booking_resolves_to_null(): void
+    {
+        $subject = (new ProvisionalAggregateNotificationSubjectSource)
+            ->subjectFor('visitation_booking', '00000000-0000-0000-0000-000000000000');
 
         $this->assertNull($subject);
     }
