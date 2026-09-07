@@ -196,6 +196,78 @@ final class DocumentAccessPolicyTest extends TestCase
         );
     }
 
+    /**
+     * VAULT-06 regression: `CreateCertificateAction` used to write
+     * `owner_type = Order::class` (an FQCN), which this policy could never
+     * resolve — every certificate document was silently unauthorizable. It
+     * now writes `ScopeEntityType::ORDER`.
+     */
+    public function test_vault06_a_certificate_document_scoped_by_order_can_now_be_authorized(): void
+    {
+        $document = $this->documentOwnedBy(ScopeEntityType::ORDER, 'order-cert-1');
+
+        $this->assertFalse($this->policy()->canView($this->actor(42, ['admin']), $document));
+
+        $this->grant(42, ScopeEntityType::ORDER, 'order-cert-1');
+
+        $this->assertTrue($this->policy()->canView($this->actor(42, ['admin']), $document));
+    }
+
+    /**
+     * VAULT-06 regression: `UploadEvidenceAction` used to write
+     * `owner_type = WorkOrder::class` (an FQCN, and not even a
+     * `ScopeEntityType`), so vendor evidence was silently unauthorizable. It
+     * now writes `ScopeEntityType::VENDOR` scoped to the work order's owning
+     * vendor.
+     */
+    public function test_vault06_vendor_evidence_scoped_by_vendor_can_now_be_authorized(): void
+    {
+        $document = $this->documentOwnedBy(ScopeEntityType::VENDOR, 'vendor-1');
+
+        $this->assertFalse($this->policy()->canView($this->actor(42, ['operator']), $document));
+
+        $this->grant(42, ScopeEntityType::VENDOR, 'vendor-1');
+
+        $this->assertTrue($this->policy()->canView($this->actor(42, ['operator']), $document));
+    }
+
+    /**
+     * VAULT-06 regression: `SubmitManualPayment` used to write
+     * `owner_type = 'payment_verification'` keyed on the verification's own
+     * id — not a `ScopeEntityType`, so a payment proof was silently
+     * unauthorizable. It now writes `ScopeEntityType::ORDER` scoped to the
+     * order the payment pays for.
+     */
+    public function test_vault06_a_payment_proof_scoped_by_order_can_now_be_authorized(): void
+    {
+        $document = $this->documentOwnedBy(ScopeEntityType::ORDER, 'order-pay-1');
+
+        $this->assertFalse($this->policy()->canView($this->actor(42, ['customer']), $document));
+
+        $this->grant(42, ScopeEntityType::ORDER, 'order-pay-1');
+
+        $this->assertTrue($this->policy()->canView($this->actor(42, ['customer']), $document));
+    }
+
+    /**
+     * VAULT-06 regression: `MemorialFamilyPage::uploadMedia()` used to write
+     * `owner_type = 'memorial_profile'` — not a `ScopeEntityType` — so a
+     * family-uploaded memorial document was silently unauthorizable. It now
+     * writes `ScopeEntityType::GRAVE` scoped to the profile's
+     * `grave_record_id` (unique per profile, so this stays a precise
+     * per-profile relationship).
+     */
+    public function test_vault06_a_memorial_document_scoped_by_grave_can_now_be_authorized(): void
+    {
+        $document = $this->documentOwnedBy(ScopeEntityType::GRAVE, 'grave-1');
+
+        $this->assertFalse($this->policy()->canView($this->actor(42, ['case_manager']), $document));
+
+        $this->grant(42, ScopeEntityType::GRAVE, 'grave-1');
+
+        $this->assertTrue($this->policy()->canView($this->actor(42, ['case_manager']), $document));
+    }
+
     private function policy(): DocumentAccessPolicy
     {
         return new DocumentAccessPolicy(new ScopeAssignmentResolver(ActorContext::guest()));

@@ -17,6 +17,7 @@ use App\Platform\DocumentVault\DocumentKind;
 use App\Platform\DocumentVault\DocumentState;
 use App\Platform\DocumentVault\Models\Document;
 use App\Platform\IdentityAccess\ActorContext;
+use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\UploadedFile;
@@ -206,8 +207,13 @@ final class MemorialFamilyPage extends Component
         app(UploadDocument::class)->upload(
             DocumentKind::ProductImage,
             $file,
-            'memorial_profile',
-            (string) $this->profile->getKey(),
+            // VAULT-06: 'memorial_profile' is not a resolvable
+            // `DocumentAccessPolicy` owner type. `grave_record_id` is the
+            // ONE link `MemorialProfile` has into a scope-checkable entity
+            // (AC7 — `grave_record_id` is unique per profile, so this stays
+            // a precise per-profile filter), so scope by grave instead.
+            ScopeEntityType::GRAVE,
+            (string) $this->profile->grave_record_id,
             null,
             $mime !== false && $mime !== null ? ['mime_declared' => $mime] : [],
         );
@@ -284,8 +290,8 @@ final class MemorialFamilyPage extends Component
     private function attachAcceptedUploads(): void
     {
         $accepted = Document::query()
-            ->where('owner_type', 'memorial_profile')
-            ->where('owner_id', (string) $this->profile->getKey())
+            ->where('owner_type', ScopeEntityType::GRAVE)
+            ->where('owner_id', (string) $this->profile->grave_record_id)
             ->where('state', DocumentState::Accepted->value)
             ->pluck('id');
 
@@ -351,8 +357,8 @@ final class MemorialFamilyPage extends Component
         $media = $this->profile->media()->orderByDesc('created_at')->get();
 
         $pendingUploads = Document::query()
-            ->where('owner_type', 'memorial_profile')
-            ->where('owner_id', (string) $this->profile->getKey())
+            ->where('owner_type', ScopeEntityType::GRAVE)
+            ->where('owner_id', (string) $this->profile->grave_record_id)
             ->where('state', '!=', DocumentState::Accepted->value)
             ->orderByDesc('created_at')
             ->get();
