@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Providers\Filament;
 
+use App\Filament\Admin\Pages\FailedNotificationDeliveries;
 use App\Filament\Admin\Pages\FeatureGateAdmin;
 use App\Filament\Admin\Pages\InAppNotifications;
 use App\Filament\Admin\Pages\PasswordReauthentication;
@@ -234,6 +235,7 @@ class AdminPanelProvider extends PanelProvider
                 Reports::class,
                 PasswordReauthentication::class,
                 InAppNotifications::class,
+                FailedNotificationDeliveries::class,
                 PlotFloorMap::class,
             ])
             ->widgets([

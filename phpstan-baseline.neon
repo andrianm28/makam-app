@@ -663,7 +663,7 @@ parameters:
 		-
 			message: '#^Call to an undefined method Mockery\\ExpectationInterface\|Mockery\\HigherOrderMessage\:\:once\(\)\.$#'
 			identifier: method.notFound
-			count: 2
+			count: 3
 			path: tests/Feature/Console/SpineWatchdogCommandTest.php
 
 		-
@@ -1417,7 +1417,7 @@ parameters:
 			path: tests/Feature/Migrations/FixCustomerAndUploaderIdentityColumnsTest.php
 
 		-
-			message: '#^Method App\\Platform\\Notification\\Contracts\\NotificationSubjectSource@anonymous/tests/Feature/Notification/NotificationDispatchPipelineTest\.php\:702\:\:subjectFor\(\) never returns null so it can be removed from the return type\.$#'
+			message: '#^Method App\\Platform\\Notification\\Contracts\\NotificationSubjectSource@anonymous/tests/Feature/Notification/NotificationDispatchPipelineTest\.php\:707\:\:subjectFor\(\) never returns null so it can be removed from the return type\.$#'
 			identifier: return.unusedType
 			count: 1
 			path: tests/Feature/Notification/NotificationDispatchPipelineTest.php

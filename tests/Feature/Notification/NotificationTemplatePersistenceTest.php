@@ -363,6 +363,10 @@ final class NotificationTemplatePersistenceTest extends TestCase
             // template.php`, not the main seed migration's own
             // `outboxEventName()` match (which has no arm for this label).
             'Renewal paid/verified (external)' => 'renewal.marked_external.v1',
+            // NOTIF-13, Batch M8b, 07 Sep 2026 — wired by
+            // 2026_09_07_120000_add_visitation_booking_notification_templates.php.
+            'Visitation booking requested' => 'visit.booking_requested.v1',
+            'Visitation booking confirmed' => 'visit.booking_confirmed.v1',
             default => null,
         };
     }

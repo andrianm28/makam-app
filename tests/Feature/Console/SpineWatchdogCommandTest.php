@@ -10,6 +10,7 @@ use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Models\User;
+use App\Platform\Notification\Contracts\Channel;
 use App\Platform\Notification\Jobs\ConsumeOutboxNotificationJob;
 use App\Platform\Notification\Jobs\SendNotificationChannelJob;
 use App\Platform\Observability\SpineDegradedException;
@@ -21,6 +22,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Mockery;
+use Tests\Fixtures\Notification\FakeChannel;
 use Tests\TestCase;
 
 /**
@@ -342,6 +344,87 @@ final class SpineWatchdogCommandTest extends TestCase
         $this->artisan('spine:watchdog')
             ->expectsOutputToContain('Spine healthy')
             ->assertExitCode(0);
+    }
+
+    /**
+     * NOTIF-06: a permanently-failed delivery is a real, actionable
+     * problem — before this signal existed, `spine:watchdog` had no
+     * coverage for it at all.
+     */
+    public function test_it_detects_a_permanently_failed_delivery_and_reports_it(): void
+    {
+        $handler = Mockery::mock(ExceptionHandler::class);
+        $handler->shouldReceive('report')->once()->with(Mockery::type(SpineDegradedException::class));
+        $this->app->instance(ExceptionHandler::class, $handler);
+
+        $this->createFailedDelivery();
+
+        $this->artisan('spine:watchdog')
+            ->expectsOutputToContain('notification delivery(ies) permanently failed')
+            ->assertExitCode(1);
+    }
+
+    /**
+     * `NotificationDeliveryWriteGuard` (AC9) rejects any direct write to
+     * `notification_deliveries` from outside `Actions\DispatchNotification`
+     * — including backdating `updated_at` for a test fixture — so "outside
+     * the window" is proven the same way `test_a_recently_queued_delivery_
+     * within_the_threshold_is_not_flagged()`'s sibling stale test proves
+     * the opposite direction: a deliberately absurd option value, not a
+     * backdated row. `--failed-deliveries-window-minutes=-1` moves the
+     * cutoff to ONE MINUTE IN THE FUTURE (`now()->subMinutes(-1)` ==
+     * `now()->addMinutes(1)`), which a delivery updated at or before the
+     * real "now" can never satisfy.
+     */
+    public function test_a_failed_delivery_outside_the_window_is_not_flagged(): void
+    {
+        $this->createFailedDelivery();
+
+        $this->artisan('spine:watchdog', ['--failed-deliveries-window-minutes' => -1])
+            ->expectsOutputToContain('Spine healthy')
+            ->assertExitCode(0);
+    }
+
+    /**
+     * Same fixture shape as `createQueuedDelivery()`, but binds a
+     * `FakeChannel(throws: true)` and runs the channel job in-process so
+     * the resulting row reaches `FAILED` (one failed send is enough —
+     * `Actions\DispatchNotification::recordChannelOutcome()` records
+     * `FAILED` regardless of `attempt_count`).
+     */
+    private function createFailedDelivery(): void
+    {
+        $user = User::factory()->create();
+        $cemetery = Cemetery::create([
+            'type' => CemeteryType::TPU,
+            'publication_status' => CemeteryPublicationStatus::DRAFT,
+            'name' => 'Spine Watchdog Failed-Delivery Test Cemetery',
+            'slug' => 'spine-watchdog-failed-delivery-test-cemetery-'.Str::random(8),
+            'city' => LaunchCityCode::JAKARTA,
+            'address' => 'Jl. Uji Coba Spine Watchdog Gagal',
+        ]);
+
+        $draft = (new StartBookingDraft)(userId: $user->id);
+        $draft->forceFill(['cemetery_id' => $cemetery->id])->save();
+
+        $this->ensureActiveTemplateVersion('Booking submitted');
+
+        $channel = new FakeChannel(throws: true);
+        $this->app->instance(Channel::class, $channel);
+
+        $outboxEventId = Outbox::record(
+            eventName: 'booking.draft_submitted.v2',
+            eventVersion: 2,
+            aggregateType: 'booking_draft',
+            aggregateId: $draft->getKey(),
+            data: ['draft_id' => $draft->getKey()],
+            classification: OutboxClassification::Internal,
+        )->getKey();
+
+        // phpunit.xml pins QUEUE_CONNECTION=sync, so this drives the whole
+        // chain (record -> queue -> per-channel send) in-process, ending
+        // with the delivery row in FAILED state.
+        ConsumeOutboxNotificationJob::dispatchSync($outboxEventId);
     }
 
     public function test_multiple_simultaneous_problems_are_all_reported_in_one_run(): void

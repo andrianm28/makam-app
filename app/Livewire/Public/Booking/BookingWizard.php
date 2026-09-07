@@ -41,6 +41,8 @@ use App\Platform\Audit\AuditSource;
 use App\Platform\FeatureGate\ModeResolver;
 use App\Platform\FeatureGate\Modes\PaymentMode;
 use App\Platform\IdentityAccess\ActorContextResolver;
+use App\Platform\Notification\Models\NotificationDelivery;
+use App\Platform\Notification\RecipientRole;
 use App\Platform\Payment\Actions\OpenPaymentSession;
 use App\Platform\Payment\Actions\OpenPaymentSessionCommand;
 use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutProviderException;
@@ -1589,6 +1591,52 @@ final class BookingWizard extends Component
         ];
     }
 
+    /**
+     * NOTIF-09: this order's own `notification_deliveries` rows for the
+     * CUSTOMER-role recipient, one at most per channel (`EMAIL`/`WA`,
+     * newest first per channel). `ownerRef`'s shape varies by whether the
+     * ordering party is authenticated or a guest
+     * (`ProvisionalAggregateNotificationSubjectSource::ownerRefForParty()`),
+     * but this query never needs to know which — it joins through
+     * `notification_events`/`notification_recipients` on the ORDER's own
+     * `aggregate_type`/`aggregate_id` and the CUSTOMER role, never on
+     * `recipient_ref` directly, so it is correct for both shapes without
+     * duplicating that resolution logic here.
+     *
+     * @return array{EMAIL: ?NotificationDelivery, WA: ?NotificationDelivery}
+     */
+    private function customerDeliveriesForOrder(string $orderId): array
+    {
+        $eventIds = DB::table('notification_events')
+            ->where('aggregate_type', 'order')
+            ->where('aggregate_id', $orderId)
+            ->pluck('event_id');
+
+        if ($eventIds->isEmpty()) {
+            return ['EMAIL' => null, 'WA' => null];
+        }
+
+        $recipientIds = DB::table('notification_recipients')
+            ->whereIn('event_id', $eventIds)
+            ->where('actor_role', RecipientRole::CUSTOMER)
+            ->pluck('id');
+
+        if ($recipientIds->isEmpty()) {
+            return ['EMAIL' => null, 'WA' => null];
+        }
+
+        $deliveries = NotificationDelivery::query()
+            ->whereIn('notification_recipient_id', $recipientIds)
+            ->whereIn('channel', ['EMAIL', 'WA'])
+            ->orderByDesc('created_at')
+            ->get();
+
+        return [
+            'EMAIL' => $deliveries->firstWhere('channel', 'EMAIL'),
+            'WA' => $deliveries->firstWhere('channel', 'WA'),
+        ];
+    }
+
     private function confirmationSummary(?Order $order, BookingDraft $draft): array
     {
         $quote = $order !== null ? Quote::currentFor($order) : null;
@@ -1797,6 +1845,17 @@ final class BookingWizard extends Component
         // genuinely succeeded and simply found no order.
         $confirmationData = null;
         $confirmationUnavailable = false;
+        // NOTIF-09 (`docs/superpowers/plans/2026-09-07-batchm8b-notification-
+        // completeness.md`): keyed by channel ('EMAIL'/'WA'), the CUSTOMER
+        // recipient's own real `notification_deliveries` row when one
+        // exists yet — populated below, once `$order` is known. `null` for
+        // a channel means "no delivery row yet" (the outbox has not been
+        // drained in the few seconds since submission), which the view
+        // renders as the pre-existing static pending badge; a real row
+        // renders through the SAME `delivery-state-chip` partial the admin
+        // inbox already uses, never a second, looser rendering of the same
+        // states.
+        $customerDeliveries = ['EMAIL' => null, 'WA' => null];
         if ($this->currentStep === BookingWizardStep::CONFIRMATION && $this->draftId !== null) {
             try {
                 $draft = BookingDraftQuery::findBound($this->draftId);
@@ -1815,6 +1874,10 @@ final class BookingWizard extends Component
                     // to its honest "not yet processed" copy rather than
                     // claiming an order that does not exist.
                     $order = Order::query()->where('booking_draft_id', $draft->id)->first();
+
+                    if ($order !== null) {
+                        $customerDeliveries = $this->customerDeliveriesForOrder($order->id);
+                    }
 
                     $confirmationData = [
                         'draft_id' => $draft->id,
@@ -1911,6 +1974,7 @@ final class BookingWizard extends Component
             'selectedPlot' => $selectedPlot,
             'confirmationData' => $confirmationData,
             'confirmationUnavailable' => $confirmationUnavailable,
+            'customerDeliveries' => $customerDeliveries,
             'paymentMode' => $paymentMode,
             'whatsAppMode' => $whatsAppMode,
             'onlineSessionState' => $onlinePaymentState['state'],

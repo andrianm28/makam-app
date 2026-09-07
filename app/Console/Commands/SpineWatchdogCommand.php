@@ -22,7 +22,7 @@ use Illuminate\Support\Facades\DB;
  * the order, the quote) succeeds and looks healthy.
  *
  * ---------------------------------------------------------------------------
- * Three independent signals, any one of which is a real problem
+ * Four independent signals, any one of which is a real problem
  * ---------------------------------------------------------------------------
  *   1. An `outbox_events` row unwatched (`dispatched_at IS NULL`) for longer
  *      than `--stale-outbox-minutes` — the publisher
@@ -38,8 +38,15 @@ use Illuminate\Support\Facades\DB;
  *      a stateless scheduled invocation with no memory of its previous run,
  *      and a time window sidesteps needing any (a cache key or a table
  *      would be one more thing that can itself silently stop working).
+ *   4. A `notification_deliveries` row that reached `FAILED` (its bounded
+ *      retry exhausted — `Jobs\RetryFailedDeliveryJob::MAX_ATTEMPTS`) within
+ *      the last `--failed-deliveries-window-minutes` — NOTIF-06, 07 Sep
+ *      2026. Before this signal, a permanently-failed delivery was
+ *      completely invisible: no operator surface, no alert, nothing in this
+ *      command's own coverage. Same recent-window shape as signal 3, for
+ *      the same statelessness reason.
  *
- * Each is independently actionable and independently caused, so all three
+ * Each is independently actionable and independently caused, so all four
  * are always checked and reported together — one exception per problem
  * found, not one exception for "something is wrong."
  *
@@ -68,7 +75,8 @@ final class SpineWatchdogCommand extends Command
         {--stale-outbox-minutes=5 : Alert when an outbox event has waited this long undispatched}
         {--stuck-outbox-minutes=10 : Alert when an outbox event has been claimed and pushed to the queue this long without publishing}
         {--stale-delivery-minutes=15 : Alert when a notification delivery has waited this long queued}
-        {--failed-jobs-window-minutes=5 : Alert on any failed job within this recent window}';
+        {--failed-jobs-window-minutes=5 : Alert on any failed job within this recent window}
+        {--failed-deliveries-window-minutes=15 : Alert on any permanently-failed notification delivery within this recent window}';
 
     protected $description = 'Detect a silently stalled outbox publisher or notification queue worker.';
 
@@ -79,6 +87,7 @@ final class SpineWatchdogCommand extends Command
             $this->checkStuckInFlightOutbox((int) $this->option('stuck-outbox-minutes')),
             $this->checkStaleDeliveries((int) $this->option('stale-delivery-minutes')),
             $this->checkRecentFailures((int) $this->option('failed-jobs-window-minutes')),
+            $this->checkFailedDeliveries((int) $this->option('failed-deliveries-window-minutes')),
         ]);
 
         if ($problems === []) {
@@ -168,5 +177,27 @@ final class SpineWatchdogCommand extends Command
         }
 
         return "{$count} job(s) failed outright in the last {$minutes} minute(s). Check failed_jobs.";
+    }
+
+    /**
+     * NOTIF-06: a delivery that reached `FAILED` has already exhausted its
+     * bounded retry (`Jobs\RetryFailedDeliveryJob::MAX_ATTEMPTS`) — nothing
+     * will ever move it forward on its own. Counts and durations only, per
+     * this class's own "Restricted data" section — no event name, recipient
+     * reference, or delivery id.
+     */
+    private function checkFailedDeliveries(int $minutes): ?string
+    {
+        $count = DB::table('notification_deliveries')
+            ->where('state', DeliveryState::Failed->value)
+            ->where('updated_at', '>=', now()->subMinutes($minutes))
+            ->count();
+
+        if ($count === 0) {
+            return null;
+        }
+
+        return "{$count} notification delivery(ies) permanently failed in the last {$minutes} minute(s). ".
+            'Check the admin "Notifikasi gagal" page.';
     }
 }
