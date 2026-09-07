@@ -328,8 +328,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install PyYAML
-        run: pip install --quiet pyyaml
+      - name: Install PyYAML and openapi-spec-validator
+        run: pip install --quiet pyyaml openapi-spec-validator
       - name: Validate YAML documents parse
         run: |
           python3 - <<'PY'
@@ -344,18 +344,12 @@ jobs:
           sys.exit(bad)
           PY
       - name: Validate OpenAPI 3.1 structure
-        run: |
-          python3 - <<'PY'
-          import sys, yaml
-          d = yaml.safe_load(open('docs/contracts/openapi.yaml'))
-          v = str(d.get('openapi', ''))
-          if not v.startswith('3.1'):
-              print(f"openapi version is {v!r}, expected 3.1.x"); sys.exit(1)
-          if not d.get('paths'):
-              print("no paths defined"); sys.exit(1)
-          print(f"OpenAPI {v}, {len(d['paths'])} paths, "
-                f"{len(d.get('components', {}).get('schemas', {}))} schemas")
-          PY
+        # A real spec validator, not a YAML parse plus hand-picked key
+        # assertions — this catches structurally invalid documents (e.g.
+        # a Response Object with stray top-level keys instead of a plain
+        # `description` string) that a loose "does openapi start with 3.1
+        # and are there any paths" check would let through.
+        run: openapi-spec-validator docs/contracts/openapi.yaml
 
   # ---------------------------------------------------------------------------
   # Dependency vulnerability audit (ci-cd-and-release.md §2).
