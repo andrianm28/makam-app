@@ -8,7 +8,6 @@ use App\Domain\GraveRegistry\GraveRecordAccessMode;
 use App\Domain\GraveRegistry\Models\GraveRecord;
 use App\Domain\Marketplace\Models\MarketplaceOrder;
 use App\Domain\OrderWorkflow\Models\Order;
-use App\Domain\Renewal\Exceptions\RenewalPaymentAmountMismatchException;
 use App\Domain\Renewal\Models\Renewal;
 use App\Domain\Renewal\Models\RenewalQuote;
 use App\Domain\Renewal\RenewalAuditActions;
@@ -189,10 +188,17 @@ final class RenewalWebhookSettlementTest extends TestCase
      * receiver's validation (the validator compares the payload against the
      * SESSION snapshot, so a self-consistent wrong session is VALIDATED),
      * but the settlement must not mark the renewal PAID for a payment that
-     * does not equal the quoted total. `MarkRenewalPaidOnline`'s amount
-     * assert rejects it, the claim rolls back, and nothing is applied.
+     * does not equal the quoted total.
+     *
+     * Batch M1b (PAY-03, 7 Sep 2026): `MarkRenewalPaidOnline`'s amount assert
+     * no longer THROWS on this path — it returns a `SettlementAnomaly`,
+     * which `ProcessWebhookEvent` turns into `MANUAL_REVIEW` plus an audit
+     * row, committed IN PLACE (never a rolled-back claim, never a row stuck
+     * at `VALIDATED`, never a retried job). The webhook delivery still
+     * responds `200 OK` — this is a well-understood, permanent anomaly, not
+     * a transient failure worth retrying.
      */
-    public function test_a_session_opened_for_the_wrong_amount_cannot_mark_the_renewal_paid(): void
+    public function test_a_session_opened_for_the_wrong_amount_moves_the_event_to_manual_review(): void
     {
         $renewal = $this->makeRenewalWithAcceptedQuote(self::AMOUNT_MINOR);
 
@@ -202,28 +208,42 @@ final class RenewalWebhookSettlementTest extends TestCase
         $wrongAmountMinor = 100_000_00;
         $this->paymentSession('pay_renewal_wrong', $wrongAmountMinor);
 
-        $this->withoutExceptionHandling();
+        $this->deliver(dataOverrides: [
+            'payment_id' => 'pay_renewal_wrong',
+            'order_id' => self::RENEWAL_REFERENCE,
+            'amount' => '100000',
+        ])->assertOk();
 
-        try {
-            $this->deliver(dataOverrides: [
-                'payment_id' => 'pay_renewal_wrong',
-                'order_id' => self::RENEWAL_REFERENCE,
-                'amount' => '100000',
-            ])->assertOk();
-            $this->fail('Expected RenewalPaymentAmountMismatchException');
-        } catch (RenewalPaymentAmountMismatchException) {
-            // expected: the paid transition is refused for the wrong amount.
-        }
-
-        // The claim rolled back: the row stays at VALIDATED, never PROCESSED.
+        // The row is moved to MANUAL_REVIEW, not left at VALIDATED and not
+        // PROCESSED — the settlement never applied, but it also never rolls
+        // back into an endless retry loop.
         $event = ProviderEvent::query()->sole();
-        $this->assertSame(ProviderEventStatus::Validated->value, $event->status);
+        $this->assertSame(ProviderEventStatus::ManualReview->value, $event->status);
+        $this->assertSame('renewal settlement amount mismatch', $event->rejection_detail);
 
         $this->assertSame(RenewalStatus::MENUNGGU_PEMBAYARAN, $renewal->fresh()->status);
         $this->assertNull($renewal->fresh()->settled_at);
 
+        // The session that authorized the (wrong) amount stays open — the
+        // anomaly is on the renewal-quote comparison, not the session claim,
+        // so it is deliberately not transitioned to PAID or any terminal
+        // state.
         $session = PaymentSession::query()->where('provider_payment_id', 'pay_renewal_wrong')->sole();
         $this->assertSame(SessionState::AwaitingPayment->value, $session->state);
+
+        $audit = AuditEvent::query()
+            ->where('action', RenewalAuditActions::RENEWAL_PAID_ONLINE_AMOUNT_MISMATCH)
+            ->sole();
+        $this->assertSame('renewal', $audit->subject_type);
+        $this->assertSame((string) $renewal->getKey(), $audit->subject_id);
+        $this->assertSame('denied', $audit->outcome);
+        $this->assertSame(
+            'settlement amount does not match the renewal quote',
+            $audit->metadata['note'] ?? null,
+        );
+
+        // AC14: no provider payload value may reach an audit row.
+        $this->assertStringNotContainsString('pay_renewal_wrong', (string) json_encode($audit->toArray()));
     }
 
     // -----------------------------------------------------------------

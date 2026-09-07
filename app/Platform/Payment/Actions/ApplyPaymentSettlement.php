@@ -7,8 +7,10 @@ namespace App\Platform\Payment\Actions;
 use App\Domain\CareSubscription\Actions\MarkCyclePaid;
 use App\Domain\CareSubscription\Models\CarePlan;
 use App\Domain\CareSubscription\Models\SubscriptionCycle;
+use App\Domain\CareSubscription\SubscriptionCycleStatus;
 use App\Domain\Marketplace\Actions\MarkMarketplaceOrderPaid;
 use App\Domain\Marketplace\Models\MarketplaceOrder;
+use App\Domain\Marketplace\PaymentState;
 use App\Domain\OrderWorkflow\Actions\ApplyPaidEffects;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\OrderStatus;
@@ -30,6 +32,7 @@ use App\Platform\Payment\Models\ProviderEvent;
 use App\Platform\Payment\PaymentAuditActions;
 use App\Platform\Payment\ProviderEventType;
 use App\Platform\Payment\SessionState;
+use App\Platform\Payment\SettlementAnomaly;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 
@@ -172,9 +175,11 @@ use Illuminate\Support\Str;
  * passed the same way the other two legs pass it: the authority is what this
  * system authorized at session-open time, not the payload.
  *
- * Unlike the booking leg, this branch does NOT audit a duplicate-arrival: it
- * mirrors the marketplace leg, which also has none. Flagged as a known
- * asymmetry across all three legs, not a decision silently made here.
+ * Batch M1b (PAY-01, 7 Sep 2026) closed the asymmetry this doc block used to
+ * flag: `settleMarketplace()` and this leg now audit a duplicate arrival the
+ * same way `settleBooking()` does — see `recordDuplicateArrival()`'s doc
+ * block for the schema-driven reason the comparison itself is shaped
+ * differently here (pre-existing paid state, not a stored source-ref column).
  *
  * `Domain\VendorFulfillment\Actions\CreateWorkOrderFromCycle` is called from
  * THIS class, not from inside `MarkCyclePaid` — cross-domain orchestration
@@ -192,10 +197,21 @@ final readonly class ApplyPaymentSettlement
      * transaction — see the class doc block. On success the session that
      * authorized the payment moves to `SessionState::Paid`.
      *
+     *
+     * @return SettlementAnomaly|null `null` on a normal settlement (the
+     *                                session moved to `Paid`); a non-null
+     *                                `SettlementAnomaly` on the renewal leg's
+     *                                two anomaly branches (PAY-03) — see
+     *                                `settleRenewal()`'s doc block. The
+     *                                caller (`ProcessWebhookEvent`) MUST NOT
+     *                                mark the row `PROCESSED` or transition
+     *                                the session to `Paid` when a non-null
+     *                                value is returned.
+     *
      * @throws SettlementTargetUnresolvableException when the event cannot be
      *                                               mapped to a session or an order.
      */
-    public function settle(ProviderEvent $event): void
+    public function settle(ProviderEvent $event): ?SettlementAnomaly
     {
         $session = $this->resolveSessionOrFail($event);
 
@@ -207,7 +223,7 @@ final readonly class ApplyPaymentSettlement
             $this->settleBooking($order, $event, $session);
             $this->transitionToTerminal($session, SessionState::Paid);
 
-            return;
+            return null;
         }
 
         $marketplaceOrder = MarketplaceOrder::query()->where('order_number', $invoiceReference)->first();
@@ -216,16 +232,21 @@ final readonly class ApplyPaymentSettlement
             $this->settleMarketplace($marketplaceOrder, $event, $session);
             $this->transitionToTerminal($session, SessionState::Paid);
 
-            return;
+            return null;
         }
 
         $renewal = Renewal::query()->where('reference', $invoiceReference)->first();
 
         if ($renewal instanceof Renewal) {
-            $this->settleRenewal($renewal, $event, $session);
+            $anomaly = $this->settleRenewal($renewal, $event, $session);
+
+            if ($anomaly instanceof SettlementAnomaly) {
+                return $anomaly;
+            }
+
             $this->transitionToTerminal($session, SessionState::Paid);
 
-            return;
+            return null;
         }
 
         $cycle = Str::isUuid($invoiceReference) ? SubscriptionCycle::query()->find($invoiceReference) : null;
@@ -236,6 +257,8 @@ final readonly class ApplyPaymentSettlement
 
         $this->settleCareSubscription($cycle, $event, $session);
         $this->transitionToTerminal($session, SessionState::Paid);
+
+        return null;
     }
 
     /**
@@ -417,8 +440,30 @@ final readonly class ApplyPaymentSettlement
         );
     }
 
+    /**
+     * Batch M1b, PAY-01. Mirrors `settleBooking()`'s duplicate-arrival guard,
+     * with the comparison shaped differently for a documented schema reason
+     * (see this class's own doc block, "Marketplace: the domain Action owns
+     * the effects"): `marketplace_orders` carries no `paid_source_ref`-style
+     * column to compare the arriving transaction against, unlike `orders`.
+     *
+     * The equivalent signal is the order's PRE-EXISTING payment state, read
+     * from the SAME row instance `settle()` already resolved — i.e. BEFORE
+     * `MarkMarketplaceOrderPaid` (which would otherwise swallow a second
+     * arrival silently, per its own idempotent-no-op doc block) runs. This is
+     * safe because `ProcessWebhookEvent`'s `(provider, provider_transaction_id)`
+     * claim guarantees this event's OWN transaction has never reached
+     * `PROCESSED` before `settle()` is called (a retry of an
+     * already-`PROCESSED` event is refused earlier as `NotClaimable`), so an
+     * order already `DIBAYAR` at this point was necessarily paid by a
+     * DIFFERENT, earlier transaction — the same fact
+     * `order->paid_source_ref !== event->provider_transaction_id` proves on
+     * the booking leg.
+     */
     private function settleMarketplace(MarketplaceOrder $order, ProviderEvent $event, PaymentSession $session): void
     {
+        $wasAlreadyPaid = $order->payment_state === PaymentState::DIBAYAR;
+
         app(MarkMarketplaceOrderPaid::class)(
             $order,
             // The session snapshot, the same authority the booking leg uses:
@@ -447,6 +492,10 @@ final readonly class ApplyPaymentSettlement
             // journal batches) are stamped with the system clock, never the
             // provider-controlled occurrence time.
         );
+
+        if ($wasAlreadyPaid) {
+            $this->recordDuplicateArrival($event);
+        }
     }
 
     /**
@@ -456,10 +505,24 @@ final readonly class ApplyPaymentSettlement
      * renewal has no separate fulfilment step (`RenewalStatus::DIBAYAR`'s own
      * doc block), so this leg is a thin dispatch, the same shape
      * `settleMarketplace()` has before its payable release.
+     *
+     * Batch M1b, PAY-03: `MarkRenewalPaidOnline` no longer THROWS on its two
+     * anomaly branches (amount mismatch, settlement against a renewal that is
+     * neither open nor already paid) — it RETURNS a `SettlementAnomaly`
+     * instead, so nothing ever unwinds out of this call and there is nothing
+     * for `ProcessWebhookEvent`'s outer transaction to roll back. See
+     * `MarkRenewalPaidOnline`'s own doc block for why a thrown exception used
+     * to erase the very audit row it was trying to write.
+     *
+     * @return SettlementAnomaly|null `null` when the renewal settled
+     *                                normally (including the swallowed
+     *                                duplicate-arrival case, which commits
+     *                                its own audit row and is NOT an
+     *                                anomaly).
      */
-    private function settleRenewal(Renewal $renewal, ProviderEvent $event, PaymentSession $session): void
+    private function settleRenewal(Renewal $renewal, ProviderEvent $event, PaymentSession $session): ?SettlementAnomaly
     {
-        app(MarkRenewalPaidOnline::class)(
+        $result = app(MarkRenewalPaidOnline::class)(
             $renewal,
             // The session snapshot, the same authority the other three legs
             // use: `WebhookValidator` proved the payload amount equals it at
@@ -471,6 +534,8 @@ final readonly class ApplyPaymentSettlement
             // other three legs pass: a webhook holds no credential of ours.
             actorRef: (string) $event->getKey(),
         );
+
+        return $result instanceof SettlementAnomaly ? $result : null;
     }
 
     /**
@@ -481,6 +546,12 @@ final readonly class ApplyPaymentSettlement
      * subscription carries no resolvable care plan is a data-integrity
      * anomaly and fails closed the same way an unresolvable invoice
      * reference does.
+     *
+     * Batch M1b, PAY-01: mirrors `settleMarketplace()`'s duplicate-arrival
+     * guard — see that method's own doc block for the full reasoning
+     * (pre-existing paid state read before the call, safe because
+     * `ProcessWebhookEvent`'s claim guarantees this event's own transaction
+     * has never settled anything before).
      */
     private function settleCareSubscription(SubscriptionCycle $cycle, ProviderEvent $event, PaymentSession $session): void
     {
@@ -489,6 +560,8 @@ final readonly class ApplyPaymentSettlement
         if (! $carePlan instanceof CarePlan) {
             throw SettlementTargetUnresolvableException::becauseNoOrder((string) $event->invoice_reference);
         }
+
+        $wasAlreadyPaid = $cycle->status === SubscriptionCycleStatus::Paid->value;
 
         $paidCycle = app(MarkCyclePaid::class)(
             $cycle,
@@ -499,6 +572,10 @@ final readonly class ApplyPaymentSettlement
             // credential of ours.
             actorReference: (string) $event->getKey(),
         );
+
+        if ($wasAlreadyPaid) {
+            $this->recordDuplicateArrival($event);
+        }
 
         app(CreateWorkOrderFromCycle::class)($paidCycle->fresh(), $carePlan);
     }

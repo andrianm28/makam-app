@@ -130,18 +130,40 @@ final class AdminMoneyActionsTest extends TestCase
         $order = $this->makeOrder(OrderStatus::MENUNGGU_VERIFIKASI_PEMBAYARAN);
         $this->issueAndAcceptQuote($order);
 
-        $paid = app(MarkOrderPaid::class)($order, 'user:1', 'finance');
+        $paid = app(MarkOrderPaid::class)($order, 'user:1', 'finance', 'Pembayaran diverifikasi manual.');
 
         $this->assertSame(OrderStatus::DIBAYAR, $paid->status());
         $this->assertSame('manual_verification', $paid->paid_via);
         $this->assertSame('manual:user:1', $paid->paid_source_ref);
         $this->assertDatabaseHas('outbox_events', ['aggregate_type' => 'order']);
+
+        // Batch M1b, PAY-07: the reason now actually reaches the trail
+        // instead of being silently discarded.
+        $this->assertDatabaseHas('order_status_events', [
+            'order_id' => $order->getKey(),
+            'to_status' => 'DIBAYAR',
+            'reason' => 'Pembayaran diverifikasi manual.',
+        ]);
     }
 
     public function test_mark_order_paid_without_quote_throws(): void
     {
         $order = $this->makeOrder(OrderStatus::MENUNGGU_VERIFIKASI_PEMBAYARAN);
         $this->expectException(PaidAmountDoesNotMatchQuoteException::class);
+        app(MarkOrderPaid::class)($order, 'user:1', 'finance', 'Pembayaran diverifikasi manual.');
+    }
+
+    /**
+     * Batch M1b, PAY-07: a blank reason is refused before anything is
+     * written — the server-side backstop behind `TransitionOrderAction`'s
+     * required `Textarea` for this transition.
+     */
+    public function test_mark_order_paid_requires_a_non_blank_reason(): void
+    {
+        $order = $this->makeOrder(OrderStatus::MENUNGGU_VERIFIKASI_PEMBAYARAN);
+        $this->issueAndAcceptQuote($order);
+
+        $this->expectException(\InvalidArgumentException::class);
         app(MarkOrderPaid::class)($order, 'user:1', 'finance');
     }
 }

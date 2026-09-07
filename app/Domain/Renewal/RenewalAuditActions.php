@@ -83,17 +83,39 @@ final class RenewalAuditActions
      * by `Actions\ExpireRenewal` (wired to a real Filament admin action). An
      * operator expiring a renewal while the customer's checkout is still
      * live, followed by the customer completing that payment, is the
-     * concrete race this branch fails closed on. **Known gap (24 Aug 2026
-     * final-review re-check)**: on the real production call path, this row
-     * is written inside a SAVEPOINT nested in `ProcessWebhookEvent`'s own
-     * outer transaction, and does NOT survive that outer transaction's
-     * rollback when the exception propagates — see `MarkRenewalPaidOnline`'s
-     * own doc block for the full trace and the deferred fix direction. The
-     * mutation still fails closed correctly either way; only this audit
-     * row's durability is the open gap.
+     * concrete race this branch fails closed on.
+     *
+     * **FIXED by Batch M1b (PAY-03, 7 Sep 2026)** — the known gap recorded
+     * here since 24 Aug 2026 (this row written inside a SAVEPOINT nested in
+     * `ProcessWebhookEvent`'s own outer transaction, erased by that outer
+     * transaction's rollback when the exception propagated) is closed:
+     * `MarkRenewalPaidOnline` no longer throws for this branch. It returns a
+     * `App\Platform\Payment\SettlementAnomaly`, and THIS action is now
+     * written by `ProcessWebhookEvent::auditSettlementAnomaly()` from inside
+     * the transaction that actually commits — see that class's own doc
+     * block and `SettlementAnomaly`'s doc block for the full shape.
      *
      * Not on `SensitiveActions::ACTIONS`, for the same reason as
      * `RENEWAL_PAID_ONLINE_DUPLICATE_ARRIVAL` above.
      */
     public const string RENEWAL_PAID_ONLINE_REFUSED = 'RENEWAL_PAID_ONLINE_REFUSED';
+
+    /**
+     * Batch M1b (PAY-03, 7 Sep 2026) — written by
+     * `App\Platform\Payment\ProcessWebhookEvent::auditSettlementAnomaly()`,
+     * subject = the `Renewal` row, when a settlement's arrived amount does
+     * not EXACTLY equal the renewal's latest quote. Before this fix the
+     * amount-mismatch branch threw `RenewalPaymentAmountMismatchException`
+     * with NO audit row at all — an operator had no durable trace of a
+     * mismatched arrival beyond a failed queue job. `MarkRenewalPaidOnline`
+     * no longer throws for this branch; it returns a
+     * `App\Platform\Payment\SettlementAnomaly` instead, and this action is
+     * recorded from the call site that is actually going to commit — see
+     * that class's own doc block for the full "record-and-return" shape.
+     *
+     * Not on `SensitiveActions::ACTIONS`, for the same reason as the two
+     * actions above: machine-decided, closed-list `note`, no free-text
+     * reason for a careless caller to fill with restricted data.
+     */
+    public const string RENEWAL_PAID_ONLINE_AMOUNT_MISMATCH = 'RENEWAL_PAID_ONLINE_AMOUNT_MISMATCH';
 }
