@@ -69,7 +69,7 @@ final class UploadDocumentTest extends TestCase
         $document = $this->action->upload(
             DocumentKind::Ktp,
             $this->uploadedFile($this->minimalPdf(), 'ktp.pdf', 'application/pdf'),
-            'booking_draft',
+            'order',
             'draft-1',
             null,
             [],
@@ -89,13 +89,38 @@ final class UploadDocumentTest extends TestCase
         );
     }
 
+    /**
+     * VAULT-06: an owner_type `DocumentAccessPolicy` cannot resolve (not
+     * `actor`, not one of `ScopeEntityType::KNOWN_TYPES`) must be caught at
+     * write time — never silently persisted as a document nothing can ever
+     * authorize access to.
+     */
+    public function test_an_unresolvable_owner_type_throws_before_any_write(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        try {
+            $this->action->upload(
+                DocumentKind::Ktp,
+                $this->uploadedFile($this->minimalPdf(), 'ktp.pdf', 'application/pdf'),
+                'booking_draft',
+                'draft-unresolvable',
+                null,
+                [],
+            );
+        } finally {
+            $this->assertSame(0, Document::query()->count());
+            $this->assertDirectoryDoesNotExist("{$this->root}/KTP");
+        }
+    }
+
     public function test_a_declared_mime_mismatch_rejects_the_upload_before_persistence(): void
     {
         try {
             $this->action->upload(
                 DocumentKind::Ktp,
                 $this->uploadedFile($this->minimalPdf(), 'ktp.pdf', 'application/pdf'),
-                'booking_draft',
+                'order',
                 'declared-mime-mismatch',
                 null,
                 ['mime_declared' => 'image/png'],
@@ -116,7 +141,7 @@ final class UploadDocumentTest extends TestCase
         $document = $this->action->upload(
             DocumentKind::Ktp,
             $this->uploadedFile($this->minimalPdf(), 'super-secret-ktp.pdf', 'application/pdf'),
-            'booking_draft',
+            'order',
             'draft-1',
             null,
             [],
@@ -142,7 +167,7 @@ final class UploadDocumentTest extends TestCase
         $first = $this->action->upload(
             DocumentKind::Ktp,
             $this->uploadedFile($this->minimalPdf(), 'ktp.pdf', 'application/pdf'),
-            'booking_draft',
+            'order',
             'draft-1',
             'resume-token-1',
             [],
@@ -151,7 +176,7 @@ final class UploadDocumentTest extends TestCase
         $second = $this->action->upload(
             DocumentKind::Ktp,
             $this->uploadedFile($this->minimalPdf(), 'ktp-retry.pdf', 'application/pdf'),
-            'booking_draft',
+            'order',
             'draft-1',
             'resume-token-1',
             [],
@@ -179,7 +204,7 @@ final class UploadDocumentTest extends TestCase
             $this->action->upload(
                 DocumentKind::Ktp,
                 $this->uploadedFile($this->minimalPdf(), 'ktp.pdf', 'application/pdf'),
-                'booking_draft',
+                'order',
                 'draft-commit-timing',
                 null,
                 [],
@@ -200,7 +225,7 @@ final class UploadDocumentTest extends TestCase
         Document::create([
             'document_kind' => DocumentKind::Ktp,
             'state' => DocumentState::Accepted,
-            'owner_type' => 'booking_draft',
+            'owner_type' => 'order',
             'owner_id' => 'draft-direct-accepted',
             'original_filename' => 'ktp.pdf',
             'storage_prefix' => 'quarantine',
@@ -218,7 +243,7 @@ final class UploadDocumentTest extends TestCase
         $document = $this->action->upload(
             DocumentKind::Ktp,
             $this->uploadedFile($this->minimalPdf(), 'ktp.pdf', 'application/pdf'),
-            'booking_draft',
+            'order',
             'draft-scanning',
             'resume-scanning',
             [],
@@ -233,7 +258,7 @@ final class UploadDocumentTest extends TestCase
             $this->action->upload(
                 DocumentKind::Ktp,
                 $this->uploadedFile($this->minimalPdf().'retry', 'ktp-retry.pdf', 'application/pdf'),
-                'booking_draft',
+                'order',
                 'draft-scanning',
                 'resume-scanning',
                 [],
@@ -251,7 +276,7 @@ final class UploadDocumentTest extends TestCase
         $document = $this->action->upload(
             DocumentKind::Ktp,
             $this->uploadedFile($this->minimalPdf(), 'ktp.pdf', 'application/pdf'),
-            'booking_draft',
+            'order',
             'draft-accepted',
             'resume-accepted',
             [],
@@ -267,7 +292,7 @@ final class UploadDocumentTest extends TestCase
             $this->action->upload(
                 DocumentKind::Ktp,
                 $this->uploadedFile($this->minimalPdf().'retry', 'ktp-retry.pdf', 'application/pdf'),
-                'booking_draft',
+                'order',
                 'draft-accepted',
                 'resume-accepted',
                 [],
@@ -285,7 +310,7 @@ final class UploadDocumentTest extends TestCase
         $document = $this->action->upload(
             DocumentKind::Ktp,
             $this->uploadedFile($this->minimalPdf(), 'ktp.pdf', 'application/pdf'),
-            'booking_draft',
+            'order',
             'draft-owner-a',
             'resume-owner-a',
             [],
@@ -299,7 +324,7 @@ final class UploadDocumentTest extends TestCase
             $this->action->upload(
                 DocumentKind::Ktp,
                 $this->uploadedFile($this->minimalPdf(), 'ktp-owner-b.pdf', 'application/pdf'),
-                'booking_draft',
+                'order',
                 'draft-owner-b',
                 'resume-owner-a',
                 [],
@@ -319,7 +344,7 @@ final class UploadDocumentTest extends TestCase
         $document = $this->action->upload(
             DocumentKind::GraveImport,
             $this->uploadedFile($csv, 'import.csv', 'text/csv'),
-            'grave_import_batch',
+            'grave',
             'batch-1',
             null,
             [],
@@ -340,7 +365,7 @@ final class UploadDocumentTest extends TestCase
             $this->action->upload(
                 DocumentKind::Ktp,
                 $this->uploadedFile('not a real pdf', 'ktp.exe', 'application/octet-stream'),
-                'booking_draft',
+                'order',
                 'draft-2',
                 null,
                 [],
@@ -362,7 +387,7 @@ final class UploadDocumentTest extends TestCase
         $sibling = $this->action->upload(
             DocumentKind::Ktp,
             $this->uploadedFile($this->minimalPdf(), 'ktp.pdf', 'application/pdf'),
-            'booking_draft',
+            'order',
             'draft-3',
             null,
             [],
@@ -372,7 +397,7 @@ final class UploadDocumentTest extends TestCase
             $this->action->upload(
                 DocumentKind::Ktp,
                 $this->uploadedFile('not a real pdf', 'ktp.exe', 'application/octet-stream'),
-                'booking_draft',
+                'order',
                 'draft-3',
                 null,
                 [],
@@ -397,7 +422,7 @@ final class UploadDocumentTest extends TestCase
         $document = $this->action->upload(
             DocumentKind::GraveImport,
             $stream,
-            'grave_import_batch',
+            'grave',
             'batch-2',
             null,
             ['original_filename' => 'import.csv', 'mime_declared' => 'text/csv'],
@@ -420,7 +445,7 @@ final class UploadDocumentTest extends TestCase
         $this->action->upload(
             DocumentKind::GraveImport,
             $stream,
-            'grave_import_batch',
+            'grave',
             'batch-3',
             null,
             [],

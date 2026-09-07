@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Marketplace\Models;
 
+use App\Domain\Marketplace\Actions\ScanProductPhoto;
 use App\Domain\Marketplace\Exceptions\ProductMustHavePhotoToActivateException;
 use App\Domain\Marketplace\MarketplaceProductCategory;
 use App\Domain\Marketplace\ProductCode;
@@ -41,6 +42,22 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * live there: real, priced, purchasable listings with placeholder/missing
  * photos. `photo_path` being a hand-typed free-text field with no relation
  * to `is_active` meant nothing here prevented the same thing.
+ *
+ * ---------------------------------------------------------------------------
+ * VAULT-02 — the `saving` hook is also this field's ONE malware-scan gate
+ * ---------------------------------------------------------------------------
+ * `photo_path` uploads bypass the platform document vault entirely (public,
+ * unauthenticated content — see `ProductForm`'s doc block), which used to
+ * mean an admin/vendor-uploaded photo reached the public disk with NO
+ * malware scan at all — the only upload path in this codebase that skipped
+ * one. Every write to `photo_path` (a NEW upload; the field is
+ * `dehydrated()` only when a file actually changed) now runs through
+ * `Actions\ScanProductPhoto` here, before save: a non-CLEAN verdict deletes
+ * the file from the public disk and throws
+ * `Exceptions\ProductPhotoFailedScanException`, so a bad file is never left
+ * reachable and the row is never saved pointing at it. See ADR-0023's
+ * VAULT-02 amendment for why this stays "scanned but not quarantined"
+ * rather than routed through the vault.
  */
 final class Product extends Model
 {
@@ -80,6 +97,10 @@ final class Product extends Model
         self::saving(function (self $product): void {
             ProductCode::assertKnown($product->code);
             MarketplaceProductCategory::assertKnown($product->category);
+
+            if ($product->isDirty('photo_path') && self::hasPhoto($product)) {
+                app(ScanProductPhoto::class)->scan((string) $product->photo_path);
+            }
 
             if ($product->is_active && ! self::hasPhoto($product)) {
                 throw ProductMustHavePhotoToActivateException::forProduct($product->code);

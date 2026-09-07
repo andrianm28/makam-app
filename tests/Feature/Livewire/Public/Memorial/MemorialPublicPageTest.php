@@ -574,8 +574,10 @@ final class MemorialPublicPageTest extends TestCase
         $document = Document::query()->sole();
 
         $this->assertSame(DocumentState::Quarantined, $document->state);
-        $this->assertSame('memorial_profile', $document->owner_type);
-        $this->assertSame($profile->getKey(), $document->owner_id);
+        // VAULT-06: scoped by the profile's grave (a resolvable
+        // `DocumentAccessPolicy` owner type), not the profile row itself.
+        $this->assertSame('grave', $document->owner_type);
+        $this->assertSame($profile->grave_record_id, $document->owner_id);
         $this->assertSame(DocumentKind::ProductImage, $document->document_kind);
         $this->assertDatabaseMissing('memorial_media', ['memorial_profile_id' => $profile->getKey()]);
     }
@@ -723,10 +725,13 @@ final class MemorialPublicPageTest extends TestCase
         $this->editorFor($profile, $editor);
         $this->actingAs($editor);
 
+        // VAULT-06: scoped by the profile's grave (a resolvable
+        // `DocumentAccessPolicy` owner type), matching what
+        // `MemorialFamilyPage::uploadMedia()` writes.
         $document = Document::createQuarantined([
             'document_kind' => DocumentKind::ProductImage,
-            'owner_type' => 'memorial_profile',
-            'owner_id' => $profile->getKey(),
+            'owner_type' => 'grave',
+            'owner_id' => $profile->grave_record_id,
             'original_filename' => 'foto.png',
             'storage_prefix' => 'quarantine',
             'storage_key' => Str::random(40),
