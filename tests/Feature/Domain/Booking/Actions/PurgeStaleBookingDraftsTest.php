@@ -10,6 +10,11 @@ use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\FuneralCase\Actions\OpenFuneralCase;
+use App\Domain\FuneralCase\Models\FuneralCase;
+use App\Domain\OrderWorkflow\Models\Order;
+use App\Domain\OrderWorkflow\OrderStatus;
+use App\Domain\OrderWorkflow\ProductType;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotInventory\PlotState;
@@ -17,6 +22,8 @@ use App\Domain\PlotReservation\Actions\ExpirePlotReservation;
 use App\Domain\PlotReservation\Actions\HoldPlotForDraft;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PlotReservation\PlotReservationState;
+use App\Domain\PreNeed\Actions\RegisterPreNeedInterest;
+use App\Domain\PreNeed\Models\PreNeedInterest;
 use App\Platform\Audit\Models\AuditEvent;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -228,6 +235,79 @@ final class PurgeStaleBookingDraftsTest extends TestCase
         $this->assertSame(2, $deleted);
         $this->assertDatabaseMissing('booking_drafts', ['id' => $withHold->id]);
         $this->assertDatabaseMissing('booking_drafts', ['id' => $plain->id]);
+    }
+
+    public function test_a_stale_draft_behind_a_live_order_is_not_purged_and_the_link_stays_intact(): void
+    {
+        $abandoned = $this->makeDraftAged(days: 45, payload: [
+            'customer_full_name' => 'Dedi Kurniawan',
+        ]);
+        $order = Order::query()->create([
+            'reference' => 'MK-2026-TEST-'.uniqid(),
+            'product_type' => ProductType::AT_NEED_SERVICE_ORDER->value,
+            'status' => OrderStatus::MASUK->value,
+            'booking_draft_id' => $abandoned->getKey(),
+        ]);
+
+        $deleted = (new PurgeStaleBookingDrafts)(retentionDays: 30);
+
+        $this->assertSame(0, $deleted);
+        $this->assertDatabaseHas('booking_drafts', ['id' => $abandoned->id]);
+
+        // The regression this guards against: DOM-01 confirmed that once
+        // `order.booking_draft_id` is nulled by the purge, IssueOrderQuote
+        // throws InvalidArgumentException — the order becomes permanently
+        // unquotable. Proving the FK link itself survives is the precise
+        // mechanism; exercising the full quote pipeline would additionally
+        // require seeded catalogue/pricing fixtures unrelated to this bug.
+        $this->assertInstanceOf(BookingDraft::class, $order->refresh()->bookingDraft);
+        $this->assertSame($abandoned->getKey(), $order->booking_draft_id);
+    }
+
+    public function test_a_stale_draft_behind_a_funeral_case_is_not_purged(): void
+    {
+        $abandoned = $this->makeDraftAged(days: 45, payload: [
+            'customer_full_name' => 'Yuni Astuti',
+            'service_type' => 'NEW_GRAVE',
+        ]);
+        $case = (new OpenFuneralCase)($abandoned);
+
+        $deleted = (new PurgeStaleBookingDrafts)(retentionDays: 30);
+
+        $this->assertSame(0, $deleted);
+        $this->assertDatabaseHas('booking_drafts', ['id' => $abandoned->id]);
+        $this->assertNotNull(FuneralCase::query()->findOrFail($case->getKey())->booking_draft_id);
+    }
+
+    public function test_a_stale_draft_behind_a_pre_need_interest_is_not_purged(): void
+    {
+        $abandoned = $this->makeDraftAged(days: 45);
+        $interest = app(RegisterPreNeedInterest::class)($abandoned);
+
+        $deleted = (new PurgeStaleBookingDrafts)(retentionDays: 30);
+
+        $this->assertSame(0, $deleted);
+        $this->assertDatabaseHas('booking_drafts', ['id' => $abandoned->id]);
+        $this->assertNotNull(PreNeedInterest::query()->findOrFail($interest->getKey())->booking_draft_id);
+    }
+
+    public function test_dependency_guards_do_not_block_the_rest_of_the_sweep(): void
+    {
+        $behindOrder = $this->makeDraftAged(days: 45);
+        Order::query()->create([
+            'reference' => 'MK-2026-TEST-'.uniqid(),
+            'product_type' => ProductType::AT_NEED_SERVICE_ORDER->value,
+            'status' => OrderStatus::MASUK->value,
+            'booking_draft_id' => $behindOrder->getKey(),
+        ]);
+
+        $trulyAbandoned = $this->makeDraftAged(days: 45, payload: ['customer_full_name' => 'Wawan Setiawan']);
+
+        $deleted = (new PurgeStaleBookingDrafts)(retentionDays: 30);
+
+        $this->assertSame(1, $deleted);
+        $this->assertDatabaseHas('booking_drafts', ['id' => $behindOrder->id]);
+        $this->assertDatabaseMissing('booking_drafts', ['id' => $trulyAbandoned->id]);
     }
 
     private function makePlot(): GravePlot

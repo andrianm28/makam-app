@@ -20,7 +20,9 @@ on:
   push:
     branches: ["**"]
   pull_request:
-    branches: [master]
+    # master is retired; docs/design-system-and-planning is trunk (CI-05,
+    # docs/superpowers/plans/2026-09-06-batch2g-cicd-hardening.md).
+    branches: [docs/design-system-and-planning]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -49,8 +51,15 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Destructive-migration gate (cicd-automation-design.md §3.4). A required PR
-  # status check — the automated replacement for the manual "read every
-  # migration before running it" step every deploy has needed by hand so far.
+  # status check that narrows, but does NOT replace, a human reading a
+  # migration before it runs: it only catches the destructive method/SQL
+  # patterns it knows about (DB-01, batch M3a: it had blind spots for months —
+  # a helper method declared after down() and several real destructive forms
+  # were both invisible to it until that fix), inside up() only, only for
+  # files changed in the diff it's given. AGENTS.md §Infrastructure-agent
+  # execution's mandatory human review before a destructive-migration-
+  # adjacent change stands in front of this gate regardless of what it does
+  # or doesn't flag.
   # ---------------------------------------------------------------------------
   verify-migrations:
     name: Verify no unapproved destructive migrations
@@ -73,6 +82,37 @@ jobs:
           php artisan key:generate
       - name: Run the destructive-migration gate
         run: php artisan migrations:verify-no-destructive-changes "origin/${{ github.event.pull_request.base.ref || 'docs/design-system-and-planning' }}"
+
+  # ---------------------------------------------------------------------------
+  # API-04 (audit finding, 07 Sep 2026): docs/product/information-architecture.md
+  # §1 drifted from the real route table in both directions with nothing to
+  # catch it. This diffs a fresh `route:list` against docs/product/
+  # route-manifest.json — needs a built vendor/, so it cannot live in
+  # ci/verify-docs.sh (explicitly "no build required"); it runs here instead,
+  # the same way verify-migrations above needs `composer install` first.
+  # ---------------------------------------------------------------------------
+  verify-route-manifest:
+    name: Verify public route manifest matches route:list
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          extensions: pdo_pgsql, pgsql, redis, zip, intl, bcmath
+          tools: composer:v2
+          coverage: none
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies from lockfile
+        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Prepare test environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+      - name: Run the route manifest gate
+        run: bash ci/verify-route-manifest.sh
 
   # ---------------------------------------------------------------------------
   # Assert the running toolchain matches ci/version-matrix.yml, so the pipeline
@@ -331,13 +371,71 @@ jobs:
           php-version: "8.5"
           tools: composer:v2
           coverage: none
-      - name: Composer audit
-        run: composer audit --locked
+      # COORD-08 (docs/superpowers/plans/2026-09-06-batch2g-cicd-hardening.md):
+      # `composer audit --locked` returns the same non-zero exit code whether
+      # a real advisory was found or Packagist's advisory database was just
+      # unreachable (DNS blip, rate limit, outage). A flaky network failure
+      # should retry-then-warn, not block every PR; a real advisory must
+      # still fail the build closed. This distinguishes the two by parsing
+      # `--format=json`: a real finding has a non-empty `advisories` object,
+      # which is retried too (in case it's a transient duplicate) but treated
+      # as fail-closed on its own attempt rather than folded into the
+      # generic retry-then-warn path below.
+      - name: Composer audit (retry on advisory-database outage, fail closed on a real finding)
+        run: |
+          set +e
+          max_attempts=3
+          attempt=1
+          while [ "$attempt" -le "$max_attempts" ]; do
+            output=$(composer audit --locked --format=json 2>&1)
+            status=$?
+            if [ "$status" -eq 0 ]; then
+              echo "$output"
+              exit 0
+            fi
+            if printf '%s' "$output" | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get('advisories') else 1)" 2>/dev/null; then
+              echo "$output"
+              echo "::error::composer audit found a real security advisory — failing closed."
+              exit 1
+            fi
+            echo "$output"
+            echo "::warning::composer audit attempt ${attempt}/${max_attempts} returned no parseable advisory report (advisory database likely unreachable). Retrying..."
+            attempt=$((attempt + 1))
+            sleep $((attempt * 5))
+          done
+          echo "::warning::composer audit could not reach the advisory database after ${max_attempts} attempts and returned nothing parseable as a real finding. Treating this as a soft failure (WARN, not FAIL) rather than risk blocking every PR on an upstream outage."
+          exit 0
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - name: npm audit
-        run: npm audit --audit-level=high
+      # Same rationale as the composer audit step above, applied to npm's
+      # registry advisory feed. `npm audit --json`'s
+      # `metadata.vulnerabilities.{high,critical}` counts are what
+      # `--audit-level=high` actually gates on.
+      - name: npm audit (retry on registry outage, fail closed on a real finding)
+        run: |
+          set +e
+          max_attempts=3
+          attempt=1
+          while [ "$attempt" -le "$max_attempts" ]; do
+            output=$(npm audit --audit-level=high --json 2>&1)
+            status=$?
+            if [ "$status" -eq 0 ]; then
+              echo "$output"
+              exit 0
+            fi
+            if printf '%s' "$output" | python3 -c "import json,sys; d=json.load(sys.stdin); m=d.get('metadata',{}).get('vulnerabilities',{}); sys.exit(0 if (m.get('high',0) or m.get('critical',0)) else 1)" 2>/dev/null; then
+              echo "$output"
+              echo "::error::npm audit found a real high/critical advisory — failing closed."
+              exit 1
+            fi
+            echo "$output"
+            echo "::warning::npm audit attempt ${attempt}/${max_attempts} returned no parseable advisory report (registry likely unreachable). Retrying..."
+            attempt=$((attempt + 1))
+            sleep $((attempt * 5))
+          done
+          echo "::warning::npm audit could not reach the registry after ${max_attempts} attempts and returned nothing parseable as a real finding. Treating this as a soft failure (WARN, not FAIL) rather than risk blocking every PR on an upstream outage."
+          exit 0
 
   # ---------------------------------------------------------------------------
   # Browser + accessibility smoke test (Playwright + @axe-core/playwright).

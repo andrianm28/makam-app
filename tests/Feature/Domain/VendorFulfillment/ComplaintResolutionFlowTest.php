@@ -22,6 +22,7 @@ use App\Models\User;
 use App\Platform\Audit\AuditSource;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -215,7 +216,22 @@ final class ComplaintResolutionFlowTest extends TestCase
     public function test_resolve_with_make_good_rolls_back_entirely_when_the_work_order_lookup_fails(): void
     {
         $complaint = $this->fileComplaint();
+
+        // DB-03 (batch M3a) gave `service_complaints.work_order_id` a real
+        // `restrictOnDelete()`/foreign key constraint to `work_orders` — the
+        // database itself now refuses to let this column point at a work
+        // order that doesn't exist, which is exactly the scenario this test
+        // simulates to prove `ResolveComplaint`'s defensive
+        // `WorkOrder::firstOrFail()` still rolls back cleanly if it ever
+        // did happen (e.g. legacy data, a future schema change). Disabling
+        // the table's triggers (Postgres implements FK enforcement as
+        // internal triggers) for this one write is the standard way to
+        // construct an otherwise-impossible row state under a real FK,
+        // scoped to `RefreshDatabase`'s per-test transaction so it never
+        // persists past this test.
+        DB::statement('ALTER TABLE service_complaints DISABLE TRIGGER ALL');
         $complaint->forceFill(['work_order_id' => (string) Str::uuid()])->save();
+        DB::statement('ALTER TABLE service_complaints ENABLE TRIGGER ALL');
 
         try {
             app(ResolveComplaint::class)($complaint->fresh(), 'Issuing a redo.', true, 'Redo the cleaning pass.');

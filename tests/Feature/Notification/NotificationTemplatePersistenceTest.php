@@ -186,7 +186,7 @@ final class NotificationTemplatePersistenceTest extends TestCase
         );
     }
 
-    public function test_only_the_twelve_ruled_rows_carry_an_outbox_event_name(): void
+    public function test_only_the_thirteen_ruled_rows_carry_an_outbox_event_name(): void
     {
         $mapped = [
             'Booking submitted' => 'booking.draft_submitted.v2',
@@ -201,6 +201,14 @@ final class NotificationTemplatePersistenceTest extends TestCase
             'Vendor evidence uploaded' => 'vendor.evidence_uploaded.v1',
             'Renewal submitted' => 'renewal.submitted.v1',
             'Renewal paid/verified' => 'renewal.paid_online.v1',
+            // 07 Sep 2026, Batch M1a QUE-03: `renewal.marked_external.v1`'s
+            // first producers (`MarkExternalRenewal`/
+            // `MarkRenewalPaidExternally`) needed their own matrix row
+            // (`notification_templates.event_name` is unique and `Renewal
+            // paid/verified` already claims the online path) — added by
+            // `2026_09_07_100000_add_renewal_marked_external_notification_
+            // template.php`, not this migration.
+            'Renewal paid/verified (external)' => 'renewal.marked_external.v1',
         ];
 
         foreach ($mapped as $eventName => $outboxEventName) {
@@ -250,6 +258,18 @@ final class NotificationTemplatePersistenceTest extends TestCase
         $this->assertFalse(Schema::hasColumn('notification_template_versions', 'updated_at'));
     }
 
+    /**
+     * Batch 2E (NOTIF-03, `2026_09_06_130000_add_v2_notification_templates_
+     * for_zero_recipient_events.php`) gives two events ("Vendor
+     * accepted/rejected", "Marketplace order submitted") a real-copy
+     * version 2 and flips their `active_version_id` to it — those two
+     * therefore now carry TWO version rows each (version 1's original
+     * matrix-snapshot placeholder, kept untouched and inactive; version 2's
+     * real Indonesian copy, active). Every other event is unaffected: still
+     * exactly one version row, still the matrix-snapshot placeholder,
+     * still active. This test asserts both shapes rather than assuming
+     * "one version per event" universally.
+     */
     public function test_the_matrix_seed_covers_every_matrix_event_with_one_active_version(): void
     {
         $matrixRows = (new NotificationMatrixSource)->rows();
@@ -259,20 +279,43 @@ final class NotificationTemplatePersistenceTest extends TestCase
         sort($matrixEvents);
         sort($seededEvents);
 
+        $eventsWithRealCopyVersion2 = ['Vendor accepted/rejected', 'Marketplace order submitted'];
+
         $this->assertSame($matrixEvents, $seededEvents);
-        $this->assertSame(count($matrixRows), NotificationTemplateVersion::query()->count());
+        $this->assertSame(
+            count($matrixRows) + count($eventsWithRealCopyVersion2),
+            NotificationTemplateVersion::query()->count()
+        );
         $this->assertSame(count($matrixRows), NotificationTemplate::query()->whereNotNull('active_version_id')->count());
 
         foreach ($matrixRows as $row) {
             $template = NotificationTemplate::query()->where('event_name', $row['event'])->sole();
-            $version = NotificationTemplateVersion::query()->where('template_id', $template->id)->sole();
+            $activeVersion = NotificationTemplateVersion::query()->whereKey($template->active_version_id)->sole();
 
-            $this->assertSame($version->id, $template->active_version_id);
             $this->assertSame($this->matrixDefaultChannel($row['recipients']), $template->default_channel);
             $this->assertSame($this->matrixOutboxEventName($row['event']), $template->outbox_event_name);
 
+            if (in_array($row['event'], $eventsWithRealCopyVersion2, true)) {
+                // Version 1 still exists, untouched, just no longer active.
+                $version1 = NotificationTemplateVersion::query()
+                    ->where('template_id', $template->id)
+                    ->where('version', 1)
+                    ->sole();
+
+                $this->assertSame(2, $activeVersion->version);
+                $this->assertNotSame($version1->id, $template->active_version_id);
+
+                foreach ($row['recipients'] as $recipient => $channelFact) {
+                    $this->assertStringContainsString($recipient.': '.$channelFact, $version1->body);
+                }
+
+                continue;
+            }
+
+            $this->assertSame(1, $activeVersion->version);
+
             foreach ($row['recipients'] as $recipient => $channelFact) {
-                $this->assertStringContainsString($recipient.': '.$channelFact, $version->body);
+                $this->assertStringContainsString($recipient.': '.$channelFact, $activeVersion->body);
             }
         }
     }
@@ -315,6 +358,11 @@ final class NotificationTemplatePersistenceTest extends TestCase
             'Vendor evidence uploaded' => 'vendor.evidence_uploaded.v1',
             'Renewal submitted' => 'renewal.submitted.v1',
             'Renewal paid/verified' => 'renewal.paid_online.v1',
+            // 07 Sep 2026, Batch M1a QUE-03 — set by
+            // `2026_09_07_100000_add_renewal_marked_external_notification_
+            // template.php`, not the main seed migration's own
+            // `outboxEventName()` match (which has no arm for this label).
+            'Renewal paid/verified (external)' => 'renewal.marked_external.v1',
             default => null,
         };
     }

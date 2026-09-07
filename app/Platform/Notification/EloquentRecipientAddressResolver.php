@@ -29,6 +29,12 @@ final class EloquentRecipientAddressResolver implements RecipientAddressResolver
             return DB::table('order_parties')->where('id', $partyId)->value('contact_email');
         }
 
+        if (is_string($ref) && str_starts_with($ref, ProvisionalAggregateNotificationSubjectSource::VENDOR_ORDER_CUSTOMER_PREFIX)) {
+            $vendorOrderId = substr($ref, strlen(ProvisionalAggregateNotificationSubjectSource::VENDOR_ORDER_CUSTOMER_PREFIX));
+
+            return DB::table('vendor_orders')->where('id', $vendorOrderId)->value('customer_email');
+        }
+
         // Every other shape — a staff actor_identifier or an authenticated
         // customer's ownerRef — is a users.id.
         return DB::table('users')->where('id', $ref)->value('email');

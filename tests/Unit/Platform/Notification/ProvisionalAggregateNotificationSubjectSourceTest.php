@@ -10,6 +10,13 @@ use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\Marketplace\AvailabilityMode;
+use App\Domain\Marketplace\EvidenceRequirement;
+use App\Domain\Marketplace\Models\MarketplaceOrder;
+use App\Domain\Marketplace\Models\Vendor;
+use App\Domain\Marketplace\Models\VendorListing;
+use App\Domain\Marketplace\Models\VendorOrder;
+use App\Domain\Marketplace\PaymentState;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\Models\OrderParty;
 use App\Domain\OrderWorkflow\OrderPartyRole;
@@ -22,6 +29,7 @@ use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use App\Platform\Notification\ProvisionalAggregateNotificationSubjectSource;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -249,6 +257,151 @@ final class ProvisionalAggregateNotificationSubjectSourceTest extends TestCase
      * update a persisted row, so every field this test needs must be
      * present at `create()` time.
      */
+    /**
+     * The load-bearing case for Batch 2E's `vendor_order` fix — a real
+     * `vendor_orders` row resolves the prefixed owner reference (see
+     * `EloquentRecipientAddressResolverTest` for the address-resolution
+     * side of this same reference) and the Vendor-column scope, where
+     * before this batch `vendor_order` fell through `default => null` and
+     * `vendor_order.decided.v1`/`vendor_order.complaint_filed.v1` resolved
+     * zero recipients.
+     */
+    public function test_a_real_vendor_order_resolves_the_prefixed_customer_reference_and_vendor_scope(): void
+    {
+        [$vendor, $order] = $this->makeVendorOrder();
+
+        $subject = (new ProvisionalAggregateNotificationSubjectSource)->subjectFor('vendor_order', $order->getKey());
+
+        $this->assertNotNull($subject);
+        $this->assertSame(
+            ProvisionalAggregateNotificationSubjectSource::VENDOR_ORDER_CUSTOMER_PREFIX.$order->getKey(),
+            $subject->ownerRef
+        );
+        $this->assertSame(ScopeEntityType::VENDOR, $subject->scopeEntityType);
+        $this->assertSame($vendor->id, (string) $subject->scopeEntityId);
+    }
+
+    public function test_a_missing_vendor_order_resolves_to_null(): void
+    {
+        $subject = (new ProvisionalAggregateNotificationSubjectSource)->subjectFor('vendor_order', 999_999);
+
+        $this->assertNull($subject);
+    }
+
+    /**
+     * The load-bearing case for Batch 2E's `marketplace_order` fix — an
+     * authenticated customer's `customer_ref` (already a `users.id`
+     * string, set by `Checkout`/`Cart`/`ProductDetail`) resolves straight
+     * through as `ownerRef`, no prefix, plus the Vendor-column scope. Where
+     * before this batch `marketplace_order` fell through `default =>
+     * null` and `marketplace_order.submitted.v1` resolved zero recipients.
+     */
+    public function test_a_marketplace_order_for_an_authenticated_customer_resolves_their_user_id_and_vendor_scope(): void
+    {
+        $user = User::factory()->create();
+        [$vendor, $order] = $this->makeMarketplaceOrder(customerRef: (string) $user->id);
+
+        $subject = (new ProvisionalAggregateNotificationSubjectSource)->subjectFor('marketplace_order', $order->getKey());
+
+        $this->assertNotNull($subject);
+        $this->assertSame((string) $user->id, $subject->ownerRef);
+        $this->assertSame(ScopeEntityType::VENDOR, $subject->scopeEntityType);
+        $this->assertSame($vendor->id, (string) $subject->scopeEntityId);
+    }
+
+    /**
+     * A guest checkout's `customer_ref` is NOT NULL but carries a PHP
+     * session id (`Checkout::placeOrder()`'s own `session()->getId()`
+     * branch), not a `users.id` — `ctype_digit()` rejects it, so no owner
+     * is resolved, but the Vendor-column scope still is, matching the
+     * anonymous-`booking_draft` precedent.
+     */
+    public function test_a_guest_marketplace_order_has_no_owner_but_keeps_its_vendor_scope(): void
+    {
+        [$vendor, $order] = $this->makeMarketplaceOrder(customerRef: 'a1b2c3d4e5f6g7h8session');
+
+        $subject = (new ProvisionalAggregateNotificationSubjectSource)->subjectFor('marketplace_order', $order->getKey());
+
+        $this->assertNotNull($subject);
+        $this->assertNull($subject->ownerRef);
+        $this->assertSame(ScopeEntityType::VENDOR, $subject->scopeEntityType);
+        $this->assertSame($vendor->id, (string) $subject->scopeEntityId);
+    }
+
+    public function test_a_missing_marketplace_order_resolves_to_null(): void
+    {
+        $subject = (new ProvisionalAggregateNotificationSubjectSource)
+            ->subjectFor('marketplace_order', '00000000-0000-0000-0000-000000000000');
+
+        $this->assertNull($subject);
+    }
+
+    /**
+     * @return array{0: Vendor, 1: VendorOrder}
+     */
+    private function makeVendorOrder(): array
+    {
+        $vendor = Vendor::query()->create(['name' => 'Vendor Subjek Uji', 'is_active' => true]);
+
+        $productId = DB::table('products')->insertGetId([
+            'code' => 'PRD-'.Str::random(8),
+            'category' => 'KARANGAN_BUNGA',
+            'name' => 'Produk Subjek Uji',
+            'description' => 'Deskripsi uji.',
+            'base_price_idr' => 100_000,
+            'price_version' => 1,
+            'is_active' => true,
+            'sort_order' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $listing = VendorListing::query()->create([
+            'vendor_id' => $vendor->id,
+            'product_id' => $productId,
+            'price_minor' => 150_000,
+            'availability_mode' => AvailabilityMode::STOCKED,
+            'evidence_requirement' => EvidenceRequirement::PHOTO,
+            'stock_quantity' => 5,
+            'is_active' => true,
+        ]);
+
+        $order = VendorOrder::query()->create([
+            'uuid' => (string) Str::uuid(),
+            'vendor_id' => $vendor->id,
+            'listing_id' => $listing->id,
+            'customer_name' => 'Pelanggan Subjek Uji',
+            'customer_phone' => '081234567891',
+            'customer_email' => 'subjek-uji@example.test',
+            'status' => 'MENUNGGU_VENDOR',
+        ]);
+
+        return [$vendor, $order];
+    }
+
+    /**
+     * @return array{0: Vendor, 1: MarketplaceOrder}
+     */
+    private function makeMarketplaceOrder(string $customerRef): array
+    {
+        $vendor = Vendor::query()->create(['name' => 'Vendor Marketplace Uji', 'is_active' => true]);
+
+        $order = MarketplaceOrder::query()->create([
+            'order_number' => 'MKT-SUBJECT-'.Str::upper(Str::random(8)),
+            'customer_ref' => $customerRef,
+            'entity_ref' => 'badan-usaha-subject-test',
+            'vendor_id' => $vendor->id,
+            'subtotal_minor' => 300_000,
+            'delivery_fee_minor' => 0,
+            'total_minor' => 300_000,
+            'payment_state' => PaymentState::BELUM_DIBAYAR,
+            'idempotency_key' => 'idem-subject-'.Str::random(12),
+            'placed_at' => CarbonImmutable::now(),
+        ]);
+
+        return [$vendor, $order];
+    }
+
     private function makeOrder(?string $bookingDraftId = null): Order
     {
         return Order::query()->create([

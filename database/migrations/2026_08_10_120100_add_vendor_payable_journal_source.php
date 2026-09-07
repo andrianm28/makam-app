@@ -17,6 +17,7 @@ return new class extends Migration
             return;
         }
 
+        // contract-approved: DB-01 — safe CHECK-constraint widen (adds 'vendor_payable' to the allowed source_type set only, no data loss)
         DB::statement('ALTER TABLE journal_batches DROP CONSTRAINT IF EXISTS journal_batches_source_type_check');
         DB::statement(
             'ALTER TABLE journal_batches ADD CONSTRAINT journal_batches_source_type_check '.

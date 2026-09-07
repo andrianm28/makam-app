@@ -18,6 +18,7 @@ return new class extends Migration
             return;
         }
 
+        // contract-approved: DB-01 — recreates the payout amount CHECK (>= 0 tightened to > 0); no data is dropped, only a stricter future-write invariant
         DB::statement('ALTER TABLE payouts DROP CONSTRAINT IF EXISTS payouts_amount_minor_check');
         DB::statement(
             'ALTER TABLE payouts ADD CONSTRAINT payouts_amount_minor_check CHECK (amount_minor > 0)'

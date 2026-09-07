@@ -81,9 +81,15 @@ final class CareHistoryPageTest extends TestCase
 
     private function createWorkOrderForCycle(SubscriptionCycle $cycle, string $workStatus = 'completed'): WorkOrder
     {
+        // DB-03 (batch M3a) caught this: `care_plan_id` was previously
+        // written as `$cycle->subscription_id` — a subscription id, not a
+        // care plan id. That silently "worked" only because
+        // `work_orders.care_plan_id` carried no DB-level FK before this
+        // batch; it now correctly fails loudly against the real
+        // `care_plans` row via `$cycle->subscription->care_plan_id`.
         return WorkOrder::query()->create([
             'reference' => 'WO-'.Str::upper(Str::random(8)),
-            'care_plan_id' => $cycle->subscription_id,
+            'care_plan_id' => $cycle->subscription->care_plan_id,
             'subscription_cycle_id' => $cycle->getKey(),
             'status' => $workStatus,
         ]);
