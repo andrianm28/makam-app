@@ -1,5 +1,6 @@
 <?php
 
+use App\Platform\Analytics\Models\MenuInteractionEvent;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -57,3 +58,11 @@ Schedule::command('plot-reservation:expire-stale-draft-holds')->everyMinute()->w
 // minutes, independent of outbox:publish's own every-minute schedule —
 // the watchdog must keep running even if the thing it watches has died.
 Schedule::command('spine:watchdog')->everyFiveMinutes()->withoutOverlapping();
+
+// PERF-06 — `menu_interaction_events` is written on every homepage view
+// (App\Livewire\Public\HomePage::mount(), via App\Jobs\
+// RecordMenuImpressions) and was never pruned before this. Daily, matching
+// the cadence of the other low-urgency retention job above
+// (booking:purge-stale-drafts) — a write-only analytics table has no
+// customer-facing staleness window to protect.
+Schedule::command('model:prune', ['--model' => [MenuInteractionEvent::class]])->daily();
