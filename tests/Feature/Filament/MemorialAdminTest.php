@@ -110,6 +110,28 @@ final class MemorialAdminTest extends TestCase
         return app(CreateMemorialProfile::class)($this->grave($cemetery), 'user:1', 'operator', $privacyMode);
     }
 
+    /**
+     * AUTHZ-03: `MemorialProfileResource`/`ModerationCaseResource` now
+     * close their query for any non-`admin`/`restricted_admin` actor
+     * holding zero cemetery grants, so a test exercising a scoped role
+     * (`operator`, `finance`, ...) against a specific profile/case needs a
+     * real grant for that record's cemetery to reach it at all — mirrors
+     * `test_cemetery_scoping_limits_an_operator_to_their_grants()`'s own
+     * `GrantScopeAssignment` call below.
+     */
+    private function grantCemetery(User $user, Cemetery $cemetery): void
+    {
+        app(GrantScopeAssignment::class)(
+            $user->id,
+            ScopeEntityType::CEMETERY,
+            $cemetery->getKey(),
+            null,
+            'Test fixture: reaching a cemetery-scoped record under a role gate that is not itself under test.',
+            null,
+        );
+        $this->forgetResolvedActorContext();
+    }
+
     // =====================================================================
     // Access matrix (both resources)
     // =====================================================================
@@ -166,6 +188,12 @@ final class MemorialAdminTest extends TestCase
 
         $finance = User::factory()->create();
         $this->grantRoleTo($finance, ActorRole::FINANCE);
+        // AUTHZ-03: MemorialProfileResource::getEloquentQuery() now closes
+        // the query for any non-admin/-restricted_admin actor holding no
+        // cemetery grant, so this actor needs one to reach the view page at
+        // all — the publish-gate refusal under test happens after that,
+        // inside the resource's own moderator check.
+        $this->grantCemetery($finance, $cemetery);
         $this->actingAs($finance);
         $this->forgetResolvedActorContext();
 
@@ -188,6 +216,9 @@ final class MemorialAdminTest extends TestCase
 
         $operator = User::factory()->create();
         $this->grantRoleTo($operator, ActorRole::OPERATOR);
+        // AUTHZ-03: see the identical comment in
+        // test_publish_is_role_gated_so_finance_cannot_publish().
+        $this->grantCemetery($operator, $cemetery);
         $this->actingAs($operator);
         $this->forgetResolvedActorContext();
 
