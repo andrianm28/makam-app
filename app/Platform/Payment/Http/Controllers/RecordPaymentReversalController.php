@@ -11,6 +11,7 @@ use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\Reauthentication\ReauthenticationService;
 use App\Platform\Payment\Contracts\PaymentActionAuthorizer;
 use App\Platform\Payment\Exceptions\PaymentActionNotAuthorisedException;
+use App\Platform\Payment\Exceptions\PaymentReversalAlreadyRecordedException;
 use App\Platform\Payment\PaymentReversalType;
 use App\Platform\Payment\RecordPaymentActionRefusal;
 use App\Platform\Payment\ReversalService;
@@ -23,8 +24,16 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  * `VerifyManualPaymentController`. Follows `VerifyManualPaymentController`'s
  * exact shape: authorize, then `ReauthenticationService::satisfy()`, validate
  * input, delegate to the write API (`ReversalService` here, `VerifyManualPayment`
- * there), redirect to `filament.admin.pages.dashboard` — no admin UI screen
- * exists for reversals either, same honest "nothing to bounce back to yet" posture.
+ * there), redirect to `filament.admin.pages.dashboard`.
+ *
+ * FIL-04 remediation added the first admin UI caller of `ReversalService`
+ * (`PaymentVerifications\Actions\RecordPaymentReversalAction`, reached from
+ * `Pages\ViewPaymentVerification`'s header actions) — that Filament action
+ * calls `ReversalService` directly, not through this HTTP endpoint, but this
+ * controller remains independently reachable and gained the matching
+ * `PaymentReversalAlreadyRecordedException` handling below now that a
+ * duplicate submission is a realistic, human-triggerable path rather than a
+ * theoretical one.
  *
  * ---------------------------------------------------------------------------
  * Authorization, and why it is the FIRST thing this method does
@@ -143,15 +152,36 @@ final class RecordPaymentReversalController extends Controller
             'reason' => ['required', 'string', new NonBlankReason],
         ]);
 
-        app(ReversalService::class)->record(
-            type: $type,
-            reference: $validated['reference'],
-            amountMinor: array_key_exists('amount_minor', $validated) ? (int) $validated['amount_minor'] : null,
-            reason: $validated['reason'],
-            actorRef: $actorContext->identityReference,
-            actorRole: $actorRole,
-            source: AuditSource::Panel,
-        );
+        try {
+            app(ReversalService::class)->record(
+                type: $type,
+                reference: $validated['reference'],
+                amountMinor: array_key_exists('amount_minor', $validated) ? (int) $validated['amount_minor'] : null,
+                reason: $validated['reason'],
+                actorRef: $actorContext->identityReference,
+                actorRole: $actorRole,
+                source: AuditSource::Panel,
+            );
+        } catch (PaymentReversalAlreadyRecordedException $exception) {
+            // FIL-04 remediation: a duplicate `(reversal_type, reference)`
+            // submission used to reach `RecordRefund`/`RecordChargeback`'s
+            // `PaymentReversalAlreadyRecordedException` uncaught here and
+            // surface as a raw 500 — acceptable only while "no admin UI
+            // (Filament resource or otherwise) exists yet" for this
+            // endpoint (this class's own former doc block). The admin
+            // Filament action added alongside this fix (`PaymentVerifications
+            // \Actions\RecordPaymentReversalAction`) makes a double submit a
+            // realistic, human-triggerable path (a re-click, a retried
+            // form), so it must fail as a clean, safe-to-surface response.
+            // 409, not 422: the request is well-formed: it conflicts with a
+            // reversal already recorded for the same type+reference, the
+            // same "structurally valid but conflicts with existing state"
+            // case 409 is for. The message is safe to surface — it names
+            // only the reversal type and the caller-supplied reference,
+            // mirroring `FinanceExportController`'s
+            // `InvalidLedgerReportException` convention.
+            abort(409, $exception->getMessage());
+        }
 
         return redirect()->route('filament.admin.pages.dashboard');
     }
