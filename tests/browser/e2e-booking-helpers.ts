@@ -54,7 +54,6 @@ export const CUSTOMER = {
     // >= 10 chars, per validateCustomerData().
     address: 'Jl. Contoh Alamat Pemesan No. 12, Jakarta',
     relationship: 'ANAK',
-    contactChannel: 'WHATSAPP',
 };
 
 export const DECEASED = {
@@ -145,7 +144,6 @@ export async function completeStep2(page: Page): Promise<void> {
     await page.locator('#customer-email').fill(CUSTOMER.email);
     await page.locator('#customer-address').fill(CUSTOMER.address);
     await page.locator('#customer-relationship').selectOption(CUSTOMER.relationship);
-    await page.locator('#customer-contact-channel').selectOption(CUSTOMER.contactChannel);
     await page.locator('#privacy-notice-accepted').check();
 
     await page.locator('#deceased-full-name').fill(DECEASED.fullName);

@@ -40,7 +40,6 @@ test.describe('E2E-BOOK — loading states', () => {
         await page.locator('#customer-email').fill(CUSTOMER.email);
         await page.locator('#customer-address').fill(CUSTOMER.address);
         await page.locator('#customer-relationship').selectOption(CUSTOMER.relationship);
-        await page.locator('#customer-contact-channel').selectOption(CUSTOMER.contactChannel);
         await page.locator('#privacy-notice-accepted').check();
         await page.locator('#deceased-full-name').fill(DECEASED.fullName);
         await page.locator('#deceased-date-of-birth').fill(DECEASED.dob);

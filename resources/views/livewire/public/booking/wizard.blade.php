@@ -1037,35 +1037,6 @@
                         @enderror
                     </div>
 
-                    <div class="flex flex-col gap-1.5">
-                        <label for="customer-contact-channel" class="text-base font-medium text-neutral-800">
-                            Saluran Kontak yang Disukai
-                            <span class="text-danger-600" aria-hidden="true">*</span>
-                            <span class="sr-only">(wajib diisi)</span>
-                        </label>
-                        <p id="customer-contact-channel-hint" class="text-sm text-neutral-600">
-                            Tim kami akan menghubungi Anda lebih dahulu melalui saluran ini.
-                        </p>
-                        <select
-                            id="customer-contact-channel"
-                            wire:model="customerContactChannel"
-                            aria-describedby="customer-contact-channel-hint{{ $errors->has('customer_contact_channel') ? ' customer-contact-channel-error' : '' }}"
-                            @if ($errors->has('customer_contact_channel')) aria-invalid="true" @endif
-                            class="{{ $mkControl }} {{ $mkFieldState($errors->has('customer_contact_channel')) }}"
-                        >
-                            <option value="">Pilih saluran</option>
-                            @foreach (\App\Domain\Booking\BookingContactChannel::KNOWN_CODES as $ch)
-                                <option value="{{ $ch }}">{{ \App\Domain\Booking\BookingContactChannel::label($ch) }}</option>
-                            @endforeach
-                        </select>
-                        @error('customer_contact_channel')
-                            <p id="customer-contact-channel-error" class="flex items-start gap-1.5 text-sm text-danger-700" role="alert">
-                                <x-dynamic-component component="icon.alert-circle" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                                <span>{{ $message }}</span>
-                            </p>
-                        @enderror
-                    </div>
-
                     {{-- field.blade.php's checkbox rule: a 20px visual box
                          (`size-5`) inside a 44px clickable row, and the WHOLE
                          row is the label target, not just the box. --}}
