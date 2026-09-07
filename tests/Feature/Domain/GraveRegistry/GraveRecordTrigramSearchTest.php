@@ -170,4 +170,95 @@ final class GraveRecordTrigramSearchTest extends TestCase
 
         $this->assertContains('Contoh Budi Santoso', $names);
     }
+
+    // =========================================================================
+    // PERF-13 (Phase 3 Batch M7a)
+    // =========================================================================
+
+    /**
+     * `2026_09_07_100100_add_grave_records_name_trgm_gist_index.php` adds a
+     * SECOND trigram index — GiST, not GIN — specifically so `ORDER BY
+     * deceased_name_normalized <-> ?` (the KNN distance operator) can be
+     * served by an index scan. GIN has no ordering support at all (see that
+     * migration's own doc block and `2026_08_08_100000_create_grave_records_
+     * table.php`'s), so this index is additive, not a replacement for the
+     * existing GIN one asserted above.
+     */
+    public function test_the_gist_trigram_index_exists_on_the_normalized_name_column(): void
+    {
+        $index = DB::selectOne(
+            "SELECT indexdef FROM pg_indexes WHERE tablename = 'grave_records' AND indexname = 'grave_records_name_trgm_gist_idx'"
+        );
+
+        $this->assertNotNull($index, 'The GiST trigram index must exist on grave_records.');
+        $this->assertStringContainsString('gist', strtolower((string) $index->indexdef));
+        $this->assertStringContainsString('gist_trgm_ops', strtolower((string) $index->indexdef));
+        $this->assertStringContainsString('deceased_name_normalized', strtolower((string) $index->indexdef));
+    }
+
+    /**
+     * The heart of PERF-13: before this fix, the disjunction was `LIKE
+     * '%...%' OR similarity(deceased_name_normalized, ?) >= threshold`
+     * (a bare function call, not an indexed operator) and the ORDER BY used
+     * `similarity(...) DESC`. Neither half could use an index — see
+     * `GraveRegistryPublicQuery::buildQuery()`'s own PERF-13 comment.
+     *
+     * This proves the REWRITTEN query shape (`column % ?` for the WHERE
+     * clause, `column <-> ?` for the ORDER BY) actually gets an index plan
+     * from the real Postgres planner, with sequential scans disabled to
+     * make the assertion meaningful at this test database's small scale —
+     * see `AuditEventsTableIndexUsageTest`'s equivalent test for the same
+     * technique and its own reasoning.
+     */
+    public function test_explain_shows_index_scans_for_the_rewritten_fuzzy_match_query(): void
+    {
+        GraveRecord::factory()->count(20)->create([
+            'cemetery_id' => CemeteryFixture::id('package', 0),
+        ]);
+
+        DB::statement('ANALYZE grave_records');
+        DB::statement('SET LOCAL enable_seqscan = off');
+        DB::statement('SET pg_trgm.similarity_threshold = '.GraveRegistryPublicQuery::SIMILARITY_THRESHOLD);
+
+        $plan = collect(DB::select(
+            'EXPLAIN SELECT * FROM grave_records '.
+            'WHERE cemetery_id = ? AND (deceased_name_normalized LIKE ? OR deceased_name_normalized % ?) '.
+            'ORDER BY deceased_name_normalized <-> ?, deceased_name_normalized LIMIT 50',
+            [CemeteryFixture::id('package', 0), '%budi%', 'budi', 'budi']
+        ))->map(fn ($row) => $row->{'QUERY PLAN'})->implode("\n");
+
+        $this->assertStringContainsString(
+            'Index',
+            $plan,
+            "Expected an index scan to be available for the rewritten query shape, got:\n{$plan}",
+        );
+    }
+
+    /**
+     * The rewrite must not change WHAT matches, only how the database gets
+     * there. `similarity(a, b) >= threshold` and the operator form `a % b`
+     * are documented by pg_trgm as equivalent once `pg_trgm.similarity_
+     * threshold` is set to that same threshold — this proves it end to end
+     * through the real public search path, not just by reading pg_trgm's
+     * docs.
+     */
+    public function test_the_rewritten_operator_form_still_finds_a_misspelled_name(): void
+    {
+        GraveRecord::factory()->create([
+            'cemetery_id' => CemeteryFixture::id('package', 0),
+            'deceased_name' => 'Contoh Budi Santoso',
+        ]);
+
+        $outcome = GraveRegistryPublicQuery::search(GraveSearchCriteria::make(
+            cemeteryId: CemeteryFixture::id('package', 0),
+            name: 'Budi Santosa',
+        ));
+
+        $names = array_map(
+            static fn (GraveRecordProjection $row): ?string => $row->deceasedName,
+            $outcome->openResults
+        );
+
+        $this->assertContains('Contoh Budi Santoso', $names);
+    }
 }

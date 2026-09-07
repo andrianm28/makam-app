@@ -35,11 +35,31 @@ use Illuminate\Support\Facades\DB;
  *
  * Migration timestamp slot: see
  * `2026_07_26_190000_create_cemeteries_table.php`'s own doc block.
+ *
+ * ---------------------------------------------------------------------------
+ * DB-05 (batch M3a) — production guard
+ * ---------------------------------------------------------------------------
+ * This migration ran completely unguarded before: fabricated cemetery/
+ * capability-profile rows would be written on EVERY `php artisan migrate`,
+ * including a real production deploy. `config('example_data.
+ * seed_cemeteries_and_capability_profiles')` defaults TRUE (see
+ * `config/example_data.php`'s own doc block on why default-true, not
+ * default-false, for this fixture family) and the `app()->isProduction()`
+ * guard is unconditional and independent of that flag — production never
+ * runs this regardless of config.
  */
 return new class extends Migration
 {
     public function up(): void
     {
+        if (! config('example_data.seed_cemeteries_and_capability_profiles')) {
+            return;
+        }
+
+        if (app()->isProduction()) {
+            return;
+        }
+
         CemeteryExampleData::seed();
     }
 

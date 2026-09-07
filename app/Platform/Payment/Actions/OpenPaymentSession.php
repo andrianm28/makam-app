@@ -26,6 +26,7 @@ use App\Platform\Payment\Exceptions\PaymentSessionMerchantMismatchException;
 use App\Platform\Payment\Exceptions\PaymentSessionOpeningDeniedException;
 use App\Platform\Payment\Exceptions\PaymentSessionOrderAlreadyPaidException;
 use App\Platform\Payment\Exceptions\PaymentSessionOrderNotFoundException;
+use App\Platform\Payment\Exceptions\PaymentSessionOrderTypeNotSupportedException;
 use App\Platform\Payment\GuardPaymentSession;
 use App\Platform\Payment\Models\PaymentIntent;
 use App\Platform\Payment\Models\PaymentSession;
@@ -194,6 +195,18 @@ final readonly class OpenPaymentSession
             OrderType::Booking => $this->authorizeBooking($command),
             OrderType::Marketplace => $this->authorizeMarketplace($command),
             OrderType::Renewal => $this->authorizeRenewal($command),
+            // ARCH-12: this arm was missing entirely — a real
+            // `OrderType::CareSubscription` command would have thrown PHP's
+            // own `UnhandledMatchError` instead of the documented, loud
+            // refusal `OrderType`'s own doc block promises ("no
+            // session-opening producer sends OrderType::CareSubscription
+            // yet ... this case ... declared now so the closed-list/router
+            // shape exists before the producer does"). Found by ratcheting
+            // phpstan to level 5 (batch M5c) — level 5's "match expression
+            // does not handle remaining value" check caught it for real.
+            OrderType::CareSubscription => throw PaymentSessionOrderTypeNotSupportedException::forOrderType(
+                $command->orderType
+            ),
         };
 
         $this->assertMerchantBound($command);
@@ -224,7 +237,7 @@ final readonly class OpenPaymentSession
                     'evaluated_at' => CarbonImmutable::now(),
                 ]);
 
-                return PaymentSession::query()->create([
+                $session = PaymentSession::query()->make([
                     'payment_intent_id' => $intent->id,
                     'provider' => $provider,
                     'provider_payment_id' => $providerResult->paymentId,
@@ -241,6 +254,26 @@ final readonly class OpenPaymentSession
                     'state' => SessionState::AwaitingPayment->value,
                     'expires_at' => $providerResult->expiresAt,
                 ]);
+
+                if ($command->sessionId !== null) {
+                    // PAY-04: when the caller pre-generated a session id (so
+                    // it could embed it in the return/cancel URLs BEFORE this
+                    // row existed), use that exact value as the primary key.
+                    // `id` is deliberately NOT in `$fillable` above — it is
+                    // a caller-controlled primary key, not an
+                    // ordinarily-mass-assignable attribute — so it is set
+                    // via `forceFill()` here instead of folded into the
+                    // `make()` array above, where it would have been
+                    // silently dropped by mass-assignment protection.
+                    // `HasUuids` only generates its own id when the
+                    // attribute is still unset/empty at save time, so this
+                    // exact value is what gets persisted, not overwritten.
+                    $session->forceFill(['id' => $command->sessionId]);
+                }
+
+                $session->save();
+
+                return $session;
             },
             action: PaymentAuditActions::SESSION_OPENED,
             subject: fn (PaymentSession $session): AuditSubject => new AuditSubject('payment_session', $session->id),

@@ -43,7 +43,12 @@ final class Task8DocumentVaultTest extends TestCase
         $catalog = file_get_contents(base_path('docs/contracts/event-catalog.md'));
 
         $this->assertIsString($catalog);
-        $this->assertStringContainsString('# Event Catalog — v0.7', $catalog);
+        // 07 Sep 2026, Batch M1a: bumped to v0.7 for the `marketplace_
+        // order.paid.v1` / `vendor.order_assigned.v1` additions — this
+        // assertion only pins that the catalogue carries a version header
+        // at or past the version this test's own three document events
+        // shipped in, not the exact current value.
+        $this->assertMatchesRegularExpression('/# Event Catalog — v0\.[6-9]/', $catalog);
         $this->assertStringContainsString('| `document.uploaded.v1` |', $catalog);
         $this->assertStringContainsString('| `document.accepted.v1` |', $catalog);
         $this->assertStringContainsString('| `document.deleted.v1` |', $catalog);

@@ -171,44 +171,41 @@ final class CemeteryDirectoryIndex extends Component
                 type: $typeValid && $this->type !== '' ? $this->type : null,
             );
 
+            // PERF-05: resolve every card's capability profile in ONE query
+            // (`PublicCapabilityProjection::forMany()` ->
+            // `ResolveCemeteryCapabilityProfile::forMany()`) instead of one
+            // query per cemetery card. Because this is now a single query,
+            // a resolution failure is necessarily whole-batch rather than
+            // per-cemetery — the AC4 response to that is unchanged (safe
+            // defaults, `capabilitiesDegraded` flagged), it is just applied
+            // to every card at once instead of only the one row that failed.
+            try {
+                $capabilitiesByCemeteryId = PublicCapabilityProjection::forMany($cemeteries);
+            } catch (Throwable $e) {
+                report($e);
+
+                // AC4: "WHEN a capability profile is missing THE SYSTEM
+                // SHALL use safe defaults." A resolution FAILURE is not
+                // the same thing as a missing profile, but the honest
+                // response is identical — fall back to the most
+                // cautious state and flag the page as degraded, never
+                // omit the cemetery or imply availability we could not
+                // read. tasks.md: "capability resolution failure falls
+                // back to safe defaults (AC4), not a blank page."
+                $this->capabilitiesDegraded = true;
+                $safeDefaults = PublicCapabilityProjection::from(
+                    new CemeteryCapabilityProfile(CemeteryCapabilityProfile::safeDefaults())
+                );
+                $capabilitiesByCemeteryId = $cemeteries
+                    ->mapWithKeys(fn (Cemetery $cemetery): array => [$cemetery->id => $safeDefaults])
+                    ->all();
+            }
+
             /** @var Collection<int, array{cemetery: Cemetery, capabilities: PublicCapabilityProjection}> $cards */
-            $cards = $cemeteries->map(function (Cemetery $cemetery): array {
-                try {
-                    $capabilities = PublicCapabilityProjection::forCemetery($cemetery);
-                } catch (Throwable $e) {
-                    report($e);
-
-                    // AC4: "WHEN a capability profile is missing THE SYSTEM
-                    // SHALL use safe defaults." A resolution FAILURE is not
-                    // the same thing as a missing profile, but the honest
-                    // response is identical — fall back to the most
-                    // cautious state and flag the page as degraded, never
-                    // omit the cemetery or imply availability we could not
-                    // read. tasks.md: "capability resolution failure falls
-                    // back to safe defaults (AC4), not a blank page."
-                    //
-                    // The substitution is the same one `CemeteryDetail`
-                    // already makes on its own degraded path: build the
-                    // safe defaults from the one place that defines them and
-                    // project them through the same AC12 allowlist. The
-                    // earlier `null` here made this the only nullable
-                    // contract crossing the seam, and the view coerced it to
-                    // `''` — a value that is not a member of
-                    // `AvailabilityMode::KNOWN_MODES`. Passing a legal value
-                    // instead of relying on the intent resolver's
-                    // degrade-to-neutral behaviour keeps both consumers
-                    // answering this question the same way.
-                    $this->capabilitiesDegraded = true;
-                    $capabilities = PublicCapabilityProjection::from(
-                        new CemeteryCapabilityProfile(CemeteryCapabilityProfile::safeDefaults())
-                    );
-                }
-
-                return [
-                    'cemetery' => $cemetery,
-                    'capabilities' => $capabilities,
-                ];
-            });
+            $cards = $cemeteries->map(fn (Cemetery $cemetery): array => [
+                'cemetery' => $cemetery,
+                'capabilities' => $capabilitiesByCemeteryId[$cemetery->id],
+            ]);
         } catch (Throwable $e) {
             report($e);
 

@@ -6,7 +6,7 @@ namespace App\Livewire\Public;
 
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\Faq\FaqPublicQuery;
-use App\Platform\Analytics\MenuInteractionRecorder;
+use App\Jobs\RecordMenuImpressions;
 use App\Platform\FeatureGate\ModeResolver;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
@@ -74,15 +74,30 @@ final class HomePage extends Component
      * never throws (see its own doc block), so a write failure here can
      * never turn into a 500 on the homepage.
      *
+     * PERF-06 (batch M7b): all four impressions are dispatched as ONE
+     * `RecordMenuImpressions` job (`default` queue) instead of four
+     * synchronous `MenuInteractionRecorder::impression()` calls inline —
+     * writing four analytics rows was real, unnecessary work on the
+     * request path of the single highest-traffic route in the app. The
+     * job performs a single batched insert. `dispatch()` queuing a job
+     * never throws back into the caller under normal operation; on the
+     * `sync` queue connection (tests, and this codebase's local default)
+     * the job still runs inline, so behaviour is unchanged for anything
+     * that already asserts against `MenuInteractionEvent` rows.
+     *
      * The CLICK side of AC9 is NOT recorded anywhere in this batch — a
      * real, named gap. See `2026_07_26_200000_create_menu_interaction_
      * events_table.php`'s own doc block and this batch's final report.
      */
     public function mount(): void
     {
+        $menus = [];
+
         foreach (self::PRIMARY_MENUS as $menuKey => $menu) {
-            MenuInteractionRecorder::impression($menuKey, $menu['route']);
+            $menus[] = ['menuKey' => $menuKey, 'route' => $menu['route']];
         }
+
+        RecordMenuImpressions::dispatch($menus);
     }
 
     public function render(): View

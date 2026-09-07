@@ -1,0 +1,1723 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Offset ''name'' on array\{name\: string, passwd\: string, uid\: int, gid\: int, gecos\: string, dir\: string, shell\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Console/Commands/IdentityGrantRoleCommand.php
+
+		-
+			message: '#^Offset ''name'' on array\{name\: string, passwd\: string, uid\: int, gid\: int, gecos\: string, dir\: string, shell\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Console/Commands/IdentityGrantScopeCommand.php
+
+		-
+			message: '#^Offset ''name'' on array\{name\: string, passwd\: string, uid\: int, gid\: int, gecos\: string, dir\: string, shell\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Console/Commands/IdentityRevokeRoleCommand.php
+
+		-
+			message: '#^Offset ''name'' on array\{name\: string, passwd\: string, uid\: int, gid\: int, gecos\: string, dir\: string, shell\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Console/Commands/IdentityRevokeScopeCommand.php
+
+		-
+			message: '#^Offset ''name'' on array\{name\: string, passwd\: string, uid\: int, gid\: int, gecos\: string, dir\: string, shell\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Console/Commands/OutboxReplayCommand.php
+
+		-
+			message: '#^Parameter \#1 \$array \(array\{''FLOWER_BOARD'', ''FLOWER_PETAL_PACKAGE'', ''GRAVESTONE_GRANITE'', ''GRAVESTONE_MARBLE'', ''GRAVESTONE…'', ''GRAVE_CARE_MONTHLY'', ''GRAVE_CARE_QUARTERLY'', ''GRAVE_CARE…'', \.\.\.\}\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Console/Commands/PurgeExampleDataCommand.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type Carbon\\CarbonImmutable\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domain/AgreementCertificate/Actions/IssueCertificate.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type Carbon\\CarbonImmutable\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domain/AgreementCertificate/Actions/ReplaceCertificate.php
+
+		-
+			message: '#^Static method App\\Domain\\AgreementCertificate\\CertificateEligibilityPolicy\:\:orderSettlementRule\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: app/Domain/AgreementCertificate/CertificateEligibilityPolicy.php
+
+		-
+			message: '#^Static method App\\Domain\\AgreementCertificate\\CertificateEligibilityPolicy\:\:preNeedSettlementRule\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: app/Domain/AgreementCertificate/CertificateEligibilityPolicy.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type Carbon\\CarbonImmutable\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domain/AgreementCertificate/CertificateStatusView.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domain/Booking/BookingDraftQuery.php
+
+		-
+			message: '#^Property App\\Domain\\CemeteryCapability\\Models\\CemeteryPackage\:\:\$price_effective_at \(Carbon\\CarbonImmutable\|null\) does not accept Illuminate\\Support\\Carbon\|null\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Domain/CemeteryCapability/Models/CemeteryPackage.php
+
+		-
+			message: '#^Call to function is_string\(\) with string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Domain/CemeteryDirectory/Models/LaunchCity.php
+
+		-
+			message: '#^Parameter \#1 \$array \(non\-empty\-list\<int\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Domain/Faq/Actions/ReorderFaqArticles.php
+
+		-
+			message: '#^Match expression does not handle remaining value\: string$#'
+			identifier: match.unhandled
+			count: 1
+			path: app/Domain/Marketplace/MarketplaceProductCategory.php
+
+		-
+			message: '#^Property App\\Domain\\Memorial\\Models\\MemorialEditor\:\:\$revoked_at \(Carbon\\CarbonImmutable\|null\) does not accept Illuminate\\Support\\Carbon\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Domain/Memorial/Models/MemorialEditor.php
+
+		-
+			message: '#^Property App\\Domain\\Memorial\\Models\\MemorialQrToken\:\:\$revoked_at \(Carbon\\CarbonImmutable\|null\) does not accept Illuminate\\Support\\Carbon\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Domain/Memorial/Models/MemorialQrToken.php
+
+		-
+			message: '#^Match expression does not handle remaining value\: string$#'
+			identifier: match.unhandled
+			count: 1
+			path: app/Domain/OrderWorkflow/ProductType.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Domain/PreNeed/Actions/SchedulePreNeedPayments.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<array\{amount_minor\: int, due_date\: string\}\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Domain/PreNeed/Actions/SchedulePreNeedPayments.php
+
+		-
+			message: '#^Property App\\Domain\\PreNeed\\Models\\PreNeedInterest\:\:\$closed_at \(Carbon\\CarbonImmutable\|null\) does not accept Illuminate\\Support\\Carbon\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Domain/PreNeed/Models/PreNeedInterest.php
+
+		-
+			message: '#^Property App\\Domain\\PreNeed\\Models\\PreNeedInterest\:\:\$contacted_at \(Carbon\\CarbonImmutable\|null\) does not accept Illuminate\\Support\\Carbon\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Domain/PreNeed/Models/PreNeedInterest.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Domain/Quotation/Actions/IssueQuote.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between Carbon\\CarbonImmutable and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Domain/Quotation/Models/Quote.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between Carbon\\CarbonImmutable and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Domain/Quotation/Models/Quote.php
+
+		-
+			message: '#^Call to function is_int\(\) with int will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Domain/ServiceCatalog/Actions/DefineServicePackage.php
+
+		-
+			message: '#^Offset ''quantity'' on array\{service_definition_id\: int, item_type\: string, quantity\: int, unit\: string, fulfillment_owner\: string, service_area\?\: string\|null, requires_schedule_window\?\: bool, evidence_required\?\: bool, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Domain/ServiceCatalog/Actions/DefineServicePackage.php
+
+		-
+			message: '#^Offset ''unit'' on array\{service_definition_id\: int, item_type\: string, quantity\: int, unit\: string, fulfillment_owner\: string, service_area\?\: string\|null, requires_schedule_window\?\: bool, evidence_required\?\: bool, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Domain/ServiceCatalog/Actions/DefineServicePackage.php
+
+		-
+			message: '#^Call to function is_array\(\) with array will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Domain/Visitation/Models/CemeteryVisitationPolicy.php
+
+		-
+			message: '#^Call to function is_string\(\) with string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Domain/Visitation/Models/VisitationBlackoutDate.php
+
+		-
+			message: '#^Instanceof between Carbon\\CarbonImmutable and Carbon\\CarbonImmutable will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: app/Domain/Visitation/Models/VisitationBlackoutDate.php
+
+		-
+			message: '#^Method App\\Filament\\Admin\\Resources\\Agreements\\AgreementsResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<App\\Domain\\AgreementCertificate\\Models\\Agreement\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Filament/Admin/Resources/Agreements/AgreementsResource.php
+
+		-
+			message: '#^Method App\\Filament\\Admin\\Resources\\AuditEvents\\AuditEventsResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<App\\Platform\\Audit\\Models\\AuditEvent\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Filament/Admin/Resources/AuditEvents/AuditEventsResource.php
+
+		-
+			message: '#^Method App\\Filament\\Admin\\Resources\\BookingOrders\\BookingOrderResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<App\\Domain\\OrderWorkflow\\Models\\Order\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Filament/Admin/Resources/BookingOrders/BookingOrderResource.php
+
+		-
+			message: '#^Match expression does not handle remaining value\: string$#'
+			identifier: match.unhandled
+			count: 1
+			path: app/Filament/Admin/Resources/BookingOrders/Schemas/BookingOrderInfolist.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>lines" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Filament/Admin/Resources/BookingOrders/Schemas/BookingOrderInfolist.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Filament/Admin/Resources/BookingOrders/Schemas/BookingOrderInfolist.php
+
+		-
+			message: '#^Method App\\Filament\\Admin\\Resources\\CarePlans\\CarePlansResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<App\\Domain\\CareSubscription\\Models\\CarePlan\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Filament/Admin/Resources/CarePlans/CarePlansResource.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Filament/Admin/Resources/CemeteryResource/RelationManagers/BlocksRelationManager.php
+
+		-
+			message: '#^Method App\\Filament\\Admin\\Resources\\CemeteryVisitationPolicies\\CemeteryVisitationPolicyResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<App\\Domain\\Visitation\\Models\\CemeteryVisitationPolicy\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Filament/Admin/Resources/CemeteryVisitationPolicies/CemeteryVisitationPolicyResource.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between non\-falsy\-string and '''' will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Filament/Admin/Resources/Certificates/Actions/CreateCertificateAction.php
+
+		-
+			message: '#^Method App\\Filament\\Admin\\Resources\\Certificates\\CertificatesResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<App\\Domain\\AgreementCertificate\\Models\\Certificate\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Filament/Admin/Resources/Certificates/CertificatesResource.php
+
+		-
+			message: '#^Method App\\Filament\\Admin\\Resources\\GravePlots\\GravePlotsResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<App\\Domain\\PlotInventory\\Models\\GravePlot\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Filament/Admin/Resources/GravePlots/GravePlotsResource.php
+
+		-
+			message: '#^Method App\\Filament\\Admin\\Resources\\MarketplaceOrders\\MarketplaceOrderResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<App\\Domain\\Marketplace\\Models\\MarketplaceOrder\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Filament/Admin/Resources/MarketplaceOrders/MarketplaceOrderResource.php
+
+		-
+			message: '#^Parameter \#1 \$order of static method App\\Filament\\Admin\\Resources\\MarketplaceOrders\\Actions\\MarkMarketplaceOrderPaidAction\:\:make\(\) expects App\\Domain\\Marketplace\\Models\\MarketplaceOrder, Illuminate\\Database\\Eloquent\\Model\|int\|string\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Filament/Admin/Resources/MarketplaceOrders/Pages/ViewMarketplaceOrder.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between string and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Filament/Admin/Resources/MarketplaceOrders/Schemas/MarketplaceOrderInfolist.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: app/Filament/Admin/Resources/MarketplaceOrders/Schemas/MarketplaceOrderInfolist.php
+
+		-
+			message: '#^Method App\\Filament\\Admin\\Resources\\MemorialProfiles\\MemorialProfileResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<App\\Domain\\Memorial\\Models\\MemorialProfile\>\.$#'
+			identifier: return.type
+			count: 2
+			path: app/Filament/Admin/Resources/MemorialProfiles/MemorialProfileResource.php
+
+		-
+			message: '#^Parameter \#1 \$profile of callable App\\Domain\\Memorial\\Actions\\GrantMemorialEditor expects App\\Domain\\Memorial\\Models\\MemorialProfile, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Filament/Admin/Resources/MemorialProfiles/RelationManagers/EditorsRelationManager.php
+
+		-
+			message: '#^Parameter \#1 \$profile of callable App\\Domain\\Memorial\\Actions\\RotateMemorialQrToken expects App\\Domain\\Memorial\\Models\\MemorialProfile, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Filament/Admin/Resources/MemorialProfiles/RelationManagers/QrTokensRelationManager.php
+
+		-
+			message: '#^Method App\\Filament\\Admin\\Resources\\ModerationCases\\ModerationCaseResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<App\\Domain\\Memorial\\Models\\ModerationCase\>\.$#'
+			identifier: return.type
+			count: 2
+			path: app/Filament/Admin/Resources/ModerationCases/ModerationCaseResource.php
+
+		-
+			message: '#^Method App\\Filament\\Admin\\Resources\\PaymentVerifications\\PaymentVerificationsResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<App\\Platform\\Payment\\Models\\PaymentVerification\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Filament/Admin/Resources/PaymentVerifications/PaymentVerificationsResource.php
+
+		-
+			message: '#^Method App\\Filament\\Admin\\Resources\\PreNeedCases\\PreNeedCaseResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<App\\Domain\\PreNeed\\Models\\PreNeedCase\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Filament/Admin/Resources/PreNeedCases/PreNeedCaseResource.php
+
+		-
+			message: '#^Method App\\Filament\\Admin\\Resources\\Reconciliations\\ReconciliationsResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<App\\Platform\\FinancialLedger\\Models\\Reconciliation\>\.$#'
+			identifier: return.type
+			count: 2
+			path: app/Filament/Admin/Resources/Reconciliations/ReconciliationsResource.php
+
+		-
+			message: '#^Parameter \#1 \$renewal of static method App\\Filament\\Admin\\Resources\\RenewalOrders\\Actions\\ExpireRenewalAction\:\:make\(\) expects App\\Domain\\Renewal\\Models\\Renewal, Illuminate\\Database\\Eloquent\\Model\|int\|string\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Filament/Admin/Resources/RenewalOrders/Pages/ViewRenewalOrder.php
+
+		-
+			message: '#^Parameter \#1 \$renewal of static method App\\Filament\\Admin\\Resources\\RenewalOrders\\Actions\\RecordExternalRenewalPaymentAction\:\:make\(\) expects App\\Domain\\Renewal\\Models\\Renewal, Illuminate\\Database\\Eloquent\\Model\|int\|string\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Filament/Admin/Resources/RenewalOrders/Pages/ViewRenewalOrder.php
+
+		-
+			message: '#^Method App\\Filament\\Admin\\Resources\\RenewalOrders\\RenewalOrderResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<App\\Domain\\Renewal\\Models\\Renewal\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Filament/Admin/Resources/RenewalOrders/RenewalOrderResource.php
+
+		-
+			message: '#^Method App\\Filament\\Admin\\Resources\\ServiceComplaints\\ServiceComplaintsResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<App\\Domain\\VendorFulfillment\\Models\\ServiceComplaint\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Filament/Admin/Resources/ServiceComplaints/ServiceComplaintsResource.php
+
+		-
+			message: '#^Parameter \#1 \$package of callable App\\Domain\\ServiceCatalog\\Actions\\ReviseServicePackageVersion expects App\\Domain\\ServiceCatalog\\Models\\ServicePackage, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Filament/Admin/Resources/ServicePackages/RelationManagers/VersionsRelationManager.php
+
+		-
+			message: '#^Method App\\Filament\\Admin\\Resources\\Subscriptions\\SubscriptionsResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<App\\Domain\\CareSubscription\\Models\\Subscription\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Filament/Admin/Resources/Subscriptions/SubscriptionsResource.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>is_blocked" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Filament/Admin/Resources/Vendors/RelationManagers/AvailabilityRelationManager.php
+
+		-
+			message: '#^Method App\\Filament\\Admin\\Resources\\VisitationBookings\\VisitationBookingsResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<App\\Domain\\Visitation\\Models\\VisitationBooking\>\.$#'
+			identifier: return.type
+			count: 2
+			path: app/Filament/Admin/Resources/VisitationBookings/VisitationBookingsResource.php
+
+		-
+			message: '#^Method App\\Filament\\Operator\\Resources\\CemeteryOrders\\CemeteryOrderResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<covariant Illuminate\\Database\\Eloquent\\Model\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Filament/Operator/Resources/CemeteryOrders/CemeteryOrderResource.php
+
+		-
+			message: '#^Parameter \#1 \$relations of method Illuminate\\Database\\Eloquent\\Builder\<App\\Domain\\PlotInventory\\Models\\CemeteryBlock\>\:\:with\(\) expects array\<array\|\(Closure\(Illuminate\\Database\\Eloquent\\Relations\\Relation\<\*, \*, \*\>\)\: mixed\)\|string\>\|string, array\{plots\: Closure\(Illuminate\\Database\\Eloquent\\Relations\\HasMany\)\: Illuminate\\Database\\Eloquent\\Relations\\HasMany\} given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Filament/Shared/PlotFloorMap/BasePlotFloorMapPage.php
+
+		-
+			message: '#^Method App\\Filament\\Vendor\\Resources\\ServiceAreas\\ServiceAreaResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<covariant Illuminate\\Database\\Eloquent\\Model\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Filament/Vendor/Resources/ServiceAreas/ServiceAreaResource.php
+
+		-
+			message: '#^Method App\\Filament\\Vendor\\Resources\\VendorAvailabilities\\VendorAvailabilityResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<covariant Illuminate\\Database\\Eloquent\\Model\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Filament/Vendor/Resources/VendorAvailabilities/VendorAvailabilityResource.php
+
+		-
+			message: '#^Method App\\Filament\\Vendor\\Resources\\VendorListings\\VendorListingResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<covariant Illuminate\\Database\\Eloquent\\Model\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Filament/Vendor/Resources/VendorListings/VendorListingResource.php
+
+		-
+			message: '#^Anonymous function with return type void returns null but should not return anything\.$#'
+			identifier: return.void
+			count: 6
+			path: app/Filament/Vendor/Resources/VendorOrders/Pages/EditVendorOrder.php
+
+		-
+			message: '#^Method App\\Filament\\Vendor\\Resources\\VendorOrders\\VendorOrderResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<covariant Illuminate\\Database\\Eloquent\\Model\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Filament/Vendor/Resources/VendorOrders/VendorOrderResource.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between non\-falsy\-string and '''' will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Filament/Vendor/Resources/WorkOrders/Actions/UploadEvidenceAction.php
+
+		-
+			message: '#^Method App\\Filament\\Vendor\\Resources\\WorkOrders\\WorkOrdersResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<covariant Illuminate\\Database\\Eloquent\\Model\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Filament/Vendor/Resources/WorkOrders/WorkOrdersResource.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>city" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Livewire/Public/Booking/BookingWizard.php
+
+		-
+			message: '#^Method App\\Livewire\\Public\\CareSubscription\\CareHistoryPage\:\:resolveWorkOrders\(\) should return Illuminate\\Support\\Collection\<int, object\> but returns Illuminate\\Support\\Collection\<int, stdClass\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Livewire/Public/CareSubscription/CareHistoryPage.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between string\|null and false will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Livewire/Public/Memorial/MemorialFamilyPage.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>attempt" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Platform/DocumentVault/Actions/ScanDocument.php
+
+		-
+			message: '#^Instanceof between App\\Platform\\DocumentVault\\DocumentKind and App\\Platform\\DocumentVault\\DocumentKind will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 2
+			path: app/Platform/DocumentVault/Models/Document.php
+
+		-
+			message: '#^Instanceof between App\\Platform\\DocumentVault\\DocumentState and App\\Platform\\DocumentVault\\DocumentState will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 2
+			path: app/Platform/DocumentVault/Models/Document.php
+
+		-
+			message: '#^Property App\\Platform\\DocumentVault\\Models\\Document\:\:\$scannerPolicyMutationAuthorized \(bool\) on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.property
+			count: 1
+			path: app/Platform/DocumentVault/Models/Document.php
+
+		-
+			message: '#^Property App\\Platform\\DocumentVault\\Models\\Document\:\:\$stateMutationAuthorized \(bool\) on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.property
+			count: 1
+			path: app/Platform/DocumentVault/Models/Document.php
+
+		-
+			message: '#^Property App\\Platform\\DocumentVault\\Models\\Document\:\:\$storageMutationAuthorized \(bool\) on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.property
+			count: 1
+			path: app/Platform/DocumentVault/Models/Document.php
+
+		-
+			message: '#^Parameter \#1 \$array \(non\-empty\-list\<string\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 2
+			path: app/Platform/FinancialLedger/CashReceiptsReport.php
+
+		-
+			message: '#^Call to function is_int\(\) with int will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Platform/FinancialLedger/Journal.php
+
+		-
+			message: '#^Call to function is_string\(\) with string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Platform/FinancialLedger/Journal.php
+
+		-
+			message: '#^Offset ''account'' on array\{account\: string, direction\: string, amountMinor\: int, reference\?\: string\|null\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Platform/FinancialLedger/Journal.php
+
+		-
+			message: '#^Offset ''amountMinor'' on array\{account\: string, direction\: string, amountMinor\: int, reference\?\: string\|null\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Platform/FinancialLedger/Journal.php
+
+		-
+			message: '#^Offset ''direction'' on array\{account\: string, direction\: string, amountMinor\: int, reference\?\: string\|null\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Platform/FinancialLedger/Journal.php
+
+		-
+			message: '#^Parameter \#1 \$array \(non\-empty\-list\<array\{account\: string, direction\: string, amountMinor\: int, reference\?\: string\|null\}\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Platform/FinancialLedger/Journal.php
+
+		-
+			message: '#^Parameter \#1 \$array \(non\-empty\-list\<string\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Platform/FinancialLedger/LedgerReport.php
+
+		-
+			message: '#^Parameter \#1 \$array \(non\-empty\-list\<string\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 2
+			path: app/Platform/FinancialLedger/PayoutSummaryReport.php
+
+		-
+			message: '#^Call to function is_int\(\) with int will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Platform/FinancialLedger/ProviderStatement.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<mixed\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Platform/IdentityAccess/Roles/ActorRoleReader.php
+
+		-
+			message: '#^Offset ''function'' on array\{function\: string, line\?\: int, file\?\: string, class\: ''App\\\\Platform\\\\Notification\\\\Actions\\\\DispatchNotification'', type\?\: ''\-\>''\|''\:\:'', args\?\: list\<mixed\>, object\?\: object\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Platform/Notification/NotificationDeliveryWriteGuard.php
+
+		-
+			message: '#^Method App\\Platform\\Observability\\SentryEventScrubber\:\:scrub\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: app/Platform/Observability/SentryEventScrubber.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type Carbon\\CarbonImmutable\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Platform/Outbox/Jobs/PublishOutboxEventJob.php
+
+		-
+			message: '#^Parameter \#1 \$array \(non\-empty\-list\<App\\Platform\\Payment\\ConditionDenial\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Platform/Payment/GuardResult.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<string\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Platform/Payment/Providers/SumoPodWebhookSignature.php
+
+		-
+			message: '#^Offset 0\|1\|2\|3\|4\|5\|6\|7\|8\|9\|10\|11 on array\{''Januari'', ''Februari'', ''Maret'', ''April'', ''Mei'', ''Juni'', ''Juli'', ''Agustus'', \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Support/Design/IndonesianDate.php
+
+		-
+			message: '#^Method App\\Support\\ExampleData\\CemeteryExampleData\:\:cemeteries\(\) should return list\<array\{int, string, string, string, string, string, list\<string\>, string\}\> but returns non\-empty\-list\<array\{literal\-string&non\-falsy\-string, string, string, ''BEKASI''\|''BOGOR''\|''DEPOK''\|''JAKARTA''\|''TANGERANG'', literal\-string&non\-falsy\-string, ''Unit Pengelola…'', array\{''Area Parkir'', ''Toilet Umum''\}, literal\-string&non\-falsy\-string\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Support/ExampleData/CemeteryExampleData.php
+
+		-
+			message: '#^Parameter \#1 \$array \(array\{''JAKARTA'', ''BOGOR'', ''DEPOK'', ''TANGERANG'', ''BEKASI''\}\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 2
+			path: app/Support/ExampleData/CemeteryExampleData.php
+
+		-
+			message: '#^Parameter \#1 \$array \(array\{''FLOWER_BOARD'', ''FLOWER_PETAL_PACKAGE'', ''GRAVESTONE_GRANITE'', ''GRAVESTONE_MARBLE'', ''GRAVESTONE…'', ''GRAVE_CARE_MONTHLY'', ''GRAVE_CARE_QUARTERLY'', ''GRAVE_CARE…'', \.\.\.\}\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Support/ExampleData/RealisticMarketplacePricingExampleData.php
+
+		-
+			message: '#^Parameter \#1 \$array \(array\{''DOCUMENT_PROCESSING'', ''GRAVE_DIGGING'', ''AMBULANCE'', ''FUNERAL_HOME'', ''HEARSE'', ''TENT_AND_CHAIRS'', ''SOUND_SYSTEM'', ''FLOWERS'', \.\.\.\}\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Support/ExampleData/ServiceOperationalExampleData.php
+
+		-
+			message: '#^Parameter \#1 \$array \(array\{''FLOWER_BOARD'', ''FLOWER_PETAL_PACKAGE'', ''GRAVESTONE_GRANITE'', ''GRAVESTONE_MARBLE'', ''GRAVESTONE…'', ''GRAVE_CARE_MONTHLY'', ''GRAVE_CARE_QUARTERLY'', ''GRAVE_CARE…'', \.\.\.\}\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Support/ExampleData/VendorExampleData.php
+
+		-
+			message: '#^Parameter \#1 \$array \(array\{''FLOWER_BOARD'', ''FLOWER_PETAL_PACKAGE'', ''GRAVESTONE_GRANITE'', ''GRAVESTONE_MARBLE'', ''GRAVESTONE…'', ''GRAVE_CARE_MONTHLY'', ''GRAVE_CARE_QUARTERLY'', ''GRAVE_CARE…'', \.\.\.\}\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 2
+			path: app/Support/ExampleData/VendorListingExampleData.php
+
+		-
+			message: '#^Call to an undefined method ReflectionType\:\:getTypes\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Contract/LedgerSeamContractTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Carbon\\CarbonImmutable will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Audit/AuditRecordTest.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: tests/Feature/Audit/AuditWrapTransactionTest.php
+
+		-
+			message: '#^Access to an undefined property App\\Domain\\Visitation\\Models\\CemeteryVisitationPolicy\:\:\$demo_batch_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Console/DemoDataPurgeCommandTest.php
+
+		-
+			message: '#^Parameter \#1 \$array \(array\{''DOCUMENT_PROCESSING'', ''GRAVE_DIGGING'', ''AMBULANCE'', ''FUNERAL_HOME'', ''HEARSE'', ''TENT_AND_CHAIRS'', ''SOUND_SYSTEM'', ''FLOWERS'', \.\.\.\}\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: tests/Feature/Console/PurgeExampleDataCommandTest.php
+
+		-
+			message: '#^Parameter \#1 \$array \(array\{''FLOWER_BOARD'', ''FLOWER_PETAL_PACKAGE'', ''GRAVESTONE_GRANITE'', ''GRAVESTONE_MARBLE'', ''GRAVESTONE…'', ''GRAVE_CARE_MONTHLY'', ''GRAVE_CARE_QUARTERLY'', ''GRAVE_CARE…'', \.\.\.\}\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: tests/Feature/Console/PurgeExampleDataCommandTest.php
+
+		-
+			message: '#^Call to an undefined method Mockery\\ExpectationInterface\|Mockery\\HigherOrderMessage\:\:once\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: tests/Feature/Console/SpineWatchdogCommandTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsArray\(\) with array will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 2
+			path: tests/Feature/Database/Migrations/AddV2NotificationTemplatesForZeroRecipientEventsTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Migrations\\Migration\:\:down\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Database/Migrations/BackfillPhotoAndMapsUrlForRealCemeteriesTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Migrations\\Migration\:\:up\(\)\.$#'
+			identifier: method.notFound
+			count: 5
+			path: tests/Feature/Database/Migrations/BackfillPhotoAndMapsUrlForRealCemeteriesTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Migrations\\Migration\:\:down\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Database/Migrations/FixCustomerAndUploaderIdentityColumnsRollbackTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Migrations\\Migration\:\:up\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Database/Migrations/FixCustomerAndUploaderIdentityColumnsRollbackTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Carbon\\CarbonImmutable will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 2
+			path: tests/Feature/DocumentVault/IssueSignedUrlTest.php
+
+		-
+			message: '#^Offset ''function'' on array\{function\: string, line\?\: int, file\?\: string, class\: ''App\\\\Platform\\\\DocumentVault\\\\Models\\\\SignedUrlGrantQueryBuilder'', type\?\: string, args\?\: list\<mixed\>, object\?\: object\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: tests/Feature/DocumentVault/IssueSignedUrlTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Carbon\\CarbonImmutable will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/DocumentVault/RecordDocumentAccessTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Carbon\\CarbonImmutable will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Domain/AgreementCertificate/CertificateTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with string will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Domain/Booking/BookingDraftClosedListValidationTest.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 2
+			path: tests/Feature/Domain/Booking/BookingDraftQueryTest.php
+
+		-
+			message: '#^Property App\\Domain\\CemeteryCapability\\Models\\CemeteryPackage\:\:\$price_effective_at \(Carbon\\CarbonImmutable\|null\) does not accept Illuminate\\Support\\Carbon\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: tests/Feature/Domain/CemeteryCapability/CemeteryPackagePricingTest.php
+
+		-
+			message: '#^Call to function array_is_list\(\) with list\<array\{code\: string, label\: string\}\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Domain/CemeteryDirectory/CemeteryPublicQueryTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsArray\(\) with array\{code\: string, label\: string\} and non\-falsy\-string will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Domain/CemeteryDirectory/CemeteryPublicQueryTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsString\(\) with string will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 2
+			path: tests/Feature/Domain/CemeteryDirectory/CemeteryPublicQueryTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertTrue\(\) with true and non\-falsy\-string will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Domain/CemeteryDirectory/CemeteryPublicQueryTest.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$category_id\.$#'
+			identifier: property.notFound
+			count: 2
+			path: tests/Feature/Domain/Faq/FaqArticleDraftExclusionTest.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 4
+			path: tests/Feature/Domain/Faq/FaqArticleDraftExclusionTest.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$slug\.$#'
+			identifier: property.notFound
+			count: 2
+			path: tests/Feature/Domain/Faq/FaqArticleDraftExclusionTest.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$title\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Domain/Faq/FaqArticleDraftExclusionTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:isDraft\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Domain/Faq/FaqArticleDraftExclusionTest.php
+
+		-
+			message: '#^Called ''contains'' on Laravel collection, but could have been retrieved as a query\.$#'
+			identifier: larastan.noUnnecessaryCollectionCall
+			count: 1
+			path: tests/Feature/Domain/Faq/FaqArticleDraftExclusionTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Carbon\\CarbonImmutable will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Domain/Faq/FaqArticleLifecycleTest.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$body\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Domain/Faq/FaqArticleSeedTest.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$current_version\.$#'
+			identifier: property.notFound
+			count: 2
+			path: tests/Feature/Domain/Faq/FaqArticleSeedTest.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 4
+			path: tests/Feature/Domain/Faq/FaqArticleSeedTest.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$published_at\.$#'
+			identifier: property.notFound
+			count: 2
+			path: tests/Feature/Domain/Faq/FaqArticleSeedTest.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$slug\.$#'
+			identifier: property.notFound
+			count: 2
+			path: tests/Feature/Domain/Faq/FaqArticleSeedTest.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$summary\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Domain/Faq/FaqArticleSeedTest.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$title\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Domain/Faq/FaqArticleSeedTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with int will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Domain/Faq/FaqAuditIntegrationTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsInt\(\) with int will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Domain/Marketplace/MarketplaceOrderSchemaTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsString\(\) with string will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Domain/Marketplace/VendorIdentityTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with App\\Domain\\Marketplace\\Models\\VendorListing and ''No active listing…'' will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Domain/Marketplace/VendorListingBootstrapTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsInt\(\) with int will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Domain/Marketplace/VendorListingTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Carbon\\CarbonImmutable will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Domain/Memorial/MemorialVisitCheckInTest.php
+
+		-
+			message: '#^Called ''pluck'' on Laravel collection, but could have been retrieved as a query\.$#'
+			identifier: larastan.noUnnecessaryCollectionCall
+			count: 1
+			path: tests/Feature/Domain/OrderWorkflow/OrderForUserScopeTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with null will always evaluate to false\.$#'
+			identifier: method.impossibleType
+			count: 1
+			path: tests/Feature/Domain/PlotReservation/PlotReservationBookingDraftHoldTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with null will always evaluate to false\.$#'
+			identifier: method.impossibleType
+			count: 2
+			path: tests/Feature/Domain/PlotReservation/PlotReservationQueryTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsString\(\) with string will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Domain/Quotation/ComposeQuoteLinesFromBookingDraftTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Carbon\\CarbonImmutable will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Domain/Renewal/RenewalMarkedExternalNotificationTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Carbon\\CarbonImmutable will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Domain/Renewal/RenewalPaidOnlineNotificationTest.php
+
+		-
+			message: '#^Constant Tests\\Feature\\Domain\\Renewal\\RenewalPaidOnlineNotificationTest\:\:AMOUNT_MINOR is unused\.$#'
+			identifier: classConstant.unused
+			count: 1
+			path: tests/Feature/Domain/Renewal/RenewalPaidOnlineNotificationTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Carbon\\CarbonImmutable will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Domain/Renewal/RenewalSubmittedNotificationTest.php
+
+		-
+			message: '#^Method Tests\\Feature\\Domain\\ServiceCatalog\\PriceVersioningTest\:\:acceptedAmountProvider\(\) should return list\<array\{string, string\}\> but returns array\{''two fractional digits''\: array\{''350000\.00'', ''350000\.00''\}, ''no fractional part''\: array\{''350000'', ''350000\.00''\}, ''one fractional digit''\: array\{''350000\.5'', ''350000\.50''\}, ''ten integer digits \(the column maximum\)''\: array\{''9999999999\.99'', ''9999999999\.99''\}\}\.$#'
+			identifier: return.type
+			count: 1
+			path: tests/Feature/Domain/ServiceCatalog/PriceVersioningTest.php
+
+		-
+			message: '#^Method Tests\\Feature\\Domain\\ServiceCatalog\\PriceVersioningTest\:\:rejectedAmountProvider\(\) should return list\<array\{string\}\> but returns array\{''scale greater than 2 \(silently rounded by the DB\)''\: array\{''100\.999''\}, ''leading whitespace''\: array\{'' 5000''\}, ''exponent notation''\: array\{''1e9''\}, ''eleven integer digits \(decimal\(12,2\) overflow\)''\: array\{''99999999999\.99''\}, zero\: array\{''0''\}, ''zero with a scale''\: array\{''0\.00''\}, negative\: array\{''\-1''\}, ''not a number at all''\: array\{''abc''\}, \.\.\.\}\.$#'
+			identifier: return.type
+			count: 1
+			path: tests/Feature/Domain/ServiceCatalog/PriceVersioningTest.php
+
+		-
+			message: '#^Method Tests\\Feature\\Domain\\ServiceCatalog\\ServiceCatalogAuditIntegrationTest\:\:blankReasonProvider\(\) should return list\<array\{string\}\> but returns array\{blank\: array\{''''\}, ''whitespace only''\: array\{"   \\t  "\}\}\.$#'
+			identifier: return.type
+			count: 1
+			path: tests/Feature/Domain/ServiceCatalog/ServiceCatalogAuditIntegrationTest.php
+
+		-
+			message: '#^Dead catch \- App\\Domain\\ServiceCatalog\\Exceptions\\PublishedServicePackageVersionIsImmutableException is never thrown in the try block\.$#'
+			identifier: catch.neverThrown
+			count: 3
+			path: tests/Feature/Domain/ServiceCatalog/ServicePackageVersionImmutabilityTest.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 3
+			path: tests/Feature/Domain/ServiceCatalog/ServicePackageVersionImmutabilityTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Carbon\\CarbonImmutable will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Domain/VendorFulfillment/AcceptServiceTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertTrue\(\) with true will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Domain/Visitation/RequestVisitationTest.php
+
+		-
+			message: '#^Instanceof between Carbon\\CarbonImmutable and Carbon\\CarbonImmutable will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: tests/Feature/Domain/Visitation/RequestVisitationTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Carbon\\CarbonImmutable will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/FeatureGate/GateActivationRecorderTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNull\(\) with null will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/FeatureGate/GateActivationRecorderTest.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$category_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Filament/Admin/Faq/CreateFaqArticleTest.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$current_version\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Filament/Admin/Faq/CreateFaqArticleTest.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Filament/Admin/Faq/CreateFaqArticleTest.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$publish_state\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Filament/Admin/Faq/CreateFaqArticleTest.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$title\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Filament/Admin/Faq/CreateFaqArticleTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:relatedArticles\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Filament/Admin/Faq/CreateFaqArticleTest.php
+
+		-
+			message: '#^Call to an undefined method Livewire\\Component\:\:getTable\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: tests/Feature/Filament/Admin/Faq/FaqArticleAuthorizationCharacterizationTest.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between Livewire\\Component and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: tests/Feature/Filament/Admin/Faq/FaqArticleAuthorizationCharacterizationTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Builder\:\:inCategory\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: tests/Feature/Filament/Admin/Faq/ReorderFaqArticleActionsTest.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between Livewire\\Component and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: tests/Feature/Filament/Admin/ProductResourceTest.php
+
+		-
+			message: '#^Call to an undefined method Livewire\\Component\:\:exportCsv\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Filament/Admin/Reports/OrdersReportPanelTest.php
+
+		-
+			message: '#^Call to an undefined method Livewire\\Component\:\:exportCsv\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Filament/Admin/Reports/OutgoingPaymentsReportPanelTest.php
+
+		-
+			message: '#^Call to an undefined method Livewire\\Component\:\:exportCsv\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Filament/Admin/Reports/ReceiptsReportPanelTest.php
+
+		-
+			message: '#^Call to an undefined method Livewire\\Component\:\:exportCsv\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Filament/Admin/Reports/RenewalPeriodReportPanelTest.php
+
+		-
+			message: '#^Call to an undefined method Livewire\\Component\:\:exportCsv\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Filament/Admin/Reports/VendorPerformanceReportPanelTest.php
+
+		-
+			message: '#^Access to an undefined property Livewire\\Component\:\:\$mountedActions\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Filament/Admin/WorkOrderVendorReplacementTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Testing\\TestResponse\:\:assertActionHidden\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Filament/Admin/WorkOrderVendorReplacementTest.php
+
+		-
+			message: '#^Access to an undefined property Livewire\\Component\:\:\$mountedActions\.$#'
+			identifier: property.notFound
+			count: 2
+			path: tests/Feature/Filament/CertificateAdminTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Testing\\TestResponse\:\:assertActionHidden\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: tests/Feature/Filament/CertificateAdminTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Testing\\TestResponse\:\:assertActionHidden\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Filament/MemorialAdminTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Testing\\TestResponse\:\:callTableAction\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Filament/MemorialAdminTest.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$cemetery_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Filament/Operator/OperatorPanelScopingTest.php
+
+		-
+			message: '#^Tests\\Feature\\Filament\\Operator\\CemeteryBlockScopeFixture\:\:getEloquentQuery\(\) calls parent\:\:getEloquentQuery\(\) but Tests\\Feature\\Filament\\Operator\\CemeteryBlockScopeFixture does not extend any class\.$#'
+			identifier: class.noParent
+			count: 1
+			path: tests/Feature/Filament/Operator/OperatorPanelScopingTest.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type App\\Domain\\PlotInventory\\Models\\GravePlot\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: tests/Feature/Filament/PlotFloorMapActionsTest.php
+
+		-
+			message: '#^Call to an undefined method Livewire\\Component\:\:blocks\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Filament/PlotFloorMapPageTest.php
+
+		-
+			message: '#^Call to an undefined method Livewire\\Component\:\:getTable\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Filament/PlotInventoryAdminTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Testing\\TestResponse\:\:assertActionVisible\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Filament/ReconciliationAdminTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Testing\\TestResponse\:\:callAction\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Filament/ReconciliationAdminTest.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$vendor_id\.$#'
+			identifier: property.notFound
+			count: 2
+			path: tests/Feature/Filament/Vendor/VendorPanelScopingTest.php
+
+		-
+			message: '#^Method Tests\\Feature\\Filament\\Vendor\\VendorPanelScopingTest\:\:classNameFor\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: tests/Feature/Filament/Vendor/VendorPanelScopingTest.php
+
+		-
+			message: '#^Property Tests\\Feature\\Filament\\Vendor\\VendorPanelScopingTest\:\:\$otherVendorId is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: tests/Feature/Filament/Vendor/VendorPanelScopingTest.php
+
+		-
+			message: '#^Method Tests\\Feature\\Filament\\VendorWorkOrdersTest\:\:makeGravePlot\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: tests/Feature/Filament/VendorWorkOrdersTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertTrue\(\) with true will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/FinancialLedger/BulkFinancialExportTest.php
+
+		-
+			message: '#^Call to function method_exists\(\) with ''App\\\\Platform\\\\FinancialLedger\\\\Models\\\\JournalBatch'' and ''persist'' will always evaluate to false\.$#'
+			identifier: function.impossibleType
+			count: 1
+			path: tests/Feature/FinancialLedger/JournalAppendOnlyTest.php
+
+		-
+			message: '#^Call to function method_exists\(\) with ''App\\\\Platform\\\\FinancialLedger\\\\Models\\\\JournalEntry'' and ''persist'' will always evaluate to false\.$#'
+			identifier: function.impossibleType
+			count: 1
+			path: tests/Feature/FinancialLedger/JournalAppendOnlyTest.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: tests/Feature/FinancialLedger/JournalPostTest.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: tests/Feature/FinancialLedger/JournalReversalTest.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: tests/Feature/FinancialLedger/LedgerSeamRealImplementationTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with App\\Platform\\FinancialLedger\\Models\\Payout will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/FinancialLedger/ManualPayoutTest.php
+
+		-
+			message: '#^Parameter \#4 \$lines of class App\\Platform\\FinancialLedger\\ProviderStatement constructor expects array\<string, int\>, array\<string, string\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Feature/FinancialLedger/RunReconciliationTest.php
+
+		-
+			message: '#^Call to an undefined method Mockery\\ExpectationInterface\|Mockery\\HigherOrderMessage\:\:once\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/IdentityAccess/ActorContextResolverTest.php
+
+		-
+			message: '#^Call to an undefined method Mockery\\ExpectationInterface\|Mockery\\HigherOrderMessage\:\:twice\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/IdentityAccess/ActorContextResolverTest.php
+
+		-
+			message: '#^Parameter \#1 \$adapter of class App\\Platform\\IdentityAccess\\ActorContextResolver constructor expects App\\Platform\\IdentityAccess\\Contracts\\IdentityAccessAdapter, Mockery\\MockInterface given\.$#'
+			identifier: argument.type
+			count: 2
+			path: tests/Feature/IdentityAccess/ActorContextResolverTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Carbon\\CarbonImmutable will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/IdentityAccess/RecordActorSessionOnLoginTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertTrue\(\) with true will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/IdentityAccess/RecordActorSessionOnLogoutTest.php
+
+		-
+			message: '#^Parameter \#2 \$user of class Illuminate\\Auth\\Events\\Logout constructor expects Illuminate\\Contracts\\Auth\\Authenticatable, null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Feature/IdentityAccess/RecordActorSessionOnLogoutTest.php
+
+		-
+			message: '#^Parameter \#1 \$panel of method App\\Models\\User\:\:canAccessPanel\(\) expects Filament\\Panel, Mockery\\MockInterface given\.$#'
+			identifier: argument.type
+			count: 3
+			path: tests/Feature/IdentityAccess/UserCanAccessPanelTest.php
+
+		-
+			message: '#^Parameter \#1 \$panel of method App\\Models\\User\:\:canAccessPanel\(\) expects Filament\\Panel, Mockery\\MockInterface given\.$#'
+			identifier: argument.type
+			count: 2
+			path: tests/Feature/Livewire/Public/Auth/RegisterPageTest.php
+
+		-
+			message: '#^Expression on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.expr
+			count: 2
+			path: tests/Feature/Livewire/Public/Booking/BookingWizardAccessibilityTest.php
+
+		-
+			message: '#^Call to an undefined method Livewire\\Component\:\:currentScreen\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: tests/Feature/Livewire/Public/Booking/BookingWizardDegradedReadsTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with string will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Livewire/Public/Booking/BookingWizardDegradedReadsTest.php
+
+		-
+			message: '#^Access to an undefined property Livewire\\Component\:\:\$pickerBlocksUnavailable\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Livewire/Public/Booking/BookingWizardPlotPickerTest.php
+
+		-
+			message: '#^Call to an undefined method Livewire\\Component\:\:pickerAppliesTo\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Livewire/Public/Booking/BookingWizardPlotPickerTest.php
+
+		-
+			message: '#^Call to an undefined method Livewire\\Component\:\:pickerBlocks\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: tests/Feature/Livewire/Public/Booking/BookingWizardPlotPickerTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Testing\\TestResponse\:\:assertSeeLivewire\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Livewire/Public/Booking/BookingWizardRouteTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Testing\\TestResponse\:\:assertSet\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Livewire/Public/Booking/BookingWizardRouteTest.php
+
+		-
+			message: '#^Call to an undefined method Livewire\\Component\:\:currentScreen\(\)\.$#'
+			identifier: method.notFound
+			count: 4
+			path: tests/Feature/Livewire/Public/Booking/BookingWizardStepFiveToSixHandoffTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Testing\\TestResponse\:\:instance\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Livewire/Public/Booking/BookingWizardStepsFourAndFiveTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Testing\\TestResponse\:\:html\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: tests/Feature/Livewire/Public/CareSubscription/CareHistoryPageTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Testing\\TestResponse\:\:html\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Livewire/Public/CareSubscription/SubscriptionStatusPageTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Testing\\TestResponse\:\:html\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Livewire/Public/Certificates/CertificateStatusPageTest.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between Carbon\\CarbonImmutable and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: tests/Feature/Livewire/Public/HomePageRouteTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Testing\\TestResponse\:\:call\(\)\.$#'
+			identifier: method.notFound
+			count: 7
+			path: tests/Feature/Livewire/Public/Memorial/MemorialPublicPageTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Testing\\TestResponse\:\:set\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: tests/Feature/Livewire/Public/Memorial/MemorialPublicPageTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Testing\\TestResponse\:\:assertHasErrors\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Livewire/Public/Renewal/RenewalStartTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Testing\\TestResponse\:\:assertHasNoErrors\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Livewire/Public/Renewal/RenewalStartTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Testing\\TestResponse\:\:assertNoRedirect\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Livewire/Public/Renewal/RenewalStartTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Testing\\TestResponse\:\:assertSet\(\)\.$#'
+			identifier: method.notFound
+			count: 5
+			path: tests/Feature/Livewire/Public/Renewal/RenewalStartTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Testing\\TestResponse\:\:assertHasErrors\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Livewire/Public/Visitation/VisitationPageTest.php
+
+		-
+			message: '#^Offset ''table_name'' does not exist on array\{table\: string, referenced_table\: string, delete_rule\: string\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: tests/Feature/Migrations/AddMissingFkConstraintsVendorFulfillmentCareSubscriptionTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsInt\(\) with int will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Migrations/FixCustomerAndUploaderIdentityColumnsTest.php
+
+		-
+			message: '#^Method App\\Platform\\Notification\\Contracts\\NotificationSubjectSource@anonymous/tests/Feature/Notification/NotificationDispatchPipelineTest\.php\:702\:\:subjectFor\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: tests/Feature/Notification/NotificationDispatchPipelineTest.php
+
+		-
+			message: '#^Dead catch \- App\\Platform\\Notification\\Exceptions\\NotificationTemplateVersionIsImmutableException is never thrown in the try block\.$#'
+			identifier: catch.neverThrown
+			count: 1
+			path: tests/Feature/Notification/NotificationTemplatePersistenceTest.php
+
+		-
+			message: '#^Dead catch \- Illuminate\\Database\\QueryException is never thrown in the try block\.$#'
+			identifier: catch.neverThrown
+			count: 1
+			path: tests/Feature/Notification/NotificationTemplatePersistenceTest.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 2
+			path: tests/Feature/Notification/NotificationTemplatePersistenceTest.php
+
+		-
+			message: '#^Parameter \#1 \$amountMinor of method Tests\\Feature\\OrderWorkflow\\ApplyPaidEffectsTest\:\:webhookTrigger\(\) expects int, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Feature/OrderWorkflow/ApplyPaidEffectsTest.php
+
+		-
+			message: '#^Call to static method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Carbon\\CarbonImmutable will always evaluate to true\.$#'
+			identifier: staticMethod.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/OrderWorkflow/IssueInvoiceTest.php
+
+		-
+			message: '#^Dead catch \- App\\Domain\\OrderWorkflow\\Exceptions\\OrderStatusEventIsAppendOnlyException is never thrown in the try block\.$#'
+			identifier: catch.neverThrown
+			count: 1
+			path: tests/Feature/OrderWorkflow/RecordOrderStatusChangeTest.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: tests/Feature/OrderWorkflow/RecordOrderStatusChangeTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with App\\Domain\\OrderWorkflow\\Models\\Order will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/OrderWorkflow/SubmitBookingDraftConvertsPlotHoldTest.php
+
+		-
+			message: '#^Access to an undefined property Tests\\Fixtures\\OutboxFixtureAggregate\:\:\$status\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Outbox/OutboxRecoveryTest.php
+
+		-
+			message: '#^Access to an undefined property Tests\\Fixtures\\OutboxFixtureAggregate\:\:\$status\.$#'
+			identifier: property.notFound
+			count: 2
+			path: tests/Feature/Outbox/OutboxTransactionTest.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: tests/Feature/Outbox/OutboxTransactionTest.php
+
+		-
+			message: '#^Method Tests\\Feature\\Payment\\GuardPaymentSessionTest\:\:unavailableUpstreamConditions\(\) should return list\<array\{App\\Platform\\Payment\\GuardCondition, string\}\> but returns array\{''condition 6 — merchant and badan usaha bound''\: array\{App\\Platform\\Payment\\GuardCondition\:\:MerchantAndBadanUsahaBound, ''Merchant\|BadanUsaha…''\}\}\.$#'
+			identifier: return.type
+			count: 1
+			path: tests/Feature/Payment/GuardPaymentSessionTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Contracts\\Auth\\PasswordBroker\:\:createToken\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: tests/Feature/Livewire/Public/Auth/PasswordResetTest.php
+
+		-
+			message: '#^Call to function class_exists\(\) with ''App\\\\Platform…'' will always evaluate to false\.$#'
+			identifier: function.impossibleType
+			count: 1
+			path: tests/Feature/Payment/PaymentGuardFailClosedTest.php
+
+		-
+			message: '#^Call to function interface_exists\(\) with ''App\\\\Platform…'' will always evaluate to false\.$#'
+			identifier: function.impossibleType
+			count: 1
+			path: tests/Feature/Payment/PaymentGuardFailClosedTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Carbon\\CarbonImmutable will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Payment/ReversalServiceTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Carbon\\CarbonImmutable will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Payment/SubmitManualPaymentTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Carbon\\CarbonImmutable will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Payment/WebhookReceiverTest.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between Carbon\\CarbonImmutable and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: tests/Feature/Platform/Analytics/MenuInteractionRecorderTest.php
+
+		-
+			message: '#^Call to static method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Carbon\\CarbonImmutable will always evaluate to true\.$#'
+			identifier: staticMethod.alreadyNarrowedType
+			count: 1
+			path: tests/Feature/Quotation/IssueQuoteTest.php
+
+		-
+			message: '#^Call to static method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with null will always evaluate to false\.$#'
+			identifier: staticMethod.impossibleType
+			count: 2
+			path: tests/Feature/Quotation/IssueQuoteTest.php
+
+		-
+			message: '#^Dead catch \- App\\Domain\\Quotation\\Exceptions\\IssuedQuoteIsImmutableException is never thrown in the try block\.$#'
+			identifier: catch.neverThrown
+			count: 2
+			path: tests/Feature/Quotation/QuoteImmutabilityTest.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 2
+			path: tests/Feature/Quotation/QuoteImmutabilityTest.php
+
+		-
+			message: '#^Access to an undefined property App\\Domain\\OrderWorkflow\\Models\\Order\:\:\$demo_batch_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Support/ExampleData/BookingOrderExampleDataTest.php
+
+		-
+			message: '#^Access to an undefined property App\\Domain\\CareSubscription\\Models\\Subscription\:\:\$demo_batch_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Support/ExampleData/CareSubscriptionExampleDataTest.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$demo_batch_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Support/ExampleData/CemeteryOperatorExampleDataTest.php
+
+		-
+			message: '#^Access to an undefined property App\\Domain\\AgreementCertificate\\Models\\Certificate\:\:\$demo_batch_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Support/ExampleData/CertificateExampleDataTest.php
+
+		-
+			message: '#^Access to an undefined property App\\Domain\\Marketplace\\Models\\MarketplaceOrder\:\:\$demo_batch_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Support/ExampleData/MarketplaceOrderExampleDataTest.php
+
+		-
+			message: '#^Access to an undefined property App\\Domain\\Renewal\\Models\\Renewal\:\:\$demo_batch_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Support/ExampleData/RenewalExampleDataTest.php
+
+		-
+			message: '#^Access to an undefined property App\\Domain\\CemeteryDirectory\\Models\\Cemetery\:\:\$demo_batch_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Support/ExampleData/TaggedAsDemoDataTest.php
+
+		-
+			message: '#^Access to an undefined property App\\Domain\\Marketplace\\Models\\Vendor\:\:\$demo_batch_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Support/ExampleData/VendorAccountExampleDataTest.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$demo_batch_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Support/ExampleData/VendorAccountExampleDataTest.php
+
+		-
+			message: '#^Access to an undefined property App\\Domain\\Visitation\\Models\\VisitationBooking\:\:\$demo_batch_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/Support/ExampleData/VisitationExampleDataTest.php
+
+		-
+			message: '#^Dead catch \- Illuminate\\View\\ViewException is never thrown in the try block\.$#'
+			identifier: catch.neverThrown
+			count: 1
+			path: tests/Feature/View/Components/MkLogoTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Domain\\GraveRegistry\\GraveNameNormalizerTest\:\:normalizationCases\(\) should return list\<array\{string, string\}\> but returns array\{lowercases\: array\{''Budi Santoso'', ''budi santoso''\}, ''trims surrounding whitespace''\: array\{''   Budi Santoso   '', ''budi santoso''\}, ''collapses internal whitespace''\: array\{"Budi\\t\\n  Santoso", ''budi santoso''\}, ''replaces punctuation with a space''\: array\{''Soekarno\-Hatta'', ''soekarno hatta''\}, ''drops full stops in an abbreviation''\: array\{''H\. Abdul Rahman'', ''h abdul rahman''\}, ''drops commas and parentheses''\: array\{''Santoso, Budi \(Alm\)'', ''santoso budi alm''\}, ''keeps digits''\: array\{''Blok A 12'', ''blok a 12''\}, ''empty stays empty''\: array\{'''', ''''\}, \.\.\.\}\.$#'
+			identifier: return.type
+			count: 1
+			path: tests/Unit/Domain/GraveRegistry/GraveNameNormalizerTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Domain\\GraveRegistry\\GraveRecordAccessModeTest\:\:restrictionCases\(\) should return list\<array\{string, bool\}\> but returns array\{''open is not restricted''\: array\{''open'', false\}, ''limited is restricted''\: array\{''limited'', true\}, ''closed is restricted''\: array\{''closed'', true\}\}\.$#'
+			identifier: return.type
+			count: 1
+			path: tests/Unit/Domain/GraveRegistry/GraveRecordAccessModeTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertTrue\(\) with true will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 5
+			path: tests/Unit/Domain/OrderWorkflow/OrderTransitionAuthorizerTest.php
+
+		-
+			message: '#^Call to static method PHPUnit\\Framework\\Assert\:\:assertTrue\(\) with true will always evaluate to true\.$#'
+			identifier: staticMethod.alreadyNarrowedType
+			count: 1
+			path: tests/Unit/Domain/OrderWorkflow/OrderTransitionTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertTrue\(\) with true will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Unit/Platform/IdentityAccess/MasterDataAdminAuthorizerTest.php
+
+		-
+			message: '#^Method App\\Platform\\Notification\\Contracts\\RecipientAddressResolver@anonymous/tests/Unit/Platform/Notification/MailChannelTest\.php\:134\:\:emailFor\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: tests/Unit/Platform/Notification/MailChannelTest.php
+
+		-
+			message: '#^Method App\\Platform\\Notification\\Contracts\\RecipientAddressResolver@anonymous/tests/Unit/Platform/Notification/MailChannelTest\.php\:154\:\:emailFor\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: tests/Unit/Platform/Notification/MailChannelTest.php
+
+		-
+			message: '#^Method App\\Platform\\Notification\\Contracts\\RecipientAddressResolver@anonymous/tests/Unit/Platform/Notification/MailChannelTest\.php\:67\:\:emailFor\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: tests/Unit/Platform/Notification/MailChannelTest.php
+
+		-
+			message: '#^Call to an undefined static method Illuminate\\Support\\Facades\\Log\:\:shouldHaveReceived\(\)\.$#'
+			identifier: staticMethod.notFound
+			count: 1
+			path: tests/Unit/Platform/Notification/NotificationChannelsTest.php
+
+		-
+			message: '#^Method Tests\\Unit\\Platform\\Payment\\GuardResultTest\:\:denialScopedAccessors\(\) should return list\<array\{string\}\> but returns array\{condition\: array\{''condition''\}, reason\: array\{''reason''\}, publicMessage\: array\{''publicMessage''\}, missingUpstream\: array\{''missingUpstream''\}, isUnavailableUpstream\: array\{''isUnavailableUpstre…''\}\}\.$#'
+			identifier: return.type
+			count: 1
+			path: tests/Unit/Platform/Payment/GuardResultTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertTrue\(\) with true will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 2
+			path: tests/Unit/Platform/ReauthenticationGuardTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsString\(\) with string will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 2
+			path: tests/Unit/Support/Design/StatusIntentTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNull\(\) with null will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 2
+			path: tests/Unit/Support/ExampleData/CemeteryExampleDataTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsBool\(\) with bool will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 2
+			path: tests/Unit/Support/ExampleData/ServiceOperationalExampleDataTest.php
+
+		-
+			message: '#^Parameter \#1 \$array \(array\{''DOCUMENT_PROCESSING'', ''GRAVE_DIGGING'', ''AMBULANCE'', ''FUNERAL_HOME'', ''HEARSE'', ''TENT_AND_CHAIRS'', ''SOUND_SYSTEM'', ''FLOWERS'', \.\.\.\}\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: tests/Unit/Support/ExampleData/ServiceOperationalExampleDataTest.php
+
+		-
+			message: '#^Parameter \#1 \$array \(array\{''FLOWER_BOARD'', ''FLOWER_PETAL_PACKAGE'', ''GRAVESTONE_GRANITE'', ''GRAVESTONE_MARBLE'', ''GRAVESTONE…'', ''GRAVE_CARE_MONTHLY'', ''GRAVE_CARE_QUARTERLY'', ''GRAVE_CARE…'', \.\.\.\}\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: tests/Unit/Support/ExampleData/VendorExampleDataTest.php

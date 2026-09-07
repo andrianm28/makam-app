@@ -16,6 +16,7 @@ return new class extends Migration
 
         $statuses = implode("', '", ProviderEventStatus::values());
 
+        // contract-approved: DB-01 — safe CHECK-constraint widen (recreated from ProviderEventStatus::values(), no data loss)
         DB::statement('ALTER TABLE provider_events DROP CONSTRAINT IF EXISTS provider_events_status_check');
         DB::statement(
             'ALTER TABLE provider_events ADD CONSTRAINT provider_events_status_check '.

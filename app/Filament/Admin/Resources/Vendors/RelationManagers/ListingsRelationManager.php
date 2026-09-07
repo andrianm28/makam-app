@@ -85,10 +85,18 @@ final class ListingsRelationManager extends RelationManager
                     ->columnSpanFull(),
 
                 TextInput::make('price_minor')
-                    ->label('Harga (Rp)')
+                    ->label('Harga (rupiah, dalam sen)')
+                    ->helperText('Nilai dalam satuan terkecil rupiah, mengikuti kolom price_minor.')
                     ->required()
                     ->numeric()
                     ->minValue(1)
+                    ->prefix('Rp')
+                    // The label already claimed rupiah while the raw
+                    // minor-unit value was written unconverted — MKT-09.
+                    // Symmetric with `VendorListingsTable`'s already-correct
+                    // `->money('IDR', divideBy: 100)`.
+                    ->formatStateUsing(fn (mixed $state): ?int => $state === null ? null : intdiv((int) $state, 100))
+                    ->dehydrateStateUsing(fn (mixed $state): int => ((int) $state) * 100)
                     ->columnSpan(1),
 
                 Select::make('availability_mode')
@@ -155,8 +163,8 @@ final class ListingsRelationManager extends RelationManager
 
                 TextColumn::make('price_minor')
                     ->label('Harga')
-                    ->numeric(decimalPlaces: 0)
-                    ->prefix('Rp ')
+                    // @phpstan-ignore method.notFound (moneyRupiah() is a Macroable macro — AppServiceProvider::boot())
+                    ->moneyRupiah()
                     ->sortable(),
 
                 TextColumn::make('availability_mode')
