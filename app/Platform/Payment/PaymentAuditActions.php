@@ -219,4 +219,24 @@ final class PaymentAuditActions
      * `note`, no free-text reason.
      */
     public const string DUPLICATE_ARRIVAL = 'PAYMENT_DUPLICATE_ARRIVAL';
+
+    /**
+     * Batch M1b, PAY-02 (7 Sep 2026) — written by
+     * `Jobs\ProcessProviderEventJob::failed()` with `AuditOutcome::Denied`,
+     * subject = the `provider_events` row, when a settling event's job
+     * exhausts every retry (`$tries`/`retryUntil()`) without the settlement
+     * ever succeeding. Before this fix the row was left `VALIDATED` forever
+     * with only a `failed_jobs` entry to find it — invisible to any operator
+     * not specifically watching that table. The row is moved to
+     * `MANUAL_REVIEW` alongside this audit row, in the job's own transaction
+     * (there is no ambient one left by this point — the last attempt's own
+     * transaction already rolled back).
+     *
+     * Not on `SensitiveActions::ACTIONS`, for the same reason as
+     * `WEBHOOK_SETTLEMENT_CONFLICT`: machine-decided, structured subject,
+     * closed-list `note` (never the underlying exception's message, which
+     * could carry any restricted value from the original failure), no
+     * free-text reason.
+     */
+    public const string SETTLEMENT_PERMANENTLY_FAILED = 'PAYMENT_SETTLEMENT_PERMANENTLY_FAILED';
 }

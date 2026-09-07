@@ -52,4 +52,18 @@ enum ProcessWebhookEventOutcome
      * applied, and never silently dropped.
      */
     case SettlementConflict;
+
+    /**
+     * Batch M1b (PAY-03): the row is a settling event whose target resolved,
+     * but `Actions\ApplyPaymentSettlement::settle()` returned a
+     * `SettlementAnomaly` — a permanent, well-understood settlement problem
+     * (today: only the renewal leg's amount-mismatch and
+     * neither-open-nor-paid branches) rather than a transient failure worth
+     * retrying. The row is moved to `MANUAL_REVIEW` and audited, in the SAME
+     * transaction that claimed it — never applied, and never silently
+     * dropped. Distinct from `SettlementConflict` (two settling events racing
+     * for one provider transaction): this case is one event whose OWN
+     * settlement attempt is itself anomalous.
+     */
+    case SettlementAnomaly;
 }

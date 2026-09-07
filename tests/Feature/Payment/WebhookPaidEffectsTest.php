@@ -385,6 +385,64 @@ final class WebhookPaidEffectsTest extends TestCase
         $this->assertSame(1, VendorPayableModel::query()->count());
     }
 
+    /**
+     * Batch M1b, PAY-01: the marketplace analogue of
+     * `test_a_second_payment_for_an_already_paid_order_is_an_audited_duplicate_arrival()`
+     * above — a second, DIFFERENT provider transaction settling an order
+     * `MarkMarketplaceOrderPaid` already marked `DIBAYAR` must be audited,
+     * not silently swallowed the way that Action's own idempotent-no-op
+     * would otherwise make it.
+     */
+    public function test_a_second_payment_for_an_already_paid_marketplace_order_is_an_audited_duplicate_arrival(): void
+    {
+        $order = $this->marketplaceOrder('MKT-DUP-0001', self::TOTAL_MINOR);
+        $this->paymentSession('pay_mkt_first', self::TOTAL_MINOR);
+
+        $this->deliver(dataOverrides: [
+            'payment_id' => 'pay_mkt_first',
+            'order_id' => 'MKT-DUP-0001',
+            'amount' => self::TOTAL_DECIMAL,
+        ])->assertOk();
+
+        $this->assertSame(PaymentState::DIBAYAR, $order->fresh()->payment_state);
+        $this->assertSame(1, AuditEvent::query()
+            ->where('action', 'MARKETPLACE_ORDER_PAYMENT_STATE_CHANGED')
+            ->where('subject_id', $order->getKey())
+            ->count());
+
+        // A second, DIFFERENT provider transaction for the same order.
+        $this->paymentSession('pay_mkt_second', self::TOTAL_MINOR);
+
+        $this->deliver(
+            id: 'msg_mkt_duplicate',
+            dataOverrides: [
+                'payment_id' => 'pay_mkt_second',
+                'order_id' => 'MKT-DUP-0001',
+                'amount' => self::TOTAL_DECIMAL,
+            ],
+        )->assertOk();
+
+        // Still DIBAYAR, still exactly one payment-state-changed audit row —
+        // `MarkMarketplaceOrderPaid`'s own idempotent no-op held.
+        $this->assertSame(PaymentState::DIBAYAR, $order->fresh()->payment_state);
+        $this->assertSame(1, AuditEvent::query()
+            ->where('action', 'MARKETPLACE_ORDER_PAYMENT_STATE_CHANGED')
+            ->where('subject_id', $order->getKey())
+            ->count());
+
+        // Money DID arrive for the second transaction, so its own session is
+        // PAID, and the duplicate arrival is explicitly audited.
+        $secondSession = PaymentSession::query()->where('provider_payment_id', 'pay_mkt_second')->sole();
+        $this->assertSame(SessionState::Paid->value, $secondSession->state);
+
+        $secondEvent = ProviderEvent::query()->where('provider_transaction_id', 'pay_mkt_second')->sole();
+
+        $audit = AuditEvent::query()->where('action', PaymentAuditActions::DUPLICATE_ARRIVAL)->sole();
+        $this->assertSame('provider_event', $audit->subject_type);
+        $this->assertSame($secondEvent->getKey(), $audit->subject_id);
+        $this->assertSame('denied', $audit->outcome);
+    }
+
     // -----------------------------------------------------------------
     // Rejection paths: no effect may be applied from a webhook that was
     // not validated against its session.
@@ -420,6 +478,19 @@ final class WebhookPaidEffectsTest extends TestCase
      * the settlement must not mark the order DIBAYAR for a payment that does
      * not equal what the order owes. The action-level amount assert rejects
      * it, the claim rolls back, and nothing is applied.
+     *
+     * Batch M1b (PAY-02, 7 Sep 2026): this suite runs on the `sync` queue
+     * (`phpunit.xml`), which has no real retry concept — a job either
+     * succeeds or is immediately treated as permanently failed on its one
+     * and only attempt (`Illuminate\Queue\SyncQueue::handleException()` always
+     * calls the job's `failed()` before rethrowing). `ProcessProviderEventJob::
+     * failed()` now moves the row to `MANUAL_REVIEW` with an audit row the
+     * moment that happens — under a REAL worker this only happens once
+     * `$tries`/`retryUntil()` are actually exhausted, but under `sync` every
+     * throw IS the last (and only) attempt, so the row lands there
+     * immediately here too. The claim itself still rolled back (nothing was
+     * half-applied) — only the terminal status changed from the pre-PAY-02
+     * behaviour (`VALIDATED` forever, invisible to any operator).
      */
     public function test_a_marketplace_session_opened_for_the_wrong_amount_cannot_mark_the_order_paid(): void
     {
@@ -443,9 +514,12 @@ final class WebhookPaidEffectsTest extends TestCase
             // expected: the paid transition is refused for the wrong amount.
         }
 
-        // The claim rolled back: the row stays VALIDATED, never PROCESSED.
+        // The claim rolled back — never PROCESSED — but the job's own
+        // `failed()` hook (PAY-02) now moves the row to MANUAL_REVIEW rather
+        // than leaving it VALIDATED forever.
         $event = ProviderEvent::query()->sole();
-        $this->assertSame(ProviderEventStatus::Validated->value, $event->status);
+        $this->assertSame(ProviderEventStatus::ManualReview->value, $event->status);
+        $this->assertSame('settlement failed; retries exhausted', $event->rejection_detail);
 
         // No DIBAYAR: the order, its payable and the session are untouched,
         // and no paid-transition audit was recorded (the fixture's payable
@@ -457,6 +531,12 @@ final class WebhookPaidEffectsTest extends TestCase
         $this->assertSame(0, AuditEvent::query()
             ->where('action', 'MARKETPLACE_ORDER_PAYMENT_STATE_CHANGED')
             ->where('subject_id', $order->getKey())
+            ->count());
+
+        // The permanent-failure audit row PAY-02 adds.
+        $this->assertSame(1, AuditEvent::query()
+            ->where('action', PaymentAuditActions::SETTLEMENT_PERMANENTLY_FAILED)
+            ->where('subject_id', $event->getKey())
             ->count());
     }
 

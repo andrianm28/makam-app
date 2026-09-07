@@ -4,14 +4,24 @@ declare(strict_types=1);
 
 namespace App\Platform\Payment\Jobs;
 
+use App\Platform\Audit\Audit;
+use App\Platform\Audit\AuditOutcome;
+use App\Platform\Audit\AuditSource;
+use App\Platform\Audit\AuditSubject;
 use App\Platform\Outbox\OutboxQueueName;
+use App\Platform\Payment\Exceptions\SettlementTargetUnresolvableException;
+use App\Platform\Payment\Models\ProviderEvent;
+use App\Platform\Payment\PaymentAuditActions;
 use App\Platform\Payment\ProcessWebhookEvent;
+use App\Platform\Payment\ProviderEventStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
+use Throwable;
 
 /**
  * AC5's "and then process it asynchronously": dispatched by `ReceiveWebhook`
@@ -70,11 +80,21 @@ use Illuminate\Queue\SerializesModels;
  *   - `backoff()` spaces the attempts so a failing event does not spin on the
  *     critical queue between retries.
  *
- * After the last retry the job moves to `failed_jobs` and a human recovers:
- * the row is still `VALIDATED` and re-claimable once the underlying cause is
- * resolved (a re-dispatch, or a fix of the unresolved target). Recorded as
- * the intended fail-closed behaviour in `ProcessWebhookEvent` — never a
- * silent drop, and never a `PROCESSED` row for work that did not commit.
+ * After the last retry the job moves to `failed_jobs`. Before Batch M1b
+ * (PAY-02, 7 Sep 2026) that was the end of the trail: the row was left
+ * `VALIDATED` forever, visible only to whoever happened to be watching
+ * `failed_jobs` directly — no `MANUAL_REVIEW` status, no audit row, no
+ * admin-panel queue. `failed()` below closes that gap: it moves the row to
+ * `MANUAL_REVIEW` with a closed-list `rejection_detail` and writes one
+ * `PaymentAuditActions::SETTLEMENT_PERMANENTLY_FAILED` audit row, in its own
+ * transaction (there is no ambient one left by the time `failed()` runs —
+ * the last attempt's own transaction already rolled back with the exception
+ * that triggered this). The row is now re-claimable once a human resolves
+ * the underlying cause AND re-dispatches it (a `MANUAL_REVIEW` row is not
+ * automatically retried by anything), surfaced in
+ * `App\Filament\Admin\Widgets\PaymentSettlementManualReviewQueueWidget` —
+ * never a silent drop, and never a `PROCESSED` row for work that did not
+ * commit.
  */
 final class ProcessProviderEventJob implements ShouldQueue
 {
@@ -138,5 +158,82 @@ final class ProcessProviderEventJob implements ShouldQueue
         // failure is a different animal: it propagates (the claim rolled
         // back, the row stays VALIDATED) so the queue retry can re-claim it.
         $process($this->providerEventId);
+    }
+
+    /**
+     * Batch M1b, PAY-02. Called by the queue worker once this job has
+     * exhausted its retries (`$tries`/`retryUntil()`) and is about to land in
+     * `failed_jobs` — see the class doc block's "Failure semantics" section.
+     *
+     * Re-fetches the row under `lockForUpdate()` rather than trusting any
+     * cached state: a concurrent successful claim (a redelivered webhook that
+     * finally landed after this job's last attempt failed for an unrelated
+     * reason) or an earlier `failed()` invocation may already have moved it
+     * past `VALIDATED`, and this must never regress a row a later event
+     * already resolved — the same "re-check the status inside the lock, act
+     * only if it is still what you expect" discipline
+     * `ProcessWebhookEvent::__invoke()` uses for its own claim.
+     *
+     * `AuditSource::Job`, not `Api`: this runs on the queue worker process
+     * after the job has already failed, not on the HTTP path any of
+     * `ProcessWebhookEvent`'s own audit writes run on.
+     */
+    public function failed(Throwable $e): void
+    {
+        DB::transaction(function () use ($e): void {
+            $event = ProviderEvent::query()->whereKey($this->providerEventId)->lockForUpdate()->first();
+
+            if ($event === null) {
+                return;
+            }
+
+            if (ProviderEventStatus::tryFrom((string) $event->status) !== ProviderEventStatus::Validated) {
+                return;
+            }
+
+            $event->markStatus(ProviderEventStatus::ManualReview, self::rejectionDetailFor($e));
+
+            Audit::record(
+                action: PaymentAuditActions::SETTLEMENT_PERMANENTLY_FAILED,
+                subject: new AuditSubject('provider_event', $event->getKey()),
+                outcome: AuditOutcome::Denied,
+                // No authenticated actor by nature — this is a queue worker
+                // recovering from an exhausted retry budget, not a request
+                // any human or credentialed caller made.
+                actorRef: null,
+                actorRole: 'system',
+                source: AuditSource::Job,
+                correlationId: $event->correlation_id,
+                metadata: ['note' => self::auditNoteFor($e)],
+            );
+        });
+    }
+
+    /**
+     * Closed-list mapping from the exhausted exception to a short,
+     * operator-facing detail — never the exception's own message, which
+     * could carry any restricted value from the original failure (AC14).
+     * Bounded to the column width by `ProviderEvent::markStatus()`, but kept
+     * short here regardless — the closed list, not the truncation, is what
+     * keeps this safe.
+     */
+    private static function rejectionDetailFor(Throwable $e): string
+    {
+        return match (true) {
+            $e instanceof SettlementTargetUnresolvableException => 'settlement target unresolvable; retries exhausted',
+            default => 'settlement failed; retries exhausted',
+        };
+    }
+
+    /**
+     * Same closed-list discipline as {@see rejectionDetailFor()}, phrased for
+     * the audit `note` (`App\Platform\Audit\MetadataAllowlist::ALLOWED_KEYS`).
+     */
+    private static function auditNoteFor(Throwable $e): string
+    {
+        return match (true) {
+            $e instanceof SettlementTargetUnresolvableException => 'settlement retries exhausted: target unresolvable',
+            default => 'settlement retries exhausted: permanent failure',
+        };
     }
 }

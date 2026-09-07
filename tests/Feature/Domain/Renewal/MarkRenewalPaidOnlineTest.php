@@ -5,14 +5,13 @@ declare(strict_types=1);
 namespace Tests\Feature\Domain\Renewal;
 
 use App\Domain\Renewal\Actions\MarkRenewalPaidOnline;
-use App\Domain\Renewal\Exceptions\RenewalAlreadySettledException;
-use App\Domain\Renewal\Exceptions\RenewalPaymentAmountMismatchException;
 use App\Domain\Renewal\Models\Renewal;
 use App\Domain\Renewal\Models\RenewalQuote;
 use App\Domain\Renewal\RenewalAuditActions;
 use App\Domain\Renewal\RenewalStatus;
 use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\Outbox\Models\OutboxEvent;
+use App\Platform\Payment\SettlementAnomaly;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -128,45 +127,40 @@ final class MarkRenewalPaidOnlineTest extends TestCase
     /**
      * The no-op above is scoped to exactly the state this call itself
      * produces (`DIBAYAR`) — any OTHER non-open status is still a genuine
-     * anomaly and still throws `RenewalAlreadySettledException`, the same
-     * scoping `MarkCyclePaid`/`MarkMarketplaceOrderPaid` use. `KEDALUWARSA`
-     * is not hypothetical here — `Actions\ExpireRenewal` is a real, live
-     * producer, wired to a real Filament admin action.
+     * anomaly, the same scoping `MarkCyclePaid`/`MarkMarketplaceOrderPaid`
+     * use. `KEDALUWARSA` is not hypothetical here — `Actions\ExpireRenewal`
+     * is a real, live producer, wired to a real Filament admin action.
      *
-     * Whole-branch review fix wave (25 Aug 2026): this anomaly used to leave
-     * NO audit trace at all (the mutation's own transaction rolled back and
-     * took any row written inside it along with it). It must now leave
-     * exactly one `RENEWAL_PAID_ONLINE_REFUSED` row — proving that row
-     * survives the rollback rather than being written inside the same
-     * transaction that throws.
+     * Batch M1b (PAY-03, 7 Sep 2026): this branch no longer throws
+     * `RenewalAlreadySettledException` — it RETURNS a `SettlementAnomaly` and
+     * writes NO audit row of its own (the caller, `ProcessWebhookEvent`,
+     * writes it from the transaction that actually commits — see
+     * `RenewalWebhookSettlementTest` for that end-to-end coverage). This
+     * unit-level test now asserts the returned value and the "writes
+     * nothing" precondition directly, since there is no longer a `catch` to
+     * exercise.
      */
-    public function test_a_settlement_attempt_against_a_kedaluwarsa_renewal_still_refuses(): void
+    public function test_a_settlement_attempt_against_a_kedaluwarsa_renewal_returns_an_anomaly_and_writes_nothing(): void
     {
         $renewal = $this->makeRenewal(RenewalStatus::KEDALUWARSA);
 
-        try {
-            app(MarkRenewalPaidOnline::class)($renewal, self::AMOUNT_MINOR, 'pay_online_1', 'provider_event:test-1');
-            $this->fail('Expected RenewalAlreadySettledException to be thrown.');
-        } catch (RenewalAlreadySettledException) {
-            // expected
-        }
+        $result = app(MarkRenewalPaidOnline::class)($renewal, self::AMOUNT_MINOR, 'pay_online_1', 'provider_event:test-1');
+
+        $this->assertInstanceOf(SettlementAnomaly::class, $result);
+        $this->assertSame(RenewalAuditActions::RENEWAL_PAID_ONLINE_REFUSED, $result->auditAction);
+        $this->assertSame(
+            'settlement arrived for a renewal that is neither open nor already paid',
+            $result->note,
+        );
+        $this->assertNotNull($result->subject);
+        $this->assertSame('renewal', $result->subject->type);
+        $this->assertSame((string) $renewal->getKey(), (string) $result->subject->id);
 
         $this->assertSame(RenewalStatus::KEDALUWARSA, $renewal->fresh()->status);
         $this->assertSame(0, OutboxEvent::query()->where('event_name', 'renewal.paid_online.v1')->count());
-
-        $refusedAudit = AuditEvent::query()
+        $this->assertSame(0, AuditEvent::query()
             ->where('action', RenewalAuditActions::RENEWAL_PAID_ONLINE_REFUSED)
-            ->where('subject_id', (string) $renewal->getKey())
-            ->sole();
-
-        $this->assertSame('denied', $refusedAudit->outcome);
-        $this->assertSame('renewal', $refusedAudit->subject_type);
-        $this->assertSame('provider', $refusedAudit->actor_role);
-        $this->assertSame('provider_event:test-1', (string) $refusedAudit->actor_ref);
-        $this->assertSame(
-            'settlement arrived for a renewal that is neither open nor already paid',
-            $refusedAudit->metadata['note'] ?? null,
-        );
+            ->count());
     }
 
     public function test_the_outbox_event_is_recorded_with_the_correct_subject_reference(): void
@@ -217,22 +211,27 @@ final class MarkRenewalPaidOnlineTest extends TestCase
      * `MarkMarketplaceOrderPaid`'s own assert-before-any-write shape. A
      * settlement whose amount does not equal the renewal's latest quote must
      * never mark it `DIBAYAR`.
+     *
+     * Batch M1b (PAY-03, 7 Sep 2026): returns a `SettlementAnomaly` instead
+     * of throwing `RenewalPaymentAmountMismatchException` — this branch
+     * never had an audit row before this fix
+     * (`RenewalAuditActions::RENEWAL_PAID_ONLINE_AMOUNT_MISMATCH`'s own doc
+     * block); the caller now writes one from a committing transaction.
      */
-    public function test_a_mismatched_amount_refuses_and_writes_nothing(): void
+    public function test_a_mismatched_amount_returns_an_anomaly_and_writes_nothing(): void
     {
         $renewal = $this->makeRenewal();
 
-        try {
-            app(MarkRenewalPaidOnline::class)(
-                $renewal,
-                self::AMOUNT_MINOR + 1,
-                'pay_online_1',
-                'provider_event:test-1',
-            );
-            $this->fail('Expected RenewalPaymentAmountMismatchException to be thrown.');
-        } catch (RenewalPaymentAmountMismatchException) {
-            // expected
-        }
+        $result = app(MarkRenewalPaidOnline::class)(
+            $renewal,
+            self::AMOUNT_MINOR + 1,
+            'pay_online_1',
+            'provider_event:test-1',
+        );
+
+        $this->assertInstanceOf(SettlementAnomaly::class, $result);
+        $this->assertSame(RenewalAuditActions::RENEWAL_PAID_ONLINE_AMOUNT_MISMATCH, $result->auditAction);
+        $this->assertSame('settlement amount does not match the renewal quote', $result->note);
 
         $this->assertSame(RenewalStatus::MENUNGGU_PEMBAYARAN, $renewal->fresh()->status);
         $this->assertNull($renewal->fresh()->settled_at);
@@ -243,20 +242,21 @@ final class MarkRenewalPaidOnlineTest extends TestCase
     /**
      * The amount assert runs even against an already-settled renewal — the
      * same ordering `CyclePaymentAmountMismatchException`'s doc block
-     * documents: a mismatched replay is refused loudly, never swallowed by
-     * the idempotency guard.
+     * documents: a mismatched replay is refused loudly (as an anomaly, not a
+     * settlement), never swallowed by the idempotency guard.
      */
-    public function test_a_mismatched_amount_against_an_already_paid_renewal_still_refuses_on_amount(): void
+    public function test_a_mismatched_amount_against_an_already_paid_renewal_still_returns_an_anomaly(): void
     {
         $renewal = $this->makeRenewal(RenewalStatus::DIBAYAR);
 
-        $this->expectException(RenewalPaymentAmountMismatchException::class);
-
-        app(MarkRenewalPaidOnline::class)(
+        $result = app(MarkRenewalPaidOnline::class)(
             $renewal,
             self::AMOUNT_MINOR + 1,
             'pay_online_1',
             'provider_event:test-1',
         );
+
+        $this->assertInstanceOf(SettlementAnomaly::class, $result);
+        $this->assertSame(RenewalAuditActions::RENEWAL_PAID_ONLINE_AMOUNT_MISMATCH, $result->auditAction);
     }
 }

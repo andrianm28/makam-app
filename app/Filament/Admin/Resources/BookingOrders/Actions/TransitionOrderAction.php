@@ -138,6 +138,17 @@ final class TransitionOrderAction
                     ->hint('Catatan ini dicatat di audit sebagai alasan transisi.')
                     ->required(),
             ]);
+        } elseif ($to === OrderStatus::DIBAYAR) {
+            // Batch M1b, PAY-07: the "mark paid" money attestation. Required
+            // — `MarkOrderPaid` itself throws `InvalidArgumentException` on a
+            // blank reason (its own doc block), so this is the form-level
+            // backstop that keeps an admin from ever submitting one blank.
+            $action->schema([
+                Textarea::make('reason')
+                    ->label('Alasan penandaan lunas')
+                    ->hint('Catatan ini dicatat di audit sebagai alasan transisi ke DIBAYAR.')
+                    ->required(),
+            ]);
         }
 
         if (in_array($transition, self::MONEY_TRANSITIONS, true)) {

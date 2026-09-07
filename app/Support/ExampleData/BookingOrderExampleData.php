@@ -215,7 +215,7 @@ final class BookingOrderExampleData
         app(RecordBuyerApproval::class)($order, self::ACTOR_REF, self::ACTOR_ROLE);
         app(GrantOrderPaymentOpening::class)($order->fresh(), self::ACTOR_REF, self::ACTOR_REF, self::ACTOR_ROLE);
         app(ManualPaymentVerification::class)($order->fresh(), self::ACTOR_REF, self::ACTOR_ROLE, 'Bukti transfer demo diverifikasi.');
-        app(MarkOrderPaid::class)($order->fresh(), self::ACTOR_REF, self::ACTOR_ROLE);
+        app(MarkOrderPaid::class)($order->fresh(), self::ACTOR_REF, self::ACTOR_ROLE, 'Pembayaran diverifikasi manual (data demo).');
 
         return $order->fresh();
     }
