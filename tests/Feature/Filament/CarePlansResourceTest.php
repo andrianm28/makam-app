@@ -177,6 +177,37 @@ final class CarePlansResourceTest extends TestCase
             ->assertOk();
     }
 
+    /**
+     * ARCH-05 regression test: `CarePlansResource` used to declare no
+     * `form()` at all, so `/admin/rencana-perawatan/create` rendered zero
+     * fields and any submit threw `ErrorException: Undefined array key
+     * "name"`. This drives the REAL Filament create flow — filling the
+     * form and calling `create` — so a missing/miswired field would fail
+     * this test the way `assertOk()` alone (the pre-existing render-only
+     * test above) never could.
+     */
+    public function test_care_plan_create_flow_creates_a_care_plan_through_the_real_form(): void
+    {
+        $this->actingUserWithRole(ActorRole::ADMIN);
+
+        Livewire::test(CreateCarePlanPage::class)
+            ->fillForm([
+                'name' => 'Perawatan Triwulan Premium',
+                'product_code' => 'GRAVE_CARE_QUARTERLY_PREMIUM',
+                'frequency' => CarePlanFrequency::Quarterly->value,
+                'price_minor' => 450000,
+                'checklist_template' => [],
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $plan = CarePlan::query()->where('product_code', 'GRAVE_CARE_QUARTERLY_PREMIUM')->sole();
+
+        $this->assertSame('Perawatan Triwulan Premium', $plan->name);
+        $this->assertSame(CarePlanFrequency::Quarterly->value, $plan->frequency);
+        $this->assertSame(450000, $plan->price_minor);
+    }
+
     // =====================================================================
     // Subscriptions — list, view
     // =====================================================================

@@ -18,6 +18,7 @@ use App\Domain\CemeteryCapability\Models\CemeteryCapabilityProfile;
 use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\CemeteryDirectory\PlotTrackingMode;
+use App\Domain\OrderWorkflow\Actions\OpenBookingOnlinePayment;
 use App\Domain\OrderWorkflow\Actions\SubmitBookingDraft;
 use App\Domain\OrderWorkflow\Exceptions\UnroutableProductTypeException;
 use App\Domain\OrderWorkflow\Models\Order;
@@ -29,8 +30,6 @@ use App\Domain\PlotReservation\Exceptions\DraftPlotHoldNoLongerValidException;
 use App\Domain\PlotReservation\Exceptions\PlotNotAvailableException;
 use App\Domain\PlotReservation\Exceptions\PlotReservationTransitionException;
 use App\Domain\PlotReservation\Models\PlotReservation;
-use App\Domain\Quotation\Actions\ComposeQuoteLinesFromBookingDraft;
-use App\Domain\Quotation\Actions\IssueQuote;
 use App\Domain\Quotation\Exceptions\UnpricedBookingServiceException;
 use App\Domain\Quotation\Models\Quote;
 use App\Domain\Quotation\Models\QuoteLine;
@@ -40,19 +39,13 @@ use App\Livewire\Public\Directory\Support\PublicCapabilityProjection;
 use App\Platform\Audit\AuditSource;
 use App\Platform\FeatureGate\ModeResolver;
 use App\Platform\FeatureGate\Modes\PaymentMode;
-use App\Platform\IdentityAccess\ActorContextResolver;
-use App\Platform\Payment\Actions\OpenPaymentSession;
-use App\Platform\Payment\Actions\OpenPaymentSessionCommand;
 use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutProviderException;
 use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutUnavailableException;
 use App\Platform\Payment\Exceptions\PaymentSessionOpeningDeniedException;
 use App\Platform\Payment\Exceptions\PaymentSessionOrderAlreadyPaidException;
 use App\Platform\Payment\Models\PaymentSession;
-use App\Platform\Payment\OrderType;
 use App\Platform\Payment\PaymentProviders;
 use App\Platform\Payment\SessionState;
-use App\Platform\SiteSettings\Models\SiteSetting;
-use App\Platform\SiteSettings\SettingsService;
 use App\Support\BankTransferInfo;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
@@ -1130,33 +1123,15 @@ final class BookingWizard extends Component
             return;
         }
 
-        // The submission chain: submit the draft as an idempotent order,
-        // then ensure a current quote exists before the opening attempt.
-        // Every failure lands the same honest fail-closed copy with the
-        // manual path (and the support escape) still on screen — never a 500.
+        // The submission chain — submit the draft as an idempotent order,
+        // ensure a current quote exists, then open the hosted checkout for
+        // the quote total — is orchestrated by `OpenBookingOnlinePayment`
+        // (ARCH-01: this Livewire component no longer composes the chain
+        // itself). Every failure lands the same honest fail-closed copy
+        // with the manual path (and the support escape) still on screen —
+        // never a 500.
         try {
-            $order = app(SubmitBookingDraft::class)($saved, 'booking:'.$saved->id.':submit');
-
-            $quote = Quote::currentFor($order);
-
-            if (! $quote instanceof Quote) {
-                // The quote's actor context comes from the same seam
-                // `OpenPaymentSession` reads (`ActorContextResolver`); an
-                // anonymous submission names the draft, mirroring
-                // `SubmitBookingDraft`'s own initial-event reference — the
-                // only stable, non-identifying reference that exists here.
-                $actor = app(ActorContextResolver::class)->resolve();
-
-                $quote = (new IssueQuote)(
-                    $order,
-                    (new ComposeQuoteLinesFromBookingDraft)($saved),
-                    now()->addDays(7),
-                    $actor->identityReference !== null
-                        ? (string) $actor->identityReference
-                        : 'booking_draft:'.$saved->id,
-                    $actor->isAuthenticated() ? 'customer' : 'guest',
-                );
-            }
+            $session = app(OpenBookingOnlinePayment::class)($saved, 'booking:'.$saved->id.':submit');
         } catch (UnpricedBookingServiceException) {
             $this->onlinePaymentError = 'Pembayaran online belum dapat dibuka karena harga layanan belum tersedia. Gunakan pembayaran manual atau hubungi dukungan.';
             $this->currentStep = BookingWizardStep::PAYMENT;
@@ -1181,21 +1156,6 @@ final class BookingWizard extends Component
             $this->currentStep = BookingWizardStep::PAYMENT;
 
             return;
-        }
-
-        try {
-            $session = app(OpenPaymentSession::class)(new OpenPaymentSessionCommand(
-                orderType: OrderType::Booking,
-                orderRef: $order->reference,
-                // The current quote's total in integer minor units — the
-                // amount the guard's condition 5 verifies; never a
-                // client-supplied figure.
-                amountMinor: $quote->totalMinor()->toMinorInt(),
-                merchantRef: (string) app(SettingsService::class)
-                    ->setting(SiteSetting::KEY_PAYMENT_MERCHANT_REF, (string) config('payment.merchant_ref', '')),
-                successReturnUrl: route('payments.return'),
-                cancelReturnUrl: route('payments.cancel'),
-            ));
         } catch (PaymentSessionOpeningDeniedException) {
             // The six-condition guard denied. Fixed Indonesian copy — the
             // guard's own messages are internal English and stay off-screen.

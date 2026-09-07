@@ -228,7 +228,7 @@ final class TransitionOrderAction
             match ($to) {
                 OrderStatus::DIVERIFIKASI => app(VerifyOrder::class)($order, $actorRef, $actorRole, $reason),
                 OrderStatus::MENUNGGU_KETERSEDIAAN => app(RequestAvailability::class)($order, $actorRef, $actorRole, $reason),
-                OrderStatus::PENAWARAN_TERKIRIM => app(IssueOrderQuote::class)($order, CarbonImmutable::now()->addDays(30), $actorRef, $actorRole, $reason),
+                OrderStatus::PENAWARAN_TERKIRIM => app(IssueOrderQuote::class)($order, CarbonImmutable::now()->addDays(IssueOrderQuote::DEFAULT_VALIDITY_DAYS), $actorRef, $actorRole, $reason),
                 OrderStatus::DISETUJUI_PEMESAN => app(RecordBuyerApproval::class)($order, $actorRef, $actorRole, $reason),
                 OrderStatus::MENUNGGU_PEMBAYARAN => app(GrantOrderPaymentOpening::class)($order, (int) $actorRef, $actorRef, $actorRole, $reason),
                 OrderStatus::MENUNGGU_VERIFIKASI_PEMBAYARAN => app(ManualPaymentVerification::class)($order, $actorRef, $actorRole, $reason ?? 'Pembayaran manual dicatat.'),

@@ -7,12 +7,14 @@ namespace Tests\Feature\Livewire\Public\Marketplace;
 use App\Domain\Marketplace\Actions\AddToCart;
 use App\Domain\Marketplace\AvailabilityMode;
 use App\Domain\Marketplace\EvidenceRequirement;
+use App\Domain\Marketplace\MarketplaceAuditActions;
 use App\Domain\Marketplace\Models\Cart as CartModel;
 use App\Domain\Marketplace\Models\Product;
 use App\Domain\Marketplace\Models\Vendor;
 use App\Domain\Marketplace\Models\VendorListing;
 use App\Domain\Marketplace\ProductCode;
 use App\Livewire\Public\Marketplace\Cart;
+use App\Platform\Audit\Models\AuditEvent;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -106,6 +108,46 @@ final class CartScreenTest extends TestCase
         $component->call('$refresh')
             ->assertSee('Harga berubah')
             ->assertSee('Konfirmasi harga baru');
+    }
+
+    /**
+     * ARCH-13 remediation: `Cart::reconfirmPricing()` used to mutate the
+     * frozen `unit_price_minor`/`price_version` columns directly with no
+     * Domain Action, no audit trail. This asserts BOTH halves of the fix —
+     * the cart line really reconfirms to the listing's new price, AND a
+     * `CART_PRICING_RECONFIRMED` audit_events row now exists for it.
+     */
+    public function test_reconfirming_pricing_updates_the_frozen_line_and_writes_an_audit_row(): void
+    {
+        $listing = $this->listing('Vendor A', ProductCode::FLOWER_BOARD, 100_000);
+
+        $component = Livewire::test(Cart::class)->call('addListing', $listing->id, 1, null);
+
+        $cart = CartModel::firstOrFail();
+        $item = $cart->items()->firstOrFail();
+        $this->assertSame(100_000, $item->unit_price_minor);
+        $this->assertSame(1, $item->price_version);
+
+        $this->assertSame(
+            0,
+            AuditEvent::query()->where('action', MarketplaceAuditActions::CART_PRICING_RECONFIRMED)->count()
+        );
+
+        $listing->update(['price_minor' => 130_000, 'price_version' => 2]);
+
+        $component->call('reconfirmPricing');
+
+        $item->refresh();
+        $this->assertSame(130_000, $item->unit_price_minor);
+        $this->assertSame(2, $item->price_version);
+
+        $event = AuditEvent::query()
+            ->where('action', MarketplaceAuditActions::CART_PRICING_RECONFIRMED)
+            ->where('subject_type', 'cart_item')
+            ->where('subject_id', (string) $item->getKey())
+            ->sole();
+
+        $this->assertSame('allowed', $event->outcome);
     }
 
     public function test_the_screen_offers_a_support_affordance(): void

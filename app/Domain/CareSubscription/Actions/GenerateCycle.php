@@ -40,9 +40,19 @@ final readonly class GenerateCycle
             return $existing;
         }
 
-        return Audit::wrap(
-            mutation: function () use ($subscription, $cycleStart, $cycleEnd): SubscriptionCycle {
-                try {
+        // The `UniqueConstraintViolationException` recovery below MUST run
+        // in a fresh transaction, never inside the one `Audit::wrap()`
+        // opens: on PostgreSQL a unique-violation (23505) aborts the whole
+        // enclosing transaction, so a recovery `SELECT` issued while still
+        // inside it fails with 25P02 ("current transaction is aborted")
+        // instead of finding the incumbent row. Wrapping the WHOLE
+        // `Audit::wrap(...)` call in the try — mirroring
+        // `SubmitBookingDraft::__invoke()`'s identical shape — lets
+        // PostgreSQL roll the aborted transaction back first; the recovery
+        // query below then runs on a clean connection state.
+        try {
+            return Audit::wrap(
+                mutation: function () use ($subscription, $cycleStart, $cycleEnd): SubscriptionCycle {
                     $cycle = SubscriptionCycle::query()->create([
                         'subscription_id' => $subscription->getKey(),
                         'cycle_start' => $cycleStart->toDateString(),
@@ -61,24 +71,24 @@ final readonly class GenerateCycle
                     $cycle->update(['invoice_id' => $invoice->getKey()]);
 
                     return $cycle->fresh();
-                } catch (UniqueConstraintViolationException) {
-                    return SubscriptionCycle::query()
-                        ->where('subscription_id', $subscription->getKey())
-                        ->where('cycle_start', $cycleStart->toDateString())
-                        ->where('cycle_end', $cycleEnd->toDateString())
-                        ->firstOrFail();
-                }
-            },
-            action: CareSubscriptionAuditActions::CYCLE_GENERATED,
-            subject: fn (SubscriptionCycle $cycle): AuditSubject => new AuditSubject(
-                'subscription_cycle',
-                $cycle->getKey(),
-            ),
-            outcome: AuditOutcome::Allowed,
-            actorRef: 'system',
-            actorRole: 'system',
-            source: AuditSource::Job,
-            correlationId: app(CorrelationContext::class)->current()?->value,
-        );
+                },
+                action: CareSubscriptionAuditActions::CYCLE_GENERATED,
+                subject: fn (SubscriptionCycle $cycle): AuditSubject => new AuditSubject(
+                    'subscription_cycle',
+                    $cycle->getKey(),
+                ),
+                outcome: AuditOutcome::Allowed,
+                actorRef: 'system',
+                actorRole: 'system',
+                source: AuditSource::Job,
+                correlationId: app(CorrelationContext::class)->current()?->value,
+            );
+        } catch (UniqueConstraintViolationException) {
+            return SubscriptionCycle::query()
+                ->where('subscription_id', $subscription->getKey())
+                ->where('cycle_start', $cycleStart->toDateString())
+                ->where('cycle_end', $cycleEnd->toDateString())
+                ->firstOrFail();
+        }
     }
 }
