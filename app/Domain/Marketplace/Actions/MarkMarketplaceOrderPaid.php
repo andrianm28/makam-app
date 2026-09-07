@@ -19,6 +19,8 @@ use App\Platform\FinancialLedger\Money;
 use App\Platform\FinancialLedger\VendorPayableAssessmentTrigger;
 use App\Platform\FinancialLedger\VendorPayableEligibility;
 use App\Platform\IdentityAccess\ActorContext;
+use App\Platform\Outbox\Outbox;
+use App\Platform\Outbox\OutboxClassification;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -133,6 +135,27 @@ final readonly class MarkMarketplaceOrderPaid
             $previousState = $order->payment_state;
 
             $order->forceFill(['payment_state' => PaymentState::DIBAYAR])->save();
+
+            // QUE-02 (Batch M1a, 07 Sep 2026): this transition previously
+            // wrote state and an audit row with no outbox event, though
+            // `queue-and-outbox.md` §6 lists `payment.received` among the
+            // events requiring one for this kind of transition. A NEW
+            // catalogued event, not a reuse of `payment.received.v1` —
+            // that event's catalogued payload carries an `OrderInvoice`
+            // reference the marketplace domain has no analogue for.
+            // References only (AC7/AC14): no amount.
+            Outbox::record(
+                eventName: 'marketplace_order.paid.v1',
+                eventVersion: 1,
+                aggregateType: 'marketplace_order',
+                aggregateId: $order->getKey(),
+                data: [
+                    'marketplace_order_id' => $order->getKey(),
+                    'vendor_id' => $order->vendor_id,
+                ],
+                classification: OutboxClassification::Internal,
+                idempotencyKey: "marketplace_order_paid:{$order->getKey()}",
+            );
 
             $this->releasePayable($order, $fulfilmentEvidenceAccepted, $disputeWindowEndsAt, $correlationId, $now);
 

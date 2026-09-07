@@ -186,7 +186,7 @@ final class NotificationTemplatePersistenceTest extends TestCase
         );
     }
 
-    public function test_only_the_twelve_ruled_rows_carry_an_outbox_event_name(): void
+    public function test_only_the_thirteen_ruled_rows_carry_an_outbox_event_name(): void
     {
         $mapped = [
             'Booking submitted' => 'booking.draft_submitted.v2',
@@ -201,6 +201,14 @@ final class NotificationTemplatePersistenceTest extends TestCase
             'Vendor evidence uploaded' => 'vendor.evidence_uploaded.v1',
             'Renewal submitted' => 'renewal.submitted.v1',
             'Renewal paid/verified' => 'renewal.paid_online.v1',
+            // 07 Sep 2026, Batch M1a QUE-03: `renewal.marked_external.v1`'s
+            // first producers (`MarkExternalRenewal`/
+            // `MarkRenewalPaidExternally`) needed their own matrix row
+            // (`notification_templates.event_name` is unique and `Renewal
+            // paid/verified` already claims the online path) — added by
+            // `2026_09_07_100000_add_renewal_marked_external_notification_
+            // template.php`, not this migration.
+            'Renewal paid/verified (external)' => 'renewal.marked_external.v1',
         ];
 
         foreach ($mapped as $eventName => $outboxEventName) {
@@ -350,6 +358,11 @@ final class NotificationTemplatePersistenceTest extends TestCase
             'Vendor evidence uploaded' => 'vendor.evidence_uploaded.v1',
             'Renewal submitted' => 'renewal.submitted.v1',
             'Renewal paid/verified' => 'renewal.paid_online.v1',
+            // 07 Sep 2026, Batch M1a QUE-03 — set by
+            // `2026_09_07_100000_add_renewal_marked_external_notification_
+            // template.php`, not the main seed migration's own
+            // `outboxEventName()` match (which has no arm for this label).
+            'Renewal paid/verified (external)' => 'renewal.marked_external.v1',
             default => null,
         };
     }
