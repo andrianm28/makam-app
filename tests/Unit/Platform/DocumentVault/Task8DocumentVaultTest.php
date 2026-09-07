@@ -43,7 +43,7 @@ final class Task8DocumentVaultTest extends TestCase
         $catalog = file_get_contents(base_path('docs/contracts/event-catalog.md'));
 
         $this->assertIsString($catalog);
-        $this->assertStringContainsString('# Event Catalog — v0.6', $catalog);
+        $this->assertStringContainsString('# Event Catalog — v0.7', $catalog);
         $this->assertStringContainsString('| `document.uploaded.v1` |', $catalog);
         $this->assertStringContainsString('| `document.accepted.v1` |', $catalog);
         $this->assertStringContainsString('| `document.deleted.v1` |', $catalog);
