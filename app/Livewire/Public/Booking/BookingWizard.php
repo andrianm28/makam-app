@@ -629,8 +629,10 @@ final class BookingWizard extends Component
         try {
             return CemeteryBlock::query()
                 ->where('cemetery_id', $this->pickerCemeteryId)
-                ->with(['plots' => fn ($query) => $query->orderBy('slot')])
+                ->with(['plots' => fn ($query) => $query->orderBy('slot')
+                    ->limit((int) config('booking.plot_picker_max_plots_per_block'))])
                 ->orderBy('code')
+                ->limit((int) config('booking.plot_picker_max_blocks'))
                 ->get();
         } catch (Throwable $e) {
             report($e);
@@ -1610,14 +1612,13 @@ final class BookingWizard extends Component
                 // cemeteries (AC6 / `booking-wizard-fields.md` §Step 2
                 // "package/class when applicable"), so the view must be able
                 // to offer one. Resolved here, once per render, rather than
-                // per-card in Blade — `CemeteryPublicQuery::activePackages()`
-                // is one query per cemetery either way, but the domain read
-                // belongs in the component, not in the template.
-                $packagesByCemetery = $cemeteries
-                    ->mapWithKeys(static fn (Cemetery $cemetery): array => [
-                        $cemetery->id => CemeteryPublicQuery::activePackages($cemetery),
-                    ])
-                    ->all();
+                // per-card in Blade.
+                //
+                // PERF-05: `CemeteryPublicQuery::activePackagesForMany()`
+                // resolves every cemetery's active packages in ONE query
+                // (`whereIn('cemetery_id', ...)`) instead of the previous
+                // one-query-per-cemetery `activePackages()` loop.
+                $packagesByCemetery = CemeteryPublicQuery::activePackagesForMany($cemeteries);
 
                 // design-system.md §3.3's normative Cemetery card spec
                 // (PUB-011) requires the SAME card content the public
@@ -1626,28 +1627,27 @@ final class BookingWizard extends Component
                 // photo, address, facilities, attributed price range, and
                 // availability. Availability needs the cemetery's resolved
                 // capability profile, projected through the same public
-                // allowlist the directory uses
-                // (`PublicCapabilityProjection::forCemetery()`) — resolved
-                // once per cemetery here, exactly mirroring
-                // `CemeteryDirectoryIndex::render()`'s own per-card
-                // try/catch: one cemetery's capability-resolution failure
-                // degrades to AC4's safe defaults rather than blanking the
-                // whole step.
-                $cemeteryCapabilities = $cemeteries
-                    ->mapWithKeys(function (Cemetery $cemetery): array {
-                        try {
-                            $capabilities = PublicCapabilityProjection::forCemetery($cemetery);
-                        } catch (Throwable $e) {
-                            report($e);
+                // allowlist the directory uses.
+                //
+                // PERF-05: `PublicCapabilityProjection::forMany()` resolves
+                // every cemetery's current profile in ONE query instead of
+                // one per cemetery. Because it is now a single query, a
+                // resolution failure is whole-batch rather than per-card —
+                // AC4's fallback (safe defaults) still applies, just to
+                // every card at once, mirroring
+                // `CemeteryDirectoryIndex::render()`'s own batch fallback.
+                try {
+                    $cemeteryCapabilities = PublicCapabilityProjection::forMany($cemeteries);
+                } catch (Throwable $e) {
+                    report($e);
 
-                            $capabilities = PublicCapabilityProjection::from(
-                                new CemeteryCapabilityProfile(CemeteryCapabilityProfile::safeDefaults())
-                            );
-                        }
-
-                        return [$cemetery->id => $capabilities];
-                    })
-                    ->all();
+                    $safeDefaults = PublicCapabilityProjection::from(
+                        new CemeteryCapabilityProfile(CemeteryCapabilityProfile::safeDefaults())
+                    );
+                    $cemeteryCapabilities = $cemeteries
+                        ->mapWithKeys(static fn (Cemetery $cemetery): array => [$cemetery->id => $safeDefaults])
+                        ->all();
+                }
             } catch (Throwable $e) {
                 report($e);
                 $this->cemeteryListUnavailable = true;

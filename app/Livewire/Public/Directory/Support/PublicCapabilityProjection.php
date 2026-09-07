@@ -9,6 +9,7 @@ use App\Domain\CemeteryCapability\BookingMode;
 use App\Domain\CemeteryCapability\MapMode;
 use App\Domain\CemeteryCapability\Models\CemeteryCapabilityProfile;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use Illuminate\Support\Collection;
 
 /**
  * The AC12 public projection of a cemetery capability profile — Sprint 4
@@ -108,6 +109,26 @@ final readonly class PublicCapabilityProjection
     public static function forCemetery(Cemetery $cemetery): self
     {
         return self::from((new ResolveCemeteryCapabilityProfile)($cemetery));
+    }
+
+    /**
+     * Batch form of `forCemetery()` — PERF-05. Resolves every cemetery's
+     * current capability profile in ONE query
+     * (`ResolveCemeteryCapabilityProfile::forMany()`) instead of one query
+     * per cemetery, then projects each through the same four-key public
+     * allowlist `forCemetery()`/`from()` apply.
+     *
+     * @param  Collection<int, Cemetery>  $cemeteries
+     * @return array<string, self> keyed by cemetery_id
+     */
+    public static function forMany(Collection $cemeteries): array
+    {
+        $profiles = (new ResolveCemeteryCapabilityProfile)->forMany($cemeteries);
+
+        return array_map(
+            static fn (CemeteryCapabilityProfile $profile): self => self::from($profile),
+            $profiles,
+        );
     }
 
     /**
