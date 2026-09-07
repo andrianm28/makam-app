@@ -9,7 +9,6 @@ use App\Domain\Renewal\Actions\MarkRenewalPaidExternally;
 use App\Domain\Renewal\Models\Renewal;
 use App\Domain\Renewal\RenewalStatus;
 use App\Filament\Admin\Pages\PasswordReauthentication;
-use App\Filament\Admin\Resources\RenewalOrders\RenewalOrderResource;
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\Reauthentication\Exceptions\ReauthenticationRequiredException;
@@ -32,6 +31,18 @@ use Filament\Support\Icons\Heroicon;
  * `->action()` closure re-checks the transition authorizer AND the
  * `ReauthenticationGuard` (money transition — recent re-authentication
  * required) before the domain action runs.
+ *
+ * NEITHER of those is the source of truth for whether the settlement
+ * itself is permitted (AUTHZ-04). `OrderTransitionAuthorizerContract`
+ * (used by both `->authorize()` and the mount-time re-check above) is
+ * role-only for this money transition — it never reads a cemetery-scope
+ * grant. The actual authorization — role AND a privileged cemetery-scope
+ * grant, matching `MarkExternalRenewal`'s CREATE path exactly — lives in
+ * `MarkRenewalPaidExternally::__invoke()` via `RenewalMarkingPolicy`. A
+ * `finance` actor can still see and click this button (the checks above
+ * pass), but the domain action itself denies them unless
+ * `RenewalMarkingPolicy::PERMITTED_ROLES` is widened — see that class and
+ * `MarkRenewalPaidExternally`'s own doc block for the open decision point.
  */
 final class RecordExternalRenewalPaymentAction
 {
@@ -61,8 +72,6 @@ final class RecordExternalRenewalPaymentAction
             ->visible(fn (Renewal $record): bool => $record->status === RenewalStatus::MENUNGGU_PEMBAYARAN)
             ->action(function (array $data) use ($renewal): void {
                 $actor = app(ActorContext::class);
-                $actorRef = $actor->identityReference;
-                $actorRole = RenewalOrderResource::auditRoleFor($actor);
 
                 try {
                     app(OrderTransitionAuthorizerContract::class)->authorizeTransition(
@@ -94,8 +103,6 @@ final class RecordExternalRenewalPaymentAction
                         $renewal,
                         (string) $data['evidence'],
                         (string) $data['reason'],
-                        (string) $actorRef,
-                        $actorRole,
                     );
                     Notification::make()->success()->title('Pembayaran eksternal dicatat.')->send();
                 } catch (\Throwable $exception) {
