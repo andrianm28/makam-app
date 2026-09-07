@@ -1273,12 +1273,6 @@ parameters:
 			path: tests/Feature/IdentityAccess/UserCanAccessPanelTest.php
 
 		-
-			message: '#^Call to an undefined method Illuminate\\Contracts\\Auth\\PasswordBroker\:\:createToken\(\)\.$#'
-			identifier: method.notFound
-			count: 2
-			path: tests/Feature/Livewire/Public/Auth/PasswordResetTest.php
-
-		-
 			message: '#^Parameter \#1 \$panel of method App\\Models\\User\:\:canAccessPanel\(\) expects Filament\\Panel, Mockery\\MockInterface given\.$#'
 			identifier: argument.type
 			count: 2
@@ -1499,6 +1493,12 @@ parameters:
 			identifier: return.type
 			count: 1
 			path: tests/Feature/Payment/GuardPaymentSessionTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Contracts\\Auth\\PasswordBroker\:\:createToken\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: tests/Feature/Livewire/Public/Auth/PasswordResetTest.php
 
 		-
 			message: '#^Call to function class_exists\(\) with ''App\\\\Platform…'' will always evaluate to false\.$#'

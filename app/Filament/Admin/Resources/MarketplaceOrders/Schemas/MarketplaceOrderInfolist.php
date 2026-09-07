@@ -9,6 +9,7 @@ use App\Domain\Marketplace\Models\MarketplaceOrderItem;
 use App\Filament\Admin\Resources\MarketplaceOrders\MarketplacePaymentStateBadge;
 use App\Models\User;
 use App\Platform\FinancialLedger\Models\VendorPayable as VendorPayableModel;
+use App\Platform\FinancialLedger\Money;
 use App\Platform\FinancialLedger\VendorPayableState;
 use App\Support\Design\StatusIntent;
 use Filament\Infolists\Components\RepeatableEntry;
@@ -207,7 +208,7 @@ final class MarketplaceOrderInfolist
 
     private static function moneyString(int $amountMinor): string
     {
-        return 'Rp '.number_format($amountMinor / 100, 0, ',', '.');
+        return (new Money($amountMinor))->format();
     }
 
     /**
