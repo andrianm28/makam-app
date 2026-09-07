@@ -20,6 +20,7 @@ use App\Platform\Payment\Exceptions\SettlementTargetUnresolvableException;
 use App\Platform\Payment\Models\PaymentIntent;
 use App\Platform\Payment\Models\PaymentSession;
 use App\Platform\Payment\Models\ProviderEvent;
+use App\Platform\Payment\PaymentAuditActions;
 use App\Platform\Payment\PaymentIntentDecision;
 use App\Platform\Payment\PaymentProviders;
 use App\Platform\Payment\ProviderEventStatus;
@@ -144,7 +145,9 @@ final class CareSubscriptionWebhookSettlementTest extends TestCase
      * `payment_id`, under a new message id) must not double-advance the
      * cycle counter or create a second work order — `MarkCyclePaid`'s
      * idempotent-if-already-paid guard and `CreateWorkOrderFromCycle`'s own
-     * idempotency both apply.
+     * idempotency both apply. Batch M1b, PAY-01: this second arrival is now
+     * also audited, closing the asymmetry `ApplyPaymentSettlement`'s own doc
+     * block used to flag against the booking leg.
      */
     public function test_a_second_payment_arrival_for_an_already_paid_cycle_changes_nothing_further(): void
     {
@@ -185,9 +188,17 @@ final class CareSubscriptionWebhookSettlementTest extends TestCase
             ->where('subscription_cycle_id', $cycle->getKey())->sole()->getKey());
 
         // Money DID arrive for the second transaction, so its own session is
-        // still marked PAID — the record of what was collected.
+        // still marked PAID — the record of what was collected — and the
+        // duplicate arrival is explicitly audited (PAY-01).
         $secondSession = PaymentSession::query()->where('provider_payment_id', 'pay_care_second')->sole();
         $this->assertSame(SessionState::Paid->value, $secondSession->state);
+
+        $secondEvent = ProviderEvent::query()->where('provider_transaction_id', 'pay_care_second')->sole();
+
+        $audit = AuditEvent::query()->where('action', PaymentAuditActions::DUPLICATE_ARRIVAL)->sole();
+        $this->assertSame('provider_event', $audit->subject_type);
+        $this->assertSame($secondEvent->getKey(), $audit->subject_id);
+        $this->assertSame('denied', $audit->outcome);
     }
 
     /**
@@ -198,6 +209,13 @@ final class CareSubscriptionWebhookSettlementTest extends TestCase
      * but the settlement must not mark the cycle PAID for a payment that
      * does not equal the invoice amount. `MarkCyclePaid`'s amount assert
      * rejects it, the claim rolls back, and nothing is applied.
+     *
+     * Batch M1b (PAY-02, 7 Sep 2026): see `WebhookPaidEffectsTest::
+     * test_a_marketplace_session_opened_for_the_wrong_amount_cannot_mark_the_order_paid()`'s
+     * own doc block for why this now lands at `MANUAL_REVIEW` rather than
+     * staying `VALIDATED` — the `sync` queue this suite runs on has no real
+     * retry concept, so `ProcessProviderEventJob::failed()` fires on this
+     * single attempt.
      */
     public function test_a_session_opened_for_the_wrong_amount_cannot_mark_the_cycle_paid(): void
     {
@@ -224,9 +242,11 @@ final class CareSubscriptionWebhookSettlementTest extends TestCase
             // expected: the paid transition is refused for the wrong amount.
         }
 
-        // The claim rolled back: the row stays VALIDATED, never PROCESSED.
+        // The claim rolled back — never PROCESSED — but the job's own
+        // `failed()` hook (PAY-02) now moves the row to MANUAL_REVIEW rather
+        // than leaving it VALIDATED forever.
         $event = ProviderEvent::query()->sole();
-        $this->assertSame(ProviderEventStatus::Validated->value, $event->status);
+        $this->assertSame(ProviderEventStatus::ManualReview->value, $event->status);
 
         $this->assertSame(SubscriptionCycleStatus::Scheduled->value, $cycle->fresh()->status);
         $this->assertSame(SubscriptionStatus::Draft->value, $subscription->fresh()->status);
@@ -234,6 +254,11 @@ final class CareSubscriptionWebhookSettlementTest extends TestCase
 
         $session = PaymentSession::query()->where('provider_payment_id', 'pay_care_wrong')->sole();
         $this->assertSame(SessionState::AwaitingPayment->value, $session->state);
+
+        $this->assertSame(1, AuditEvent::query()
+            ->where('action', PaymentAuditActions::SETTLEMENT_PERMANENTLY_FAILED)
+            ->where('subject_id', $event->getKey())
+            ->count());
     }
 
     /**
@@ -241,6 +266,9 @@ final class CareSubscriptionWebhookSettlementTest extends TestCase
      * or subscription cycle is a data-integrity anomaly and fails closed —
      * the same stance `SettlementTargetUnresolvableException` already
      * documents for the other two legs.
+     *
+     * Batch M1b (PAY-02, 7 Sep 2026): see the wrong-amount test above for why
+     * this now lands at `MANUAL_REVIEW` rather than staying `VALIDATED`.
      */
     public function test_an_unresolvable_invoice_reference_fails_closed(): void
     {
@@ -260,7 +288,8 @@ final class CareSubscriptionWebhookSettlementTest extends TestCase
         }
 
         $event = ProviderEvent::query()->sole();
-        $this->assertSame(ProviderEventStatus::Validated->value, $event->status);
+        $this->assertSame(ProviderEventStatus::ManualReview->value, $event->status);
+        $this->assertSame('settlement target unresolvable; retries exhausted', $event->rejection_detail);
         $this->assertSame(0, WorkOrder::query()->count());
     }
 

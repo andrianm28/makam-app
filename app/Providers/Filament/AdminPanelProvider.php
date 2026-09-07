@@ -12,6 +12,7 @@ use App\Filament\Admin\Pages\Reports;
 use App\Filament\Admin\Widgets\FailedPaymentExceptionQueueWidget;
 use App\Filament\Admin\Widgets\FinancialOverviewWidget;
 use App\Filament\Admin\Widgets\OrderStatusOverviewWidget;
+use App\Filament\Admin\Widgets\PaymentSettlementManualReviewQueueWidget;
 use App\Filament\Admin\Widgets\PlatformOverviewWidget;
 use App\Http\Middleware\AssignCorrelationId;
 use Filament\Http\Middleware\Authenticate;
@@ -249,6 +250,9 @@ class AdminPanelProvider extends PanelProvider
                 OrderStatusOverviewWidget::class,
                 FinancialOverviewWidget::class,
                 FailedPaymentExceptionQueueWidget::class,
+                // Batch M1b (PAY-02) — same gate, same finance-only visibility
+                // as the queue above.
+                PaymentSettlementManualReviewQueueWidget::class,
             ])
             ->middleware([
                 // S3-T10 (platform-audit AC10 / platform-outbox AC13): this

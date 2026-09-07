@@ -67,6 +67,22 @@ use InvalidArgumentException;
  * well as minor units (`task-7-brief.md` §1c step 1). Without this field
  * there is nothing to compare the quote's `currency` against, so it is
  * carried explicitly rather than assumed to be the configured one.
+ *
+ * ---------------------------------------------------------------------------
+ * `reason` — Batch M1b, PAY-07 (7 Sep 2026)
+ * ---------------------------------------------------------------------------
+ * Nullable and forwarded verbatim to `Actions\RecordOrderStatusChange`'s own
+ * `?string $reason` parameter (`Actions\ApplyPaidEffects::apply()`). Fixes a
+ * real gap: `Actions\MarkOrderPaid` accepted a `$reason` argument that never
+ * reached this trigger, so an admin's "mark paid" money attestation reason
+ * was silently discarded before this fix — nothing downstream ever saw it.
+ *
+ * Stays `null` on the WEBHOOK trigger site (`App\Platform\Payment\Actions\
+ * ApplyPaymentSettlement::settleBooking()`), deliberately: a validated
+ * webhook has no human-authored justification to carry, the same reasoning
+ * `App\Domain\Renewal\RenewalAuditActions`'s doc block gives for keeping
+ * `RENEWAL_PAID_ONLINE` off `SensitiveActions::ACTIONS`. `MarkOrderPaid` is
+ * the only site that supplies a non-null value.
  */
 final readonly class PaidTrigger
 {
@@ -79,6 +95,7 @@ final readonly class PaidTrigger
         public CarbonImmutable $occurredAt,
         public string $actorRef,
         public string $actorRole,
+        public ?string $reason = null,
     ) {
         if (trim($this->sourceId) === '') {
             throw new InvalidArgumentException('A paid trigger requires a non-blank source id.');
