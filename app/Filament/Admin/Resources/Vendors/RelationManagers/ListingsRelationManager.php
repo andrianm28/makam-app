@@ -85,7 +85,8 @@ final class ListingsRelationManager extends RelationManager
                     ->columnSpanFull(),
 
                 TextInput::make('price_minor')
-                    ->label('Harga (Rp)')
+                    ->label('Harga (rupiah, dalam sen)')
+                    ->helperText('Nilai dalam satuan terkecil rupiah, mengikuti kolom price_minor.')
                     ->required()
                     ->numeric()
                     ->minValue(1)
@@ -155,8 +156,7 @@ final class ListingsRelationManager extends RelationManager
 
                 TextColumn::make('price_minor')
                     ->label('Harga')
-                    ->numeric(decimalPlaces: 0)
-                    ->prefix('Rp ')
+                    ->money()
                     ->sortable(),
 
                 TextColumn::make('availability_mode')

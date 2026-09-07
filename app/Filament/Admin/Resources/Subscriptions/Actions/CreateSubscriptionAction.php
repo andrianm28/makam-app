@@ -10,6 +10,7 @@ use App\Domain\CareSubscription\Models\CarePlan;
 use App\Domain\CareSubscription\Models\Subscription;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Filament\Admin\Resources\Subscriptions\SubscriptionsResource;
+use App\Filament\Shared\PanelFailure;
 use App\Platform\IdentityAccess\ActorContext;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
@@ -85,11 +86,7 @@ final class CreateSubscriptionAction
             Notification::make()->success()->title('Langganan perawatan dibuat.')->send();
             redirect()->route('filament.admin.resources.langganan.view', ['record' => $subscription->getKey()]);
         } catch (\Throwable $exception) {
-            Notification::make()
-                ->danger()
-                ->title('Gagal membuat langganan')
-                ->body($exception->getMessage())
-                ->send();
+            PanelFailure::notify($exception, 'Gagal membuat langganan');
         }
     }
 }

@@ -86,6 +86,26 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Display Timezone (ARCH-14)
+    |--------------------------------------------------------------------------
+    |
+    | Storage and `now()` stay UTC (see 'timezone' above) — this is the ONE
+    | seam every customer- or operator-facing rendered timestamp must go
+    | through instead: `Filament\Support\Facades\FilamentTimezone` (wired in
+    | `AppServiceProvider::boot()`) for every Filament panel, and the
+    | `<x-mk.local-time>` Blade component for public views. This names the
+    | same real-world zone `App\Platform\FinancialLedger\LedgerPeriod::TIMEZONE`
+    | does, for a different concern (display conversion of a UTC instant,
+    | not naive-literal ledger period-window construction) — see that
+    | class's own doc block and
+    | docs/superpowers/plans/2026-09-07-batchm5b-money-display-exception-consistency.md.
+    |
+    */
+
+    'display_timezone' => 'Asia/Jakarta',
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Locale Configuration
     |--------------------------------------------------------------------------
     |

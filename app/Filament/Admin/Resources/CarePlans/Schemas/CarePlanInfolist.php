@@ -36,7 +36,7 @@ final class CarePlanInfolist
 
                         TextEntry::make('price_minor')
                             ->label('Harga')
-                            ->formatStateUsing(fn ($state): string => 'Rp '.number_format((int) $state, 0, ',', '.')),
+                            ->money(),
 
                         TextEntry::make('status')
                             ->label('Status')

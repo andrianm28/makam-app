@@ -39,7 +39,7 @@ final class CarePlansTable
 
                 TextColumn::make('price_minor')
                     ->label('Harga')
-                    ->formatStateUsing(fn ($state): string => 'Rp '.number_format((int) $state, 0, ',', '.'))
+                    ->money()
                     ->sortable(),
 
                 TextColumn::make('status')

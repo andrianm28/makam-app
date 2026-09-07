@@ -15,6 +15,7 @@ use App\Domain\PreNeed\PreNeedCaseStatus;
 use App\Domain\Quotation\Models\Quote;
 use App\Domain\Quotation\QuoteStatus;
 use App\Filament\Admin\Resources\PreNeedCases\PreNeedCaseStatusBadge;
+use App\Platform\FinancialLedger\Money;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
@@ -165,7 +166,7 @@ final class PreNeedCaseInfolist
                                 TextEntry::make('installment_number')->label('Cicilan Ke-'),
                                 TextEntry::make('amount')
                                     ->label('Jumlah')
-                                    ->state(fn (PreNeedPaymentScheduleItem $item): string => 'Rp '.number_format($item->amount_minor / 100, 0, ',', '.')),
+                                    ->state(fn (PreNeedPaymentScheduleItem $item): string => (new Money((int) $item->amount_minor))->format()),
                                 TextEntry::make('currency')->label('Mata Uang'),
                                 TextEntry::make('due_date')->label('Jatuh Tempo')->date(),
                                 TextEntry::make('state')->label('Status')->badge(),
@@ -218,9 +219,7 @@ final class PreNeedCaseInfolist
             return 'Belum ada penawaran';
         }
 
-        $totalRupiah = $quote->totalMinor()->toMinorInt() / 100;
-
-        return 'Rp '.number_format($totalRupiah, 0, ',', '.').' · versi '.$quote->version_number;
+        return $quote->totalMinor()->format().' · versi '.$quote->version_number;
     }
 
     private static function reservation(PreNeedCase $record): ?PlotReservation

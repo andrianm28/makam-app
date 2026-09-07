@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Admin\Resources\Subscriptions\Actions;
 
 use App\Domain\CareSubscription\Models\Subscription;
+use App\Filament\Shared\PanelFailure;
 use App\Platform\IdentityAccess\ActorContext;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -46,11 +47,7 @@ final class PauseSubscriptionAction
                 ->body('Kebijakan pengjedaan langganan belum dikonfigurasi. Hubungi administrator.')
                 ->send();
         } catch (Throwable $exception) {
-            Notification::make()
-                ->danger()
-                ->title('Gagal menjeda langganan')
-                ->body($exception->getMessage())
-                ->send();
+            PanelFailure::notify($exception, 'Gagal menjeda langganan');
         }
     }
 }

@@ -2,6 +2,10 @@
 
 namespace App\Providers;
 
+use App\Platform\FinancialLedger\Money;
+use Filament\Infolists\Components\TextEntry;
+use Filament\Support\Facades\FilamentTimezone;
+use Filament\Tables\Columns\TextColumn;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -22,6 +26,38 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // ARCH-06: the path of least resistance for a Filament money
+        // column/entry is `->money()`, not hand-rolled `number_format`
+        // math — both macros route through the ONE `Money::format()` seam.
+        // Macroable rebinds $this to the calling class (TextColumn/TextEntry)
+        // at runtime; PHPStan only sees the declaring class here
+        // (AppServiceProvider), hence the ignores below.
+        TextColumn::macro('money', function (): TextColumn {
+            /** @var TextColumn $this */
+            // @phpstan-ignore varTag.nativeType
+            return $this->formatStateUsing(
+                fn (mixed $state): ?string => $state === null ? null : (new Money((int) $state))->format(),
+            );
+        });
+
+        TextEntry::macro('money', function (): TextEntry {
+            /** @var TextEntry $this */
+            // @phpstan-ignore varTag.nativeType
+            return $this->formatStateUsing(
+                fn (mixed $state): ?string => $state === null ? null : (new Money((int) $state))->format(),
+            );
+        });
+
+        // ARCH-14: the one display seam for every Filament panel (Admin,
+        // Operator, Vendor) — a `DateTimePicker`/`->dateTime()` column or
+        // entry that doesn't set its own explicit `->timezone()` renders
+        // converted to Jakarta local time instead of the raw UTC storage
+        // value. Deliberately NOT `config('app.timezone')` (see
+        // docs/superpowers/plans/2026-09-07-batchm5b-money-display-exception-consistency.md
+        // §ARCH-14) — this only affects Filament's own display layer, never
+        // `now()`/`Carbon::now()` or how anything is stored.
+        FilamentTimezone::set(config('app.display_timezone', 'Asia/Jakarta'));
+
         RateLimiter::for('document-download', static function (Request $request): Limit {
             $actorRef = $request->user()?->getAuthIdentifier() ?? 'guest';
 

@@ -57,9 +57,9 @@ final class SubscriptionInfolist
                             ->label('Nomor referensi')
                             ->placeholder('—'),
 
-                        TextEntry::make('carePlan.price')
+                        TextEntry::make('carePlan.price_minor')
                             ->label('Harga')
-                            ->formatStateUsing(fn ($state): string => 'Rp '.number_format((float) $state, 0, ',', '.'))
+                            ->money()
                             ->placeholder('—'),
                     ]),
             ]);
