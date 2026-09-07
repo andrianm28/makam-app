@@ -279,7 +279,12 @@ Production runs on the same shared `yiemvm` host as development and staging, not
 
 ## 18. Security/runtime boundaries
 
-- Session authentication and mandatory privileged MFA.
+- Session authentication and mandatory privileged re-authentication.
+  (7 Sep 2026) This line previously read "mandatory privileged MFA"; TOTP MFA
+  and recovery codes were built, then removed entirely on 22 Aug 2026 — see
+  `docs/adr/0024-use-session-auth-and-mfa.md`'s superseding note and
+  `docs/security/authentication-and-mfa.md` for the current mechanism
+  (password-only re-authentication).
 - Filament panels have explicit access checks and record scope.
 - Untrusted files cannot cross quarantine boundary without validation and scan.
 - Payment/journal/reconciliation data crosses only typed adapters and durable records.

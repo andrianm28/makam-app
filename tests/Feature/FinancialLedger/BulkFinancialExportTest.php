@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature\FinancialLedger;
 
+use App\Filament\Admin\Pages\PasswordReauthentication;
+use App\Http\Middleware\RequireRecentAuthentication;
 use App\Models\User;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\Models\AuditEvent;
@@ -25,6 +27,7 @@ use App\Platform\IdentityAccess\Scopes\ScopeGrantLevel;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use InvalidArgumentException;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
@@ -524,6 +527,61 @@ final class BulkFinancialExportTest extends TestCase
         $this->assertDatabaseMissing('audit_events', [
             'action' => BulkFinancialExport::AUDIT_ACTION,
         ]);
+    }
+
+    /**
+     * SEC-07 end-to-end regression. This used to be permanently stuck: the
+     * controller's catch block redirected to the challenge page without
+     * flashing `RequireRecentAuthentication::REASON_SESSION_KEY`, so
+     * `PasswordReauthentication::submit()` satisfied the generic
+     * `password_reauthentication` reason instead of `bulk_financial_export`
+     * — `assertReauthenticatedRecently()`'s own reason-scoped check then
+     * never matched, and the actor looped back to the challenge page on
+     * every retry, forever. This exercises the full HTTP round trip: get
+     * redirected to the challenge, complete it with the correct password,
+     * and confirm the CSV actually streams back afterward.
+     */
+    public function test_a_session_fresh_actor_can_complete_the_reauthentication_challenge_and_then_export(): void
+    {
+        $this->seedLedger();
+
+        $user = $this->freshlyAuthenticatedUser();
+        $actorRef = (string) $user->getAuthIdentifier();
+
+        $this->actAsFinanceActor($actorRef, fresh: true);
+        $this->grantLedgerReadAuthority(actorRef: $actorRef);
+
+        $this->actingAs($user)
+            ->get(route('admin.finance.exports', ['period' => '2026-08']))
+            ->assertRedirect(route('filament.admin.pages.verifikasi-ulang-kata-sandi'));
+
+        $this->assertSame(
+            BulkFinancialExport::REAUTHENTICATION_REASON,
+            session(RequireRecentAuthentication::REASON_SESSION_KEY),
+            'The redirect must flash the bulk_financial_export reason so the challenge page '.
+            'satisfies the SAME reason the Action is checking for, not the generic fallback.',
+        );
+
+        Livewire::test(PasswordReauthentication::class)
+            ->set('password', 'password')
+            ->call('submit')
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('reauthentication_events', [
+            'actor_ref' => $actorRef,
+            'reason' => BulkFinancialExport::REAUTHENTICATION_REASON,
+            'outcome' => ReauthenticationOutcome::SATISFIED,
+        ]);
+
+        // Re-bind ActorContext fresh (the earlier binding is still in the
+        // container from actAsFinanceActor() above) and hit the export route
+        // again — this is the request the actor's browser would make after
+        // PasswordReauthentication::submit()'s own redirectIntended().
+        $response = $this->actingAs($user)
+            ->get(route('admin.finance.exports', ['period' => '2026-08']));
+
+        $response->assertOk();
+        $response->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
     }
 
     public function test_the_route_streams_the_csv_for_an_authorised_reauthenticated_actor(): void

@@ -3,7 +3,12 @@
 ## Identity and privileged access
 
 - Same-origin Laravel session authentication through shared K1 identity.
-- TOTP MFA and recovery codes for privileged roles.
+- Password-only recent re-authentication (`RequireRecentAuthentication` /
+  `PasswordReauthentication`) for privileged roles. (7 Sep 2026) TOTP MFA and
+  recovery codes were built, then removed entirely on 22 Aug 2026 — see
+  `docs/adr/0024-use-session-auth-and-mfa.md`'s superseding note and
+  `authentication-and-mfa.md` for the full history. Do not reintroduce MFA
+  language here without updating that ADR.
 - Explicit Filament panel access plus policies/query scopes.
 - Session revocation and recent re-authentication for financial, gate, certificate, bank-detail, plot-override, and bulk-export actions.
 - See `authentication-and-mfa.md`.
