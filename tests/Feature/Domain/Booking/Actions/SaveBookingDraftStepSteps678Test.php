@@ -518,15 +518,25 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
     // CUSTOMER_AND_DECEASED_DATA — customer_contact_channel
     // =====================================================================
 
-    public function test_customer_and_deceased_data_step_rejects_a_missing_contact_channel(): void
+    /**
+     * The "Saluran Kontak yang Disukai" field was removed from the wizard
+     * (7 Sep 2026, product owner request relayed via WhatsApp), so a
+     * missing `customer_contact_channel` is now genuinely optional rather
+     * than rejected — `SaveBookingDraftStep` only validates the value when
+     * one is actually present. See `test_customer_and_deceased_data_step_
+     * rejects_a_contact_channel_outside_the_closed_list()` below for proof
+     * the closed-list check is still enforced when a caller does send one.
+     */
+    public function test_customer_and_deceased_data_step_accepts_a_missing_contact_channel(): void
     {
-        $this->assertRejectedWithKey(
-            'customer_contact_channel',
+        $saved = (new SaveBookingDraftStep)(
             $this->draftReadyForCustomerAndDeceasedData(),
             BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
             [...$this->customerPayloadWithout('customer_contact_channel'), ...$this->deceasedPayload()],
-            'idem-s6-channel-missing'
+            'idem-s6-channel-missing-ok'
         );
+
+        $this->assertNull($saved->customer_contact_channel);
     }
 
     public function test_customer_and_deceased_data_step_rejects_a_contact_channel_outside_the_closed_list(): void

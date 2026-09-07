@@ -122,7 +122,11 @@ final readonly class SaveBookingDraftStep
                     'customer_email' => self::trimmed($payload['customer_email']),
                     'customer_address' => self::trimmed($payload['customer_address']),
                     'customer_relationship' => $payload['customer_relationship'],
-                    'customer_contact_channel' => $payload['customer_contact_channel'],
+                    // No longer collected by the wizard UI (removed 7 Sep
+                    // 2026) — `?? null` guards a caller that omits the key
+                    // entirely, matching the deceased fields' own pattern
+                    // just below.
+                    'customer_contact_channel' => $payload['customer_contact_channel'] ?? null,
                     // Stamped from the server clock, reached only because
                     // validation above observed a genuine `true`. This is the
                     // record that consent happened, so its time must come
@@ -473,10 +477,18 @@ final readonly class SaveBookingDraftStep
             $errors['customer_relationship'] = ['Hubungan tidak valid.'];
         }
 
+        // No longer collected on Step 6 — the "Saluran Kontak yang Disukai"
+        // field was removed from the wizard at the product owner's request
+        // (7 Sep 2026, relayed via WhatsApp). Optional-but-validated-if-
+        // present rather than deleted outright: `customer_contact_channel`
+        // stays a real, nullable `BookingDraft` column and
+        // `BookingContactChannel::label()` already degrades gracefully for
+        // a null/unknown code on the confirmation screen (its own doc
+        // block), so an already-submitted draft that carries a value from
+        // before this change, or any future caller that still sends one,
+        // is still checked rather than silently accepted.
         $channel = $payload['customer_contact_channel'] ?? null;
-        if (! is_string($channel) || $channel === '') {
-            $errors['customer_contact_channel'] = ['Saluran kontak yang disukai harus dipilih.'];
-        } elseif (! BookingContactChannel::isKnown($channel)) {
+        if (is_string($channel) && $channel !== '' && ! BookingContactChannel::isKnown($channel)) {
             $errors['customer_contact_channel'] = ['Saluran kontak tidak valid.'];
         }
 
