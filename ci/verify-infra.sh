@@ -266,6 +266,74 @@ case "$acme" in
 esac
 
 # ---------------------------------------------------------------------------
+head2 "GATE I12 — APP_DEBUG is off on every publicly reachable vhost  [OBS-08]"
+# ---------------------------------------------------------------------------
+# ADR-0031 made dev.makam.co.id public-by-decision (no basic auth) — GATE I9
+# above already treats a bare 200 there as the intended state. Nothing,
+# before this gate, ever checked whether that publicly reachable host is
+# ALSO running with `APP_DEBUG=false`. A debug page (Laravel's Whoops/Ignition
+# error renderer) on a host anyone on the internet can hit leaks stack
+# traces, file paths, and — if `config('app.debug')` is ever combined with an
+# environment variable dump in a future error page — secrets. This gate reads
+# the CONTAINER'S OWN effective config via a built-in, non-secret artisan
+# introspection command (`php artisan about --json`, Laravel's own
+# "what is this install actually running with" command — nothing bespoke was
+# added to app code for this), never a guess from a config file or an env var
+# this script itself sets. `docs/operations/ai-agent-dev-stg-setup-prompt.md`
+# and `docs/adr/0031-make-dev-environment-public.md` were updated in the same
+# change (OBS-08) to describe THIS as the intended posture — debug off on
+# anything publicly reachable — rather than continuing to assert the
+# previously-documented `APP_DEBUG=true` baseline as correct.
+#
+# Container names below follow the same `makam-nonprod-<service>-1` pattern
+# GATE I7/I9's own `postgres`/`redis` checks use, with `dev-web`/`stg-web` as
+# the Laravel application services' compose keys — the same names
+# `docs/operations/examples/compose.deployed-reference.yml`'s own comments
+# use for the containers that replace `dev-placeholder`/`stg-placeholder`.
+# CONFIRM these against the real `compose.yml` on this host before trusting a
+# SKIP here as "nothing to check" rather than "wrong container name" — this
+# gate was authored and syntax-checked off-host (see CLAUDE.md: this script
+# only runs on the deployment host) and could not be run end-to-end before
+# merge. A human must run it for real on the live host to confirm.
+#
+# dev.makam.co.id is publicly reachable by ADR-0031 and MUST be checked.
+# stg.makam.co.id remains behind basic auth (ADR-0031 did not touch it) and
+# is checked anyway, on the same "publicly reachable" caution: a public vhost
+# is a network/DNS fact this script cannot verify from container config
+# alone, and a false SKIP is cheaper than a false PASS on a security gate.
+for pair in "dev-web:dev.makam.co.id" "stg-web:stg.makam.co.id"; do
+  svc=${pair%%:*}
+  host=${pair##*:}
+  c="makam-nonprod-$svc-1"
+  if ! docker ps --format '{{.Names}}' | grep -qx "$c"; then
+    skip "$c not running — cannot check APP_DEBUG for $host"
+    continue
+  fi
+
+  about_json=$(docker exec "$c" php artisan about --json 2>/dev/null)
+  if [ -z "$about_json" ]; then
+    fail "$c: 'php artisan about --json' produced no output — cannot verify APP_DEBUG"
+    continue
+  fi
+
+  debug_mode=$(echo "$about_json" | python3 -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    env = data.get("environment", {})
+    print(env.get("debug_mode"))
+except Exception:
+    print("unknown")
+' 2>/dev/null)
+
+  case "$debug_mode" in
+    False|false) pass "$host ($c): APP_DEBUG is off" ;;
+    True|true)   fail "$host ($c): APP_DEBUG is ON — a debug page is reachable from the public internet" ;;
+    *)           fail "$host ($c): could not determine debug_mode from 'about --json' output: $about_json" ;;
+  esac
+done
+
+# ---------------------------------------------------------------------------
 head2 "GATE I11 — production sites unaffected"
 # ---------------------------------------------------------------------------
 # Any nginx change on this host can break the live apex. This is the regression

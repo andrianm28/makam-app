@@ -142,24 +142,24 @@ final class AuditEventsTableTest extends TestCase
             source: AuditSource::Panel,
         );
 
-        // Backdate this one row directly — Audit::record() always stamps
-        // "now", and this test needs a row genuinely outside the filtered
-        // range rather than a second "now" row that would land inside it
-        // too. AuditEvent::update() throws by design (AC1), so the backdate
-        // goes through a raw query builder update, not the Eloquent
-        // instance — the one path AuditEvent's own guard does not cover
-        // (see that model's class-level doc block) and the only way this
-        // test can produce an out-of-range fixture at all.
-        $outOfRange = Audit::record(
-            action: 'booking.updated',
-            subject: new AuditSubject(type: 'booking', id: 2),
-            outcome: AuditOutcome::Allowed,
-            actorRef: 1,
-            actorRole: 'admin',
-            source: AuditSource::Panel,
-        );
-        AuditEvent::query()->whereKey($outOfRange->id)->update([
+        // This row needs a genuinely out-of-range `occurred_at`, and
+        // `Audit::record()` always stamps "now". A raw query builder
+        // UPDATE used to be the only way to backdate an already-written
+        // row (`AuditEvent::update()` throws by design, AC1), but finding
+        // OBS-01 (6 Sep 2026 audit) closed that loophole too: a database
+        // trigger now rejects any UPDATE/DELETE on this table outright,
+        // not just the Eloquent-level guard. `occurred_at` is fillable,
+        // so a direct create() — a real INSERT, which the trigger never
+        // touches — is what produces the fixture correctly.
+        $outOfRange = AuditEvent::query()->create([
             'occurred_at' => CarbonImmutable::now()->subDays(30),
+            'actor_ref' => 1,
+            'actor_role' => 'admin',
+            'action' => 'booking.updated',
+            'source' => AuditSource::Panel,
+            'subject_type' => 'booking',
+            'subject_id' => '2',
+            'outcome' => AuditOutcome::Allowed,
         ]);
 
         $this->admin();

@@ -6,6 +6,7 @@ namespace App\Platform\Audit;
 
 use App\Platform\Audit\Exceptions\AuditReasonRequiredException;
 use App\Platform\Audit\Models\AuditEvent;
+use App\Platform\Correlation\CorrelationContext;
 use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Support\Facades\DB;
@@ -82,10 +83,18 @@ final class Audit
      *                               `$action` is on `SensitiveActions::ACTIONS`
      *                               — throws `AuditReasonRequiredException`
      *                               otherwise. Optional for every other action.
-     * @param  string|null  $correlationId  Schema column only — AC10's
-     *                                      propagation mechanism is S3-T10, a separate later batch.
-     *                                      Pass one through if the caller already has it; leave null
-     *                                      otherwise.
+     * @param  string|null  $correlationId  OBS-03 (2026-09-07): defaults to
+     *                                      the AMBIENT `CorrelationContext::current()` id when the
+     *                                      caller omits it — mirrors
+     *                                      `Outbox::record()`'s
+     *                                      `app(CorrelationContext::class)->current()?->value` at its
+     *                                      own line ~108, so a caller no longer has to remember to
+     *                                      thread the ambient id through by hand (72 of 149 write
+     *                                      sites did not). Pass an EXPLICIT value only when a job has
+     *                                      captured/restored a *different* id than whatever is
+     *                                      ambient in this process right now (e.g. a queue job that
+     *                                      restored a propagated trace id before this call) — that
+     *                                      explicit value always wins over the ambient one.
      * @param  array<string, mixed>  $metadata  AC5: checked against
      *                                          `MetadataAllowlist::ALLOWED_KEYS` — throws
      *                                          `AuditMetadataKeyNotAllowedException` on any other key.
@@ -106,6 +115,12 @@ final class Audit
         }
 
         MetadataAllowlist::assertAllowed($metadata);
+
+        // OBS-03: default to the ambient correlation id when the caller
+        // did not pass one explicitly, rather than leaving 72+ call sites
+        // with no correlation trail at all. See the parameter doc block
+        // above for the precise precedence (explicit argument always wins).
+        $correlationId ??= app(CorrelationContext::class)->current()?->value;
 
         return AuditEvent::create([
             'occurred_at' => CarbonImmutable::now(),

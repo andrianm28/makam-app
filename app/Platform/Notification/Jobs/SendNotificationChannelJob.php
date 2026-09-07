@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Platform\Notification\Jobs;
 
+use App\Platform\Correlation\Concerns\CarriesCorrelationId;
 use App\Platform\Notification\Actions\DispatchNotification;
 use App\Platform\Notification\Contracts\Channel;
 use App\Platform\Notification\DeliveryResult;
@@ -37,6 +38,7 @@ use Throwable;
  */
 final class SendNotificationChannelJob implements ShouldQueue
 {
+    use CarriesCorrelationId;
     use Dispatchable;
     use InteractsWithQueue;
     use Queueable;
@@ -44,10 +46,14 @@ final class SendNotificationChannelJob implements ShouldQueue
 
     public function __construct(
         public readonly int $deliveryId,
-    ) {}
+    ) {
+        $this->captureCorrelationContext();
+    }
 
     public function handle(DispatchNotification $dispatcher, Channel $channel): void
     {
+        $this->restoreCorrelationContext();
+
         $delivery = $dispatcher->claimDeliveryForChannelJob($this);
 
         if ($delivery === null) {

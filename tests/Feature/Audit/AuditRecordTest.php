@@ -11,6 +11,8 @@ use App\Platform\Audit\AuditSubject;
 use App\Platform\Audit\Exceptions\AuditMetadataKeyNotAllowedException;
 use App\Platform\Audit\Exceptions\AuditReasonRequiredException;
 use App\Platform\Audit\Models\AuditEvent;
+use App\Platform\Correlation\CorrelationContext;
+use App\Platform\Correlation\CorrelationId;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -53,6 +55,77 @@ final class AuditRecordTest extends TestCase
 
         $this->assertNotNull($event->occurred_at);
         $this->assertSame(['note' => 'rescheduled'], $event->metadata);
+    }
+
+    /**
+     * OBS-03: 72 of 149 write sites omitted `$correlationId` — including
+     * refunds, role grants, and signed-URL issuance — leaving those rows
+     * with no correlation trail. `Audit::record()` now defaults it from the
+     * ambient `CorrelationContext`, mirroring `Outbox::record()`'s own
+     * `app(CorrelationContext::class)->current()?->value` (line ~108 of
+     * `app/Platform/Outbox/Outbox.php`), rather than requiring every one of
+     * those call sites to be touched individually.
+     */
+    public function test_record_defaults_the_correlation_id_from_the_ambient_context_when_the_caller_omits_it(): void
+    {
+        $this->app->make(CorrelationContext::class)->set(CorrelationId::fromString('trace-obs03-ambient'));
+
+        $event = Audit::record(
+            action: 'booking.updated',
+            subject: new AuditSubject(type: 'booking', id: 8),
+            outcome: AuditOutcome::Allowed,
+            actorRef: 99,
+            actorRole: 'admin',
+            source: AuditSource::Panel,
+            // $correlationId deliberately omitted — this is the case 72 of
+            // 149 real call sites are in today.
+        );
+
+        $this->assertSame('trace-obs03-ambient', $event->correlation_id);
+        $this->assertDatabaseHas('audit_events', [
+            'id' => $event->id,
+            'correlation_id' => 'trace-obs03-ambient',
+        ]);
+    }
+
+    /**
+     * The override path must still work: a caller that already captured a
+     * DIFFERENT id (e.g. a queue job that restored a propagated trace id
+     * distinct from whatever the current worker process happens to be
+     * carrying right now) can still pass it explicitly, and that value must
+     * win over the ambient one.
+     */
+    public function test_an_explicit_correlation_id_still_overrides_the_ambient_one(): void
+    {
+        $this->app->make(CorrelationContext::class)->set(CorrelationId::fromString('trace-ambient'));
+
+        $event = Audit::record(
+            action: 'booking.updated',
+            subject: new AuditSubject(type: 'booking', id: 9),
+            outcome: AuditOutcome::Allowed,
+            actorRef: 99,
+            actorRole: 'admin',
+            source: AuditSource::Panel,
+            correlationId: 'trace-explicit-override',
+        );
+
+        $this->assertSame('trace-explicit-override', $event->correlation_id);
+    }
+
+    public function test_record_leaves_correlation_id_null_when_neither_an_explicit_value_nor_an_ambient_context_exists(): void
+    {
+        $this->assertNull($this->app->make(CorrelationContext::class)->current());
+
+        $event = Audit::record(
+            action: 'booking.updated',
+            subject: new AuditSubject(type: 'booking', id: 10),
+            outcome: AuditOutcome::Allowed,
+            actorRef: 99,
+            actorRole: 'admin',
+            source: AuditSource::Panel,
+        );
+
+        $this->assertNull($event->correlation_id);
     }
 
     public function test_record_allows_a_null_actor_ref_alongside_a_required_actor_role(): void

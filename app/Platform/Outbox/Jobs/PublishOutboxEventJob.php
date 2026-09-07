@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Platform\Outbox\Jobs;
 
+use App\Platform\Correlation\CorrelationContext;
+use App\Platform\Correlation\CorrelationId;
 use App\Platform\Outbox\Events\OutboxEventPublished;
 use App\Platform\Outbox\Models\OutboxEvent;
 use Illuminate\Bus\Queueable;
@@ -45,6 +47,20 @@ final class PublishOutboxEventJob implements ShouldQueue
             // in this codebase deletes outbox_events rows today, but
             // handle() must not assume that forever) — nothing to publish.
             return;
+        }
+
+        // OBS-04: this job re-fetches fresh state rather than carrying the
+        // dispatching request's ambient correlation id (see the class doc
+        // block on why — the row may be processed long after, and by a
+        // different worker than, whatever request originally inserted it).
+        // The row's OWN `trace_id`, persisted at insertion time by
+        // `Outbox::record()`, is the correct id to bind — not whatever
+        // happens to be ambient in THIS worker process — and it must be
+        // bound BEFORE dispatching the downstream event, so anything that
+        // event's listeners do (including `Audit::record()` calls that now
+        // default to the ambient id per OBS-03) inherits the SAME trace.
+        if ($row->trace_id !== null) {
+            app(CorrelationContext::class)->set(CorrelationId::fromString($row->trace_id));
         }
 
         Event::dispatch(new OutboxEventPublished($this->buildEnvelope($row)));
