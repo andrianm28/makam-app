@@ -55,7 +55,11 @@ Until general NFR is approved, use engineering targets from `performance-and-cap
 - restricted-file access anomaly;
 - quarantine/scanner failure;
 - signed URL generation/access;
-- privileged action and MFA failure.
+- privileged action and re-authentication failure. (7 Sep 2026: this line
+  previously said "MFA failure" — TOTP MFA was built, then removed entirely
+  on 22 Aug 2026; see `docs/adr/0024-use-session-auth-and-mfa.md`'s
+  superseding note and `docs/security/authentication-and-mfa.md` for the
+  current mechanism.)
 
 ## Critical alerts
 

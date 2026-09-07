@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Filament\Admin\Pages\PasswordReauthentication;
 use App\Http\Controllers\Controller;
+use App\Http\Middleware\RequireRecentAuthentication;
 use App\Platform\FinancialLedger\Actions\BulkFinancialExport;
 use App\Platform\FinancialLedger\Exceptions\BulkFinancialExportReauthenticationRequiredException;
 use App\Platform\FinancialLedger\Exceptions\InvalidLedgerReportException;
@@ -81,7 +82,24 @@ final class FinanceExportController extends Controller
             // Mirror `RequireRecentAuthentication`: preserve where the actor
             // was going and send them to the challenge page, rather than
             // surfacing a 500 for a control that fired exactly as intended.
+            //
+            // SEC-07: this used to omit the line below, which meant
+            // `PasswordReauthentication::reasonForThisChallenge()` found no
+            // `REASON_SESSION_KEY` to pull and fell back to the generic
+            // `password_reauthentication` reason. The satisfied event it
+            // then wrote never matched `BulkFinancialExport`'s own
+            // `where('reason', self::REAUTHENTICATION_REASON)` check, so a
+            // session-fresh actor who reached this catch block could never
+            // actually complete the challenge — the export was unreachable
+            // over HTTP. Writing the same session key
+            // `RequireRecentAuthentication::handle()` writes on its own
+            // redirect closes that gap identically for this second,
+            // Action-owned gate.
             $request->session()->put('url.intended', $request->fullUrl());
+            $request->session()->put(
+                RequireRecentAuthentication::REASON_SESSION_KEY,
+                BulkFinancialExport::REAUTHENTICATION_REASON,
+            );
 
             return redirect()->route(PasswordReauthentication::ROUTE_NAME);
         }
