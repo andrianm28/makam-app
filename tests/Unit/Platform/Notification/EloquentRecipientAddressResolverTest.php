@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Platform\Notification;
 
+use App\Domain\Marketplace\AvailabilityMode;
+use App\Domain\Marketplace\EvidenceRequirement;
+use App\Domain\Marketplace\Models\Vendor;
+use App\Domain\Marketplace\Models\VendorListing;
+use App\Domain\Marketplace\Models\VendorOrder;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\Models\OrderParty;
 use App\Domain\OrderWorkflow\OrderPartyRole;
@@ -15,6 +20,7 @@ use App\Platform\Notification\ProvisionalAggregateNotificationSubjectSource;
 use App\Platform\Notification\Recipient;
 use App\Platform\Notification\RecipientRole;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -85,6 +91,72 @@ final class EloquentRecipientAddressResolverTest extends TestCase
     {
         $recipient = new Recipient(
             actorRef: ProvisionalAggregateNotificationSubjectSource::GUEST_ORDER_PARTY_PREFIX.'00000000-0000-0000-0000-000000000000',
+            actorRole: RecipientRole::CUSTOMER,
+            scopeEntityType: null,
+            scopeEntityId: null,
+        );
+
+        $this->assertNull((new EloquentRecipientAddressResolver)->emailFor($recipient));
+    }
+
+    /**
+     * Batch 2E's `vendor_order` fix — the prefixed reference re-reads the
+     * SAME `vendor_orders` row (by its own id) rather than a separate party
+     * table, because `customer_email` is inline and always present there.
+     */
+    public function test_it_resolves_a_vendor_order_customer_actor_ref_to_the_orders_inline_email(): void
+    {
+        $vendor = Vendor::query()->create(['name' => 'Vendor Resolver Uji', 'is_active' => true]);
+
+        $productId = DB::table('products')->insertGetId([
+            'code' => 'PRD-RESOLVER',
+            'category' => 'KARANGAN_BUNGA',
+            'name' => 'Produk Resolver Uji',
+            'description' => 'Deskripsi uji.',
+            'base_price_idr' => 100_000,
+            'price_version' => 1,
+            'is_active' => true,
+            'sort_order' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $listing = VendorListing::query()->create([
+            'vendor_id' => $vendor->id,
+            'product_id' => $productId,
+            'price_minor' => 150_000,
+            'availability_mode' => AvailabilityMode::STOCKED,
+            'evidence_requirement' => EvidenceRequirement::PHOTO,
+            'stock_quantity' => 5,
+            'is_active' => true,
+        ]);
+
+        $vendorOrder = VendorOrder::query()->create([
+            'uuid' => (string) Str::uuid(),
+            'vendor_id' => $vendor->id,
+            'listing_id' => $listing->id,
+            'customer_name' => 'Pelanggan Resolver Uji',
+            'customer_phone' => '081234567892',
+            'customer_email' => 'resolver-uji@example.test',
+            'status' => 'MENUNGGU_VENDOR',
+        ]);
+
+        $recipient = new Recipient(
+            actorRef: ProvisionalAggregateNotificationSubjectSource::VENDOR_ORDER_CUSTOMER_PREFIX.$vendorOrder->getKey(),
+            actorRole: RecipientRole::CUSTOMER,
+            scopeEntityType: null,
+            scopeEntityId: null,
+        );
+
+        $email = (new EloquentRecipientAddressResolver)->emailFor($recipient);
+
+        $this->assertSame('resolver-uji@example.test', $email);
+    }
+
+    public function test_it_returns_null_for_a_vendor_order_customer_reference_that_no_longer_exists(): void
+    {
+        $recipient = new Recipient(
+            actorRef: ProvisionalAggregateNotificationSubjectSource::VENDOR_ORDER_CUSTOMER_PREFIX.'999999',
             actorRole: RecipientRole::CUSTOMER,
             scopeEntityType: null,
             scopeEntityId: null,

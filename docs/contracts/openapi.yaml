@@ -163,10 +163,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PlotReservation'
         '409':
-          description: Plot unavailable
-          stale: null
-          conflicted: null
-          or capability disabled: null
+          description: Plot unavailable, stale, conflicted, or capability disabled
   /plot-reservations/{reservationId}/release:
     post:
       tags:
@@ -272,9 +269,7 @@ paths:
         '201':
           description: Visit booking created
         '409':
-          description: Capacity
-          hours: null
-          or capability unavailable: null
+          description: Capacity, hours, or capability unavailable
   /memorials/{memorialId}:
     get:
       tags:

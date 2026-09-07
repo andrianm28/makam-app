@@ -36,6 +36,7 @@ return new class extends Migration
                 ->after('quote_id')
                 ->constrained('service_definitions')
                 ->restrictOnDelete();
+            // contract-approved: DB-01 — widening NOT NULL -> nullable only; no existing row's value is changed or dropped
             $table->foreignId('service_package_version_id')->nullable()->change();
 
             $table->index('service_definition_id');

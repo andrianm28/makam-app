@@ -76,8 +76,8 @@ final class CemeteryVisitationPoliciesTable
         if ($uniform && $uniformPair !== null) {
             return sprintf(
                 'Setiap hari %s–%s',
-                IndonesianDate::clock((string) $uniformPair[0]),
-                IndonesianDate::clock((string) $uniformPair[1]),
+                IndonesianDate::clock($uniformPair['open']),
+                IndonesianDate::clock($uniformPair['close']),
             );
         }
 

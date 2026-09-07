@@ -8,10 +8,16 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// Retention for abandoned booking drafts, which hold customer and deceased
-// personal data from Step 6 onward. Daily and off-peak; the window itself
-// lives in config/booking.php.
-Schedule::command('booking:purge-stale-drafts')->dailyAt('03:15');
+// DISABLED 6 Sep 2026 (audit finding DOM-01, Critical) — this sweep deletes
+// any booking_draft whose updated_at is older than the retention window with
+// NO check for dependent records. Because SubmitBookingDraft never touches a
+// draft again after submission, updated_at freezes at submission time, so
+// this job was on track to permanently null booking_draft_id on live orders,
+// funeral cases, pre-need interests and plot reservations starting around
+// 19 Sep 2026 (the oldest currently-linked draft's 30-day anniversary).
+// Re-enabled with a dependency-aware predicate in the Phase 1 follow-up —
+// see docs/superpowers/plans/2026-09-06-remediasi-audit-makam.md Task 1.1.
+// Schedule::command('booking:purge-stale-drafts')->dailyAt('03:15');
 
 // Generate due subscription cycles for active care subscriptions. Daily
 // and off-peak, shortly after the draft-purge job.
@@ -57,3 +63,11 @@ Schedule::command('plot-reservation:expire-stale-draft-holds')->everyMinute()->w
 // minutes, independent of outbox:publish's own every-minute schedule —
 // the watchdog must keep running even if the thing it watches has died.
 Schedule::command('spine:watchdog')->everyFiveMinutes()->withoutOverlapping();
+
+// Stop-gap visibility for audit findings COORD-07 (Critical: no worker
+// consumes the media queue, so quarantined documents can never be scanned)
+// and COORD-15 (failed critical/urgent jobs sitting unretried with nothing
+// surfacing them) while their permanent fixes land in Phase 1 of
+// docs/superpowers/plans/2026-09-06-remediasi-audit-makam.md. Mutates
+// nothing — see AlertCriticalOperationalGapsCommand's own doc block.
+Schedule::command('alert:critical-operational-gaps')->everyFiveMinutes()->withoutOverlapping();

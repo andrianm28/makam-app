@@ -109,6 +109,20 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // DB-05 (batch M3a): ran completely unguarded before this fix, on
+        // EVERY `php artisan migrate` including a real production deploy —
+        // writing fourteen fictional deceased-person rows there. See
+        // `config/example_data.php`'s own doc block on why this flag
+        // defaults TRUE (not false), and why `app()->isProduction()` is an
+        // unconditional, independent guard regardless of the flag.
+        if (! config('example_data.seed_example_grave_records')) {
+            return;
+        }
+
+        if (app()->isProduction()) {
+            return;
+        }
+
         // The fourteen example grave records are defined in
         // App\Support\ExampleData\CemeteryExampleData::graveRecords().
         // It resolves cemetery slug -> id at runtime and skips (never

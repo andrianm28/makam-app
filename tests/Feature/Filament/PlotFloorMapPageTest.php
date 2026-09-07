@@ -434,4 +434,32 @@ final class PlotFloorMapPageTest extends TestCase
             Filament::getPanel('operator')->getPages(),
         );
     }
+
+    /**
+     * PERF-03. `BasePlotFloorMapPage::blocks()` used to eager-load EVERY
+     * block and EVERY plot of the selected cemetery with no bound. Proves
+     * the same `booking.*` config bounds `BookingWizard::pickerBlocks()`
+     * also apply here, mirroring the pattern already used for that
+     * component's own bounded-scan test.
+     */
+    public function test_blocks_are_bounded_by_config(): void
+    {
+        config(['booking.plot_picker_max_blocks' => 2, 'booking.plot_picker_max_plots_per_block' => 3]);
+
+        $actor = $this->admin();
+        $cemetery = Cemetery::factory()->create(['plot_tracking_mode' => PlotTrackingMode::GRANULAR]);
+
+        foreach (['BLOK-A', 'BLOK-B', 'BLOK-C', 'BLOK-D'] as $code) {
+            app(CreateCemeteryBlock::class)($cemetery, $code, $code, 6, $actor->id, 'admin');
+        }
+
+        $component = Livewire::actingAs($actor)
+            ->test(AdminPlotFloorMap::class)
+            ->set('cemeteryId', (string) $cemetery->getKey());
+
+        $blocks = $component->instance()->blocks();
+
+        $this->assertCount(2, $blocks, 'Expected blocks() to stop at the configured block limit instead of loading every block.');
+        $this->assertCount(3, $blocks->first()->plots, 'Expected the eager-loaded plots relation to stop at the configured per-block limit instead of loading every plot.');
+    }
 }

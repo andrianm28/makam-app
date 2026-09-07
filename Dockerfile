@@ -186,6 +186,24 @@ RUN { \
       echo 'opcache.interned_strings_buffer=16'; \
     } > /usr/local/etc/php/conf.d/opcache.ini
 
+# Application-facing php.ini overrides (CI-03, docs/superpowers/plans/
+# 2026-09-06-batch2g-cicd-hardening.md). PHP's own default
+# upload_max_filesize (2M) is far below the 10MB document cap this app
+# documents, and expose_php leaks the PHP version in every response's
+# X-Powered-By header. Written here — before `USER www-data` below — because
+# /usr/local/etc/php/conf.d/ is owned by root and not writable by www-data;
+# doing this as root now is the only way it lands at all.
+# post_max_size (14M) stays above upload_max_filesize (12M) per PHP's own
+# documented requirement, and both stay below nginx's `client_max_body_size
+# 15m` (docker/nginx.conf) so nginx never rejects a request PHP would have
+# accepted.
+RUN { \
+      echo 'upload_max_filesize=12M'; \
+      echo 'post_max_size=14M'; \
+      echo 'memory_limit=256M'; \
+      echo 'expose_php=Off'; \
+    } > /usr/local/etc/php/conf.d/zz-app.ini
+
 WORKDIR /var/www/html
 
 # The vendor stage's composer:2 image has the `composer` binary; only

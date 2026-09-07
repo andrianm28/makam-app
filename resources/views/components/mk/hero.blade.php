@@ -46,6 +46,20 @@
     The image is deliberately decorative (empty alt) -- it sets
     atmosphere, never conveys information the heading doesn't already
     carry, matching this repo's existing decorative-image convention.
+
+    Responsive derivatives (DS-01, docs/superpowers/plans/
+    2026-09-06-batch2g-cicd-hardening.md): `image` is expected to name a
+    JPEG at `{name}.jpg` with sibling AVIF/WebP derivatives at
+    `{name}-640.avif`, `{name}-960.avif`, `{name}-1440.avif` and the
+    matching `.webp` files, all in the same directory -- exactly what
+    public/images/hero/cemetery-garden-daylight.* provides. The `<img>`
+    fallback keeps the plain `{name}.jpg` path (960px wide, ~230KB) so
+    existing `assertSee('src="'.asset(...).'"')` tests keep matching
+    unchanged; browsers that support AVIF or WebP never reach it. Only
+    one call site exists today (home-page.blade.php); if a second image
+    is ever passed that doesn't have these derivatives, generate them
+    first (see the plan doc's DS-01 section for the cwebp/avifenc
+    commands used) rather than passing a bare path through this prop.
 --}}
 @props([
     'image' => null,
@@ -61,11 +75,37 @@
     $classes = 'relative overflow-hidden rounded-lg';
 
     $headingClasses = 'font-display text-4xl font-semibold tracking-tight text-neutral-900 lg:text-5xl';
+
+    if ($image) {
+        $imageDir = rtrim(pathinfo($image, PATHINFO_DIRNAME), '/');
+        $imageName = pathinfo($image, PATHINFO_FILENAME);
+        $widths = [640, 960, 1440];
+        $srcset = fn (string $ext) => collect($widths)
+            ->map(fn (int $w) => "{$imageDir}/{$imageName}-{$w}.{$ext} {$w}w")
+            ->implode(', ');
+        $avifSrcset = $srcset('avif');
+        $webpSrcset = $srcset('webp');
+        // Matches resources/css/tokens.css's --container-content (80rem /
+        // 1280px page shell) minus the lg:px-8 gutters home-page.blade.php
+        // applies around the hero.
+        $imageSizes = '(min-width: 1024px) 1216px, 100vw';
+    }
 @endphp
 
 <div {{ $attributes->merge(['class' => $classes]) }}>
     @if ($image)
-        <img src="{{ $image }}" alt="" class="h-64 w-full object-cover md:h-96" />
+        <picture>
+            <source type="image/avif" srcset="{{ $avifSrcset }}" sizes="{{ $imageSizes }}" />
+            <source type="image/webp" srcset="{{ $webpSrcset }}" sizes="{{ $imageSizes }}" />
+            <img
+                src="{{ $image }}"
+                alt=""
+                width="960"
+                height="624"
+                fetchpriority="high"
+                class="h-64 w-full object-cover md:h-96"
+            />
+        </picture>
     @endif
 
     <div class="flex flex-col gap-4 bg-primary-50 p-6 md:p-8">

@@ -5,16 +5,20 @@ declare(strict_types=1);
 namespace App\Filament\Admin\Resources\Subscriptions\Actions;
 
 use App\Domain\CareSubscription\Models\Subscription;
-use App\Filament\Shared\PanelFailure;
-use App\Platform\IdentityAccess\ActorContext;
 use Filament\Actions\Action;
-use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
-use Throwable;
 
 /**
- * Header action for cancelling a subscription.
- * Checks AC7 gate first: if not configured, shows honest 'Belum dapat diaktifkan' notification.
+ * Header action placeholder for cancelling a subscription.
+ *
+ * ARCH-11: see `PauseSubscriptionAction`'s doc block for the full
+ * reasoning — this class had the identical problem (a working-looking
+ * confirmation-modal action that always refused via a hardcoded
+ * notification) and the identical fix. No configuration surface for a
+ * cancellation policy exists yet, so `App\Domain\CareSubscription\Actions
+ * \CancelSubscription` (the real, tested domain action) has nothing to be
+ * gated on; building that gate is a real product/config decision, out of
+ * scope for this fix. This control stays disabled until it does.
  */
 final class CancelSubscriptionAction
 {
@@ -23,35 +27,13 @@ final class CancelSubscriptionAction
         return Action::make('batalkan')
             ->label('Batalkan Langganan')
             ->icon(Heroicon::OutlinedXCircle)
-            ->color('danger')
+            ->color('gray')
             ->visible(fn (): bool => in_array(
                 $subscription->status,
                 ['active', 'paused', 'draft'],
                 true,
             ))
-            ->requiresConfirmation()
-            ->modalHeading('Batalkan langganan ini?')
-            ->modalDescription(
-                'Pembatalan akan mengakhiri langganan ini secara permanen. '
-                .'Kebijakan pembatalan harus dikonfigurasi sebelum dapat diaktifkan (AC7).'
-            )
-            ->action(fn () => self::run($subscription));
-    }
-
-    private static function run(Subscription $subscription): void
-    {
-        $actor = app(ActorContext::class);
-
-        try {
-            // AC7 gate: cancellation policy must be explicitly configured before this action can run.
-            // For MVP, this gate is not configured, so we show an honest notification.
-            Notification::make()
-                ->warning()
-                ->title('Belum dapat diaktifkan')
-                ->body('Kebijakan pembatalan langganan belum dikonfigurasi. Hubungi administrator.')
-                ->send();
-        } catch (Throwable $exception) {
-            PanelFailure::notify($exception, 'Gagal membatalkan langganan');
-        }
+            ->disabled()
+            ->tooltip('Kebijakan pembatalan langganan belum dikonfigurasi. Hubungi administrator.');
     }
 }

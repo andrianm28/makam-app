@@ -720,26 +720,39 @@ final class SaveBookingDraftStepSteps678Test extends TestCase
     // CUSTOMER_AND_DECEASED_DATA — dates of birth and death
     // =====================================================================
 
-    public function test_customer_and_deceased_data_step_rejects_a_missing_date_of_birth(): void
+    /**
+     * UXB-02: `deceased_date_of_birth` is now OPTIONAL-but-validated-if-present
+     * for every service type (this fixture's draft never actually saved
+     * DISCOVERY, so `service_type` is `null` here — treated the same as an
+     * At-Need type) — matching the Blade copy "Isi sebisa Anda". A missing
+     * date must no longer be rejected; format/range validation when a date
+     * IS supplied is covered by the tests below and is unchanged.
+     */
+    public function test_customer_and_deceased_data_step_accepts_a_missing_date_of_birth(): void
     {
-        $this->assertRejectedWithKey(
-            'deceased_date_of_birth',
+        $saved = (new SaveBookingDraftStep)(
             $this->draftReadyForCustomerAndDeceasedData(),
             BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
             [...$this->customerPayload(), ...$this->deceasedPayloadWithout('deceased_date_of_birth')],
             'idem-s7-dob-missing'
         );
+
+        $this->assertNull($saved->deceased_date_of_birth);
     }
 
-    public function test_customer_and_deceased_data_step_rejects_a_missing_date_of_death(): void
+    /**
+     * Same UXB-02 change as above, for `deceased_date_of_death`.
+     */
+    public function test_customer_and_deceased_data_step_accepts_a_missing_date_of_death(): void
     {
-        $this->assertRejectedWithKey(
-            'deceased_date_of_death',
+        $saved = (new SaveBookingDraftStep)(
             $this->draftReadyForCustomerAndDeceasedData(),
             BookingWizardStep::CUSTOMER_AND_DECEASED_DATA,
             [...$this->customerPayload(), ...$this->deceasedPayloadWithout('deceased_date_of_death')],
             'idem-s7-dod-missing'
         );
+
+        $this->assertNull($saved->deceased_date_of_death);
     }
 
     public function test_customer_and_deceased_data_step_rejects_an_unparseable_date_of_birth(): void
