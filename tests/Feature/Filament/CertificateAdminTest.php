@@ -23,11 +23,14 @@ use App\Filament\Admin\Resources\Certificates\CertificatesResource;
 use App\Filament\Admin\Resources\Certificates\Pages\ListCertificates;
 use App\Filament\Admin\Resources\Certificates\Pages\ViewCertificate;
 use App\Models\User;
+use App\Platform\Audit\Models\AuditEvent;
 use App\Platform\DocumentVault\Adapters\LocalFilesystemObjectStorage;
 use App\Platform\DocumentVault\Contracts\ObjectStorage;
 use App\Platform\DocumentVault\DocumentState;
 use App\Platform\DocumentVault\Models\Document;
+use App\Platform\IdentityAccess\Models\ActorSession;
 use App\Platform\IdentityAccess\Roles\ActorRole;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Str;
@@ -86,9 +89,30 @@ final class CertificateAdminTest extends TestCase
         $user = User::factory()->create();
         $this->grantRoleTo($user, $role);
         $this->actingAs($user);
+        // Finding SEC-03 (6 Sep 2026 audit): certificate issue/revoke/replace
+        // now require a fresh re-authentication (ReauthenticationGuard),
+        // same fixture FeatureGateAdminTest/RequireRecentAuthenticationMiddlewareTest
+        // establish — a non-revoked actor_sessions row with a fresh
+        // last_authenticated_at, which LocalUsersTableIdentityAccessAdapter::
+        // resolveLastAuthenticatedAt() reads.
+        $this->seedActorSession($user, CarbonImmutable::now());
         $this->forgetResolvedActorContext();
 
         return $user;
+    }
+
+    /**
+     * `updateOrCreate`, not `create`: several tests call this twice for the
+     * same user — once via `actingUserWithRole()` (fresh) and again to
+     * overwrite it as stale — and `(user_id, session_id)` is uniquely
+     * constrained.
+     */
+    private function seedActorSession(User $user, CarbonImmutable $lastAuthenticatedAt): ActorSession
+    {
+        return ActorSession::query()->updateOrCreate(
+            ['user_id' => $user->id, 'session_id' => 'test-session-'.$user->id],
+            ['guard' => 'web', 'last_authenticated_at' => $lastAuthenticatedAt, 'revoked_at' => null],
+        );
     }
 
     private function makePaidOrder(): Order
@@ -255,6 +279,82 @@ final class CertificateAdminTest extends TestCase
             'event_name' => 'certificate.issued.v1',
             'aggregate_id' => (string) $certificate->getKey(),
         ]);
+    }
+
+    // =====================================================================
+    // Step-up re-authentication (finding SEC-03, 6 Sep 2026 audit)
+    // =====================================================================
+
+    /**
+     * `actingUserWithRole()` always seeds a FRESH session; these three
+     * regression tests each override it with a stale one afterward, so the
+     * role/authorize gate still passes (proving the redirect is genuinely
+     * the freshness check, not a role failure) while the session itself is
+     * too old.
+     */
+    public function test_issuing_a_certificate_with_a_stale_session_redirects_and_writes_nothing(): void
+    {
+        $order = $this->makePaidOrder();
+        $user = $this->actingUserWithRole(ActorRole::ADMIN);
+        $this->seedActorSession($user, CarbonImmutable::now()->subHour());
+        $this->forgetResolvedActorContext();
+
+        Livewire::test(ListCertificates::class)
+            ->callAction('terbitkan', data: [
+                'subject' => Order::class.'|'.$order->getKey(),
+                'document_file' => $this->vaultPdf(),
+            ])
+            ->assertNotified('Perlu verifikasi ulang')
+            ->assertRedirect(route('filament.admin.pages.verifikasi-ulang-kata-sandi'));
+
+        $this->assertSame(0, Certificate::query()->count());
+        $this->assertSame(0, Document::query()->count());
+    }
+
+    public function test_revoking_a_certificate_with_a_stale_session_redirects_and_writes_nothing(): void
+    {
+        $order = $this->makePaidOrder();
+        $certificate = app(IssueCertificate::class)(
+            CertificateType::OrderSettlement,
+            $order,
+            'admin:1',
+            'admin',
+            null,
+        );
+        $user = $this->actingUserWithRole(ActorRole::ADMIN);
+        $this->seedActorSession($user, CarbonImmutable::now()->subHour());
+        $this->forgetResolvedActorContext();
+
+        Livewire::test(ViewCertificate::class, ['record' => $certificate->getKey()])
+            ->callAction('cabut', data: ['reason' => 'Percobaan tanpa sesi segar.'])
+            ->assertNotified('Perlu verifikasi ulang')
+            ->assertRedirect(route('filament.admin.pages.verifikasi-ulang-kata-sandi'));
+
+        $this->assertSame(CertificateStatus::Issued->value, $certificate->fresh()->status);
+        $this->assertSame(0, AuditEvent::query()->where('action', 'CERTIFICATE_REVOKED')->count());
+    }
+
+    public function test_replacing_a_certificate_with_a_stale_session_redirects_and_writes_nothing(): void
+    {
+        $order = $this->makePaidOrder();
+        $certificate = app(IssueCertificate::class)(
+            CertificateType::OrderSettlement,
+            $order,
+            'admin:1',
+            'admin',
+            null,
+        );
+        $user = $this->actingUserWithRole(ActorRole::ADMIN);
+        $this->seedActorSession($user, CarbonImmutable::now()->subHour());
+        $this->forgetResolvedActorContext();
+
+        Livewire::test(ViewCertificate::class, ['record' => $certificate->getKey()])
+            ->callAction('ganti', data: ['reason' => 'Percobaan tanpa sesi segar.'])
+            ->assertNotified('Perlu verifikasi ulang')
+            ->assertRedirect(route('filament.admin.pages.verifikasi-ulang-kata-sandi'));
+
+        $this->assertSame(CertificateStatus::Issued->value, $certificate->fresh()->status);
+        $this->assertSame(1, Certificate::query()->count());
     }
 
     // =====================================================================

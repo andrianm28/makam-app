@@ -8,7 +8,6 @@ use App\Http\Middleware\RequireRecentAuthentication;
 use App\Models\User;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\Models\AuditEvent;
-use App\Platform\IdentityAccess\Models\ActorSession;
 use App\Platform\IdentityAccess\Reauthentication\Models\ReauthenticationEvent;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use App\Platform\IdentityAccess\Roles\Models\ActorRoleAssignment;
@@ -19,6 +18,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\Support\EstablishesFreshActorSession;
 use Tests\TestCase;
 
 /**
@@ -45,6 +45,7 @@ use Tests\TestCase;
  */
 final class RecordPaymentReversalRouteTest extends TestCase
 {
+    use EstablishesFreshActorSession;
     use RefreshDatabase;
 
     private function url(string $reversalType): string
@@ -75,16 +76,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
      */
     private function freshlyAuthenticatedUser(): User
     {
-        $user = User::factory()->create();
-
-        ActorSession::query()->create([
-            'user_id' => $user->id,
-            'session_id' => 'test-session-'.$user->id,
-            'guard' => 'web',
-            'last_authenticated_at' => CarbonImmutable::now()->subSeconds(10),
-        ]);
-
-        return $user;
+        return User::factory()->create();
     }
 
     /**
@@ -198,7 +190,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
     {
         $user = $this->authorizedUser();
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->url('refund'), [
                 'reference' => 'TRX-route-2',
                 'amount_minor' => 10_000_00,
@@ -216,7 +208,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
     {
         $user = $this->authorizedUser();
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->url('chargeback'), [
                 'reference' => 'TRX-route-3',
                 'reason' => 'Card issuer disputed the transaction',
@@ -248,7 +240,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
     {
         $user = $this->freshlyAuthenticatedUser();
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->url('refund'), [
                 'reference' => 'TRX-route-denied',
                 'reason' => 'Customer requested a refund',
@@ -269,7 +261,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
         // "holds any role at all."
         $user = $this->authorizedUser(ActorRole::CUSTOMER);
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->url('refund'), [
                 'reference' => 'TRX-route-customer',
                 'reason' => 'Customer requested a refund',
@@ -297,7 +289,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
     {
         $user = $this->authorizedUser(ActorRole::ADMIN);
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->url('refund'), [
                 'reference' => 'TRX-route-admin',
                 'reason' => 'Customer requested a refund',
@@ -312,7 +304,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
         $user = $this->freshlyAuthenticatedUser();
         $this->grantRole($user, ActorRole::FINANCE)->revoke();
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->url('refund'), [
                 'reference' => 'TRX-route-revoked',
                 'reason' => 'Customer requested a refund',
@@ -339,7 +331,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
     {
         $user = $this->authorizedUser($role);
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->url('refund'), [
                 'reference' => 'TRX-route-'.$role,
                 'reason' => 'Customer requested a refund',
@@ -362,7 +354,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
     {
         $user = $this->authorizedUser($role);
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->url('refund'), [
                 'reference' => 'TRX-route-audit-'.$role,
                 'reason' => 'Customer requested a refund',
@@ -391,7 +383,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
         $this->grantRole($user, ActorRole::FINANCE);
         $this->grantRole($user, ActorRole::RESTRICTED_ADMIN);
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->url('refund'), [
                 'reference' => 'TRX-route-both',
                 'reason' => 'Customer requested a refund',
@@ -411,7 +403,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
     {
         $user = $this->freshlyAuthenticatedUser();
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->url('refund'), [
                 // Missing `reference` and `reason` entirely — a well-formed
                 // request would be a 422 here.
@@ -462,7 +454,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
 
         Schema::drop('audit_events');
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->url('refund'), [
                 'reference' => 'TRX-route-audit-down',
                 'reason' => 'Customer requested a refund',
@@ -478,7 +470,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
     {
         $user = $this->authorizedUser();
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->url('refund'), [
                 'reference' => 'TRX-route-4',
                 'reason' => '',
@@ -507,7 +499,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
     {
         $user = $this->authorizedUser();
 
-        $response = $this->actingAs($user)
+        $response = $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->url('refund'), [
                 'reference' => 'TRX-route-blank',
                 'reason' => $reason,
@@ -541,7 +533,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
     {
         $user = $this->authorizedUser();
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->url('refund'), [
                 'reason' => 'Some reason',
             ])
@@ -558,7 +550,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
         // router's, not a leak from inside the controller.
         $user = $this->freshlyAuthenticatedUser();
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post('/admin/pembayaran/pembalikan/reversal', [
                 'reference' => 'TRX-route-5',
                 'reason' => 'Some reason',
@@ -574,12 +566,12 @@ final class RecordPaymentReversalRouteTest extends TestCase
     {
         $user = $this->authorizedUser();
 
-        $this->actingAs($user)->post($this->url('refund'), [
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))->post($this->url('refund'), [
             'reference' => 'TRX-route-duplicate',
             'reason' => 'First refund',
         ])->assertRedirect(route('filament.admin.pages.dashboard'));
 
-        $response = $this->actingAs($user)->post($this->url('refund'), [
+        $response = $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))->post($this->url('refund'), [
             'reference' => 'TRX-route-duplicate',
             'reason' => 'Second refund attempt, must not be allowed',
         ]);
@@ -628,7 +620,7 @@ final class RecordPaymentReversalRouteTest extends TestCase
     {
         $user = $this->authorizedUser();
 
-        $this->actingAs($user)->post($this->url('refund'), [
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))->post($this->url('refund'), [
             'reference' => 'TRX-route-7',
             'reason' => 'Some reason',
         ]);

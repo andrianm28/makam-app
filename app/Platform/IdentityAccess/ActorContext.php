@@ -69,12 +69,20 @@ final class ActorContext
      *                                `"entity_type:entity_id"` strings — see the class-level note.
      *                                An empty array means "no scopes granted", not "no scope
      *                                required."
+     * @param  string|null  $sessionId  Finding SEC-05 (6 Sep 2026 audit): the current PHP session
+     *                                  id, so `resolveLastAuthenticatedAt()` can scope freshness to
+     *                                  THIS session rather than the max across every non-revoked
+     *                                  `actor_sessions` row the actor holds. Trailing-optional so
+     *                                  `guest()` below and every existing named-argument call site
+     *                                  are unaffected. `null` for a guest, or when the adapter has
+     *                                  no session id to offer (a console/job context).
      */
     public function __construct(
         public readonly int|string|null $identityReference,
         public readonly array $roles = [],
         public readonly array $scopes = [],
         public readonly ?CarbonImmutable $lastAuthenticatedAt = null,
+        public readonly ?string $sessionId = null,
     ) {}
 
     /**

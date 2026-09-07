@@ -16,6 +16,9 @@ use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use App\Platform\IdentityAccess\Scopes\ScopeGrantLevel;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
+use Illuminate\Session\ArraySessionHandler;
+use Illuminate\Session\Store as SessionStore;
 use Tests\TestCase;
 
 /**
@@ -111,6 +114,67 @@ final class LocalUsersTableIdentityAccessAdapterTest extends TestCase
         $this->assertTrue(
             CarbonImmutable::parse('2026-07-23T09:00:00Z')->equalTo($context->lastAuthenticatedAt)
         );
+    }
+
+    /**
+     * Finding SEC-05 (6 Sep 2026 audit): the core regression this fix
+     * closes. Two real sessions for the SAME user; a step-up proof on the
+     * OTHER, older session must not silently satisfy freshness for THIS
+     * one. Before the fix, `lastAuthenticatedAt` took the max across both
+     * rows regardless of which session was making the request.
+     */
+    public function test_last_authenticated_at_is_scoped_to_the_current_session_when_one_is_known(): void
+    {
+        $user = User::factory()->create();
+
+        ActorSession::query()->create([
+            'user_id' => $user->id,
+            'session_id' => str_repeat('a', 40),
+            'guard' => 'web',
+            'last_authenticated_at' => CarbonImmutable::parse('2026-07-20T09:00:00Z'),
+        ]);
+        ActorSession::query()->create([
+            'user_id' => $user->id,
+            'session_id' => str_repeat('b', 40),
+            'guard' => 'web',
+            'last_authenticated_at' => CarbonImmutable::parse('2026-07-24T09:00:00Z'),
+        ]);
+
+        $adapter = new LocalUsersTableIdentityAccessAdapter(request: $this->requestWithSessionId(str_repeat('a', 40)));
+        $context = $adapter->resolveActorContext($user);
+
+        // The OLDER "this-session" timestamp, not the fresher
+        // "a-different-session" one — proves the query is genuinely
+        // session-scoped, not merely session-aware-but-still-cross-session.
+        $this->assertTrue(
+            CarbonImmutable::parse('2026-07-20T09:00:00Z')->equalTo($context->lastAuthenticatedAt)
+        );
+        $this->assertSame(str_repeat('a', 40), $context->sessionId);
+    }
+
+    public function test_a_session_with_no_matching_actor_session_row_has_null_last_authenticated_at_even_if_another_session_is_fresh(): void
+    {
+        $user = User::factory()->create();
+
+        ActorSession::query()->create([
+            'user_id' => $user->id,
+            'session_id' => 'a-different-fresh-session',
+            'guard' => 'web',
+            'last_authenticated_at' => CarbonImmutable::now(),
+        ]);
+
+        $adapter = new LocalUsersTableIdentityAccessAdapter(request: $this->requestWithSessionId(str_repeat('c', 40)));
+        $context = $adapter->resolveActorContext($user);
+
+        $this->assertNull($context->lastAuthenticatedAt);
+    }
+
+    private function requestWithSessionId(string $sessionId): Request
+    {
+        $request = new Request;
+        $request->setLaravelSession(new SessionStore('test', new ArraySessionHandler(120), $sessionId));
+
+        return $request;
     }
 
     public function test_authenticated_identity_with_no_grants_has_empty_roles_and_scopes(): void
