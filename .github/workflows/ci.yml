@@ -49,8 +49,15 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Destructive-migration gate (cicd-automation-design.md §3.4). A required PR
-  # status check — the automated replacement for the manual "read every
-  # migration before running it" step every deploy has needed by hand so far.
+  # status check that narrows, but does NOT replace, a human reading a
+  # migration before it runs: it only catches the destructive method/SQL
+  # patterns it knows about (DB-01, batch M3a: it had blind spots for months —
+  # a helper method declared after down() and several real destructive forms
+  # were both invisible to it until that fix), inside up() only, only for
+  # files changed in the diff it's given. AGENTS.md §Infrastructure-agent
+  # execution's mandatory human review before a destructive-migration-
+  # adjacent change stands in front of this gate regardless of what it does
+  # or doesn't flag.
   # ---------------------------------------------------------------------------
   verify-migrations:
     name: Verify no unapproved destructive migrations
