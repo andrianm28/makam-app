@@ -143,6 +143,18 @@ final class SensitiveActions
         // payment-state changes above.
         'SUBSCRIPTION_PAUSED',
         'SUBSCRIPTION_CANCELLED',
+
+        // Added by Batch M1c (QUE-04, `docs/architecture/queue-and-outbox
+        // .md` §8: "Manual replay requires privileged permission, reason,
+        // and audit"). Written by `App\Console\Commands\OutboxReplayCommand`
+        // — the only write path that manually resets a stuck/failed outbox
+        // row's claim so `outbox:publish` re-claims and re-publishes it. A
+        // forced replay can re-fire a domain event a second time (consumers
+        // must already be idempotent per `queue-and-outbox.md` §7, but the
+        // operator decision to force it is still a deliberate override of
+        // the normal automatic pipeline), the same "override with
+        // consequences" category as `PLOT_OVERRIDE`/`GATE_CHANGE` above.
+        'OUTBOX_EVENT_REPLAY',
     ];
 
     public static function requiresReason(string $action): bool

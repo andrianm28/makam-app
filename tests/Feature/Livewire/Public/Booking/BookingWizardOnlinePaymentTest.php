@@ -482,6 +482,19 @@ final class BookingWizardOnlinePaymentTest extends TestCase
         );
 
         Http::assertSent(fn ($request): bool => str_contains($request->url(), '/api/v1/payments'));
+
+        // PAY-04: the session id embedded in the return/cancel URLs sent to
+        // the provider must be the EXACT id the created `payment_sessions`
+        // row carries — otherwise `payments.return`/`payments.cancel` can
+        // never resolve which session to describe
+        // (`ReturnPageState::fromRequest()`'s `session` selector).
+        Http::assertSent(function ($request) use ($session): bool {
+            $body = $request->data();
+
+            return isset($body['success_return_url'], $body['cancel_return_url'])
+                && str_contains((string) $body['success_return_url'], 'session='.$session->id)
+                && str_contains((string) $body['cancel_return_url'], 'session='.$session->id);
+        });
     }
 
     /**
