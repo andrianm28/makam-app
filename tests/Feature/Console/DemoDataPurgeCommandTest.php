@@ -73,18 +73,20 @@ final class DemoDataPurgeCommandTest extends TestCase
     }
 
     /**
-     * `subscriptions.care_plan_id` is the only real FK constraint pointing
-     * at `care_plans` — confirmed against
+     * `subscriptions.care_plan_id` and, since DB-03 (batch M3a),
+     * `work_orders.care_plan_id` are both real FK constraints pointing at
+     * `care_plans` — confirmed against
      * `database/migrations/2026_08_17_110010_create_subscriptions_table.php`
-     * (`work_orders.care_plan_id` is a plain `foreignUuid()` column with no
-     * `->constrained()`, so it carries no DB-level constraint and does not
-     * need dropping first). Dropping that FK then the table itself — the
-     * same two-step technique
-     * `BookingWizardDegradedReadsTest::makeServiceCatalogUnreadable()`
-     * established for `service_definitions` — makes the very first write
-     * `CareSubscriptionExampleData::seed()` performs after creating its own
-     * demo vendor (`CreateCarePlan`'s insert into `care_plans`) fail with a
-     * real "relation does not exist" error from Postgres.
+     * and `2026_09_07_100000_add_missing_fk_constraints_vendor_fulfillment_
+     * care_subscription.php`. Both must be dropped before the table itself,
+     * or Postgres refuses `DROP TABLE care_plans` with "other objects
+     * depend on it". Dropping the FKs then the table — the same two-step
+     * technique `BookingWizardDegradedReadsTest::
+     * makeServiceCatalogUnreadable()` established for `service_definitions`
+     * — makes the very first write `CareSubscriptionExampleData::seed()`
+     * performs after creating its own demo vendor (`CreateCarePlan`'s
+     * insert into `care_plans`) fail with a real "relation does not exist"
+     * error from Postgres.
      *
      * `care_subscriptions` is the LAST domain `DemoDataSeedCommand::handle()`
      * runs before this failure point — vendor accounts, cemetery operator,
@@ -112,6 +114,9 @@ final class DemoDataPurgeCommandTest extends TestCase
     {
         Schema::table('subscriptions', function (Blueprint $table): void {
             $table->dropForeign(['care_plan_id']);
+        });
+        Schema::table('work_orders', function (Blueprint $table): void {
+            $table->dropForeign('work_orders_care_plan_id_fk');
         });
         Schema::dropIfExists('care_plans');
 

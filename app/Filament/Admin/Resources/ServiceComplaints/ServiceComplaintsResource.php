@@ -19,6 +19,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Auth\Access\Response;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use UnitEnum;
 
@@ -86,6 +87,15 @@ final class ServiceComplaintsResource extends Resource
     public static function table(Table $table): Table
     {
         return ServiceComplaintsTable::configure($table);
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        // PERF-11: `ServiceComplaintsTable`'s `workOrder.reference` column
+        // ran a per-row query with no eager load at all — this Resource had
+        // no `getEloquentQuery()` override. Mirrors `GravePlotsResource::
+        // getEloquentQuery()`'s own `with([...])` override.
+        return ServiceComplaint::query()->with(['workOrder']);
     }
 
     public static function infolist(Schema $schema): Schema

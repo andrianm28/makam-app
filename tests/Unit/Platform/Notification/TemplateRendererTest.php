@@ -75,7 +75,7 @@ final class TemplateRendererTest extends TestCase
      * cell count differs, so a note that snuck into the table (or a row
      * added with the wrong column count) must fail loudly here rather than
      * silently skewing the seed and every recipient-resolution decision.
-     * The 17-row count and the live `forEvent()` lookup pin the canonical
+     * The 18-row count and the live `forEvent()` lookup pin the canonical
      * event set and the header-derived recipient columns without restating
      * the full event list as a second source of truth.
      */
@@ -85,7 +85,7 @@ final class TemplateRendererTest extends TestCase
 
         $rows = $source->rows();
 
-        $this->assertCount(17, $rows);
+        $this->assertCount(18, $rows);
 
         $headerColumns = array_keys($rows[0]['recipients']);
         foreach ($rows as $row) {

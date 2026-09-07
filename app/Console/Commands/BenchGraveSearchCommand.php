@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Domain\GraveRegistry\GraveNameNormalizer;
 use App\Domain\GraveRegistry\GraveRegistryPublicQuery;
 use App\Domain\GraveRegistry\GraveSearchCriteria;
 use Illuminate\Console\Command;
@@ -40,7 +41,8 @@ final class BenchGraveSearchCommand extends Command
 {
     protected $signature = 'bench:grave-search
         {--iterations=200 : Number of search calls to time}
-        {--fail-threshold-ms=500 : p95 threshold in milliseconds; exceeding it fails the command}';
+        {--fail-threshold-ms=500 : p95 threshold in milliseconds; exceeding it fails the command}
+        {--explain : Also print EXPLAIN (ANALYZE, BUFFERS) for the exact fuzzy-match query shape — PostgreSQL only. PERF-13 evidence: confirms the rewritten query actually uses the trigram indexes instead of asserting it from reading the SQL.}';
 
     protected $description = 'Measure GraveRegistryPublicQuery::search() p50/p95/p99 against the current database (AC4 certification).';
 
@@ -92,6 +94,10 @@ final class BenchGraveSearchCommand extends Command
             $timingsMs[] = $elapsedMs;
         }
 
+        if ($this->option('explain') && DB::connection()->getDriverName() === 'pgsql') {
+            $this->printExplain((string) $largestCemetery->cemetery_id, $searchTerm);
+        }
+
         sort($timingsMs);
 
         $p50 = $this->percentile($timingsMs, 50);
@@ -122,6 +128,48 @@ final class BenchGraveSearchCommand extends Command
         $this->info(sprintf('AC4 PASSED: p95 (%.2fms) is within the %dms target.', $p95, $thresholdMs));
 
         return self::SUCCESS;
+    }
+
+    /**
+     * PERF-13 evidence: prints `EXPLAIN (ANALYZE, BUFFERS)` for the exact
+     * WHERE/ORDER BY shape `GraveRegistryPublicQuery::buildQuery()` runs
+     * once a name term is present, so a reviewer can see the planner
+     * actually choosing `grave_records_name_trgm_idx` (GIN, for the `%`/
+     * LIKE WHERE clause) and `grave_records_name_trgm_gist_idx` (GiST, for
+     * the `<->` ORDER BY) rather than taking that on faith from reading the
+     * SQL. Mirrors `buildQuery()`'s own predicate/order shape directly
+     * (that method is `private`, so this rebuilds the equivalent SQL rather
+     * than reflecting into it) — see `GraveRegistryPublicQuery::search()`
+     * for the source of truth this must stay in sync with.
+     */
+    private function printExplain(string $cemeteryId, string $searchTerm): void
+    {
+        $normalizedName = GraveNameNormalizer::normalize($searchTerm);
+
+        if ($normalizedName === '') {
+            return;
+        }
+
+        DB::statement('SET pg_trgm.similarity_threshold = '.GraveRegistryPublicQuery::SIMILARITY_THRESHOLD);
+
+        $like = '%'.$normalizedName.'%';
+
+        $rows = DB::select(
+            'EXPLAIN (ANALYZE, BUFFERS) '.
+            'SELECT * FROM grave_records '.
+            'WHERE cemetery_id = ? '.
+            'AND (deceased_name_normalized LIKE ? OR deceased_name_normalized % ?) '.
+            'ORDER BY deceased_name_normalized <-> ?, deceased_name_normalized '.
+            'LIMIT 50',
+            [$cemeteryId, $like, $normalizedName, $normalizedName]
+        );
+
+        $this->newLine();
+        $this->info('EXPLAIN (ANALYZE, BUFFERS) for the fuzzy-match query shape:');
+
+        foreach ($rows as $row) {
+            $this->line((string) $row->{'QUERY PLAN'});
+        }
     }
 
     /**

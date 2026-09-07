@@ -128,4 +128,32 @@ final class PlotReservationExpiryTest extends TestCase
 
         $this->assertCount(0, $expired);
     }
+
+    /**
+     * Real customer report, 7 Sep 2026: a plot held via the picker did not
+     * return to "Tersedia" after its hold window passed. Root cause:
+     * `plot_reservations.booking_draft_id` is `nullOnDelete()`, so once
+     * `PurgeStaleBookingDrafts` deletes the draft (its own, much longer,
+     * 30-day retention window), the hold's `booking_draft_id` is set to
+     * NULL — the scheduler's draft-scoped candidate query then excludes it
+     * FOREVER, because it can no longer be grouped by a draft id it no
+     * longer has, even though `state` still reads `held` and `expires_at`
+     * is long past. The scheduler's second, plot-keyed candidate pass is
+     * what catches this case now — this test proves the row still gets
+     * expired even after `nullOnDelete()` has actually fired.
+     */
+    public function test_a_stale_hold_is_still_expired_after_its_booking_draft_is_deleted(): void
+    {
+        $plot = $this->makePlot();
+        $draft = BookingDraft::query()->create(['current_step' => 2]);
+        (new HoldPlotForDraft)($plot, $draft, "booking_draft:{$draft->getKey()}", ttlMinutes: -5);
+
+        $draft->delete();
+
+        $expired = app(PlotReservationExpiryScheduler::class)->expireStaleDraftHolds();
+
+        $this->assertCount(1, $expired);
+        $this->assertSame($plot->getKey(), $expired->first()->plot_id);
+        $this->assertSame(PlotState::AVAILABLE, $plot->fresh()->plot_state);
+    }
 }
