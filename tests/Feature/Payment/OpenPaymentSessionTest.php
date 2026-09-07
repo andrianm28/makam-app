@@ -29,6 +29,7 @@ use App\Platform\Payment\Exceptions\PaymentSessionMerchantMismatchException;
 use App\Platform\Payment\Exceptions\PaymentSessionOpeningDeniedException;
 use App\Platform\Payment\Exceptions\PaymentSessionOrderAlreadyPaidException;
 use App\Platform\Payment\Exceptions\PaymentSessionOrderNotFoundException;
+use App\Platform\Payment\Exceptions\PaymentSessionOrderTypeNotSupportedException;
 use App\Platform\Payment\Models\PaymentIntent;
 use App\Platform\Payment\Models\PaymentSession;
 use App\Platform\Payment\OrderType;
@@ -455,5 +456,27 @@ final class OpenPaymentSessionTest extends TestCase
             1_500_000_00,
             PaymentIntent::query()->whereKey($session->payment_intent_id)->sole()->requested_amount_minor,
         );
+    }
+
+    /**
+     * ARCH-12 regression: `OrderType::CareSubscription` has no
+     * session-opening producer yet (`OrderType`'s own doc block), and
+     * before this fix `OpenPaymentSession`'s match expression had no arm
+     * for it at all — a real `OrderType::CareSubscription` command would
+     * have thrown PHP's own `UnhandledMatchError` instead of a documented,
+     * catchable domain exception. Caught by ratcheting phpstan to level 5
+     * (batch M5c), which flags a match not handling every case of a
+     * backed-enum subject.
+     */
+    public function test_a_care_subscription_order_type_is_refused_with_a_domain_exception_not_an_unhandled_match_error(): void
+    {
+        $this->guardWithPaymentGate(open: true);
+
+        $this->expectException(PaymentSessionOrderTypeNotSupportedException::class);
+
+        app(OpenPaymentSession::class)($this->command([
+            'orderType' => OrderType::CareSubscription,
+            'orderRef' => 'irrelevant-for-this-order-type',
+        ]));
     }
 }

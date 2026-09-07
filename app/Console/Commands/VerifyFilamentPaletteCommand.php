@@ -6,7 +6,6 @@ namespace App\Console\Commands;
 
 use App\Support\Design\FilamentPaletteGenerator;
 use Illuminate\Console\Command;
-use RuntimeException;
 use Throwable;
 
 /**
@@ -51,7 +50,7 @@ class VerifyFilamentPaletteCommand extends Command
 
         try {
             $expected = FilamentPaletteGenerator::parseTokens($tokensPath);
-        } catch (RuntimeException|Throwable $e) {
+        } catch (Throwable $e) {
             $this->error("Failed to parse tokens.css: {$e->getMessage()}");
 
             return self::FAILURE;

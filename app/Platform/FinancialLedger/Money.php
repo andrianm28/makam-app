@@ -35,6 +35,16 @@ final readonly class Money
      *
      * @throws InvalidArgumentException when the value is not an exact decimal
      *                                  at the configured precision.
+     * @throws OverflowException when the whole-number part exceeds what fits
+     *                           in a PHP integer at the configured precision
+     *                           — this docblock was missing this tag before
+     *                           ARCH-12 (batch M5c), which made phpstan's
+     *                           level-5 `catch.neverThrown` check wrongly
+     *                           flag every real catch of this exception
+     *                           (`ProviderStatementCsvParser::parseLines()`)
+     *                           as dead code, since phpstan only knows a
+     *                           user-defined method's throw contract from
+     *                           its `@throws` tags.
      */
     public static function fromDecimal(string $amount): int
     {
