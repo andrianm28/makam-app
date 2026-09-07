@@ -26,6 +26,7 @@ use App\Platform\Payment\Exceptions\PaymentSessionMerchantMismatchException;
 use App\Platform\Payment\Exceptions\PaymentSessionOpeningDeniedException;
 use App\Platform\Payment\Exceptions\PaymentSessionOrderAlreadyPaidException;
 use App\Platform\Payment\Exceptions\PaymentSessionOrderNotFoundException;
+use App\Platform\Payment\Exceptions\PaymentSessionOrderTypeNotSupportedException;
 use App\Platform\Payment\GuardPaymentSession;
 use App\Platform\Payment\Models\PaymentIntent;
 use App\Platform\Payment\Models\PaymentSession;
@@ -194,6 +195,18 @@ final readonly class OpenPaymentSession
             OrderType::Booking => $this->authorizeBooking($command),
             OrderType::Marketplace => $this->authorizeMarketplace($command),
             OrderType::Renewal => $this->authorizeRenewal($command),
+            // ARCH-12: this arm was missing entirely — a real
+            // `OrderType::CareSubscription` command would have thrown PHP's
+            // own `UnhandledMatchError` instead of the documented, loud
+            // refusal `OrderType`'s own doc block promises ("no
+            // session-opening producer sends OrderType::CareSubscription
+            // yet ... this case ... declared now so the closed-list/router
+            // shape exists before the producer does"). Found by ratcheting
+            // phpstan to level 5 (batch M5c) — level 5's "match expression
+            // does not handle remaining value" check caught it for real.
+            OrderType::CareSubscription => throw PaymentSessionOrderTypeNotSupportedException::forOrderType(
+                $command->orderType
+            ),
         };
 
         $this->assertMerchantBound($command);
