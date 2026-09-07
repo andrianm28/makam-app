@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Platform\DocumentVault\Jobs;
 
+use App\Platform\Correlation\Concerns\CarriesCorrelationId;
 use App\Platform\DocumentVault\Contracts\ObjectStorage;
 use App\Platform\DocumentVault\Contracts\StoragePathResolver;
 use App\Platform\DocumentVault\DocumentState;
@@ -23,12 +24,25 @@ use Throwable;
  */
 final class ReconcileDocumentStorageCleanupJob implements ShouldQueue
 {
+    use CarriesCorrelationId;
     use Dispatchable;
     use InteractsWithQueue;
     use Queueable;
     use SerializesModels;
 
     public int $tries = 5;
+
+    public function __construct()
+    {
+        // OBS-04: this job is scheduler-driven (`bootstrap/app.php`'s
+        // `withSchedule()`), so there is usually no ambient request/job
+        // correlation id to capture at construction time — but adopting the
+        // trait keeps this job consistent with every other queued job in
+        // the codebase, and correct the moment anything (a future admin
+        // action, a manual re-dispatch) constructs it from a context that
+        // DOES have one bound.
+        $this->captureCorrelationContext();
+    }
 
     /**
      * @return list<int>
@@ -40,6 +54,8 @@ final class ReconcileDocumentStorageCleanupJob implements ShouldQueue
 
     public function handle(ObjectStorage $objectStorage, StoragePathResolver $pathResolver): void
     {
+        $this->restoreCorrelationContext();
+
         $failures = [];
 
         DocumentStorageCleanup::query()

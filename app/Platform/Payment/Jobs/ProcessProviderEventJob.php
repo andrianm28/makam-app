@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Platform\Payment\Jobs;
 
+use App\Platform\Correlation\Concerns\CarriesCorrelationId;
 use App\Platform\Outbox\OutboxQueueName;
 use App\Platform\Payment\ProcessWebhookEvent;
 use Carbon\CarbonImmutable;
@@ -78,6 +79,7 @@ use Illuminate\Queue\SerializesModels;
  */
 final class ProcessProviderEventJob implements ShouldQueue
 {
+    use CarriesCorrelationId;
     use Dispatchable;
     use InteractsWithQueue;
     use Queueable;
@@ -120,6 +122,7 @@ final class ProcessProviderEventJob implements ShouldQueue
         public readonly string $providerEventId,
     ) {
         $this->onQueue(OutboxQueueName::Critical->value);
+        $this->captureCorrelationContext();
     }
 
     /**
@@ -129,6 +132,8 @@ final class ProcessProviderEventJob implements ShouldQueue
      */
     public function handle(ProcessWebhookEvent $process): void
     {
+        $this->restoreCorrelationContext();
+
         // The outcome is deliberately not acted on: every case is a normal,
         // terminal result for this job. `NotClaimable` is at-least-once
         // redelivery working; `NotFound` is a stale dispatch against an

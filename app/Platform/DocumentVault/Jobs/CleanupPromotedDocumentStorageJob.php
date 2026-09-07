@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Platform\DocumentVault\Jobs;
 
+use App\Platform\Correlation\Concerns\CarriesCorrelationId;
 use App\Platform\DocumentVault\Contracts\ObjectStorage;
 use App\Platform\DocumentVault\Contracts\StoragePathResolver;
 use App\Platform\DocumentVault\DocumentState;
@@ -24,6 +25,7 @@ use Illuminate\Support\Facades\DB;
  */
 final class CleanupPromotedDocumentStorageJob implements ShouldQueue
 {
+    use CarriesCorrelationId;
     use Dispatchable;
     use InteractsWithQueue;
     use Queueable;
@@ -40,7 +42,9 @@ final class CleanupPromotedDocumentStorageJob implements ShouldQueue
         public readonly ?string $documentId = null,
         public readonly bool $reconcileAcceptedCopy = false,
         public readonly ?int $cleanupId = null,
-    ) {}
+    ) {
+        $this->captureCorrelationContext();
+    }
 
     /**
      * @return list<int>
@@ -52,6 +56,8 @@ final class CleanupPromotedDocumentStorageJob implements ShouldQueue
 
     public function handle(ObjectStorage $objectStorage, StoragePathResolver $pathResolver): void
     {
+        $this->restoreCorrelationContext();
+
         if ($this->reconcileAcceptedCopy) {
             $this->reconcileAcceptedCopy($objectStorage, $pathResolver);
 

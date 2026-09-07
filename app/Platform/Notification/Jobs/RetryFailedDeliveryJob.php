@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Platform\Notification\Jobs;
 
+use App\Platform\Correlation\Concerns\CarriesCorrelationId;
 use App\Platform\Notification\Actions\DispatchNotification;
 use App\Platform\Notification\DeliveryState;
 use App\Platform\Notification\Models\NotificationDelivery;
@@ -22,6 +23,7 @@ use Illuminate\Support\Facades\Log;
  */
 final class RetryFailedDeliveryJob implements ShouldQueue
 {
+    use CarriesCorrelationId;
     use Dispatchable;
     use InteractsWithQueue;
     use Queueable;
@@ -32,7 +34,9 @@ final class RetryFailedDeliveryJob implements ShouldQueue
     public function __construct(
         public readonly int $deliveryId,
         public readonly bool $operationalEscalation = false,
-    ) {}
+    ) {
+        $this->captureCorrelationContext();
+    }
 
     public static function backoffSeconds(int $attempt): int
     {
@@ -43,6 +47,8 @@ final class RetryFailedDeliveryJob implements ShouldQueue
 
     public function handle(DispatchNotification $dispatcher): void
     {
+        $this->restoreCorrelationContext();
+
         $delivery = NotificationDelivery::query()->find($this->deliveryId);
 
         if ($delivery === null || $delivery->state !== DeliveryState::Failed) {

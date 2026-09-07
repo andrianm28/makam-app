@@ -423,7 +423,7 @@ Development baseline:
 
 ```env
 APP_ENV=development
-APP_DEBUG=true
+APP_DEBUG=false
 APP_URL=https://${DEV_DOMAIN}
 SESSION_COOKIE=makam_dev_session
 DB_DATABASE=makam_dev
@@ -433,6 +433,20 @@ HORIZON_PREFIX=makam-dev:
 PAYMENT_MODE=sandbox_or_manual
 WHATSAPP_MODE=disabled_or_sandbox
 ```
+
+**UPDATED 7 Sep 2026 (OBS-08):** this baseline previously read `APP_DEBUG=true`,
+asserting the insecure posture as intended. That stopped being defensible once
+[ADR-0031](../adr/0031-make-dev-environment-public.md) removed
+`dev.makam.co.id`'s access restriction — a debug page (stack traces, file
+paths, local variables) is now reachable by anyone who finds the hostname, not
+just an allowlisted/authenticated party. `APP_DEBUG=false` is REQUIRED on any
+publicly reachable vhost this host serves, dev included. Set `APP_DEBUG=true`
+only in a genuinely private, non-network-reachable context (a local developer
+machine, never this shared host) when actively debugging, and revert it before
+leaving the environment running unattended. `ci/verify-infra.sh` GATE I12
+checks the running containers' effective `config('app.debug')` and fails when
+debug is on for a publicly reachable vhost — run it after any environment
+configuration change to confirm.
 
 Staging baseline:
 

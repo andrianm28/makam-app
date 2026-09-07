@@ -4,6 +4,7 @@ use App\Http\Middleware\AssignCorrelationId;
 use App\Http\Middleware\BetaNoindexTag;
 use App\Http\Middleware\ReportContentSecurityPolicy;
 use App\Platform\DocumentVault\Jobs\ReconcileDocumentStorageCleanupJob;
+use App\Platform\Observability\SentryEventScrubber;
 use App\Platform\Outbox\OutboxQueueName;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
@@ -105,6 +106,25 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*'),
         );
+
+        // OBS-07 (PII leak, 7 Sep 2026): registered BEFORE
+        // `Integration::handles($exceptions)` below, which registers
+        // Sentry's OWN `reportable()` callback (the one that actually calls
+        // `captureException()`). `Handler::reportThrowable()` runs every
+        // registered `reportable()` callback, in registration order, before
+        // its own default `$logger->{$level}($e->getMessage(), ...)` log
+        // write — so this callback, running first, mutates the SAME
+        // exception object both the log write and Sentry's capture read
+        // `->getMessage()` from afterward. One fix point, both sinks. See
+        // `SentryEventScrubber::redactQueryExceptionMessages()`'s own doc
+        // block for why a `QueryException`'s message cannot be trusted
+        // as-is: it interpolates every SQL binding verbatim (a failed
+        // `booking_drafts` write carries deceased-person names and dates),
+        // and some native drivers separately echo a real value into their
+        // own error text on a constraint violation.
+        $exceptions->reportable(function (Throwable $exception): void {
+            SentryEventScrubber::redactQueryExceptionMessages($exception);
+        });
 
         // Task 4 (observability-and-adr-fixes): registers Sentry's own
         // exception-reporting hook. Prepared alongside config/sentry.php,
