@@ -1197,6 +1197,12 @@ final class BookingWizard extends Component
             return;
         }
 
+        // PAY-04: pre-generate the session id so it can be embedded in the
+        // return/cancel URLs before the `payment_sessions` row exists —
+        // without this, the return page can never resolve which session to
+        // describe (`ReturnPageState::fromRequest()`'s `session` selector).
+        $paymentSessionId = (string) Str::uuid();
+
         try {
             $session = app(OpenPaymentSession::class)(new OpenPaymentSessionCommand(
                 orderType: OrderType::Booking,
@@ -1207,8 +1213,9 @@ final class BookingWizard extends Component
                 amountMinor: $quote->totalMinor()->toMinorInt(),
                 merchantRef: (string) app(SettingsService::class)
                     ->setting(SiteSetting::KEY_PAYMENT_MERCHANT_REF, (string) config('payment.merchant_ref', '')),
-                successReturnUrl: route('payments.return'),
-                cancelReturnUrl: route('payments.cancel'),
+                successReturnUrl: route('payments.return', ['session' => $paymentSessionId]),
+                cancelReturnUrl: route('payments.cancel', ['session' => $paymentSessionId]),
+                sessionId: $paymentSessionId,
             ));
         } catch (PaymentSessionOpeningDeniedException) {
             // The six-condition guard denied. Fixed Indonesian copy — the
