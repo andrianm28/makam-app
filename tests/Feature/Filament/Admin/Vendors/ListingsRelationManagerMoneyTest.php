@@ -13,9 +13,9 @@ use App\Domain\Marketplace\ProductCode;
 use App\Filament\Admin\Resources\Vendors\Pages\EditVendor;
 use App\Filament\Admin\Resources\Vendors\RelationManagers\ListingsRelationManager;
 use App\Models\User;
+use App\Platform\FinancialLedger\Money;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Number;
 use Livewire\Livewire;
 use Tests\Support\GrantsActorRoles;
 use Tests\TestCase;
@@ -131,7 +131,13 @@ final class ListingsRelationManagerMoneyTest extends TestCase
             'is_active' => true,
         ]);
 
-        $expected = Number::currency(150_000, 'IDR', app()->getLocale());
+        // This table now renders through the shared `->money()` Filament
+        // column macro (ARCH-06, `AppServiceProvider::boot()`), which routes
+        // every render through `Money::format()` — not Laravel's own
+        // `Number::currency()` formatter, which the old Filament-native
+        // `->money('IDR', divideBy: 100)` modifier used and which always
+        // appends a ",00" fraction even for a whole-rupiah amount.
+        $expected = (new Money(15_000_000))->format();
 
         Livewire::test(ListingsRelationManager::class, [
             'ownerRecord' => $vendor,

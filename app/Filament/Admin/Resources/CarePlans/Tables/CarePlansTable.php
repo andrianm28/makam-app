@@ -39,7 +39,8 @@ final class CarePlansTable
 
                 TextColumn::make('price_minor')
                     ->label('Harga')
-                    ->money()
+                    // @phpstan-ignore method.notFound (moneyRupiah() is a Macroable macro — AppServiceProvider::boot())
+                    ->moneyRupiah()
                     ->sortable(),
 
                 TextColumn::make('status')

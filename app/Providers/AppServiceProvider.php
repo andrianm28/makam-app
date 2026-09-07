@@ -27,12 +27,26 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         // ARCH-06: the path of least resistance for a Filament money
-        // column/entry is `->money()`, not hand-rolled `number_format`
+        // column/entry is `->moneyRupiah()`, not hand-rolled `number_format`
         // math — both macros route through the ONE `Money::format()` seam.
+        //
+        // NOT named `money()`: `Filament\Tables\Columns\Concerns
+        // \CanFormatState`/`Filament\Infolists\Components\Concerns
+        // \CanFormatState` already declare a REAL `money(?string $currency =
+        // null, int $divideBy = 0, ...)` method on both `TextColumn` and
+        // `TextEntry`. PHP always resolves a real method before falling
+        // through to `Macroable::__call()`, so a macro sharing that exact
+        // name is silently unreachable — `->money()` would keep calling the
+        // framework's own method with `$currency = null`, never this one.
+        // Caught by a real Livewire-rendered assertSee() test going red
+        // with zero exception (the framework method degrades quietly
+        // rather than throwing), not by inspection — worth stating so a
+        // future refactor doesn't reach for the same colliding name.
+        //
         // Macroable rebinds $this to the calling class (TextColumn/TextEntry)
         // at runtime; PHPStan only sees the declaring class here
         // (AppServiceProvider), hence the ignores below.
-        TextColumn::macro('money', function (): TextColumn {
+        TextColumn::macro('moneyRupiah', function (): TextColumn {
             /** @var TextColumn $this */
             // @phpstan-ignore varTag.nativeType
             return $this->formatStateUsing(
@@ -40,7 +54,7 @@ class AppServiceProvider extends ServiceProvider
             );
         });
 
-        TextEntry::macro('money', function (): TextEntry {
+        TextEntry::macro('moneyRupiah', function (): TextEntry {
             /** @var TextEntry $this */
             // @phpstan-ignore varTag.nativeType
             return $this->formatStateUsing(

@@ -2,7 +2,7 @@
     resources/views/components/mk/money.blade.php
 
     <x-mk.money :minor="$order->total_minor" /> — ARCH-06's Blade seam for
-    money outside Filament (Filament panels use the `->money()` column/entry
+    money outside Filament (Filament panels use the `->moneyRupiah()` column/entry
     macro registered in `App\Providers\AppServiceProvider::boot()` instead).
     Both route through the ONE `App\Platform\FinancialLedger\Money::format()`
     implementation rather than hand-rolled `number_format()` math.

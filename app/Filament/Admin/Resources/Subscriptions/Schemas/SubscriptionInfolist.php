@@ -59,7 +59,8 @@ final class SubscriptionInfolist
 
                         TextEntry::make('carePlan.price_minor')
                             ->label('Harga')
-                            ->money()
+                            // @phpstan-ignore method.notFound (moneyRupiah() is a Macroable macro — AppServiceProvider::boot())
+                            ->moneyRupiah()
                             ->placeholder('—'),
                     ]),
             ]);

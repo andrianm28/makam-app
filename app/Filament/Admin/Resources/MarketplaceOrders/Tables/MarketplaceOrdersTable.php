@@ -58,7 +58,8 @@ final class MarketplaceOrdersTable
 
                 TextColumn::make('total_minor')
                     ->label('Total')
-                    ->money()
+                    // @phpstan-ignore method.notFound (moneyRupiah() is a Macroable macro — AppServiceProvider::boot())
+                    ->moneyRupiah()
                     ->sortable(),
 
                 TextColumn::make('payment_state')
