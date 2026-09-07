@@ -85,6 +85,44 @@ final class PlotReservationLifecycleCemeteryOperatorTest extends TestCase
         return [$order, $reservation];
     }
 
+    /**
+     * Batch M3b (DOM-08) fixture: an active reservation whose owning order
+     * is already `DIBAYAR`.
+     *
+     * @return array{Order, PlotReservation}
+     */
+    private function heldReservationForAPaidOrderIn(Cemetery $cemetery): array
+    {
+        $draft = BookingDraft::query()->create(['cemetery_id' => $cemetery->id]);
+        $order = Order::query()->create([
+            'reference' => 'MK-2026-'.Str::upper(Str::random(8)),
+            'product_type' => ProductType::AT_NEED_SERVICE_ORDER->value,
+            'status' => OrderStatus::DIBAYAR->value,
+            'booking_draft_id' => $draft->id,
+        ]);
+        $block = CemeteryBlock::query()->create([
+            'cemetery_id' => $cemetery->id,
+            'code' => 'BLOK-'.Str::upper(Str::random(4)),
+            'name' => 'Blok uji berbayar',
+            'capacity' => 5,
+            'is_active' => true,
+        ]);
+        $plot = GravePlot::query()->create([
+            'block_id' => $block->id,
+            'slot' => 'S-'.Str::upper(Str::random(4)),
+            'plot_state' => PlotState::RESERVED,
+        ]);
+        $reservation = PlotReservation::query()->create([
+            'plot_id' => $plot->id,
+            'order_id' => $order->id,
+            'state' => PlotReservationState::HELD,
+            'reserved_by_ref' => '1',
+            'reserved_at' => CarbonImmutable::now(),
+        ]);
+
+        return [$order, $reservation];
+    }
+
     private function actingAsCemeteryOperatorGrantedTo(Cemetery $cemetery): void
     {
         $user = User::factory()->create();
@@ -153,6 +191,55 @@ final class PlotReservationLifecycleCemeteryOperatorTest extends TestCase
      * closure directly (bypassing `isAuthorized()`), which is exactly what
      * makes this assertion about the guard and not about the actor gate.
      */
+    /**
+     * Batch M3b (DOM-08): once the order is `DIBAYAR`, the plain
+     * release()/expire() actions must hide themselves, and the distinct
+     * override action must become visible in their place.
+     */
+    public function test_plain_release_and_expire_are_hidden_and_the_override_shown_once_the_order_is_paid(): void
+    {
+        [$order, $reservation] = $this->heldReservationForAPaidOrderIn($this->cemeteryA);
+        $this->actingAsCemeteryOperatorGrantedTo($this->cemeteryA);
+
+        $this->assertFalse(PlotReservationLifecycleActions::release($order, $reservation)->isVisible());
+        $this->assertFalse(PlotReservationLifecycleActions::expire($order, $reservation)->isVisible());
+        $this->assertTrue(PlotReservationLifecycleActions::releasePaidOrderOverride($order, $reservation)->isVisible());
+    }
+
+    /**
+     * The mirror image: before payment, the plain actions are visible and
+     * the override is hidden.
+     */
+    public function test_plain_release_and_expire_are_visible_and_the_override_hidden_before_payment(): void
+    {
+        [$order, $reservation] = $this->heldReservationIn($this->cemeteryA);
+        $this->actingAsCemeteryOperatorGrantedTo($this->cemeteryA);
+
+        $this->assertTrue(PlotReservationLifecycleActions::release($order, $reservation)->isVisible());
+        $this->assertTrue(PlotReservationLifecycleActions::expire($order, $reservation)->isVisible());
+        $this->assertFalse(PlotReservationLifecycleActions::releasePaidOrderOverride($order, $reservation)->isVisible());
+    }
+
+    /**
+     * The override action carries the same cemetery-scoped actor gate as
+     * the other three lifecycle actions.
+     */
+    public function test_an_operator_may_run_the_override_on_their_own_cemeterys_paid_order(): void
+    {
+        [$order, $reservation] = $this->heldReservationForAPaidOrderIn($this->cemeteryA);
+        $this->actingAsCemeteryOperatorGrantedTo($this->cemeteryA);
+
+        $this->assertTrue(PlotReservationLifecycleActions::releasePaidOrderOverride($order, $reservation)->isAuthorized());
+    }
+
+    public function test_an_operator_may_not_run_the_override_on_another_cemeterys_paid_order(): void
+    {
+        [$order, $reservation] = $this->heldReservationForAPaidOrderIn($this->cemeteryB);
+        $this->actingAsCemeteryOperatorGrantedTo($this->cemeteryA);
+
+        $this->assertFalse(PlotReservationLifecycleActions::releasePaidOrderOverride($order, $reservation)->isAuthorized());
+    }
+
     public function test_run_refuses_a_reservation_that_does_not_belong_to_the_given_order(): void
     {
         [$order] = $this->heldReservationIn($this->cemeteryA);

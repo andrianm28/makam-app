@@ -4,9 +4,15 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Payment;
 
+use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\OrderWorkflow\ProductType;
+use App\Domain\PlotInventory\Models\CemeteryBlock;
+use App\Domain\PlotInventory\Models\GravePlot;
+use App\Domain\PlotInventory\PlotState;
+use App\Domain\PlotReservation\Models\PlotReservation;
+use App\Domain\PlotReservation\PlotReservationState;
 use App\Domain\Quotation\Models\Quote;
 use App\Domain\Quotation\QuoteStatus;
 use App\Models\User;
@@ -120,6 +126,29 @@ final class GuardPaymentSessionUpstreamTest extends TestCase
         ]);
     }
 
+    /**
+     * Batch M3b (DOM-03) fixture helper: `plot_reservations.plot_id` is
+     * NOT NULL, so every reservation row this suite creates needs a real
+     * plot behind it.
+     */
+    private function plot(): GravePlot
+    {
+        $cemetery = Cemetery::factory()->create();
+        $block = CemeteryBlock::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'code' => 'BLOK-'.Str::upper(Str::random(4)),
+            'name' => 'Blok uji pembayaran',
+            'capacity' => 5,
+            'is_active' => true,
+        ]);
+
+        return GravePlot::query()->create([
+            'block_id' => $block->getKey(),
+            'slot' => 'S-'.Str::upper(Str::random(4)),
+            'plot_state' => PlotState::RESERVED,
+        ]);
+    }
+
     private function grantOrderScope(string $actorRef, Order $order): void
     {
         ScopeAssignment::query()->create([
@@ -209,6 +238,134 @@ final class GuardPaymentSessionUpstreamTest extends TestCase
                 GuardCondition::ConfirmationOrReservation,
                 $denial->condition,
                 'Condition 2 must not be in the denial list for a confirmed order.',
+            );
+        }
+    }
+
+    /**
+     * Batch M3b (DOM-03): a confirmed order whose ONLY plot-reservation
+     * history is a RELEASED row must deny condition 2 — the status is
+     * confirmed, but the specific plot is no longer actually held.
+     */
+    public function test_condition_2_denies_when_the_orders_only_reservation_history_is_released(): void
+    {
+        $order = $this->makeOrder(OrderStatus::PENAWARAN_TERKIRIM);
+
+        PlotReservation::query()->create([
+            'plot_id' => $this->plot()->getKey(),
+            'order_id' => $order->getKey(),
+            'state' => PlotReservationState::RELEASED,
+            'reserved_by_ref' => 'user:1',
+            'released_at' => CarbonImmutable::now(),
+        ]);
+
+        $result = ($this->guardWithPaymentGate(open: true))($order, $this->amount(1_500_000_00));
+
+        $this->assertFalse($result->isAllowed());
+
+        $denial = null;
+        foreach ($result->denials() as $d) {
+            if ($d->condition === GuardCondition::ConfirmationOrReservation) {
+                $denial = $d;
+                break;
+            }
+        }
+
+        $this->assertNotNull($denial, 'Condition 2 must deny once the order\'s only reservation was released.');
+        $this->assertSame(GuardDenialReason::DomainDenied, $denial->reason);
+        $this->assertNull($denial->missingUpstream);
+    }
+
+    /**
+     * Batch M3b (DOM-03): a confirmed order whose active `held` reservation
+     * has an `expires_at` in the past must deny condition 2 even though the
+     * chain's head row is still nominally `held`.
+     */
+    public function test_condition_2_denies_when_the_active_reservation_has_expired(): void
+    {
+        $order = $this->makeOrder(OrderStatus::PENAWARAN_TERKIRIM);
+
+        PlotReservation::query()->create([
+            'plot_id' => $this->plot()->getKey(),
+            'order_id' => $order->getKey(),
+            'state' => PlotReservationState::HELD,
+            'reserved_by_ref' => 'user:1',
+            'reserved_at' => CarbonImmutable::now()->subMinutes(30),
+            'expires_at' => CarbonImmutable::now()->subMinutes(1),
+        ]);
+
+        $result = ($this->guardWithPaymentGate(open: true))($order, $this->amount(1_500_000_00));
+
+        $this->assertFalse($result->isAllowed());
+
+        $denial = null;
+        foreach ($result->denials() as $d) {
+            if ($d->condition === GuardCondition::ConfirmationOrReservation) {
+                $denial = $d;
+                break;
+            }
+        }
+
+        $this->assertNotNull($denial, 'Condition 2 must deny once the order\'s active reservation has expired.');
+        $this->assertSame(GuardDenialReason::DomainDenied, $denial->reason);
+        $this->assertNull($denial->missingUpstream);
+    }
+
+    /**
+     * Batch M3b (DOM-03): the pass path — a confirmed order with an active,
+     * unexpired reservation must NOT deny condition 2.
+     */
+    public function test_condition_2_holds_for_a_confirmed_order_with_an_active_unexpired_reservation(): void
+    {
+        $order = $this->makeOrder(OrderStatus::PENAWARAN_TERKIRIM);
+        $this->acceptedQuote($order, 1_500_000_00);
+
+        PlotReservation::query()->create([
+            'plot_id' => $this->plot()->getKey(),
+            'order_id' => $order->getKey(),
+            'state' => PlotReservationState::HELD,
+            'reserved_by_ref' => 'user:1',
+            'reserved_at' => CarbonImmutable::now(),
+            'expires_at' => CarbonImmutable::now()->addMinutes(10),
+        ]);
+
+        $result = ($this->guardWithPaymentGate(open: true))($order, $this->amount(1_500_000_00));
+
+        foreach ($result->denials() as $denial) {
+            $this->assertNotSame(
+                GuardCondition::ConfirmationOrReservation,
+                $denial->condition,
+                'Condition 2 must not deny an order with an active, unexpired reservation.',
+            );
+        }
+    }
+
+    /**
+     * Batch M3b (DOM-03): a reservation with no `expires_at` at all (the
+     * order-anchored shape `ConvertDraftHoldToOrderReservation` creates)
+     * must not be treated as expired.
+     */
+    public function test_condition_2_holds_for_a_confirmed_order_with_an_active_reservation_and_no_expiry(): void
+    {
+        $order = $this->makeOrder(OrderStatus::PENAWARAN_TERKIRIM);
+        $this->acceptedQuote($order, 1_500_000_00);
+
+        PlotReservation::query()->create([
+            'plot_id' => $this->plot()->getKey(),
+            'order_id' => $order->getKey(),
+            'state' => PlotReservationState::CONFIRMED,
+            'reserved_by_ref' => 'user:1',
+            'reserved_at' => CarbonImmutable::now(),
+            'confirmed_at' => CarbonImmutable::now(),
+        ]);
+
+        $result = ($this->guardWithPaymentGate(open: true))($order, $this->amount(1_500_000_00));
+
+        foreach ($result->denials() as $denial) {
+            $this->assertNotSame(
+                GuardCondition::ConfirmationOrReservation,
+                $denial->condition,
+                'Condition 2 must not deny an active reservation that carries no expires_at.',
             );
         }
     }

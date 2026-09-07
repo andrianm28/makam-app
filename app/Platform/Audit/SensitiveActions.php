@@ -143,6 +143,20 @@ final class SensitiveActions
         // payment-state changes above.
         'SUBSCRIPTION_PAUSED',
         'SUBSCRIPTION_CANCELLED',
+
+        // Added by Batch M3b (DOM-08 audit remediation). Written by
+        // `App\Domain\PlotReservation\Actions\ReleasePlotReservation`/
+        // `ExpirePlotReservation` ONLY when releasing/expiring a
+        // reservation whose owning order is already `DIBAYAR` or later
+        // (`overridePaidOrder: true`) — the plain
+        // `PLOT_RESERVATION_RELEASED`/`PLOT_RESERVATION_EXPIRED` actions
+        // stay off this list (see `PlotReservationAuditActions`'s doc
+        // block: routine, machine/operator work). Silently returning a
+        // paid-for plot to available inventory is the same money-adjacent
+        // risk category as `PAYMENT_REFUND`/`RENEWAL_EXTERNAL_MARKING`
+        // above, so a recorded justification is mandatory.
+        'PLOT_RESERVATION_RELEASED_PAID_ORDER_OVERRIDE',
+        'PLOT_RESERVATION_EXPIRED_PAID_ORDER_OVERRIDE',
     ];
 
     public static function requiresReason(string $action): bool
