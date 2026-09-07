@@ -38,7 +38,20 @@
     use App\Domain\ServiceCatalog\FulfillmentOwner;
     use App\Platform\FinancialLedger\Money;
 @endphp
-<div class="py-8 md:py-12">
+<div
+    class="py-8 md:py-12"
+    x-data
+    x-on:booking-wizard-cemetery-selected.window="
+        $nextTick(() => {
+            const target = document.getElementById('discovery-service-type-heading');
+            if (! target) return;
+            target.scrollIntoView({
+                behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+                block: 'start',
+            });
+        })
+    "
+>
     @php
         $mkControl = 'h-11 w-full rounded-md border bg-neutral-0 px-4 text-base text-neutral-900
             placeholder:text-neutral-500

@@ -734,6 +734,18 @@ final class BookingWizard extends Component
 
         $this->pickerCemeteryId = null;
         $this->pickerCemeteryPackageId = null;
+
+        // Real customer report, 7 Sep 2026: the "Pilih Jenis Layanan" section
+        // this reveals only renders below the FULL "Pilih TPU/TPS" list —
+        // every published cemetery in the chosen city, not just the one just
+        // picked — so on a city with several cemeteries the newly-revealed
+        // section can sit many screens below the button the customer just
+        // pressed, with no on-screen cue that anything happened. Worse on a
+        // narrow viewport. The wizard itself was never broken — this browser
+        // event is what tells the page to scroll the customer to what their
+        // click actually revealed. See the matching `x-on` listener on this
+        // view's root element.
+        $this->dispatch('booking-wizard-cemetery-selected');
     }
 
     public function selectServiceType(string $serviceType): void
