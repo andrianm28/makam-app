@@ -75,6 +75,37 @@ jobs:
         run: php artisan migrations:verify-no-destructive-changes "origin/${{ github.event.pull_request.base.ref || 'docs/design-system-and-planning' }}"
 
   # ---------------------------------------------------------------------------
+  # API-04 (audit finding, 07 Sep 2026): docs/product/information-architecture.md
+  # §1 drifted from the real route table in both directions with nothing to
+  # catch it. This diffs a fresh `route:list` against docs/product/
+  # route-manifest.json — needs a built vendor/, so it cannot live in
+  # ci/verify-docs.sh (explicitly "no build required"); it runs here instead,
+  # the same way verify-migrations above needs `composer install` first.
+  # ---------------------------------------------------------------------------
+  verify-route-manifest:
+    name: Verify public route manifest matches route:list
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          extensions: pdo_pgsql, pgsql, redis, zip, intl, bcmath
+          tools: composer:v2
+          coverage: none
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies from lockfile
+        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Prepare test environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+      - name: Run the route manifest gate
+        run: bash ci/verify-route-manifest.sh
+
+  # ---------------------------------------------------------------------------
   # Assert the running toolchain matches ci/version-matrix.yml, so the pipeline
   # never silently drifts off the accepted baseline (technology-baseline.md §5).
   # ---------------------------------------------------------------------------
