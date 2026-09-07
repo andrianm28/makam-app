@@ -5,9 +5,9 @@ Durable events use the transactional outbox and envelope in `outbox-event-contra
 | Event | Producer | Main consumers | Notes |
 |---|---|---|---|
 | `booking.draft_submitted.v2` | Booking | Workflow router, audit | Contains explicit product type |
-| `funeral_case.created.v1` | FuneralCase | Operations, notification | At-Need accepted |
-| `funeral_case.manager_assigned.v1` | FuneralCase | Operations, audit | Includes handover reason when changed |
-| `funeral_case.task_overdue.v1` | FuneralCase | Escalation | Idempotent per task/window |
+| `funeral_case.created.v1` | FuneralCase | Operations, notification | At-Need accepted; the only `funeral_case.*` event with a real producer — `App\Domain\FuneralCase\Actions\OpenFuneralCase`, called from `SubmitBookingDraft` and `ActivatePreNeed`/`RegisterPreNeedInterest` |
+| `funeral_case.manager_assigned.v1` | FuneralCase | Operations, audit | **Deferred (CONTRACT-04, 07 Sep 2026)** — no producer exists; `funeral-case-management` is not built (`docs/planning/sprint-plan.md` §2.2 "Feature specs deferred entirely"). Row/shape reserved for when that spec starts. Includes handover reason when changed |
+| `funeral_case.task_overdue.v1` | FuneralCase | Escalation | **Deferred (CONTRACT-04, 07 Sep 2026)** — no producer exists (only referenced in `OutboxQueueRouter`'s routing table, never emitted); same `funeral-case-management` deferral as above. Idempotent per task/window |
 | `availability.requested.v1` | Availability | Operator notification | Non-blocking |
 | `availability.confirmed.v2` | Availability | Quote workflow | Manual or authoritative evidence type |
 | `cemetery.capability_changed.v1` | CemeteryCapability | UI/read models, operations | Audited version activation |
