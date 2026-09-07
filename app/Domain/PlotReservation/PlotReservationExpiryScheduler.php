@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Domain\PlotReservation;
 
-use App\Domain\Booking\Models\BookingDraft;
 use App\Domain\PlotReservation\Actions\ExpirePlotReservation;
 use App\Domain\PlotReservation\Exceptions\PlotReservationTransitionException;
 use App\Domain\PlotReservation\Models\PlotReservation;
@@ -39,7 +38,7 @@ use Illuminate\Support\Collection;
  *
  * Instead: find the DISTINCT `booking_draft_id`s that have any stale
  * `held` row at all (cheap, indexed), then re-derive each draft's TRUE
- * current hold via `PlotReservation::activeForDraft()` — the same
+ * current hold via `PlotReservation::activeForDraftId()` — the same
  * incumbent-of-the-latest-row logic `HoldPlotForDraft`/
  * `ConvertDraftHoldToOrderReservation` already trust. Only a draft whose
  * ACTUAL current head is still `held` and still past its `expires_at` is
@@ -54,7 +53,7 @@ use Illuminate\Support\Collection;
  * historical rows, but not from SELECTING them: because the `state` column
  * never changes, a long-since-converted draft's original `held` row keeps
  * matching `state = held AND expires_at < now()` forever, so the candidate
- * set — and the per-draft `activeForDraft()` re-derivation each candidate
+ * set — and the per-draft `activeForDraftId()` re-derivation each candidate
  * costs — grew for the life of the table, on a sweep that runs every
  * minute. Bounded to the last day: the TTL default is 15 minutes
  * (`config/plot-reservation.php`), so a hold that expired more than a day
@@ -74,13 +73,44 @@ use Illuminate\Support\Collection;
  * `(state, expires_at)` is indexed for exactly this predicate (see the
  * Task 1 migration).
  *
+ * ---------------------------------------------------------------------------
+ * The second candidate source: a hold whose `booking_draft_id` is gone
+ * ---------------------------------------------------------------------------
+ * Real customer report, 7 Sep 2026: a held plot did not return to
+ * "Tersedia" after its hold window passed. `plot_reservations.
+ * booking_draft_id` is `nullOnDelete()` (see `2026_08_29_100000_add_
+ * booking_draft_hold_to_plot_reservations_table.php`'s own doc block for
+ * why NOT restrict — `PurgeStaleBookingDrafts` deletes stale drafts nightly
+ * on a 30-day retention window, unrelated to this sweep's 15-minute TTL),
+ * so a hold that outlives a full run of BOTH this sweep AND the nightly
+ * purge (only possible if this sweep itself has not run at all for a long
+ * stretch — see the bounded-window note below) has its `booking_draft_id`
+ * set to NULL out from under it. The `whereNotNull('booking_draft_id')`
+ * candidate query above then excludes that row FOREVER: it can never be
+ * grouped by a draft id it no longer has, so it stops being a "draft-scoped
+ * hold" as far as that query is concerned, while its `state` column still
+ * reads `held` and its plot never comes back to `available`.
+ *
+ * The fix mirrors the draft-scoped query exactly, keyed by `plot_id`
+ * instead: find plots with a stale, now-orphaned `held` row, then
+ * re-derive each plot's TRUE current head via
+ * `PlotReservation::activeForPlotId()` — same incumbent-of-the-latest-row
+ * logic, just grouped by the identifier that survives the draft's
+ * deletion. `expires_at IS NOT NULL` alone is what tells an orphaned
+ * draft-scoped hold apart from an operator-initiated (`order_id`-anchored)
+ * one: the latter never sets `expires_at` at all (that migration's own doc
+ * block — "only draft-scoped `held` rows ever set it").
+ *
  * `AGENTS.md` §Queue and event reliability: "Consumers are idempotent" —
- * satisfied two ways here: the `activeForDraft()` re-derivation above
- * skips most already-resolved rows outright, and the remaining
- * `ExpirePlotReservation` call is itself idempotent against a row that
- * moved on in the brief window between that re-derivation and this
- * write (a genuine concurrent run) — it throws
- * `PlotReservationTransitionException`, caught and skipped below.
+ * satisfied two ways here for EACH candidate source: the
+ * `activeForDraftId()`/`activeForPlotId()` re-derivation skips most
+ * already-resolved rows outright, and the remaining `ExpirePlotReservation`
+ * call is itself idempotent against a row that moved on in the brief
+ * window between that re-derivation and this write (a genuine concurrent
+ * run) — it throws `PlotReservationTransitionException`, caught and
+ * skipped below. The two sources can never name the same row twice (one
+ * requires `booking_draft_id` non-null, the other requires it null), so
+ * there is nothing to de-duplicate between them.
  */
 final readonly class PlotReservationExpiryScheduler
 {
@@ -93,6 +123,7 @@ final readonly class PlotReservationExpiryScheduler
     public function expireStaleDraftHolds(?CarbonInterface $now = null): Collection
     {
         $now ??= now();
+        $expired = new Collection;
 
         $candidateDraftIds = PlotReservation::query()
             ->whereNotNull('booking_draft_id')
@@ -102,41 +133,58 @@ final readonly class PlotReservationExpiryScheduler
             ->distinct()
             ->pluck('booking_draft_id');
 
-        $expired = new Collection;
-
         foreach ($candidateDraftIds as $draftId) {
-            $draft = BookingDraft::query()->find($draftId);
+            // Deliberately not gated on the draft still existing: a draft
+            // deleted after its plot hold went stale (e.g. by
+            // `PurgeStaleBookingDrafts`) still needs that hold released —
+            // see `activeForDraftId()`'s own doc block. The wider gap this
+            // alone does not close (`booking_draft_id` already nulled
+            // before this candidate query even runs) is what the second
+            // pass below exists for.
+            $this->expireIfStillDue(PlotReservation::activeForDraftId($draftId), $expired);
+        }
 
-            if ($draft === null) {
-                continue;
-            }
+        $candidatePlotIds = PlotReservation::query()
+            ->whereNull('booking_draft_id')
+            ->where('state', PlotReservationState::HELD)
+            ->whereNotNull('expires_at')
+            ->where('expires_at', '<', $now)
+            ->where('expires_at', '>', $now->copy()->subDay())
+            ->distinct()
+            ->pluck('plot_id');
 
-            $head = PlotReservation::activeForDraft($draft);
-
-            if (
-                $head === null
-                || $head->state !== PlotReservationState::HELD
-                || $head->expires_at === null
-                || ! $head->expires_at->isPast()
-            ) {
-                // Not a real candidate — `activeForDraft()`'s own
-                // incumbent-of-the-latest-row logic says this chain has
-                // already moved on (converted/expired/released) or its
-                // current head is not actually stale. See class doc block.
-                continue;
-            }
-
-            try {
-                $expired->push(($this->expirePlotReservation)($head, 'system', 'system'));
-            } catch (PlotReservationTransitionException) {
-                // Moved on between the re-derivation above and this write
-                // (a genuine concurrent run) — nothing to do, and not an
-                // error. Isolated per row so one stale candidate can never
-                // starve the rest of a real sweep.
-                continue;
-            }
+        foreach ($candidatePlotIds as $plotId) {
+            $this->expireIfStillDue(PlotReservation::activeForPlotId($plotId), $expired);
         }
 
         return $expired;
+    }
+
+    /**
+     * Shared per-candidate guard for both passes above: re-check the
+     * incumbent is genuinely still a stale `held` hold before acting, and
+     * isolate a row that moved on between the candidate query and this
+     * write so one candidate can never starve the rest of a real sweep.
+     */
+    private function expireIfStillDue(?PlotReservation $head, Collection $expired): void
+    {
+        if (
+            $head === null
+            || $head->state !== PlotReservationState::HELD
+            || $head->expires_at === null
+            || ! $head->expires_at->isPast()
+        ) {
+            // Not a real candidate — the incumbent-of-the-latest-row logic
+            // says this chain has already moved on (converted/expired/
+            // released) or its current head is not actually stale.
+            return;
+        }
+
+        try {
+            $expired->push(($this->expirePlotReservation)($head, 'system', 'system'));
+        } catch (PlotReservationTransitionException) {
+            // Moved on between the re-derivation above and this write (a
+            // genuine concurrent run) — nothing to do, and not an error.
+        }
     }
 }

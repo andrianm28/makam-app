@@ -77,10 +77,12 @@ final class TemplateRendererTest extends TestCase
      * silently skewing the seed and every recipient-resolution decision.
      * The row count and the live `forEvent()` lookup pin the canonical
      * event set and the header-derived recipient columns without restating
-     * the full event list as a second source of truth. Raised 17 -> 19 on
-     * 07 Sep 2026 (NOTIF-13, Batch M8b): "Visitation booking requested" and
-     * "Visitation booking confirmed" were added additively at the end of
-     * the table — every row this test already depended on is unchanged.
+     * the full event list as a second source of truth. Raised 17 -> 18 on
+     * 07 Sep 2026 (Batch M1a, QUE-03): "Renewal paid/verified (external)"
+     * was added additively at the end of the table. Raised 18 -> 20 the
+     * same day (NOTIF-13, Batch M8b): "Visitation booking requested" and
+     * "Visitation booking confirmed" were added additively after that —
+     * every row this test already depended on is unchanged.
      */
     public function test_the_reconciled_matrix_parses_end_to_end(): void
     {
@@ -88,7 +90,7 @@ final class TemplateRendererTest extends TestCase
 
         $rows = $source->rows();
 
-        $this->assertCount(19, $rows);
+        $this->assertCount(20, $rows);
 
         $headerColumns = array_keys($rows[0]['recipients']);
         foreach ($rows as $row) {

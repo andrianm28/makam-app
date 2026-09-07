@@ -107,6 +107,64 @@ final class SpineWatchdogCommandTest extends TestCase
     }
 
     /**
+     * QUE-04's new signal: a row `OutboxPublisher::dispatchOne()` claimed
+     * (`locked_at` set) and handed to the queue driver, but that never
+     * completed publishing (`dispatched_at` still null) — see
+     * `checkStuckInFlightOutbox()`'s own doc block for why this is checked
+     * separately from `checkStaleOutbox()` above.
+     */
+    public function test_it_detects_an_outbox_event_stuck_in_flight_and_reports_it(): void
+    {
+        $handler = Mockery::mock(ExceptionHandler::class);
+        $handler->shouldReceive('report')->once()->with(Mockery::type(SpineDegradedException::class));
+        $this->app->instance(ExceptionHandler::class, $handler);
+
+        DB::table('outbox_events')->insert([
+            'id' => (string) Str::uuid(),
+            'event_name' => 'payment.received.v1',
+            'event_version' => 1,
+            'aggregate_type' => 'fixture',
+            'aggregate_id' => '1',
+            'payload' => json_encode([]),
+            'classification' => 'INTERNAL',
+            // Recent `occurred_at` so `checkStaleOutbox()`'s OWN
+            // occurred_at-based threshold (default 5 minutes) does not also
+            // fire — this fixture isolates the NEW `locked_at`-based signal.
+            'occurred_at' => now()->subMinutes(1),
+            'available_at' => now()->subMinutes(1),
+            'attempt_count' => 0,
+            'dispatched_at' => null,
+            'locked_at' => now()->subMinutes(15),
+        ]);
+
+        $this->artisan('spine:watchdog')
+            ->expectsOutputToContain('Outbox events stuck in flight: 1 event(s)')
+            ->assertExitCode(1);
+    }
+
+    public function test_a_recently_claimed_in_flight_event_within_the_threshold_is_not_flagged(): void
+    {
+        DB::table('outbox_events')->insert([
+            'id' => (string) Str::uuid(),
+            'event_name' => 'payment.received.v1',
+            'event_version' => 1,
+            'aggregate_type' => 'fixture',
+            'aggregate_id' => '1',
+            'payload' => json_encode([]),
+            'classification' => 'INTERNAL',
+            'occurred_at' => now()->subMinutes(1),
+            'available_at' => now()->subMinutes(1),
+            'attempt_count' => 0,
+            'dispatched_at' => null,
+            'locked_at' => now()->subMinutes(1),
+        ]);
+
+        $this->artisan('spine:watchdog')
+            ->expectsOutputToContain('Spine healthy')
+            ->assertExitCode(0);
+    }
+
+    /**
      * `--stale-delivery-minutes=-1`, not `$this->travel()`: `Actions\
      * DispatchNotification` stamps `created_at` via `CarbonImmutable::now()`
      * (real wall-clock, always), while `$this->travel()` only mocks

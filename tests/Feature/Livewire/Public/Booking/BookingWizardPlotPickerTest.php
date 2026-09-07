@@ -757,4 +757,72 @@ final class BookingWizardPlotPickerTest extends TestCase
         Livewire::test(BookingWizard::class, ['draftId' => $draft->id])
             ->assertDontSee('Petak:');
     }
+
+    /**
+     * PERF-03. `pickerBlocks()` used to eager-load EVERY `CemeteryBlock` and
+     * EVERY `GravePlot` of the selected cemetery with no bound — re-run on
+     * every `wire:poll.5s` tick while the picker is open. This proves the
+     * bound is real: with `booking.plot_picker_max_blocks` configured to 2,
+     * seeding 4 blocks returns only 2.
+     */
+    public function test_picker_blocks_are_bounded_by_config(): void
+    {
+        config(['booking.plot_picker_max_blocks' => 2]);
+
+        $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+
+        foreach (['BLOK-A', 'BLOK-B', 'BLOK-C', 'BLOK-D'] as $code) {
+            $block = CemeteryBlock::query()->create([
+                'cemetery_id' => $cemetery->getKey(),
+                'code' => $code,
+                'name' => $code,
+                'capacity' => 1,
+            ]);
+            GravePlot::query()->create(['block_id' => $block->getKey(), 'slot' => '001', 'plot_state' => PlotState::AVAILABLE]);
+        }
+
+        $draftId = $this->draftIdAtDiscovery();
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->call('openPickerFor', $cemetery->id);
+
+        $blocks = $component->instance()->pickerBlocks();
+
+        $this->assertCount(2, $blocks, 'Expected pickerBlocks() to stop at the configured block limit instead of loading every block.');
+    }
+
+    /**
+     * PERF-03, the nested half of the same bound: `plots` was eager-loaded
+     * with no limit either. With `booking.plot_picker_max_plots_per_block`
+     * configured to 3, seeding 6 plots in one block returns only 3.
+     */
+    public function test_picker_plots_per_block_are_bounded_by_config(): void
+    {
+        config(['booking.plot_picker_max_plots_per_block' => 3]);
+
+        $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+        $block = CemeteryBlock::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'code' => 'BLOK-A',
+            'name' => 'Blok A',
+            'capacity' => 6,
+        ]);
+
+        for ($i = 1; $i <= 6; $i++) {
+            GravePlot::query()->create([
+                'block_id' => $block->getKey(),
+                'slot' => str_pad((string) $i, 3, '0', STR_PAD_LEFT),
+                'plot_state' => PlotState::AVAILABLE,
+            ]);
+        }
+
+        $draftId = $this->draftIdAtDiscovery();
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->call('openPickerFor', $cemetery->id);
+
+        $blocks = $component->instance()->pickerBlocks();
+
+        $this->assertCount(3, $blocks->first()->plots, 'Expected the eager-loaded plots relation to stop at the configured per-block limit instead of loading every plot.');
+    }
 }

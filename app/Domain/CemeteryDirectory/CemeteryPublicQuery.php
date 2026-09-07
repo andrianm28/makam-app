@@ -302,4 +302,45 @@ final class CemeteryPublicQuery
 
         return $packages;
     }
+
+    /**
+     * Batch form of `activePackages()` — PERF-05. `BookingWizard::render()`
+     * used to call `activePackages()` once per cemetery
+     * (`$cemeteries->mapWithKeys(...)`), one query per cemetery for the
+     * step's whole list. This resolves active packages for every published
+     * cemetery in `$cemeteries` in ONE query
+     * (`CemeteryPackage::whereIn('cemetery_id', ...)->active()`), grouped
+     * back out per cemetery — same ordering, same "unpublished cemetery
+     * gets none" rule `activePackages()` applies.
+     *
+     * @param  Collection<int, Cemetery>  $cemeteries
+     * @return array<string, Collection<int, CemeteryPackage>> keyed by cemetery_id
+     */
+    public static function activePackagesForMany(Collection $cemeteries): array
+    {
+        $publishedIds = $cemeteries
+            ->filter(fn (Cemetery $cemetery): bool => $cemetery->isPublished())
+            ->pluck('id')
+            ->all();
+
+        $result = array_fill_keys($cemeteries->pluck('id')->all(), new Collection);
+
+        if ($publishedIds === []) {
+            return $result;
+        }
+
+        /** @var Collection<int, CemeteryPackage> $packages */
+        $packages = CemeteryPackage::query()
+            ->whereIn('cemetery_id', $publishedIds)
+            ->active()
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+
+        foreach ($packages->groupBy('cemetery_id') as $cemeteryId => $cemeteryPackages) {
+            $result[$cemeteryId] = $cemeteryPackages->values();
+        }
+
+        return $result;
+    }
 }

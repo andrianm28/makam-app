@@ -22,6 +22,19 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // DB-05 (batch M3a): ran completely unguarded before this fix, on
+        // EVERY `php artisan migrate` including a real production deploy.
+        // See `config/example_data.php`'s own doc block on why this flag
+        // defaults TRUE (not false), and why `app()->isProduction()` is an
+        // unconditional, independent guard regardless of the flag.
+        if (! config('example_data.seed_service_areas_for_example_vendors')) {
+            return;
+        }
+
+        if (app()->isProduction()) {
+            return;
+        }
+
         // Guards on "areas already exist" (not on vendor existence), so this
         // runs correctly AFTER the vendor/listing seed on fresh environments
         // and is a safe no-op on re-runs.

@@ -38,6 +38,7 @@ use App\Platform\Outbox\Models\OutboxEvent;
 use App\Platform\Outbox\Outbox;
 use App\Platform\Outbox\OutboxClassification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
@@ -416,11 +417,30 @@ final class NotificationDispatchPipelineTest extends TestCase
         $outboxEventId = $this->recordBookingSubmitted($draft->id);
         $outboxRowBefore = OutboxEvent::query()->findOrFail($outboxEventId)->toArray();
 
-        // No exception must escape this call.
+        // No exception must escape this call. `SendNotificationChannelJob`
+        // catches the channel's throw internally (its own retry path), so
+        // it never reaches `Event::dispatch()` inside `handle()` at all —
+        // from the outbox's perspective this IS a successful publish.
         (new PublishOutboxEventJob($outboxEventId))->handle();
 
         $this->assertSame($draftBefore, $draft->fresh()->toArray(), 'The booking_drafts row must be untouched by a channel failure.');
-        $this->assertSame($outboxRowBefore, OutboxEvent::query()->findOrFail($outboxEventId)->toArray(), 'The outbox_events row must be untouched by a channel failure.');
+
+        // QUE-04: `handle()` now stamps `dispatched_at`/clears `locked_at`
+        // itself once `OutboxEventPublished` has genuinely fired (see that
+        // job's own class doc block) — a downstream channel's own failure,
+        // caught inside `SendNotificationChannelJob`, is that job's concern
+        // via its own retry path, not evidence the outbox publish itself
+        // failed. So `dispatched_at`/`locked_at` are the ONLY columns this
+        // call is expected to change; everything else on the row —
+        // `payload`, `attempt_count`, `last_error`, aggregate identity —
+        // must stay exactly as it was before the channel ever threw.
+        $outboxRowAfter = OutboxEvent::query()->findOrFail($outboxEventId)->toArray();
+        $this->assertNotNull($outboxRowAfter['dispatched_at'], 'A genuinely successful publish must be marked dispatched.');
+        $this->assertSame(
+            Arr::except($outboxRowBefore, ['dispatched_at', 'locked_at']),
+            Arr::except($outboxRowAfter, ['dispatched_at', 'locked_at']),
+            'Only dispatched_at/locked_at may change; the rest of the row must be untouched by a downstream channel failure.'
+        );
         // 2, not 1: StartBookingDraft (bookingSubmittedFixture()) already
         // wrote its own booking.draft_started.v1 outbox row as a real side
         // effect — both it and the booking.draft_submitted.v2 row this test

@@ -45,8 +45,11 @@ use App\Platform\Payment\Http\Controllers\PaymentCancelController;
 use App\Platform\Payment\Http\Controllers\PaymentReturnController;
 use App\Platform\Payment\Http\Controllers\RecordPaymentReversalController;
 use App\Platform\Payment\Http\Controllers\VerifyManualPaymentController;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Http\Request;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 /*
 |--------------------------------------------------------------------------
@@ -104,8 +107,44 @@ use Illuminate\Support\Facades\Route;
 // deliberately: these are infrastructure routes, not product surface, and
 // a deploy/monitoring probe should find them without scanning past every
 // public journey below.
-Route::get('/health/live', HealthLiveController::class)->name('health.live');
-Route::get('/health/ready', HealthReadyController::class)->name('health.ready');
+//
+// Both routes exclude StartSession, ShareErrorsFromSession,
+// PreventRequestForgery (the framework's CSRF middleware — the
+// `VerifyCsrfToken` name is a deprecated subclass alias of it, but the web
+// group registers the parent class itself, which is what a middleware
+// exclusion must match against), and throttle:public-guest even though
+// they're declared inside this `web`-group route file (bootstrap/app.php's
+// `web: __DIR__.'/../routes/web.php'`). Without this, a session-store
+// outage (SESSION_DRIVER=database by default, config/session.php) or a
+// cache outage (the public-guest rate limiter is cache-backed,
+// AppServiceProvider::boot()) throws inside framework middleware before
+// either controller ever runs — turning /health/live into a de facto
+// second readiness check (defeating its whole purpose: it must only fail
+// when this process cannot answer HTTP at all) and turning /health/ready's
+// intended clean 503 JSON (HealthReadyController's own doc block) into an
+// unhandled exception instead. ShareErrorsFromSession and
+// PreventRequestForgery must be excluded alongside StartSession — both
+// unconditionally call $request->session() (the latter to mint the
+// XSRF-TOKEN cookie), which throws once StartSession no longer runs. This
+// mirrors, as closely as a route staying inside routes/web.php allows, how
+// the framework's own `/up` (bootstrap/app.php's `health: '/up'`) is
+// registered outside every middleware group entirely.
+Route::get('/health/live', HealthLiveController::class)
+    ->withoutMiddleware([
+        'throttle:public-guest',
+        StartSession::class,
+        ShareErrorsFromSession::class,
+        PreventRequestForgery::class,
+    ])
+    ->name('health.live');
+Route::get('/health/ready', HealthReadyController::class)
+    ->withoutMiddleware([
+        'throttle:public-guest',
+        StartSession::class,
+        ShareErrorsFromSession::class,
+        PreventRequestForgery::class,
+    ])
+    ->name('health.ready');
 
 Route::get('/', HomePage::class)->name('home');
 

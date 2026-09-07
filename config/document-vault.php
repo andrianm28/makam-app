@@ -68,4 +68,13 @@ return [
     'object_storage' => $configuredObjectStorage ?? ($isDevelopmentEnvironment ? LocalFilesystemObjectStorage::class : null),
 
     'malware_scanner' => $configuredMalwareScanner ?? ($isDevelopmentEnvironment ? MockScanner::class : null),
+
+    // PERF-01: bounds `ReconcileDocumentStorageCleanupJob`'s per-run scan of
+    // non-'accepted'-prefix documents in a terminal state. Terminal states
+    // never leave that predicate, so without a bound the candidate set only
+    // grows for the app's whole lifetime. See that job's own class doc
+    // block for the resumable-watermark mechanism this limit bounds.
+    // Overridable in tests so the bounding behaviour can be exercised
+    // without seeding hundreds of real rows.
+    'reconcile_orphan_scan_limit' => (int) env('DOCUMENT_VAULT_RECONCILE_ORPHAN_SCAN_LIMIT', 500),
 ];

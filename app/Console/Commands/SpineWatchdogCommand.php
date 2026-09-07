@@ -73,6 +73,7 @@ final class SpineWatchdogCommand extends Command
 {
     protected $signature = 'spine:watchdog
         {--stale-outbox-minutes=5 : Alert when an outbox event has waited this long undispatched}
+        {--stuck-outbox-minutes=10 : Alert when an outbox event has been claimed and pushed to the queue this long without publishing}
         {--stale-delivery-minutes=15 : Alert when a notification delivery has waited this long queued}
         {--failed-jobs-window-minutes=5 : Alert on any failed job within this recent window}
         {--failed-deliveries-window-minutes=15 : Alert on any permanently-failed notification delivery within this recent window}';
@@ -83,6 +84,7 @@ final class SpineWatchdogCommand extends Command
     {
         $problems = array_filter([
             $this->checkStaleOutbox((int) $this->option('stale-outbox-minutes')),
+            $this->checkStuckInFlightOutbox((int) $this->option('stuck-outbox-minutes')),
             $this->checkStaleDeliveries((int) $this->option('stale-delivery-minutes')),
             $this->checkRecentFailures((int) $this->option('failed-jobs-window-minutes')),
             $this->checkFailedDeliveries((int) $this->option('failed-deliveries-window-minutes')),
@@ -115,6 +117,38 @@ final class SpineWatchdogCommand extends Command
 
         return "Outbox publisher stalled: {$count} event(s) undispatched for over {$minutes} minute(s). ".
             'Check that outbox:publish is still scheduled and running.';
+    }
+
+    /**
+     * QUE-04's new signal: "dispatched but never consumed" — a row
+     * `OutboxPublisher::dispatchOne()` claimed (`locked_at` set) and handed
+     * to the queue driver, but `PublishOutboxEventJob::handle()` never
+     * completed for it (`dispatched_at` still null). `checkStaleOutbox()`
+     * above eventually catches this too (it ages off `occurred_at`,
+     * independent of claim state), but that signal cannot tell "never
+     * claimed at all" apart from "claimed, queued, and stuck" — the two
+     * have very different causes (scheduler/publisher not running, versus a
+     * crash-looping worker or a permanently-failed job that never reached
+     * its own `failed()` hook). This check is keyed on `locked_at` instead
+     * of `occurred_at` specifically to surface the second case fast, without
+     * waiting for `OutboxPublisher::STALE_CLAIM_SECONDS` to lapse before a
+     * human even finds out.
+     */
+    private function checkStuckInFlightOutbox(int $minutes): ?string
+    {
+        $count = DB::table('outbox_events')
+            ->whereNull('dispatched_at')
+            ->whereNotNull('locked_at')
+            ->where('locked_at', '<', now()->subMinutes($minutes))
+            ->count();
+
+        if ($count === 0) {
+            return null;
+        }
+
+        return "Outbox events stuck in flight: {$count} event(s) claimed and dispatched to the queue over ".
+            "{$minutes} minute(s) ago but never published. Check for a crash-looping worker or a ".
+            'permanently-failed PublishOutboxEventJob (failed_jobs), then consider outbox:replay.';
     }
 
     private function checkStaleDeliveries(int $minutes): ?string
