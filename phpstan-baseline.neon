@@ -1495,6 +1495,12 @@ parameters:
 			path: tests/Feature/Payment/GuardPaymentSessionTest.php
 
 		-
+			message: '#^Call to an undefined method Illuminate\\Contracts\\Auth\\PasswordBroker\:\:createToken\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: tests/Feature/Livewire/Public/Auth/PasswordResetTest.php
+
+		-
 			message: '#^Call to function class_exists\(\) with ''App\\\\Platform…'' will always evaluate to false\.$#'
 			identifier: function.impossibleType
 			count: 1
