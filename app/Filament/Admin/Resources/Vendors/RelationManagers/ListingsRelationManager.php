@@ -85,7 +85,8 @@ final class ListingsRelationManager extends RelationManager
                     ->columnSpanFull(),
 
                 TextInput::make('price_minor')
-                    ->label('Harga (Rp)')
+                    ->label('Harga (rupiah, dalam sen)')
+                    ->helperText('Nilai dalam satuan terkecil rupiah, mengikuti kolom price_minor.')
                     ->required()
                     ->numeric()
                     ->minValue(1)
@@ -162,7 +163,8 @@ final class ListingsRelationManager extends RelationManager
 
                 TextColumn::make('price_minor')
                     ->label('Harga')
-                    ->money('IDR', divideBy: 100)
+                    // @phpstan-ignore method.notFound (moneyRupiah() is a Macroable macro — AppServiceProvider::boot())
+                    ->moneyRupiah()
                     ->sortable(),
 
                 TextColumn::make('availability_mode')

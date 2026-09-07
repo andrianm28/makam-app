@@ -60,7 +60,7 @@
                 <div>
                     <dt class="font-medium text-neutral-500">Harga per Siklus</dt>
                     <dd class="mt-1 text-right tabular-nums font-mono font-semibold text-neutral-900">
-                        Rp {{ number_format($subscription->price_minor, 0, ',', '.') }}
+                        <x-mk.money :minor="$subscription->price_minor" />
                     </dd>
                 </div>
 

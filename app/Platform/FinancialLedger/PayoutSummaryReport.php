@@ -7,6 +7,7 @@ namespace App\Platform\FinancialLedger;
 use App\Platform\FinancialLedger\Exceptions\InvalidLedgerReportException;
 use App\Platform\FinancialLedger\Models\Payout;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\LazyCollection;
 
 /**
  * The "outgoing payments" report AC7 asks for: money that actually left the
@@ -82,6 +83,54 @@ final class PayoutSummaryReport
             rows: $rows,
             totalMinor: array_sum(array_column($rows, 'amount_minor')),
         );
+    }
+
+    /**
+     * PERF-14 — the CSV-export counterpart of `summary()`, same reasoning
+     * as `CashReceiptsReport::cursor()`'s own doc block: a lazily
+     * evaluated `cursor()` stream, sorted at the database level instead of
+     * PHP, never materializing the full result set in memory.
+     *
+     * @param  string|list<string>|null  $entityRef
+     * @return LazyCollection<int, array{id: string, vendor_id: string, entity_ref: string, amount_minor: int, method: string, state: string, occurred_at: string}>
+     *
+     * @throws InvalidLedgerReportException on a malformed period or an empty
+     *                                      entity-reference list.
+     */
+    public function cursor(string $period, string|array|null $entityRef = null): LazyCollection
+    {
+        $period = trim($period);
+        $this->assertPeriod($period);
+
+        if (is_array($entityRef) && $entityRef === []) {
+            throw InvalidLedgerReportException::forEmptyEntityScope();
+        }
+
+        $entityRefs = match (true) {
+            $entityRef === null => null,
+            is_array($entityRef) => array_values($entityRef),
+            default => [$entityRef],
+        };
+
+        [$start, $endExclusive] = LedgerPeriod::boundsFor($period);
+
+        return Payout::query()
+            ->where('occurred_at', '>=', $start)
+            ->where('occurred_at', '<', $endExclusive)
+            ->when($entityRefs !== null, static fn ($query) => $query->whereIn('entity_ref', $entityRefs))
+            ->orderBy('occurred_at')
+            ->orderBy('id')
+            ->select(['id', 'vendor_id', 'entity_ref', 'amount_minor', 'method', 'state', 'occurred_at'])
+            ->cursor()
+            ->map(static fn (Payout $payout): array => [
+                'id' => (string) $payout->id,
+                'vendor_id' => (string) $payout->vendor_id,
+                'entity_ref' => (string) $payout->entity_ref,
+                'amount_minor' => (int) $payout->amount_minor,
+                'method' => (string) $payout->method,
+                'state' => (string) $payout->state,
+                'occurred_at' => $payout->occurred_at->toISOString(),
+            ]);
     }
 
     /**

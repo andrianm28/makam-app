@@ -59,8 +59,13 @@ final class ReceiptsReportPanelTest extends TestCase
         $component = Livewire::actingAs($user)->test(ReceiptsReportPanel::class);
 
         $this->assertSame(CarbonImmutable::now()->format('Y-m'), $component->get('period'));
-        $component->assertSee('Belum ada penerimaan pada periode ini')
-            ->assertCount('reportRows', 0);
+        $component->assertSee('Belum ada penerimaan pada periode ini');
+
+        // PERF-14 — reportRows/totalMinor are no longer public Livewire
+        // state (see ReceiptsReportPanel's own doc block); row-level
+        // assertions now read the rendered HTML instead of component
+        // properties.
+        $this->assertSame(0, substr_count($component->html(), 'payment:provider-event-receipts-report'));
     }
 
     public function test_a_seeded_receipt_renders_in_the_report(): void
@@ -70,8 +75,10 @@ final class ReceiptsReportPanelTest extends TestCase
 
         $component = Livewire::actingAs($user)->test(ReceiptsReportPanel::class);
 
-        $component->assertCount('reportRows', 1)
-            ->assertSet('totalMinor', 100_000);
+        $html = $component->html();
+
+        $this->assertSame(1, substr_count($html, 'payment:provider-event-receipts-report'));
+        $this->assertStringContainsString('Rp 1.000', $html);
     }
 
     /**
@@ -103,8 +110,11 @@ final class ReceiptsReportPanelTest extends TestCase
 
         $component = Livewire::actingAs($user)->test(ReceiptsReportPanel::class);
 
-        $component->assertCount('reportRows', 1)
-            ->assertSet('totalMinor', 100_000);
+        $html = $component->html();
+
+        $this->assertSame(1, substr_count($html, 'payment:provider-event-receipts-report'));
+        $this->assertStringNotContainsString('payment:provider-event-receipts-report-other', $html);
+        $this->assertStringContainsString('Rp 1.000', $html);
     }
 
     public function test_a_malformed_period_renders_the_inline_validation_error(): void
@@ -116,9 +126,10 @@ final class ReceiptsReportPanelTest extends TestCase
         $component->set('period', '2026-13')->call('loadReport');
 
         $component->assertSee('Format periode tidak valid. Gunakan format YYYY-MM, contohnya 2026-08.')
-            ->assertCount('reportRows', 0)
             ->assertHasErrors('period')
             ->assertSet('error', 'Format periode tidak valid. Gunakan format YYYY-MM, contohnya 2026-08.');
+
+        $this->assertSame(0, substr_count($component->html(), 'payment:provider-event-receipts-report'));
     }
 
     private function authorisedFinanceUser(): User
