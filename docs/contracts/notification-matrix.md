@@ -19,7 +19,8 @@
 > design-system delivery-state contract (`docs/design/design-system.md` §6.8:
 > `success` "Terkirim" · `pending` "Sedang dikirim" · `neutral` "WhatsApp
 > belum tersedia"; the UI may claim a delivery only from a recorded
-> `notification_deliveries` state, AC4). The 17 event rows, their order, and
+> `notification_deliveries` state, AC4). The 18 event rows (07 Sep 2026: +1,
+> `Renewal paid/verified (external)`, Batch M1a QUE-03), their order, and
 > their cell texts are canonical and pinned by the module's tests; do not
 > reorder, drop, or reword a row without changing those tests in the same
 > change.
@@ -70,7 +71,19 @@
 | Vendor evidence uploaded | EMAIL/WA | optional | none | IN_APP | TBD | TBD |
 | Renewal submitted | EMAIL/WA | IN_APP | IN_APP/EMAIL | none | TBD | TBD |
 | Renewal paid/verified | EMAIL/WA + invoice | IN_APP | IN_APP | none | TBD | TBD |
+| Renewal paid/verified (external) | EMAIL/WA + invoice | IN_APP | IN_APP | none | TBD | TBD |
 | Reminder due | EMAIL/WA | optional | optional | none | TBD | TBD |
+
+> **Row added — 07 Sep 2026 (Phase 3 Batch M1a, QUE-03).** `Renewal paid/
+> verified (external)` carries the SAME recipient facts as `Renewal paid/
+> verified` — it is the identical real-world event (a renewal reaching a
+> settled state), reached via the offline/admin path
+> (`Actions\MarkExternalRenewal` / `Actions\MarkRenewalPaidExternally`,
+> catalogued event `renewal.marked_external.v1`) rather than the online
+> webhook path (`Actions\MarkRenewalPaidOnline`, `renewal.paid_online.v1`).
+> A separate row exists only because `notification_templates.event_name`
+> is unique per row and the online path's row already claims `Renewal paid/
+> verified` — not because the recipient policy differs.
 
 ## Delivery rules
 

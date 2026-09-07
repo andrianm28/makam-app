@@ -1,4 +1,4 @@
-# Event Catalog — v0.6
+# Event Catalog — v0.7
 
 Durable events use the transactional outbox and envelope in `outbox-event-contract.md`. All events include `event_id`, `event_version`, `occurred_at`, actor/service identity, `trace_id`, aggregate reference, idempotency key, and data classification. Restricted documents or permanent file URLs are never embedded.
 
@@ -19,6 +19,7 @@ Durable events use the transactional outbox and envelope in `outbox-event-contra
 | `payment.received.v1` | PaymentAdapter | Journal/order/invoice | Valid webhook only |
 | `payment.outcome_failed.v1` | PaymentAdapter | Notification | Carries `outcome` (Failed/Expired) — one event for one matrix row, not two |
 | `marketplace_order.submitted.v1` | Marketplace | Notification | Real customer order submission, one event, no discrimination needed |
+| `marketplace_order.paid.v1` | Marketplace | Notification | The marketplace order root's `payment_state -> DIBAYAR` transition (`MarkMarketplaceOrderPaid`) — distinct from `payment.received.v1`, whose catalogued payload carries an `OrderInvoice` reference the marketplace domain has no analogue for |
 | `vendor_order.decided.v1` | Marketplace | Notification | Carries `outcome` (accepted/rejected) — one event for one matrix row, not two, same shape as payment.outcome_failed.v1 |
 | `order.status_changed.v1` | OrderWorkflow | Notification/reporting | Forward-only commercial status |
 | `agreement.accepted.v1` | Agreement (AcceptAgreement) | PreNeed/operations | Exact version and evidence; emitted once on the `agreements` row — the pre-need case-level acceptance binds the same row without re-emitting |
@@ -38,6 +39,7 @@ Durable events use the transactional outbox and envelope in `outbox-event-contra
 | `care.work_order_created.v1` | VendorFulfillment | Case/customer | Evidence reference; one per paid cycle |
 | `care.complaint_filed.v1` | VendorFulfillment | Case/customer/audit | Linked to work order; audited |
 | `care.make_good_created.v1` | VendorFulfillment | Case/customer | Replacement order linked to original |
+| `vendor.order_assigned.v1` | VendorFulfillment | Case/customer/notification | A pending work order's vendor assignment (`AssignWorkOrder`); references only — work order, vendor, and care plan/cycle ids |
 | `vendor.work_completed.v1` | VendorFulfillment | Case/customer | Evidence reference |
 | `vendor.evidence_uploaded.v1` | VendorFulfillment | Notification | References only — no document content or restricted data |
 | `memorial.unpublished.v1` | Memorial | Public read/QR | Privacy/moderation action |
@@ -52,6 +54,8 @@ Durable events use the transactional outbox and envelope in `outbox-event-contra
 > **Note (16 Aug 2026):** `plot.reservation_acquired.v1` / `plot.reservation_expired.v1` / `plot.reservation_conflict.v1` above are superseded by `plot_reservation.state_changed.v1` — the shipped P3 module emits the underscore event and no producer exists for the dotted names; kept as history, not evidence of an active contract.
 
 > **Note (17 Aug 2026):** v0.6 — P5a whole-branch review: `agreement.accepted.v1` has exactly one producer, Lane 1's `AcceptAgreement`, emitting on the `agreements` row (UUID aggregate id, `{agreement_id, version_number, quote_id, accepted_by_ref}` payload); `AcceptPreNeedAgreement` records the case binding without a second emission.
+
+> **Note (07 Sep 2026):** v0.7 — Phase 3 Batch M1a: added `marketplace_order.paid.v1` (new producer `MarkMarketplaceOrderPaid`, closing QUE-02 — a settlement that wrote state and an audit row with no outbox event) and `vendor.order_assigned.v1` (new producer `AssignWorkOrder`, closing QUE-10, same gap). `renewal.marked_external.v1` already existed in this catalogue with no producer; QUE-03 gave it its first two (`MarkExternalRenewal`, `MarkRenewalPaidExternally`) — no catalogue row change needed for that one.
 
 ## Compatibility
 
