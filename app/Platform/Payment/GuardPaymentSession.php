@@ -7,6 +7,7 @@ namespace App\Platform\Payment;
 use App\Domain\OrderWorkflow\Actions\AuthorizeOrderPaymentOpening;
 use App\Domain\OrderWorkflow\Exceptions\OrderPaymentOpeningNotAuthorisedException;
 use App\Domain\OrderWorkflow\Models\Order;
+use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\Quotation\Models\Quote;
 use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
@@ -261,15 +262,52 @@ final readonly class GuardPaymentSession
 
     private function conditionTwo(GuardCondition $condition, Order $order): ?ConditionDenial
     {
-        if (in_array($order->status, self::CONFIRMED_STATUSES, true)) {
+        if (! in_array($order->status, self::CONFIRMED_STATUSES, true)) {
+            return new ConditionDenial(
+                condition: $condition,
+                reason: GuardDenialReason::DomainDenied,
+                publicMessage: 'Payment cannot be started because the booking confirmation or plot reservation is not available.',
+            );
+        }
+
+        // Batch M3b (DOM-03): the status check above only proves the ORDER
+        // reached a confirmed status once; it says nothing about whether a
+        // specific plot reservation tied to that order is STILL valid now.
+        // An order can keep its confirmed status forever while its plot
+        // reservation was separately released or left to expire (by an
+        // operator, or by `PlotReservationExpiryScheduler`), which must
+        // not leave a payment session openable for a plot no longer
+        // actually held. Orders with NO reservation history at all — a
+        // package/class confirmation that never involved a specific plot —
+        // keep the status-only path above unchanged: that absence is
+        // correct, not evidence of a lapsed hold.
+        $hasReservationHistory = PlotReservation::query()
+            ->where('order_id', $order->getKey())
+            ->exists();
+
+        if (! $hasReservationHistory) {
             return null;
         }
 
-        return new ConditionDenial(
-            condition: $condition,
-            reason: GuardDenialReason::DomainDenied,
-            publicMessage: 'Payment cannot be started because the booking confirmation or plot reservation is not available.',
-        );
+        $activeReservation = PlotReservation::activeForOrder($order);
+
+        if ($activeReservation === null) {
+            return new ConditionDenial(
+                condition: $condition,
+                reason: GuardDenialReason::DomainDenied,
+                publicMessage: 'Payment cannot be started because the plot reservation for this order is no longer active.',
+            );
+        }
+
+        if ($activeReservation->expires_at !== null && $activeReservation->expires_at->isPast()) {
+            return new ConditionDenial(
+                condition: $condition,
+                reason: GuardDenialReason::DomainDenied,
+                publicMessage: 'Payment cannot be started because the plot reservation for this order has expired.',
+            );
+        }
+
+        return null;
     }
 
     private function conditionThree(GuardCondition $condition, ?Quote $currentQuote): ?ConditionDenial

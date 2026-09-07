@@ -16,6 +16,7 @@ use App\Domain\PlotReservation\Actions\ExpirePlotReservation;
 use App\Domain\PlotReservation\Actions\ReleasePlotReservation;
 use App\Domain\PlotReservation\Actions\ReservePlot;
 use App\Domain\PlotReservation\Exceptions\PlotNotAvailableException;
+use App\Domain\PlotReservation\Exceptions\PlotReservationOrderAlreadyPaidException;
 use App\Domain\PlotReservation\Exceptions\PlotReservationTransitionException;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PlotReservation\PlotReservationState;
@@ -551,6 +552,16 @@ abstract class BasePlotFloorMapPage extends Page
 
             Notification::make()->success()->title('Reservasi diperbarui.')->send();
             $this->closePlot();
+        } catch (PlotReservationOrderAlreadyPaidException) {
+            // Batch M3b (DOM-08): pesanan ini sudah dibayar — melepaskan/
+            // mengedaluwarsakan reservasinya dari sini bukan alur yang
+            // ditawarkan; gunakan aksi override khusus pada halaman detail
+            // pesanan (memerlukan alasan tertulis dan verifikasi ulang).
+            Notification::make()
+                ->danger()
+                ->title('Tindakan reservasi gagal')
+                ->body('Pesanan ini sudah dibayar. Gunakan aksi lepaskan reservasi pesanan berbayar pada halaman detail pesanan.')
+                ->send();
         } catch (PlotReservationTransitionException $exception) {
             Notification::make()->danger()->title('Tindakan reservasi gagal')->body($exception->getMessage())->send();
         } catch (Throwable $exception) {

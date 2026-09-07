@@ -56,4 +56,18 @@ enum OrderStatus: string
     {
         return $this === self::DITOLAK;
     }
+
+    /**
+     * Batch M3b (DOM-08): `true` once money is confirmed
+     * (`DIBAYAR`) or the order has moved past it. `OrderTransition::ALLOWED`
+     * shows `DIBAYAR => ['DIPROSES']` and `DIPROSES => ['SELESAI']` as the
+     * ONLY edges reachable once an order is `DIBAYAR` — nothing terminal
+     * (`DITOLAK`/`DIBATALKAN`/`KEDALUWARSA`) is reachable afterwards — so
+     * this closed three-value list is exhaustive, not a guess at "later"
+     * statuses.
+     */
+    public function isPaidOrLater(): bool
+    {
+        return in_array($this, [self::DIBAYAR, self::DIPROSES, self::SELESAI], true);
+    }
 }
