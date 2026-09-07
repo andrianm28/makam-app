@@ -25,6 +25,12 @@ parameters:
 			path: app/Console/Commands/IdentityRevokeScopeCommand.php
 
 		-
+			message: '#^Offset ''name'' on array\{name\: string, passwd\: string, uid\: int, gid\: int, gecos\: string, dir\: string, shell\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Console/Commands/OutboxReplayCommand.php
+
+		-
 			message: '#^Parameter \#1 \$array \(array\{''FLOWER_BOARD'', ''FLOWER_PETAL_PACKAGE'', ''GRAVESTONE_GRANITE'', ''GRAVESTONE_MARBLE'', ''GRAVESTONE…'', ''GRAVE_CARE_MONTHLY'', ''GRAVE_CARE_QUARTERLY'', ''GRAVE_CARE…'', \.\.\.\}\) of array_values is already a list, call has no effect\.$#'
 			identifier: arrayValues.list
 			count: 1
@@ -241,18 +247,6 @@ parameters:
 			path: app/Filament/Admin/Resources/CemeteryVisitationPolicies/CemeteryVisitationPolicyResource.php
 
 		-
-			message: '#^Offset 0 does not exist on array\{open\: string, close\: string\}\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: app/Filament/Admin/Resources/CemeteryVisitationPolicies/Tables/CemeteryVisitationPoliciesTable.php
-
-		-
-			message: '#^Offset 1 does not exist on array\{open\: string, close\: string\}\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: app/Filament/Admin/Resources/CemeteryVisitationPolicies/Tables/CemeteryVisitationPoliciesTable.php
-
-		-
 			message: '#^Strict comparison using \!\=\= between non\-falsy\-string and '''' will always evaluate to true\.$#'
 			identifier: notIdentical.alwaysTrue
 			count: 1
@@ -353,6 +347,12 @@ parameters:
 			identifier: return.type
 			count: 1
 			path: app/Filament/Admin/Resources/RenewalOrders/RenewalOrderResource.php
+
+		-
+			message: '#^Method App\\Filament\\Admin\\Resources\\ServiceComplaints\\ServiceComplaintsResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<App\\Domain\\VendorFulfillment\\Models\\ServiceComplaint\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Filament/Admin/Resources/ServiceComplaints/ServiceComplaintsResource.php
 
 		-
 			message: '#^Parameter \#1 \$package of callable App\\Domain\\ServiceCatalog\\Actions\\ReviseServicePackageVersion expects App\\Domain\\ServiceCatalog\\Models\\ServicePackage, Illuminate\\Database\\Eloquent\\Model given\.$#'
@@ -663,8 +663,14 @@ parameters:
 		-
 			message: '#^Call to an undefined method Mockery\\ExpectationInterface\|Mockery\\HigherOrderMessage\:\:once\(\)\.$#'
 			identifier: method.notFound
-			count: 1
+			count: 2
 			path: tests/Feature/Console/SpineWatchdogCommandTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsArray\(\) with array will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 2
+			path: tests/Feature/Database/Migrations/AddV2NotificationTemplatesForZeroRecipientEventsTest.php
 
 		-
 			message: '#^Call to an undefined method Illuminate\\Database\\Migrations\\Migration\:\:down\(\)\.$#'
@@ -904,6 +910,12 @@ parameters:
 			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Carbon\\CarbonImmutable will always evaluate to true\.$#'
 			identifier: method.alreadyNarrowedType
 			count: 1
+			path: tests/Feature/Domain/Renewal/RenewalMarkedExternalNotificationTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Carbon\\CarbonImmutable will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
 			path: tests/Feature/Domain/Renewal/RenewalPaidOnlineNotificationTest.php
 
 		-
@@ -1123,6 +1135,12 @@ parameters:
 			path: tests/Feature/Filament/PlotFloorMapActionsTest.php
 
 		-
+			message: '#^Call to an undefined method Livewire\\Component\:\:blocks\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/Filament/PlotFloorMapPageTest.php
+
+		-
 			message: '#^Call to an undefined method Livewire\\Component\:\:getTable\(\)\.$#'
 			identifier: method.notFound
 			count: 1
@@ -1255,12 +1273,6 @@ parameters:
 			path: tests/Feature/IdentityAccess/UserCanAccessPanelTest.php
 
 		-
-			message: '#^Call to an undefined method Illuminate\\Contracts\\Auth\\PasswordBroker\:\:createToken\(\)\.$#'
-			identifier: method.notFound
-			count: 2
-			path: tests/Feature/Livewire/Public/Auth/PasswordResetTest.php
-
-		-
 			message: '#^Parameter \#1 \$panel of method App\\Models\\User\:\:canAccessPanel\(\) expects Filament\\Panel, Mockery\\MockInterface given\.$#'
 			identifier: argument.type
 			count: 2
@@ -1299,7 +1311,7 @@ parameters:
 		-
 			message: '#^Call to an undefined method Livewire\\Component\:\:pickerBlocks\(\)\.$#'
 			identifier: method.notFound
-			count: 1
+			count: 3
 			path: tests/Feature/Livewire/Public/Booking/BookingWizardPlotPickerTest.php
 
 		-
@@ -1393,13 +1405,19 @@ parameters:
 			path: tests/Feature/Livewire/Public/Visitation/VisitationPageTest.php
 
 		-
+			message: '#^Offset ''table_name'' does not exist on array\{table\: string, referenced_table\: string, delete_rule\: string\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: tests/Feature/Migrations/AddMissingFkConstraintsVendorFulfillmentCareSubscriptionTest.php
+
+		-
 			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsInt\(\) with int will always evaluate to true\.$#'
 			identifier: method.alreadyNarrowedType
 			count: 1
 			path: tests/Feature/Migrations/FixCustomerAndUploaderIdentityColumnsTest.php
 
 		-
-			message: '#^Method App\\Platform\\Notification\\Contracts\\NotificationSubjectSource@anonymous/tests/Feature/Notification/NotificationDispatchPipelineTest\.php\:682\:\:subjectFor\(\) never returns null so it can be removed from the return type\.$#'
+			message: '#^Method App\\Platform\\Notification\\Contracts\\NotificationSubjectSource@anonymous/tests/Feature/Notification/NotificationDispatchPipelineTest\.php\:702\:\:subjectFor\(\) never returns null so it can be removed from the return type\.$#'
 			identifier: return.unusedType
 			count: 1
 			path: tests/Feature/Notification/NotificationDispatchPipelineTest.php
