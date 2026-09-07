@@ -11,6 +11,7 @@ use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\AuditSubject;
 use App\Platform\DocumentVault\Actions\UploadDocument;
 use App\Platform\DocumentVault\DocumentKind;
+use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use App\Platform\Payment\Exceptions\PaymentVerificationOrderNotFoundException;
 use App\Platform\Payment\Models\PaymentVerification;
 use Illuminate\Http\UploadedFile;
@@ -147,8 +148,15 @@ final readonly class SubmitManualPayment
                     $document = $this->uploadDocument->upload(
                         DocumentKind::PaymentProof,
                         $proofFile,
-                        'payment_verification',
-                        $verification->id,
+                        // VAULT-06: 'payment_verification' (keyed on the
+                        // verification's own id) is not a resolvable
+                        // `DocumentAccessPolicy` owner type. The proof
+                        // belongs, relationship-wise, to the order it pays
+                        // for — `payment_verifications.order_id` is a real
+                        // foreign key to `$order` — so scope the document to
+                        // that order instead.
+                        ScopeEntityType::ORDER,
+                        $order->id,
                         $clientUploadId,
                         $proofMeta,
                     );

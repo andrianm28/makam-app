@@ -10,8 +10,10 @@ use App\Platform\DocumentVault\Actions\PromoteDocument;
 use App\Platform\DocumentVault\Actions\ScanDocument;
 use App\Platform\DocumentVault\Actions\UploadDocument;
 use App\Platform\DocumentVault\DocumentKind;
+use App\Platform\DocumentVault\DocumentState;
 use App\Platform\DocumentVault\Models\Document;
 use App\Platform\IdentityAccess\ActorContext;
+use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
@@ -157,11 +159,33 @@ final class UploadEvidenceAction
             $document = app(UploadDocument::class)->upload(
                 DocumentKind::VendorEvidence,
                 $file,
-                WorkOrder::class,
-                (string) $workOrder->getKey(),
+                // VAULT-06: `WorkOrder::class` (an FQCN) is not a resolvable
+                // `DocumentAccessPolicy` owner type, and `WorkOrder` itself
+                // carries no `order_id` to scope by order (only `vendor_id`
+                // via `care_plan_id`/`WorkOrder::vendor()`) — so the
+                // resolvable relationship this evidence document has is the
+                // owning vendor, not the work order row itself.
+                ScopeEntityType::VENDOR,
+                (string) $workOrder->vendor_id,
                 null,
                 [],
             );
+
+            // VAULT-01: `UploadDocument::upload()` always dispatches
+            // `Jobs\ScanDocumentJob` via `DB::afterCommit()` regardless of
+            // this caller's own synchronous scan/promote below. On a
+            // synchronous queue driver (`QUEUE_CONNECTION=sync`, used in
+            // tests and possible in this single-host deployment), that job
+            // runs immediately when `upload()`'s transaction commits — and
+            // now (VAULT-01) promotes a CLEAN scan itself. Re-fetch first: if
+            // the job already won the race and promoted this document, this
+            // caller must not call `ScanDocument::scan()` again (it would
+            // throw — a document is only scannable from QUARANTINED/SCANNING).
+            $document = $document->fresh();
+
+            if ($document->state === DocumentState::Accepted) {
+                return $document;
+            }
 
             app(ScanDocument::class)->scan($document);
 

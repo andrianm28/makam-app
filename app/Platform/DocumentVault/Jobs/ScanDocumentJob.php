@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Platform\DocumentVault\Jobs;
 
+use App\Platform\DocumentVault\Actions\PromoteDocument;
 use App\Platform\DocumentVault\Actions\ScanDocument;
 use App\Platform\DocumentVault\DocumentState;
 use App\Platform\DocumentVault\Models\Document;
+use App\Platform\DocumentVault\ScanVerdict;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -37,6 +39,34 @@ use Illuminate\Queue\SerializesModels;
  * strict `Actions\ScanDocument` and fail the job on every issuance, so the
  * job no-ops instead. Its action-level acceptance list is kept in one place
  * — the Action remains strict, this job is the tolerant consumer.
+ *
+ * ---------------------------------------------------------------------------
+ * VAULT-01 fix — this job is the ONLY promoter for the async path
+ * ---------------------------------------------------------------------------
+ * Before this fix, `handle()` only ever called `Actions\ScanDocument::scan()`
+ * and stopped: a CLEAN verdict left the document sitting in
+ * `DocumentState::Scanning` forever, because nothing on this path ever
+ * called `Actions\PromoteDocument`. Every document uploaded through
+ * `Actions\UploadDocument`'s normal (non-synchronous-fast-path) route — e.g.
+ * `Livewire\Public\Memorial\MemorialFamilyPage::uploadMedia()`, whose own
+ * `attachAcceptedUploads()` polls for `DocumentState::Accepted` rows that
+ * this job alone is responsible for producing — was permanently stuck in
+ * quarantine even when genuinely clean.
+ *
+ * The fix is deliberately placed HERE, in the job, and not inside
+ * `Actions\ScanDocument::applyVerdict()` itself: `scan()` is shared by this
+ * job AND by the two synchronous fast paths
+ * (`CreateCertificateAction`/`UploadEvidenceAction`), which already call
+ * `Actions\PromoteDocument::promote()` themselves immediately after
+ * `scan()` returns. Auto-promoting inside `scan()` would make BOTH promote
+ * the same document — the fast paths' own explicit `promote()` call would
+ * then throw ("Only a scanning document may be promoted") because the
+ * document is already `Accepted` by the time they reach it. Keeping
+ * promotion here, in the one caller that previously had none, fixes the gap
+ * without disturbing the fast paths or the many `Actions\ScanDocument`-level
+ * tests that deliberately hold a document at `Scanning` to drive
+ * `Actions\PromoteDocument` under controlled conditions (checksum-mismatch,
+ * storage-tampering, rollback scenarios).
  */
 final class ScanDocumentJob implements ShouldQueue
 {
@@ -49,7 +79,7 @@ final class ScanDocumentJob implements ShouldQueue
         public readonly string $documentId,
     ) {}
 
-    public function handle(ScanDocument $scanDocument): void
+    public function handle(ScanDocument $scanDocument, PromoteDocument $promoteDocument): void
     {
         $document = Document::query()->findOrFail($this->documentId);
 
@@ -57,7 +87,11 @@ final class ScanDocumentJob implements ShouldQueue
             return;
         }
 
-        $scanDocument->scan($document);
+        $scan = $scanDocument->scan($document);
+
+        if ($scan->verdict === ScanVerdict::Clean) {
+            $promoteDocument->promote($document->fresh());
+        }
     }
 
     /**

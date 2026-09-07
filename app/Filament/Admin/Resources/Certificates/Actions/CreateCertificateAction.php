@@ -17,9 +17,11 @@ use App\Platform\DocumentVault\Actions\PromoteDocument;
 use App\Platform\DocumentVault\Actions\ScanDocument;
 use App\Platform\DocumentVault\Actions\UploadDocument;
 use App\Platform\DocumentVault\DocumentKind;
+use App\Platform\DocumentVault\DocumentState;
 use App\Platform\DocumentVault\Models\Document;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\Roles\ActorRole;
+use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use Filament\Actions\Action;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
@@ -263,11 +265,31 @@ final class CreateCertificateAction
             $document = app(UploadDocument::class)->upload(
                 DocumentKind::Certificate,
                 $file,
-                Order::class,
+                // VAULT-06: `Order::class` (an FQCN) is not one of
+                // `DocumentAccessPolicy`'s resolvable owner types and made
+                // this document's access checks unauthorizable — use the
+                // scope entity type the policy actually understands.
+                ScopeEntityType::ORDER,
                 (string) $subject->getKey(),
                 null,
                 ['mime_declared' => 'application/pdf'],
             );
+
+            // VAULT-01: `UploadDocument::upload()` always dispatches
+            // `Jobs\ScanDocumentJob` via `DB::afterCommit()` regardless of
+            // this caller's own synchronous scan/promote below. On a
+            // synchronous queue driver (`QUEUE_CONNECTION=sync`, used in
+            // tests and possible in this single-host deployment), that job
+            // runs immediately when `upload()`'s transaction commits — and
+            // now (VAULT-01) promotes a CLEAN scan itself. Re-fetch first: if
+            // the job already won the race and promoted this document, this
+            // caller must not call `ScanDocument::scan()` again (it would
+            // throw — a document is only scannable from QUARANTINED/SCANNING).
+            $document = $document->fresh();
+
+            if ($document->state === DocumentState::Accepted) {
+                return $document;
+            }
 
             app(ScanDocument::class)->scan($document);
 

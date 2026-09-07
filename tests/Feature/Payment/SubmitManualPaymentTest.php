@@ -158,8 +158,10 @@ final class SubmitManualPaymentTest extends TestCase
         $document = Document::query()->findOrFail($verification->proof_document_id);
         $this->assertSame(DocumentKind::PaymentProof, $document->document_kind);
         $this->assertSame(DocumentState::Quarantined, $document->state);
-        $this->assertSame('payment_verification', $document->owner_type);
-        $this->assertSame($verification->id, $document->owner_id);
+        // VAULT-06: scoped to the order the proof pays for (a resolvable
+        // `DocumentAccessPolicy` owner type), not the verification's own id.
+        $this->assertSame('order', $document->owner_type);
+        $this->assertSame($verification->order_id, $document->owner_id);
 
         // The row references the document, never its content — the schema
         // itself has no column capable of carrying file bytes, a checksum,
