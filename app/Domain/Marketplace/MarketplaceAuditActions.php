@@ -69,4 +69,23 @@ final class MarketplaceAuditActions
      * free-text reason would add nothing.
      */
     public const string PAYMENT_OPENING_DENIED = 'MARKETPLACE_PAYMENT_OPENING_DENIED';
+
+    /**
+     * ARCH-13 remediation
+     * (`docs/superpowers/plans/2026-09-07-batchm5a-domain-action-extraction.md`).
+     * Written by `Actions\ReconfirmCartPricing` — the only writer that may
+     * refresh a `cart_items` row's FROZEN `unit_price_minor`/`price_version`
+     * pair back to the listing's current values, replacing
+     * `Cart::reconfirmPricing()`'s previous direct, unaudited mutation.
+     *
+     * Deliberately NOT added to `SensitiveActions::ACTIONS`: this is the
+     * customer's own explicit acceptance of a price change already visible
+     * on screen (the "Harga berubah" alert), not a privileged override —
+     * there is no human-authored justification a mandatory-reason gate
+     * would meaningfully extract, the same category `MarketplaceAuditActions`
+     * already draws for `ORDER_STATUS_CHANGED` above. The audit row still
+     * exists (not skipped) so a complete "which cart line's frozen price
+     * was reconfirmed, when" history exists for this money-affecting write.
+     */
+    public const string CART_PRICING_RECONFIRMED = 'CART_PRICING_RECONFIRMED';
 }

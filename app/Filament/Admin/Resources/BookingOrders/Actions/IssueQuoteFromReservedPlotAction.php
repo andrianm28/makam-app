@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Admin\Resources\BookingOrders\Actions;
 
 use App\Domain\CemeteryDirectory\PlotTrackingMode;
+use App\Domain\OrderWorkflow\Actions\IssueOrderQuote;
 use App\Domain\OrderWorkflow\Actions\IssueQuoteFromReservedPlot;
 use App\Domain\OrderWorkflow\Authorization\Contracts\OrderTransitionAuthorizerContract;
 use App\Domain\OrderWorkflow\Exceptions\OrderActionNotAuthorisedException;
@@ -142,7 +143,7 @@ final class IssueQuoteFromReservedPlotAction
         try {
             app(IssueQuoteFromReservedPlot::class)(
                 $order,
-                CarbonImmutable::now()->addDays(30),
+                CarbonImmutable::now()->addDays(IssueOrderQuote::DEFAULT_VALIDITY_DAYS),
                 $actorRef,
                 $actorRole,
                 $reason,
