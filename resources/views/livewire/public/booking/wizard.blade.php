@@ -1352,6 +1352,24 @@
                                     </x-mk.alert>
                                 @endif
 
+                                {{-- The ordinary outcome for a booking a visitor
+                                     just submitted: the order EXISTS and is
+                                     waiting on the operator, so this is
+                                     `pending`, never `danger`, and carries no
+                                     "something went wrong" framing. See
+                                     BookingWizard::$onlinePaymentPendingNotice. --}}
+                                @if ($onlinePaymentPendingNotice !== null)
+                                    <x-mk.alert
+                                        intent="pending"
+                                        icon="clock"
+                                        title="Pesanan Anda sudah kami terima"
+                                        live="polite"
+                                        class="mt-3"
+                                    >
+                                        <p class="text-sm">{{ $onlinePaymentPendingNotice }}</p>
+                                    </x-mk.alert>
+                                @endif
+
                                 @if ($onlinePaymentError !== null)
                                     <x-mk.alert
                                         intent="danger"

@@ -49,6 +49,7 @@ use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutProviderException;
 use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutUnavailableException;
 use App\Platform\Payment\Exceptions\PaymentSessionOpeningDeniedException;
 use App\Platform\Payment\Exceptions\PaymentSessionOrderAlreadyPaidException;
+use App\Platform\Payment\GuardCondition;
 use App\Platform\Payment\Models\PaymentSession;
 use App\Platform\Payment\OrderType;
 use App\Platform\Payment\PaymentProviders;
@@ -63,6 +64,7 @@ use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
+use LogicException;
 use OverflowException;
 use Throwable;
 
@@ -256,6 +258,24 @@ final class BookingWizard extends Component
      * never an English exception message (`AGENTS.md` §Observability).
      */
     public ?string $onlinePaymentError = null;
+
+    /**
+     * The ONLINE branch's *expected* outcome for a brand-new self-service
+     * booking — not a failure, and deliberately a separate property from
+     * `$onlinePaymentError` so the view cannot render it in `danger`.
+     *
+     * The six-condition guard's conditions 2, 3 and 4 (order confirmation,
+     * accepted quote, ORDER-scope admin authorization) are all operator-
+     * owned: a booking a visitor just submitted cannot satisfy any of them
+     * by construction, and `BookingWizardOnlinePaymentTest` pins that as
+     * intended. The order itself HAS been created and submitted by the time
+     * the guard runs, so the truthful message is "we have your booking,
+     * payment opens after we confirm" — not a red failure over a booking
+     * that actually succeeded. See
+     * `docs/research/booking-payment-model-2026-09.md` for why this is a UI
+     * fix rather than a guard change.
+     */
+    public ?string $onlinePaymentPendingNotice = null;
 
     /**
      * The PHP-session key under which an opened session is remembered for
@@ -1130,6 +1150,7 @@ final class BookingWizard extends Component
     public function openOnlinePayment(): void
     {
         $this->onlinePaymentError = null;
+        $this->onlinePaymentPendingNotice = null;
 
         if ($this->draftId === null) {
             $this->onlinePaymentError = 'Sesi pemesanan Anda telah berakhir. Silakan mulai ulang.';
@@ -1279,10 +1300,30 @@ final class BookingWizard extends Component
                 cancelReturnUrl: route('payments.cancel', ['session' => $paymentSessionId]),
                 sessionId: $paymentSessionId,
             ));
-        } catch (PaymentSessionOpeningDeniedException) {
-            // The six-condition guard denied. Fixed Indonesian copy — the
-            // guard's own messages are internal English and stay off-screen.
-            $this->onlinePaymentError = 'Pembayaran online belum dapat dibuka saat ini karena konfirmasi pesanan, penawaran harga, atau otorisasi pembayaran belum lengkap. Gunakan pembayaran manual atau hubungi dukungan.';
+        } catch (PaymentSessionOpeningDeniedException $denial) {
+            // The six-condition guard denied. Two very different situations
+            // land here and they must not read the same way to a customer.
+            //
+            // When the ONLY failing conditions are the three operator-owned
+            // ones, nothing has gone wrong: the order was created and
+            // submitted a few lines above, and it is simply waiting for the
+            // operator to confirm availability and issue a final quote.
+            // Reporting that as a failure told customers their booking had
+            // not gone through when it had — the real defect behind the
+            // 8 Sep 2026 report.
+            //
+            // Any OTHER denial (gate closed, merchant binding missing,
+            // amount mismatch) is a genuine configuration or data problem
+            // the customer can neither cause nor fix, and keeps the
+            // fail-closed error copy. The guard's own messages are internal
+            // English and stay off-screen either way.
+            if ($this->deniedOnlyByOperatorOwnedConditions($denial)) {
+                $this->onlinePaymentPendingNotice = 'Pesanan Anda sudah kami terima dengan nomor '.$order->reference
+                    .'. Pembayaran dibuka setelah tim kami mengonfirmasi ketersediaan makam dan menerbitkan penawaran final — kami akan menghubungi Anda.';
+            } else {
+                $this->onlinePaymentError = 'Pembayaran online belum dapat dibuka saat ini karena konfirmasi pesanan, penawaran harga, atau otorisasi pembayaran belum lengkap. Gunakan pembayaran manual atau hubungi dukungan.';
+            }
+
             $this->currentStep = BookingWizardStep::PAYMENT;
 
             return;
@@ -1467,6 +1508,43 @@ final class BookingWizard extends Component
      * has already rolled back by the time this catch handler runs, so a
      * release attempted inside it would roll back right along with it.
      */
+    /**
+     * True when the guard's denial is the ordinary "waiting for the
+     * operator" state rather than a real problem — i.e. every failing
+     * condition is one of the three an operator owns and a self-service
+     * visitor structurally cannot satisfy: the order-status confirmation,
+     * the accepted quote, and the ORDER-scope admin authorization.
+     *
+     * Fails SAFE in both directions: an empty denial list, or a denial this
+     * cannot inspect (an exception built via `forPublicMessage()` for a
+     * non-booking order type carries no `GuardResult` and throws), is
+     * treated as a real error rather than silently reassuring a customer
+     * whose payment failed for a reason nobody looked at.
+     */
+    private function deniedOnlyByOperatorOwnedConditions(PaymentSessionOpeningDeniedException $denial): bool
+    {
+        try {
+            $denied = $denial->result()->deniedConditionValues();
+        } catch (LogicException) {
+            return false;
+        }
+
+        if ($denied === []) {
+            return false;
+        }
+
+        $operatorOwned = array_map(
+            static fn (GuardCondition $condition): string => $condition->value,
+            [
+                GuardCondition::ConfirmationOrReservation,
+                GuardCondition::QuoteAcceptedAndUnexpired,
+                GuardCondition::AuthorizedOpening,
+            ],
+        );
+
+        return array_diff($denied, $operatorOwned) === [];
+    }
+
     private function routeBackToPlotPickerAfterExpiredHold(BookingDraft $draft): void
     {
         $this->currentStep = BookingWizardStep::DISCOVERY;
@@ -2015,8 +2093,16 @@ final class BookingWizard extends Component
         // asserts `Pembayaran Manual` is visible exactly when
         // `onlinePaymentError` is set) and the Failed/Expired session copy
         // above, which explicitly tells the customer to use it.
+        //
+        // `$onlinePaymentPendingNotice` counts as "the online path has been
+        // tried and did not open" for exactly this purpose (added 8 Sep
+        // 2026 with that property): a booking waiting on operator
+        // confirmation still needs the manual route on screen, and gating
+        // the card on `onlinePaymentError` alone silently removed it the
+        // moment that case stopped being reported as an error.
         $showManualPayment = $paymentMode !== PaymentMode::Online
             || $this->onlinePaymentError !== null
+            || $this->onlinePaymentPendingNotice !== null
             || $onlinePaymentState['state'] === SessionState::Failed
             || $onlinePaymentState['state'] === SessionState::Expired;
 

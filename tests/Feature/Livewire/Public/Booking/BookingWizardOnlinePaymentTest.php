@@ -502,6 +502,15 @@ final class BookingWizardOnlinePaymentTest extends TestCase
      * longer a give-up — the click CREATES the order and its quote through
      * the chain. Payment still fails closed until the operator-side
      * prerequisites exist, with the manual path as the live alternative.
+     *
+     * Updated 8 Sep 2026: the fail-closed OUTCOME is unchanged (no session,
+     * no provider call, idempotent re-click) but its PRESENTATION is not. A
+     * denial whose only failing conditions are the three operator-owned ones
+     * is the ordinary state of a booking the visitor just submitted — the
+     * order exists and is waiting on the operator — so it now sets the
+     * `pending` notice, not the `danger` error. Reporting it as an error
+     * told customers their booking had not gone through when it had. See
+     * `docs/research/booking-payment-model-2026-09.md`.
      */
     public function test_online_submit_creates_order_and_quote_but_fails_closed_without_calling_the_provider(): void
     {
@@ -512,22 +521,64 @@ final class BookingWizardOnlinePaymentTest extends TestCase
 
         $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
         $component->call('openOnlinePayment')
-            ->assertSet('onlinePaymentError', 'Pembayaran online belum dapat dibuka saat ini karena konfirmasi pesanan, penawaran harga, atau otorisasi pembayaran belum lengkap. Gunakan pembayaran manual atau hubungi dukungan.')
+            ->assertSet('onlinePaymentError', null)
             ->assertSet('currentStep', BookingWizardStep::PAYMENT);
 
         $order = $this->chainOrderFor($draftId);
+
+        $notice = $component->get('onlinePaymentPendingNotice');
+        $this->assertIsString($notice, 'An operator-owned denial must surface as the pending notice, not as nothing at all.');
+        $this->assertStringContainsString(
+            $order->reference,
+            $notice,
+            'The notice must name the order that WAS created, so the customer can see their booking is recorded.',
+        );
 
         $this->assertSame(1, Quote::query()->where('order_id', $order->getKey())->count());
         $this->assertSame(0, PaymentSession::query()->count());
         Http::assertNothingSent();
 
         // Re-click without operator-side state: the chain is idempotent —
-        // the SAME order and quote, still honestly closed.
+        // the SAME order and quote, still honestly closed, still no error.
         $component->call('openOnlinePayment')
-            ->assertSet('onlinePaymentError', 'Pembayaran online belum dapat dibuka saat ini karena konfirmasi pesanan, penawaran harga, atau otorisasi pembayaran belum lengkap. Gunakan pembayaran manual atau hubungi dukungan.');
+            ->assertSet('onlinePaymentError', null);
+
+        $this->assertStringContainsString($order->reference, (string) $component->get('onlinePaymentPendingNotice'));
 
         $this->assertSame(1, Order::query()->where('booking_draft_id', $draftId)->count());
         $this->assertSame(1, Quote::query()->where('order_id', $order->getKey())->count());
+        $this->assertSame(0, PaymentSession::query()->count());
+        Http::assertNothingSent();
+    }
+
+    /**
+     * The other side of the branch: a denial that is NOT purely
+     * operator-owned is a real configuration problem the customer can
+     * neither cause nor fix, and must keep the fail-closed `danger` copy
+     * rather than being dressed up as a benign "waiting for confirmation".
+     *
+     * Blanking the merchant binding fails guard condition 6
+     * (`merchant_and_badan_usaha_bound`) ON TOP of the three operator-owned
+     * ones, which is exactly the mixed case the branch has to tell apart.
+     */
+    public function test_a_denial_that_is_not_purely_operator_owned_still_shows_the_error(): void
+    {
+        $this->withPaymentGate(open: true);
+        Http::fake();
+
+        config([
+            'payment.merchant_ref' => '',
+            'payment.badan_usaha_ref' => '',
+        ]);
+
+        $draftId = $this->journeyToPayment()->get('draftId');
+
+        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->call('openOnlinePayment')
+            ->assertSet('onlinePaymentPendingNotice', null)
+            ->assertSet('onlinePaymentError', 'Pembayaran online belum dapat dibuka saat ini karena konfirmasi pesanan, penawaran harga, atau otorisasi pembayaran belum lengkap. Gunakan pembayaran manual atau hubungi dukungan.')
+            ->assertSet('currentStep', BookingWizardStep::PAYMENT);
+
         $this->assertSame(0, PaymentSession::query()->count());
         Http::assertNothingSent();
     }
@@ -578,10 +629,14 @@ final class BookingWizardOnlinePaymentTest extends TestCase
 
         $draftId = $this->journeyToPayment()->get('draftId');
 
-        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->call('openOnlinePayment')
-            ->assertSet('onlinePaymentError', 'Pembayaran online belum dapat dibuka saat ini karena konfirmasi pesanan, penawaran harga, atau otorisasi pembayaran belum lengkap. Gunakan pembayaran manual atau hubungi dukungan.')
+            ->assertSet('onlinePaymentError', null)
             ->assertSet('currentStep', BookingWizardStep::PAYMENT);
+
+        // Operator-owned denial → the pending notice, not the error. The
+        // guard decision below is unchanged: still denied, still audited.
+        $this->assertIsString($component->get('onlinePaymentPendingNotice'));
 
         $this->assertSame(1, Order::query()->where('booking_draft_id', $draftId)->count());
         $this->assertSame(OrderStatus::MASUK->value, $this->chainOrderFor($draftId)->status);
