@@ -97,7 +97,7 @@
             @if ($photoUrl)
                 <img
                     src="{{ $photoUrl }}"
-                    alt="Ilustrasi {{ $cemetery->name }}"
+                    alt="Foto {{ $cemetery->name }}"
                     class="h-56 w-full rounded-lg object-cover md:h-72"
                 >
             @else

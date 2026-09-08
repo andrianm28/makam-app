@@ -65,7 +65,7 @@ final class BookingWizardStepTwoCardContentTest extends TestCase
 
         $this->atCemeteryChoice(LaunchCityCode::BOGOR)
             ->assertSeeHtml('src="'.$photoUrl.'"')
-            ->assertSeeHtml('alt="Ilustrasi '.$cemetery->name.'"');
+            ->assertSeeHtml('alt="Foto '.$cemetery->name.'"');
     }
 
     public function test_step_2_shows_the_cemetery_address_unconditionally(): void
