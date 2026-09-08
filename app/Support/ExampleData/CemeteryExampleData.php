@@ -49,9 +49,20 @@ use InvalidArgumentException;
  *     inventing precise-looking coordinates for a fictional address
  *     would be a false-precision claim `requirements.md`'s negative
  *     criteria do not ask for and this batch's honesty discipline
- *     forbids. The dummy photo backfill uses the existing four
- *     illustration SVGs, which are explicitly illustrations, not
- *     photographs of real cemeteries.
+ *     forbids.
+ *   - `primary_photo_path`: UPDATED 8 Sep 2026, product owner direction
+ *     (relayed via WhatsApp) — the four generic illustration SVGs this
+ *     backfill used before are replaced with four real, neutral cemetery
+ *     stock photos (`EXAMPLE_PHOTOS`, cycled by index exactly as the SVGs
+ *     were). This is a deliberate reversal of the "illustrations, not
+ *     photographs" stance the rest of this honesty framing still holds
+ *     to for every OTHER field: a photo of an unrelated real cemetery is
+ *     now shown against these fictional rows, on explicit instruction,
+ *     accepting the same disclosed-reuse risk the four real named
+ *     cemeteries' own photo backfill already carries (see
+ *     `2026_08_24_100000_backfill_photo_and_maps_url_for_real_cemeteries
+ *     .php`'s doc block). Name/address/coordinates/price above are
+ *     unaffected and remain fully fictionalized.
  *   - `price_min`/`price_max` are DERIVED placeholders
  *     (`3_000_000 + index * 500_000` and `price_min * 1.8`) attributed
  *     by `priceSourceLabel()` as an internal estimate of example data —
@@ -177,16 +188,28 @@ final class CemeteryExampleData
     private const array EXAMPLE_WORDS = ['Sejahtera', 'Permai', 'Asri', 'Damai', 'Cendana', 'Kenanga', 'Melati', 'Anggrek'];
 
     /**
-     * The existing four illustration SVGs, cycled by index — illustrations,
-     * not photographs of real cemeteries.
+     * Four real, neutral cemetery/garden stock photos (daylight, no people,
+     * no religious iconography — design-system.md §2.2's imagery
+     * constraints), cycled by index. Replaces the four generic illustration
+     * SVGs this constant used before 8 Sep 2026 — product owner direction
+     * (relayed via WhatsApp) was to show real photography on every TPU/TPS
+     * card rather than a hand-drawn placeholder, for BOTH these example
+     * rows and the real named cemeteries (see the
+     * `2026_09_08_...backfill_real_photos_for_all_cemeteries` migration,
+     * which applies the same four files to the four real rows). None of
+     * these photos depict a specific one of the ten fictional cemeteries
+     * here — cycling one small photo pool across many rows is a deliberate,
+     * disclosed reuse (the same shape the four illustrations already had),
+     * not a claim that this exact plot belongs to this exact fictional
+     * TPU/TPS.
      *
      * @var list<string>
      */
     private const array EXAMPLE_PHOTOS = [
-        'images/cemeteries/illustration-01-gate.svg',
-        'images/cemeteries/illustration-02-grove.svg',
-        'images/cemeteries/illustration-03-path.svg',
-        'images/cemeteries/illustration-04-garden.svg',
+        'images/cemeteries/photo-01-jakarta-memorial.jpg',
+        'images/cemeteries/photo-02-grid-colorful.jpg',
+        'images/cemeteries/photo-03-river-divide.jpg',
+        'images/cemeteries/photo-04-red-green-grid.jpg',
     ];
 
     /**

@@ -688,6 +688,18 @@ parameters:
 			message: '#^Call to an undefined method Illuminate\\Database\\Migrations\\Migration\:\:down\(\)\.$#'
 			identifier: method.notFound
 			count: 1
+			path: tests/Feature/Database/Migrations/BackfillRealPhotosForRealAndExampleCemeteriesTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Migrations\\Migration\:\:up\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: tests/Feature/Database/Migrations/BackfillRealPhotosForRealAndExampleCemeteriesTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Migrations\\Migration\:\:down\(\)\.$#'
+			identifier: method.notFound
+			count: 1
 			path: tests/Feature/Database/Migrations/FixCustomerAndUploaderIdentityColumnsRollbackTest.php
 
 		-

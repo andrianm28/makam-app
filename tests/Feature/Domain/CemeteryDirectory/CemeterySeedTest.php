@@ -128,7 +128,7 @@ final class CemeterySeedTest extends TestCase
 
             $this->assertNotNull($cemetery->primary_photo_path);
             $this->assertStringStartsWith('images/cemeteries/', (string) $cemetery->primary_photo_path);
-            $this->assertStringEndsWith('.svg', (string) $cemetery->primary_photo_path);
+            $this->assertStringEndsWith('.jpg', (string) $cemetery->primary_photo_path);
 
             // Coordinates and the maps URL are ALWAYS null by design (see
             // `CemeteryExampleData`'s honesty framing) — inventing
