@@ -611,6 +611,24 @@ final class BookingWizard extends Component
      * `App\Filament\Shared\PlotFloorMap\BasePlotFloorMapPage::blocks()`'s
      * own fail-empty shape.
      *
+     * ALSO scoped to `$pickerCemeteryPackageId` when one is set. A block is
+     * generated wholly against a single package (`CreateCemeteryBlock`'s own
+     * doc block: "every generated plot" shares the `$cemeteryPackageId` the
+     * operator picked for that call), so a cemetery with multiple packages
+     * has multiple, disjoint blocks — one customer's chosen package must
+     * only ever see that package's own blocks/plots, never another
+     * package's, which a bare `cemetery_id` filter let through: a visitor
+     * choosing "Kelas A" could be shown "Kelas B"'s block (wrong
+     * availability count, wrong plots to hold) or vice versa. `whereHas`
+     * drops blocks with no plot in the chosen package entirely, rather than
+     * rendering them as a confusing "0 tersedia" empty block; the
+     * eager-loaded `plots` relation is filtered the same way so the
+     * `$availableCount`/tile grid the Blade view builds from it never mixes
+     * in another package's plots. No filter is applied when
+     * `$pickerCemeteryPackageId` is null (a cemetery whose blocks were
+     * generated without a package) — the pre-existing, package-agnostic
+     * behaviour.
+     *
      * A genuine query failure ALSO degrades to empty, but sets
      * `$pickerBlocksUnavailable` first — the same fail-honest discipline
      * `render()` already applies to the cemetery list and the picker's own
@@ -628,10 +646,21 @@ final class BookingWizard extends Component
             return new \Illuminate\Support\Collection;
         }
 
+        $packageId = $this->pickerCemeteryPackageId;
+
         try {
             return CemeteryBlock::query()
                 ->where('cemetery_id', $this->pickerCemeteryId)
-                ->with(['plots' => fn ($query) => $query->orderBy('slot')
+                ->when(
+                    $packageId !== null,
+                    fn ($query) => $query->whereHas(
+                        'plots',
+                        fn ($plots) => $plots->where('cemetery_package_id', $packageId),
+                    ),
+                )
+                ->with(['plots' => fn ($query) => $query
+                    ->when($packageId !== null, fn ($plots) => $plots->where('cemetery_package_id', $packageId))
+                    ->orderBy('slot')
                     ->limit((int) config('booking.plot_picker_max_plots_per_block'))])
                 ->orderBy('code')
                 ->limit((int) config('booking.plot_picker_max_blocks'))
@@ -833,6 +862,19 @@ final class BookingWizard extends Component
 
         if ($plot === null) {
             $this->addError('plot', 'Plot tidak ditemukan pada TPU/TPS ini.');
+
+            return;
+        }
+
+        // Mirrors pickerBlocks()'s own package scoping: a block (and every
+        // plot in it) is generated wholly against one package
+        // (CreateCemeteryBlock's doc block), so a client-supplied plot id
+        // for a DIFFERENT package than the one the customer selected must be
+        // refused here too — pickerBlocks() normally keeps such a plot off
+        // the grid entirely, but this is the server-side check that closes
+        // the gap for a stale render or a direct Livewire call.
+        if ($plot->cemetery_package_id !== $cemeteryPackageId) {
+            $this->addError('plot', 'Plot tidak sesuai dengan paket/kelas yang dipilih.');
 
             return;
         }
