@@ -611,23 +611,38 @@ final class BookingWizard extends Component
      * `App\Filament\Shared\PlotFloorMap\BasePlotFloorMapPage::blocks()`'s
      * own fail-empty shape.
      *
-     * ALSO scoped to `$pickerCemeteryPackageId` when one is set. A block is
-     * generated wholly against a single package (`CreateCemeteryBlock`'s own
-     * doc block: "every generated plot" shares the `$cemeteryPackageId` the
-     * operator picked for that call), so a cemetery with multiple packages
-     * has multiple, disjoint blocks — one customer's chosen package must
-     * only ever see that package's own blocks/plots, never another
-     * package's, which a bare `cemetery_id` filter let through: a visitor
-     * choosing "Kelas A" could be shown "Kelas B"'s block (wrong
-     * availability count, wrong plots to hold) or vice versa. `whereHas`
-     * drops blocks with no plot in the chosen package entirely, rather than
-     * rendering them as a confusing "0 tersedia" empty block; the
-     * eager-loaded `plots` relation is filtered the same way so the
-     * `$availableCount`/tile grid the Blade view builds from it never mixes
-     * in another package's plots. No filter is applied when
-     * `$pickerCemeteryPackageId` is null (a cemetery whose blocks were
-     * generated without a package) — the pre-existing, package-agnostic
-     * behaviour.
+     * ALSO scoped to `$pickerCemeteryPackageId` when one is set. A block
+     * CAN be generated wholly against a single package
+     * (`CreateCemeteryBlock`'s own doc block: "every generated plot" shares
+     * the `$cemeteryPackageId` the operator picked for that call), so a
+     * cemetery with multiple packages can have multiple, disjoint blocks —
+     * one customer's chosen package must never be shown a DIFFERENT,
+     * explicitly-set package's blocks/plots, which a bare `cemetery_id`
+     * filter let through (a visitor choosing "Kelas A" could be shown
+     * "Kelas B"'s block: wrong availability count, wrong plots to hold).
+     *
+     * A plot/block generated with NO package (`cemetery_package_id` null —
+     * the operator never segmented this cemetery's granular inventory by
+     * class, confirmed as a real, common shape in production data, not a
+     * hypothetical) is package-AGNOSTIC, not "belongs to no package": it
+     * must stay visible no matter which package the customer picked,
+     * exactly as it was before this scoping existed. So the filter is
+     * "matches the selected package OR carries no package at all", never a
+     * bare `=` — an EARLIER version of this fix used a strict `=` and, in
+     * real UAT against `dev.makam.co.id`, made every unsegmented
+     * cemetery's plots vanish behind "Belum ada plot terdaftar" the moment
+     * any package was selected, which is a worse regression than the
+     * original cross-package leak this scoping exists to close.
+     *
+     * `whereHas` drops a block with NEITHER a matching-package NOR a
+     * null-package plot entirely, rather than rendering it as a confusing
+     * "0 tersedia" empty block; the eager-loaded `plots` relation applies
+     * the identical OR-null condition so the `$availableCount`/tile grid
+     * the Blade view builds from it never mixes in a DIFFERENT explicit
+     * package's plots, while still surfacing every unsegmented one. No
+     * filter is applied at all when `$pickerCemeteryPackageId` itself is
+     * null (the customer's selection carries no package) — the
+     * pre-existing, fully package-agnostic behaviour for that case.
      *
      * A genuine query failure ALSO degrades to empty, but sets
      * `$pickerBlocksUnavailable` first — the same fail-honest discipline
@@ -648,18 +663,19 @@ final class BookingWizard extends Component
 
         $packageId = $this->pickerCemeteryPackageId;
 
+        $matchesSelectedPackage = fn ($plots) => $plots->where(
+            fn ($q) => $q->where('cemetery_package_id', $packageId)->orWhereNull('cemetery_package_id'),
+        );
+
         try {
             return CemeteryBlock::query()
                 ->where('cemetery_id', $this->pickerCemeteryId)
                 ->when(
                     $packageId !== null,
-                    fn ($query) => $query->whereHas(
-                        'plots',
-                        fn ($plots) => $plots->where('cemetery_package_id', $packageId),
-                    ),
+                    fn ($query) => $query->whereHas('plots', $matchesSelectedPackage),
                 )
                 ->with(['plots' => fn ($query) => $query
-                    ->when($packageId !== null, fn ($plots) => $plots->where('cemetery_package_id', $packageId))
+                    ->when($packageId !== null, $matchesSelectedPackage)
                     ->orderBy('slot')
                     ->limit((int) config('booking.plot_picker_max_plots_per_block'))])
                 ->orderBy('code')
@@ -866,14 +882,16 @@ final class BookingWizard extends Component
             return;
         }
 
-        // Mirrors pickerBlocks()'s own package scoping: a block (and every
-        // plot in it) is generated wholly against one package
-        // (CreateCemeteryBlock's doc block), so a client-supplied plot id
-        // for a DIFFERENT package than the one the customer selected must be
-        // refused here too — pickerBlocks() normally keeps such a plot off
-        // the grid entirely, but this is the server-side check that closes
-        // the gap for a stale render or a direct Livewire call.
-        if ($plot->cemetery_package_id !== $cemeteryPackageId) {
+        // Mirrors pickerBlocks()'s own package scoping: a client-supplied
+        // plot id for a DIFFERENT, explicitly-set package than the one the
+        // customer selected must be refused here too — pickerBlocks()
+        // normally keeps such a plot off the grid entirely, but this is the
+        // server-side check that closes the gap for a stale render or a
+        // direct Livewire call. A package-agnostic plot (cemetery_package_id
+        // null — an unsegmented cemetery's ordinary shape, not an edge case)
+        // is always allowed regardless of the selected package, same as
+        // pickerBlocks()'s own OR-null condition.
+        if ($plot->cemetery_package_id !== null && $plot->cemetery_package_id !== $cemeteryPackageId) {
             $this->addError('plot', 'Plot tidak sesuai dengan paket/kelas yang dipilih.');
 
             return;
