@@ -940,4 +940,59 @@ final class BookingWizardPlotPickerTest extends TestCase
 
         $this->assertDatabaseHas('plot_reservations', ['plot_id' => $fixture['plotA']->id]);
     }
+
+    /**
+     * Real UAT against `dev.makam.co.id` (8 Sep 2026) found a cemetery whose
+     * granular inventory was never segmented by package at all — every
+     * plot's `cemetery_package_id` is null even though the cemetery has
+     * multiple named packages/classes. An earlier version of the
+     * package-scoping fix used a strict `=` comparison, which made this
+     * kind of block vanish behind "Belum ada plot terdaftar" the instant
+     * ANY package was selected — a worse regression than the cross-package
+     * leak the scoping exists to close. This is the real-data shape that
+     * proves the fix must treat a null-package plot as visible/holdable no
+     * matter which package is selected, not just when no package is
+     * selected at all.
+     */
+    public function test_picker_blocks_still_shows_unsegmented_plots_regardless_of_selected_package(): void
+    {
+        $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+
+        $package = CemeteryPackage::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'name' => 'Makam Tumpang',
+            'availability_status' => CemeteryPackageAvailabilityStatus::AVAILABLE,
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $block = CemeteryBlock::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'code' => 'BLOK-A',
+            'name' => 'Blok A',
+            'capacity' => 1,
+        ]);
+        $plot = GravePlot::query()->create([
+            'block_id' => $block->getKey(),
+            'slot' => '001',
+            'plot_state' => PlotState::AVAILABLE,
+            'cemetery_package_id' => null,
+        ]);
+
+        $draftId = $this->draftIdAtDiscovery();
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->call('openPickerFor', $cemetery->id, $package->getKey());
+
+        $blocks = $component->instance()->pickerBlocks();
+
+        $this->assertCount(1, $blocks, 'An unsegmented block must still appear when a package is selected.');
+        $this->assertCount(1, $blocks->first()->plots);
+        $this->assertSame($plot->id, $blocks->first()->plots->first()->id);
+
+        $component->call('holdPlotForDiscovery', $cemetery->id, $package->getKey(), $plot->id)
+            ->assertHasNoErrors(['plot']);
+
+        $this->assertDatabaseHas('plot_reservations', ['plot_id' => $plot->id]);
+    }
 }
