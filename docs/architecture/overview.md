@@ -296,7 +296,7 @@ Production runs on the same shared `yiemvm` host as development and staging, not
 ## 20. Combined development and staging topology
 
 ```text
-Ubuntu 22.04 LTS host — 2 vCPU / 4 GB
+Ubuntu LTS host — see docs/operations/host-facts.md
 ├── host reverse proxy/TLS
 ├── development web container
 ├── staging web container
