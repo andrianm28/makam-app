@@ -74,7 +74,7 @@ Re-scan when scanner intelligence materially changes, before high-risk bulk rele
 
 ## 9. Development/staging scanner profile
 
-On the Ubuntu 22.04 2/4 combined host:
+On the combined non-production host (`docs/operations/host-facts.md`):
 
 - development may use a deterministic mock scanner only for application-flow development;
 - CI includes scanner-adapter and EICAR-style test evidence;

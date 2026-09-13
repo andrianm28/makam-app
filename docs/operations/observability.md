@@ -119,8 +119,13 @@ Sourced from `dev-staging-environment.md` §6 (resource budget table) and
 below are not invented, and where §6 does not specify a number that is
 called out explicitly rather than silently filled in.
 
-Host: Ubuntu 22.04, 2 vCPU / 4 GB RAM, 2–4 GB swap (§6 line 10–11; this is
-the swap *device size*, not an alert threshold).
+Host: see [`host-facts.md`](host-facts.md) — this document does not restate
+the specification. **Correction, 13 Sep 2026:** the line this paragraph
+replaced claimed "2–4 GB swap", read from §6 of a document describing the
+retired `adrivm` host. The live host has **no swap device at all**, so there
+is no swap cushion before an OOM kill and no swap-utilisation signal to alert
+on. The threshold table below is kept, but any row that assumes swap exists is
+measuring something absent.
 
 | Signal | Source | Threshold used by `monitoring-check.sh` |
 |---|---|---|

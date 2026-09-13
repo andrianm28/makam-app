@@ -97,7 +97,7 @@ Only then consider read replicas, dedicated search service, SQS/broker, Octane, 
 
 Record test commit, environment, runtime versions, dataset size, script, p50/p95/p99, throughput, error rate, resource graphs, bottlenecks, and accepted exceptions.
 
-## 9. Interpretation for the 2/4 combined host
+## 9. Interpretation for the combined non-production host
 
 The combined development/staging server is intended for feature integration and limited UAT. It is not automatically accepted as production-capacity evidence.
 
