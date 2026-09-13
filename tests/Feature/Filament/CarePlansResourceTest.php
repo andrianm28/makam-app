@@ -205,7 +205,13 @@ final class CarePlansResourceTest extends TestCase
 
         $this->assertSame('Perawatan Triwulan Premium', $plan->name);
         $this->assertSame(CarePlanFrequency::Quarterly->value, $plan->frequency);
-        $this->assertSame(450000, $plan->price_minor);
+
+        // The field is RUPIAH, not sen: `CarePlanForm`'s helper text says so
+        // ("Harga per siklus dalam rupiah") and `CreateCarePlan` converts with
+        // `Money::fromDecimal()`, so Rp 450.000 is stored as 45.000.000 sen.
+        // This assertion is the whole reason the conversion is worth testing —
+        // an off-by-100 here is a real money bug, not a formatting detail.
+        $this->assertSame(45_000_000, $plan->price_minor);
     }
 
     // =====================================================================
