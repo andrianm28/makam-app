@@ -44,11 +44,165 @@ return Application::configure(basePath: dirname(__DIR__))
         // there is no topology where Laravel talks to the internet directly.
         // Without this, $request->isSecure()/secure_url() see plain HTTP
         // even behind an HTTPS-terminating proxy, breaking SESSION_SECURE_COOKIE
-        // and generated URLs. `at: '*'` (trust any upstream) is safe here
-        // specifically because the app port is never bound beyond 127.0.0.1
-        // (ci/verify-infra.sh GATE I7) — only the host's own reverse proxy can
-        // ever reach it to set these headers in the first place.
-        $middleware->trustProxies(at: '*');
+        // and generated URLs.
+        //
+        // Finding SEC-N1 (13 Sep 2026). This line previously read
+        // `trustProxies(at: '*')`, justified by the argument that "the app
+        // port is never bound beyond 127.0.0.1 (ci/verify-infra.sh GATE I7),
+        // so only the host's own reverse proxy can ever reach it to set these
+        // headers in the first place." **That argument is wrong, and this
+        // comment deliberately keeps the record of why** rather than deleting
+        // it: the loopback binding controls who may open a SOCKET to the app,
+        // not who may author its HEADERS. An internet client sends
+        // `X-Forwarded-Host: evil.example`; the host nginx vhosts set `Host`,
+        // `X-Real-IP`, `X-Forwarded-For` and `X-Forwarded-Proto` but never
+        // touch `X-Forwarded-Host`, so the attacker's header arrives at the
+        // app verbatim, carried in by the very proxy the binding argument
+        // relied on. `at: '*'` then made that header authoritative. The
+        // observed result was a genuine, app-sent password-reset email whose
+        // link pointed at an attacker-controlled domain
+        // (`tests/Feature/Http/TrustedProxiesAndHostsTest`).
+        //
+        // Two independent changes, both required — see that test's class doc
+        // block for why neither alone is sufficient.
+        //
+        // 1. `at:` — the addresses that may speak for a client at all.
+        //    Both application containers publish ONLY to loopback
+        //    (`127.0.0.1:8081->8080` dev, `127.0.0.1:8083->8080` beta), so
+        //    every packet reaches the container's nginx either from the
+        //    host's own address on a docker bridge (observed: 172.19.0.1,
+        //    the `makam-nonprod_egress` gateway) or from 127.0.0.1 (the
+        //    image's own HEALTHCHECK, which curls http://127.0.0.1:8080/up
+        //    from inside the container). The trusted set is therefore
+        //    loopback plus docker's primary default address pool, NOT the
+        //    single observed gateway address: docker allocates that subnet
+        //    dynamically, and this host already holds ten bridge networks in
+        //    172.17–172.27, so pinning 172.19.0.1 would silently stop
+        //    matching the day the compose networks are recreated — and a
+        //    no-longer-matching proxy address means `isSecure()` goes false
+        //    behind TLS and every visitor collapses onto one rate-limit key.
+        //    `10.0.0.0/8` is deliberately EXCLUDED: this host's own NIC sits
+        //    on a 10.0.0.0/16 provider LAN it does not exclusively own, so
+        //    trusting it would re-open header spoofing to anything else on
+        //    that LAN.
+        //
+        //    **THE /12 IS NOT SUFFICIENT ON ITS OWN, and the closer is not
+        //    in this file.** Unrelated stacks hold bridges across
+        //    172.17–172.27 on this host. A co-tenant container can connect
+        //    to the host nginx on :443 with a forged `X-Forwarded-For`;
+        //    because the vhosts APPEND (`$proxy_add_x_forwarded_for`),
+        //    Symfony's right-to-left walk discards 172.19.0.1, then discards
+        //    the co-tenant's own 172.x, and lands on the forged value —
+        //    spoofing client IP against the login and payment-webhook
+        //    throttles. Trusting `X-Forwarded-Proto` from the same range
+        //    lets a co-tenant force `http://` into generated URLs.
+        //    Narrowing further is NOT the answer: it reintroduces the
+        //    renumbering outage
+        //    `test_a_legitimate_request_through_the_real_proxy_shape_still_resolves_correctly`
+        //    exists to catch. The answer is
+        //    `proxy_set_header X-Forwarded-For $remote_addr;` — OVERWRITE,
+        //    not append — in the live vhosts, which makes the /12's width
+        //    irrelevant. That is an `/opt/makam/` change this repository
+        //    cannot make; it is recorded as a REQUIRED companion step in
+        //    this task's report, not as optional hardening. Do not read this
+        //    array as evidence the IP path is fully closed.
+        //
+        // 2. `headers:` — which forwarded headers may be believed. Laravel's
+        //    default bitmask is FOR|HOST|PORT|PROTO|PREFIX|AWS_ELB. Only the
+        //    TWO the nginx vhosts actually set are kept, because a trusted
+        //    header that nothing in our own infrastructure sets is pure
+        //    attack surface with no consumer:
+        //
+        //    - `HOST` — the finding itself.
+        //    - `PORT` — no vhost in this stack sets `X-Forwarded-Port`
+        //      (grep the live configs: they set `Host`, `X-Real-IP`,
+        //      `X-Forwarded-For` and `X-Forwarded-Proto`, and nothing else).
+        //      Trusting it let a client choose the port in every generated
+        //      absolute URL — `https://makam.co.id:1337/reset-password/…`.
+        //      Lower severity than the HOST defect because the DOMAIN stays
+        //      ours, so it is link-breakage rather than takeover, but it is
+        //      the same shape of bug and it has no upside. Dropping it is
+        //      provably safe rather than merely safer: with both PORT and
+        //      HOST untrusted, `Request::getPort()` falls through to the
+        //      `Host` header, which carries no port, and returns 443 from
+        //      the scheme — which is the correct answer behind an
+        //      HTTPS-terminating proxy. Covered by
+        //      `test_a_spoofed_x_forwarded_port_does_not_reach_the_generated_url`.
+        //    - `PREFIX` — same class of reason: `X-Forwarded-Prefix` rewrites
+        //      the base path of every generated URL and nothing sets it.
+        //    - `AWS_ELB` — there is no AWS anywhere in this project
+        //      (CLAUDE.md §6).
+        //
+        //    If a future topology puts a load balancer in front that DOES
+        //    set `X-Forwarded-Port` on a non-standard port, re-add PORT in
+        //    the same commit that introduces it — not before.
+        $middleware->trustProxies(
+            at: [
+                '127.0.0.1',
+                '::1',
+                '172.16.0.0/12',
+            ],
+            headers: Request::HEADER_X_FORWARDED_FOR
+                | Request::HEADER_X_FORWARDED_PROTO,
+        );
+
+        // Finding SEC-N1, the positive half. Dropping `HEADER_X_FORWARDED_HOST`
+        // above stops that header being believed; this stops a forged plain
+        // `Host:` header being believed, which nothing else in the stack
+        // checks — the host nginx vhosts pass `Host $host` through verbatim,
+        // and with no trusted-host patterns registered Symfony applies only a
+        // hostname-SYNTAX check, which `evil-attacker.example` passes.
+        //
+        // These strings are REGULAR EXPRESSIONS, not hostnames:
+        // `Request::setTrustedHosts()` wraps each one as `{...}i` and they
+        // are not anchored for you. A bare `'makam.co.id'` would match
+        // `makamXcoZid.attacker.example`. Hence the explicit `^...$` and the
+        // escaped dots.
+        //
+        // `subdomains: false` is deliberate, and is the reason the list is
+        // enumerated rather than expressed as `^(.+\.)?makam\.co\.id$` (which
+        // is what Laravel's own default and `subdomains: true` would give).
+        // A wildcard would let any subdomain takeover be escalated straight
+        // back into reset-link poisoning; the set of hostnames actually
+        // served is small, known, and changes about once a year.
+        //
+        // The list is every `server_name` on the deployment host that
+        // proxies to this application — `makam.co.id` and `www.makam.co.id`
+        // (live, both -> beta-web), `dev.makam.co.id` (-> dev-web) — plus
+        // `stg.makam.co.id`, which is a committed vhost example and a
+        // documented runbook target (`docs/operations/runbooks/
+        // deploy-stg-vhost.md`) not currently enabled; including it now
+        // means enabling that vhost later cannot 400 the whole site.
+        //
+        // `127.0.0.1` and `localhost` are here for the container's own
+        // HEALTHCHECK. Be precise about what is established and what is not,
+        // because the tempting version of this comment overstates it:
+        //
+        // - ESTABLISHED: the runtime image's HEALTHCHECK requests
+        //   `http://127.0.0.1:8080/up` (`Dockerfile`), so its `Host` header
+        //   is `127.0.0.1:8080`; and `getHost()` strips the port before
+        //   matching the allowlist, so `127.0.0.1` is the string that has to
+        //   match. Both are covered by
+        //   `test_the_trusted_host_allowlist_is_anchored_and_covers_every_live_host`.
+        // - NOT ESTABLISHED: that omitting the entry would actually break
+        //   the probe. That needs something in the `/up` path to call
+        //   `getHost()`, and nobody has confirmed anything does. It has
+        //   never been observed, and the allowlist is inert inside the test
+        //   suite (see below), so the suite cannot settle it either.
+        //
+        // The entry stays because it is either load-bearing or free: a
+        // forged `Host: 127.0.0.1` yields a reset link pointing at the
+        // recipient's own loopback, which is worth nothing to an attacker.
+        // Removing it is a bet on the unproven half above, so don't — but do
+        // not repeat the 400 as fact either.
+        $middleware->trustHosts(at: [
+            '^makam\.co\.id$',
+            '^www\.makam\.co\.id$',
+            '^dev\.makam\.co\.id$',
+            '^stg\.makam\.co\.id$',
+            '^127\.0\.0\.1$',
+            '^localhost$',
+        ], subdomains: false);
 
         // `/akun` account area, Task 2 of `.superpowers/sdd/
         // 2026-08-20-akun-shell-and-drafts/task-2-brief.md`: an
