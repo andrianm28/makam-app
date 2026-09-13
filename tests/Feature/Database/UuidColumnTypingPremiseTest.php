@@ -58,6 +58,22 @@ use Tests\TestCase;
  * i.e. it would keep reporting success while testing nothing. The SQLSTATE is
  * asserted explicitly so this file cannot rot into the very shape it exists to
  * detect.
+ *
+ * ---------------------------------------------------------------------------
+ * How this file was mutation-tested, and what that does NOT prove
+ * ---------------------------------------------------------------------------
+ * Two mutations, both confirmed to fail: a provider row pointed at a column
+ * that is already `text` fails with "no longer behaving as a `uuid` column",
+ * and a row pointed at a missing table fails on the SQLSTATE assertion
+ * (`42P01`) rather than passing on "it threw".
+ *
+ * The first is a SUBSTITUTE for the retype it simulates. For what this file
+ * claims — "this column raises 22P02 on a non-uuid comparison" — exercising a
+ * column that genuinely does not raise proves the detector fires, and the two
+ * are equivalent. What it does NOT prove: a column retyped `uuid` -> `text`
+ * *in place* could carry leftover constraints or a lingering check that an
+ * always-`text` column never had. If that distinction ever matters, the real
+ * retype is the experiment; it has not been run.
  */
 final class UuidColumnTypingPremiseTest extends TestCase
 {
@@ -67,10 +83,18 @@ final class UuidColumnTypingPremiseTest extends TestCase
      * Every `uuid` column that a production `Str::isUuid()` (or equivalent
      * shape) guard stands in front of, with the guard that depends on it.
      *
-     * Add a row here when you add a guard. A column that appears in this list
-     * and is no longer `uuid` is not a failing test to silence — it means the
-     * guard in front of it has become decorative and its test has gone
-     * vacuous, and both need revisiting.
+     * That word "every" is a claim, and it is the entire value of this
+     * provider — a list that merely covers "most" would go on reporting
+     * success while the uncovered column was the one that moved. It was
+     * derived by enumerating every `Str::isUuid()` and equivalent shape check
+     * under `app/` and resolving each to the column it protects, including the
+     * guards that have no test of their own. If you add a guard, add its
+     * column here. If a guarded column genuinely cannot be covered, say why
+     * here — do not narrow the claim to fit what the list happens to contain.
+     *
+     * A column that appears in this list and is no longer `uuid` is not a
+     * failing test to silence — it means the guard in front of it has become
+     * decorative and its test has gone vacuous, and both need revisiting.
      *
      * @return array<string, array{0: string, 1: string, 2: string}>
      */
@@ -86,6 +110,16 @@ final class UuidColumnTypingPremiseTest extends TestCase
             'orders.id' => ['orders', 'id', 'PreNeedInterestPage and BasePlotFloorMapPage::linkedOrder()'],
             'outbox_events.id' => ['outbox_events', 'id', "OutboxReplayCommand::replayOne()'s UUID regex"],
             'reconciliation_exceptions.id' => ['reconciliation_exceptions', 'id', 'ResolveException::resolve()'],
+
+            // The two below sit behind guards that have NO test of their own.
+            // That makes this file their only coverage, and it is partial: it
+            // proves the column still type-checks, never that the guard in
+            // front of it still exists. They were missed in this provider's
+            // first revision, which is worth knowing — the artefact written to
+            // detect a silently-weakened premise skipped precisely the two
+            // guards nothing else watches.
+            'subscription_cycles.id' => ['subscription_cycles', 'id', 'ApplyPaymentSettlement (money path; no test of its own)'],
+            'work_orders.id' => ['work_orders', 'id', 'CareHistoryPage::ownedWorkOrder() (no test of its own)'],
         ];
     }
 
