@@ -141,7 +141,7 @@ Use automated pull requests where available, but never auto-deploy dependency ch
 
 ## 10. Combined dev/staging deployment profile
 
-The Ubuntu 22.04 2/4 host receives a prebuilt immutable artifact/image. Composer dependency resolution, frontend production build, SBOM generation, browser test build, and vulnerability audit run in CI.
+The non-production host (see [`host-facts.md`](host-facts.md) — this document does not restate its specification) receives a prebuilt immutable artifact/image. Composer dependency resolution, frontend production build, SBOM generation, browser test build, and vulnerability audit run in CI.
 
 Promotion:
 

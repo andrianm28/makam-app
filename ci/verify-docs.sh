@@ -437,6 +437,115 @@ LEDGER
   fi
 fi
 
+# ---------------------------------------------------------------------------
+head2 "GATE 16 — host specification is not restated outside host-facts.md"
+# ---------------------------------------------------------------------------
+# docs/operations/host-facts.md is the single source of truth for what the
+# non-production host IS (AGENTS.md §Documentation: "Do not duplicate canonical
+# catalog data in multiple hand-maintained documents or code locations").
+#
+# This gate exists because of a real, found failure, not a hypothetical one.
+# The host's specification was restated in seven operations documents and ALL
+# SEVEN WERE WRONG: they described a 2 vCPU / 4 GB / Ubuntu 22.04 machine — the
+# retired `adrivm` host — while the stack has run on an 8 vCPU / 31 GB /
+# Ubuntu 24.04 machine since the 17 Aug 2026 migration. Capacity limits, swap
+# thresholds and "too small for X" judgements were all being argued against a
+# machine that no longer existed. Correcting one copy would not have corrected
+# the other six, which is exactly what a gate is for.
+#
+# Allowlist, and why each entry is legitimate rather than an exemption:
+#   docs/operations/host-facts.md          the canonical file itself
+#   docs/adr/**                            ADRs are immutable decision records;
+#                                          ADR-0027's own FILENAME contains
+#                                          "ubuntu22-2v4g", so every link to it
+#                                          carries the string by necessity
+#   docs/operations/2026-08-17-*yiemvm.md  a dated migration record; its
+#                                          "2 vCPU" describes adrivm, the host
+#                                          being retired, and is correct there
+#   any line containing "former line"      a document quoting its own
+#                                          superseded text verbatim as history
+#   docs/superpowers/**                    append-only historical tree
+#                                          (AGENTS.md:154)
+#   docs/review/**                         dated review summaries; each records
+#                                          what was believed at its own date
+#   docs/planning/sprint-plan.md           a dated sprint ledger: its remaining
+#                                          hits are risk-register rows, Sprint 1
+#                                          open questions and dated task rows,
+#                                          all recording a past position. It is
+#                                          ALSO slated for W0b, which migrates
+#                                          its N-xx/OQ-xx ledgers out; gating it
+#                                          now would obstruct that work rather
+#                                          than help it. Revisit after W0b.
+#   any line containing "superseded"       a correction that must quote the
+#                                          old value in order to supersede it
+#
+# Every allowlist entry above is a document RECORDING history, never a document
+# ASSERTING the current state. That is the line: if a sentence tells a reader
+# what the host is today, it belongs in host-facts.md or references it.
+HOSTSPEC_HITS=$(grep -rInE '2 vCPU|2/4 host|2/4 combined host|4 GB RAM|Ubuntu 22\.04' \
+      --include='*.md' docs/ 2>/dev/null \
+      | grep -v '^docs/operations/host-facts\.md:' \
+      | grep -v '^docs/adr/' \
+      | grep -v '^docs/superpowers/' \
+      | grep -v '^docs/review/' \
+      | grep -v '^docs/planning/sprint-plan\.md:' \
+      | grep -v '^docs/operations/2026-08-17-makam-migration-to-yiemvm\.md:' \
+      | grep -v '0027-combine-dev-staging-on-ubuntu22-2v4g' \
+      | grep -v 'former line' \
+      | grep -v 'superseded' || true)
+if [ -z "$HOSTSPEC_HITS" ]; then
+  pass "host specification lives only in docs/operations/host-facts.md"
+else
+  fail "host specification restated outside host-facts.md — reference that file instead of copying its numbers"
+  printf '%s\n' "$HOSTSPEC_HITS" | sed 's/^/    /'
+fi
+
+# ---------------------------------------------------------------------------
+head2 "GATE 17 — host-facts.md carries a last-verified date that is not stale"
+# ---------------------------------------------------------------------------
+# A canonical facts file is only worth trusting if someone re-checked it
+# recently. GATE 16 stops the numbers from being COPIED; it cannot tell whether
+# they are still TRUE. This one bounds how long a wrong number can sit there
+# unchallenged. It detects staleness, never incorrectness — re-verifying is a
+# human/agent action against the live host, and the date is the claim that it
+# happened.
+python3 - <<'HOSTFACTS'
+import datetime, re, sys, pathlib
+
+p = pathlib.Path("docs/operations/host-facts.md")
+if not p.exists():
+    print("    docs/operations/host-facts.md is missing", file=sys.stderr); sys.exit(1)
+
+text = p.read_text(encoding="utf-8")
+m = re.match(r"---\n(.*?)\n---\n", text, re.S)
+if not m:
+    print("    host-facts.md has no YAML front matter", file=sys.stderr); sys.exit(1)
+
+d = re.search(r"^last-verified:\s*(\d{4})-(\d{2})-(\d{2})\s*$", m.group(1), re.M)
+if not d:
+    print("    host-facts.md front matter has no last-verified: YYYY-MM-DD", file=sys.stderr); sys.exit(1)
+
+verified = datetime.date(int(d.group(1)), int(d.group(2)), int(d.group(3)))
+today = datetime.date.today()
+age = (today - verified).days
+MAX_AGE_DAYS = 90
+
+if verified > today:
+    print(f"    last-verified {verified} is in the future", file=sys.stderr); sys.exit(1)
+if age > MAX_AGE_DAYS:
+    print(f"    last-verified {verified} is {age} days old (max {MAX_AGE_DAYS}) — "
+          "re-run the commands in the file's 'How to re-verify' section and update the date",
+          file=sys.stderr)
+    sys.exit(1)
+
+print(f"    last-verified {verified} ({age} day(s) old, max {MAX_AGE_DAYS})")
+HOSTFACTS
+if [ $? -eq 0 ]; then
+  pass "host-facts.md last-verified date is present and within 90 days"
+else
+  fail "host-facts.md last-verified date is missing, malformed, or stale"
+fi
+
 printf '\n'
 if [ "$FAIL" -eq 0 ]; then
   printf '\033[32mRESULT: ALL DOC GATES PASS\033[0m\n'; exit 0

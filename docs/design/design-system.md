@@ -946,7 +946,7 @@ Grid gap: `gap-4` mobile → `md:gap-6`.
 
 ### 4.6 Front-end weight budget
 
-Derived from [`performance-and-capacity.md`](../operations/performance-and-capacity.md) §3 (homepage server p95 ≤ 500 ms; wizard read/save p95 ≤ 1000 ms) and the 2 vCPU/4 GB non-production host. These are **design-side guardrails**, not measured results (§12).
+Derived from [`performance-and-capacity.md`](../operations/performance-and-capacity.md) §3 (homepage server p95 ≤ 500 ms; wizard read/save p95 ≤ 1000 ms) and the non-production host (`docs/operations/host-facts.md`). These are **design-side guardrails**, not measured results (§12).
 
 | Budget | Target |
 |---|---|
@@ -979,7 +979,7 @@ Covered in §1.6 (tokens). Design rules:
 | Toast enter | `base` 180 ms | `decelerate` | opacity + `translateY(8px)` |
 | Accordion | `base` 180 ms | `standard` | `grid-template-rows` |
 
-**No horizontal slide between wizard steps.** It implies a filmstrip the user can swipe, invites accidental back-navigation on mobile, and costs layout work on a 2 vCPU host. Crossfade + scroll-to-top is calmer and cheaper.
+**No horizontal slide between wizard steps.** It implies a filmstrip the user can swipe, invites accidental back-navigation on mobile, and costs layout work on a modest host. Crossfade + scroll-to-top is calmer and cheaper.
 
 `prefers-reduced-motion` is handled globally in `tokens.css` §3.
 

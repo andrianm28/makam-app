@@ -144,7 +144,7 @@ QUE-09 (Batch M1c): `App\Platform\DocumentVault\Jobs\ReconcileDocumentStorageCle
 
 ## 10. Combined dev/staging worker profile
 
-On the Ubuntu 22.04 2/4 non-production host:
+On the combined non-production host (`docs/operations/host-facts.md`):
 
 - staging runs one constrained Horizon deployment across `critical,urgent,notifications,default`;
 - maximum normal worker processes: two total;
