@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Feature\DocumentVault;
 
+use App\Platform\DocumentVault\Jobs\ReconcileDocumentStorageCleanupJob;
+use App\Platform\Outbox\OutboxQueueName;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Artisan;
 use Tests\TestCase;
 
@@ -66,6 +69,16 @@ use Tests\TestCase;
  * registration sites, then restore and confirm green. That round trip is the
  * only thing that proves this test still bites.
  *
+ * THE FIELD TO CHECK IS `CallbackEvent::$description`. Re-running the
+ * mutation is what an upgrader DOES; this is what they LOOK AT. The two
+ * registration sites are identified by different fields — the
+ * `routes/console.php` one by `Event::$command` (its `description` is null),
+ * the `bootstrap/app.php` one by `CallbackEvent::$description` (its `command`
+ * is null) — and the duplicate being detected is the second. If `description`
+ * stops carrying the `->name()` value, detection silently stops working.
+ * `test_the_matcher_can_still_see_a_job_entry_identified_only_by_its_description`
+ * below is the canary that turns that from silent into loud; read it too.
+ *
  * Historical, and the reason this test no longer parses that output:
  * `ScheduleListCommand` prints a SECOND line per event carrying the event
  * description when `$this->output->isVerbose()` (`:233-236`). For the
@@ -78,16 +91,34 @@ use Tests\TestCase;
  */
 final class DocumentScheduleTest extends TestCase
 {
+    /**
+     * Deliberately does NOT contain `reconcile-storage-cleanup`, so the
+     * canary entry cannot perturb the count the real assertion makes.
+     */
+    private const string CANARY_NAME = 'fn1-canary-callback-event-description';
+
+    /**
+     * The one matcher both tests below run on, so the canary really does
+     * exercise the code path the real assertion depends on rather than an
+     * approximation of it.
+     *
+     * @return Collection<int, string>
+     */
+    private function scheduleSummaries(Schedule $schedule): Collection
+    {
+        return collect($schedule->events())
+            ->map(static fn ($event): string => trim(
+                ($event->command ?? '').' '.$event->getSummaryForDisplay().' '.($event->description ?? '')
+            ));
+    }
+
     public function test_document_storage_reconciliation_is_scheduled_exactly_once(): void
     {
         // Called for its side effect only — booting the console application
         // is what makes `withSchedule()` entries exist. The output is not read.
         Artisan::call('schedule:list');
 
-        $entries = collect(app(Schedule::class)->events())
-            ->map(static fn ($event): string => trim(
-                ($event->command ?? '').' '.$event->getSummaryForDisplay().' '.($event->description ?? '')
-            ))
+        $entries = $this->scheduleSummaries(app(Schedule::class))
             ->filter(static fn (string $summary): bool => str_contains($summary, 'reconcile-storage-cleanup'))
             ->values();
 
@@ -104,6 +135,65 @@ final class DocumentScheduleTest extends TestCase
             (string) $entries->first(),
             'routes/console.php is the single discoverable schedule inventory (EDGE-03); the surviving '
             .'registration must be the artisan command, not a bare job entry in bootstrap/app.php.'
+        );
+    }
+
+    /**
+     * The canary for the test above — read it before changing either.
+     *
+     * The two registration sites are identified by DIFFERENT fields, which a
+     * probe of the resolved schedule shows directly:
+     *
+     *   Event         (routes/console.php)   command = "… artisan documents:…"
+     *                                        description = NULL
+     *   CallbackEvent (bootstrap/app.php)    command = NULL
+     *                                        description = "document-vault:…"
+     *
+     * The duplicate this suite exists to catch is the CallbackEvent, and
+     * `description` is its ONLY identifying string. The test above has a
+     * positive control for the `Event` branch — its `assertStringContainsString`
+     * on `documents:reconcile-storage-cleanup` — and had NOTHING exercising the
+     * `CallbackEvent` branch.
+     *
+     * That made it fail-OPEN in a way no amount of care would show: if a future
+     * Laravel stops populating `description` on `$schedule->job()` entries, or
+     * `->name()` stops writing it, the matcher finds one entry, `assertCount(1)`
+     * passes, and a re-added duplicate goes undetected. Green, silent, wrong —
+     * the same shape as the `schedule:list` blind spot this file already
+     * documents, one layer further in.
+     *
+     * So this registers a throwaway `$schedule->job(...)->name(...)` — the same
+     * construction the deleted `bootstrap/app.php` block used — and asserts the
+     * matcher can see it. If `description` ever stops carrying the name, THIS
+     * fails loudly while the real assertion above goes on passing, which is
+     * precisely the swap from fail-open to fail-closed that makes the green
+     * above mean something.
+     *
+     * The canary's name deliberately shares no substring with
+     * `reconcile-storage-cleanup`, so it can never inflate the real count.
+     */
+    public function test_the_matcher_can_still_see_a_job_entry_identified_only_by_its_description(): void
+    {
+        Artisan::call('schedule:list');
+
+        $schedule = app(Schedule::class);
+
+        $schedule->job(new ReconcileDocumentStorageCleanupJob, OutboxQueueName::Media->value)
+            ->name(self::CANARY_NAME);
+
+        $canaries = $this->scheduleSummaries($schedule)
+            ->filter(static fn (string $summary): bool => str_contains($summary, self::CANARY_NAME))
+            ->values();
+
+        $this->assertCount(
+            1,
+            $canaries,
+            'A `$schedule->job(...)->name(...)` entry is a CallbackEvent whose ONLY identifying string is '
+            .'`description`. The duplicate-detection in this file rests entirely on that field, so if this '
+            .'assertion fails, `test_document_storage_reconciliation_is_scheduled_exactly_once` above is '
+            .'passing VACUOUSLY and can no longer see a re-added bootstrap/app.php registration. Fix the '
+            .'matcher in `scheduleSummaries()` to key off whatever field now carries the name — do not '
+            .'delete this test to get green.'
         );
     }
 }
