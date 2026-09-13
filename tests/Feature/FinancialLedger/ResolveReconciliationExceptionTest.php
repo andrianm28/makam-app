@@ -161,7 +161,6 @@ final class ResolveReconciliationExceptionTest extends TestCase
         } catch (ReconciliationNotAuthorisedException $unknown) {
             $this->assertSame($knownFailure->getMessage(), $unknown->getMessage());
         }
-
     }
 
     /**

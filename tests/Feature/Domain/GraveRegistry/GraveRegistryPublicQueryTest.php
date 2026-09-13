@@ -435,7 +435,7 @@ final class GraveRegistryPublicQueryTest extends TestCase
     public function test_a_search_with_no_cemetery_returns_nothing(): void
     {
         $this->requiresUuidTypeEnforcement(
-            "GraveRegistryPublicQuery::search()'s Str::isUuid() guard on grave_records.cemetery_id"
+            "GraveRegistryPublicQuery::search() -> matchedRecords()'s Str::isUuid() guard on grave_records.cemetery_id"
         );
 
         $outcome = GraveRegistryPublicQuery::search(
@@ -461,7 +461,7 @@ final class GraveRegistryPublicQueryTest extends TestCase
     public function test_a_malformed_cemetery_identifier_returns_nothing_instead_of_erroring(): void
     {
         $this->requiresUuidTypeEnforcement(
-            "GraveRegistryPublicQuery::search()'s Str::isUuid() guard on grave_records.cemetery_id"
+            "GraveRegistryPublicQuery::search() -> matchedRecords()'s Str::isUuid() guard on grave_records.cemetery_id"
         );
 
         foreach (['garbage', '../../etc/passwd', "' OR 1=1 --", '12345'] as $tampered) {

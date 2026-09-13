@@ -252,7 +252,7 @@ final class PlotFloorMapPageTest extends TestCase
     public function test_a_malformed_plot_id_on_open_plot_resolves_to_nothing_instead_of_erroring(): void
     {
         $this->requiresUuidTypeEnforcement(
-            "BasePlotFloorMapPage::openPlot()'s Str::isUuid() guard on plots.id"
+            "BasePlotFloorMapPage::resolvePlot()'s Str::isUuid() guard on grave_plots.id"
         );
 
         $actor = $this->admin();

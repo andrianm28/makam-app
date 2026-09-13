@@ -217,9 +217,24 @@ final class CemeteryPublicQueryTest extends TestCase
         );
 
         $this->assertNull(CemeteryPublicQuery::findPublishedById('garbage'));
+        $this->assertNull(CemeteryPublicQuery::findPublishedById('00000000-0000-0000-0000-00000000000'));
+
+        // `''` and `'   '` stay HERE rather than being split into an ungated
+        // sibling, and that was measured rather than reasoned. The argument
+        // for splitting was that they return early on `trim()` + `=== ''`
+        // before the shape guard, so they are driver-independent. They are —
+        // but only in the weak sense that they PASS on both drivers. Delete
+        // BOTH guards and they still pass on SQLite (`where id = ''` simply
+        // matches nothing) while failing on PostgreSQL with 22P02 on `""`.
+        //
+        // So on SQLite they cannot fail, which makes them vacuous there in
+        // exactly the way the rest of this test is. An ungated sibling would
+        // have been green-but-incapable — the precise species of lie this
+        // gate exists to remove. Splitting is right when the split-out
+        // assertion can actually FAIL on the weaker driver (see
+        // `IssueSignedUrlTest`'s echo test, which does); it is wrong here.
         $this->assertNull(CemeteryPublicQuery::findPublishedById(''));
         $this->assertNull(CemeteryPublicQuery::findPublishedById('   '));
-        $this->assertNull(CemeteryPublicQuery::findPublishedById('00000000-0000-0000-0000-00000000000'));
     }
 
     public function test_find_published_by_id_returns_null_for_a_well_formed_but_unknown_uuid(): void

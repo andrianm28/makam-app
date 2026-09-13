@@ -244,7 +244,7 @@ final class PreNeedInterestPageTest extends TestCase
         // guards against cannot be reproduced at all, so a pass here would be
         // the same false reassurance the suite gave on the day of the incident.
         $this->requiresUuidTypeEnforcement(
-            "PreNeedInterestPage::resolveCertificateSubject()'s Str::isUuid() guard on orders.id"
+            "PreNeedInterestPage::certificateSubject()'s Str::isUuid() guard on orders.id"
         );
 
         $this->makePaidOrder();

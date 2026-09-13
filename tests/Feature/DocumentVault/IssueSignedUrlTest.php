@@ -319,10 +319,47 @@ final class IssueSignedUrlTest extends TestCase
             $this->assertSame($wellFormedUnknown::class, $denial::class);
             $this->assertSame($wellFormedUnknown->getMessage(), $denial->getMessage());
             $this->assertSame($wellFormedUnknown->getCode(), $denial->getCode());
+        }
+    }
 
-            if ($malformedId !== '') {
-                $this->assertStringNotContainsString($malformedId, $denial->getMessage());
-            }
+    /**
+     * AC9's echo half, split out of the gated test above so it keeps running
+     * on every driver.
+     *
+     * Indistinguishability (above) is driver-dependent: with the guard
+     * deleted, SQLite's `find()` returns `null` and produces the identical
+     * denial, so that assertion cannot fail there. **This** assertion is not.
+     * "The refusal must not quote back what was asked for" is a property of
+     * `DocumentAccessDeniedException::denied()` alone — no query, no column
+     * type, no driver. If someone interpolates the requested id into that
+     * message, this fails on SQLite and PostgreSQL alike.
+     *
+     * Left inside the gated test it would have been skipped under a plain
+     * `vendor/bin/phpunit` — CI would still catch the regression, but the run
+     * a developer actually watches would go green with the leak in place.
+     * Same reasoning as the split in `ResolveReconciliationExceptionTest`, and
+     * the same reason the append-only sibling below is deliberately ungated.
+     */
+    public function test_a_malformed_document_id_is_never_echoed_back_in_the_refusal(): void
+    {
+        $stranger = new ActorContext(identityReference: 99, roles: ['admin']);
+
+        foreach ([
+            'not-a-uuid',
+            '42',
+            "'; DROP TABLE documents; --",
+            str_repeat('a', 4096),
+            '00000000-0000-0000-0000-00000000000',
+        ] as $malformedId) {
+            $denial = $this->captureDenial(
+                fn () => $this->action()->issueForDocumentId(
+                    $stranger,
+                    $malformedId,
+                    DocumentAccessPurpose::Download,
+                ),
+            );
+
+            $this->assertStringNotContainsString($malformedId, $denial->getMessage());
         }
     }
 

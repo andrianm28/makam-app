@@ -104,7 +104,7 @@ final class UuidColumnTypingPremiseTest extends TestCase
             'booking_drafts.id' => ['booking_drafts', 'id', 'BookingDraftQuery::find()'],
             'cemeteries.id' => ['cemeteries', 'id', 'CemeteryPublicQuery::findPublishedById() and BasePlotFloorMapPage::selectedCemetery()'],
             'grave_records.id' => ['grave_records', 'id', 'RenewalPayment'],
-            'grave_records.cemetery_id' => ['grave_records', 'cemetery_id', 'GraveRegistryPublicQuery::search()'],
+            'grave_records.cemetery_id' => ['grave_records', 'cemetery_id', 'GraveRegistryPublicQuery::search() -> matchedRecords()'],
             'grave_plots.id' => ['grave_plots', 'id', 'BasePlotFloorMapPage::resolvePlot()'],
             'documents.id' => ['documents', 'id', 'IssueSignedUrl::issueForDocumentId() and DownloadDocument'],
             'orders.id' => ['orders', 'id', 'PreNeedInterestPage and BasePlotFloorMapPage::linkedOrder()'],

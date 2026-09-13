@@ -90,8 +90,30 @@ use Illuminate\Support\Facades\DB;
  * Cost of getting it wrong, stated plainly: if a future CI job legitimately
  * runs this suite on SQLite, it fails here and someone must either point that
  * job at PostgreSQL or consciously exclude these tests. That is a loud,
- * cheap, self-explaining failure. The failure mode it replaces — a guard
- * silently deleted under a green suite — cost a production 500.
+ * cheap, self-explaining failure.
+ *
+ * ---------------------------------------------------------------------------
+ * When to delete the CI branch — a CONDITION, not a date
+ * ---------------------------------------------------------------------------
+ * The `fail()` branch is unreachable today: `.github/workflows/ci.yml` is the
+ * only workflow file, it contains exactly one PHPUnit invocation, and that job
+ * sets `DB_CONNECTION: pgsql`. Fifteen unreachable lines look like dead weight
+ * a year from now, so here is why they are not, and exactly when they become
+ * so.
+ *
+ * Its real trigger is not "somebody points a CI job at SQLite on purpose". It
+ * is "a `DB_CONNECTION: pgsql` line goes MISSING from a job that runs
+ * PHPUnit" — a one-line omission in a file that keeps growing. That risk
+ * exists for exactly as long as `phpunit.xml` pins `DB_CONNECTION=sqlite`
+ * WITHOUT `force="true"`, because that is what lets the driver vary by
+ * environment at all.
+ *
+ * So: **delete this branch the day `phpunit.xml` gains `force="true"` on
+ * `DB_CONNECTION`, and not before.** At that point the driver can no longer
+ * vary between environments, the omission it watches for stops being
+ * possible, and the tripwire has nothing left to catch. Until then, an
+ * unreachable branch is the correct state for a tripwire — reaching it is the
+ * failure it exists to report.
  *
  * Scope note: this is about UUID TYPE ENFORCEMENT, not about PostgreSQL in
  * general. Do not reach for it to skip a test merely because PostgreSQL is
