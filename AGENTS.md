@@ -145,7 +145,7 @@ Never remove a stakeholder MVP item merely because an external gate is closed. I
 ## Documentation
 
 - Update spec, traceability, screen inventory, API contract, and test when behavior changes.
-- `tasks.md` is planning only; issue tracker owns progress.
+- `tasks.md` owns durable per-spec progress; there is no external issue tracker (ADR-0038). Audit-finding status lives in `docs/remediation/findings.yml`, not here.
 - Do not duplicate canonical catalog data in multiple hand-maintained documents or code locations.
 
 ## Development methodology
@@ -157,4 +157,4 @@ Never remove a stakeholder MVP item merely because an external gate is closed. I
 - Review is two-tier: each task is reviewed against its brief before the next task starts, then the whole branch is reviewed once as a unit before merge. Findings are triaged Critical/Important/Minor; Critical and Important get one bounded fix wave with a scoped re-review; Minor is ledgered and parked unless trivial.
 - Every unit of work lands as its own PR against `docs/design-system-and-planning` (the working trunk — see the ADR recorded when `master` was formally retired as a promotion target). Direct commits to the trunk branch are no longer the default.
 - Kiro specs (`.kiro/specs/*/{requirements,design,tasks}.md`) remain the "what to build" authority — acceptance criteria, traceability, durable per-spec progress. A Superpowers plan implements one or more Kiro AC items; it does not restate or replace them. `grill-spec` interrogates Kiro artifacts before `writing-plans` starts, not instead of it.
-- This does not resolve the open "which issue tracker" decision — `tasks.md` still says the issue tracker owns progress and none is named; that stays open.
+- The "which issue tracker" question is closed: there is none, and `tasks.md` owns per-spec progress (ADR-0038). `docs/superpowers/plans/` is an append-only historical record of how one pass of work was executed — never consult it to answer "what is the current state".
