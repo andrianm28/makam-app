@@ -32,6 +32,19 @@ use Tests\TestCase;
  * `AuditEventsTableTest` already covers that filtering STILL RETURNS the
  * right rows — this file exists because that alone proves nothing about
  * the query SHAPE, which is what PERF-10 actually is.
+ *
+ * BACK-DATING CONVENTION (OBS-01, Phase 3 Batch M8a). Both tests below need
+ * `audit_events` rows with an `occurred_at` in the past. They used to insert
+ * a row and then `UPDATE` its `occurred_at`. That is no longer possible, and
+ * deliberately so: the `audit_events_append_only` trigger added by
+ * `2026_09_07_100000_enforce_audit_events_append_only.php` raises SQLSTATE
+ * 42501 on ANY `UPDATE` or `DELETE` against this table, including one issued
+ * by a test. Rewriting audit history is exactly the thing that migration
+ * exists to prevent, so the fixture does what production code would have to
+ * do — record the event at the time it is supposed to have happened, via
+ * `travelTo()` around `Audit::record()`. Do not reintroduce an `UPDATE` here
+ * or add a trigger bypass for tests; that would make the append-only control
+ * untrue for the one suite that would notice it breaking.
  */
 final class AuditEventsTableIndexUsageTest extends TestCase
 {
@@ -65,17 +78,22 @@ final class AuditEventsTableIndexUsageTest extends TestCase
             source: AuditSource::Panel,
         );
 
-        $outOfRange = Audit::record(
-            action: 'booking.updated',
-            subject: new AuditSubject(type: 'booking', id: 2),
-            outcome: AuditOutcome::Allowed,
-            actorRef: 1,
-            actorRole: 'admin',
-            source: AuditSource::Panel,
+        // Recorded AS OF 30 days ago rather than recorded now and then
+        // back-dated with an UPDATE: `Audit::record()` stamps `occurred_at`
+        // from `CarbonImmutable::now()`, so travelling makes the row
+        // genuinely old at INSERT time. See the class doc block for why an
+        // UPDATE is no longer an option here.
+        $outOfRange = $this->travelTo(
+            CarbonImmutable::now()->subDays(30),
+            static fn (): AuditEvent => Audit::record(
+                action: 'booking.updated',
+                subject: new AuditSubject(type: 'booking', id: 2),
+                outcome: AuditOutcome::Allowed,
+                actorRef: 1,
+                actorRole: 'admin',
+                source: AuditSource::Panel,
+            ),
         );
-        AuditEvent::query()->whereKey($outOfRange->id)->update([
-            'occurred_at' => CarbonImmutable::now()->subDays(30),
-        ]);
 
         $this->admin();
 
@@ -123,18 +141,21 @@ final class AuditEventsTableIndexUsageTest extends TestCase
         }
 
         for ($i = 0; $i < 50; $i++) {
-            $event = Audit::record(
-                action: 'booking.updated',
-                subject: new AuditSubject(type: 'booking', id: $i),
-                outcome: AuditOutcome::Allowed,
-                actorRef: 1,
-                actorRole: 'admin',
-                source: AuditSource::Panel,
+            // Same reason as the first test: each row is recorded AS OF its
+            // own day rather than inserted now and back-dated afterwards.
+            $this->travelTo(
+                CarbonImmutable::now()->subDays($i),
+                static function () use ($i): void {
+                    Audit::record(
+                        action: 'booking.updated',
+                        subject: new AuditSubject(type: 'booking', id: $i),
+                        outcome: AuditOutcome::Allowed,
+                        actorRef: 1,
+                        actorRole: 'admin',
+                        source: AuditSource::Panel,
+                    );
+                },
             );
-
-            AuditEvent::query()->whereKey($event->id)->update([
-                'occurred_at' => CarbonImmutable::now()->subDays($i),
-            ]);
         }
 
         // A generous ANALYZE so the planner's row-count estimate reflects
