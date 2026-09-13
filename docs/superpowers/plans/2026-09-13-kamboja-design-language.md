@@ -586,7 +586,7 @@ platform yang melayani orang dalam duka.
 dibaca secara harfiah sebagai warna dan bentuk, maka permintaan itu bertabrakan langsung dengan
 ADR-0034 dan §2.3, dan tidak bisa dipenuhi tanpa ADR baru yang membatalkan keduanya. Jika dibaca
 sebagai *"buat terasa sehangat dan sepenuh itu"*, permintaan itu bisa dipenuhi seluruhnya — dan
-itulah yang direncanakan dokumen ini. Konfirmasi bacaan ini ada di §14 OQ-K2.
+itulah yang direncanakan dokumen ini. **Bacaan ini dikonfirmasi pemilik pada 13 Sep 2026** — lihat §14 OQ-K2.
 
 ---
 
@@ -1073,7 +1073,7 @@ tidak menyajikan apa pun sebagai sudah disepakati.
 | ID | Pertanyaan | Mengapa menghalangi |
 |---|---|---|
 | **OQ-K1** | ~~Desktop~~ **TERJAWAB 13 Sep 2026** (§0.3) — menyelesaikan §13.1. **Yang masih dibutuhkan: tangkapan MOBILE nyata** (perangkat asli atau device-mode DevTools, bukan jendela sempit) | Chrome menahan lebar jendela minimum, sehingga percobaan 390×844 menghasilkan tata letak desktop pada 1200px. **Seluruh perilaku mobile kamboja tetap NOT VERIFIED** (§1.4b, §15) — dan mobile adalah kasus utama produk ini (§7) |
-| **OQ-K2** | "Dibuat seperti kamboja" berarti (a) **warna dan bentuknya** — magenta, gradien, tombol pil — atau (b) **kehangatan dan kepenuhannya**, dengan identitas Earth/Leaf tetap? | Jika (a), ADR-0034 dan §2.3 harus dibatalkan lewat ADR baru, dan seluruh rencana ini berubah. Rencana ini mengasumsikan **(b)** |
+| ~~**OQ-K2**~~ **TERJAWAB 13 Sep 2026** | Pemilik: *"lebih ke layouting, images dan lainnya, pertahankan identitas brand makam"* — yaitu **(b)**. | **Asumsi rencana ini dikonfirmasi.** ADR-0034 dan §2.3 tetap berdiri; tidak ada ADR pembatal yang dibutuhkan. Magenta, gradien, tombol pil, dan mask blob tetap di luar cakupan — bukan karena rencana ini menolaknya, tapi karena pemilik meminta identitas makam dipertahankan. Setiap tahap boleh berjalan apa adanya. |
 | **OQ-K3** | Apakah ada foto TPU/TPS nyata — milik sendiri atau berlisensi — untuk lokasi yang tampil di direktori? Satu per lokasi | **Memblokir Tahap 5.** Hari ini empat foto dipakai bergilir untuk sembilan lokasi fiktif (§9.1) |
 | **OQ-K10** | Jika jawaban OQ-K3 tidak, pilih satu: **(i)** kembali ke ilustrasi untuk lokasi tanpa foto sendiri (§9.3, menyelaraskan dengan marketplace); **(ii)** pertahankan foto stok tetapi tambahkan kapsion sumber terlihat di setiap kartu, seperti disclaimer kamboja; **(iii)** pertahankan apa adanya | Arahan 8 Sep 2026 memilih foto stok secara eksplisit. Rekomendasi saya **(i)**, dengan **(ii)** sebagai kompromi yang dapat diterima. **(iii)** membuat klaim yang tidak bisa dipertanggungjawabkan (§9.2) |
 | **OQ-K4** | Apakah Makam.co.id boleh memotret layanan nyata, dengan izin keluarga, seperti yang dilakukan kamboja? | Ini sumber kehangatan terbesar kamboja (§1.5) dan tidak bisa digantikan token. Butuh keputusan operasional + persetujuan, bukan keputusan desain |

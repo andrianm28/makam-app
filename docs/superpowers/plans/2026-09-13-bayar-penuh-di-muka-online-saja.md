@@ -146,10 +146,13 @@ pelanggan bisa membayar penuh untuk petak yang sama.
 ### Tahap 4 — Refund sungguhan
 
 - Perluas `PaymentCheckoutClient` dengan `refund()`.
-- Implementasikan di `SumoPodPaymentClient`. **Belum diverifikasi apakah SumoPod
-  mendukung refund API sama sekali** — ini harus dipastikan sebelum tahap ini
-  dijadwalkan, karena kalau tidak mendukung, seluruh model "tagih penuh, refund
-  kalau ditolak" tidak bisa ditepati.
+- **SumoPod tidak mendukung refund API** — dikonfirmasi pemilik 13 Sep 2026.
+  Jadi tahap ini tidak bisa diselesaikan dengan penyedia yang ada sekarang; ia
+  menunggu sistem refund yang akan direncanakan terpisah. Yang masih bisa
+  dikerjakan lebih awal: memperluas kontrak `PaymentCheckoutClient` dengan
+  `refund()` sebagai antarmuka, supaya penyedia yang mendukungnya nanti tinggal
+  mengimplementasikannya — tapi antarmuka tanpa implementasi **tidak boleh**
+  dibaca sebagai kemampuan refund yang sudah ada.
 - Refund tidak instan. Butuh penanganan status asinkron, dan jurnal pembalik
   lewat `RecordRefund` yang sudah ada.
 - Batasi kanal pembayaran ke yang bisa di-refund, ditegakkan **di kode**, bukan
@@ -157,7 +160,25 @@ pelanggan bisa membayar penuh untuk petak yang sama.
 
 ### Tahap 5 — Hapus jalur manual
 
-Dikerjakan **terakhir**, bukan pertama. Selama Tahap 0–4 belum selesai, jalur
+> **TERKUNCI, 13 Sep 2026.** Tahap ini **tidak boleh dikirim sebelum sistem
+> refund ada dan bekerja**. Bukan "sebaiknya terakhir" — tidak boleh.
+>
+> Pemilik mengonfirmasi hari ini bahwa **SumoPod tidak mendukung refund API**,
+> dan bahwa sistem refund akan direncanakan terpisah nanti. Itu mengubah sifat
+> tahap ini sepenuhnya.
+>
+> Hari ini pembayaran manual adalah **satu-satunya jalur di mana admin
+> mengkonfirmasi sebelum uang berpindah**. Menghapusnya sambil mengaktifkan
+> bayar-penuh-di-muka, tanpa refund, menciptakan keadaan ini: pelanggan
+> membayar penuh, admin menolak karena petaknya ternyata tidak tersedia, dan
+> **uangnya terjebak tanpa mekanisme pengembalian apa pun**. Pada layanan
+> pemakaman, itu keluarga yang sedang berduka.
+>
+> Urutan yang mengikat: sistem refund → Tahap 4 → baru Tahap 5. Sampai itu,
+> jalur manual tetap hidup, dan bayar-di-muka hanya boleh berjalan
+> berdampingan dengannya, tidak menggantikannya.
+
+Alasan aslinya, yang masih berlaku: selama Tahap 0–4 belum selesai, jalur
 manual adalah satu-satunya cara pelanggan menyelesaikan pemesanan. Mencabutnya
 lebih awal membuat situs tidak bisa menerima pesanan sama sekali.
 
@@ -175,8 +196,13 @@ lewatnya waktu.
 
 ## Yang harus diputuskan sebelum Tahap 4 dijadwalkan
 
-- **Apakah SumoPod mendukung refund API?** Kalau tidak, model ini tidak bisa
-  ditepati dan keputusan 1 harus ditinjau ulang.
+- ~~**Apakah SumoPod mendukung refund API?**~~ **TERJAWAB 13 Sep 2026: TIDAK.**
+  Pemilik mengonfirmasi SumoPod tidak mendukungnya, dan sistem refund akan
+  direncanakan sebagai pekerjaan tersendiri. Konsekuensinya tercatat di Tahap 4
+  dan Tahap 5: model "tagih penuh, refund kalau ditolak" **belum bisa ditepati
+  dengan penyedia saat ini**, jadi bayar-di-muka tidak boleh menggantikan jalur
+  manual sampai sistem refund itu ada. Ini tidak membatalkan keputusan 1 —
+  ia menunda separuh keduanya sampai mekanismenya nyata.
 - **Berapa lama admin boleh menahan konfirmasi?** Uang pelanggan sudah ditarik
   selama itu. Butuh batas waktu, dan refund otomatis kalau terlewat.
 - **Siapa menanggung biaya gateway saat refund?** Sebagian besar gateway tidak
