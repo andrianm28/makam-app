@@ -156,6 +156,24 @@ final class RenewalPayment extends Component
     }
 
     /**
+     * UXO-01: `renewals.id` is `uuid`, and PostgreSQL raises SQLSTATE 22P02
+     * rather than matching nothing when a non-UUID string is compared
+     * against it — so a truncated or mistyped `?perpanjangan=` 500'd on this
+     * public URL instead of reaching the "Data perpanjangan tidak
+     * ditemukan." state both callers below already have. Same
+     * `Str::isUuid()` guard `resolveGrave()` in this very class already
+     * applies to its own client-supplied id.
+     */
+    private function resolveRenewal(): ?Renewal
+    {
+        if (! Str::isUuid($this->perpanjangan)) {
+            return null;
+        }
+
+        return Renewal::query()->find($this->perpanjangan);
+    }
+
+    /**
      * The payment section's ONLINE branch — unchanged from `RenewalPayment::
      * payOnline()`. See that method's original doc block (carried over
      * verbatim in spirit) for the full re-click-guard and exception-mapping
@@ -165,7 +183,7 @@ final class RenewalPayment extends Component
     {
         $this->checkoutError = null;
 
-        $renewal = Renewal::query()->find($this->perpanjangan);
+        $renewal = $this->resolveRenewal();
 
         if (! $renewal instanceof Renewal) {
             $this->checkoutError = 'Data perpanjangan tidak ditemukan. Silakan muat ulang halaman ini.';
@@ -344,7 +362,7 @@ final class RenewalPayment extends Component
             'paymentState' => 'none',
         ];
 
-        $renewal = Renewal::query()->find($this->perpanjangan);
+        $renewal = $this->resolveRenewal();
 
         if (! $renewal instanceof Renewal) {
             return $notFound;

@@ -8,6 +8,7 @@ use App\Domain\AgreementCertificate\CertificateStatusView;
 use App\Domain\OrderWorkflow\Models\Order;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 use Livewire\Component;
 
 /**
@@ -84,6 +85,20 @@ final class CertificateStatusPage extends Component
     private function resolveSubject(): ?Model
     {
         if (! in_array($this->subjectType, self::SUPPORTED_SUBJECTS, true) || ! class_exists($this->subjectType)) {
+            return null;
+        }
+
+        // UXO-01: every class in `SUPPORTED_SUBJECTS` has a `uuid` primary
+        // key, and PostgreSQL raises SQLSTATE 22P02 rather than matching
+        // nothing when a non-UUID string is compared against one — so a
+        // mistyped id 500'd instead of 404ing. A malformed id returns null
+        // here and joins the existing `abort(404)` in `mount()`/`render()`,
+        // which is the right destination for exactly the reason stated in
+        // this class's "404 discipline" note above: an unknown type, an
+        // unknown id and an ineligible type are all indistinguishable, and a
+        // distinguishable error on the malformed case would leak the shape
+        // of a valid id.
+        if (! Str::isUuid($this->subjectId)) {
             return null;
         }
 
