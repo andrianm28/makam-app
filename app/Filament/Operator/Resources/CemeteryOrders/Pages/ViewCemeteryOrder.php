@@ -69,6 +69,9 @@ final class ViewCemeteryOrder extends ViewRecord
             $actions[] = PlotReservationLifecycleActions::confirm($record, $reservation);
             $actions[] = PlotReservationLifecycleActions::release($record, $reservation);
             $actions[] = PlotReservationLifecycleActions::expire($record, $reservation);
+            // Batch M3b (DOM-08): the distinct paid-order override, visible
+            // only once release()/expire() above have hidden themselves.
+            $actions[] = PlotReservationLifecycleActions::releasePaidOrderOverride($record, $reservation);
         }
 
         return $actions;

@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Domain\PlotReservation\Actions;
 
+use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotInventory\PlotState;
+use App\Domain\PlotReservation\Exceptions\PlotReservationOrderAlreadyPaidException;
 use App\Domain\PlotReservation\Exceptions\PlotReservationTransitionException;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PlotReservation\PlotReservationAuditActions;
@@ -56,6 +58,21 @@ use Illuminate\Support\Facades\DB;
  * `booking_draft_id` is carried forward from `$current` exactly like
  * `order_id`, so an expired row never silently drops which draft it
  * belongs to.
+ *
+ * ---------------------------------------------------------------------------
+ * Batch M3b (DOM-08) — the paid-order guard
+ * ---------------------------------------------------------------------------
+ * Identical shape to `ReleasePlotReservation`'s own doc block: an unlocked
+ * read of the chain's `order_id` order, refused via
+ * `PlotReservationOrderAlreadyPaidException` when it is already `DIBAYAR` or
+ * later unless the caller passes `overridePaidOrder: true`, in which case
+ * the audit action written is
+ * `PlotReservationAuditActions::PLOT_RESERVATION_EXPIRED_PAID_ORDER_OVERRIDE`
+ * instead of the plain `PLOT_RESERVATION_EXPIRED`.
+ * `PlotReservationExpiryScheduler::expireStaleDraftHolds()` — the only
+ * scheduled caller of this action — only ever expires draft-anchored holds
+ * (`order_id` always null on that chain), so this guard is a no-op on that
+ * path.
  */
 final readonly class ExpirePlotReservation
 {
@@ -65,6 +82,7 @@ final readonly class ExpirePlotReservation
         string $actorRole,
         ?string $reason = null,
         AuditSource $auditSource = AuditSource::Panel,
+        bool $overridePaidOrder = false,
     ): PlotReservation {
         return DB::transaction(function () use (
             $reservation,
@@ -72,6 +90,7 @@ final readonly class ExpirePlotReservation
             $actorRole,
             $auditSource,
             $reason,
+            $overridePaidOrder,
         ): PlotReservation {
             $plot = GravePlot::query()->lockForUpdate()->findOrFail($reservation->plot_id);
 
@@ -85,6 +104,20 @@ final readonly class ExpirePlotReservation
                 throw PlotReservationTransitionException::forTransition(
                     $current instanceof PlotReservation ? (string) $current->state : 'none',
                     PlotReservationState::EXPIRED
+                );
+            }
+
+            $orderIsPaid = false;
+
+            if ($current->order_id !== null) {
+                $order = Order::query()->find($current->order_id);
+                $orderIsPaid = $order instanceof Order && $order->status()->isPaidOrLater();
+            }
+
+            if ($orderIsPaid && ! $overridePaidOrder) {
+                throw PlotReservationOrderAlreadyPaidException::forReservation(
+                    (string) $reservation->getKey(),
+                    (string) $current->order_id,
                 );
             }
 
@@ -113,7 +146,9 @@ final readonly class ExpirePlotReservation
             $this->emitStateChanged($row, (string) $plot->getKey(), PlotReservationState::HELD);
 
             Audit::record(
-                action: PlotReservationAuditActions::PLOT_RESERVATION_EXPIRED,
+                action: $orderIsPaid
+                    ? PlotReservationAuditActions::PLOT_RESERVATION_EXPIRED_PAID_ORDER_OVERRIDE
+                    : PlotReservationAuditActions::PLOT_RESERVATION_EXPIRED,
                 subject: new AuditSubject('plot_reservation', $row->getKey()),
                 outcome: AuditOutcome::Allowed,
                 actorRef: $actorReference,
