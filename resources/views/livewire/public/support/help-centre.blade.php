@@ -47,7 +47,7 @@
     reads as a staffed hotline, which is a promise to a grieving family
     that nothing in this repository can keep.
 --}}
-<div class="py-8 md:py-12">
+<div class="py-section md:py-section-lg">
     <div class="mx-auto max-w-content px-4">
         <article class="mx-auto max-w-prose">
             <header class="mb-6 space-y-2">

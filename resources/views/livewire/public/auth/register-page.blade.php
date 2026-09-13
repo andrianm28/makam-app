@@ -6,7 +6,7 @@
     task-2-brief.md`). Guest-only registration: name, email, password,
     password confirmation, submit.
 --}}
-<div class="py-8 md:py-12">
+<div class="py-section md:py-section-lg">
     <div class="mx-auto max-w-content px-4">
         <div class="mx-auto w-full max-w-sm">
             <div class="mb-8 text-center">

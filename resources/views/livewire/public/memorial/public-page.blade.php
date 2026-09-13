@@ -26,7 +26,7 @@
     MemorialPublicProjection's own doc block) and therefore never appears
     on this page, badge included.
 --}}
-<div class="py-8 md:py-12">
+<div class="py-section md:py-section-lg">
     <div class="mx-auto max-w-content px-4">
         @if (! $visible)
             {{-- The uniform not-visible state — identical for every denial

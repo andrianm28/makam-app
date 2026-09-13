@@ -15,7 +15,7 @@
     without product change approval"). "Pre-Need" stays English, per
     App\Domain\Booking\BookingServiceType's own label note.
 --}}
-<div class="py-8 md:py-12">
+<div class="py-section md:py-section-lg">
     <div class="mx-auto max-w-content px-4">
 
         {{-- §6.9 gated fallback banner. Server-resolved via ModeResolver on

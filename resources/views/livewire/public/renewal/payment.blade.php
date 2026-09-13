@@ -10,7 +10,7 @@
     the pre-existing `$paymentState` (`'denied'`|`'manual'`|`'online'`)
     still drives the three payment branches exactly as before.
 --}}
-<div class="py-8 md:py-12">
+<div class="py-section md:py-section-lg">
     <div class="mx-auto max-w-content px-4">
 
         <x-mk.stepper

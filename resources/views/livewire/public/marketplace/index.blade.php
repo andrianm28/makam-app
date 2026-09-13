@@ -71,7 +71,7 @@
     use App\Livewire\Public\Marketplace\Support\MarketplacePresenter;
 @endphp
 
-<div class="py-8 md:py-12">
+<div class="py-section md:py-section-lg">
     <div class="mx-auto max-w-content px-4 md:px-6 lg:px-8">
         <div class="mx-auto mb-8 max-w-prose space-y-2 text-center">
             <h1 class="text-3xl font-semibold tracking-tight text-neutral-900">

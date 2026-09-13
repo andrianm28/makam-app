@@ -16,7 +16,7 @@
     renewal has not moved the due date; showing a projected one would be a
     fabricated figure.
 --}}
-<div class="py-8 md:py-12">
+<div class="py-section md:py-section-lg">
     <div class="mx-auto max-w-content px-4">
 
         <x-mk.stepper

@@ -39,7 +39,7 @@
     use App\Platform\FinancialLedger\Money;
 @endphp
 <div
-    class="py-8 md:py-12"
+    class="py-section md:py-section-lg"
     x-data
     x-on:booking-wizard-cemetery-selected.window="
         $nextTick(() => {

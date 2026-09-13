@@ -14,7 +14,7 @@
 
     Tone: quiet and respectful (kiro tasks.md tone constraint).
 --}}
-<div class="py-8 md:py-12">
+<div class="py-section md:py-section-lg">
     <div class="mx-auto max-w-content px-4">
         @if (! $visible)
             {{-- Same uniform not-visible state as the public page — no

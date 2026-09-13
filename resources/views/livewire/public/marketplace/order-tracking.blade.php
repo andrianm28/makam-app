@@ -20,7 +20,7 @@
     use App\Support\Design\StatusIntent;
 @endphp
 
-<div class="py-8 md:py-12">
+<div class="py-section md:py-section-lg">
     <div class="mx-auto max-w-content px-4 md:px-6 lg:px-8">
         <header class="mb-6">
             <h1 class="text-2xl font-semibold text-neutral-900">Status Pesanan</h1>
