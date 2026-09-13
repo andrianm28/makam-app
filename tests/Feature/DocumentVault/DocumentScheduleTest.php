@@ -51,23 +51,25 @@ use Tests\TestCase;
  * ---------------------------------------------------------------------------
  * ON A LARAVEL MAJOR BUMP: RE-RUN THE MUTATION. DO NOT TRUST THE GREEN.
  * ---------------------------------------------------------------------------
+ * If a changed `$command` or `$description` leaves exactly one match no
+ * matter how many entries are registered, this test goes QUIET: green proves
+ * nothing. That is the danger, and it is the first thing to understand
+ * here — not the reassuring one. (The opposite shape, where every string
+ * this test matches on goes empty, fails visibly and is the safe direction.)
+ *
  * This assertion reads `Event::$command`, `Event::getSummaryForDisplay()` and
  * `Event::$description`. That is more stable than rendered text, but it is
- * still framework surface, not a public contract. If a future Laravel
- * changes how `$schedule->job()` populates `description` — or renames any of
- * the three — every string this test matches on goes empty, the filter
- * matches nothing, and `assertCount(1, ...)` fails loudly on ONE registration
- * while `assertCount(2, ...)` would have. Worse: the reverse shape, where a
- * changed `$command` leaves exactly one match no matter how many entries
- * exist, makes this test go QUIET rather than red. A green run would then
- * prove nothing at all.
+ * still framework surface, not a public contract, and nothing about a
+ * passing run distinguishes "still detecting duplicates" from "no longer
+ * able to see them".
  *
  * So on a Laravel major upgrade, do not take this test passing as evidence.
  * Re-run the mutation that built it: re-add the `withSchedule()` block to
- * `bootstrap/app.php` (git history of this file's FN-1 commit has it
- * verbatim), confirm this test FAILS and that its message names BOTH
- * registration sites, then restore and confirm green. That round trip is the
- * only thing that proves this test still bites.
+ * `bootstrap/app.php` — `git show bf731cfe -- bootstrap/app.php` carries it
+ * verbatim, 13 removed lines (the 10-line block plus the 3 imports it was
+ * the only user of) — confirm this test FAILS and that its message names
+ * BOTH registration sites, then restore and confirm green. That round trip
+ * is the only thing that proves this test still bites.
  *
  * THE FIELD TO CHECK IS `CallbackEvent::$description`. Re-running the
  * mutation is what an upgrader DOES; this is what they LOOK AT. The two
