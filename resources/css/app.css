@@ -46,6 +46,29 @@
 @utility duration-slow    { transition-duration: var(--mk-duration-slow); }
 @utility duration-slower  { transition-duration: var(--mk-duration-slower); }
 
+/* -----------------------------------------------------------------------------
+ * Section rhythm — design-system.md §4.4.
+ *
+ * §4.4 mandates 40 px between page sections on mobile and 64 px from `lg`, and
+ * `--mk-section-gap` / `--mk-section-gap-lg` have carried those numbers since
+ * tokens.css was written. Until now nothing consumed them: every section on
+ * every page hardcoded `py-5 lg:py-8` — 20/32 px, exactly half — and no gate
+ * objected, because `py-5` is a legitimate Tailwind utility rather than the
+ * hardcoded hex GATE 2 and GATE 3 look for.
+ *
+ * An audit on 13 Sep 2026 found this is not one oversight: 31 of the 94
+ * `--mk-*` tokens had zero consumers, and they clustered precisely in the
+ * scales no gate protects — spacing, gutters, control heights, icon sizes,
+ * borders. Every `--mk-z-*` token IS consumed, because GATE 11 forbids raw
+ * z-index; both focus tokens are consumed, because GATE 12 forbids suppressing
+ * focus. The rule with a guard is followed; the rule without one is not.
+ *
+ * These two utilities exist for the same reason the `z-*` block above it does:
+ * to make the token the easy thing to write.
+ * -------------------------------------------------------------------------- */
+@utility py-section    { padding-block: var(--mk-section-gap); }
+@utility py-section-lg { padding-block: var(--mk-section-gap-lg); }
+
 /* Enforces the 44 px touch floor without hand-written px anywhere. */
 @utility touch-target {
   min-height: var(--mk-touch-min);

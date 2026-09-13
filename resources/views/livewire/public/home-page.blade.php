@@ -200,7 +200,7 @@
          HomePage::PRIMARY_MENUS (see that class's own doc block for why
          this is a second hardcoded copy of header.blade.php's $navItems,
          and why that is not forbidden catalogue-data duplication). --}}
-    <section aria-labelledby="services-heading" class="mx-auto max-w-content px-4 py-5 md:px-6 lg:px-8 lg:py-8">
+    <section aria-labelledby="services-heading" class="mx-auto max-w-content px-4 py-section md:px-6 lg:px-8 lg:py-section-lg">
         <h2 id="services-heading" class="sr-only">Layanan utama</h2>
         @php
             $serviceDescriptions = [
@@ -255,7 +255,7 @@
          slot rather than an icon — a number is the correct affordance for
          an ordered <ol> item; see icon-medallion.blade.php's own doc block
          for why Cara Kerja specifically does not use icons. --}}
-    <section aria-labelledby="how-it-works-heading" class="bg-secondary-50 py-5 lg:py-8">
+    <section aria-labelledby="how-it-works-heading" class="bg-secondary-50 py-section lg:py-section-lg">
         <div class="mx-auto max-w-content px-4 md:px-6 lg:px-8">
             <h2 id="how-it-works-heading" class="mb-6 text-center text-2xl font-semibold text-neutral-900">
                 Cara Kerja
@@ -289,7 +289,7 @@
          entirely rather than an empty shell, per design-system.md §6.2's
          own required-states row for this section. --}}
     @unless ($featuredCemeteriesUnavailable || $featuredCemeteries->isEmpty())
-        <section aria-labelledby="featured-cemeteries-heading" class="mx-auto max-w-content px-4 py-5 md:px-6 lg:px-8 lg:py-8">
+        <section aria-labelledby="featured-cemeteries-heading" class="mx-auto max-w-content px-4 py-section md:px-6 lg:px-8 lg:py-section-lg">
             <h2 id="featured-cemeteries-heading" class="mb-6 text-center text-2xl font-semibold text-neutral-900">
                 TPU &amp; TPS Unggulan
             </h2>
@@ -359,7 +359,7 @@
          both say explicitly to use it for trust/reassurance sections. The
          Leaf tint moved to the Cara Kerja band (section 4) instead, which
          is what actually produces the page's warm/leaf/warm rhythm. --}}
-    <section aria-labelledby="trust-heading" class="bg-primary-50 py-5 lg:py-8">
+    <section aria-labelledby="trust-heading" class="bg-primary-50 py-section lg:py-section-lg">
         <div class="mx-auto max-w-content px-4 md:px-6 lg:px-8">
             <h2 id="trust-heading" class="mb-6 text-center text-2xl font-semibold text-neutral-900">
                 Kenapa Makam.co.id
@@ -413,7 +413,7 @@
          sections. `alt=""`: decorative, same convention the hero above
          uses — the heading and copy below already carry the message the
          image doesn't add information beyond. --}}
-    <section aria-labelledby="family-warmth-heading" class="mx-auto max-w-content px-4 py-5 md:px-6 lg:px-8 lg:py-8">
+    <section aria-labelledby="family-warmth-heading" class="mx-auto max-w-content px-4 py-section md:px-6 lg:px-8 lg:py-section-lg">
         <x-mk.card class="mx-auto max-w-2xl" padding="lg">
             <x-slot:media>
                 <img
@@ -439,7 +439,7 @@
          gracefully (HomePage::render()'s own try/catch); §6.2 empty state
          for the (rare, hard to trigger against real seed data) case where
          the query succeeds but returns nothing. --}}
-    <section aria-labelledby="faq-highlights-heading" class="mx-auto max-w-content px-4 py-5 md:px-6 lg:px-8 lg:py-8">
+    <section aria-labelledby="faq-highlights-heading" class="mx-auto max-w-content px-4 py-section md:px-6 lg:px-8 lg:py-section-lg">
         <h2 id="faq-highlights-heading" class="mb-6 text-center text-2xl font-semibold text-neutral-900">
             Pertanyaan yang Sering Diajukan
         </h2>
@@ -478,7 +478,7 @@
     {{-- Section 8: Customer-service CTA — requirements.md AC5. Distinct
          from the Urgent banner above: this is a general "need help
          choosing" invitation, not a gate-state notice. --}}
-    <section aria-labelledby="cs-cta-heading" class="mx-auto max-w-content px-4 py-5 md:px-6 lg:px-8 lg:py-8">
+    <section aria-labelledby="cs-cta-heading" class="mx-auto max-w-content px-4 py-section md:px-6 lg:px-8 lg:py-section-lg">
         <div class="mx-auto flex max-w-prose flex-col items-center gap-3 rounded-lg border border-primary-200 bg-primary-50 p-6 text-center md:p-8">
             <x-mk.icon-medallion icon="question-mark-circle" tone="earth" size="lg" />
             <h2 id="cs-cta-heading" class="text-xl font-semibold text-neutral-900">

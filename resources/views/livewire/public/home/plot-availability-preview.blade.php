@@ -1,6 +1,6 @@
 <div>
     @unless ($unavailable || empty($showcase))
-        <section aria-labelledby="plot-preview-heading" class="mx-auto max-w-content px-4 py-5 md:px-6 lg:px-8 lg:py-8">
+        <section aria-labelledby="plot-preview-heading" class="mx-auto max-w-content px-4 py-section md:px-6 lg:px-8 lg:py-section-lg">
             <h2 id="plot-preview-heading" class="mb-2 text-center text-2xl font-semibold text-neutral-900">
                 Lihat Contoh Ketersediaan Plot
             </h2>
