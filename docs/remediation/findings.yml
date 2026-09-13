@@ -29,7 +29,7 @@
   effort: M
   audit_verdict: CONFIRMED
   status: mitigated
-  status_evidence: [host-action-2026-09-13]
+  status_evidence: [host-action-2026-09-13, docs/operations/backup-and-restore-runbook.md]
   status_verified: true
   status_note: >-
     PR #240 hanya menyebut CI-01 sebagai pekerjaan terpisah: 'CI-01 (production backup), SEC-02
@@ -46,6 +46,27 @@
     yang sama dengan databasenya, sehingga satu kegagalan disk tetap menghapus keduanya. Enkripsi
     dan pengiriman ke luar disk menunggu keputusan pemilik soal tujuan penyimpanan, dan
     ci/verify-infra.sh belum punya gate yang memastikan artefak beta lebih baru dari RPO.
+    DIPERKUAT 13 September 2026 (sore): rehearsal pemulihan diulang dengan bukti
+    yang dicatat, bukan hanya diklaim - lihat backup-and-restore-runbook.md
+    "Evidence - 4b". Dump otomatis makam_beta_20260913_064613.sql.gz (SHA-256
+    689a3226..., 7.002.032 byte) dipulihkan ke database sekali-pakai dalam 16
+    detik dengan ON_ERROR_STOP=1, lalu dibandingkan tabel per tabel dengan
+    sumber yang masih hidup: 123 tabel di kedua sisi, 119 identik. Empat yang
+    berbeda semuanya telemetri/sesi (pulse_entries, pulse_aggregates,
+    menu_interaction_events, sessions) dan semuanya bergerak ke arah yang sama -
+    sumber punya LEBIH banyak baris daripada dump berumur 74 menit. Kecocokan
+    sempurna di 123 tabel justru akan mencurigakan. Seluruh tabel bisnis dan
+    finansial cocok persis. Versi server, ekstensi (pg_trgm/unaccent), batch
+    migrasi (11), dan 115 constraint foreign key identik; 0 FK tidak tervalidasi.
+    Database rehearsal sudah dihapus; makam_beta tidak pernah ditulisi.
+    TIGA hal yang TIDAK diklaim: smoke test aplikasi 5.6 NOT TESTED; kadensi 6
+    jam belum pernah disaksikan berjalan tanpa campur tangan (perubahan cron
+    terjadi 06:46 UTC, setelah jadwal 06:00 hari itu lewat, jadi eksekusi
+    otomatis pertama jatuh 12:00 UTC); dan makam_stg - database yang justru
+    dinamai runbook ini - tidak punya rehearsal sama sekali karena isinya kosong
+    (dump 584 byte, stg-web masih container placeholder).
+    TETAP `mitigated`: dump masih tak terenkripsi dan masih satu disk dengan
+    databasenya.
   files:
     - "docs/operations/database-backup-and-recovery.md:122"
     - "/opt/makam/scripts/pg-backup.sh:1"
