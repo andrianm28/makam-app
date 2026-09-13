@@ -280,9 +280,22 @@ final class TrustedProxiesAndHostsTest extends TestCase
     }
 
     /**
-     * Symfony's trusted-host state is static and process-wide, so a test that
-     * sets it must put it back or every later test in the same process
-     * inherits an allowlist that rejects `localhost`.
+     * `Request::$trustedHostPatterns` is a static on
+     * `Symfony\Component\HttpFoundation\Request`, and NOTHING in
+     * `Illuminate\Foundation\Testing\` or `Illuminate\Foundation\Bootstrap\`
+     * resets it — unlike `TrustProxies`/`TrustHosts`, which Laravel's own
+     * `TestCase::tearDown()` flushes. So whatever this test sets survives for
+     * the rest of the PHP process, across `refreshApplication()` and into
+     * every later test.
+     *
+     * Be exact about the consequence, because the obvious version of this
+     * sentence overstates it and is how someone later concludes the reset is
+     * unnecessary and deletes it: the leaked list is the six configured
+     * patterns, and `^localhost$` is one of them, so it would NOT break the
+     * default test host. It would reject any OTHER host a later test uses —
+     * anything building a request for `example.com`, say — and it would do so
+     * as a `SuspiciousOperationException` from vendor code, a long way from
+     * this file.
      */
     protected function tearDown(): void
     {
