@@ -19,7 +19,7 @@
     admin Site Settings page (SiteSettingsForm's "Tinjauan hukum" section)
     — do not delete the draft branch, it is the honest default state.
 --}}
-<div class="py-8 md:py-12">
+<div class="py-section md:py-section-lg">
     <div class="mx-auto max-w-content px-4">
         <article class="mx-auto max-w-prose">
             <header class="mb-6 space-y-2">

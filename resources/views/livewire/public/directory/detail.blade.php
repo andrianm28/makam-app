@@ -47,7 +47,7 @@
     $facilities = CemeteryPresenter::facilities($cemetery);
 @endphp
 
-<div class="py-8 md:py-12">
+<div class="py-section md:py-section-lg">
     <div class="mx-auto max-w-content px-4">
         <nav aria-label="Navigasi kembali" class="mb-6">
             <a

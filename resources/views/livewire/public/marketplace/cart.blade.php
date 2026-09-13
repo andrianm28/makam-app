@@ -44,7 +44,7 @@
     })->all();
 @endphp
 
-<div class="py-8 md:py-12">
+<div class="py-section md:py-section-lg">
     <div class="mx-auto max-w-content px-4 md:px-6 lg:px-8">
         <header class="mb-6 flex items-end justify-between gap-4">
             <div>

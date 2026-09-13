@@ -17,7 +17,7 @@
     use App\Support\ContactInfo;
 @endphp
 
-<div class="py-8 md:py-12">
+<div class="py-section md:py-section-lg">
     <div class="mx-auto max-w-content px-4">
         <nav aria-label="Navigasi FAQ" class="mx-auto mb-6 max-w-prose text-sm text-neutral-600">
             <a href="{{ route('faq.index') }}" class="text-primary-600 underline underline-offset-2 hover:text-primary-700">FAQ</a>

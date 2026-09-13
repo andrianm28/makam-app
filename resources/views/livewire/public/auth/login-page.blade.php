@@ -16,7 +16,7 @@
     existed. Task 3 (this change) does the same for `/lupa-password` now
     that `route('password.request')` exists.
 --}}
-<div class="py-8 md:py-12">
+<div class="py-section md:py-section-lg">
     <div class="mx-auto max-w-content px-4">
         <div class="mx-auto w-full max-w-sm">
             <div class="mb-8 text-center">

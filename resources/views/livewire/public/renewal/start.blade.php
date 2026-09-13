@@ -32,7 +32,7 @@
     usages below are therefore the explicit `@php ... @endphp` block form
     with an immediately-adjacent `@endphp`, never the inline shorthand.
 --}}
-<div class="py-8 md:py-12">
+<div class="py-section md:py-section-lg">
     <div class="mx-auto max-w-content px-4">
 
         <x-mk.stepper

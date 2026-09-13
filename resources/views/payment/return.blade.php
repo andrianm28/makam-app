@@ -38,7 +38,7 @@
     $returnState = $returnState ?? ReturnPageState::PENDING;
 @endphp
 @component('layouts.app', ['title' => 'Status Pembayaran — Makam.co.id'])
-    <div class="py-8 md:py-12">
+    <div class="py-section md:py-section-lg">
         <div class="mx-auto max-w-content px-4">
             <article class="mx-auto max-w-prose">
                 <header class="mb-6 space-y-2">
