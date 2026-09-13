@@ -45,6 +45,27 @@ use Tests\TestCase;
  * `Schedule::events()` — same detection, with no dependence on a display
  * format Laravel is free to change in any minor release.
  *
+ * ---------------------------------------------------------------------------
+ * ON A LARAVEL MAJOR BUMP: RE-RUN THE MUTATION. DO NOT TRUST THE GREEN.
+ * ---------------------------------------------------------------------------
+ * This assertion reads `Event::$command`, `Event::getSummaryForDisplay()` and
+ * `Event::$description`. That is more stable than rendered text, but it is
+ * still framework surface, not a public contract. If a future Laravel
+ * changes how `$schedule->job()` populates `description` — or renames any of
+ * the three — every string this test matches on goes empty, the filter
+ * matches nothing, and `assertCount(1, ...)` fails loudly on ONE registration
+ * while `assertCount(2, ...)` would have. Worse: the reverse shape, where a
+ * changed `$command` leaves exactly one match no matter how many entries
+ * exist, makes this test go QUIET rather than red. A green run would then
+ * prove nothing at all.
+ *
+ * So on a Laravel major upgrade, do not take this test passing as evidence.
+ * Re-run the mutation that built it: re-add the `withSchedule()` block to
+ * `bootstrap/app.php` (git history of this file's FN-1 commit has it
+ * verbatim), confirm this test FAILS and that its message names BOTH
+ * registration sites, then restore and confirm green. That round trip is the
+ * only thing that proves this test still bites.
+ *
  * Historical, and the reason this test no longer parses that output:
  * `ScheduleListCommand` prints a SECOND line per event carrying the event
  * description when `$this->output->isVerbose()` (`:233-236`). For the
