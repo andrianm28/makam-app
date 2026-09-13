@@ -276,6 +276,12 @@ final class PreNeedInterestPage extends Component
             // cities here would delete the information rather than protect
             // anyone — the opposite of what it does in the wizard.
             //
+            // The shortest way to hold the distinction: FN-2's defect was a
+            // list that led somewhere and dead-ended. This one leads to a
+            // working submit button. The field is even labelled `Kota
+            // (wilayah layanan)` rather than a booking location, so the two
+            // lists are answering different questions.
+            //
             // So the two surfaces differ on purpose. Read
             // `CemeteryPublicQuery::launchCities()`'s doc block before
             // changing either of them.
