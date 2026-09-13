@@ -1,6 +1,6 @@
 # Rencana: sistem refund
 
-**Status:** Rencana — belum satu baris kode pun ditulis. Butuh persetujuan pemilik.
+**Status:** Rencana — tenggat sudah diputuskan pemilik, R0 dan R1 mulai dibangun.
 **Tanggal:** 13 September 2026
 **Memblokir:** Tahap 4 dan Tahap 5 dari
 [`2026-09-13-bayar-penuh-di-muka-online-saja.md`](2026-09-13-bayar-penuh-di-muka-online-saja.md)
@@ -77,6 +77,45 @@ dalam closure mutasinya sendiri. Kewajiban refund mengikuti pola itu.
 Dan: **tidak ada yang menutup kewajiban kecuali eksekusi yang tercatat beserta
 buktinya.** Bukan admin yang menandai selesai. Bukan kedaluwarsa.
 
+## Tenggat: 3 hari kerja — diputuskan pemilik 13 Sep 2026
+
+Sebuah kewajiban refund harus **dieksekusi dalam 3 hari kerja** sejak ia lahir,
+yaitu sejak transaksi yang menolak pesanan berhasil di-commit. Lewat dari itu,
+kewajiban tersebut **terlambat**, dan Tahap R4 membuatnya berisik.
+
+Angka ini bukan sekadar kolom. Ia menentukan tiga hal sekaligus:
+
+| Yang ditentukannya | Akibatnya di kode |
+|---|---|
+| Kapan sebuah kewajiban jatuh tempo | `due_at` dihitung saat pembuatan, disimpan, tidak dihitung ulang |
+| Kapan ia jadi "terlambat" | Satu perbandingan, bukan kebijakan yang tersebar |
+| Apa yang muncul di watchdog | Tahap R4 punya sesuatu yang bisa dibandingkan |
+
+### "Hari kerja", bukan 72 jam
+
+Ini perbedaan yang nyata, bukan kerewelan. Kewajiban yang lahir **Jumat sore**
+jatuh tempo **Rabu**, bukan Senin. Menghitungnya sebagai 72 jam akan membuat
+sistem menandai operator terlambat pada pekerjaan yang tidak mungkin ia
+kerjakan — dan alarm yang salah adalah alarm yang orang belajar abaikan.
+
+Repo ini **belum punya** helper hari kerja: `grep` untuk `businessDay`,
+`addWeekdays`, `isWeekend`, `holiday` di `app/` dan `config/` tidak mengembalikan
+apa pun. Jadi R0 membawa satu seam baru — dan seam itu, bukan pemanggilnya, yang
+dites.
+
+### Hari libur nasional: dinyatakan, tidak dikarang
+
+Implementasi pertama melewati **Sabtu dan Minggu saja**. Hari libur nasional
+Indonesia **tidak** dilewati, karena melewatinya menuntut kalender resmi yang
+repo ini tidak punya dan yang berubah tiap tahun — mengarangnya akan
+memperkenalkan data yang salah ke dalam perhitungan tenggat uang orang.
+
+Konsekuensinya dinyatakan terang-terangan: **pada pekan dengan libur nasional,
+tenggat akan terasa lebih ketat dari maksud "3 hari kerja"**. Seam-nya dibuat
+supaya kalender libur bisa dipasang belakangan tanpa menyentuh satu pun
+pemanggil. Bila pemilik ingin libur nasional ikut dihitung, itu **satu keputusan
+terpisah** yang datang dengan kewajiban menyediakan sumber kalendernya.
+
 ## Tahapan
 
 ### Tahap R0 — Buku kewajiban
@@ -84,8 +123,8 @@ buktinya.** Bukan admin yang menandai selesai. Bukan kedaluwarsa.
 Perluas `payment_reversals`, atau tabel baru bila bentuknya terlalu berbeda,
 sehingga sebuah kewajiban punya: status (`terutang` → `dieksekusi` →
 `terkonfirmasi`), tautan ke pesanan dan ke sesi pembayaran aslinya, jumlah,
-tenggat, aktor yang memutuskan, aktor yang mengeksekusi, waktu eksekusi, dan
-rujukan bukti.
+tenggat (`due_at` = 3 hari kerja sejak kewajiban lahir), aktor yang memutuskan,
+aktor yang mengeksekusi, waktu eksekusi, dan rujukan bukti.
 
 Status ditulis append-only mengikuti disiplin yang sudah dipakai
 `price_versions` dan `audit_events`, bukan satu kolom yang ditimpa — karena
@@ -127,6 +166,9 @@ ketika ia benar-benar bergerak.
 
 ### Tahap R4 — Yang terlambat harus berisik
 
+**Tidak lagi terblokir** — tenggatnya 3 hari kerja, jadi "terlambat" sudah punya
+arti yang bisa dihitung.
+
 Kewajiban yang lewat tenggat harus muncul di tempat yang dilihat orang, bukan
 hanya di tabel yang harus dibuka. Repo ini punya `spine:watchdog` dan widget
 antrean tinjauan manual di panel admin; kewajiban terlambat masuk ke sana.
@@ -159,8 +201,11 @@ operator dan risiko kelalaian, bukan dengan kode.
 
 ## Yang harus diputuskan pemilik
 
-- **Berapa tenggat eksekusi refund?** Angka ini yang membuat "terlambat" punya
-  arti. Tanpa itu Tahap R4 tidak bisa dibangun.
+- ~~**Berapa tenggat eksekusi refund?**~~ **Terjawab 13 Sep 2026: 3 hari
+  kerja.** R4 tidak lagi terblokir.
+- **Apakah hari libur nasional dilewati juga?** Implementasi pertama tidak
+  melewatinya, dan alasannya ada di §Tenggat di atas. Menjawab "ya" menuntut
+  sumber kalender resmi.
 - **Berapa lama admin boleh menahan konfirmasi** sebelum pesanan otomatis
   ditolak dan direfund? Uang pelanggan tertahan selama itu.
 - **Siapa menanggung biaya gateway?** Sebagian besar gateway tidak
