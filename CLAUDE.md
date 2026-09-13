@@ -2,15 +2,49 @@
 
 **[`AGENTS.md`](AGENTS.md) is the canonical, binding instruction set for this repository. Read it in full before you plan or change anything.** This file is only a pointer to it; it deliberately does not restate its contents, because `AGENTS.md` §Documentation forbids duplicating canonical data across hand-maintained documents.
 
-## Read these before working (by reference — do not copy them here)
+## Read these when your change touches them — not before every session
 
-| Document | Authority |
-| --- | --- |
-| [`AGENTS.md`](AGENTS.md) | Binding project rules; source-precedence order (RKS K23–K35 → `docs/product/mvp-scope.md` → approved ADR/specs → approved benchmark extensions) |
-| [`.kiro/steering/project.md`](.kiro/steering/project.md) | Project steering context |
-| [`docs/design/design-system.md`](docs/design/design-system.md) | Single source of truth for visual design decisions |
-| [`resources/css/tokens.css`](resources/css/tokens.css) | Authoritative design token values |
-| [`docs/planning/sprint-plan.md`](docs/planning/sprint-plan.md) | Sprint sequencing and scope |
+This section was previously headed *"Read these before working"* and listed
+five documents. Followed literally, that instruction costs **~87,000 tokens
+before a single line of code is opened**, and it was paid by every agent in
+every session, including one-line fixes. Measured 13 Sep 2026:
+`sprint-plan.md` ~43,200 tokens and `design-system.md` ~33,700 — 88% of the
+total between them.
+
+**Nothing has been deleted and no authority has moved.** Both documents are
+unchanged and still govern. What changed is *when* you are told to open them.
+
+**Always, before planning or changing anything:**
+
+| Document | Authority | Cost |
+| --- | --- | --- |
+| [`AGENTS.md`](AGENTS.md) | Binding project rules; source-precedence order (RKS K23–K35 → `docs/product/mvp-scope.md` → approved ADR/specs → approved benchmark extensions) | ~2,600 tok |
+| [`.kiro/steering/project.md`](.kiro/steering/project.md) | Project steering context | ~400 tok |
+
+**Then, only if your change touches the subject:**
+
+| If you are changing… | Read | Cost |
+| --- | --- | --- |
+| Blade, Livewire, Filament, CSS — anything with a visual result | [`docs/design/design-system.md`](docs/design/design-system.md) — single source of truth for visual design decisions | ~33,700 tok |
+| a design value (colour, spacing, radius, z-index, type scale) | [`resources/css/tokens.css`](resources/css/tokens.css) — authoritative token values. Grep it for the token you need; you rarely need the whole file | ~6,300 tok |
+| scope, sequencing, or deciding what to build next | [`docs/planning/sprint-plan.md`](docs/planning/sprint-plan.md) — sprint sequencing and scope | ~43,200 tok |
+
+### Why skipping a read here is safe, and where it is not
+
+The design rules are **enforced mechanically whether or not you read the
+document**: `ci/verify-docs.sh` GATE 1 (WCAG AA contrast), GATE 2 (no hardcoded
+design values outside `tokens.css`), GATE 3 (no arbitrary Tailwind values),
+GATE 11 (no raw z-index), GATE 12 (no unreplaced focus suppression), plus the
+`design:verify-filament-palette` and `blade:verify-content-survival` artisan
+commands. The document is the guidance; the gates are the guarantee.
+
+So this is **not** permission to hardcode a design value and hope. It will fail
+CI. It is permission to stop paying 33,700 tokens to read the design system
+before editing a domain action that renders nothing.
+
+**Scope has no such gate.** If your work decides *what* gets built rather than
+*how*, read `sprint-plan.md` — nothing mechanical will catch you building the
+wrong thing.
 
 ## Rules most often broken before `AGENTS.md` is read
 
