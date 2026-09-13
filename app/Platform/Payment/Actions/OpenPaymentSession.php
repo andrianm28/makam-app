@@ -8,7 +8,6 @@ use App\Domain\Marketplace\Actions\GuardMarketplacePaymentOpening;
 use App\Domain\Marketplace\Models\MarketplaceOrder;
 use App\Domain\Marketplace\PaymentState;
 use App\Domain\OrderWorkflow\Models\Order;
-use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\Renewal\Actions\GuardRenewalPaymentOpening;
 use App\Domain\Renewal\Models\Renewal;
 use App\Domain\Renewal\RenewalStatus;
@@ -420,20 +419,42 @@ final readonly class OpenPaymentSession
 
     /**
      * The "no second session for an already-paid order" refusal — see the
-     * class doc block. A DIBAYAR order is already paid; opening a session for
-     * it would let the customer be charged a second time, and the second
-     * payment would be silently swallowed by `ApplyPaidEffects`. The refusal
-     * is audited (`PAYMENT_SESSION_OPENING_REFUSED`, `AuditOutcome::Denied`)
-     * before the exception is thrown, so an operator can see the attempt.
+     * class doc block. An order whose money has arrived is already paid;
+     * opening a session for it would let the customer be charged a second
+     * time, and the second payment would be silently swallowed by
+     * `ApplyPaidEffects`. The refusal is audited
+     * (`PAYMENT_SESSION_OPENING_REFUSED`, `AuditOutcome::Denied`) before the
+     * exception is thrown, so an operator can see the attempt.
      *
      * Deliberately an order-status check, not a `payment_sessions` query:
      * sessions carry no order reference (class doc block), so the order's own
-     * DIBAYAR status is the only pre-provider authority that a payment was
-     * collected for this order.
+     * status is the only pre-provider authority that a payment was collected
+     * for this order.
+     *
+     * -----------------------------------------------------------------------
+     * 13 Sep 2026 (finding H-1): `isPaidOrLater()`, not `=== DIBAYAR`
+     * -----------------------------------------------------------------------
+     * This was a raw comparison against the single literal `DIBAYAR`, which
+     * asked "is the order in that one status" when what it MEANS is "has this
+     * order's money already arrived". `OrderStatus::isPaidOrLater()` is the
+     * predicate for the second question and already existed; this call site
+     * simply did not use it.
+     *
+     * The gap was not theoretical even before the pay-first flow: an order at
+     * `DIPROSES` or `SELESAI` is past `DIBAYAR` and was therefore free to open
+     * a second payment session. The pay-first flow widened it badly — every
+     * status added to `isPaidOrLater()` stayed chargeable, so a customer whose
+     * payment had arrived and was awaiting admin confirmation could be charged
+     * a second full amount. In this domain that is a grieving family charged
+     * twice for one burial.
+     *
+     * Asking the predicate rather than naming a status is also what stops the
+     * hole reopening: a future status added to `isPaidOrLater()` is covered
+     * here the moment it is added, with no second edit to remember.
      */
     private function assertOrderNotAlreadyPaid(Order $order): void
     {
-        if ($order->status !== OrderStatus::DIBAYAR->value) {
+        if (! $order->status()->isPaidOrLater()) {
             return;
         }
 

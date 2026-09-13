@@ -202,6 +202,39 @@ final class OrderTransitionTest extends TestCase
     }
 
     /**
+     * The hourly quote-expiry sweep must never be able to reach an order
+     * whose money has already arrived.
+     *
+     * `QuoteExpiryScheduler` drives orders to `KEDALUWARSA`, and
+     * `RecordOrderStatusChange` then releases the plot. Doing that to a
+     * paid-but-unconfirmed order would expire a booking the customer has
+     * already paid for and hand their plot to somebody else, with the money
+     * still sitting in the account.
+     *
+     * Asserted as a GRAPH property rather than by reading the scheduler's
+     * own list, because that is the layer which holds regardless of what any
+     * future sweep decides to select: no paid-or-later status has a
+     * `KEDALUWARSA` edge at all, so `ExpireOrder` would throw
+     * `IllegalOrderTransitionException` even if a scheduler picked one up.
+     * The scheduler's `EXPIRABLE_STATUSES` is the first line and this is the
+     * second; the test guards the one that cannot be edited around by
+     * accident.
+     */
+    public function test_no_order_whose_money_has_arrived_can_be_swept_into_expiry(): void
+    {
+        foreach (OrderStatus::cases() as $status) {
+            if (! $status->isPaidOrLater()) {
+                continue;
+            }
+
+            self::assertFalse(
+                OrderTransition::isAllowed($status, OrderStatus::KEDALUWARSA),
+                "{$status->value} -> KEDALUWARSA would expire an order whose money has already arrived",
+            );
+        }
+    }
+
+    /**
      * DOM-08's protection must apply to every state in which money has
      * arrived, or a paid customer's plot hold becomes releasable without the
      * paid-order override on the new flow — silently, and only on the new
