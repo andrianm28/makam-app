@@ -21,6 +21,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Livewire\Component;
 use Livewire\Features\SupportFileUploads\WithFileUploads;
@@ -119,7 +120,16 @@ final class MemorialFamilyPage extends Component
 
     public function mount(string $profileId): void
     {
-        $this->profile = MemorialProfile::query()->find($profileId);
+        // UXO-01: `memorial_profiles.id` is `uuid`, and PostgreSQL raises
+        // SQLSTATE 22P02 rather than matching nothing when a non-UUID string
+        // is compared against it — a truncated share link or a typo gave the
+        // visitor a 500 instead of this page's own not-visible state. Same
+        // `Str::isUuid()` guard this codebase already uses before every other
+        // client-supplied uuid lookup (`BookingDraftQuery`,
+        // `DownloadDocument`, `PreNeedInterestPage::resolveSubject()`).
+        $this->profile = Str::isUuid($profileId)
+            ? MemorialProfile::query()->find($profileId)
+            : null;
 
         if (! $this->profile instanceof MemorialProfile || ! $this->profile->hasActiveEditor(app(ActorContext::class))) {
             $this->visible = false;

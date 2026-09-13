@@ -258,6 +258,33 @@ final class PreNeedInterestPage extends Component
         $mode = app(ModeResolver::class)->preNeedMode();
 
         return view('livewire.public.pre-need.pre-need-interest-page', [
+            // DELIBERATELY the raw catalogue, and deliberately NOT
+            // `CemeteryPublicQuery::launchCities()` — do not "fix" this to
+            // match the booking wizard.
+            //
+            // FN-2 narrowed `launchCities()` so an admin-added city with no
+            // published cemetery stops appearing in the city lists that lead
+            // to a cemetery: the booking wizard, the directory chips and the
+            // renewal search all dead-end on "Belum ada TPU/TPS terdaftar di
+            // kota ini" if they offer a city nothing is registered in.
+            //
+            // This surface dead-ends on nothing. Registering interest in a
+            // city we do not serve YET is the whole point of the screen: it
+            // is the demand signal the owner uses to decide where to expand,
+            // and the form promises no booking, no plot and no payment while
+            // `G-LEGAL-01` keeps pre-need in `InterestOnly`. Hiding those
+            // cities here would delete the information rather than protect
+            // anyone — the opposite of what it does in the wizard.
+            //
+            // The shortest way to hold the distinction: FN-2's defect was a
+            // list that led somewhere and dead-ended. This one leads to a
+            // working submit button. The field is even labelled `Kota
+            // (wilayah layanan)` rather than a booking location, so the two
+            // lists are answering different questions.
+            //
+            // So the two surfaces differ on purpose. Read
+            // `CemeteryPublicQuery::launchCities()`'s doc block before
+            // changing either of them.
             'cities' => LaunchCityQuery::activeCities(),
             'mode' => $mode,
             'fallback' => $mode->fallback(),
