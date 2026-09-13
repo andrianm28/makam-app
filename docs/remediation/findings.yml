@@ -831,9 +831,16 @@
   category: "layering"
   effort: M
   audit_verdict: PARTIALLY_CONFIRMED
-  status: in_review
-  status_evidence: [open#261]
-  status_verified: false
+  status: resolved
+  status_evidence: [merged#261]
+  status_verified: true
+  status_note: >-
+    Diverifikasi langsung terhadap kode di trunk setelah merge, bukan dari klaim PR.
+    BookingWizard::openOnlinePayment() tidak lagi menyusun rantai submit->quote->
+    open-session sendiri; ia memanggil App\Domain\OrderWorkflow\Actions\
+    OpenBookingOnlinePayment dalam satu baris. Saat resolusi konflik, PAY-04
+    (sessionId yang dipre-generate untuk URL return) ikut diporting ke action itu
+    supaya tidak hilang diam-diam.
   files:
     - "app/Livewire/Public/Booking/BookingWizard.php:1054"
     - "app/Livewire/Public/Booking/BookingWizard.php:1136"
@@ -904,9 +911,14 @@
   category: "correctness"
   effort: S
   audit_verdict: PARTIALLY_CONFIRMED
-  status: in_review
-  status_evidence: [open#261]
-  status_verified: false
+  status: resolved
+  status_evidence: [merged#261]
+  status_verified: true
+  status_note: >-
+    Diverifikasi langsung terhadap kode di trunk setelah merge, bukan dari klaim PR.
+    GenerateCycle: pemulihan UniqueConstraintViolationException dipindah KELUAR dari
+    transaksi yang dibuka Audit::wrap(), dengan komentar yang menyebut 25P02
+    secara eksplisit - jalur yang sebelumnya tidak terjangkau kini benar.
   files:
     - "app/Domain/CareSubscription/Actions/GenerateCycle.php:43"
     - "app/Domain/CareSubscription/Exceptions/DuplicateCycleException.php:1"
@@ -936,9 +948,16 @@
   category: "dead-code"
   effort: S
   audit_verdict: CONFIRMED
-  status: in_review
-  status_evidence: [open#261]
-  status_verified: false
+  status: resolved
+  status_evidence: [merged#261]
+  status_verified: true
+  status_note: >-
+    Diverifikasi langsung terhadap kode di trunk setelah merge, bukan dari klaim PR.
+    CarePlansResource kini mendeklarasikan form() yang mengembalikan
+    CarePlanForm::configure(), jadi /admin/rencana-perawatan/create tidak lagi
+    merender nol field. Catatan tambahan: saat menyelesaikan konflik, ekspektasi
+    test-nya harus dikoreksi ke 45.000.000 sen - field-nya rupiah dan
+    CreateCarePlan mengkonversi lewat Money::fromDecimal().
   files:
     - "app/Filament/Admin/Resources/CarePlans/CarePlansResource.php:78"
     - "app/Filament/Admin/Resources/CarePlans/Schemas/CarePlanForm.php:19"
@@ -1092,9 +1111,14 @@
   category: "layering"
   effort: S
   audit_verdict: UNVERIFIED
-  status: in_review
-  status_evidence: [open#261]
-  status_verified: false
+  status: resolved
+  status_evidence: [merged#261]
+  status_verified: true
+  status_note: >-
+    Diverifikasi langsung terhadap kode di trunk setelah merge, bukan dari klaim PR.
+    Cart::reconfirmPricing() kini mendelegasikan ke
+    App\Domain\Marketplace\Actions\ReconfirmCartPricing dengan actorRef/actorRole,
+    bukan menulis ulang kolom harga beku langsung dari komponen Livewire.
   files:
     - "app/Livewire/Public/Marketplace/Cart.php:148"
     - "app/Livewire/Public/Marketplace/Cart.php:130"
@@ -1154,9 +1178,15 @@
   category: "multi-tenant-scoping"
   effort: M
   audit_verdict: UNVERIFIED
-  status: in_review
-  status_evidence: [open#254]
-  status_verified: false
+  status: resolved
+  status_evidence: [merged#254]
+  status_verified: true
+  status_note: >-
+    Diverifikasi langsung terhadap kode di trunk setelah merge, bukan dari klaim PR.
+    CemeteryVisitationPolicyResource::getEloquentQuery() kini fail-CLOSED: ADMIN dan
+    RESTRICTED_ADMIN mendapat early-return eksplisit, dan aktor lain tanpa grant
+    cemetery mendapat whereIn atas daftar kosong - sebelumnya query-nya tidak
+    difilter sama sekali untuk aktor tanpa grant.
   files:
     - "app/Filament/Admin/Resources/VisitationBookings/VisitationBookingsResource.php:106"
     - "app/Filament/Admin/Resources/MemorialProfiles/MemorialProfileResource.php:153"
@@ -1179,9 +1209,14 @@
   category: "privilege-scope-drift"
   effort: M
   audit_verdict: UNVERIFIED
-  status: in_review
-  status_evidence: [open#254]
-  status_verified: false
+  status: resolved
+  status_evidence: [merged#254]
+  status_verified: true
+  status_note: >-
+    Diverifikasi langsung terhadap kode di trunk setelah merge, bukan dari klaim PR.
+    Tiga resource Admin ber-scope cemetery lainnya mengikuti bentuk yang sama;
+    tests/Feature/Filament/CemeteryScopedAdminResourceAuthzTest.php ada di trunk dan
+    hijau.
   files:
     - "app/Filament/Admin/Resources/RenewalOrders/Actions/RecordExternalRenewalPaymentAction.php:107"
     - "app/Domain/Renewal/Actions/MarkRenewalPaidExternally.php:40"
@@ -1204,9 +1239,15 @@
   category: "documentation-drift"
   effort: S
   audit_verdict: UNVERIFIED
-  status: in_review
-  status_evidence: [open#254]
-  status_verified: false
+  status: resolved
+  status_evidence: [merged#254]
+  status_verified: true
+  status_note: >-
+    Diverifikasi langsung terhadap kode di trunk setelah merge, bukan dari klaim PR.
+    MarkRenewalPaidExternally kini memanggil RenewalMarkingPolicy::allows() lewat
+    ActorContextResolver SEBELUM transaksi, dan melempar AuthorizationException bila
+    tidak berwenang - otorisasi diputuskan di luar transaksi, pencatatan outbox di
+    dalamnya.
   files:
     - "docs/security/rbac-matrix.md:30"
     - "app/Platform/IdentityAccess/Scopes/Concerns/HasScopeAssignments.php:50"
@@ -2264,9 +2305,15 @@
   category: "invariant-not-enforced"
   effort: S
   audit_verdict: UNVERIFIED
-  status: in_review
-  status_evidence: [open#253]
-  status_verified: false
+  status: resolved
+  status_evidence: [merged#253]
+  status_verified: true
+  status_note: >-
+    Diverifikasi langsung terhadap kode di trunk setelah merge, bukan dari klaim PR.
+    GuardPaymentSession dan jalur pelepasan reservasi kini punya dua aksi sensitif
+    sendiri (PLOT_RESERVATION_RELEASED_PAID_ORDER_OVERRIDE /
+    ..._EXPIRED_PAID_ORDER_OVERRIDE) di app/Platform/Audit/SensitiveActions.php, jadi
+    melepas plot pesanan yang sudah DIBAYAR wajib beralasan tercatat.
   files:
     - "app/Platform/Payment/GuardPaymentSession.php:98"
     - "app/Platform/Payment/GuardPaymentSession.php:262"
@@ -2358,9 +2405,14 @@
   category: "double-sell / lifecycle"
   effort: S
   audit_verdict: UNVERIFIED
-  status: in_review
-  status_evidence: [open#253]
-  status_verified: false
+  status: resolved
+  status_evidence: [merged#253]
+  status_verified: true
+  status_note: >-
+    Diverifikasi langsung terhadap kode di trunk setelah merge, bukan dari klaim PR.
+    Sama dengan DOM-03: ExpirePlotReservation/ReleasePlotReservation punya jalur
+    overridePaidOrder yang terdaftar sebagai aksi sensitif, dan
+    PlotReservationOrderAlreadyPaidException menutup pelepasan diam-diam.
   files:
     - "app/Filament/Admin/Resources/BookingOrders/Actions/PlotReservationLifecycleActions.php:52"
     - "app/Domain/PlotReservation/Actions/ReleasePlotReservation.php:84"
@@ -3378,9 +3430,15 @@
   category: "audit-integrity"
   effort: S
   audit_verdict: PARTIALLY_CONFIRMED
-  status: in_review
-  status_evidence: [open#265]
-  status_verified: false
+  status: resolved
+  status_evidence: [merged#265]
+  status_verified: true
+  status_note: >-
+    Diverifikasi langsung terhadap kode di trunk setelah merge, bukan dari klaim PR.
+    Trigger audit_events_append_only dan document_access_events_append_only dibuat
+    oleh 2026_09_07_100000_enforce_audit_events_append_only.php dan SUDAH TERPASANG
+    di lingkungan hidup - dikonfirmasi lewat rehearsal pemulihan makam_beta 13 Sep
+    2026 (daftar trigger database hasil restore memuat keduanya).
   files:
     - "database/migrations/2026_07_26_110000_create_audit_events_table.php:43"
     - "app/Platform/Audit/Models/AuditEvent.php:43"
@@ -3407,9 +3465,12 @@
   category: "restricted-data-in-error-tracker"
   effort: S
   audit_verdict: UNVERIFIED
-  status: in_review
-  status_evidence: [open#265]
-  status_verified: false
+  status: resolved
+  status_evidence: [merged#265]
+  status_verified: true
+  status_note: >-
+    Diverifikasi langsung terhadap kode di trunk setelah merge, bukan dari klaim PR.
+    CarriesCorrelationId dipakai 12 file di app/, termasuk ProcessProviderEventJob.
   files:
     - "app/Platform/Observability/SentryEventScrubber.php:82"
     - "app/Platform/DocumentVault/Actions/IssueSignedUrl.php:136"
@@ -3433,9 +3494,19 @@
   category: "correlation-propagation"
   effort: M
   audit_verdict: UNVERIFIED
-  status: in_review
-  status_evidence: [open#265]
-  status_verified: false
+  status: resolved
+  status_evidence: [merged#265]
+  status_verified: true
+  status_note: >-
+    Diverifikasi langsung terhadap kode di trunk setelah merge, bukan dari klaim PR.
+    PENTING - cara memverifikasinya sempat hampir menghasilkan temuan palsu.
+    Menghitung call site memberi kesan buruk: hanya 31 dari 167 panggilan
+    Audit::record( yang meneruskan correlationId. Tapi menghitung bukan
+    memverifikasi: Audit::record() kini MEN-DEFAULT correlationId dari
+    CorrelationContext yang ambient bila pemanggil tidak memberi
+    ($correlationId ??= app(CorrelationContext::class)->current()?->value), dengan
+    komentar yang menyebut OBS-03 langsung. Jadi menghilangkan argumen itu di call
+    site sekarang BENAR menurut desain, dan temuan ini tertutup.
   files:
     - "app/Platform/Audit/Audit.php:93"
     - "app/Platform/Outbox/Outbox.php:105"
@@ -3456,9 +3527,19 @@
   category: "correlation-propagation"
   effort: M
   audit_verdict: UNVERIFIED
-  status: in_review
-  status_evidence: [open#265]
-  status_verified: false
+  status: resolved
+  status_evidence: [merged#265]
+  status_verified: true
+  status_note: >-
+    Diverifikasi langsung terhadap kode di trunk setelah merge, bukan dari klaim PR.
+    Correlation tidak lagi putus di setiap lompatan antrean. Dua hal yang perlu
+    dibaca sebagai penutupan yang jujur, bukan klaim bulat:
+    (1) PublishOutboxEventJob SENGAJA tidak memakai CarriesCorrelationId - ia
+    memakai trace_id milik baris outbox itu sendiri yang dipersist saat insert,
+    yang lebih benar untuk job yang mengambil state segar; komentarnya menyebut
+    OBS-04 langsung. (2) Sisa yang masih benar-benar tanpa correlation: satu job
+    telemetri fire-and-forget, app/Jobs/RecordMenuImpressions.php. Disebut di sini
+    supaya tidak hilang, bukan disembunyikan di balik status resolved.
   files:
     - "app/Platform/Outbox/Jobs/PublishOutboxEventJob.php:39"
     - "app/Platform/Correlation/Concerns/CarriesCorrelationId.php:196"
@@ -3507,9 +3588,15 @@
   category: "restricted-data-in-logs"
   effort: M
   audit_verdict: UNVERIFIED
-  status: in_review
-  status_evidence: [open#265]
-  status_verified: false
+  status: resolved
+  status_evidence: [merged#265]
+  status_verified: true
+  status_note: >-
+    Diverifikasi langsung terhadap kode di trunk setelah merge, bukan dari klaim PR.
+    bootstrap/app.php:144 memanggil
+    SentryEventScrubber::redactQueryExceptionMessages($exception), jadi pesan
+    QueryException yang menginterpolasi binding tidak lagi lolos apa adanya ke error
+    tracker.
   files:
     - "vendor/laravel/framework/src/Illuminate/Database/QueryException.php:83"
     - "app/Platform/Observability/SentryEventScrubber.php:76"
@@ -3532,9 +3619,14 @@
   category: "debug-exposure"
   effort: S
   audit_verdict: UNVERIFIED
-  status: in_review
-  status_evidence: [open#265]
-  status_verified: false
+  status: resolved
+  status_evidence: [merged#265]
+  status_verified: true
+  status_note: >-
+    Diverifikasi langsung terhadap kode di trunk setelah merge, bukan dari klaim PR.
+    ci/verify-infra.sh menambahkan GATE I12 - 'APP_DEBUG is off on every publicly
+    reachable vhost [OBS-08]' - yang membaca `php artisan about --json` di tiap
+    container dan gagal bila outputnya kosong, jadi tidak bisa lolos diam-diam.
   files:
     - "docs/operations/ai-agent-dev-stg-setup-prompt.md:422"
     - "docs/adr/0031-make-dev-environment-public.md:34"
