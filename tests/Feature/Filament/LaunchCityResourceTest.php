@@ -386,4 +386,33 @@ final class LaunchCityResourceTest extends TestCase
         // while inactive.
         $this->assertTrue(LaunchCityQuery::isKnown('SUKABUMI'));
     }
+
+    // -----------------------------------------------------------------------
+    // The rule the operator has to be told about
+    // -----------------------------------------------------------------------
+
+    /**
+     * FN-2 made "Aktif" necessary but not sufficient: a city outside
+     * `LaunchCityCode::KNOWN_CODES` reaches the public city lists only once
+     * it has a published cemetery. This form is the ONLY place an operator
+     * meets that rule.
+     *
+     * Without this sentence, an operator who adds a city, ticks Aktif, loads
+     * the site and sees nothing cannot tell a failed save from a rule nobody
+     * told them about — which is how `SUKABUMI` reached the live booking
+     * funnel in the first place. Asserting the copy here means deleting it
+     * fails a test rather than quietly stranding the next operator.
+     *
+     * Asserted on fragments rather than the whole sentence so a wording
+     * improvement stays possible; what must survive is that the helper text
+     * still names the published-cemetery precondition.
+     */
+    public function test_the_active_toggle_tells_the_operator_that_active_alone_is_not_enough(): void
+    {
+        $this->admin();
+
+        Livewire::test(CreateLaunchCity::class)
+            ->assertSee('Aktif saja belum cukup')
+            ->assertSee('setelah ada TPU/TPS berstatus');
+    }
 }
