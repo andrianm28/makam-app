@@ -33,6 +33,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
 use Tests\Support\GrantsActorRoles;
+use Tests\Support\RequiresUuidTypeEnforcement;
 use Tests\TestCase;
 
 /**
@@ -50,6 +51,7 @@ final class PlotFloorMapActionsTest extends TestCase
 {
     use GrantsActorRoles;
     use RefreshDatabase;
+    use RequiresUuidTypeEnforcement;
 
     protected function setUp(): void
     {
@@ -377,6 +379,10 @@ final class PlotFloorMapActionsTest extends TestCase
 
     public function test_a_malformed_order_id_is_ignored_instead_of_erroring(): void
     {
+        $this->requiresUuidTypeEnforcement(
+            "BasePlotFloorMapPage's Str::isUuid() guards on the #[Url]-bound order_id (orders.id)"
+        );
+
         $admin = $this->freshAdmin();
         [$cemetery, $block] = $this->granularCemetery($admin);
         $plot = $this->firstPlot($block);
