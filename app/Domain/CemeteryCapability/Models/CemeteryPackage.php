@@ -6,6 +6,8 @@ namespace App\Domain\CemeteryCapability\Models;
 
 use App\Domain\CemeteryCapability\CemeteryPackageAvailabilityStatus;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\ServiceCatalog\Concerns\HasVersionedPrice;
+use App\Domain\ServiceCatalog\Contracts\Priceable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -68,8 +70,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * `packagePriceAttribution()` render it with the identical "Perlu
  * konfirmasi" framing the cemetery-level figure already carries.
  */
-final class CemeteryPackage extends Model
+final class CemeteryPackage extends Model implements Priceable
 {
+    use HasVersionedPrice;
+
     protected $table = 'cemetery_packages';
 
     /**
