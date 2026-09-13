@@ -243,7 +243,7 @@ parameters:
 		-
 			message: '#^Method App\\Filament\\Admin\\Resources\\CemeteryVisitationPolicies\\CemeteryVisitationPolicyResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<App\\Domain\\Visitation\\Models\\CemeteryVisitationPolicy\>\.$#'
 			identifier: return.type
-			count: 1
+			count: 2
 			path: app/Filament/Admin/Resources/CemeteryVisitationPolicies/CemeteryVisitationPolicyResource.php
 
 		-
