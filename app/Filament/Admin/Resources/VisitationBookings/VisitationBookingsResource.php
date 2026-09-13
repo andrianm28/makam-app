@@ -91,10 +91,17 @@ final class VisitationBookingsResource extends Resource
     }
 
     /**
-     * The AC6 query-level scope: cemetery-granted actors see only their
-     * cemeteries' bookings; everyone else (admins, and any master-data
-     * actor with no grants yet) sees all. Deliberately NO global scope on
-     * `VisitationBooking` itself: `ScopeAssignmentGlobalScope`'s
+     * The AC6 query-level scope: `ADMIN`/`RESTRICTED_ADMIN` are the only
+     * platform-wide roles and see every cemetery's bookings — a stated
+     * role fact, checked explicitly below, not an accident of holding no
+     * grant. Every other actor is scoped to their active `scope_assignments`
+     * cemetery grants, and `whereIn('cemetery_id', [])` closes the query
+     * to nothing when they hold none (AUTHZ-03: this used to fail OPEN —
+     * an actor who cleared the `MasterDataAdminAuthorizerContract` gate
+     * but held zero cemetery grants saw every cemetery's bookings, which
+     * is the opposite of the intended "no grant = no rows" default the
+     * vendor/operator `ScopesTo*` traits already use). Deliberately NO
+     * global scope on `VisitationBooking` itself: `ScopeAssignmentGlobalScope`'s
      * closed-by-default semantics would make every booking invisible to
      * every actor until grants exist — right for models whose rows are
      * all privately scoped, wrong for a queue whose whole point is that
@@ -107,20 +114,22 @@ final class VisitationBookingsResource extends Resource
     {
         $actor = app(ActorContext::class);
 
-        if ($actor->isAuthenticated()) {
-            $grantedCemeteryIds = app(ScopeAssignmentReader::class)->grantedEntityIds(
-                $actor->identityReference,
-                ScopeEntityType::CEMETERY,
-            );
-
-            if ($grantedCemeteryIds !== []) {
-                return VisitationBooking::query()
-                    ->whereIn('cemetery_id', $grantedCemeteryIds)
-                    ->with('cemetery');
-            }
+        if ($actor->isAuthenticated()
+            && ($actor->hasRole(ActorRole::ADMIN) || $actor->hasRole(ActorRole::RESTRICTED_ADMIN))
+        ) {
+            return VisitationBooking::query()->with('cemetery');
         }
 
-        return VisitationBooking::query()->with('cemetery');
+        $grantedCemeteryIds = $actor->isAuthenticated()
+            ? app(ScopeAssignmentReader::class)->grantedEntityIds(
+                $actor->identityReference,
+                ScopeEntityType::CEMETERY,
+            )
+            : [];
+
+        return VisitationBooking::query()
+            ->whereIn('cemetery_id', $grantedCemeteryIds)
+            ->with('cemetery');
     }
 
     public static function getPages(): array

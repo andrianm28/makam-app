@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Livewire\Public\Marketplace;
 
 use App\Domain\Marketplace\Actions\AddToCart;
+use App\Domain\Marketplace\Actions\ReconfirmCartPricing;
 use App\Domain\Marketplace\Actions\RemoveCartItem;
 use App\Domain\Marketplace\Actions\ReplaceCartWithVendor;
 use App\Domain\Marketplace\Actions\UpdateCartItem;
@@ -148,12 +149,11 @@ final class Cart extends Component
     /** The customer's explicit accept of the new prices — refreshes the frozen pair from each listing. */
     public function reconfirmPricing(): void
     {
-        foreach ($this->cart()->items()->with('listing')->get() as $item) {
-            $item->update([
-                'unit_price_minor' => $item->listing->price_minor,
-                'price_version' => $item->listing->price_version,
-            ]);
-        }
+        (new ReconfirmCartPricing)->handle(
+            $this->cart(),
+            auth()->id(),
+            auth()->check() ? 'customer' : 'guest',
+        );
     }
 
     public function render(): View
