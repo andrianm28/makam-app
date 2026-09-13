@@ -1,3 +1,9 @@
+---
+verification: unverified
+verification-note: >-
+  NOT verified as a whole. Only one claim was checked on 13 Sep 2026: that /health/live and /health/ready exist and answer 200. Log channels, monitoring-check.sh and every threshold in it remain unchecked.
+---
+
 # Observability Implementation — Dev/Staging Host (S2-T10)
 
 Status: partial implementation. This document is the runbook for what is

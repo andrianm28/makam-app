@@ -1,3 +1,9 @@
+---
+verification: unverified
+verification-note: >-
+  Nobody has checked this document against the live system. Treat every operational claim in it as unconfirmed until someone does and stamps a date here.
+---
+
 # Operations Runbooks — v0.3
 
 ## 1. Urgent/At-Need cannot be fulfilled

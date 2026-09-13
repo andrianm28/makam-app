@@ -1,3 +1,9 @@
+---
+verification: unverified
+verification-note: >-
+  Nobody has checked this document against the live system. Treat every operational claim in it as unconfirmed until someone does and stamps a date here.
+---
+
 # Observability and Service Objectives — v0.4
 
 ## Mandatory/source indicators

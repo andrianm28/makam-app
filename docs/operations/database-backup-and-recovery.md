@@ -1,3 +1,9 @@
+---
+verification: unverified
+verification-note: >-
+  NOT verified as a whole. Only the backup cadence and encryption claims were checked on 13 Sep 2026.
+---
+
 # Managed PostgreSQL, Backup, PITR, and Recovery — v0.5
 
 ## Production backup strategy correction (23 Aug 2026)

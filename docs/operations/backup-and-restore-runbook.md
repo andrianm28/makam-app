@@ -1,3 +1,10 @@
+---
+verification: verified
+last-verified: 2026-09-13
+verification-note: >-
+  Backup script, cron cadence, destination, retention and a full restore rehearsal of makam_beta all checked against the live host on this date.
+---
+
 # Runbook: Staging Backup and Restore (`makam_stg`) — v0.2
 
 ## Status

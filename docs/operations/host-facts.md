@@ -1,7 +1,10 @@
 ---
+verification: verified
 last-verified: 2026-09-13
 verified-by: AI agent (Claude Opus 5), executing on the host itself
 canonical-for: host hardware, OS, container runtime, running services, firewall
+verification-note: >-
+  Built from the live host on this date; every row records the command behind it.
 ---
 
 # Canonical host facts — `yiemvm`

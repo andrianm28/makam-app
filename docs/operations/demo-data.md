@@ -1,3 +1,9 @@
+---
+verification: unverified
+verification-note: >-
+  Nobody has checked this document against the live system. Treat every operational claim in it as unconfirmed until someone does and stamps a date here.
+---
+
 # Demo Seed Data
 
 Generates realistic, safely-tagged demo data across every major makam-app
