@@ -15,6 +15,7 @@ use App\Domain\PlotReservation\Actions\ConfirmPlotReservation;
 use App\Domain\PlotReservation\Actions\ExpirePlotReservation;
 use App\Domain\PlotReservation\Actions\ReleasePlotReservation;
 use App\Domain\PlotReservation\Actions\ReservePlot;
+use App\Domain\PlotReservation\Exceptions\PlotReservationOrderAlreadyPaidException;
 use App\Domain\PlotReservation\Exceptions\PlotReservationTransitionException;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PlotReservation\PlotReservationState;
@@ -40,6 +41,36 @@ final class PlotReservationLifecycleTest extends TestCase
             'status' => OrderStatus::DIVERIFIKASI,
         ]);
         $reservation = app(ReservePlot::class)($plot, $order, 'user:1', 'operator');
+
+        return [$plot, $order, $reservation];
+    }
+
+    /**
+     * Batch M3b (DOM-08) fixture: an active `held` reservation whose owning
+     * order is already `DIBAYAR` — created directly with that status
+     * (initial `create()` is not gated the way `applyStatus()`'s update
+     * path is; other suites in this repository already build fixture
+     * orders this way, e.g. `GuardPaymentSessionUpstreamTest::makeOrder()`).
+     *
+     * @return array{GravePlot, Order, PlotReservation}
+     */
+    private function heldForAPaidOrder(): array
+    {
+        $cemetery = Cemetery::factory()->create();
+        $block = CemeteryBlock::query()->create(['cemetery_id' => $cemetery->getKey(), 'code' => 'BLOK-P', 'name' => 'Blok P', 'capacity' => 1]);
+        $plot = GravePlot::query()->create(['block_id' => $block->getKey(), 'slot' => 'P01', 'plot_state' => PlotState::RESERVED]);
+        $order = Order::query()->create([
+            'reference' => 'MK-2026-'.Str::upper(Str::random(8)),
+            'product_type' => ProductType::AT_NEED_SERVICE_ORDER,
+            'status' => OrderStatus::DIBAYAR,
+        ]);
+        $reservation = PlotReservation::query()->create([
+            'plot_id' => $plot->getKey(),
+            'order_id' => $order->getKey(),
+            'state' => PlotReservationState::HELD,
+            'reserved_by_ref' => 'user:1',
+            'reserved_at' => CarbonImmutable::now(),
+        ]);
 
         return [$plot, $order, $reservation];
     }
@@ -184,6 +215,113 @@ final class PlotReservationLifecycleTest extends TestCase
             ->where('subject_id', $expired->getKey())
             ->sole();
         $this->assertStringContainsString('plot state diverged from reserved (override preserved)', $audit->reason);
+    }
+
+    /**
+     * Batch M3b (DOM-08): releasing a reservation whose owning order is
+     * already `DIBAYAR` must refuse without an explicit override.
+     */
+    public function test_release_refuses_a_paid_orders_reservation_without_an_override(): void
+    {
+        [$plot, , $reservation] = $this->heldForAPaidOrder();
+
+        $this->expectException(PlotReservationOrderAlreadyPaidException::class);
+
+        try {
+            app(ReleasePlotReservation::class)($reservation, 'user:1', 'operator');
+        } finally {
+            $this->assertSame(PlotState::RESERVED, $plot->fresh()->plot_state, 'The plot must stay reserved when the guard refuses.');
+        }
+    }
+
+    /**
+     * Batch M3b (DOM-08): expiring a reservation whose owning order is
+     * already `DIBAYAR` must refuse without an explicit override.
+     */
+    public function test_expire_refuses_a_paid_orders_reservation_without_an_override(): void
+    {
+        [$plot, , $reservation] = $this->heldForAPaidOrder();
+
+        $this->expectException(PlotReservationOrderAlreadyPaidException::class);
+
+        try {
+            app(ExpirePlotReservation::class)($reservation, 'user:1', 'operator');
+        } finally {
+            $this->assertSame(PlotState::RESERVED, $plot->fresh()->plot_state, 'The plot must stay reserved when the guard refuses.');
+        }
+    }
+
+    /**
+     * Batch M3b (DOM-08): the explicit override releases the reservation
+     * and records the DISTINCT `_PAID_ORDER_OVERRIDE` audit action, never
+     * the plain `PLOT_RESERVATION_RELEASED` one.
+     */
+    public function test_release_with_override_releases_a_paid_orders_reservation_under_a_distinct_audit_action(): void
+    {
+        [$plot, , $reservation] = $this->heldForAPaidOrder();
+
+        $released = app(ReleasePlotReservation::class)(
+            $reservation,
+            'user:1',
+            'operator',
+            'admin corrected a duplicate booking',
+            overridePaidOrder: true,
+        );
+
+        $this->assertSame(PlotReservationState::RELEASED, $released->state);
+        $this->assertSame(PlotState::AVAILABLE, $plot->fresh()->plot_state);
+        $this->assertDatabaseHas('audit_events', [
+            'action' => 'PLOT_RESERVATION_RELEASED_PAID_ORDER_OVERRIDE',
+            'reason' => 'admin corrected a duplicate booking',
+        ]);
+        $this->assertDatabaseMissing('audit_events', ['action' => 'PLOT_RESERVATION_RELEASED']);
+    }
+
+    /**
+     * Batch M3b (DOM-08): the override, symmetrically, for expire.
+     */
+    public function test_expire_with_override_expires_a_paid_orders_reservation_under_a_distinct_audit_action(): void
+    {
+        [$plot, , $reservation] = $this->heldForAPaidOrder();
+
+        $expired = app(ExpirePlotReservation::class)(
+            $reservation,
+            'user:1',
+            'operator',
+            'admin corrected a duplicate booking',
+            overridePaidOrder: true,
+        );
+
+        $this->assertSame(PlotReservationState::EXPIRED, $expired->state);
+        $this->assertSame(PlotState::AVAILABLE, $plot->fresh()->plot_state);
+        $this->assertDatabaseHas('audit_events', [
+            'action' => 'PLOT_RESERVATION_EXPIRED_PAID_ORDER_OVERRIDE',
+            'reason' => 'admin corrected a duplicate booking',
+        ]);
+        $this->assertDatabaseMissing('audit_events', ['action' => 'PLOT_RESERVATION_EXPIRED']);
+    }
+
+    /**
+     * A reservation with no owning order at all (a draft-anchored hold —
+     * the only shape `PlotReservationExpiryScheduler` ever expires) must
+     * never trip the paid-order guard.
+     */
+    public function test_expire_is_unaffected_for_a_reservation_with_no_owning_order(): void
+    {
+        $cemetery = Cemetery::factory()->create();
+        $block = CemeteryBlock::query()->create(['cemetery_id' => $cemetery->getKey(), 'code' => 'BLOK-D', 'name' => 'Blok D', 'capacity' => 1]);
+        $plot = GravePlot::query()->create(['block_id' => $block->getKey(), 'slot' => 'D01', 'plot_state' => PlotState::RESERVED]);
+        $reservation = PlotReservation::query()->create([
+            'plot_id' => $plot->getKey(),
+            'state' => PlotReservationState::HELD,
+            'reserved_by_ref' => 'user:1',
+            'reserved_at' => CarbonImmutable::now(),
+        ]);
+
+        $expired = app(ExpirePlotReservation::class)($reservation, 'system', 'system');
+
+        $this->assertSame(PlotReservationState::EXPIRED, $expired->state);
+        $this->assertDatabaseHas('audit_events', ['action' => 'PLOT_RESERVATION_EXPIRED']);
     }
 
     public function test_active_states_is_the_closed_held_confirmed_pair(): void

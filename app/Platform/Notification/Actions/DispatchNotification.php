@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Platform\Notification\Actions;
 
+use App\Platform\Correlation\CorrelationContext;
+use App\Platform\Correlation\CorrelationId;
 use App\Platform\FeatureGate\ModeResolver;
 use App\Platform\FeatureGate\Modes\WhatsAppMode;
 use App\Platform\Notification\Contracts\Channel;
@@ -128,6 +130,22 @@ final class DispatchNotification
             // — nothing in this codebase deletes outbox_events rows today,
             // but this stays correct even if that ever changes.
             return;
+        }
+
+        // OBS-04: `Jobs\ConsumeOutboxNotificationJob` carries only the
+        // outbox event's id, not its ambient dispatching correlation id
+        // (the notification consumer runs long after, and on a different
+        // queue than, whatever request originally published the event) —
+        // so the correlation id has to come from the ENVELOPE (this row's
+        // own `trace_id`, set by `Outbox::record()` at insertion time), not
+        // from whatever happens to be ambient in this worker process. Bound
+        // here, before any further work, so both this method's own
+        // `Audit::record()` calls (OBS-03: defaults to ambient when omitted)
+        // and every `Jobs\SendNotificationChannelJob` dispatched below (which
+        // captures the NOW-ambient id via `CarriesCorrelationId`) inherit the
+        // same trace.
+        if ($outboxRow->trace_id !== null) {
+            app(CorrelationContext::class)->set(CorrelationId::fromString($outboxRow->trace_id));
         }
 
         $template = $matrixEventName !== null

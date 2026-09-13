@@ -150,6 +150,16 @@ final class SensitiveActionsTest extends TestCase
      * "Manual replay requires privileged permission, reason, and audit,"
      * the same override-with-consequences category as
      * `PLOT_OVERRIDE`/`GATE_CHANGE` already on this list.
+     * UPDATED 7 Sep 2026 — Batch M3b of the 6 Sep 2026 audit remediation
+     * program (finding DOM-08) added
+     * `PLOT_RESERVATION_RELEASED_PAID_ORDER_OVERRIDE`/
+     * `PLOT_RESERVATION_EXPIRED_PAID_ORDER_OVERRIDE`: the only writers of
+     * a plot-reservation release/expiry on an order that has already
+     * reached DIBAYAR or later
+     * (`App\Domain\PlotReservation\Actions\ReleasePlotReservation`/
+     * `ExpirePlotReservation`'s `overridePaidOrder` path) — reversing a
+     * paid customer's plot hold is the same mandatory-reason category as
+     * `PAYMENT_REFUND`/`PAYMENT_CHARGEBACK` already on this list.
      */
     public function test_the_list_contains_the_requirements_named_actions_plus_the_documented_additions(): void
     {
@@ -182,6 +192,8 @@ final class SensitiveActionsTest extends TestCase
                 'SUBSCRIPTION_CANCELLED',
                 'SITE_SETTING_BANK_TRANSFER_UPDATED',
                 'OUTBOX_EVENT_REPLAY',
+                'PLOT_RESERVATION_RELEASED_PAID_ORDER_OVERRIDE',
+                'PLOT_RESERVATION_EXPIRED_PAID_ORDER_OVERRIDE',
             ],
             SensitiveActions::ACTIONS
         );

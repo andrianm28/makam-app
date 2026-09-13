@@ -40,6 +40,23 @@ use Illuminate\Queue\SerializesModels;
  * (see `DispatchOrderNotifications`'s own doc block). Every existing
  * caller outside that bridge leaves it null and keeps the
  * `outbox_event_name` lookup.
+ *
+ * ---------------------------------------------------------------------------
+ * OBS-04 (7 Sep 2026) — correlation id comes from the ENVELOPE, not this
+ * job's own construction
+ * ---------------------------------------------------------------------------
+ * Unlike most other queued jobs in this codebase (which adopt
+ * `CarriesCorrelationId` to carry the DISPATCHING process's ambient id
+ * across the queue hop), this job's correct trace id is the outbox row's
+ * own `trace_id` — the envelope's id, set once by `Outbox::record()` when
+ * the event was first written, which may be long unrelated to whatever
+ * happens to be ambient when this job is dispatched by the (non-queued)
+ * `Listeners\DispatchNotificationConsumerOnOutboxEventPublished` listener.
+ * `Actions\DispatchNotification::consumeOutboxEvent()` binds it, from the
+ * re-fetched row, before doing any further work — see that method's own
+ * doc block. This job's `handle()` deliberately does nothing extra: the
+ * bind happens one level down, at the one place that actually has the
+ * envelope in hand.
  */
 final class ConsumeOutboxNotificationJob implements ShouldQueue
 {
