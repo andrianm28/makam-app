@@ -72,7 +72,32 @@
         throw new InvalidArgumentException('<x-mk.hero> requires a heading.');
     }
 
-    $classes = 'relative overflow-hidden rounded-lg';
+    // MOBILE ORDER (Task C1, 13 Sep 2026 — kamboja design-language plan
+    // §2.7/§7, option M2). Measured on 360x740, deviceScaleFactor 2,
+    // mobile true: the `Pesan Makam` CTA sat at y = 1048 px, 1.4 screens
+    // below the fold, because the 256 px photo band rendered above the
+    // text panel that carries the CTA. M2 flips that order on mobile ONLY
+    // -- text panel + CTA first, photo after -- which lifts the CTA by
+    // exactly the photo band's height without shrinking the photo (M1) or
+    // adding a persistent sticky bar (M3, deliberately not chosen here;
+    // the booking wizard's --mk-z-sticky-cta precedent is NOT copied).
+    //
+    // Mechanism: the root becomes a flex column below `md` so that CSS
+    // `order` applies, and reverts to `md:block` from `md` up. The
+    // `md:block` reset restores the exact formatting context desktop has
+    // today (block root, inline <picture>), which is why desktop is
+    // unchanged rather than merely similar -- `md:order-none` on the
+    // <picture> below is belt-and-braces for anyone who later drops the
+    // `md:block`.
+    //
+    // Accessibility: this is a CSS-order/DOM-order divergence, which WCAG
+    // 1.3.2 (Meaningful Sequence) only penalises when the reordered
+    // content carries meaning or focus. The <picture> is decorative
+    // (alt="", no focusable descendants), so reading order and tab order
+    // are both unaffected -- the only focusable element in this component
+    // is the CTA, and it is now reached sooner visually as well as in the
+    // DOM order it already had.
+    $classes = 'relative flex flex-col overflow-hidden rounded-lg md:block';
 
     $headingClasses = 'font-display text-4xl font-semibold tracking-tight text-neutral-900 lg:text-5xl';
 
@@ -94,7 +119,10 @@
 
 <div {{ $attributes->merge(['class' => $classes]) }}>
     @if ($image)
-        <picture>
+        {{-- `order-last` is what puts the photo BELOW the text panel on
+             mobile; see $classes above for why, and why the `md:` reset is
+             expressed twice. --}}
+        <picture class="order-last md:order-none">
             <source type="image/avif" srcset="{{ $avifSrcset }}" sizes="{{ $imageSizes }}" />
             <source type="image/webp" srcset="{{ $webpSrcset }}" sizes="{{ $imageSizes }}" />
             <img
