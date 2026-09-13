@@ -682,8 +682,9 @@ Development is disposable unless a short-lived manual backup is explicitly neede
 
 Staging requires:
 
-- daily encrypted PostgreSQL logical backup;
-- remote private object-storage upload;
+- PostgreSQL logical backup (**as built: six-hourly, gzip, local disk** — the original three
+  lines said "daily encrypted" and "remote private object-storage upload"; neither is what runs,
+  see `backup-and-restore-runbook.md`);
 - minimum seven-day retention;
 - backup verification;
 - restore script/procedure;
@@ -842,7 +843,7 @@ The task is complete only when all applicable checks below are actually verified
 15. Public and panel routes are checked.
 16. CI builds from lockfiles and produces an immutable artifact.
 17. Production builds do not routinely run on the host.
-18. Staging backup is uploaded remotely.
+18. ~~Staging backup is uploaded remotely.~~ **Not met, 13 Sep 2026** — dumps stay on the database's own disk. Tracked as the open half of finding CI-01; left in the list as an unmet item rather than deleted, because deleting it would hide the gap.
 19. A restore test is executed successfully.
 20. Monitoring covers host, containers, queues, PostgreSQL, Redis, and backups.
 21. No production data or credential is present.
