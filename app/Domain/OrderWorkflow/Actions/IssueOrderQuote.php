@@ -15,6 +15,16 @@ use InvalidArgumentException;
 
 final readonly class IssueOrderQuote
 {
+    /**
+     * The single source of truth for a quote's validity window. Both admin
+     * quote-issuing call sites (`TransitionOrderAction`'s
+     * `PENAWARAN_TERKIRIM` transition and `IssueQuoteFromReservedPlotAction`)
+     * and the booking wizard's `OpenBookingOnlinePayment` share this
+     * constant — previously the wizard hardcoded a second, different
+     * (7-day) window inline.
+     */
+    public const int DEFAULT_VALIDITY_DAYS = 30;
+
     public function __construct(
         private ComposeQuoteLinesFromBookingDraft $composeLines,
         private IssueQuote $issueQuote,

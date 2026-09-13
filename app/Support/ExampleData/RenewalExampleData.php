@@ -6,9 +6,14 @@ namespace App\Support\ExampleData;
 
 use App\Domain\GraveRegistry\Models\GraveRecord;
 use App\Domain\Renewal\Actions\ExpireRenewal;
-use App\Domain\Renewal\Actions\MarkRenewalPaidExternally;
 use App\Domain\Renewal\Actions\OpenRenewal;
 use App\Domain\Renewal\Models\Renewal;
+use App\Domain\Renewal\Models\RenewalExternalMarking;
+use App\Domain\Renewal\RenewalStatus;
+use App\Platform\Audit\Audit;
+use App\Platform\Audit\AuditOutcome;
+use App\Platform\Audit\AuditSource;
+use App\Platform\Audit\AuditSubject;
 use App\Support\ExampleData\Concerns\TaggedAsDemoData;
 
 /**
@@ -23,6 +28,21 @@ use App\Support\ExampleData\Concerns\TaggedAsDemoData;
  * parent cemetery (`QuoteRenewal`'s own requirement), and finding or
  * creating three such records is the orchestration command's job, not
  * this generator's — see Task 10.
+ *
+ * ---------------------------------------------------------------------------
+ * The `DIBAYAR` demo row does NOT go through `MarkRenewalPaidExternally`
+ * ---------------------------------------------------------------------------
+ * AUTHZ-04 moved that action's authorization onto `RenewalMarkingPolicy`,
+ * which requires a real authenticated actor holding `admin` AND a
+ * privileged cemetery-scope grant — this console-triggered generator has
+ * neither an HTTP session nor any `scope_assignments` row to grant, and
+ * manufacturing a throwaway logged-in admin purely to satisfy that policy
+ * would be a bigger, riskier change than this generator warrants. So this
+ * settle write is inlined here instead, at the same level `OpenRenewal`
+ * (create) and `ExpireRenewal` (expire, also never actor-checked) already
+ * write demo rows — `self::ACTOR_REF`/`self::ACTOR_ROLE` are trusted
+ * strings for demo data exactly as `ExpireRenewal`'s call two lines below
+ * already trusts them, not a real authorization decision.
  */
 final class RenewalExampleData
 {
@@ -46,12 +66,10 @@ final class RenewalExampleData
 
         $renewal = (new OpenRenewal)($paid);
         TaggedAsDemoData::tag($renewal, $batchId);
-        (new MarkRenewalPaidExternally)(
+        self::settleExternallyForDemo(
             $renewal,
             evidence: 'DEMO-BUKTI-TRANSFER-001',
             reason: 'Pembayaran perpanjangan demo diverifikasi manual.',
-            actorRef: self::ACTOR_REF,
-            actorRole: self::ACTOR_ROLE,
         );
         $renewals[] = $renewal->fresh();
 
@@ -61,5 +79,38 @@ final class RenewalExampleData
         $renewals[] = $renewal->fresh();
 
         return $renewals;
+    }
+
+    /**
+     * The same settle mutation `MarkRenewalPaidExternally` performs, minus
+     * the `RenewalMarkingPolicy` check — see the class doc block for why
+     * this demo generator does not (and should not) go through the real
+     * actor-checked action.
+     */
+    private static function settleExternallyForDemo(Renewal $renewal, string $evidence, string $reason): void
+    {
+        Audit::wrap(
+            mutation: function () use ($renewal, $evidence, $reason): void {
+                $renewal->update([
+                    'status' => RenewalStatus::DIBAYAR,
+                    'settled_at' => now(),
+                ]);
+
+                RenewalExternalMarking::query()->create([
+                    'renewal_id' => $renewal->getKey(),
+                    'marked_by_actor_ref' => self::ACTOR_REF,
+                    'evidence_reference' => $evidence,
+                    'reason' => $reason,
+                    'marked_at' => now(),
+                ]);
+            },
+            action: 'RENEWAL_EXTERNAL_MARKING',
+            subject: fn (): AuditSubject => new AuditSubject('renewal', (string) $renewal->getKey()),
+            outcome: AuditOutcome::Allowed,
+            actorRef: self::ACTOR_REF,
+            actorRole: self::ACTOR_ROLE,
+            source: AuditSource::Panel,
+            reason: $reason,
+        );
     }
 }

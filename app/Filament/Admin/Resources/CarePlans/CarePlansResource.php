@@ -8,6 +8,7 @@ use App\Domain\CareSubscription\Models\CarePlan;
 use App\Filament\Admin\Resources\CarePlans\Pages\CreateCarePlan;
 use App\Filament\Admin\Resources\CarePlans\Pages\ListCarePlans;
 use App\Filament\Admin\Resources\CarePlans\Pages\ViewCarePlan;
+use App\Filament\Admin\Resources\CarePlans\Schemas\CarePlanForm;
 use App\Filament\Admin\Resources\CarePlans\Schemas\CarePlanInfolist;
 use App\Filament\Admin\Resources\CarePlans\Tables\CarePlansTable;
 use App\Platform\IdentityAccess\ActorContext;
@@ -73,6 +74,11 @@ final class CarePlansResource extends Resource
         }
 
         return $actor->isAuthenticated() ? 'authenticated_actor' : 'guest';
+    }
+
+    public static function form(Schema $schema): Schema
+    {
+        return CarePlanForm::configure($schema);
     }
 
     public static function table(Table $table): Table

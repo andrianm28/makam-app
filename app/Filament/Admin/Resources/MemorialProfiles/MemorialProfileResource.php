@@ -149,6 +149,12 @@ final class MemorialProfileResource extends Resource
 
     /**
      * Cemetery scoping via the actor's grants — see the class doc block.
+     * `ADMIN`/`RESTRICTED_ADMIN` are the only platform-wide roles and see
+     * every cemetery's profiles — a stated role fact, checked explicitly
+     * — and any other actor holding zero cemetery grants gets a closed
+     * query, because `whereHas(..., whereIn('cemetery_id', []))` never
+     * matches (AUTHZ-03: this used to fail OPEN for a zero-grant actor of
+     * any role).
      */
     public static function getEloquentQuery(): Builder
     {
@@ -158,21 +164,21 @@ final class MemorialProfileResource extends Resource
 
         $actor = app(ActorContext::class);
 
-        if ($actor->identityReference === null) {
+        if ($actor->isAuthenticated()
+            && ($actor->hasRole(ActorRole::ADMIN) || $actor->hasRole(ActorRole::RESTRICTED_ADMIN))
+        ) {
             return $query;
         }
 
-        $grantedCemeteryIds = app(ScopeAssignmentReader::class)
-            ->grantedEntityIds((string) $actor->identityReference, ScopeEntityType::CEMETERY);
+        $grantedCemeteryIds = $actor->identityReference === null
+            ? []
+            : app(ScopeAssignmentReader::class)
+                ->grantedEntityIds((string) $actor->identityReference, ScopeEntityType::CEMETERY);
 
-        if ($grantedCemeteryIds !== []) {
-            $query->whereHas(
-                'graveRecord',
-                fn (Builder $graveQuery): Builder => $graveQuery->whereIn('cemetery_id', $grantedCemeteryIds),
-            );
-        }
-
-        return $query;
+        return $query->whereHas(
+            'graveRecord',
+            fn (Builder $graveQuery): Builder => $graveQuery->whereIn('cemetery_id', $grantedCemeteryIds),
+        );
     }
 
     public static function getPages(): array
