@@ -22,7 +22,7 @@ other concurrent agents in the same batch and are out of scope here.
 | Host memory / swap / disk / container status | `docs/operations/examples/monitoring-check.sh` (this task) | Implemented — read-only, pass/warn/fail output |
 | Structured application/job logs | `config/logging.php` `json` channel (this task) | Implemented, opt-in (see §2) |
 | Container restart visibility | `monitoring-check.sh` (heuristic; `docker inspect` restart count) | Implemented, best-effort |
-| `/health/live`, `/health/ready` deployment checks (`ci-cd-and-release.md` §8) | Application routes | **Not implemented — blocked, see §4** |
+| `/health/live`, `/health/ready` deployment checks (`ci-cd-and-release.md` §8) | Application routes | **Implemented** — `routes/web.php`, `HealthLiveController` / `HealthReadyController`; both return 200 on the live dev host (checked 13 Sep 2026). The §4 "blocked" section below is superseded and says so. |
 | Staging Horizon queue wait/failure visibility, Pulse | Laravel Horizon/Pulse dashboards | Not started — no Horizon/Pulse configuration exists yet in this repo |
 | PostgreSQL connections/locks/storage, Redis memory/latency/eviction | Managed metrics or exporters | Not started — no metrics exporter configured; out of scope for this task (compose/Redis ownership sits with other Batch 2.7 agents) |
 | External error tracking | Third-party SDK (Sentry/Flare/etc.) | Not started — no package installed, no `.env` keys, not evaluated in this task |
@@ -144,7 +144,7 @@ signal requires running it repeatedly (cron, systemd timer, or an
 interactive `watch`) and looking at the trend across runs. Nothing in this
 task wires up that scheduling — see §5.
 
-## 4. Deployment health checks — blocked dependency
+## 4. Deployment health checks — ~~blocked dependency~~ RESOLVED 13 Sep 2026
 
 `ci-cd-and-release.md` §8 references `/health/live` and `/health/ready` as
 deployment checks:
@@ -153,7 +153,14 @@ deployment checks:
 > - `/health/ready`: database/Redis/config readiness without exposing
 >   secrets.
 
-**Neither route exists in this repository yet.** `routes/web.php` has no
+> **SUPERSEDED 13 Sep 2026.** Both routes now exist and answer: `routes/web.php`
+> registers `/health/live` (`HealthLiveController`) and `/health/ready`
+> (`HealthReadyController`), and both returned 200 from the real edge at
+> `https://dev.makam.co.id` when checked on 13 Sep 2026. The paragraph below is
+> kept verbatim as the record of why they were once absent and what was true at
+> the time; it must not be read as a statement about today.
+
+*Original text, kept verbatim:* **Neither route exists in this repository yet.** `routes/web.php` has no
 routes at all (see that file's own header comment — nothing is served from
 `/` until the homepage spec ships in Sprint 4), and `bootstrap/app.php`
 only registers Laravel's single built-in health route at `/up`
