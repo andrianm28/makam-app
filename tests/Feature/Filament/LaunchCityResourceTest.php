@@ -406,6 +406,26 @@ final class LaunchCityResourceTest extends TestCase
      * Asserted on fragments rather than the whole sentence so a wording
      * improvement stays possible; what must survive is that the helper text
      * still names the published-cemetery precondition.
+     *
+     * ---------------------------------------------------------------------
+     * When to copy this pattern, and when NOT to
+     * ---------------------------------------------------------------------
+     * The rule: WHEN ADMIN COPY IS THE ONLY PLACE AN OPERATOR CAN LEARN A
+     * RULE ENFORCED ELSEWHERE IN CODE, PIN THE RULE'S PRESENCE.
+     *
+     * That is a narrow licence and it is meant to stay narrow. This is the
+     * first `helperText` assertion in the suite, and "test the admin copy"
+     * as a general habit would be worse than having none: it ossifies panel
+     * wording repo-wide, so every copy improvement arrives with a failing
+     * test and the fix is to edit the assertion, which teaches people that
+     * these tests are noise.
+     *
+     * The qualifying condition is specific — the rule lives in code the
+     * operator cannot read (`CemeteryPublicQuery::launchCities()`), the
+     * panel is their only window onto it, and the cost of not knowing is
+     * that they cannot distinguish a failed save from a rule. Copy for a
+     * label, a placeholder, or a sentence that merely describes what the
+     * field obviously does does NOT qualify; leave those untested.
      */
     public function test_the_active_toggle_tells_the_operator_that_active_alone_is_not_enough(): void
     {
