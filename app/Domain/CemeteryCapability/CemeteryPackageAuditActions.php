@@ -36,4 +36,19 @@ final class CemeteryPackageAuditActions
     public const string CREATED = 'CEMETERY_PACKAGE_CREATED';
 
     public const string UPDATED = 'CEMETERY_PACKAGE_UPDATED';
+
+    /**
+     * A grave package's firm, bookable price changed.
+     *
+     * Distinct from `UPDATED` on purpose. `UPDATED` covers catalogue edits —
+     * name, class label, availability, sort order. This one covers money, and
+     * it is listed in `Platform\Audit\SensitiveActions::ACTIONS` so a change
+     * cannot be recorded without a reason an operator can later read back.
+     *
+     * Distinct from the service-fee equivalent
+     * (`SERVICE_DEFINITION_PRICE_VERSION_RECORDED`) for the same reason: an
+     * operator reviewing the trail must be able to tell a change to a burial
+     * plot's price from a change to an ambulance fee without joining tables.
+     */
+    public const string PRICE_VERSION_RECORDED = 'CEMETERY_PACKAGE_PRICE_VERSION_RECORDED';
 }
