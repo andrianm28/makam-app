@@ -16,7 +16,10 @@ use App\Platform\Payment\Models\PaymentSession;
 use App\Platform\Payment\PaymentAuditActions;
 use App\Platform\Payment\PaymentReversalType;
 use App\Platform\Payment\ReversalService;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 use Tests\TestCase;
 
@@ -26,10 +29,10 @@ use Tests\TestCase;
  * reachable pieces named by the ruling: a `payment_reversals` row is
  * recorded exactly once per `(reversal_type, reference)` pair, the
  * mandatory-reason audit is enforced by `Audit::record()`'s own
- * `SensitiveActions` check (not re-implemented here), and structurally
- * proves the hard prohibitions: no `payment_sessions` write, no
- * `Journal::post()`/`postReversal()`, no `PaymentProvider` reference, no
- * `OrderWorkflow` reference.
+ * `SensitiveActions` check (not re-implemented here), and behaviourally
+ * proves the hard prohibitions by observing every statement the service
+ * actually executed: no payment-session, journal, provider or order-
+ * aggregate access at all.
  */
 final class ReversalServiceTest extends TestCase
 {
@@ -306,44 +309,139 @@ final class ReversalServiceTest extends TestCase
         $this->assertSame(0, PaymentSession::query()->count());
     }
 
-    public function test_none_of_the_reversal_files_reference_journal_payment_provider_or_the_order_aggregate(): void
+    /**
+     * Replaces a `file_get_contents()` + `assertStringNotContainsString()`
+     * scan of the four reversal source files.
+     *
+     * A source-text grep cannot see indirection: the moment the prohibition
+     * is broken through a collaborator, a variable table name, a facade, or
+     * a queued job, the grep still passes while the behaviour it was meant
+     * to protect is gone. It also breaks spuriously on any rename — the
+     * forbidden strings are class and constant names, not behaviour. Worse,
+     * two entries in the old list (`Contracts\PaymentProvider`,
+     * `PaymentProvider::refund`) name a contract that has never existed in
+     * this branch, so those assertions could never fail for any reason.
+     *
+     * This runs the real service for both reversal types and observes what
+     * the database actually saw, which is the claim the ruling cares about:
+     * a reversal writes its own row and its own audit event, and never
+     * reads or writes payment sessions, the financial journal, or any order
+     * aggregate.
+     */
+    public function test_recording_reversals_touches_only_its_own_tables_and_never_sessions_the_journal_or_an_order(): void
     {
-        foreach ([
-            'app/Platform/Payment/ReversalService.php',
-            'app/Platform/Payment/Actions/RecordRefund.php',
-            'app/Platform/Payment/Actions/RecordChargeback.php',
-            'app/Platform/Payment/Models/PaymentReversal.php',
-        ] as $relativePath) {
-            $source = $this->withoutComments((string) file_get_contents(base_path($relativePath)));
+        // A provider-side refund (the plan's dropped `PaymentProvider::
+        // refund()`) would have to leave this process as an outbound
+        // request; faking the HTTP client lets us assert none was made.
+        Http::fake();
 
-            foreach ([
-                'payment_sessions',
-                'PaymentSession',
-                'SessionState::Paid',
-                'Journal::post',
-                'Journal::postReversal',
-                'Contracts\\PaymentProvider',
-                'PaymentProvider::refund',
-                'OrderWorkflow',
-                'DIBAYAR',
-            ] as $forbidden) {
-                $this->assertStringNotContainsString($forbidden, $source, "{$relativePath} references [{$forbidden}]");
-            }
+        $statements = [];
+        DB::listen(function (QueryExecuted $query) use (&$statements): void {
+            $statements[] = $query->sql;
+        });
+
+        $this->service()->record(
+            type: PaymentReversalType::Refund,
+            reference: 'TRX-scope-refund',
+            amountMinor: 15_000_00,
+            reason: 'Customer cancelled within cooling-off period',
+            actorRef: 7,
+            actorRole: 'admin',
+            source: AuditSource::Panel,
+        );
+
+        $this->service()->record(
+            type: PaymentReversalType::Chargeback,
+            reference: 'TRX-scope-chargeback',
+            amountMinor: null,
+            reason: 'Card issuer disputed the transaction',
+            actorRef: 7,
+            actorRole: 'admin',
+            source: AuditSource::Panel,
+        );
+
+        // Anchor: an empty capture would make every assertion below pass
+        // for the wrong reason.
+        $this->assertNotEmpty($statements, 'The reversal service executed no queries at all.');
+
+        $written = $this->writtenTables($statements);
+
+        $this->assertSame(
+            [],
+            array_values(array_diff($written, ['payment_reversals', 'audit_events'])),
+            'A reversal may write its own row and its own audit event, nothing else.'
+        );
+        $this->assertContains('payment_reversals', $written, 'The reversal row itself was never written.');
+
+        foreach ([
+            // `payment_sessions` / `PaymentSession` / `SessionState::Paid`.
+            'payment_sessions',
+            'payment_intents',
+            // `Journal::post` / `Journal::postReversal`.
+            'journal_batches',
+            'journal_entries',
+            // `OrderWorkflow` — the booking order aggregate.
+            'orders',
+            'order_status_events',
+            'order_parties',
+            'order_documents',
+            'order_invoices',
+            // `DIBAYAR` — the marketplace payment state a reversal must
+            // never reach for.
+            'marketplace_orders',
+        ] as $forbiddenTable) {
+            $this->assertNoStatementTouches($statements, $forbiddenTable);
         }
+
+        Http::assertNothingSent();
     }
 
-    private function withoutComments(string $source): string
+    /**
+     * The distinct tables written to, sorted. Fails loudly on a write whose
+     * target cannot be identified rather than skipping it — an unparsed
+     * statement must never be mistaken for a clean run.
+     *
+     * @param  list<string>  $statements
+     * @return list<string>
+     */
+    private function writtenTables(array $statements): array
     {
-        $code = '';
+        $tables = [];
 
-        foreach (token_get_all($source) as $token) {
-            if (is_array($token) && in_array($token[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+        foreach ($statements as $sql) {
+            if (preg_match('/^\s*(?:insert|update|delete|truncate)\b/i', $sql) !== 1) {
                 continue;
             }
 
-            $code .= is_array($token) ? $token[1] : $token;
+            if (preg_match('/^\s*(?:insert\s+into|update|delete\s+from|truncate)\s+"?([A-Za-z0-9_.]+)"?/i', $sql, $matches) !== 1) {
+                $this->fail("Could not identify the target table of write statement: {$sql}");
+            }
+
+            if (! in_array($matches[1], $tables, true)) {
+                $tables[] = $matches[1];
+            }
         }
 
-        return $code;
+        sort($tables);
+
+        return $tables;
+    }
+
+    /**
+     * Asserts no captured statement — read or write — names `$table`. The
+     * identifier boundaries matter: `orders` must not match inside
+     * `marketplace_orders`.
+     *
+     * @param  list<string>  $statements
+     */
+    private function assertNoStatementTouches(array $statements, string $table): void
+    {
+        foreach ($statements as $sql) {
+            $this->assertDoesNotMatchRegularExpression(
+                '/(?<![A-Za-z0-9_])'.preg_quote($table, '/').'(?![A-Za-z0-9_])/i',
+                $sql,
+                "A statement referenced the forbidden table [{$table}]: {$sql}"
+            );
+        }
     }
 }

@@ -14,7 +14,6 @@ use App\Domain\VendorFulfillment\Actions\CreateWorkOrder;
 use App\Domain\VendorFulfillment\Models\WorkOrder;
 use App\Filament\Vendor\Resources\WorkOrders\Pages\ListWorkOrders;
 use App\Filament\Vendor\Resources\WorkOrders\Pages\ViewWorkOrder;
-use App\Filament\Vendor\Resources\WorkOrders\WorkOrdersResource;
 use App\Models\User;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\ActorContextResolver;
@@ -124,16 +123,58 @@ final class VendorWorkOrdersTest extends TestCase
     // Access matrix
     // =====================================================================
 
-    public function test_work_orders_resource_requires_vendor_role(): void
+    /**
+     * The assertion this replaces was `assertTrue(class_exists(
+     * WorkOrdersResource::class))`, under a name promising the resource
+     * "requires vendor role". Its own comments conceded it was not testing
+     * that; a `class_exists` on an imported class cannot fail, because the
+     * `use` statement at the top of this file already autoloads it. It was a
+     * green light wired to nothing on a **fail-closed access gate**, which is
+     * the worst place to have one.
+     *
+     * What the name promised is what is asserted now: a signed-in user who is
+     * not a vendor does not get the list.
+     *
+     * Asserted over HTTP, not through `Livewire::test()`. The original test's
+     * own comment named the reason — "a customer in the vendor panel would be
+     * redirected by panel middleware" — and it is decisive: the refusal lives
+     * in `VendorPanelProvider`'s `authMiddleware()`, which a direct Livewire
+     * component test never enters. `Livewire::test(ListWorkOrders::class)` as
+     * a non-vendor does return OK, so a Livewire-level assertion here would
+     * report a breach that production does not have. `/vendor/order-kerja` is
+     * the surface a browser actually reaches.
+     *
+     * `VendorPanelAccessTest` sweeps the panel's routes for exactly this
+     * check, but its two route lists do not include `order-kerja` — so until
+     * now no test anywhere covered this resource's door. Left there rather
+     * than added to that file's lists, which are out of this change's scope;
+     * flagged in the branch report.
+     */
+    public function test_a_signed_in_user_without_the_vendor_role_cannot_reach_the_work_orders_list(): void
     {
-        // Without auth, vendor resources may throw or redirect
-        // We test that canAccess on the resource isn't the right gate -
-        // the panel boundary handles it. Instead we test rendering.
-        $this->actingAs(User::factory()->create());
+        $this->makeWorkOrder();
 
-        // A customer in the vendor panel would be redirected by panel middleware,
-        // but we can test that the resource exists and is properly structured.
-        $this->assertTrue(class_exists(WorkOrdersResource::class));
+        // No role grant and no vendor scope assignment — an authenticated
+        // stranger to the vendor panel.
+        $this->actingAs(User::factory()->create());
+        $this->forgetResolvedActorContext();
+
+        $this->get('/vendor/order-kerja')->assertForbidden();
+    }
+
+    /**
+     * The control for the test above: the identical URL IS served once the
+     * vendor role and scope are granted. Without it, a route that had broken
+     * closed for everyone — or a typo in the slug, which would 404 and satisfy
+     * neither promise while looking like a refusal — would leave the access
+     * matrix permanently, silently green.
+     */
+    public function test_the_same_url_is_served_once_the_vendor_role_and_grant_are_present(): void
+    {
+        $this->makeWorkOrder();
+        $this->actingUserWithRole(ActorRole::VENDOR);
+
+        $this->get('/vendor/order-kerja')->assertSuccessful();
     }
 
     // =====================================================================

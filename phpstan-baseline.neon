@@ -1201,18 +1201,6 @@ parameters:
 			path: tests/Feature/FinancialLedger/BulkFinancialExportTest.php
 
 		-
-			message: '#^Call to function method_exists\(\) with ''App\\\\Platform\\\\FinancialLedger\\\\Models\\\\JournalBatch'' and ''persist'' will always evaluate to false\.$#'
-			identifier: function.impossibleType
-			count: 1
-			path: tests/Feature/FinancialLedger/JournalAppendOnlyTest.php
-
-		-
-			message: '#^Call to function method_exists\(\) with ''App\\\\Platform\\\\FinancialLedger\\\\Models\\\\JournalEntry'' and ''persist'' will always evaluate to false\.$#'
-			identifier: function.impossibleType
-			count: 1
-			path: tests/Feature/FinancialLedger/JournalAppendOnlyTest.php
-
-		-
 			message: '#^Unreachable statement \- code above always terminates\.$#'
 			identifier: deadCode.unreachable
 			count: 1
