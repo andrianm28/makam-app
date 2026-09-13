@@ -32,6 +32,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Symfony\Component\Finder\Finder;
+use Tests\Support\RequiresUuidTypeEnforcement;
 use Tests\TestCase;
 
 /**
@@ -55,6 +56,7 @@ use Tests\TestCase;
 final class ResolveReconciliationExceptionTest extends TestCase
 {
     use RefreshDatabase;
+    use RequiresUuidTypeEnforcement;
 
     private const string ENTITY = 'badan-usaha-1';
 
@@ -158,6 +160,38 @@ final class ResolveReconciliationExceptionTest extends TestCase
             $this->fail('Expected an unknown exception resolution to be refused.');
         } catch (ReconciliationNotAuthorisedException $unknown) {
             $this->assertSame($knownFailure->getMessage(), $unknown->getMessage());
+        }
+
+    }
+
+    /**
+     * The malformed-id third of the case above, split out rather than left
+     * inline.
+     *
+     * `reconciliation_exceptions.id` is a real `uuid` column, so a non-UUID id
+     * reaching `find()` is SQLSTATE 22P02 — a 500 — not the opaque refusal
+     * AC-opacity requires. `ResolveException.php`'s `Str::isUuid()` guard is
+     * what turns it back into the same refusal an unknown id gets.
+     *
+     * It lives in its own method because only THIS third is driver-dependent:
+     * SQLite has no `uuid` type, compares the string happily, and so cannot
+     * tell the guarded path from the unguarded one. Gating the combined test
+     * would have taken the unauthorised and well-formed-unknown assertions —
+     * which are perfectly real on SQLite — down with it.
+     */
+    public function test_a_malformed_exception_id_has_the_same_opaque_failure(): void
+    {
+        $this->requiresUuidTypeEnforcement(
+            "ResolveException::resolve()'s Str::isUuid() guard on reconciliation_exceptions.id"
+        );
+
+        $exception = $this->openException();
+
+        try {
+            $this->resolve($exception, ReconciliationDecision::ESCALATE);
+            $this->fail('Expected an unauthorised exception resolution to be refused.');
+        } catch (ReconciliationNotAuthorisedException $unauthorised) {
+            $knownFailure = $unauthorised;
         }
 
         $malformedException = new ReconciliationExceptionModel;

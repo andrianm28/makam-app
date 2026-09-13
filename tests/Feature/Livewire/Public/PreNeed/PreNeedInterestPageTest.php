@@ -29,6 +29,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
+use Tests\Support\RequiresUuidTypeEnforcement;
 use Tests\TestCase;
 
 /**
@@ -41,6 +42,7 @@ use Tests\TestCase;
 final class PreNeedInterestPageTest extends TestCase
 {
     use RefreshDatabase;
+    use RequiresUuidTypeEnforcement;
 
     /**
      * The §6.9 non-dismissible InterestOnly banner copy — brief's exact
@@ -237,6 +239,14 @@ final class PreNeedInterestPageTest extends TestCase
      */
     public function test_an_unknown_reference_degrades_honestly_instead_of_crashing(): void
     {
+        // This is the regression test for the 2 Sep 2026 production 500, and
+        // that 500 was a PostgreSQL `uuid` type error. On SQLite the crash it
+        // guards against cannot be reproduced at all, so a pass here would be
+        // the same false reassurance the suite gave on the day of the incident.
+        $this->requiresUuidTypeEnforcement(
+            "PreNeedInterestPage::resolveCertificateSubject()'s Str::isUuid() guard on orders.id"
+        );
+
         $this->makePaidOrder();
 
         Livewire::test(PreNeedInterestPage::class)

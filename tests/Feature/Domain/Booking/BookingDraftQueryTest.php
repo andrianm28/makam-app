@@ -14,11 +14,13 @@ use App\Domain\ServiceCatalog\Models\ServiceDefinition;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Tests\Support\RequiresUuidTypeEnforcement;
 use Tests\TestCase;
 
 final class BookingDraftQueryTest extends TestCase
 {
     use RefreshDatabase;
+    use RequiresUuidTypeEnforcement;
 
     public function test_find_returns_null_for_an_unknown_id(): void
     {
@@ -27,6 +29,10 @@ final class BookingDraftQueryTest extends TestCase
 
     public function test_find_returns_null_for_a_non_uuid_string(): void
     {
+        $this->requiresUuidTypeEnforcement(
+            "BookingDraftQuery::find()'s Str::isUuid() guard on booking_drafts.id"
+        );
+
         $this->assertNull(BookingDraftQuery::find('not-a-uuid'));
     }
 

@@ -11,6 +11,7 @@ use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\RequiresUuidTypeEnforcement;
 use Tests\TestCase;
 
 /**
@@ -36,6 +37,7 @@ use Tests\TestCase;
 final class CemeteryPublicQueryTest extends TestCase
 {
     use RefreshDatabase;
+    use RequiresUuidTypeEnforcement;
 
     private const DRAFT_SLUG = CemeteryExampleData::DRAFT_SLUG;
 
@@ -199,14 +201,21 @@ final class CemeteryPublicQueryTest extends TestCase
      * The UUID-shape guard, asserted directly rather than transitively.
      * `cemeteries.id` is a real `uuid` column on PostgreSQL, so a non-UUID
      * comparison is a database TYPE ERROR, not a miss — without the guard a
-     * tampered query string turns a public screen into a 500. It passes
-     * silently on SQLite, which is exactly why it needs an assertion that
-     * does not depend on the driver raising: this asserts the clean `null`
-     * on both drivers, so removing the guard fails here on PostgreSQL (with
-     * the type error) rather than only in production.
+     * tampered query string turns a public screen into a 500.
+     *
+     * This doc block used to argue that asserting a clean `null` made the test
+     * driver-independent. It does not: on SQLite `null` is also what the
+     * UNGUARDED path returns, so the assertion holds either way and the test
+     * passes with the guard deleted. The assertion was never the weak part —
+     * the driver was. `requiresUuidTypeEnforcement()` makes that explicit
+     * instead of leaving a green result to imply coverage it does not have.
      */
     public function test_find_published_by_id_returns_null_for_a_malformed_id_without_querying(): void
     {
+        $this->requiresUuidTypeEnforcement(
+            "CemeteryPublicQuery::findPublishedById()'s Str::isUuid() guard on cemeteries.id"
+        );
+
         $this->assertNull(CemeteryPublicQuery::findPublishedById('garbage'));
         $this->assertNull(CemeteryPublicQuery::findPublishedById(''));
         $this->assertNull(CemeteryPublicQuery::findPublishedById('   '));

@@ -30,6 +30,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\Support\RequiresUuidTypeEnforcement;
 use Tests\TestCase;
 
 /**
@@ -40,6 +41,7 @@ use Tests\TestCase;
 final class IssueSignedUrlTest extends TestCase
 {
     use RefreshDatabase;
+    use RequiresUuidTypeEnforcement;
 
     public function test_no_url_is_issued_before_a_document_is_accepted(): void
     {
@@ -266,12 +268,29 @@ final class IssueSignedUrlTest extends TestCase
      * `documents.id` is a real PostgreSQL `uuid` column, so a non-UUID id
      * would make the driver raise a `QueryException` (a 500) instead of
      * returning `null` — distinguishable from a clean refusal, and therefore
-     * an AC9 existence leak. The guard runs in PHP before any driver is
-     * involved, so this test is meaningful on SQLite even though SQLite could
-     * never reproduce the original PostgreSQL failure.
+     * an AC9 existence leak.
+     *
+     * This doc block used to claim that because the guard runs in PHP before
+     * any driver is involved, the test was "meaningful on SQLite" anyway.
+     * That was measured and it is false FOR THIS TEST: delete
+     * `IssueSignedUrl.php`'s `Str::isUuid()` guard and run on SQLite, and
+     * `find()` simply returns `null`, producing the very same
+     * `DocumentAccessDeniedException` this asserts on — so every assertion
+     * below still passes with the guard gone. On PostgreSQL the same mutation
+     * errors with SQLSTATE 22P02. `requiresUuidTypeEnforcement()` is what now
+     * keeps the test from reporting a pass it did not earn.
+     *
+     * The sibling test below is the genuine exception to that: it asserts on
+     * append-only ROW COUNTS rather than on the exception, and the unguarded
+     * path writes three audit rows on SQLite too. It fails under the same
+     * mutation on both drivers, so it needs no gate and deliberately has none.
      */
     public function test_a_malformed_document_id_is_refused_identically_to_a_well_formed_unknown_one(): void
     {
+        $this->requiresUuidTypeEnforcement(
+            "IssueSignedUrl::issueForDocumentId()'s Str::isUuid() guard on documents.id"
+        );
+
         $stranger = new ActorContext(identityReference: 99, roles: ['admin']);
         $wellFormedUnknown = $this->captureDenial(
             fn () => $this->action()->issueForDocumentId(
