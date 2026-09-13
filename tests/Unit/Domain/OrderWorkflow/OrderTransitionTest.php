@@ -104,15 +104,23 @@ final class OrderTransitionTest extends TestCase
         );
     }
 
+    /**
+     * Derived from `isTerminal()` rather than hand-listed, so a terminal
+     * status added later is covered without anyone remembering to add it
+     * here — the test-shape lesson from `OrderReadModel` (13 Sep 2026),
+     * where a hand-written list stayed green through exactly the change it
+     * existed to catch.
+     */
     public function test_terminal_states_are_absorbing(): void
     {
-        foreach ([
-            OrderStatus::SELESAI,
-            OrderStatus::DITOLAK,
-            OrderStatus::DITOLAK_SETELAH_BAYAR,
-            OrderStatus::DIBATALKAN,
-            OrderStatus::KEDALUWARSA,
-        ] as $terminal) {
+        $terminals = array_values(array_filter(
+            OrderStatus::cases(),
+            static fn (OrderStatus $status): bool => OrderTransition::isTerminal($status),
+        ));
+
+        self::assertNotEmpty($terminals);
+
+        foreach ($terminals as $terminal) {
             self::assertTrue(OrderTransition::isTerminal($terminal));
 
             foreach (OrderStatus::cases() as $to) {
@@ -242,30 +250,36 @@ final class OrderTransitionTest extends TestCase
      */
     public function test_every_state_where_money_has_arrived_counts_as_paid_or_later(): void
     {
-        foreach ([
+        // The positive half is the real claim and stays explicit — it is the
+        // reviewed decision about which statuses mean "money has arrived".
+        $paid = [
             OrderStatus::DIBAYAR,
             OrderStatus::DIBAYAR_MENUNGGU_KONFIRMASI,
             OrderStatus::DIKONFIRMASI,
             OrderStatus::DITOLAK_SETELAH_BAYAR,
             OrderStatus::DIPROSES,
             OrderStatus::SELESAI,
-        ] as $paid) {
-            self::assertTrue($paid->isPaidOrLater(), "{$paid->value} must count as paid-or-later");
+        ];
+
+        foreach ($paid as $status) {
+            self::assertTrue($status->isPaidOrLater(), "{$status->value} must count as paid-or-later");
         }
 
-        foreach ([
-            OrderStatus::MASUK,
-            OrderStatus::DIVERIFIKASI,
-            OrderStatus::MENUNGGU_KETERSEDIAAN,
-            OrderStatus::PENAWARAN_TERKIRIM,
-            OrderStatus::DISETUJUI_PEMESAN,
-            OrderStatus::MENUNGGU_PEMBAYARAN,
-            OrderStatus::MENUNGGU_VERIFIKASI_PEMBAYARAN,
-            OrderStatus::DITOLAK,
-            OrderStatus::DIBATALKAN,
-            OrderStatus::KEDALUWARSA,
-        ] as $unpaid) {
-            self::assertFalse($unpaid->isPaidOrLater(), "{$unpaid->value} must not count as paid-or-later");
+        // The negative half is DERIVED from `cases()`, not hand-listed.
+        // Writing it out would have made this test the very shape it was
+        // added to defend against: a seventeenth status would have appeared
+        // in neither array and gone unasserted, which is precisely how
+        // `OrderReadModel` was missed. Derived, a new case lands here
+        // automatically and must justify itself.
+        foreach (OrderStatus::cases() as $status) {
+            if (in_array($status, $paid, true)) {
+                continue;
+            }
+
+            self::assertFalse(
+                $status->isPaidOrLater(),
+                "{$status->value} is not on the reviewed paid list but claims money has arrived",
+            );
         }
     }
 
