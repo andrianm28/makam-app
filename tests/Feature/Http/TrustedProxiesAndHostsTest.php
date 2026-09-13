@@ -6,6 +6,7 @@ namespace Tests\Feature\Http;
 
 use App\Models\User;
 use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Illuminate\Http\Middleware\TrustHosts;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -226,6 +227,39 @@ final class TrustedProxiesAndHostsTest extends TestCase
      */
     public function test_the_trusted_host_allowlist_is_anchored_and_covers_every_live_host(): void
     {
+        // FIRST, and before any pattern is read: is the middleware that
+        // consumes these patterns actually in the stack?
+        //
+        // This assertion exists because its absence already caused a wrong
+        // conclusion once. Constructing `new TrustHosts($this->app)` below
+        // reports what the patterns WOULD be; it says nothing about whether
+        // anything consumes them. Reading only that, a previous version of
+        // this work concluded the pre-fix application had a
+        // wildcard-subdomain allowlist inherited from `app.url`. It did not:
+        // `Middleware::$trustHosts` defaults to false
+        // (`Illuminate\Foundation\Configuration\Middleware.php:105`) and
+        // `getGlobalMiddleware()` includes `TrustHosts::class` only when that
+        // flag is true (`:456`). `bootstrap/app.php` never called
+        // `trustHosts()`, so the middleware was absent, `setTrustedHosts()`
+        // was never reached, and `getHost()` accepted ANY syntactically valid
+        // host — which is why the original exploit reached
+        // `evil-attacker.example`, a domain no wildcard over `makam.co.id`
+        // could ever have matched.
+        //
+        // It also closes a real divergence, not a theoretical one:
+        // `$middleware->trustHosts()` with NO arguments sets the flag but
+        // leaves `TrustHosts::$alwaysTrust` null, silently falling back to
+        // the `app.url` wildcard. The two halves of this test cover opposite
+        // failures — this assertion catches "patterns configured, middleware
+        // not registered", the pattern assertions below catch "middleware
+        // registered, patterns wrong".
+        $this->assertContains(
+            TrustHosts::class,
+            $this->app->make(HttpKernel::class)->getGlobalMiddleware(),
+            'TrustHosts is not in the global middleware stack, so the trusted-host '
+            .'allowlist below is never applied to a real request no matter what it contains.',
+        );
+
         // `app.url` is read ONLY by `TrustHosts::allSubdomainsOfApplicationUrl()`,
         // which `subdomains: false` never reaches — which is precisely why this
         // test has to pin it. Under PHPUnit `app.url` falls back to
