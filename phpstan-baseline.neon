@@ -697,6 +697,12 @@ parameters:
 			path: tests/Feature/Database/Migrations/BackfillRealPhotosForRealAndExampleCemeteriesTest.php
 
 		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Migrations\\Migration\:\:up\(\)\.$#'
+			identifier: method.notFound
+			count: 7
+			path: tests/Feature/Database/Migrations/BackfillRealPhotosByCurrentValueNotSlugTest.php
+
+		-
 			message: '#^Call to an undefined method Illuminate\\Database\\Migrations\\Migration\:\:down\(\)\.$#'
 			identifier: method.notFound
 			count: 1
