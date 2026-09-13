@@ -8,10 +8,17 @@
 
 **Tujuan:** Menjawab masukan pemilik produk — *"utk design makam nya nnti dibuat ky kamboja ajaa..
 mgkn itu kelihatan msh plain krn aku blm ksh brand guideline sehingga blm ada corak2 warna nya
-yaa"* — dengan memisahkan dua hal yang berbeda: **bahasa desain** (ritme tata letak, strategi
-citra, suara tipografi, kepadatan, gerak, cara kehangatan dibentuk) yang boleh diambil dari
-kamboja.co.id, dan **identitas merek** (palet, logo, nama, nilai token) yang tetap milik
-Makam.co.id dan sudah dikunci [ADR-0034](../../adr/0034-adopt-makam-brand-identity.md).
+yaa"*, diperluas menjadi *"termasuk visual ui/ux, seperti layouting, images, dan semuanya"* —
+dengan memisahkan dua hal yang berbeda: **bahasa desain** (ritme tata letak, grid, strategi citra,
+suara tipografi, kepadatan, state layar, gerak, pola interaksi, cara kehangatan dibentuk) yang
+boleh diambil dari kamboja.co.id, dan **identitas merek** (palet, logo, nama, nilai token) yang
+tetap milik Makam.co.id dan sudah dikunci
+[ADR-0034](../../adr/0034-adopt-makam-brand-identity.md).
+
+**Cakupan:** seluruh permukaan visual dan interaksi publik — tata letak, grid, citra, komponen,
+sepuluh state layar wajib, mobile, gerak, ikonografi, dan pola UX — bukan hanya palet dan tipografi.
+Halaman yang diperiksa langsung: beranda, direktori TPU/TPS (`/pemakaman`), wizard pemesanan
+(`/pemesanan-makam`), perpanjangan (`/perpanjangan`), marketplace (`/marketplace`).
 
 **Temuan utama yang membentuk seluruh rencana ini:** keluhan "plain" **bukan** masalah palet.
 Palet merek sudah ada, sudah disampling dari logo asli, dan sudah lulus WCAG AA untuk 49 pasang
@@ -80,7 +87,7 @@ turun ke 24.802px, dan `<h1>` meresolusi ke Nunito 45px/700.
   pengamatan langsung.
 
 **Satu-satunya cara menutup celah ini:** tangkapan layar dari mesin pemilik produk sendiri
-(desktop + mobile, halaman penuh). Lihat §9 OQ-K1.
+(desktop + mobile, halaman penuh). Lihat §14 OQ-K1.
 
 ### 0.3 Bukti makam.co.id
 
@@ -187,11 +194,41 @@ Urutan section dari DOM terarsip (tinggi = hasil render rekonstruksi, indikatif 
 | 13 | Testimoni + Rated Excellent 5.0/5.0 | 969 | 60 |
 | 14 | Footer — CS + hotline 24/7 | 1.307 | 6 |
 
-Breakpoint: `max-width: 479px` (33 aturan), `767px` (22), `991px` (17), `1120px` (7) — jelas
-mobile-first dengan pengerjaan terbanyak di layar kecil.
+Breakpoint: `max-width: 479px` (33 aturan), `767px` (22), `991px` (17), `1120px` (7).
 
 Yang perlu dicatat: **halaman ini panjang dan longgar.** Satu section bisa 2.000–10.000px. Tidak ada
 usaha memadatkan.
+
+### 1.4a Sistem kolom
+
+`universal.css` memakai sistem flex sederhana, bukan grid 12-kolom:
+
+| Deklarasi | Jumlah |
+|---|---|
+| `width: 100%` | 86 |
+| `width: 50%` | 11 |
+| `width: 33.33%` | 5 |
+| `flex-direction: row` | 25 |
+| `flex-direction: column` | 20 |
+
+Jadi progresi kolomnya efektif **1 / 2 / 3** — sebanding dengan progresi `--container-content`
+Makam di §4.3 design system (1 → 2 → 3 → 4 tergantung jenis konten). Tidak ada sesuatu yang perlu
+diadopsi di sini; Makam sudah setara atau lebih rapi.
+
+### 1.4b Perilaku mobile kamboja — **NOT VERIFIED**
+
+Ini celah penting dan harus dinyatakan, karena brief menempatkan mobile sebagai kasus utama.
+
+Di dalam `universal.css`, blok `@media (max-width: 479px)` hanya mengubah ±50 deklarasi, didominasi
+`display` (8), `width` (4), `margin-top` (4), `background-color` (4), `font-size` (3). Itu terlalu
+sedikit untuk menjelaskan bagaimana halaman benar-benar tersusun ulang di ponsel. Pekerjaan tata
+letak mobile yang sesungguhnya hampir pasti berada di CSS per-halaman yang **tidak terarsip**
+(§0.2).
+
+**Karena itu tidak ada satu pun klaim tentang tata letak mobile kamboja di dokumen ini.** Tidak ada
+navigasi bawah, pola sticky CTA, atau urutan section mobile yang bisa dibuktikan. Menebaknya akan
+lebih berbahaya daripada mengosongkannya, karena pemilik akan bertindak atas dasar itu. Lihat
+OQ-K1.
 
 ### 1.5 Strategi citra — dua jalur, dan salah satunya milik sendiri
 
@@ -365,7 +402,61 @@ Catatan: `public/images/cemeteries/` sudah memuat empat ilustrasi SVG
 (`illustration-01-gate.svg`, `-02-grove`, `-03-path`, `-04-garden`, masing-masing < 2,1KB) yang
 **tidak dipakai di beranda**. Aset ini sudah ada dan gratis untuk dipakai.
 
-### 2.6 Yang sudah benar dan tidak perlu disentuh
+### 2.6 Halaman demi halaman — bukan hanya beranda
+
+Semua diukur langsung dari situs hidup, 1440×900.
+
+| Halaman | Tinggi dokumen | Temuan |
+|---|---|---|
+| `/` beranda | 4.452px | 9 section, 18 kartu identik, satu bidang merek (§2.1–2.5) |
+| `/pemakaman` direktori | 2.249px | 9 lokasi, **4 foto** dipakai bergilir; tidak ada `<select>`/`<input>` — filter kota & jenis berupa chip 44px; setiap kartu memuat `Perlu konfirmasi`, kisaran harga, dan atribusi `Sumber: Estimasi internal (data contoh) · per 08/08/2026` |
+| `/pemesanan-makam` wizard | 926px (mobile 360) | Stepper 4 langkah; Langkah 1 **nol `<input>`** — pemilihan kota berupa chip 44px, progressive reveal; ada bar sticky `md:hidden sticky top-[var(--mk-header-h)] z-sticky-cta` |
+| `/perpanjangan` | 900px | Stepper 3 langkah; pola chip kota yang sama; halaman sangat pendek |
+| `/marketplace` | 2.007px | 9 produk, grid `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4`, atribusi harga `Estimasi internal (data contoh)` |
+
+**Temuan lintas-halaman yang paling penting: dua register citra hidup berdampingan tanpa aturan.**
+Direktori dan beranda memakai **fotografi** (`photo-01…04.jpg`); marketplace memakai
+**ilustrasi SVG** untuk seluruh sembilan produknya (`flower-board.svg`,
+`gravestone-granite.svg`, `grave-care-monthly.svg`, …). Tidak ada satu pun baris di
+`design-system.md` yang menyatakan kapan register yang mana dipakai. Ini bukan sekadar
+ketidakkonsistenan estetika — ia adalah akar masalah §9.
+
+**Temuan kedua: kekuatan Makam justru ada di halaman transaksional, bukan di beranda.** Wizard
+empat langkah dengan progressive reveal, chip 44px alih-alih dropdown, sticky CTA mobile, dan
+atribusi sumber pada setiap angka adalah pola yang **kamboja tidak punya** — situs kamboja
+mengarahkan ke formulir dan WhatsApp. Rencana ini melindunginya (§11).
+
+### 2.7 Mobile — kasus utama, dan di sinilah kerusakan terbesar
+
+Diukur pada 360×740, `deviceScaleFactor: 2`, `mobile: true` — viewport Android yang
+`--breakpoint-xs` sendiri targetkan.
+
+| Ukuran | Nilai | Catatan |
+|---|---|---|
+| Horizontal scroll | tidak ada | benar |
+| Tinggi header | 56px | sesuai `--mk-header-h` |
+| `h1` | 36px/40px | sesuai `text-4xl` |
+| Tinggi hero | 708px | foto 256px + panel teks |
+| Padding section | **20px** di ketujuh section | §4.4 mewajibkan 40px — separuh, sama seperti desktop |
+| Navigasi bawah | tidak ada | benar — §3.11 menandainya PROPOSED, NOT APPROVED (OQ-04) |
+| **Posisi CTA `Pesan Makam`** | **y = 1.048px** | ukuran 160×52 |
+
+**Angka terakhir itu adalah temuan UX terpenting dari seluruh pemeriksaan ini.** Pada viewport
+setinggi 740px, aksi utama produk berada **1,4 layar di bawah lipatan**. Pengguna harus menggulir
+melewati banner ketersediaan (±136px), pita foto 256px, judul dua baris, dan satu paragraf sebelum
+melihat tombol yang menjadi alasan halaman ini ada.
+
+Untuk produk yang, menurut brief, sering dibuka dalam keadaan darurat, satu tangan, oleh orang yang
+sedang terguncang, ini bukan persoalan estetika. Ini kegagalan fungsional — dan ia **tidak**
+disebabkan oleh palet.
+
+Catatan tambahan, **belum dipastikan**: beberapa elemen interaktif terukur < 44px tinggi kotaknya —
+`Lihat semua TPU & TPS` (16px), tautan footer (20px), `+62 812-0000-1234` dan `hubungi Bantuan`
+(36px). §7.3 mengizinkan ukuran visual lebih kecil **asalkan area sentuhnya 44px**, dan yang diukur
+di sini adalah kotak elemen, bukan area sentuh. Jadi ini **daftar periksa**, bukan tuduhan
+pelanggaran. Verifikasi area sentuh masuk Tahap 1.
+
+### 2.8 Yang sudah benar dan tidak perlu disentuh
 
 Agar rencana ini jujur: banyak hal sudah beres. Tipografi meresolusi tepat (Poppins 600 display,
 Inter var body, keduanya `document.fonts.check()` → true, self-hosted, nol permintaan pihak ketiga).
@@ -414,7 +505,7 @@ platform yang melayani orang dalam duka.
 dibaca secara harfiah sebagai warna dan bentuk, maka permintaan itu bertabrakan langsung dengan
 ADR-0034 dan §2.3, dan tidak bisa dipenuhi tanpa ADR baru yang membatalkan keduanya. Jika dibaca
 sebagai *"buat terasa sehangat dan sepenuh itu"*, permintaan itu bisa dipenuhi seluruhnya — dan
-itulah yang direncanakan dokumen ini. Konfirmasi bacaan ini ada di §9 OQ-K2.
+itulah yang direncanakan dokumen ini. Konfirmasi bacaan ini ada di §14 OQ-K2.
 
 ---
 
@@ -435,14 +526,17 @@ RESULT: PASS — all 49 pairs meet WCAG 2.1 AA
 
 | Usulan | Pasang terdampak | Pasang baru diperlukan |
 |---|---|---|
-| Tahap 1 (ritme) | tidak ada | tidak |
-| Tahap 2 (`--mk-surface-quiet`) | `text-default on secondary-50`, `text-strong on secondary-50` (sudah ada, baris 93–94) | **tidak** |
-| Tahap 3 (citra) | tidak ada | tidak |
-| Tahap 4 (kartu) | tidak ada | tidak |
-| Tahap 5 (salinan) | tidak ada | tidak |
+| Tahap 1 (ritme + area sentuh) | tidak ada | tidak |
+| Tahap 2 (`--mk-surface-quiet`, bidang merek) | `text-default on secondary-50`, `text-strong on secondary-50` (sudah ada, baris 93–94) | **tidak** |
+| Tahap 3 (mobile, posisi CTA) | tidak ada | tidak |
+| Tahap 4 (hierarki komponen) | tidak ada | tidak |
+| Tahap 5 (register citra) | tidak ada | tidak |
+| Tahap 6 (dua jalur + harga mulai) | `--mk-text-price` = `primary-800` di atas putih — sudah terbukti AA lewat ADR-0037 (lebih gelap dari pasang `primary-700 on white`, 12,16:1) | **tidak** |
+| Tahap 7 (salinan) | tidak ada | tidak |
 
-**Hitungan pasang tetap 49 di seluruh rencana ini.** Satu-satunya usulan yang bisa mengubahnya
-adalah scrim hero opsional di §4.3, yang sengaja tidak masuk tahap mana pun.
+**Hitungan pasang tetap 49 di seluruh rencana ini** — termasuk setelah perluasan cakupan ke
+layout, citra, komponen, state layar, dan mobile. Satu-satunya usulan yang bisa mengubahnya adalah
+scrim hero opsional di §4.3, yang sengaja tidak masuk tahap mana pun.
 
 ### 4.2 Perubahan yang diusulkan
 
@@ -498,33 +592,258 @@ rencana ini karena dua alasan:
    gate sambil tidak membuktikan apa pun tentang piksel yang sebenarnya.
 
 Jika hal ini tetap diinginkan, ia butuh ADR sendiri **dan** metode verifikasi baru (pengukuran
-piksel terender pada gambar terburuk), bukan sekadar entri di `PAIRS`. Dicatat di §9 OQ-K5.
+piksel terender pada gambar terburuk), bukan sekadar entri di `PAIRS`. Dicatat di §14 OQ-K5.
 
 ---
 
 ## 5. Perubahan per komponen — file nyata
 
-Semua path diverifikasi ada pada `7d3bcb81`.
+Semua path diverifikasi ada pada `7d3bcb81`. Kolom "identitas" menjawab pertanyaan brief: apakah
+komponen ini membawa identitas Makam, atau generik?
 
-| File | Perubahan | Tahap |
-|---|---|---|
-| `resources/views/livewire/public/home-page.blade.php` | Ganti 8 kemunculan `py-5 lg:py-8` / `py-8` pada `<section>` menjadi `section-y lg:section-y-lg`. Tambahkan alternasi tint. Tidak ada section ditambah, dihapus, atau **diurut ulang** — §4.5 adalah kontrak produk | 1, 2 |
-| `resources/css/app.css` | Dua `@utility` baru (§4.2b) | 1 |
-| `resources/css/tokens.css` | Satu alias semantik `--mk-surface-quiet` (§4.2a) | 2 |
-| `resources/views/components/mk/card.blade.php` | Tambah varian penekanan agar kartu layanan ≠ baris FAQ (§2.3). Varian baru, default tidak berubah | 4 |
-| `resources/views/components/mk/hero.blade.php` | Beri bobot lebih pada panel teks; ruang untuk baris pendukung. **Tanpa** overlay, tanpa scrim (§4.3) | 4 |
-| `public/images/cemeteries/` | Ganti tiga foto drone daur ulang dengan satu foto per lokasi; bangun turunan AVIF/WebP seperti hero | 3 |
-| `public/images/home/family-warmth.jpg` | Ganti stok "BALI" dengan foto yang relevan, atau hapus sectionnya | 3 |
-| `app/Livewire/Public/HomePage.php` | Hanya jika salinan hero berubah (§5 Tahap 5) | 5 |
-| `docs/design/design-system.md` | Sinkronkan §2.2 (temuan §1.5), §4.4 (utilitas baru), §2.1 SURFACES | tiap tahap |
+| Komponen / file | Identitas? | Temuan | Usulan | Tahap |
+|---|---|---|---|---|
+| `components/mk/card.blade.php` | **generik** | Satu perlakuan (putih / 12px / 1px `#DCE0E0` / `shadow-sm`) untuk 18 kartu: layanan, TPU/TPS, FAQ | Tambah varian penekanan; kartu pintu-masuk journey ≠ baris FAQ. Varian baru, default tidak berubah | 4 |
+| `components/mk/button.blade.php` | **membawa** | Primer `#563B26` 160×52, radius 8px, sekunder outline — satu-satunya bidang merek di halaman | Jangan sentuh bentuknya. Tambah pemakaian, bukan gaya baru | — |
+| `components/mk/field.blade.php` | membawa (fokus + border) | `--mk-border-interactive` 3,67:1 sudah benar | Tidak ada | — |
+| `components/mk/badge.blade.php` | **membawa** (lewat intent) | Membaca `--mk-intent-*`; resolusi status lewat `StatusIntent` | **Tidak ada perubahan warna status.** Lihat §5.1 | — |
+| `components/mk/filter-chip.blade.php` | generik | Chip kota/jenis 44px di direktori, wizard, perpanjangan — pola mobile yang bagus | Lindungi; jadikan pola kanonik untuk pilihan pendek alih-alih `<select>` | — |
+| `components/mk/table.blade.php` | generik | Tidak muncul di lima halaman publik yang diperiksa | Tidak ada usulan — tidak ada bukti masalah | — |
+| `components/mk/hero.blade.php` | membawa | Dua balok yang tidak bersentuhan (§2.4) | Beri bobot panel teks; **tanpa** overlay/scrim (§4.3) | 4 |
+| `components/mk/icon-medallion.blade.php` | **membawa** (tone earth/leaf) | Sudah dipakai di tiga section beranda | Perbesar pada kartu layanan — device "ikon besar" kamboja (§1.5 jalur A) yang aman diadopsi | 4 |
+| `components/mk/stepper.blade.php` | membawa | 4 langkah pemesanan, 3 langkah perpanjangan; label Indonesia + status "belum tersedia" | Lindungi. Ini keunggulan Makam (§10) | — |
+| `components/mk/alert.blade.php` | membawa | Banner ketersediaan `warning` di puncak beranda | Lindungi — ini kejujuran yang §2.2 minta | — |
+| `layouts/app.blade.php:155` `<footer>` | **membawa** | `bg-primary-900 px-4 py-8` — satu dari dua bidang merek di halaman | Perluas: footer adalah tempat paling aman untuk bidang merek besar | 2 |
+| `components/mk/header.blade.php` | membawa | 56px mobile / sticky; hamburger 44×44 | Tidak ada. §3.11 melarang navigasi bawah tanpa persetujuan produk | — |
+| `filament/shared/plot-floor-map.blade.php` (+ `aggregate`, `granular`) | generik | Peta petak — **panel Filament**, bukan permukaan publik | **Di luar cakupan.** §8.3 design system menandai panel Filament sebagai keputusan pemilik yang terpisah | — |
+| `livewire/public/home/plot-availability-preview.blade.php` | membawa | Pratinjau petak di beranda, read-only, merender nol saat tidak ada data nyata | Lindungi — pola empty-state yang benar (§6) | — |
 
-**Komponen yang sengaja TIDAK disentuh:** `sticky-comparison-rail.blade.php`,
-`icon-medallion.blade.php`, `badge.blade.php`, `stepper.blade.php`, `alert.blade.php` — tidak ada
-temuan di §2 yang menyentuhnya. `<x-mk.trust-badge-strip>` **tidak dibangun** (N7).
+### 5.1 Warna status — tidak disentuh, dan alasannya
+
+`app/Support/Design/StatusIntent.php` adalah **satu-satunya** tempat status domain diterjemahkan ke
+(intent, ikon, label Indonesia). Doc block-nya menyatakan aturannya: komponen tidak boleh
+`match` enum sendiri (§3.7 normatif, §9.2 MUST #5), dan kelas itu **tidak pernah** mengembalikan
+hex — resolusi warna tetap di lapisan Blade lewat token `--mk-intent-*`.
+
+**Rencana ini tidak mengubah satu pun warna status, pemetaan intent, atau ikon.** Alasannya bukan
+kehati-hatian umum: §7.5 mewajibkan setiap status berpasangan dengan ikon **dan** label teks
+Indonesia, sehingga warna status bukan lagi variabel estetika — ia terikat pada makna domain yang
+kanonik di `order-lifecycle.md` dan `marketplace-catalog.md`. Menggeser hue "supaya lebih hangat"
+akan memutus ikatan itu.
+
+Satu-satunya hal yang boleh berubah adalah **di mana** intent muncul, bukan warnanya.
 
 ---
 
-## 6. Yang TIDAK boleh berubah
+## 6. Sepuluh state layar — bahasa desain yang hanya menggambarkan happy path belum selesai
+
+`design-system.md` §6 menyatakan sepuluh state **wajib** dan menegaskan: *"All ten are required. A
+screen missing one is incomplete, not 'shipped'."* Tabel di bawah menyatakan bagaimana tiap state
+terasa dalam bahasa desain yang diusulkan. **Tidak ada state yang mendapat warna baru** — yang
+berubah hanya ruang, ritme, dan register citra.
+
+| # | State | §  | Bagaimana bahasa desain baru menyentuhnya |
+|---|---|---|---|
+| 1 | loading | 6.1 | Skeleton struktural sudah benar (`--mk-skeleton-base`, CLS < 0,1). **Satu perubahan:** skeleton harus meniru ritme section yang baru (40/64px), bukan yang lama — kalau tidak, halaman "melompat" saat konten masuk |
+| 2 | empty | 6.2 | Tiga bagian (apa kosong · mengapa · langkah berikutnya) tidak berubah. Di sinilah **ilustrasi** (§9) mendapat perannya yang sah: ikon `size-12 text-neutral-400` boleh naik menjadi ilustrasi SVG yang sudah ada di repo. Ini menambah kehangatan tanpa mengarang konten |
+| 3 | validation error | 6.3 | Tidak berubah. Inline per field + alert ringkasan |
+| 4 | authorization failure | 6.4 | Tidak berubah — halaman penjelas, bukan 403 mentah |
+| 5 | provider unavailable | 6.5 | Tidak berubah |
+| 6 | duplicate / retry-safe | 6.6 | Tidak berubah |
+| 7 | pending | 6.7 | Tidak berubah. `--mk-intent-pending-*` tetap |
+| 8 | success | 6.8 | Tidak berubah, dan **harus tetap tenang** — §2.3 melarang perayaan. Ini titik di mana godaan "seperti kamboja" paling berbahaya |
+| 9 | support escape hatch | 6.10 | Tetap di setiap layar transaksional. Ritme baru tidak boleh mendorongnya turun — lihat §7 |
+| 10 | responsive mobile | — | **Di sinilah pekerjaan nyata.** §2.7 menunjukkan padding mobile separuh dari yang diwajibkan dan CTA utama di y=1.048. Setiap state di atas harus dirancang pada 320px lebih dulu |
+
+**Konsekuensi yang harus dinyatakan:** menambah ruang (Tahap 1) membuat setiap halaman **lebih
+panjang**. Itu memperbaiki desktop dan memperburuk mobile bila dilakukan tanpa Tahap 3. Karena itu
+Tahap 1 dan Tahap 3 tidak boleh dipisah lebih dari satu rilis.
+
+---
+
+## 7. Mobile sebagai kasus utama
+
+Brief menyatakan produk ini sering dibuka dalam keadaan darurat, satu tangan, oleh orang yang
+terguncang. Bahasa desain harus dinilai dari kondisi itu, bukan dari desktop.
+
+**Masalah:** CTA utama di y = 1.048px pada viewport 740px (§2.7).
+
+**Tiga cara memperbaikinya, dengan konsekuensi masing-masing:**
+
+| Opsi | Cara | Konsekuensi |
+|---|---|---|
+| M1 | Perpendek pita foto hero di mobile (256px → lebih kecil), CTA naik | Paling murah; foto makin menjadi hiasan tipis. Perubahan token: **nihil** (`h-64` → nilai lebih kecil, tetap turunan `--spacing`) |
+| M2 | Balik urutan di dalam hero pada mobile: panel teks + CTA **di atas** foto | CTA naik ±256px tanpa mengecilkan foto. Butuh perubahan `hero.blade.php`; §4.5 tidak terpengaruh karena urutan *section* tidak berubah — hanya urutan internal satu komponen |
+| M3 | Sticky CTA mobile di beranda, meniru bar yang **sudah ada** di wizard (`md:hidden sticky top-[var(--mk-header-h)] z-sticky-cta`) | Pola sudah terbukti di repo ini; token `--mk-z-sticky-cta` sudah ada. Risiko: menambah elemen persisten di halaman pemasaran |
+
+**Rekomendasi: M2, lalu ukur ulang.** M2 memperbaiki penyebabnya (urutan), bukan gejalanya
+(ukuran), tidak menambah elemen persisten, dan tidak mengecilkan satu-satunya foto besar di
+halaman. M1 dan M3 tetap tersedia bila pengukuran ulang menunjukkan CTA masih di bawah lipatan.
+
+Yang **tidak** diusulkan: navigasi bawah. §3.11 menandainya PROPOSED, NOT APPROVED, terikat OQ-04,
+dan `AGENTS.md` melarang menciptakan navigasi alternatif tanpa persetujuan produk.
+
+Pemeriksaan mobile wajib di setiap tahap: nol scroll horizontal pada 320px; area sentuh 44px (§7.3,
+termasuk daftar periksa §2.7); `--mk-safe-bottom` dihormati; setiap state §6 diperiksa pada 320px.
+
+---
+
+## 8. Gerak dan ikonografi
+
+### 8.1 Gerak — hampir tidak ada yang berubah, dan itu disengaja
+
+Situs hidup sudah memakai token: `color/background-color/border-color/box-shadow 0.12s
+cubic-bezier(0.2,0,0,1)` — yaitu `--mk-duration-fast` + `--ease-standard`. kamboja memakai
+`transition: .3s` di 21 tempat.
+
+**Tidak diadopsi** (N9): §2.2 menetapkan "Motion: barely noticeable" sebagai target dan
+"Animated, celebratory, attention-seeking" sebagai anti-target.
+
+Tiga tempat di mana gerak boleh ditambah, semuanya memakai token yang sudah ada:
+
+1. Perpindahan langkah wizard → `--mk-duration-slow` (260ms) + `--ease-emphasized`. Token ini sudah
+   didefinisikan untuk tujuan itu (`tokens.css` §1.11 komentar "stepper advance") tetapi belum
+   terpakai.
+2. Bottom sheet / modal → `--mk-duration-slow`, sudah sesuai §3.4.
+3. Skeleton → `--mk-duration-slower` (400ms), sudah sesuai §6.1.
+
+`prefers-reduced-motion` sudah ditangani `tokens.css` §3. Tidak ada usulan perubahan.
+
+### 8.2 Ikonografi
+
+kamboja memakai dua hal yang berbeda: ikon SVG datar berukuran besar (89×89, 131×130) dalam warna
+merek penuh, dan **ikon lintas-agama berukuran setara** (`star-crescent.svg`, `cross.svg`,
+`covered-jar-pink.svg`, masing-masing 37×37).
+
+| Device | Adopsi? | Catatan |
+|---|---|---|
+| Ikon besar pada kartu layanan | **ya** | `<x-mk.icon-medallion>` sudah ada dan sudah punya `tone="earth"`/`tone="leaf"`. Perbesar, jangan bikin baru |
+| Ikon dalam warna merek penuh | **ya, terbatas** | Medallion sudah melakukannya. Ini salah satu cara termurah menambah bidang merek (§2.2) |
+| Ikonografi lintas-agama setara | **ya, tetapi bukan keputusan desain** | Pasar Jabodetabek jelas multi-agama dan produk sudah membedakan "Muslim & Non-muslim". Tetapi menambahkan simbol agama ke antarmuka adalah keputusan produk, bukan estetika. Lihat OQ-K9 |
+| Icon font | **tidak** | §4.6 verbatim: "Inline SVG sprite, tree-shaken. **No icon font.**" |
+
+---
+
+## 9. Citra — masalah nyata, dan pendapat saya
+
+Brief meminta pendapat yang jelas di sini. Ini pendapat itu.
+
+### 9.1 Keadaan faktual
+
+- `app/Support/ExampleData/CemeteryExampleData.php:208-213` mendefinisikan `EXAMPLE_PHOTOS`, **empat
+  file**, dan doc block-nya menyatakan foto itu "cycled by index".
+- `database/migrations/2026_08_24_100000_backfill_photo_and_maps_url_for_real_cemeteries.php:73-93`
+  memakai pola yang sama (`PHOTOS[$index % count(PHOTOS)]`) untuk empat TPU nyata bernama — dengan
+  **empat ilustrasi SVG**, bukan foto.
+- Pada direktori publik hari ini, sembilan lokasi tampil dan seluruhnya memakai **empat foto** yang
+  sama secara bergilir. Tidak ada SVG yang muncul. Seluruh sembilan baris itu fiktif — alamat
+  "Jl. Contoh …", harga "Estimasi internal (data contoh)".
+- Doc block yang sama menyatakan perubahan 8 Sep 2026 ini dilakukan atas **arahan eksplisit pemilik
+  produk** (via WhatsApp), menggantikan empat ilustrasi SVG dengan empat foto stok, dan mencatat
+  sendiri bahwa ini "a deliberate reversal of the 'illustrations, not photographs' stance".
+
+### 9.2 Pendapat
+
+**Empat foto yang diputar untuk seluruh katalog tidak layak dibawa ke peluncuran publik.** Bukan
+karena pengulangannya terlihat murah — meski iya — melainkan karena efek gabungannya membuat klaim
+yang tidak bisa dibuktikan.
+
+Tiap bagian, sendiri-sendiri, dapat dipertahankan. Baris fiktif diberi nama supaya terbaca fiktif.
+Pemakaian ulang foto diungkap. Harga diatribusi. Tetapi **yang dibaca pengunjung bukan bagian-bagian
+itu** — yang dibaca adalah sebuah kartu berjudul "TPU Bogor Bantarjati" dengan sebuah foto
+pemakaman di atasnya, dan kartu itu berkata: *beginilah rupa TPU Bogor Bantarjati.* Foto itu
+sesungguhnya pemakaman lain yang tidak berhubungan. Pengungkapannya ada di komentar PHP;
+klaimnya ada di halaman.
+
+Ini persis pola yang `design-system.md` §2.2 tolak pada baris "Trust signals: **named source**" dan
+yang `AGENTS.md` larang sebagai klaim tanpa bukti. Repositori ini sudah menerapkan disiplin itu
+dengan ketat di tempat lain — koordinat dibiarkan `null` daripada mengarang presisi, harga selalu
+membawa atribusi sumber dan tanggal, ketersediaan selalu "Perlu konfirmasi". Foto adalah satu-satunya
+bidang yang lolos dari disiplin itu, dan ia kebetulan bidang yang paling besar dan paling dipercaya
+mata.
+
+**Dan kamboja sendiri menunjukkan jalan keluarnya.** Situs itu memasang disclaimer fotonya **di
+halaman**, bukan di komentar kode: *"Materi foto diatas adalah properti tim dokumentasi Kamboja dan
+telah mendapat persetujuan dari keluarga dan pihak terkait."* Itu bukan basa-basi hukum — itu
+device desain. Ia mengubah foto dari klaim menjadi kesaksian.
+
+### 9.3 Yang saya usulkan
+
+Aturan register citra, ditulis ke `design-system.md` §2.2 sebagai aturan eksplisit yang hari ini
+belum ada:
+
+| Kondisi | Register | Alasan |
+|---|---|---|
+| Ada foto terverifikasi **dari lokasi itu sendiri** | Fotografi, dengan kapsion sumber terlihat di kartu | Foto adalah klaim; kapsion membuatnya klaim yang bisa dipertanggungjawabkan |
+| Tidak ada foto lokasi itu | **Ilustrasi** — empat SVG yang sudah ada di `public/images/cemeteries/` | Ilustrasi jujur berkata "kami belum punya foto tempat ini". Foto stok berbohong berkata "inilah tempat ini" |
+| Produk marketplace | Ilustrasi | Sudah begitu hari ini — sembilan produk, sembilan SVG. Register ini sudah konsisten dan terbukti |
+| Foto manusia | Hanya bila nyata dan berizin | §2.2 "candid warmth", dan §9.2 di atas |
+
+Perhatikan bahwa ini **bukan** usulan baru: ini mengembalikan posisi yang sudah dipegang
+`2026_08_24_100000_…` untuk empat TPU nyata, dan menyelaraskan direktori dengan marketplace yang
+sudah memakai ilustrasi. Ilustrasinya sudah ada di repo (< 2,1KB masing-masing) dan **tidak dipakai
+di mana pun** saat ini.
+
+**Tetapi arahan 8 Sep 2026 adalah arahan eksplisit pemilik.** Jadi ini rekomendasi untuk ditinjau
+ulang, bukan pembalikan sepihak. OQ-K3 dan OQ-K10 memberi pemilik tiga pilihan yang jelas.
+
+### 9.4 Perlakuan dan potongan
+
+Bila fotografi tetap dipakai, empat aturan, semuanya turunan token:
+
+1. **Rasio konsisten.** Hari ini kartu TPU/TPS memakai `h-40` (160px) pada kotak 387px lebar =
+   2,4:1, sementara hero dipaksa ke 3,7:1 dari sumber 1216×791. Satu rasio untuk media kartu, satu
+   untuk hero.
+2. **Turunan responsif untuk semua, bukan hanya hero.** Hari ini hanya hero punya AVIF/WebP
+   (§2.5). Enam kartu direktori mengirim ±1,4MB JPEG mentah. GATE 14 tidak gagal, tetapi §4.6
+   "Largest hero image ≤ 120 KB" jelas mengandaikan pipeline yang sama untuk media lain.
+3. **Jangan pernah memotong wajah.** Tidak berlaku hari ini (tidak ada wajah di foto pemakaman),
+   tetapi berlaku saat OQ-K4 dijawab ya.
+4. **`alt` yang jujur.** Hari ini `alt="Foto TPU Bekasi Jatiasih"` pada foto pemakaman lain. Bila
+   register foto dipertahankan, `alt` harus menyebut apa foto itu sebenarnya.
+
+---
+
+## 10. Pola UX — dua arah, bukan satu
+
+Brief meminta kejujuran dua arah. Ini dia.
+
+### 10.1 Di mana kamboja lebih baik
+
+| # | Pola | Bukti | Bisa diadopsi? |
+|---|---|---|---|
+| U1 | **Bukti sosial di dalam hero**, bukan di kaki halaman — Google Reviews + Trustpilot ada di section 0 | DOM terarsip section 0 hanya memuat dua gambar, keduanya logo ulasan | **Polanya ya, isinya tidak** — Makam belum punya listing ulasan (N7, OQ-K6) |
+| U2 | **Dua jalur produk dinyatakan di layar pertama** — "Proteksi Berjangka" vs "Jasa On Demand", masing-masing dengan harga mulai | Section 0 CTA ganda; section 1 dua kartu dengan "Mulai dari IDR …" | **Ya.** Makam punya At-Need vs Pre-Need (`benchmark-validation-2026-07.md` menyimpulkannya sebagai dua journey berbeda) tetapi beranda tidak menyatakannya di layar pertama |
+| U3 | **Harga mulai ditampilkan di kartu produk**, bukan disembunyikan | "Mulai dari IDR 15.000.000", "Biaya mulai IDR 35.000 per bulan" | **Ya** — dan Makam sudah punya `--mk-text-price` (ADR-0037) yang dibuat persis untuk ini |
+| U4 | **Halaman panjang dan longgar** | §1.4 | **Ya** — Tahap 1 |
+| U5 | **Disclaimer foto di halaman** | §1.5 | **Ya** — §9.2 |
+| U6 | **Kanal bantuan mengambang persisten** (WhatsApp) | Terlihat pada rekonstruksi | **Sebagian.** §6.10 sudah mewajibkan support escape hatch; yang kurang adalah persistensinya di halaman pemasaran |
+
+### 10.2 Di mana Makam lebih baik — dan harus dilindungi
+
+Ini bagian yang paling mudah dirusak oleh permintaan "dibuat seperti kamboja", karena kamboja
+adalah situs pemasaran dan Makam adalah aplikasi transaksional. Semua di bawah **tidak dimiliki
+kamboja**.
+
+| # | Pola Makam | Bukti | Status |
+|---|---|---|---|
+| P1 | **Wizard 4 langkah dengan stepper bernama** ("Cari & Pilih / Detail Pemesanan / Pembayaran / Konfirmasi"), lengkap dengan status "belum tersedia" pada langkah yang belum dibuka | `/pemesanan-makam`, diukur langsung | **Lindungi.** Jangan pernah diganti formulir satu halaman |
+| P2 | **Progressive reveal** — Langkah 1 merender **nol `<input>`**; pengguna memilih kota lewat chip 44px lebih dulu | `fields: 0` pada pengukuran; chip 113×44, 90×44, … | **Lindungi.** Ini persis yang dibutuhkan pengguna terguncang: satu keputusan per layar (§2.2 "one decision per screen") |
+| P3 | **Chip alih-alih `<select>`** untuk pilihan pendek | Direktori, wizard, perpanjangan — ketiganya | **Lindungi dan jadikan kanonik.** Dropdown pada ponsel satu tangan lebih buruk |
+| P4 | **Pratinjau ketersediaan petak** di beranda, read-only, merender nol saat tidak ada data nyata | `plot-availability-preview.blade.php` | **Lindungi.** Tidak ada padanannya di kamboja |
+| P5 | **Atribusi sumber pada setiap angka** — "Sumber: Estimasi internal (data contoh) · per 08/08/2026" | Beranda, direktori, marketplace | **Lindungi.** Ini kebalikan dari badge Trustpilot: klaim yang bisa diperiksa |
+| P6 | **Ketersediaan dinyatakan jujur** — "Perlu konfirmasi" di setiap kartu, banner `warning` di puncak beranda | Diukur langsung | **Lindungi.** §2.2 "honest availability" |
+| P7 | **Perpanjangan sebagai journey tersendiri** dengan stepper 3 langkah | `/perpanjangan` | **Lindungi** |
+| P8 | **Nol permintaan pihak ketiga**, font self-hosted | §4.6; kamboja memuat `fonts.googleapis.com` | **Lindungi.** Ini juga keputusan privasi, bukan hanya performa |
+
+**Kesimpulan §10:** kamboja lebih baik dalam *menjual*; Makam lebih baik dalam *mengurus*. Bahasa
+desain yang diadopsi harus menaikkan kemampuan menjual di beranda **tanpa** menyentuh mesin
+pengurusan di wizard. Itulah sebabnya Tahap 1–4 hanya menyentuh permukaan pemasaran dan Tahap 5–6
+sengaja ditempatkan paling akhir.
+
+---
+
+## 11. Yang TIDAK boleh berubah
 
 1. **Palet ADR-0034.** Earth brown `primary`, Leaf green `secondary` dalam kurungannya, hue
    `danger` 352°, `--mk-surface-warm` menunjuk `primary-50`. Semuanya disampling dari logo asli
@@ -534,57 +853,77 @@ temuan di §2 yang menyentuhnya. `<x-mk.trust-badge-strip>` **tidak dibangun** (
    pernah** fill, badge, tombol, atau alert (§1.2b, §9.2 MUST NOT 7).
 4. **Urutan sembilan section beranda** — §4.5 menyebutnya *"a product contract, not a design
    preference"*.
-5. **Satu aksi primer per tampilan** — §2.3 DO.
-6. **`--mk-text-price` hanya untuk angka uang final** — ADR-0037.
-7. **Larangan pil / gradien / bayangan berwarna / mode gelap** — §2.3, §1.7, OQ-07.
-8. **Banner ketersediaan yang jujur** tetap di atas halaman selama `G-OPS-01` tertutup.
-9. **Nol permintaan pihak ketiga di halaman publik** — §4.6. Ini berarti font tetap self-hosted;
-   kamboja memuat `fonts.googleapis.com`, Makam tidak boleh.
-10. **§3.3d `<x-mk.trust-badge-strip>` tetap RESERVED, NOT BUILT** sampai ada konten nyata.
+5. **Pemetaan status → intent → ikon → label** di `StatusIntent.php` (§5.1). Tidak ada hue status
+   yang bergeser.
+6. **Satu aksi primer per tampilan** — §2.3 DO.
+7. **`--mk-text-price` hanya untuk angka uang final** — ADR-0037.
+8. **Larangan pil / gradien / bayangan berwarna / mode gelap** — §2.3, §1.7, OQ-07.
+9. **Success tetap tenang** — §2.3 melarang konfeti, animasi centang, "Selamat!".
+10. **Banner ketersediaan yang jujur** tetap di atas halaman selama `G-OPS-01` tertutup.
+11. **Nol permintaan pihak ketiga di halaman publik** — §4.6.
+12. **§3.3d `<x-mk.trust-badge-strip>` tetap RESERVED, NOT BUILT** sampai ada konten nyata.
+13. **Navigasi bawah tidak dibangun** — §3.11 PROPOSED, NOT APPROVED, OQ-04.
+14. **Sepuluh state layar tetap wajib** — §6. Tidak ada tahap boleh mengirim layar yang kehilangan
+    satu state demi tampilan.
+15. **Panel Filament di luar cakupan** — §8.3 menandainya keputusan pemilik yang terpisah.
 
 ---
 
-## 7. Urutan bertahap — satu PR per tahap
+## 12. Urutan bertahap — satu PR per tahap
 
-Tiap tahap berdiri sendiri, bisa dikirim dan bisa dibalik sendiri. Tiap tahap wajib lulus
-`bash ci/verify-docs.sh`, `php artisan design:verify-filament-palette`,
-`php artisan blade:verify-content-survival`, dan suite `tests/browser/*.spec.ts`.
+Diurutkan berdasarkan dampak tertinggi dengan risiko terendah lebih dulu. Tiap tahap berdiri
+sendiri, bisa dikirim dan bisa dibalik sendiri. Tiap tahap wajib lulus `bash ci/verify-docs.sh`,
+`php artisan design:verify-filament-palette`, `php artisan blade:verify-content-survival`, dan
+suite `tests/browser/*.spec.ts`, plus pemeriksaan 320px untuk setiap state §6 yang tersentuh.
 
-- [ ] **Tahap 1 — Ritme vertikal.** Dua `@utility` di `app.css`; ganti `py-5 lg:py-8` menjadi
-  `section-y lg:section-y-lg` di beranda. Nol perubahan warna, nol perubahan salinan, nol
-  perubahan urutan. Ini perbaikan kepatuhan terhadap §4.4, jadi sekaligus yang paling mudah
-  dipertahankan di review. **Perubahan visual terbesar per baris kode dari seluruh rencana.**
-- [ ] **Tahap 2 — Alternasi permukaan.** Tambah `--mk-surface-quiet` (butuh ADR); terapkan
+- [ ] **Tahap 1 — Ritme vertikal + audit area sentuh.** Dua `@utility` di `app.css`; ganti
+  `py-5 lg:py-8` menjadi `section-y lg:section-y-lg` di beranda, direktori, dan marketplace.
+  Verifikasi area sentuh 44px pada daftar §2.7. Nol perubahan warna, salinan, atau urutan.
+  **Dampak visual terbesar per baris kode; risiko terendah** — ini perbaikan kepatuhan §4.4, bukan
+  perkara selera.
+- [ ] **Tahap 2 — Alternasi permukaan + bidang merek.** Tambah `--mk-surface-quiet` (butuh ADR);
   selang-seling tint antar section sehingga batas section terbaca tanpa garis pembatas (§4.4:
-  *"Proximity carries the grouping — do not reach for divider lines"*).
-- [ ] **Tahap 3 — Citra.** Satu foto nyata per TPU/TPS, hentikan daur ulang, bangun turunan
-  AVIF/WebP, patuhi GATE 14. **Terblokir pada input pemilik** — lihat §9 OQ-K3.
-- [ ] **Tahap 4 — Hierarki komponen.** Varian penekanan `<x-mk.card>`; bobot panel teks
-  `<x-mk.hero>`. Tanpa scrim, tanpa overlay.
-- [ ] **Tahap 5 — Suara salinan.** Hero dan judul section bergeser ke orang kedua yang hangat,
+  *"Proximity carries the grouping — do not reach for divider lines"*); perluas bidang merek
+  (footer, medallion) sehingga `primary` tidak lagi hanya mengisi satu elemen (§2.2).
+- [ ] **Tahap 3 — Mobile: naikkan CTA.** Terapkan M2 (§7), ukur ulang posisi CTA pada 360×740,
+  laporkan angkanya. **Tidak boleh terpisah lebih dari satu rilis dari Tahap 1**, karena Tahap 1
+  memanjangkan halaman.
+- [ ] **Tahap 4 — Hierarki komponen.** Varian penekanan `<x-mk.card>`; perbesar
+  `<x-mk.icon-medallion>` pada kartu layanan; beri bobot panel teks `<x-mk.hero>`. Tanpa scrim,
+  tanpa overlay.
+- [ ] **Tahap 5 — Register citra.** Terapkan aturan §9.3 setelah OQ-K3/OQ-K10 dijawab; bangun
+  turunan AVIF/WebP untuk media kartu; perbaiki `alt`. **Terblokir pada input pemilik.**
+- [ ] **Tahap 6 — Dua jalur di layar pertama (U2/U3).** Nyatakan At-Need vs Pre-Need pada beranda
+  dengan harga mulai memakai `--mk-text-price`. **Perubahan §4.5 — butuh review kontrak produk,
+  bukan keputusan desain.**
+- [ ] **Tahap 7 — Suara salinan.** Hero dan judul section bergeser ke orang kedua yang hangat,
   **tanpa** eufemisme (A7 + N8). Butuh persetujuan pemilik atas teksnya.
-- [ ] **Tahap 6 — Sinkronisasi dokumen.** `design-system.md` §2.2/§4.4/§2.1 + CHANGELOG.
+- [ ] **Tahap 8 — Sinkronisasi dokumen.** `design-system.md` §2.1 SURFACES, §2.2 (aturan register
+  citra §9.3), §4.4 (utilitas baru), §6 (skeleton mengikuti ritme baru) + CHANGELOG.
 
-Tahap 1–2 tidak bergantung pada input siapa pun dan bisa jalan sekarang. Tahap 3 dan 5 menunggu
-pemilik. Tahap 4 bisa jalan paralel dengan 3.
+Tahap 1–2 tidak bergantung pada input siapa pun dan bisa jalan sekarang. Tahap 3 dan 4 bisa jalan
+paralel. Tahap 5–7 menunggu pemilik. Tahap 6 menunggu review kontrak produk.
 
 ---
 
-## 8. Hubungan dengan dokumen yang sudah ada — bukan dokumen saingan
+## 13. Hubungan dengan dokumen yang sudah ada — bukan dokumen saingan
 
 `AGENTS.md` §Documentation melarang menduplikasi data kanonik. Benchmark kamboja **sudah pernah
 dikerjakan di repo ini**, dan rencana ini melanjutkannya, tidak menggantikannya:
 
 | Dokumen | Yang sudah diputuskan di sana | Posisi rencana ini |
 |---|---|---|
-| [ADR-0037](../../adr/0037-price-emphasis-and-one-accent-one-purpose.md) (26 Agu 2026) | Tiga rekomendasi dari review benchmark kamboja. Rek. 1 → `--mk-text-price`. Rek. 2 → pelengkap positif §2.2. Rek. 3 (sinyal kepercayaan) → **ditahan** | Menghormati ketiganya. N7 menegaskan ulang penahanan rek. 3 |
-| `design-system.md` §2.2 (26 Agu 2026) | Pelengkap citra: *"prefer candid warmth and connection"* saat ada orang dalam bingkai | §1.5 menambah bukti tersampel; §3.1 A3 menambah dimensi kepemilikan dan izin |
+| [ADR-0037](../../adr/0037-price-emphasis-and-one-accent-one-purpose.md) (26 Agu 2026) | Tiga rekomendasi dari review benchmark kamboja. Rek. 1 → `--mk-text-price`. Rek. 2 → pelengkap positif §2.2. Rek. 3 (sinyal kepercayaan) → **ditahan** | Menghormati ketiganya. N7 menegaskan ulang penahanan rek. 3; U3/Tahap 6 akhirnya memakai `--mk-text-price` untuk tujuan aslinya |
+| `design-system.md` §2.2 (26 Agu 2026) | Pelengkap citra: *"prefer candid warmth and connection"* saat ada orang dalam bingkai | §1.5 menambah bukti tersampel; §9.3 menambah aturan register yang §2.2 belum punya |
 | `design-system.md` §3.3d (26 Agu 2026) | `<x-mk.trust-badge-strip>` RESERVED, NOT BUILT | Tidak dibangun. Tidak ada perubahan status |
+| `design-system.md` §3.11 | Navigasi bawah PROPOSED, NOT APPROVED (OQ-04) | Tidak dibangun (§7) |
+| `app/Support/Design/StatusIntent.php` | Satu tempat resolusi status → intent | Tidak disentuh (§5.1) |
 | [Spec brand refresh](../specs/2026-08-21-brand-visual-refresh-design.md) (21 Agu 2026) | Arah "lighter, younger, warmer"; fase 1–3 | Ini adalah pendahulu Fase 3 yang belum punya rencana |
 | [Fase 1](2026-08-21-brand-visual-refresh-phase1-foundation.md), [Fase 2](2026-08-25-brand-visual-refresh-phase2-homepage.md) | Palet di-anchor ulang; `<x-mk.hero>` dipasang | Beranda yang dinilai "plain" oleh pemilik **adalah hasil Fase 2**. §2 mendiagnosis mengapa |
-| [`benchmark-validation-2026-07.md`](../../research/benchmark-validation-2026-07.md) | kamboja dikutip untuk At-Need/Pre-Need, bukan desain | Tidak tersentuh |
+| [`benchmark-validation-2026-07.md`](../../research/benchmark-validation-2026-07.md) | kamboja dikutip untuk At-Need/Pre-Need, bukan desain | Dipakai sebagai dasar U2 (dua journey), tidak diubah |
+| `CemeteryExampleData.php` doc block | Kerangka kejujuran + pembalikan foto 8 Sep 2026 | §9 membangun di atasnya; tidak ada pembalikan sepihak |
 
-### 8.1 Satu ketidakcocokan yang harus diselesaikan, bukan dipilih diam-diam
+### 13.1 Satu ketidakcocokan yang harus diselesaikan, bukan dipilih diam-diam
 
 `design-system.md` §2.2 dan ADR-0037 Context 2 sama-sama menyatakan:
 
@@ -607,35 +946,50 @@ bobot pada panel teks", bukan "tiru hero berfoto", karena rumusan itu benar di k
 
 ---
 
-## 9. Pertanyaan terbuka untuk pemilik produk
+## 14. Pertanyaan terbuka untuk pemilik produk
 
 Pemilik menulis bahwa brand guideline **belum** ada. Rencana ini **tidak** mengarang satu pun dan
 tidak menyajikan apa pun sebagai sudah disepakati.
 
 | ID | Pertanyaan | Mengapa menghalangi |
 |---|---|---|
-| **OQ-K1** | Bisakah dikirim tangkapan layar halaman penuh kamboja.co.id (desktop + mobile) dari mesin sendiri? | Situs diblokir DNS dari host ini (§0.1). Bukti saat ini berumur 4 bulan dan CSS per-halaman hilang. Ini juga menyelesaikan ketidakcocokan §8.1 |
+| **OQ-K1** | Bisakah dikirim tangkapan layar halaman penuh kamboja.co.id (desktop **dan mobile**) dari mesin sendiri? | Situs diblokir DNS dari host ini (§0.1). Bukti berumur 4 bulan, CSS per-halaman hilang, dan **seluruh perilaku mobile kamboja NOT VERIFIED** (§1.4b). Ini juga menyelesaikan ketidakcocokan §13.1 |
 | **OQ-K2** | "Dibuat seperti kamboja" berarti (a) **warna dan bentuknya** — magenta, gradien, tombol pil — atau (b) **kehangatan dan kepenuhannya**, dengan identitas Earth/Leaf tetap? | Jika (a), ADR-0034 dan §2.3 harus dibatalkan lewat ADR baru, dan seluruh rencana ini berubah. Rencana ini mengasumsikan **(b)** |
-| **OQ-K3** | Apakah ada foto TPU/TPS nyata — milik sendiri atau berlisensi — untuk enam lokasi di beranda? Satu per lokasi | **Memblokir Tahap 3.** Hari ini tiga foto dipakai untuk enam lokasi (§2.5). Tidak akan ada foto yang dikarang atau lokasi yang salah dilabeli |
+| **OQ-K3** | Apakah ada foto TPU/TPS nyata — milik sendiri atau berlisensi — untuk lokasi yang tampil di direktori? Satu per lokasi | **Memblokir Tahap 5.** Hari ini empat foto dipakai bergilir untuk sembilan lokasi fiktif (§9.1) |
+| **OQ-K10** | Jika jawaban OQ-K3 tidak, pilih satu: **(i)** kembali ke ilustrasi untuk lokasi tanpa foto sendiri (§9.3, menyelaraskan dengan marketplace); **(ii)** pertahankan foto stok tetapi tambahkan kapsion sumber terlihat di setiap kartu, seperti disclaimer kamboja; **(iii)** pertahankan apa adanya | Arahan 8 Sep 2026 memilih foto stok secara eksplisit. Rekomendasi saya **(i)**, dengan **(ii)** sebagai kompromi yang dapat diterima. **(iii)** membuat klaim yang tidak bisa dipertanggungjawabkan (§9.2) |
 | **OQ-K4** | Apakah Makam.co.id boleh memotret layanan nyata, dengan izin keluarga, seperti yang dilakukan kamboja? | Ini sumber kehangatan terbesar kamboja (§1.5) dan tidak bisa digantikan token. Butuh keputusan operasional + persetujuan, bukan keputusan desain |
 | **OQ-K5** | Apakah teks hero harus berada **di atas** foto? | Butuh token scrim + ADR + metode verifikasi baru (§4.3). Sengaja di luar tahap mana pun |
-| **OQ-K6** | Apakah sudah ada mitra, sertifikasi, listing ulasan, atau liputan pers yang **nyata**? | Menentukan kapan §3.3d boleh dibangun. Selama jawabannya tidak, strip kepercayaan tetap tidak dibangun (N7) |
-| **OQ-K7** | Bolehkah salinan bergeser ke orang kedua yang hangat ("Untuk keluarga Anda"), dengan tetap menyebut hal apa adanya tanpa eufemisme? | **Memblokir Tahap 5.** N8 menolak eufemisme kamboja; A7 menerima kehangatannya. Batas ini milik pemilik |
+| **OQ-K6** | Apakah sudah ada mitra, sertifikasi, listing ulasan, atau liputan pers yang **nyata**? | Menentukan kapan §3.3d boleh dibangun dan apakah U1 bisa diadopsi. Selama jawabannya tidak, strip kepercayaan tetap tidak dibangun (N7) |
+| **OQ-K7** | Bolehkah salinan bergeser ke orang kedua yang hangat ("Untuk keluarga Anda"), dengan tetap menyebut hal apa adanya tanpa eufemisme? | **Memblokir Tahap 7.** N8 menolak eufemisme kamboja; A7 menerima kehangatannya. Batas ini milik pemilik |
 | **OQ-K8** | Kalau nanti brand guideline terbit dan bertabrakan dengan ADR-0034, mana yang menang? | ADR-0034 menutup OQ-01 dan OQ-12 dengan nilai dari logo asli. Guideline baru butuh ADR yang membatalkannya secara eksplisit |
+| **OQ-K9** | Bolehkah simbol agama (bulan-bintang, salib, guci) muncul di antarmuka publik seperti pada kamboja? | Keputusan produk, bukan estetika (§8.2). Berdampak pada ikonografi layanan |
+| **OQ-K11** | Bolehkah beranda menyatakan dua jalur — At-Need vs Pre-Need — di layar pertama? | **Memblokir Tahap 6**, karena §4.5 adalah kontrak produk. U2/U3 mengusulkannya; keputusannya bukan milik desain |
 
 ---
 
-## 10. NOT VERIFIED — daftar lengkap
+## 15. NOT VERIFIED — daftar lengkap
 
 - Tampilan kamboja.co.id **hari ini**. Semua bukti dari arsip; halaman 10 Mei 2026, stylesheet
   30 Mei 2026.
+- **Seluruh perilaku tata letak mobile kamboja** (§1.4b). Blok `@media (max-width: 479px)` di
+  `universal.css` hanya mengubah ±50 deklarasi; pekerjaan mobile yang sesungguhnya ada di CSS
+  per-halaman yang tidak terarsip. Tidak ada klaim mobile kamboja di dokumen ini.
 - *Padding* tingkat-section kamboja, gambar latar section, dan warna final tombol non-hero — CSS
   per-halaman tidak terarsip (§0.2). Tinggi section di §1.4 berasal dari rekonstruksi dan hanya
   indikatif.
-- Apakah hero kamboja memuat foto (§8.1).
+- Apakah hero kamboja memuat foto (§13.1).
+- Apakah elemen < 44px di §2.7 benar-benar melanggar §7.3 — yang diukur kotak elemen, bukan area
+  sentuh. Verifikasi masuk Tahap 1.
+- Jumlah total baris `cemeteries` di basis data produksi. Yang dihitung adalah **sembilan lokasi
+  yang tampil** di direktori publik; jumlah baris termasuk yang tidak dipublikasikan tidak
+  diperiksa.
 - Tampilan `dev.makam.co.id`. Hanya `makam.co.id` produksi yang diperiksa; keduanya meresolusi ke
   103.92.214.243, tetapi tidak diasumsikan identik.
-- Tampilan mobile Makam.co.id pada 360px. Semua pengukuran §2 pada 1440×900.
+- Tampilan panel Filament dan peta petak `plot-floor-map` — sengaja di luar cakupan (§11.15), tidak
+  dimuat.
+- State layar §6 selain yang kebetulan terlihat (empty-state pratinjau petak, banner `warning`).
+  Loading, error, otorisasi, dan pending **tidak** dipicu atau diamati; §6 adalah usulan atas dasar
+  dokumen, bukan atas dasar pengamatan.
 - Dampak visual dari setiap usulan. Tidak ada yang diimplementasikan — ini rencana.
 - Klaim ADR-0037 bahwa kamboja memakai *"exactly one accent colour for urgency … and exactly one,
   different, accent colour for money"*. Sampling `universal.css` menemukan `#D23574` mendominasi
