@@ -22,6 +22,7 @@ use App\Platform\SiteSettings\SettingsService;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use RuntimeException;
+use Throwable;
 
 /**
  * ARCH-01 remediation (`docs/superpowers/plans/2026-09-07-batchm5a-domain-
@@ -115,19 +116,31 @@ final readonly class OpenBookingOnlinePayment
             // `QuoteExpiryScheduler::expireDueOrders()` for the reader and
             // the migration's doc block for why a column rather than a join.
             //
-            // NOT atomic with the session row, and that is a deliberate
-            // trade rather than an oversight. `OpenPaymentSession` makes a
-            // blocking HTTP call to the provider before it writes anything,
-            // so wrapping both in one transaction would hold a database
-            // transaction open across a network round trip — on a 2 vCPU
-            // host with a pooled connection, that is its own outage shape.
-            // The residual window is: session committed, process dies here,
-            // order never learns of it. That order then behaves exactly as
-            // it does today (pre-fix), which is strictly no worse than the
-            // status quo rather than a regression this introduces. Closing
-            // it properly needs the provider call moved out of the write
-            // path entirely; that is a larger change than this fix.
-            $order->linkPaymentSession($session);
+            // NEVER allowed to fail the opening. By the time this line runs,
+            // `OpenPaymentSession` has committed the session row AND SumoPod
+            // is already hosting a live, payable checkout page whose
+            // `payment_link_url` exists only in `$session`. If this write
+            // threw — `OrderIsGuardedException` from its own existence
+            // check, or an ordinary deadlock or dropped connection on the
+            // `save()` — the exception would escape past the
+            // `PaymentSessionOpeningDeniedException` handler below, out of
+            // `__invoke()`, and into `BookingWizard`'s generic
+            // `catch (Throwable)`. The customer would see "payment failed"
+            // while a live payable session existed that nobody was ever
+            // shown, and the order would carry no link either, so this
+            // guard would not protect it. That is a WORSE outcome than the
+            // one this whole commit exists to prevent, and it would be
+            // introduced by the prevention.
+            //
+            // So the failure is absorbed and reported, never propagated. An
+            // unlinked order degrades to exactly the pre-fix behaviour —
+            // the state this class's known-limits note already accepts — and
+            // a lost payment link is not an acceptable trade for it.
+            try {
+                $order->linkPaymentSession($session);
+            } catch (Throwable $linkFailure) {
+                report($linkFailure);
+            }
 
             return $session;
         } catch (PaymentSessionOpeningDeniedException $denial) {

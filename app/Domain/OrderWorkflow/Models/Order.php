@@ -281,6 +281,24 @@ final class Order extends Model
      * `OpenPaymentSession`'s own invariant in a second place, and would
      * wrongly refuse a future caller that legitimately re-links.
      *
+     * DELIBERATELY UNAUDITED, and that is a decision rather than an
+     * omission. The authoritative record of a checkout opening is already
+     * written, by `Actions\OpenPaymentSession`, as a
+     * `PaymentAuditActions::SESSION_OPENED` row in `audit_events`. This
+     * column is a DERIVED POINTER at that same event — not an independent
+     * fact about the order, and not a money-bearing value: it grants
+     * nothing, moves no status, and its only reader
+     * (`QuoteExpiryScheduler`) treats it as a reason to do LESS. Auditing it
+     * would put a second record of one event into the trail, which is how an
+     * audit trail stops being answerable. The two doors above are audited
+     * because they write facts (`status`, `paid_via`) that nothing else
+     * records; this one is not, because something else already does.
+     *
+     * Unlike those two it is also written outside any transaction. It has no
+     * partner row to stay atomic with — the audit row it would pair with
+     * belongs to the session, and was committed before this method is ever
+     * reached.
+     *
      * @throws OrderIsGuardedException when no such session row exists.
      */
     public function linkPaymentSession(PaymentSession $session): void
@@ -288,6 +306,21 @@ final class Order extends Model
         if (! PaymentSession::query()->whereKey($session->getKey())->exists()) {
             throw OrderIsGuardedException::forOperation('linkPaymentSession');
         }
+
+        // `save()` persists EVERY dirty attribute, not just the one filled
+        // below — so without this line a caller holding an instance with an
+        // in-memory `$order->status = 'DIBAYAR'` could ride that write in
+        // through this door, landing a paid status with no
+        // `order_status_events` row, no audit row and no outbox row: exactly
+        // the money bug the class-level write guard exists to stop, reached
+        // one method along. Discarding first makes this door write one
+        // column and nothing else, whatever it is handed.
+        //
+        // `applyStatus()` and `stampPaidSource()` have the same shape and
+        // are NOT changed here — they are pre-existing, out of this task's
+        // scope, and each is reachable only with a persisted event row as
+        // its token. Recorded as a known gap rather than silently matched.
+        $this->discardChanges();
 
         $this->paymentSessionWriteAuthorized = true;
 

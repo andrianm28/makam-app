@@ -447,6 +447,86 @@ final class PreNeedCaseResourceTest extends TestCase
         $this->assertSame(1, PaymentIntent::query()->count());
     }
 
+    /**
+     * H-2 review, CRITICAL-1 — pins WHY that finding is currently
+     * unreachable, and fails the day it stops being.
+     *
+     * The review flagged this action as a second surface that opens a real
+     * booking session against a real `orders` row without linking it, which
+     * would let the hourly expiry sweep release the grave mid-payment. The
+     * link is now written (`PreNeedCaseActions::paymentLink()`), but it
+     * cannot be exercised end to end, because the guard denies this path
+     * before a session is ever created — and not for the reason this class's
+     * own doc block has been claiming.
+     *
+     * Measured, not assumed: with the instalment amount set to the FULL
+     * quote total — removing condition 5 (`amount == quote total`) from the
+     * picture entirely — the opening is still denied, by three
+     * operator-owned conditions:
+     *
+     *     confirmation_valid_or_reservation_active
+     *     quote_accepted_and_unexpired
+     *     authorized_opening
+     *
+     * A pre-need order is never walked through operator verification, quote
+     * acceptance, or an order-scoped opening grant, so none of the three can
+     * hold. That makes CRITICAL-1 a latent defect rather than a live one:
+     * the fix is in place and costs nothing, but no test can drive it until
+     * the pre-need flow grows those operator steps.
+     *
+     * This test therefore asserts the denial and its exact reasons. When
+     * someone does open that path, this test fails and points at the line of
+     * `PreNeedCaseActions::paymentLink()` that will then need real coverage.
+     */
+    public function test_the_per_installment_payment_link_is_denied_by_the_operator_conditions_not_the_amount(): void
+    {
+        $this->bindGateRegistryWith(['G-LEGAL-01' => true, 'G-PAY-01' => true]);
+
+        $admin = User::factory()->create();
+        $this->grantRoleTo($admin, ActorRole::ADMIN);
+        $this->actingAs($admin);
+        $this->seedActorSession($admin, CarbonImmutable::now());
+
+        $this->configurePaymentMerchant();
+        $this->fakeProviderSuccess();
+
+        $case = $this->agreedCase();
+        $quote = Quote::query()->findOrFail($case->fresh()->quote_id);
+
+        // The full quote total, so the amount condition CANNOT be the cause.
+        app(SchedulePreNeedPayments::class)(
+            $case->fresh(),
+            [['amount_minor' => $quote->totalMinor()->toMinorInt(), 'due_date' => '2026-09-01']],
+            'actor:admin-1',
+            'admin',
+        );
+
+        $case = $case->fresh();
+        $installment = PreNeedPaymentScheduleItem::query()
+            ->where('pre_need_case_id', $case->getKey())
+            ->firstOrFail();
+
+        Livewire::test(ViewPreNeedCase::class, ['record' => $case->getKey()])
+            ->callAction('payment_link_'.$installment->getKey())
+            ->assertNotified('Gagal membuat tautan pembayaran');
+
+        $this->assertSame(0, PaymentSession::query()->count());
+        $this->assertNull($case->order()?->fresh()->payment_session_id);
+
+        $intent = PaymentIntent::query()->latest('evaluated_at')->firstOrFail();
+
+        $this->assertSame('denied', $intent->decision);
+        $this->assertSame(
+            [
+                'confirmation_valid_or_reservation_active',
+                'quote_accepted_and_unexpired',
+                'authorized_opening',
+            ],
+            $intent->denied_conditions,
+            'the amount condition must NOT be among these — if it is, the fixture stopped testing what it claims',
+        );
+    }
+
     // ---------------------------------------------------------------------
     // Fixtures.
     // ---------------------------------------------------------------------

@@ -168,6 +168,23 @@ final class QuoteExpiryRespectsLivePaymentTest extends TestCase
         ?CarbonImmutable $expiresAt,
         ?CarbonImmutable $createdAt = null,
     ): PaymentSession {
+        $session = $this->makeSession($state, $expiresAt, $createdAt);
+
+        $order->linkPaymentSession($session);
+
+        return $session;
+    }
+
+    /**
+     * An unattached `payment_sessions` row. Split out of `linkSession()` so
+     * the mid-sweep race test can create a live session that the order does
+     * not yet point at.
+     */
+    private function makeSession(
+        SessionState $state,
+        ?CarbonImmutable $expiresAt,
+        ?CarbonImmutable $createdAt = null,
+    ): PaymentSession {
         $intent = PaymentIntent::query()->create([
             'requested_amount_minor' => 1_500_000_00,
             'currency' => 'IDR',
@@ -198,8 +215,6 @@ final class QuoteExpiryRespectsLivePaymentTest extends TestCase
                 ->update(['created_at' => $createdAt]);
             $session->refresh();
         }
-
-        $order->linkPaymentSession($session);
 
         return $session;
     }
@@ -384,9 +399,93 @@ final class QuoteExpiryRespectsLivePaymentTest extends TestCase
         $forged = new PaymentSession;
         $forged->forceFill(['id' => (string) Str::uuid()]);
 
-        $this->expectException(OrderIsGuardedException::class);
+        try {
+            $order->linkPaymentSession($forged);
+            $this->fail('a forged session must not be linkable');
+        } catch (OrderIsGuardedException) {
+            // Asserting the throw is not enough on its own: an
+            // implementation that wrote the column and THEN threw would
+            // satisfy it while still pinning the plot. The column is what
+            // the sweep reads, so the column is what must be asserted.
+            $this->assertNull($order->fresh()->payment_session_id);
+        }
+    }
 
-        $order->linkPaymentSession($forged);
+    public function test_the_door_writes_only_its_own_column(): void
+    {
+        $order = $this->makeOrder(OrderStatus::MENUNGGU_PEMBAYARAN);
+        $session = $this->linkSession(
+            $order,
+            SessionState::AwaitingPayment,
+            CarbonImmutable::now()->addHours(6),
+        );
+
+        // A caller holding a tampered in-memory instance must not be able to
+        // ride a status write in through this door: `save()` persists every
+        // dirty attribute, and `DIBAYAR` with no `order_status_events` row,
+        // no audit row and no outbox row is a money bug.
+        $order->status = OrderStatus::DIBAYAR->value;
+        $order->linkPaymentSession($session);
+
+        $this->assertSame(
+            OrderStatus::MENUNGGU_PEMBAYARAN,
+            $order->fresh()->status(),
+            'the status must not have ridden along with the session link',
+        );
+        $this->assertSame($session->getKey(), $order->fresh()->payment_session_id);
+    }
+
+    // ---------------------------------------------------------------------
+    // The race the re-check exists for
+    // ---------------------------------------------------------------------
+
+    public function test_a_checkout_opened_after_the_selection_query_is_still_respected(): void
+    {
+        $plot = $this->makePlot();
+        $order = $this->makeOrder(OrderStatus::MASUK);
+        (new ReservePlot)($plot, $order, "order:{$order->getKey()}", 'system');
+        $order = $this->moveTo($order, OrderStatus::MENUNGGU_PEMBAYARAN);
+
+        $quote = $this->issueExpiredQuote($order);
+        $this->forceAccepted($quote);
+
+        // A live session that the order does NOT yet point at — the state of
+        // the world at the instant the sweep runs its SELECT.
+        $session = $this->makeSession(
+            SessionState::AwaitingPayment,
+            CarbonImmutable::now()->addHours(6),
+        );
+        $this->assertNull($order->fresh()->payment_session_id);
+
+        // The customer clicks "pay" AFTER the sweep has already selected its
+        // candidates. Written straight to the database, so the instance the
+        // sweep eager-loaded keeps its stale NULL — which is precisely the
+        // condition that made the previous revision's re-check a no-op. It
+        // only fires once, on the eager load, so the sweep's own locked
+        // re-read afterwards sees the committed value.
+        $fired = false;
+        Order::retrieved(function (Order $retrieved) use (&$fired, $session): void {
+            if ($fired) {
+                return;
+            }
+            $fired = true;
+
+            DB::table('orders')
+                ->where('id', $retrieved->getKey())
+                ->update(['payment_session_id' => $session->getKey()]);
+        });
+
+        $this->artisan('orders:expire-stale-quotes')
+            ->assertExitCode(0)
+            ->expectsOutputToContain('Expired 0 order(s)');
+
+        $this->assertTrue($fired, 'the simulated mid-sweep checkout never ran');
+        $this->assertSame(OrderStatus::MENUNGGU_PEMBAYARAN, $order->fresh()->status());
+        $this->assertSame(
+            PlotState::RESERVED,
+            $plot->fresh()->plot_state,
+            'a checkout opened mid-sweep must still save the plot',
+        );
     }
 
     /**

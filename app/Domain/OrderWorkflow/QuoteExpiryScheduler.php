@@ -15,6 +15,7 @@ use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Finds orders whose current quote has silently expired and writes
@@ -186,31 +187,58 @@ final readonly class QuoteExpiryScheduler
                 continue;
             }
 
-            // Re-check under the same predicate, immediately before the
-            // write. The query above is a SELECT and this loop is a series of
-            // writes; a customer who opens a checkout in between would
-            // otherwise be expired by a decision taken before their session
-            // existed. This is the same time-of-check/time-of-use gap the
-            // `IllegalOrderTransitionException` catch below already
-            // acknowledges for concurrent status moves — but that one costs a
-            // no-op, and this one costs a released plot and an unattributable
-            // payment, so it is checked rather than caught.
-            //
-            // Stated plainly rather than claimed closed: this narrows the
-            // window to microseconds, it does not eliminate it.
-            // `RecordOrderStatusChange` takes `lockForUpdate()` on the order,
-            // but the session-opening path (`OpenBookingOnlinePayment` ->
-            // `OpenPaymentSession`) never locks the order row, so the two are
-            // not serialised against each other. Closing it completely means
-            // taking the order lock on the opening path too — a wider change
-            // than this fix, and one that would need its own review.
-            if ($this->hasLivePaymentSession($order, $now)) {
-                continue;
-            }
-
             try {
-                ($this->expireOrder)($order, 'system', 'system');
-                $expired->push($order);
+                // Decide and write under one lock on the order row.
+                //
+                // The SELECT above and this loop are separated by however
+                // long the loop takes — a real sweep can carry hundreds of
+                // candidates, so that is seconds, not microseconds. A
+                // customer who opens a checkout inside that gap must not be
+                // expired by a decision taken before their session existed.
+                //
+                // Re-reading alone would not be enough, and an earlier
+                // revision of this code got that wrong: `$order` here is the
+                // instance eager-loaded by the SELECT, so its
+                // `payment_session_id` is a snapshot from before the gap.
+                // Re-querying `payment_sessions` off that stale id reads a
+                // stale NULL as "no session" and a superseded id as "the
+                // wrong session". The order row itself has to be read again.
+                //
+                // `lockForUpdate()` is what makes the re-read hold. The
+                // opening path writes `orders.payment_session_id` with a
+                // plain UPDATE (`Order::linkPaymentSession()`), and in
+                // PostgreSQL an UPDATE must wait for an existing
+                // `SELECT ... FOR UPDATE` on the same row — so a checkout
+                // opening concurrently with this decision either lands
+                // before the lock is taken (and is seen) or blocks until
+                // after the expiry is committed (and then finds an order it
+                // can no longer pay, which is the pre-existing, correct
+                // refusal). `RecordOrderStatusChange` takes the same lock on
+                // the same row inside the nested transaction below; holding
+                // it here first matches its documented lock ordering — order
+                // first, plot second — so this adds no new deadlock shape.
+                $didExpire = DB::transaction(function () use ($order, $now): bool {
+                    $locked = Order::query()
+                        ->whereKey($order->getKey())
+                        ->lockForUpdate()
+                        ->first();
+
+                    if (! $locked instanceof Order) {
+                        return false;
+                    }
+
+                    if ($this->hasLivePaymentSession($locked, $now)) {
+                        return false;
+                    }
+
+                    ($this->expireOrder)($locked, 'system', 'system');
+
+                    return true;
+                });
+
+                if ($didExpire) {
+                    $expired->push($order);
+                }
             } catch (IllegalOrderTransitionException) {
                 // The order moved on between the query above and this
                 // write (paid, cancelled, rejected, or re-quoted
@@ -233,6 +261,14 @@ final readonly class QuoteExpiryScheduler
      * order — while `constrainToLiveSessions()` keeps the definition of
      * "live" in exactly one place. Two copies of that definition is precisely
      * how a guard like this rots.
+     *
+     * CONTRACT: `$order` must be an instance read from the database inside
+     * the caller's transaction, under `lockForUpdate()`. This method reads
+     * `payment_session_id` off the instance it is handed and does not
+     * re-read the row itself, so handing it the instance eager-loaded by the
+     * selection query would silently reintroduce the exact staleness the
+     * caller's lock exists to remove. The single caller does this correctly;
+     * a second caller must too.
      */
     private function hasLivePaymentSession(Order $order, CarbonInterface $now): bool
     {
