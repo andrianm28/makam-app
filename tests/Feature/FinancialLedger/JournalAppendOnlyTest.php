@@ -7,6 +7,7 @@ namespace Tests\Feature\FinancialLedger;
 use App\Platform\FinancialLedger\Journal;
 use App\Platform\FinancialLedger\Models\JournalBatch;
 use App\Platform\FinancialLedger\Models\JournalEntry;
+use Illuminate\Database\Eloquent\MassAssignmentException;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -119,13 +120,46 @@ final class JournalAppendOnlyTest extends TestCase
         }
     }
 
-    public function test_the_journal_models_carry_no_mutation_methods_of_their_own(): void
+    /**
+     * `$guarded = ['*']` is a declaration; what it is FOR is that no caller
+     * can mass-assign its way into a journal row. That is what is asserted
+     * now — `fill()` and `create()` are handed real ledger columns and must
+     * refuse — rather than reading the property's default value back out of
+     * the class.
+     *
+     * The reflection version passed on the literal `['*']` and nothing else,
+     * so it would have gone green on `$guarded = ['*']` sitting next to a
+     * `$fillable` that re-opened the columns (Eloquent honours `$fillable`
+     * when both are present), on a `fillable()` override, or on a trait
+     * relaxing it. All three are mass-assignment holes with a correct-looking
+     * `$guarded` line.
+     *
+     * The `method_exists(..., 'persist')` pair it also replaces was asserting
+     * the absence of a method nobody has ever written — unfalsifiable, and
+     * silent about `save()`, `update()` and `forceFill()`, which are the
+     * mutation paths that actually exist. Those are covered by this file's
+     * sibling tests against the append-only trigger.
+     */
+    public function test_the_journal_models_refuse_mass_assignment_of_their_ledger_columns(): void
     {
-        $this->assertTrue(property_exists(JournalBatch::class, 'guarded'));
-        $this->assertSame(['*'], (new \ReflectionClass(JournalBatch::class))->getDefaultProperties()['guarded'] ?? []);
+        foreach ([JournalBatch::class, JournalEntry::class] as $model) {
+            // `assertThrows()`' third argument is an expected MESSAGE, not a
+            // failure message, so the reason lives in these comments: a model
+            // that let either call through has re-opened its ledger columns to
+            // mass assignment.
+            $this->assertThrows(
+                fn () => new $model(['reference' => 'MASS-ASSIGNED', 'amount_minor' => 1_000_00]),
+                MassAssignmentException::class,
+            );
 
-        $this->assertFalse(method_exists(JournalBatch::class, 'persist'), 'A persisted mutation helper must never appear.');
-        $this->assertFalse(method_exists(JournalEntry::class, 'persist'), 'A persisted mutation helper must never appear.');
+            $this->assertThrows(
+                fn () => $model::query()->create(['reference' => 'MASS-ASSIGNED', 'amount_minor' => 1_000_00]),
+                MassAssignmentException::class,
+            );
+        }
+
+        $this->assertSame(0, JournalBatch::query()->count(), 'A refused mass assignment must leave no row behind.');
+        $this->assertSame(0, JournalEntry::query()->count());
     }
 
     /**

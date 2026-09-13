@@ -407,6 +407,87 @@ final class ProcessWebhookEventTest extends TestCase
         $this->assertSame(PaymentState::DIBAYAR, $order->fresh()->payment_state);
     }
 
+    /**
+     * The job's half of `test_a_settling_event_with_no_resolvable_target_
+     * fails_closed_and_rolls_back`, and the behavioural replacement for what
+     * `ProcessProviderEventJobTest` used to assert by scanning `handle()`'s
+     * method body for the strings `PROCESSED` and `markStatus`.
+     *
+     * That scan has been vacuous since Task 4 moved the claim into
+     * `ProcessWebhookEvent`: the job does now mark rows `PROCESSED` (see
+     * `test_the_queued_job_performs_the_claim` directly above), it just does
+     * it one call away, so the literal strings left `handle()` while the
+     * behaviour they stood for reversed. The invariant that is actually live
+     * is the one the job's own doc block states — "never a `PROCESSED` row for
+     * work that did not commit" — so that is what is asserted here: the
+     * settlement throws out of `handle()`, the claim rolls back with it, and
+     * the row is left re-claimable rather than falsely marked done.
+     */
+    public function test_the_queued_job_leaves_the_row_validated_when_the_settlement_throws(): void
+    {
+        // A VALIDATED settling row whose provider transaction resolves to no
+        // session — the same orphan fixture the action-level test uses.
+        $event = $this->validatedEvent([
+            'provider_transaction_id' => 'pay_orphan_job',
+            'invoice_reference' => 'order_orphan_job',
+        ]);
+
+        try {
+            (new ProcessProviderEventJob($event->getKey()))->handle(app(ProcessWebhookEvent::class));
+            $this->fail('Expected the settlement failure to propagate out of the job so the queue can retry it.');
+        } catch (SettlementTargetUnresolvableException) {
+            // Expected: a thrown settlement is not an outcome, it is a retry.
+        }
+
+        $this->assertSame(
+            ProviderEventStatus::Validated->value,
+            $event->fresh()->status,
+            'The job left a claim behind for work that did not commit.'
+        );
+        $this->assertSame(0, MarketplaceOrder::query()->count());
+    }
+
+    /**
+     * AC14: no payload may enter a queue payload. Asserted against the bytes
+     * the queue driver actually stores, with a distinctive secret planted in
+     * the row's `raw_payload`, rather than against the job constructor's
+     * parameter list.
+     *
+     * The signature check it replaces could only ever prove that the id is the
+     * single constructor argument. It could not see a `SerializesModels`
+     * property added later, a payload copied onto the job after construction,
+     * or a queue middleware that attaches context — all of which put the same
+     * secret on the same queue while leaving the constructor untouched.
+     */
+    public function test_dispatching_the_job_puts_only_the_row_id_on_the_queue(): void
+    {
+        $secret = 'sk_live_NEVER_QUEUE_THIS_'.bin2hex(random_bytes(8));
+        $body = '{"event_type":"payment.completed","auth":"'.$secret.'"}';
+
+        $event = $this->validatedEvent([
+            'raw_payload' => $body,
+            'payload_digest' => hash('sha256', $body),
+        ]);
+
+        // The real payload a driver would persist, not a paraphrase of it.
+        $queued = serialize(new ProcessProviderEventJob($event->getKey()));
+
+        $this->assertStringContainsString(
+            (string) $event->getKey(),
+            $queued,
+            'The queue payload must carry the row id — without it the worker has nothing to re-fetch.'
+        );
+        $this->assertStringNotContainsString($secret, $queued);
+        $this->assertStringNotContainsString('raw_payload', $queued);
+        $this->assertStringNotContainsString('payload_digest', $queued);
+        $this->assertStringNotContainsString('signature_header', $queued);
+
+        // Non-vacuity: the secret really is retrievable from the row, so the
+        // assertions above are about the queue payload and not about a
+        // fixture that never carried a secret in the first place.
+        $this->assertStringContainsString($secret, (string) $event->fresh()->raw_payload);
+    }
+
     private function claim(ProviderEvent $event): ProcessWebhookEventOutcome
     {
         return app(ProcessWebhookEvent::class)($event->getKey());

@@ -11,8 +11,6 @@ use App\Domain\GraveRegistry\GraveSearchCriteria;
 use App\Domain\GraveRegistry\Models\GraveRecord;
 use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use ReflectionClass;
-use ReflectionProperty;
 use Tests\Support\CemeteryFixture;
 use Tests\TestCase;
 
@@ -460,29 +458,57 @@ final class GraveRegistryPublicQueryTest extends TestCase
     // =====================================================================
 
     /**
-     * Structural, not behavioural — the same instinct as
-     * `ClientSideTamperingCannotOpenAGateTest`'s reflection walk. `design.md`
-     * Privacy: "Contact details must never appear in public search by
-     * default." A `null` assertion would only prove today's seed rows leave
-     * the column empty; this proves no access mode COULD project it,
-     * because the value object has nowhere to put it.
+     * `design.md` Privacy: "Contact details must never appear in public search
+     * by default."
+     *
+     * The objection to a plain `null` assertion was that the seed rows leave
+     * `heir_contact_reference` empty, so asserting `null` would prove nothing.
+     * That objection is answered by filling the column instead of asserting
+     * about it: every matched row gets a distinctive sentinel written straight
+     * to the table (the model has no write path for it — that is the point),
+     * and then the WHOLE serialised outcome is searched for the sentinel, in
+     * every one of the three access modes.
+     *
+     * This is strictly more than the property-name walk it replaces. A
+     * property list proves no property is *named* for heir contact; it says
+     * nothing about the value arriving inside another field — folded into
+     * `deceasedName`, appended to `block`, or carried by a `__get`, a
+     * `toArray()` override, or an accessor added later. Serialising the real
+     * outcome and grepping for the value catches every one of those.
      */
-    public function test_no_access_mode_can_project_heir_contact_because_the_projection_has_no_such_property(): void
+    public function test_no_access_mode_projects_heir_contact_into_a_public_search_result(): void
     {
-        $properties = array_map(
-            static fn (ReflectionProperty $property): string => $property->getName(),
-            (new ReflectionClass(GraveRecordProjection::class))->getProperties()
-        );
+        $sentinel = 'HEIR-CONTACT-'.bin2hex(random_bytes(8));
+        $cemeteryId = $this->makeThePackageCemeteryMixed();
 
-        $this->assertSame(
-            ['accessMode', 'isExampleData', 'deceasedName', 'cemeteryName', 'block', 'deathDate', 'dueDate'],
-            $properties
-        );
+        // Written at the table, deliberately: `GraveRecord` exposes no write
+        // path for this column, so this is the only way to prove the query
+        // withholds a value that is genuinely present in the row.
+        $filled = GraveRecord::query()
+            ->where('cemetery_id', $cemeteryId)
+            ->update(['heir_contact_reference' => $sentinel]);
 
-        foreach ($properties as $name) {
-            $this->assertStringNotContainsStringIgnoringCase('heir', $name);
-            $this->assertStringNotContainsStringIgnoringCase('contact', $name);
-            $this->assertStringNotContainsStringIgnoringCase('kontak', $name);
+        $this->assertGreaterThan(0, $filled, 'Fixture anchor: no row carried the sentinel, so nothing was withheld.');
+
+        foreach (GraveRecordAccessMode::KNOWN_MODES as $mode) {
+            GraveRecord::query()->where('cemetery_id', $cemeteryId)->update(['access_mode' => $mode]);
+
+            $outcome = GraveRegistryPublicQuery::search(
+                GraveSearchCriteria::make(cemeteryId: $cemeteryId, name: 'Contoh')
+            );
+
+            $rows = [...$outcome->openResults, ...$outcome->restrictedResults];
+
+            $this->assertNotEmpty(
+                $rows,
+                "Fixture anchor: access mode [{$mode}] matched no rows, so the assertion below would be vacuous."
+            );
+
+            $this->assertStringNotContainsString(
+                $sentinel,
+                (string) json_encode($rows),
+                "Access mode [{$mode}] projected the heir contact reference into a public search result."
+            );
         }
     }
 

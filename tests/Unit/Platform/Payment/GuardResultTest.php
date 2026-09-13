@@ -8,6 +8,7 @@ use App\Platform\Payment\ConditionDenial;
 use App\Platform\Payment\GuardCondition;
 use App\Platform\Payment\GuardDenialReason;
 use App\Platform\Payment\GuardResult;
+use Error;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use ReflectionClass;
@@ -53,12 +54,27 @@ final class GuardResultTest extends TestCase
         );
     }
 
+    /**
+     * Attempting the construction is the proof. `isPrivate()` reports the
+     * declaration; this reports what a caller outside the class actually
+     * gets — which is the invariant the factories exist to protect: no
+     * caller may hand-build a result whose denial list does not match its
+     * allowed/denied verdict.
+     *
+     * The message is asserted so that a constructor which merely stopped
+     * accepting these arguments (a `TypeError`, or an `ArgumentCountError`
+     * from a public constructor) cannot pass as "private".
+     */
     public function test_the_constructor_is_private_so_only_the_factories_can_build_one(): void
     {
-        $constructor = (new ReflectionClass(GuardResult::class))->getConstructor();
-
-        $this->assertNotNull($constructor);
-        $this->assertTrue($constructor->isPrivate());
+        try {
+            // @phpstan-ignore-next-line new.privateConstructor (the refusal is the assertion)
+            new GuardResult([$this->denial()]);
+            $this->fail('GuardResult was constructible from outside the class — only the factories may build one.');
+        } catch (Error $e) {
+            $this->assertStringContainsString('private', $e->getMessage(), $e->getMessage());
+            $this->assertStringContainsString('__construct', $e->getMessage(), $e->getMessage());
+        }
     }
 
     public function test_allowed_and_denied_are_the_only_public_factories_on_the_class(): void

@@ -6,6 +6,8 @@ namespace Tests\Unit\Platform\IdentityAccess;
 
 use App\Platform\IdentityAccess\ActorContext;
 use Carbon\CarbonImmutable;
+use Error;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -86,19 +88,51 @@ final class ActorContextTest extends TestCase
         $this->assertTrue($timestamp->equalTo($actor->lastAuthenticatedAt));
     }
 
-    public function test_actor_context_is_immutable_by_construction(): void
+    /**
+     * The live mutation attempt IS the test. Asking reflection whether the
+     * declaration says `readonly` proves the declaration; attempting the write
+     * proves the guarantee AC8's "single source consumers read" actually rests
+     * on — that a consumer holding an `ActorContext` cannot have its roles or
+     * scopes swapped out from under it after resolution.
+     *
+     * The message is asserted, not merely the `Error`: removing the property,
+     * or reducing it to private, throws here too, and neither is immutability.
+     */
+    #[DataProvider('immutablePropertyProvider')]
+    public function test_actor_context_is_immutable_by_construction(string $property, mixed $replacement): void
     {
-        // readonly properties: this is a compile-time guarantee, but assert
-        // the property is declared readonly via reflection so a future
-        // refactor that accidentally drops `readonly` fails loudly here
-        // instead of only being caught by a live mutation attempt.
-        $reflection = new \ReflectionClass(ActorContext::class);
+        $actor = new ActorContext(
+            identityReference: 1,
+            roles: ['admin'],
+            scopes: ['cemetery:1'],
+            lastAuthenticatedAt: CarbonImmutable::parse('2026-07-25T10:00:00Z'),
+        );
+        $original = $actor->{$property};
 
-        foreach (['identityReference', 'roles', 'scopes', 'lastAuthenticatedAt'] as $property) {
-            $this->assertTrue(
-                $reflection->getProperty($property)->isReadOnly(),
-                "ActorContext::\${$property} must be readonly."
+        try {
+            $actor->{$property} = $replacement;
+            $this->fail("ActorContext::\${$property} accepted a write — it must be readonly.");
+        } catch (Error $e) {
+            $this->assertStringContainsString(
+                'Cannot modify readonly property',
+                $e->getMessage(),
+                "ActorContext::\${$property} refused the write for the wrong reason: {$e->getMessage()}"
             );
         }
+
+        $this->assertSame($original, $actor->{$property});
+    }
+
+    /**
+     * @return array<string, array{string, mixed}>
+     */
+    public static function immutablePropertyProvider(): array
+    {
+        return [
+            'identityReference' => ['identityReference', 999],
+            'roles' => ['roles', ['superuser']],
+            'scopes' => ['scopes', ['cemetery:*']],
+            'lastAuthenticatedAt' => ['lastAuthenticatedAt', null],
+        ];
     }
 }
