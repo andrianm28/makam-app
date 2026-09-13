@@ -132,6 +132,24 @@ final class SensitiveActionsTest extends TestCase
      * already on this list. See `ServiceCatalogAuditActions`'s doc block
      * for the full judgement call.
      *
+     * UPDATED 6 Sep 2026 — finding SEC-02 (full audit remediation, Task 1.3
+     * of `docs/superpowers/plans/2026-09-06-remediasi-audit-makam.md`) added
+     * `SITE_SETTING_BANK_TRANSFER_UPDATED`: the only write path for the
+     * manual-payment destination bank account
+     * (`App\Filament\Admin\Resources\SiteSettings\Pages\
+     * EditSiteSettings::save()`). Redirecting real customer funeral
+     * payments to the wrong account with no recorded justification is the
+     * same risk category as `PAYMENT_REFUND`/`VENDOR_PAYOUT` already on
+     * this list.
+     * UPDATED 7 Sep 2026 — Batch M1c (QUE-04,
+     * `docs/superpowers/plans/2026-09-07-batchm1c-outbox-scheduler-
+     * robustness.md`) added `OUTBOX_EVENT_REPLAY`: the only writer of the
+     * new `App\Console\Commands\OutboxReplayCommand`'s claim-release
+     * mutation — a manual override of the automatic outbox claim/publish
+     * loop, `docs/architecture/queue-and-outbox.md` §8's own required
+     * "Manual replay requires privileged permission, reason, and audit,"
+     * the same override-with-consequences category as
+     * `PLOT_OVERRIDE`/`GATE_CHANGE` already on this list.
      * UPDATED 7 Sep 2026 — Batch M3b of the 6 Sep 2026 audit remediation
      * program (finding DOM-08) added
      * `PLOT_RESERVATION_RELEASED_PAID_ORDER_OVERRIDE`/
@@ -172,6 +190,8 @@ final class SensitiveActionsTest extends TestCase
                 'PRODUCT_UPDATED',
                 'SUBSCRIPTION_PAUSED',
                 'SUBSCRIPTION_CANCELLED',
+                'SITE_SETTING_BANK_TRANSFER_UPDATED',
+                'OUTBOX_EVENT_REPLAY',
                 'PLOT_RESERVATION_RELEASED_PAID_ORDER_OVERRIDE',
                 'PLOT_RESERVATION_EXPIRED_PAID_ORDER_OVERRIDE',
             ],

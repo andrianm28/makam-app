@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Admin\Resources\SiteSettings\Schemas;
 
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -52,7 +53,15 @@ final class SiteSettingsForm
                 TextInput::make('data.bank_transfer_bank_name')->label('Nama bank')->maxLength(120),
                 TextInput::make('data.bank_transfer_account_number')->label('Nomor rekening')->maxLength(60),
                 TextInput::make('data.bank_transfer_account_holder')->label('Nama pemilik rekening')->maxLength(191),
-            ])->description('Rekening tujuan yang ditampilkan pada kartu "Pembayaran Manual" di wizard pemesanan. Kosongkan salah satu untuk menyembunyikan seluruh rekening — jangan isi sebagian, karena pembayar tidak dapat menggunakan rekening yang tidak lengkap.'),
+                // Not a persisted SiteSetting — read once by EditSiteSettings::save()
+                // as the mandatory audit reason when any bank_transfer_* key
+                // changes (finding SEC-02), then discarded. Never written to
+                // site_settings and never appears in KNOWN_KEYS.
+                Textarea::make('data.bank_transfer_change_reason')
+                    ->label('Alasan perubahan rekening')
+                    ->maxLength(500)
+                    ->helperText('Wajib diisi hanya jika salah satu nilai rekening di atas benar-benar berubah dari nilai tersimpan saat ini.'),
+            ])->description('Rekening tujuan yang ditampilkan pada kartu "Pembayaran Manual" di wizard pemesanan. Kosongkan salah satu untuk menyembunyikan seluruh rekening — jangan isi sebagian, karena pembayar tidak dapat menggunakan rekening yang tidak lengkap. Mengubah rekening ini memerlukan verifikasi ulang kata sandi dan dicatat sebagai peristiwa audit tersendiri.'),
         ]);
     }
 }

@@ -26,7 +26,9 @@ use App\Platform\Payment\PaymentVerificationDecision;
 use App\Platform\Payment\PaymentVerificationStatus;
 use App\Platform\Payment\VerifyManualPayment;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -39,10 +41,12 @@ use Tests\TestCase;
  * `VERIFIED`/`REJECTED` exactly once, with a mandatory reason enforced by
  * `Audit::record()`'s own `SensitiveActions` check (not re-implemented
  * here); proves PAY-02's amount-matched order transition and its
- * all-or-nothing rollback on mismatch; and structurally proves the
- * remaining hard prohibitions: no `payment_sessions` write, no
- * `Journal::post()`, no `app/Domain/OrderWorkflow/` reference (booking
- * orders never flow through this table — see PAY-02's migration doc block).
+ * all-or-nothing rollback on mismatch; and behaviourally proves the
+ * remaining hard prohibitions by observing every statement the action and
+ * its collaborators actually executed: no payment-session access, no
+ * journal access, and no `app/Domain/OrderWorkflow/` order-aggregate access
+ * (booking orders never flow through this table — see PAY-02's migration
+ * doc block).
  * `VerifyManualPaymentRouteTest` covers the HTTP/re-authentication half.
  */
 final class VerifyManualPaymentTest extends TestCase
@@ -305,18 +309,139 @@ final class VerifyManualPaymentTest extends TestCase
         }
     }
 
-    public function test_it_never_references_payment_sessions_the_journal_or_the_booking_order_aggregate(): void
+    /**
+     * Replaces a `file_get_contents()` + `assertStringNotContainsString()`
+     * scan of `VerifyManualPayment.php`.
+     *
+     * A source-text grep cannot see indirection, and this action is almost
+     * entirely indirection: approving delegates to the marketplace order
+     * transition, which in turn re-assesses the vendor payable and emits an
+     * outbox event. None of that was visible to a grep that only read the
+     * one action file, so a `Journal::post()` reached through any of those
+     * collaborators would have passed it. It also breaks spuriously on any
+     * rename, since the forbidden strings are class and constant names
+     * rather than behaviour.
+     *
+     * This runs the real action down both decision branches and observes
+     * what the database actually saw.
+     */
+    public function test_deciding_writes_only_its_own_tables_and_never_reaches_sessions_the_journal_or_a_booking_order(): void
     {
-        $source = $this->withoutComments((string) file_get_contents(base_path('app/Platform/Payment/VerifyManualPayment.php')));
+        [$approved] = $this->submittedVerificationForANewOrder();
+        [$rejected] = $this->submittedVerificationForANewOrder();
+
+        // The listener is registered after the fixtures so the capture
+        // contains the action's own statements only.
+        $statements = [];
+        DB::listen(function (QueryExecuted $query) use (&$statements): void {
+            $statements[] = $query->sql;
+        });
+
+        (new VerifyManualPayment)->verify(
+            verification: $approved,
+            decision: PaymentVerificationDecision::Approve,
+            reason: 'Matches bank statement',
+            actorRef: 9,
+            actorRole: 'finance',
+            source: AuditSource::Panel,
+        );
+
+        (new VerifyManualPayment)->verify(
+            verification: $rejected,
+            decision: PaymentVerificationDecision::Reject,
+            reason: 'Reference does not match any transfer we received',
+            actorRef: 9,
+            actorRole: 'finance',
+            source: AuditSource::Panel,
+        );
+
+        // Anchor: an empty capture would make every assertion below pass
+        // for the wrong reason.
+        $this->assertNotEmpty($statements, 'The verify action executed no queries at all.');
+
+        // A subset assertion, not an exact set: the vendor-payable
+        // re-assessment issues its UPDATE only when it crosses a wall-clock
+        // second from the fixture's own write, because Eloquent compares
+        // `updated_at` at `Y-m-d H:i:s` precision. The claim under test is
+        // "nothing outside this list is written", which a subset expresses
+        // exactly; the positive writes have their own tests above.
+        $written = $this->writtenTables($statements);
+
+        $this->assertSame(
+            [],
+            array_values(array_diff($written, ['payment_verifications', 'marketplace_orders', 'outbox_events', 'vendor_payables', 'audit_events'])),
+            'Deciding may write the verification row, the linked marketplace order it marks paid, that order\'s outbox event and re-assessed vendor payable, and its own audit events — nothing else.'
+        );
+        $this->assertContains('payment_verifications', $written, 'The decision was never written.');
+        $this->assertContains('marketplace_orders', $written, 'The approved order was never marked paid.');
 
         foreach ([
+            // `payment_sessions` / `PaymentSession` / `SessionState::Paid`.
             'payment_sessions',
-            'PaymentSession',
-            'SessionState::Paid',
-            'Journal::post',
-            'OrderWorkflow',
-        ] as $forbidden) {
-            $this->assertStringNotContainsString($forbidden, $source, "VerifyManualPayment.php references [{$forbidden}]");
+            'payment_intents',
+            // `Journal::post` — reached neither here nor through the
+            // marketplace/vendor-payable collaborators this action fans out
+            // to, which is the part a single-file grep could never prove.
+            'journal_batches',
+            'journal_entries',
+            // `OrderWorkflow` — booking orders never flow through
+            // `payment_verifications`; see PAY-02's migration doc block.
+            'orders',
+            'order_status_events',
+            'order_parties',
+            'order_documents',
+            'order_invoices',
+        ] as $forbiddenTable) {
+            $this->assertNoStatementTouches($statements, $forbiddenTable);
+        }
+    }
+
+    /**
+     * The distinct tables written to, sorted. Fails loudly on a write whose
+     * target cannot be identified rather than skipping it — an unparsed
+     * statement must never be mistaken for a clean run.
+     *
+     * @param  list<string>  $statements
+     * @return list<string>
+     */
+    private function writtenTables(array $statements): array
+    {
+        $tables = [];
+
+        foreach ($statements as $sql) {
+            if (preg_match('/^\s*(?:insert|update|delete|truncate)\b/i', $sql) !== 1) {
+                continue;
+            }
+
+            if (preg_match('/^\s*(?:insert\s+into|update|delete\s+from|truncate)\s+"?([A-Za-z0-9_.]+)"?/i', $sql, $matches) !== 1) {
+                $this->fail("Could not identify the target table of write statement: {$sql}");
+            }
+
+            if (! in_array($matches[1], $tables, true)) {
+                $tables[] = $matches[1];
+            }
+        }
+
+        sort($tables);
+
+        return $tables;
+    }
+
+    /**
+     * Asserts no captured statement — read or write — names `$table`. The
+     * identifier boundaries matter: `orders` must not match inside
+     * `marketplace_orders`.
+     *
+     * @param  list<string>  $statements
+     */
+    private function assertNoStatementTouches(array $statements, string $table): void
+    {
+        foreach ($statements as $sql) {
+            $this->assertDoesNotMatchRegularExpression(
+                '/(?<![A-Za-z0-9_])'.preg_quote($table, '/').'(?![A-Za-z0-9_])/i',
+                $sql,
+                "A statement referenced the forbidden table [{$table}]: {$sql}"
+            );
         }
     }
 
@@ -492,20 +617,5 @@ final class VerifyManualPaymentTest extends TestCase
         );
 
         $this->assertSame(PaymentVerificationStatus::Rejected, $verification->fresh()->status());
-    }
-
-    private function withoutComments(string $source): string
-    {
-        $code = '';
-
-        foreach (token_get_all($source) as $token) {
-            if (is_array($token) && in_array($token[0], [T_COMMENT, T_DOC_COMMENT], true)) {
-                continue;
-            }
-
-            $code .= is_array($token) ? $token[1] : $token;
-        }
-
-        return $code;
     }
 }

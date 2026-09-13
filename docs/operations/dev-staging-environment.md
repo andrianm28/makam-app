@@ -170,6 +170,8 @@ worker memory: 128–192 MB
 
 The host cron invokes the staging scheduler once per minute or runs one lightweight staging scheduler process. Overlap prevention and environment-specific locks are mandatory.
 
+Batch M1c (QUE-07): every frequent entry in `routes/console.php` (`outbox:publish`, `plot-reservation:expire-stale-draft-holds`, `spine:watchdog`, `documents:reconcile-storage-cleanup`) passes `withoutOverlapping()` an explicit short expiry rather than the framework's 24-hour default, so one ungracefully-killed run cannot silence that job for a full day. If a mutex is ever suspected stuck before its expiry naturally lapses, `php artisan schedule:clear-cache` clears every cached overlap mutex on this host immediately — see `docs/architecture/queue-and-outbox.md` §9 for the full reasoning and the per-command expiry values.
+
 ### Development
 
 No always-on Horizon or scheduler is required. Run:

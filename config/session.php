@@ -18,7 +18,12 @@ return [
     |
     */
 
-    'driver' => env('SESSION_DRIVER', 'database'),
+    // PERF-07: default changed from 'database' to 'redis' 7 Sep 2026 — see
+    // config/cache.php's matching comment on the same change. This only
+    // changes the DEFAULT used when no `SESSION_DRIVER` env var is set;
+    // the live `.env.beta`/`.env.stg` files on the deployed host must
+    // still be updated to `SESSION_DRIVER=redis` by a human operator.
+    'driver' => env('SESSION_DRIVER', 'redis'),
 
     /*
     |--------------------------------------------------------------------------

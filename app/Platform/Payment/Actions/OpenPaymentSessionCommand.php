@@ -29,6 +29,24 @@ use App\Platform\Payment\OrderType;
  *                               equal `config('payment.merchant_ref')`
  * @param  string|null  $successReturnUrl  hosted-checkout success return URL
  * @param  string|null  $cancelReturnUrl  hosted-checkout cancel return URL
+ * @param  string|null  $sessionId  PAY-04: the `payment_sessions.id` UUID the
+ *                                  caller has already generated so it can be
+ *                                  embedded in `$successReturnUrl`/
+ *                                  `$cancelReturnUrl` BEFORE the session row
+ *                                  exists (`route('payments.return', ['session'
+ *                                  => $sessionId])`). `OpenPaymentSession`
+ *                                  uses this exact value as the created
+ *                                  `PaymentSession`'s primary key instead of
+ *                                  letting `HasUuids` generate one, so the id
+ *                                  in the return URL matches the row it
+ *                                  describes. Null falls back to
+ *                                  `HasUuids`' own generation, unchanged from
+ *                                  before this parameter existed — see
+ *                                  `PaymentSession`'s own doc block for why
+ *                                  a caller-supplied `id` is safe here: it is
+ *                                  used only as a display-side selector
+ *                                  (`ReturnPageState::fromRequest()`), never
+ *                                  as evidence of anything.
  */
 final readonly class OpenPaymentSessionCommand
 {
@@ -39,5 +57,6 @@ final readonly class OpenPaymentSessionCommand
         public string $merchantRef,
         public ?string $successReturnUrl = null,
         public ?string $cancelReturnUrl = null,
+        public ?string $sessionId = null,
     ) {}
 }

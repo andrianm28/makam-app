@@ -32,9 +32,14 @@ use Illuminate\Support\Facades\DB;
  *   - The care-subscription/vendor-fulfillment child chain
  *     (`subscription_cycles`, `subscription_invoices`,
  *     `subscription_payment_references`, `work_orders`, `work_order_tasks`,
- *     `work_evidence`, `service_acceptances`, `service_complaints`) — via
- *     `care_plans.id`/`subscriptions.id` (see
- *     `deleteCareSubscriptionScopedTables()`).
+ *     `work_evidence`, `service_acceptances`, `service_complaints`,
+ *     `make_good_orders`) — via `care_plans.id`/`subscriptions.id` (see
+ *     `deleteCareSubscriptionScopedTables()`). `make_good_orders` carries no
+ *     `demo_batch_id` of its own; it is purged by matching its
+ *     `original_work_order_id`/`replacement_work_order_id` against
+ *     `$workOrderIds`, and MUST run before the `work_orders` delete in the
+ *     same method — DB-03 (batch M3a) gave it a real `restrictOnDelete()`
+ *     FK to `work_orders`.
  *   - `order_status_events`/`order_parties`/`quotes`(+`quote_lines`)/
  *     `order_invoices`/`funeral_cases` — via `orders.id` (see
  *     `deleteBookingOrderScopedTables()`). NONE of this group is named
@@ -443,6 +448,24 @@ final class DemoDataPurgeCommand extends Command
             $count = DB::table($table)->whereIn('work_order_id', $ids)->delete();
             if ($count > 0) {
                 $this->line(sprintf('%-28s %d', $table, $count));
+            }
+        }
+
+        // `make_good_orders.original_work_order_id`/`replacement_work_order_id`
+        // now RESTRICT-delete on `work_orders`
+        // (2026_09_07_100000_add_missing_fk_constraints_vendor_fulfillment_
+        // care_subscription.php, DB-03) — this MUST run before the
+        // `work_orders` delete below, or a batch that exercised make-good
+        // fails the whole transaction with a foreign key violation.
+        if ($workOrderIds->isNotEmpty()) {
+            $count = DB::table('make_good_orders')
+                ->where(function ($query) use ($workOrderIds): void {
+                    $query->whereIn('original_work_order_id', $workOrderIds)
+                        ->orWhereIn('replacement_work_order_id', $workOrderIds);
+                })
+                ->delete();
+            if ($count > 0) {
+                $this->line(sprintf('%-28s %d', 'make_good_orders', $count));
             }
         }
 

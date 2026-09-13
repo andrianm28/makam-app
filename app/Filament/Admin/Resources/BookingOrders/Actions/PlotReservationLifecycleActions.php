@@ -12,6 +12,7 @@ use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PlotReservation\PlotReservationState;
 use App\Filament\Admin\Pages\PasswordReauthentication;
 use App\Filament\Admin\Resources\BookingOrders\BookingOrderResource;
+use App\Filament\Shared\PanelFailure;
 use App\Filament\Support\CemeteryOrderActionGate;
 use App\Filament\Support\OrderViewUrl;
 use App\Http\Middleware\RequireRecentAuthentication;
@@ -193,7 +194,7 @@ final class PlotReservationLifecycleActions
             Notification::make()->success()->title($successTitle)->send();
             redirect()->to(OrderViewUrl::for($order));
         } catch (\Throwable $exception) {
-            Notification::make()->danger()->title('Pembaruan gagal')->body($exception->getMessage())->send();
+            PanelFailure::notify($exception, 'Pembaruan gagal');
         }
     }
 

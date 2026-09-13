@@ -12,6 +12,7 @@ use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
 
 /**
  * List table for `AuditEventsResource` — one row per `audit_events` record,
@@ -88,9 +89,19 @@ final class AuditEventsTable
                     ->query(function (Builder $query, array $data): Builder {
                         $value = trim((string) ($data['action'] ?? ''));
 
+                        // PERF-10: a leading `%` wildcard (`'%'.$value.'%'`)
+                        // cannot use a b-tree index at all — Postgres has no
+                        // way to seek to a start point when the match can
+                        // begin anywhere in the string, so this forced a
+                        // sequential scan of `audit_events` on every filter
+                        // application. `action` values are dot-namespaced
+                        // (`cemetery.capability_changed`, `booking.hold_
+                        // extended`, ...), so a prefix match still covers the
+                        // real "find events under this namespace" use case
+                        // while staying index-usable.
                         return $value === ''
                             ? $query
-                            : $query->where('action', 'like', '%'.$value.'%');
+                            : $query->where('action', 'like', $value.'%');
                     }),
 
                 Filter::make('actor_ref')
@@ -102,6 +113,29 @@ final class AuditEventsTable
                     ->query(function (Builder $query, array $data): Builder {
                         $value = trim((string) ($data['actor_ref'] ?? ''));
 
+                        // PERF-10 note: unlike the `action` filter above,
+                        // this one is deliberately LEFT as a leading-
+                        // wildcard LIKE, not switched to a prefix match.
+                        // `actor_ref` values are opaque identity references
+                        // (a numeric user id, or a string like
+                        // 'actor-alpha') with no shared, meaningful prefix
+                        // vocabulary the way `action` has its dot-namespace
+                        // ('booking.', 'cemetery.', ...) — an operator
+                        // searching "which events involve this actor"
+                        // legitimately types a fragment they remember, not
+                        // necessarily the leading characters (see
+                        // `AuditEventsTableTest::
+                        // test_filtering_by_actor_narrows_the_table()`,
+                        // which searches 'alpha' and expects it to match
+                        // 'actor-alpha' — a prefix match would silently stop
+                        // finding that row). The finding's own two cited
+                        // line numbers (this table's original 83/118) are
+                        // the `action` LIKE and the `occurred_at`
+                        // `whereDate()` — both fixed above/below. This
+                        // filter still forces a sequential scan on a
+                        // non-empty search; that trade-off is accepted here
+                        // rather than silently changing what an operator's
+                        // search finds.
                         return $value === ''
                             ? $query
                             : $query->where('actor_ref', 'like', '%'.$value.'%');
@@ -122,14 +156,32 @@ final class AuditEventsTable
                         DatePicker::make('occurred_until')->label('Sampai tanggal'),
                     ])
                     ->query(function (Builder $query, array $data): Builder {
+                        // PERF-10: `whereDate('occurred_at', ...)` wraps the
+                        // indexed timestamp column in `DATE(occurred_at)`
+                        // before comparing, and Postgres cannot use a plain
+                        // b-tree index on `occurred_at` (see this table's
+                        // `audit_events_occurred_at_index`) through a
+                        // function applied to the column — it forces a
+                        // sequential scan instead. A half-open range on the
+                        // raw timestamp is index-usable and selects the
+                        // exact same calendar-day rows: `[start-of-day,
+                        // start-of-next-day)`.
                         return $query
                             ->when(
                                 $data['occurred_from'] ?? null,
-                                fn (Builder $query, string $date): Builder => $query->whereDate('occurred_at', '>=', $date),
+                                fn (Builder $query, string $date): Builder => $query->where(
+                                    'occurred_at',
+                                    '>=',
+                                    Carbon::parse($date)->startOfDay(),
+                                ),
                             )
                             ->when(
                                 $data['occurred_until'] ?? null,
-                                fn (Builder $query, string $date): Builder => $query->whereDate('occurred_at', '<=', $date),
+                                fn (Builder $query, string $date): Builder => $query->where(
+                                    'occurred_at',
+                                    '<',
+                                    Carbon::parse($date)->addDay()->startOfDay(),
+                                ),
                             );
                     }),
             ])

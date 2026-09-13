@@ -10,6 +10,8 @@ use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\Models\OrderStatusEvent;
 use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\OrderWorkflow\OrderTransition;
+use App\Domain\PlotReservation\Actions\ReleasePlotReservation;
+use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
@@ -287,6 +289,44 @@ final readonly class RecordOrderStatusChange
                 // leaving the caller's instance current.
                 if ($order !== $current) {
                     $order->setRawAttributes($current->getAttributes(), true);
+                }
+
+                // UNBUILT-01 remediation (Batch 2C,
+                // `docs/superpowers/plans/2026-09-06-batch2c-plot-reservation-
+                // release.md`): an order-anchored plot reservation (created by
+                // `ConvertDraftHoldToOrderReservation`, with no `expires_at`)
+                // must not survive an order that lands on a terminal
+                // non-completed status — otherwise the plot stays claimed
+                // forever with no lifecycle action left to release it.
+                // `SELESAI` (completed) is deliberately excluded: that plot
+                // claim is meant to stay in force.
+                if (in_array($to, [OrderStatus::DIBATALKAN, OrderStatus::DITOLAK, OrderStatus::KEDALUWARSA], true)) {
+                    // `$current` is the ORDER row, already locked with
+                    // `lockForUpdate()` above — lock ordering here follows
+                    // `ReservePlot`'s documented precedent of locking the
+                    // Order first and the plot/reservation second.
+                    $activeReservation = PlotReservation::activeForOrder($current);
+
+                    if ($activeReservation instanceof PlotReservation) {
+                        // `ReleasePlotReservation` deliberately writes its own
+                        // audit row with `Audit::record()` inside its OWN
+                        // `DB::transaction()`, not `Audit::wrap()` (see that
+                        // class's doc block) — the plot-state divergence
+                        // reason is only knowable once the plot row itself is
+                        // locked, while `Audit::wrap()` fixes `$reason` at
+                        // call time. Calling it here nests that
+                        // `DB::transaction()` inside THIS method's own
+                        // `Audit::wrap()` transaction. This is safe: Laravel
+                        // treats a nested `DB::transaction()` call as a
+                        // savepoint, not a second real transaction.
+                        app(ReleasePlotReservation::class)(
+                            $activeReservation,
+                            $actorRef,
+                            $actorRole,
+                            "order transitioned to {$to->value}: releasing its plot reservation",
+                            AuditSource::Api,
+                        );
+                    }
                 }
 
                 $this->emitStatusChanged($event, (string) $current->getKey(), $from, $to);

@@ -8,21 +8,36 @@ use App\Platform\Outbox\OutboxQueueName;
 use App\Platform\Payment\Jobs\ProcessProviderEventJob;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use PHPUnit\Framework\TestCase;
-use ReflectionClass;
 
 /**
  * The job `ReceiveWebhook` dispatches once a delivery reaches `VALIDATED`.
  *
- * Its apply logic belongs to Task 4 (`ProcessWebhookEvent` /
- * `ApplyWebhookEffect`), so `handle()` is deliberately empty. What this task
- * owns, and what is asserted here, are the two properties that must survive
- * Task 4 filling that body in: it runs on `critical`, and it carries an id
- * rather than a model or a payload.
+ * What stays here is what can be proved without a database: the job runs on
+ * `critical`, and it survives the queue's own serialisation round trip
+ * carrying its id.
  *
- * The dispatch itself is NOT TESTED end to end — no delivery can reach
- * `VALIDATED` while `payment_sessions` is uncreatable under Wave 1b ruling
- * 1b-L3-01, and no session fixture is fabricated to manufacture one. Recorded
- * as such in the Task 3 report.
+ * The two claims that need real rows to mean anything moved to
+ * `Tests\Feature\Payment\ProcessWebhookEventTest`, where the provider-event
+ * fixtures already live:
+ *
+ *   - AC14 "no payload may enter a queue payload" —
+ *     `test_dispatching_the_job_puts_only_the_row_id_on_the_queue`, which
+ *     plants a distinctive secret in a real row's encrypted `raw_payload`
+ *     and reads the actual serialised queue payload back.
+ *   - "never a `PROCESSED` row for work that did not commit" —
+ *     `test_the_queued_job_leaves_the_row_validated_when_the_settlement_
+ *     throws`.
+ *
+ * Both were previously asserted here by reading `ProcessProviderEventJob`'s
+ * own source: the constructor's parameter list, and `handle()`'s method body
+ * scanned for the literal strings `PROCESSED` and `markStatus`. The source
+ * scan is why this file is worth reading as a cautionary note. Task 4 moved
+ * the claim into `ProcessWebhookEvent` and Task 5 wired the settlement, so
+ * running this job now does mark a row `PROCESSED` — the literal strings
+ * simply live one call away, in the collaborator. The structural assertion
+ * stayed green throughout while the behaviour it named inverted, and
+ * `ProcessWebhookEventTest::test_the_queued_job_performs_the_claim` has been
+ * asserting the opposite next door.
  */
 final class ProcessProviderEventJobTest extends TestCase
 {
@@ -38,42 +53,20 @@ final class ProcessProviderEventJobTest extends TestCase
         $this->assertSame(OutboxQueueName::Critical->value, $job->queue);
     }
 
-    public function test_it_carries_only_a_row_id_so_no_payload_or_credential_can_enter_a_queue_payload(): void
+    /**
+     * The round trip is the point: a worker rebuilds the job from the
+     * serialised payload, so anything the job needs must survive `serialize()`
+     * and anything it does not need must not be in there to survive. Both the
+     * id and the queue assignment come back.
+     */
+    public function test_the_id_and_its_queue_survive_the_serialisation_a_worker_replays(): void
     {
-        $constructor = (new ReflectionClass(ProcessProviderEventJob::class))->getConstructor();
-
-        $this->assertNotNull($constructor);
-
-        $parameters = $constructor->getParameters();
-
-        $this->assertCount(1, $parameters, 'the job must take exactly one constructor argument');
-        $this->assertSame('providerEventId', $parameters[0]->getName());
-        $this->assertSame('string', (string) $parameters[0]->getType());
-
         $job = new ProcessProviderEventJob('01996f4e-0000-7000-8000-000000000000');
 
-        $this->assertStringNotContainsString(
-            'raw_payload',
-            (string) json_encode(get_object_vars($job)),
-        );
-    }
+        $restored = unserialize(serialize($job));
 
-    public function test_it_does_not_claim_to_have_processed_anything(): void
-    {
-        // A shell that marked a row `PROCESSED` would write a false claim into
-        // the append-only table design.md calls the replay source of truth —
-        // and append-only means it could not be quietly corrected later.
-        $body = (new ReflectionClass(ProcessProviderEventJob::class))
-            ->getMethod('handle');
-
-        $source = file(__DIR__.'/../../../../app/Platform/Payment/Jobs/ProcessProviderEventJob.php');
-        $lines = array_slice(
-            $source,
-            $body->getStartLine() - 1,
-            $body->getEndLine() - $body->getStartLine() + 1
-        );
-
-        $this->assertStringNotContainsString('PROCESSED', implode('', $lines));
-        $this->assertStringNotContainsString('markStatus', implode('', $lines));
+        $this->assertInstanceOf(ProcessProviderEventJob::class, $restored);
+        $this->assertSame('01996f4e-0000-7000-8000-000000000000', $restored->providerEventId);
+        $this->assertSame(OutboxQueueName::Critical->value, $restored->queue);
     }
 }

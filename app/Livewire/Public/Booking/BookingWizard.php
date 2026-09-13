@@ -41,12 +41,15 @@ use App\Platform\Audit\AuditSource;
 use App\Platform\FeatureGate\ModeResolver;
 use App\Platform\FeatureGate\Modes\PaymentMode;
 use App\Platform\IdentityAccess\ActorContextResolver;
+use App\Platform\Notification\Models\NotificationDelivery;
+use App\Platform\Notification\RecipientRole;
 use App\Platform\Payment\Actions\OpenPaymentSession;
 use App\Platform\Payment\Actions\OpenPaymentSessionCommand;
 use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutProviderException;
 use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutUnavailableException;
 use App\Platform\Payment\Exceptions\PaymentSessionOpeningDeniedException;
 use App\Platform\Payment\Exceptions\PaymentSessionOrderAlreadyPaidException;
+use App\Platform\Payment\GuardCondition;
 use App\Platform\Payment\Models\PaymentSession;
 use App\Platform\Payment\OrderType;
 use App\Platform\Payment\PaymentProviders;
@@ -61,6 +64,7 @@ use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
+use LogicException;
 use OverflowException;
 use Throwable;
 
@@ -254,6 +258,24 @@ final class BookingWizard extends Component
      * never an English exception message (`AGENTS.md` §Observability).
      */
     public ?string $onlinePaymentError = null;
+
+    /**
+     * The ONLINE branch's *expected* outcome for a brand-new self-service
+     * booking — not a failure, and deliberately a separate property from
+     * `$onlinePaymentError` so the view cannot render it in `danger`.
+     *
+     * The six-condition guard's conditions 2, 3 and 4 (order confirmation,
+     * accepted quote, ORDER-scope admin authorization) are all operator-
+     * owned: a booking a visitor just submitted cannot satisfy any of them
+     * by construction, and `BookingWizardOnlinePaymentTest` pins that as
+     * intended. The order itself HAS been created and submitted by the time
+     * the guard runs, so the truthful message is "we have your booking,
+     * payment opens after we confirm" — not a red failure over a booking
+     * that actually succeeded. See
+     * `docs/research/booking-payment-model-2026-09.md` for why this is a UI
+     * fix rather than a guard change.
+     */
+    public ?string $onlinePaymentPendingNotice = null;
 
     /**
      * The PHP-session key under which an opened session is remembered for
@@ -609,6 +631,39 @@ final class BookingWizard extends Component
      * `App\Filament\Shared\PlotFloorMap\BasePlotFloorMapPage::blocks()`'s
      * own fail-empty shape.
      *
+     * ALSO scoped to `$pickerCemeteryPackageId` when one is set. A block
+     * CAN be generated wholly against a single package
+     * (`CreateCemeteryBlock`'s own doc block: "every generated plot" shares
+     * the `$cemeteryPackageId` the operator picked for that call), so a
+     * cemetery with multiple packages can have multiple, disjoint blocks —
+     * one customer's chosen package must never be shown a DIFFERENT,
+     * explicitly-set package's blocks/plots, which a bare `cemetery_id`
+     * filter let through (a visitor choosing "Kelas A" could be shown
+     * "Kelas B"'s block: wrong availability count, wrong plots to hold).
+     *
+     * A plot/block generated with NO package (`cemetery_package_id` null —
+     * the operator never segmented this cemetery's granular inventory by
+     * class, confirmed as a real, common shape in production data, not a
+     * hypothetical) is package-AGNOSTIC, not "belongs to no package": it
+     * must stay visible no matter which package the customer picked,
+     * exactly as it was before this scoping existed. So the filter is
+     * "matches the selected package OR carries no package at all", never a
+     * bare `=` — an EARLIER version of this fix used a strict `=` and, in
+     * real UAT against `dev.makam.co.id`, made every unsegmented
+     * cemetery's plots vanish behind "Belum ada plot terdaftar" the moment
+     * any package was selected, which is a worse regression than the
+     * original cross-package leak this scoping exists to close.
+     *
+     * `whereHas` drops a block with NEITHER a matching-package NOR a
+     * null-package plot entirely, rather than rendering it as a confusing
+     * "0 tersedia" empty block; the eager-loaded `plots` relation applies
+     * the identical OR-null condition so the `$availableCount`/tile grid
+     * the Blade view builds from it never mixes in a DIFFERENT explicit
+     * package's plots, while still surfacing every unsegmented one. No
+     * filter is applied at all when `$pickerCemeteryPackageId` itself is
+     * null (the customer's selection carries no package) — the
+     * pre-existing, fully package-agnostic behaviour for that case.
+     *
      * A genuine query failure ALSO degrades to empty, but sets
      * `$pickerBlocksUnavailable` first — the same fail-honest discipline
      * `render()` already applies to the cemetery list and the picker's own
@@ -626,11 +681,25 @@ final class BookingWizard extends Component
             return new \Illuminate\Support\Collection;
         }
 
+        $packageId = $this->pickerCemeteryPackageId;
+
+        $matchesSelectedPackage = fn ($plots) => $plots->where(
+            fn ($q) => $q->where('cemetery_package_id', $packageId)->orWhereNull('cemetery_package_id'),
+        );
+
         try {
             return CemeteryBlock::query()
                 ->where('cemetery_id', $this->pickerCemeteryId)
-                ->with(['plots' => fn ($query) => $query->orderBy('slot')])
+                ->when(
+                    $packageId !== null,
+                    fn ($query) => $query->whereHas('plots', $matchesSelectedPackage),
+                )
+                ->with(['plots' => fn ($query) => $query
+                    ->when($packageId !== null, $matchesSelectedPackage)
+                    ->orderBy('slot')
+                    ->limit((int) config('booking.plot_picker_max_plots_per_block'))])
                 ->orderBy('code')
+                ->limit((int) config('booking.plot_picker_max_blocks'))
                 ->get();
         } catch (Throwable $e) {
             report($e);
@@ -734,6 +803,18 @@ final class BookingWizard extends Component
 
         $this->pickerCemeteryId = null;
         $this->pickerCemeteryPackageId = null;
+
+        // Real customer report, 7 Sep 2026: the "Pilih Jenis Layanan" section
+        // this reveals only renders below the FULL "Pilih TPU/TPS" list —
+        // every published cemetery in the chosen city, not just the one just
+        // picked — so on a city with several cemeteries the newly-revealed
+        // section can sit many screens below the button the customer just
+        // pressed, with no on-screen cue that anything happened. Worse on a
+        // narrow viewport. The wizard itself was never broken — this browser
+        // event is what tells the page to scroll the customer to what their
+        // click actually revealed. See the matching `x-on` listener on this
+        // view's root element.
+        $this->dispatch('booking-wizard-cemetery-selected');
     }
 
     public function selectServiceType(string $serviceType): void
@@ -817,6 +898,21 @@ final class BookingWizard extends Component
 
         if ($plot === null) {
             $this->addError('plot', 'Plot tidak ditemukan pada TPU/TPS ini.');
+
+            return;
+        }
+
+        // Mirrors pickerBlocks()'s own package scoping: a client-supplied
+        // plot id for a DIFFERENT, explicitly-set package than the one the
+        // customer selected must be refused here too — pickerBlocks()
+        // normally keeps such a plot off the grid entirely, but this is the
+        // server-side check that closes the gap for a stale render or a
+        // direct Livewire call. A package-agnostic plot (cemetery_package_id
+        // null — an unsegmented cemetery's ordinary shape, not an edge case)
+        // is always allowed regardless of the selected package, same as
+        // pickerBlocks()'s own OR-null condition.
+        if ($plot->cemetery_package_id !== null && $plot->cemetery_package_id !== $cemeteryPackageId) {
+            $this->addError('plot', 'Plot tidak sesuai dengan paket/kelas yang dipilih.');
 
             return;
         }
@@ -1054,6 +1150,7 @@ final class BookingWizard extends Component
     public function openOnlinePayment(): void
     {
         $this->onlinePaymentError = null;
+        $this->onlinePaymentPendingNotice = null;
 
         if ($this->draftId === null) {
             $this->onlinePaymentError = 'Sesi pemesanan Anda telah berakhir. Silakan mulai ulang.';
@@ -1183,6 +1280,12 @@ final class BookingWizard extends Component
             return;
         }
 
+        // PAY-04: pre-generate the session id so it can be embedded in the
+        // return/cancel URLs before the `payment_sessions` row exists —
+        // without this, the return page can never resolve which session to
+        // describe (`ReturnPageState::fromRequest()`'s `session` selector).
+        $paymentSessionId = (string) Str::uuid();
+
         try {
             $session = app(OpenPaymentSession::class)(new OpenPaymentSessionCommand(
                 orderType: OrderType::Booking,
@@ -1193,13 +1296,34 @@ final class BookingWizard extends Component
                 amountMinor: $quote->totalMinor()->toMinorInt(),
                 merchantRef: (string) app(SettingsService::class)
                     ->setting(SiteSetting::KEY_PAYMENT_MERCHANT_REF, (string) config('payment.merchant_ref', '')),
-                successReturnUrl: route('payments.return'),
-                cancelReturnUrl: route('payments.cancel'),
+                successReturnUrl: route('payments.return', ['session' => $paymentSessionId]),
+                cancelReturnUrl: route('payments.cancel', ['session' => $paymentSessionId]),
+                sessionId: $paymentSessionId,
             ));
-        } catch (PaymentSessionOpeningDeniedException) {
-            // The six-condition guard denied. Fixed Indonesian copy — the
-            // guard's own messages are internal English and stay off-screen.
-            $this->onlinePaymentError = 'Pembayaran online belum dapat dibuka saat ini karena konfirmasi pesanan, penawaran harga, atau otorisasi pembayaran belum lengkap. Gunakan pembayaran manual atau hubungi dukungan.';
+        } catch (PaymentSessionOpeningDeniedException $denial) {
+            // The six-condition guard denied. Two very different situations
+            // land here and they must not read the same way to a customer.
+            //
+            // When the ONLY failing conditions are the three operator-owned
+            // ones, nothing has gone wrong: the order was created and
+            // submitted a few lines above, and it is simply waiting for the
+            // operator to confirm availability and issue a final quote.
+            // Reporting that as a failure told customers their booking had
+            // not gone through when it had — the real defect behind the
+            // 8 Sep 2026 report.
+            //
+            // Any OTHER denial (gate closed, merchant binding missing,
+            // amount mismatch) is a genuine configuration or data problem
+            // the customer can neither cause nor fix, and keeps the
+            // fail-closed error copy. The guard's own messages are internal
+            // English and stay off-screen either way.
+            if ($this->deniedOnlyByOperatorOwnedConditions($denial)) {
+                $this->onlinePaymentPendingNotice = 'Pesanan Anda sudah kami terima dengan nomor '.$order->reference
+                    .'. Pembayaran dibuka setelah tim kami mengonfirmasi ketersediaan makam dan menerbitkan penawaran final — kami akan menghubungi Anda.';
+            } else {
+                $this->onlinePaymentError = 'Pembayaran online belum dapat dibuka saat ini karena konfirmasi pesanan, penawaran harga, atau otorisasi pembayaran belum lengkap. Gunakan pembayaran manual atau hubungi dukungan.';
+            }
+
             $this->currentStep = BookingWizardStep::PAYMENT;
 
             return;
@@ -1384,6 +1508,43 @@ final class BookingWizard extends Component
      * has already rolled back by the time this catch handler runs, so a
      * release attempted inside it would roll back right along with it.
      */
+    /**
+     * True when the guard's denial is the ordinary "waiting for the
+     * operator" state rather than a real problem — i.e. every failing
+     * condition is one of the three an operator owns and a self-service
+     * visitor structurally cannot satisfy: the order-status confirmation,
+     * the accepted quote, and the ORDER-scope admin authorization.
+     *
+     * Fails SAFE in both directions: an empty denial list, or a denial this
+     * cannot inspect (an exception built via `forPublicMessage()` for a
+     * non-booking order type carries no `GuardResult` and throws), is
+     * treated as a real error rather than silently reassuring a customer
+     * whose payment failed for a reason nobody looked at.
+     */
+    private function deniedOnlyByOperatorOwnedConditions(PaymentSessionOpeningDeniedException $denial): bool
+    {
+        try {
+            $denied = $denial->result()->deniedConditionValues();
+        } catch (LogicException) {
+            return false;
+        }
+
+        if ($denied === []) {
+            return false;
+        }
+
+        $operatorOwned = array_map(
+            static fn (GuardCondition $condition): string => $condition->value,
+            [
+                GuardCondition::ConfirmationOrReservation,
+                GuardCondition::QuoteAcceptedAndUnexpired,
+                GuardCondition::AuthorizedOpening,
+            ],
+        );
+
+        return array_diff($denied, $operatorOwned) === [];
+    }
+
     private function routeBackToPlotPickerAfterExpiredHold(BookingDraft $draft): void
     {
         $this->currentStep = BookingWizardStep::DISCOVERY;
@@ -1568,6 +1729,52 @@ final class BookingWizard extends Component
         ];
     }
 
+    /**
+     * NOTIF-09: this order's own `notification_deliveries` rows for the
+     * CUSTOMER-role recipient, one at most per channel (`EMAIL`/`WA`,
+     * newest first per channel). `ownerRef`'s shape varies by whether the
+     * ordering party is authenticated or a guest
+     * (`ProvisionalAggregateNotificationSubjectSource::ownerRefForParty()`),
+     * but this query never needs to know which — it joins through
+     * `notification_events`/`notification_recipients` on the ORDER's own
+     * `aggregate_type`/`aggregate_id` and the CUSTOMER role, never on
+     * `recipient_ref` directly, so it is correct for both shapes without
+     * duplicating that resolution logic here.
+     *
+     * @return array{EMAIL: ?NotificationDelivery, WA: ?NotificationDelivery}
+     */
+    private function customerDeliveriesForOrder(string $orderId): array
+    {
+        $eventIds = DB::table('notification_events')
+            ->where('aggregate_type', 'order')
+            ->where('aggregate_id', $orderId)
+            ->pluck('event_id');
+
+        if ($eventIds->isEmpty()) {
+            return ['EMAIL' => null, 'WA' => null];
+        }
+
+        $recipientIds = DB::table('notification_recipients')
+            ->whereIn('event_id', $eventIds)
+            ->where('actor_role', RecipientRole::CUSTOMER)
+            ->pluck('id');
+
+        if ($recipientIds->isEmpty()) {
+            return ['EMAIL' => null, 'WA' => null];
+        }
+
+        $deliveries = NotificationDelivery::query()
+            ->whereIn('notification_recipient_id', $recipientIds)
+            ->whereIn('channel', ['EMAIL', 'WA'])
+            ->orderByDesc('created_at')
+            ->get();
+
+        return [
+            'EMAIL' => $deliveries->firstWhere('channel', 'EMAIL'),
+            'WA' => $deliveries->firstWhere('channel', 'WA'),
+        ];
+    }
+
     private function confirmationSummary(?Order $order, BookingDraft $draft): array
     {
         $quote = $order !== null ? Quote::currentFor($order) : null;
@@ -1610,14 +1817,13 @@ final class BookingWizard extends Component
                 // cemeteries (AC6 / `booking-wizard-fields.md` §Step 2
                 // "package/class when applicable"), so the view must be able
                 // to offer one. Resolved here, once per render, rather than
-                // per-card in Blade — `CemeteryPublicQuery::activePackages()`
-                // is one query per cemetery either way, but the domain read
-                // belongs in the component, not in the template.
-                $packagesByCemetery = $cemeteries
-                    ->mapWithKeys(static fn (Cemetery $cemetery): array => [
-                        $cemetery->id => CemeteryPublicQuery::activePackages($cemetery),
-                    ])
-                    ->all();
+                // per-card in Blade.
+                //
+                // PERF-05: `CemeteryPublicQuery::activePackagesForMany()`
+                // resolves every cemetery's active packages in ONE query
+                // (`whereIn('cemetery_id', ...)`) instead of the previous
+                // one-query-per-cemetery `activePackages()` loop.
+                $packagesByCemetery = CemeteryPublicQuery::activePackagesForMany($cemeteries);
 
                 // design-system.md §3.3's normative Cemetery card spec
                 // (PUB-011) requires the SAME card content the public
@@ -1626,28 +1832,27 @@ final class BookingWizard extends Component
                 // photo, address, facilities, attributed price range, and
                 // availability. Availability needs the cemetery's resolved
                 // capability profile, projected through the same public
-                // allowlist the directory uses
-                // (`PublicCapabilityProjection::forCemetery()`) — resolved
-                // once per cemetery here, exactly mirroring
-                // `CemeteryDirectoryIndex::render()`'s own per-card
-                // try/catch: one cemetery's capability-resolution failure
-                // degrades to AC4's safe defaults rather than blanking the
-                // whole step.
-                $cemeteryCapabilities = $cemeteries
-                    ->mapWithKeys(function (Cemetery $cemetery): array {
-                        try {
-                            $capabilities = PublicCapabilityProjection::forCemetery($cemetery);
-                        } catch (Throwable $e) {
-                            report($e);
+                // allowlist the directory uses.
+                //
+                // PERF-05: `PublicCapabilityProjection::forMany()` resolves
+                // every cemetery's current profile in ONE query instead of
+                // one per cemetery. Because it is now a single query, a
+                // resolution failure is whole-batch rather than per-card —
+                // AC4's fallback (safe defaults) still applies, just to
+                // every card at once, mirroring
+                // `CemeteryDirectoryIndex::render()`'s own batch fallback.
+                try {
+                    $cemeteryCapabilities = PublicCapabilityProjection::forMany($cemeteries);
+                } catch (Throwable $e) {
+                    report($e);
 
-                            $capabilities = PublicCapabilityProjection::from(
-                                new CemeteryCapabilityProfile(CemeteryCapabilityProfile::safeDefaults())
-                            );
-                        }
-
-                        return [$cemetery->id => $capabilities];
-                    })
-                    ->all();
+                    $safeDefaults = PublicCapabilityProjection::from(
+                        new CemeteryCapabilityProfile(CemeteryCapabilityProfile::safeDefaults())
+                    );
+                    $cemeteryCapabilities = $cemeteries
+                        ->mapWithKeys(static fn (Cemetery $cemetery): array => [$cemetery->id => $safeDefaults])
+                        ->all();
+                }
             } catch (Throwable $e) {
                 report($e);
                 $this->cemeteryListUnavailable = true;
@@ -1778,6 +1983,17 @@ final class BookingWizard extends Component
         // genuinely succeeded and simply found no order.
         $confirmationData = null;
         $confirmationUnavailable = false;
+        // NOTIF-09 (`docs/superpowers/plans/2026-09-07-batchm8b-notification-
+        // completeness.md`): keyed by channel ('EMAIL'/'WA'), the CUSTOMER
+        // recipient's own real `notification_deliveries` row when one
+        // exists yet — populated below, once `$order` is known. `null` for
+        // a channel means "no delivery row yet" (the outbox has not been
+        // drained in the few seconds since submission), which the view
+        // renders as the pre-existing static pending badge; a real row
+        // renders through the SAME `delivery-state-chip` partial the admin
+        // inbox already uses, never a second, looser rendering of the same
+        // states.
+        $customerDeliveries = ['EMAIL' => null, 'WA' => null];
         if ($this->currentStep === BookingWizardStep::CONFIRMATION && $this->draftId !== null) {
             try {
                 $draft = BookingDraftQuery::findBound($this->draftId);
@@ -1796,6 +2012,10 @@ final class BookingWizard extends Component
                     // to its honest "not yet processed" copy rather than
                     // claiming an order that does not exist.
                     $order = Order::query()->where('booking_draft_id', $draft->id)->first();
+
+                    if ($order !== null) {
+                        $customerDeliveries = $this->customerDeliveriesForOrder($order->id);
+                    }
 
                     $confirmationData = [
                         'draft_id' => $draft->id,
@@ -1873,8 +2093,16 @@ final class BookingWizard extends Component
         // asserts `Pembayaran Manual` is visible exactly when
         // `onlinePaymentError` is set) and the Failed/Expired session copy
         // above, which explicitly tells the customer to use it.
+        //
+        // `$onlinePaymentPendingNotice` counts as "the online path has been
+        // tried and did not open" for exactly this purpose (added 8 Sep
+        // 2026 with that property): a booking waiting on operator
+        // confirmation still needs the manual route on screen, and gating
+        // the card on `onlinePaymentError` alone silently removed it the
+        // moment that case stopped being reported as an error.
         $showManualPayment = $paymentMode !== PaymentMode::Online
             || $this->onlinePaymentError !== null
+            || $this->onlinePaymentPendingNotice !== null
             || $onlinePaymentState['state'] === SessionState::Failed
             || $onlinePaymentState['state'] === SessionState::Expired;
 
@@ -1892,6 +2120,7 @@ final class BookingWizard extends Component
             'selectedPlot' => $selectedPlot,
             'confirmationData' => $confirmationData,
             'confirmationUnavailable' => $confirmationUnavailable,
+            'customerDeliveries' => $customerDeliveries,
             'paymentMode' => $paymentMode,
             'whatsAppMode' => $whatsAppMode,
             'onlineSessionState' => $onlinePaymentState['state'],

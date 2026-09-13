@@ -87,7 +87,10 @@ final class CarePlansResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        return CarePlan::query()->latest('created_at');
+        // PERF-11: `CarePlansTable`'s `vendor.name` column ran a per-row
+        // query with no eager load. Mirrors `GravePlotsResource::
+        // getEloquentQuery()`'s own `with([...])` override.
+        return CarePlan::query()->with(['vendor'])->latest('created_at');
     }
 
     public static function getPages(): array

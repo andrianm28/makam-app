@@ -12,14 +12,14 @@ use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\ServiceCatalog\ServiceCode;
-use App\Platform\Outbox\Jobs\PublishOutboxEventJob;
+use App\Platform\Outbox\Events\OutboxEventPublished;
 use App\Platform\Outbox\Models\OutboxEvent;
 use App\Platform\Outbox\OutboxPublisher;
 use App\Platform\Outbox\OutboxQueueName;
 use App\Platform\Outbox\OutboxQueueRouter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Event;
 use Tests\TestCase;
 
 /**
@@ -51,9 +51,19 @@ final class OutboxBookingDraftPublicationTest extends TestCase
         }
     }
 
+    /**
+     * QUE-04: `dispatched_at` is stamped by `PublishOutboxEventJob::handle()`
+     * once it has actually published, not by `OutboxPublisher::dispatchOne()`
+     * the moment the job is handed to the queue driver — see that job's own
+     * class doc block. `Queue::fake()` would intercept the dispatch and the
+     * job would never run at all, so `dispatched_at` could never be
+     * observed set; `Event::fake()` instead lets the real (test env:
+     * `QUEUE_CONNECTION=sync`) job run and fire `OutboxEventPublished`,
+     * which is this test's actual "did this publish" proof.
+     */
     public function test_a_real_booking_mutation_produces_an_event_the_publisher_claims_and_dispatches(): void
     {
-        Queue::fake();
+        Event::fake([OutboxEventPublished::class]);
 
         $draft = (new StartBookingDraft)(userId: null);
 
@@ -62,7 +72,7 @@ final class OutboxBookingDraftPublicationTest extends TestCase
 
         $this->publishPendingEvents();
 
-        Queue::assertPushed(PublishOutboxEventJob::class);
+        Event::assertDispatched(OutboxEventPublished::class);
 
         $this->assertNotNull(
             $event->fresh()->dispatched_at,
@@ -73,7 +83,10 @@ final class OutboxBookingDraftPublicationTest extends TestCase
 
     public function test_several_steps_of_one_journey_each_publish_independently(): void
     {
-        Queue::fake();
+        // See test_a_real_booking_mutation_produces_an_event_the_publisher_
+        // claims_and_dispatches()'s doc block for why this needs the real
+        // sync-queue job to run rather than `Queue::fake()`.
+        Event::fake([OutboxEventPublished::class]);
 
         $draft = (new StartBookingDraft)(userId: null);
 
@@ -107,7 +120,7 @@ final class OutboxBookingDraftPublicationTest extends TestCase
 
         $this->publishPendingEvents();
 
-        Queue::assertPushed(PublishOutboxEventJob::class, 2);
+        Event::assertDispatched(OutboxEventPublished::class, 2);
 
         $this->assertSame(
             0,

@@ -246,6 +246,38 @@ final class GraveRegistryPublicQuery
                 ->orderBy('deceased_name_normalized');
         }
 
+        // PERF-13: the disjunction used to be `LIKE '%...%' OR
+        // similarity(deceased_name_normalized, ?) >= threshold`, ordered by
+        // `similarity(...) DESC`. `similarity()` called as a bare function
+        // is not one of the operators `gin_trgm_ops` indexes (`%`, `<%`,
+        // `%>`, LIKE/ILIKE, `~`/`~*`) — see this table's own migration doc
+        // block — so that branch defeated `grave_records_name_trgm_idx` for
+        // the WHOLE OR group, and `ORDER BY similarity(...)` cannot use a
+        // GIN index at all regardless. The rewrite below makes every clause
+        // indexable:
+        //
+        //   - the OPERATOR form `column % ?` IS indexed by
+        //     `grave_records_name_trgm_idx` (gin_trgm_ops covers `%`), and
+        //     is equivalent to `similarity(column, ?) >= current_setting(
+        //     'pg_trgm.similarity_threshold')` — so the session GUC below
+        //     is set to `self::SIMILARITY_THRESHOLD` to keep the exact same
+        //     match set as before, not pg_trgm's own default (which happens
+        //     to also be 0.3, but that must not become an unstated
+        //     coincidence this class relies on).
+        //   - KNN ordering by the distance operator `<->` is what lets
+        //     `ORDER BY` use an index at all, but only a GiST one — GIN has
+        //     no ordering support (same migration doc block) — so this
+        //     needs `grave_records_name_trgm_gist_idx`
+        //     (`2026_09_07_100100_add_grave_records_name_trgm_gist_index.php`)
+        //     alongside the existing GIN index rather than instead of it:
+        //     GIN still carries the `%`/LIKE WHERE-clause matching, GiST
+        //     carries the ORDER BY.
+        //
+        // `SET` (not `SET LOCAL`): this call is not inside a transaction,
+        // and the value is a fixed class constant, never user input, so a
+        // literal in the statement carries no injection risk.
+        DB::statement('SET pg_trgm.similarity_threshold = '.self::SIMILARITY_THRESHOLD);
+
         return $query
             ->where(function (Builder $inner) use ($like, $normalizedName): void {
                 // Substring OR similarity, not similarity alone: an exact
@@ -256,11 +288,11 @@ final class GraveRegistryPublicQuery
                 $inner
                     ->where('deceased_name_normalized', 'like', $like)
                     ->orWhereRaw(
-                        'similarity(deceased_name_normalized, ?) >= ?',
-                        [$normalizedName, self::SIMILARITY_THRESHOLD]
+                        'deceased_name_normalized % ?',
+                        [$normalizedName]
                     );
             })
-            ->orderByRaw('similarity(deceased_name_normalized, ?) desc', [$normalizedName])
+            ->orderByRaw('deceased_name_normalized <-> ?', [$normalizedName])
             ->orderBy('deceased_name_normalized');
     }
 
