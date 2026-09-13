@@ -28,13 +28,24 @@
   category: "data-loss / backup"
   effort: M
   audit_verdict: CONFIRMED
-  status: open
-  status_evidence: []
+  status: mitigated
+  status_evidence: [host-action-2026-09-13]
   status_verified: true
   status_note: >-
     PR #240 hanya menyebut CI-01 sebagai pekerjaan terpisah: 'CI-01 (production backup), SEC-02
     (bank-transfer re-auth) - the other two Critical findings, separate PRs.' Backup makam_beta
-    adalah aksi host yang dieksekusi manusia dan belum dikonfirmasi.
+    adalah aksi host yang dieksekusi manusia. DIKERJAKAN 13 September 2026 atas persetujuan
+    pemilik: (1) dump pertama makam_beta yang pernah ada diambil, 6,7 MB; (2) dump itu
+    DIPULIHKAN ke database sementara makam_beta_restoretest dan diverifikasi identik dengan
+    sumbernya - 10 orders, 56 booking_drafts, 11 users, 280 audit_events, 123 tabel - lalu
+    database ujinya dihapus; (3) makam_beta ditambahkan ke loop /opt/makam/scripts/pg-backup.sh
+    (sebelumnya hanya makam_dev + makam_stg) dan skripnya dijalankan sekali end-to-end;
+    (4) kadensi /etc/cron.d/makam-pg-backup dinaikkan dari harian 03:00 menjadi tiap 6 jam.
+    Skrip dan cron lama dicadangkan sebagai .bak-<timestamp> sebelum disunting.
+    TETAP `mitigated`, BUKAN `resolved`: dump masih tidak terenkripsi dan masih berada di disk
+    yang sama dengan databasenya, sehingga satu kegagalan disk tetap menghapus keduanya. Enkripsi
+    dan pengiriman ke luar disk menunggu keputusan pemilik soal tujuan penyimpanan, dan
+    ci/verify-infra.sh belum punya gate yang memastikan artefak beta lebih baru dari RPO.
   files:
     - "docs/operations/database-backup-and-recovery.md:122"
     - "/opt/makam/scripts/pg-backup.sh:1"
