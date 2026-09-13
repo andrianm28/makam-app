@@ -13,6 +13,7 @@ use App\Platform\Notification\RecipientResolutionSubject;
 use App\Platform\Notification\RecipientResolver;
 use App\Platform\Notification\RecipientRole;
 use App\Platform\Notification\RecipientSet;
+use App\Platform\Notification\ScopeEntityReference;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
@@ -73,6 +74,60 @@ final class RecipientResolverTest extends TestCase
 
         $this->assertRecipientsMatch([
             ['actor_ref' => 'admin-1', 'actor_role' => RecipientRole::PLATFORM_ADMIN, 'scope_entity_type' => ScopeEntityType::BUSINESS_ENTITY, 'scope_entity_id' => '1'],
+        ], $set);
+    }
+
+    /**
+     * NOTIF-01: a subject carrying TWO scope entities (its own cemetery
+     * scope AND the platform's business_entity scope) resolves BOTH — the
+     * gap this finding closes. Before NOTIF-01, a subject could carry only
+     * one scope entity at all, so an admin recipient and a cemetery
+     * operator recipient could never both resolve from the same subject.
+     */
+    public function test_a_subject_with_two_scope_entities_resolves_both_recipient_classes(): void
+    {
+        ScopeAssignment::query()->create(['actor_identifier' => 'operator-1', 'entity_type' => ScopeEntityType::CEMETERY, 'entity_id' => '10']);
+        ScopeAssignment::query()->create(['actor_identifier' => 'admin-1', 'entity_type' => ScopeEntityType::BUSINESS_ENTITY, 'entity_id' => '1']);
+
+        $subject = new RecipientResolutionSubject(
+            ownerRef: 'customer-1',
+            scopeEntityType: ScopeEntityType::CEMETERY,
+            scopeEntityId: '10',
+            additionalScopeEntities: [new ScopeEntityReference(ScopeEntityType::BUSINESS_ENTITY, '1')],
+        );
+
+        $set = $this->resolver()->resolve('Booking submitted', $subject);
+
+        $this->assertRecipientsMatch([
+            ['actor_ref' => 'customer-1', 'actor_role' => RecipientRole::CUSTOMER, 'scope_entity_type' => null, 'scope_entity_id' => null],
+            ['actor_ref' => 'operator-1', 'actor_role' => RecipientRole::CEMETERY_OPERATOR, 'scope_entity_type' => ScopeEntityType::CEMETERY, 'scope_entity_id' => '10'],
+            ['actor_ref' => 'admin-1', 'actor_role' => RecipientRole::PLATFORM_ADMIN, 'scope_entity_type' => ScopeEntityType::BUSINESS_ENTITY, 'scope_entity_id' => '1'],
+        ], $set);
+    }
+
+    /**
+     * The dedupe tuple is `(actor_ref, actor_role, scope_entity_type,
+     * scope_entity_id)` — an actor holding a grant on BOTH of a subject's
+     * scope entities resolves as two DISTINCT recipients (different roles
+     * and different scope entities), never collapsed into one.
+     */
+    public function test_the_same_actor_holding_grants_on_both_scope_entities_resolves_as_two_distinct_recipients(): void
+    {
+        ScopeAssignment::query()->create(['actor_identifier' => 'dual-role-actor', 'entity_type' => ScopeEntityType::CEMETERY, 'entity_id' => '10']);
+        ScopeAssignment::query()->create(['actor_identifier' => 'dual-role-actor', 'entity_type' => ScopeEntityType::BUSINESS_ENTITY, 'entity_id' => '1']);
+
+        $subject = new RecipientResolutionSubject(
+            ownerRef: null,
+            scopeEntityType: ScopeEntityType::CEMETERY,
+            scopeEntityId: '10',
+            additionalScopeEntities: [new ScopeEntityReference(ScopeEntityType::BUSINESS_ENTITY, '1')],
+        );
+
+        $set = $this->resolver()->resolve('Booking submitted', $subject);
+
+        $this->assertRecipientsMatch([
+            ['actor_ref' => 'dual-role-actor', 'actor_role' => RecipientRole::CEMETERY_OPERATOR, 'scope_entity_type' => ScopeEntityType::CEMETERY, 'scope_entity_id' => '10'],
+            ['actor_ref' => 'dual-role-actor', 'actor_role' => RecipientRole::PLATFORM_ADMIN, 'scope_entity_type' => ScopeEntityType::BUSINESS_ENTITY, 'scope_entity_id' => '1'],
         ], $set);
     }
 

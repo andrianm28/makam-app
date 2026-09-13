@@ -38,7 +38,20 @@
     use App\Domain\ServiceCatalog\FulfillmentOwner;
     use App\Platform\FinancialLedger\Money;
 @endphp
-<div class="py-8 md:py-12">
+<div
+    class="py-8 md:py-12"
+    x-data
+    x-on:booking-wizard-cemetery-selected.window="
+        $nextTick(() => {
+            const target = document.getElementById('discovery-service-type-heading');
+            if (! target) return;
+            target.scrollIntoView({
+                behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+                block: 'start',
+            });
+        })
+    "
+>
     @php
         $mkControl = 'h-11 w-full rounded-md border bg-neutral-0 px-4 text-base text-neutral-900
             placeholder:text-neutral-500
@@ -275,7 +288,7 @@
                                         @if ($photoUrl)
                                             <img
                                                 src="{{ $photoUrl }}"
-                                                alt="Ilustrasi {{ $cemetery->name }}"
+                                                alt="Foto {{ $cemetery->name }}"
                                                 loading="lazy"
                                                 class="h-40 w-full object-cover"
                                             >
@@ -462,33 +475,131 @@
                             agar petugas kami membantu langsung.
                         </x-mk.alert>
                     @else
+                    @php
+                        // Floor/Block Map — mirrors the Filament admin reference at
+                        // resources/views/filament/shared/plot-floor-map/granular.blade.php,
+                        // adapted for the public design system (mobile-first, capped
+                        // max-w-form width, tokens.css semantic intents). Cell colour
+                        // comes from StatusIntent::FAMILY_PLOT_STATE, exactly as the
+                        // admin map and the homepage preview both already do.
+
+                        // Static literal strings, one per intent — same discipline as
+                        // badge.blade.php / card.blade.php. Never interpolate $intent
+                        // into a class string: Tailwind's @source scanner reads literal
+                        // file text, so an interpolated class generates no CSS at all.
+                        $plotTileSurfaces = [
+                            'neutral' => 'bg-[var(--mk-intent-neutral-bg)] text-[var(--mk-intent-neutral-fg)] border-[var(--mk-intent-neutral-border)]',
+                            'info'    => 'bg-[var(--mk-intent-info-bg)] text-[var(--mk-intent-info-fg)] border-[var(--mk-intent-info-border)]',
+                            'pending' => 'bg-[var(--mk-intent-pending-bg)] text-[var(--mk-intent-pending-fg)] border-[var(--mk-intent-pending-border)]',
+                            'success' => 'bg-[var(--mk-intent-success-bg)] text-[var(--mk-intent-success-fg)] border-[var(--mk-intent-success-border)]',
+                            'danger'  => 'bg-[var(--mk-intent-danger-bg)] text-[var(--mk-intent-danger-fg)] border-[var(--mk-intent-danger-border)]',
+                            'urgent'  => 'bg-[var(--mk-intent-urgent-bg)] text-[var(--mk-intent-urgent-fg)] border-[var(--mk-intent-urgent-border)]',
+                        ];
+
+                        // Hand-reproduces button.blade.php's sanctioned focus ring,
+                        // transition, and disabled recipe — there is no tile variant
+                        // in the component system, and x-mk.button hard-codes
+                        // h-11 px-4 inline-flex, incompatible with a stacked grid cell.
+                        $plotTileBase = 'flex h-16 md:h-20 w-full flex-col items-center justify-center gap-1
+                            rounded-md border text-base font-semibold tabular-nums leading-none
+                            transition-[color,background-color,border-color,box-shadow]
+                            duration-fast ease-standard select-none
+                            focus-visible:outline-none focus-visible:ring-2
+                            focus-visible:ring-primary-600 focus-visible:ring-offset-2
+                            disabled:cursor-not-allowed disabled:bg-neutral-100
+                            disabled:text-neutral-500 disabled:border-neutral-300';
+
+                        $plotTileActionable = 'cursor-pointer hover:border-primary-600 hover:bg-primary-50
+                            hover:text-primary-800 active:bg-primary-100';
+
+                        // activeDraftPlotHold() already traverses ->plot->block->cemetery,
+                        // so the relation is loaded — this costs no extra query.
+                        $heldPlotId = $hold?->plot?->id;
+                    @endphp
+
+                    @if ($pickerBlocksResult->isNotEmpty())
+                        <div class="mb-6 flex flex-wrap items-center gap-2 rounded-md border border-neutral-200 bg-neutral-50 p-3">
+                            <span class="text-sm font-medium text-neutral-700">Keterangan:</span>
+                            <ul class="flex flex-wrap items-center gap-2" aria-label="Keterangan status plot">
+                                @foreach (\App\Domain\PlotInventory\PlotState::KNOWN_STATES as $legendState)
+                                    <li>
+                                        <x-mk.badge
+                                            intent="{{ \App\Support\Design\StatusIntent::intent($legendState, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE) }}"
+                                            :icon="\App\Support\Design\StatusIntent::icon($legendState, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE)"
+                                        >
+                                            {{ \App\Support\Design\StatusIntent::label($legendState, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE) }}
+                                        </x-mk.badge>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
+
                     <div class="grid gap-y-6">
                         @forelse ($pickerBlocksResult as $block)
-                            <div>
-                                <p class="mb-2 text-sm font-medium text-neutral-900">{{ $block->code }} &mdash; {{ $block->name }}</p>
-                                <ul class="flex flex-wrap gap-2" aria-label="Plot di {{ $block->code }}">
-                                    @foreach ($block->plots as $plot)
-                                        <li wire:key="plot-{{ $plot->id }}">
-                                            <x-mk.button
-                                                variant="secondary"
-                                                :disabled="$plot->plot_state !== \App\Domain\PlotInventory\PlotState::AVAILABLE"
-                                                wire:click="holdPlotForDiscovery('{{ $this->pickerCemeteryId }}', {{ $this->pickerCemeteryPackageId ?? 'null' }}, '{{ $plot->id }}')"
-                                                wire:loading.attr="disabled"
-                                                wire:target="holdPlotForDiscovery"
-                                            >
-                                                {{ $plot->slot }}
-                                                <x-mk.badge
-                                                    intent="{{ \App\Support\Design\StatusIntent::intent($plot->plot_state, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE) }}"
-                                                    :icon="\App\Support\Design\StatusIntent::icon($plot->plot_state, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE)"
-                                                    size="sm"
+                            @php
+                                $availableCount = $block->plots
+                                    ->where('plot_state', \App\Domain\PlotInventory\PlotState::AVAILABLE)
+                                    ->count();
+                            @endphp
+                            <x-mk.card wire:key="picker-block-{{ $block->id }}" aria-labelledby="picker-block-{{ $block->id }}-heading">
+                                <x-slot name="header">
+                                    <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                                        <h5 id="picker-block-{{ $block->id }}-heading" class="text-base font-semibold text-neutral-900">
+                                            {{ $block->code }} &mdash; {{ $block->name }}
+                                        </h5>
+                                        <p class="text-sm text-neutral-600">
+                                            Kapasitas {{ $block->capacity }} &middot; {{ $availableCount }} tersedia
+                                        </p>
+                                    </div>
+                                </x-slot>
+
+                                @if ($block->plots->isEmpty())
+                                    <p class="text-base text-neutral-600">Blok ini belum memiliki plot.</p>
+                                @else
+                                    <ul class="grid grid-cols-3 gap-2 sm:grid-cols-5 sm:gap-3 md:grid-cols-6"
+                                        aria-label="Plot di blok {{ $block->code }}">
+                                        @foreach ($block->plots as $plot)
+                                            @php
+                                                $plotIntent = \App\Support\Design\StatusIntent::intent($plot->plot_state, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE);
+                                                $plotIcon   = \App\Support\Design\StatusIntent::icon($plot->plot_state, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE);
+                                                $plotLabel  = \App\Support\Design\StatusIntent::label($plot->plot_state, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE);
+
+                                                $isAvailable = $plot->plot_state === \App\Domain\PlotInventory\PlotState::AVAILABLE;
+                                                $isHeldByMe  = $heldPlotId !== null && $heldPlotId === $plot->id;
+
+                                                $tileClasses = trim(
+                                                    $plotTileBase . ' '
+                                                    . ($plotTileSurfaces[$plotIntent] ?? $plotTileSurfaces['neutral']) . ' '
+                                                    . ($isAvailable ? $plotTileActionable : 'cursor-default') . ' '
+                                                    . ($isHeldByMe ? 'ring-2 ring-primary-600 ring-offset-2' : '')
+                                                );
+
+                                                $tileAria = 'Plot ' . $block->code . ' ' . $plot->slot . ' — ' . $plotLabel
+                                                    . ($isHeldByMe ? ' — plot pilihan Anda' : ($isAvailable ? '' : ' — tidak dapat dipilih'));
+                                            @endphp
+                                            <li wire:key="picker-plot-{{ $plot->id }}">
+                                                <button
+                                                    type="button"
+                                                    class="{{ $tileClasses }}"
+                                                    aria-label="{{ $tileAria }}"
+                                                    @if ($isHeldByMe) aria-current="true" @endif
+                                                    @if ($isAvailable)
+                                                        wire:click="holdPlotForDiscovery('{{ $this->pickerCemeteryId }}', {{ $this->pickerCemeteryPackageId ?? 'null' }}, '{{ $plot->id }}')"
+                                                        wire:loading.attr="disabled"
+                                                        wire:target="holdPlotForDiscovery"
+                                                    @else
+                                                        aria-disabled="true"
+                                                    @endif
                                                 >
-                                                    {{ \App\Support\Design\StatusIntent::label($plot->plot_state, \App\Support\Design\StatusIntent::FAMILY_PLOT_STATE) }}
-                                                </x-mk.badge>
-                                            </x-mk.button>
-                                        </li>
-                                    @endforeach
-                                </ul>
-                            </div>
+                                                    <span>{{ $plot->slot }}</span>
+                                                    <x-dynamic-component :component="'icon.' . $plotIcon" class="size-4 shrink-0" aria-hidden="true" />
+                                                </button>
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                @endif
+                            </x-mk.card>
                         @empty
                             <div class="flex flex-col items-center gap-3 py-12 text-center">
                                 <x-dynamic-component component="icon.inbox" class="size-12 text-neutral-400" aria-hidden="true" />
@@ -926,35 +1037,6 @@
                         @enderror
                     </div>
 
-                    <div class="flex flex-col gap-1.5">
-                        <label for="customer-contact-channel" class="text-base font-medium text-neutral-800">
-                            Saluran Kontak yang Disukai
-                            <span class="text-danger-600" aria-hidden="true">*</span>
-                            <span class="sr-only">(wajib diisi)</span>
-                        </label>
-                        <p id="customer-contact-channel-hint" class="text-sm text-neutral-600">
-                            Tim kami akan menghubungi Anda lebih dahulu melalui saluran ini.
-                        </p>
-                        <select
-                            id="customer-contact-channel"
-                            wire:model="customerContactChannel"
-                            aria-describedby="customer-contact-channel-hint{{ $errors->has('customer_contact_channel') ? ' customer-contact-channel-error' : '' }}"
-                            @if ($errors->has('customer_contact_channel')) aria-invalid="true" @endif
-                            class="{{ $mkControl }} {{ $mkFieldState($errors->has('customer_contact_channel')) }}"
-                        >
-                            <option value="">Pilih saluran</option>
-                            @foreach (\App\Domain\Booking\BookingContactChannel::KNOWN_CODES as $ch)
-                                <option value="{{ $ch }}">{{ \App\Domain\Booking\BookingContactChannel::label($ch) }}</option>
-                            @endforeach
-                        </select>
-                        @error('customer_contact_channel')
-                            <p id="customer-contact-channel-error" class="flex items-start gap-1.5 text-sm text-danger-700" role="alert">
-                                <x-dynamic-component component="icon.alert-circle" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                                <span>{{ $message }}</span>
-                            </p>
-                        @enderror
-                    </div>
-
                     {{-- field.blade.php's checkbox rule: a 20px visual box
                          (`size-5`) inside a 44px clickable row, and the WHOLE
                          row is the label target, not just the box. --}}
@@ -1270,6 +1352,24 @@
                                     </x-mk.alert>
                                 @endif
 
+                                {{-- The ordinary outcome for a booking a visitor
+                                     just submitted: the order EXISTS and is
+                                     waiting on the operator, so this is
+                                     `pending`, never `danger`, and carries no
+                                     "something went wrong" framing. See
+                                     BookingWizard::$onlinePaymentPendingNotice. --}}
+                                @if ($onlinePaymentPendingNotice !== null)
+                                    <x-mk.alert
+                                        intent="pending"
+                                        icon="clock"
+                                        title="Pesanan Anda sudah kami terima"
+                                        live="polite"
+                                        class="mt-3"
+                                    >
+                                        <p class="text-sm">{{ $onlinePaymentPendingNotice }}</p>
+                                    </x-mk.alert>
+                                @endif
+
                                 @if ($onlinePaymentError !== null)
                                     <x-mk.alert
                                         intent="danger"
@@ -1580,26 +1680,45 @@
 
                     <div class="mt-6 flex flex-col gap-4">
                         {{-- §6.8 / AGENTS.md: "Do not claim WhatsApp/email
-                             delivery without delivery state." No delivery
-                             record exists anywhere in this lane, so no channel
-                             may be shown as "Terkirim"; each one is shown as
-                             not yet sent. Whether WhatsApp is a channel we have
-                             at all is G-WA-01's answer, read server-side and
+                             delivery without delivery state." NOTIF-09
+                             (`docs/superpowers/plans/2026-09-07-batchm8b-
+                             notification-completeness.md`): `$customerDeliveries`
+                             now carries this order's REAL
+                             `notification_deliveries` row per channel, when
+                             one already exists — rendered through the exact
+                             same `delivery-state-chip` partial the admin
+                             inbox uses, never a second rendering of the same
+                             states. The static "Belum dikirim" pending badge
+                             is kept ONLY for the genuine race where no
+                             delivery row exists yet (the outbox has not been
+                             drained in the few seconds since submission) —
+                             it is not a permanent placeholder any more.
+                             Whether WhatsApp is a channel we have at all is
+                             still G-WA-01's answer, read server-side and
                              handed here as `$whatsAppMode` — when it is the
-                             fallback mode, WhatsApp is not promised. --}}
+                             fallback mode, WhatsApp is not promised and no
+                             delivery row can ever exist for it. --}}
                         <x-mk.card>
                             <h3 class="text-base font-semibold text-neutral-900">Pemberitahuan</h3>
 
                             <ul class="flex flex-col gap-3">
                                 <li class="flex flex-wrap items-center justify-between gap-2">
                                     <span class="text-sm text-neutral-700">Email ke alamat yang Anda isi</span>
-                                    <x-mk.badge intent="pending" icon="clock">Belum dikirim</x-mk.badge>
+                                    @if ($customerDeliveries['EMAIL'] !== null)
+                                        @include('filament.admin.notifications.partials.delivery-state-chip', ['delivery' => $customerDeliveries['EMAIL']])
+                                    @else
+                                        <x-mk.badge intent="pending" icon="clock">Belum dikirim</x-mk.badge>
+                                    @endif
                                 </li>
 
                                 @if ($whatsAppMode === \App\Platform\FeatureGate\Modes\WhatsAppMode::WhatsApp)
                                     <li class="flex flex-wrap items-center justify-between gap-2">
                                         <span class="text-sm text-neutral-700">WhatsApp ke nomor yang Anda isi</span>
-                                        <x-mk.badge intent="pending" icon="clock">Belum dikirim</x-mk.badge>
+                                        @if ($customerDeliveries['WA'] !== null)
+                                            @include('filament.admin.notifications.partials.delivery-state-chip', ['delivery' => $customerDeliveries['WA']])
+                                        @else
+                                            <x-mk.badge intent="pending" icon="clock">Belum dikirim</x-mk.badge>
+                                        @endif
                                     </li>
                                 @else
                                     <li class="flex flex-wrap items-center justify-between gap-2">

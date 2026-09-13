@@ -68,6 +68,26 @@ final class BookingWizardProgressiveRevealTest extends TestCase
     }
 
     /**
+     * Real customer report, 7 Sep 2026: on a city with several published
+     * cemeteries, "Pilih Jenis Layanan" only renders below the FULL "Pilih
+     * TPU/TPS" list, not just below the one card the customer picked — it
+     * can land many screens below the button they just pressed, with
+     * nothing on screen to say so. Reproduced live on makam.co.id/Jakarta
+     * (7+ cemetery cards). `selectCemetery()` now dispatches a browser
+     * event the view's root `x-on` listener uses to scroll the customer to
+     * what their click actually revealed — this pins that the event still
+     * fires, since a PHPUnit test cannot observe the resulting scroll
+     * itself.
+     */
+    public function test_choosing_a_cemetery_dispatches_the_scroll_to_service_type_event(): void
+    {
+        Livewire::test(BookingWizard::class)
+            ->call('selectCity', LaunchCityCode::JAKARTA)
+            ->call('selectCemetery', $this->jakartaCemeteryWithoutPackages()->id)
+            ->assertDispatched('booking-wizard-cemetery-selected');
+    }
+
+    /**
      * The whole point of the merge: after the three upstream choices, all
      * four sections stand together on one screen with the single "Lanjutkan"
      * that saves them.

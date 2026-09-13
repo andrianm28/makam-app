@@ -19,7 +19,6 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
-use Illuminate\Auth\Access\AuthorizationException;
 
 /**
  * The `ListRenewalOrders` header action that creates a NEW renewal record via
@@ -139,7 +138,7 @@ final class MarkExternalRenewalAction
                     Notification::make()->success()->title('Perpanjangan eksternal dicatat.')->send();
                 } catch (DuplicateRenewalPeriodException $exception) {
                     Notification::make()->danger()->title('Periode ini sudah tercatat')->body($exception->getMessage())->send();
-                } catch (AuthorizationException|\Throwable $exception) {
+                } catch (\Throwable $exception) {
                     Notification::make()->danger()->title('Gagal mencatat perpanjangan')->body($exception->getMessage())->send();
                 }
             });

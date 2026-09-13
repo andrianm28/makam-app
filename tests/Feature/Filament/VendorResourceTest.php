@@ -278,7 +278,9 @@ final class VendorResourceTest extends TestCase
 
         $this->assertSame(AvailabilityMode::STOCKED, $listing->availability_mode);
         $this->assertSame(EvidenceRequirement::PHOTO, $listing->evidence_requirement);
-        $this->assertSame(750000, $listing->price_minor);
+        // MKT-09: the form field takes plain rupiah ('750000' = Rp 750.000)
+        // and dehydrates it *100 into the minor-unit column.
+        $this->assertSame(75_000_000, $listing->price_minor);
         $this->assertSame(5, $listing->stock_quantity);
         $this->assertTrue($listing->is_active);
 

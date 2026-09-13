@@ -55,11 +55,19 @@ final class VendorListingForm
                     ->disabledOn('edit'),
 
                 TextInput::make('price_minor')
-                    ->label('Harga (rupiah, dalam sen)')
-                    ->helperText('Nilai dalam satuan terkecil rupiah, mengikuti kolom price_minor.')
+                    ->label('Harga (Rp)')
+                    ->helperText('Nilai dalam rupiah penuh. Disimpan pada kolom price_minor sebagai satuan terkecil (dikalikan 100), mengikuti pola tampilan tabel listing vendor.')
                     ->numeric()
                     ->required()
-                    ->minValue(1),
+                    ->minValue(1)
+                    ->prefix('Rp')
+                    // Symmetric with `VendorListingsTable`'s already-correct
+                    // `->money('IDR', divideBy: 100)`: the raw stored value
+                    // is minor-unit (rupiah * 100), so the vendor is shown
+                    // and types plain rupiah here, never the minor-unit
+                    // figure — MKT-09.
+                    ->formatStateUsing(fn (mixed $state): ?int => $state === null ? null : intdiv((int) $state, 100))
+                    ->dehydrateStateUsing(fn (mixed $state): int => ((int) $state) * 100),
 
                 Select::make('availability_mode')
                     ->label('Mode ketersediaan')

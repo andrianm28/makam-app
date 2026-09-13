@@ -278,6 +278,49 @@ return [
         // below) — declared here too, with a maxProcesses baseline, per
         // this file's own convention that every supervisor referenced in
         // 'environments' has a matching 'defaults' entry.
+        //
+        // PERF-09 (7 Sep 2026): 'balance' was 'auto', with
+        // 'autoScalingStrategy' => 'time'. Traced through
+        // `Laravel\Horizon\Supervisor::createProcessPools()` and
+        // `AutoScaler::numberOfWorkersPerQueue()`: `balance = 'auto'`
+        // makes Horizon build ONE PROCESS POOL PER QUEUE, and when every
+        // queue is idle (the common case on staging), the autoscaler
+        // assigns `minProcesses` to EACH pool independently, ignoring
+        // `maxProcesses` for that idle branch entirely — with 4 queues and
+        // the 'staging' environment override's `minProcesses => 1`, that
+        // is 4 resident processes, not the 2 ADR-0027 condition 4
+        // documents ("staging runs a maximum of two normal Horizon worker
+        // processes"), even though `maxProcesses => 2` reads as if it caps
+        // the total.
+        //
+        // Fix: `'balance' => 'off'` (verified against
+        // `Laravel\Horizon\SupervisorOptions::balancing()`, which treats
+        // only 'simple'/'auto' as balancing — 'off' is the actual
+        // not-balancing sentinel, not the literal string/boolean 'false').
+        // Confirmed via `Supervisor::createProcessPools()`:
+        // non-balancing builds a SINGLE process pool over the
+        // comma-joined queue list (`ProvisioningPlan::toSupervisorOptions()`
+        // already implodes the `queue` array with commas before
+        // `SupervisorOptions` is built), so `maxProcesses` becomes one
+        // real cap on the WHOLE supervisor's process count — literally "a
+        // pool capped at two processes" for the combined queue list, which
+        // is what ADR-0027 condition 4 actually intends. Rejected
+        // splitting into 4 per-queue supervisors summing to 2 total: 2
+        // processes cannot be integer-divided across 4 queues without
+        // permanently starving at least 2 of them (`maxProcesses => 0`),
+        // defeating the point of running all 4 queues on staging at all.
+        //
+        // `autoScalingStrategy` is removed — it only affects the
+        // balancing branch of `AutoScaler::numberOfWorkersPerQueue()`
+        // (`autoScaling()`/`balancing()` are both required for it to have
+        // any effect), so it is a no-op under `balance => 'off'` and a
+        // stale, misleading key if left in.
+        //
+        // `minProcesses => 1` is added here (previously implicit/absent
+        // in `defaults`) so this supervisor never resolves to a 0-process
+        // floor before an environment override applies — the 'staging'
+        // override below still sets the real `minProcesses`/`maxProcesses`
+        // pair (`1`/`2`) that actually governs the live deployment.
         'supervisor-normal' => [
             'connection' => 'redis',
             'queue' => [
@@ -286,8 +329,8 @@ return [
                 OutboxQueueName::Notifications->value,
                 OutboxQueueName::Default->value,
             ],
-            'balance' => 'auto',
-            'autoScalingStrategy' => 'time',
+            'balance' => 'off',
+            'minProcesses' => 1,
             'maxProcesses' => 4,
             'maxTime' => 0,
             'maxJobs' => 0,

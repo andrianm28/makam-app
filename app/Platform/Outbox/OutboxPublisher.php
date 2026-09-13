@@ -221,12 +221,24 @@ final class OutboxPublisher
         try {
             $queue = OutboxQueueRouter::routeFor($row->event_name);
 
+            // `dispatched_at` is deliberately NOT stamped here (QUE-04).
+            // Stamping it right after the row is handed to the queue driver
+            // means "queued" and "published" become indistinguishable: a
+            // job that is pushed successfully but then fails every retry
+            // (a bad payload, a listener throwing, a worker crash-looping)
+            // would otherwise sit with `dispatched_at` set forever, with
+            // `locked_at` already cleared below — invisible to both
+            // `claim()`'s reclaim query (`dispatched_at IS NULL`) and to a
+            // human scanning the table, because nothing about the row looks
+            // wrong. `locked_at` (still set from this row's `claim()`) is
+            // kept as the in-flight marker instead: it is only cleared once
+            // `PublishOutboxEventJob::handle()` actually runs the publish
+            // and stamps `dispatched_at` itself, or once this job's
+            // `failed()` hook clears it after exhausting retries. Either
+            // way, an event that was queued but never truly published stays
+            // reclaimable — by the stale-claim window at worst, or
+            // immediately once `failed()` runs.
             PublishOutboxEventJob::dispatch($row->getKey())->onQueue($queue->value);
-
-            $row->forceFill([
-                'dispatched_at' => CarbonImmutable::now(),
-                'locked_at' => null,
-            ])->save();
         } catch (Throwable $exception) {
             $attempt = $row->attempt_count + 1;
 

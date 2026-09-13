@@ -10,6 +10,13 @@ use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\Marketplace\AvailabilityMode;
+use App\Domain\Marketplace\EvidenceRequirement;
+use App\Domain\Marketplace\Models\MarketplaceOrder;
+use App\Domain\Marketplace\Models\Vendor;
+use App\Domain\Marketplace\Models\VendorListing;
+use App\Domain\Marketplace\Models\VendorOrder;
+use App\Domain\Marketplace\PaymentState;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\Models\OrderParty;
 use App\Domain\OrderWorkflow\OrderPartyRole;
@@ -17,11 +24,14 @@ use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\OrderWorkflow\ProductType;
 use App\Domain\Quotation\Models\Quote;
 use App\Domain\Quotation\QuoteStatus;
+use App\Domain\Visitation\Actions\RequestVisitation;
+use App\Domain\Visitation\Models\CemeteryVisitationPolicy;
 use App\Models\User;
 use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use App\Platform\Notification\ProvisionalAggregateNotificationSubjectSource;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -174,16 +184,47 @@ final class ProvisionalAggregateNotificationSubjectSourceTest extends TestCase
 
     /**
      * An order with no backing booking draft (a Funeral-Case/Pre-Need-only
-     * submission) has no scope entity — never an error.
+     * submission) has no CEMETERY scope entity — never an error. It still
+     * carries the platform's own `business_entity` scope (NOTIF-01,
+     * `ProvisionalAggregateNotificationSubjectSource`'s own doc block) —
+     * every order gets that one unconditionally, regardless of whether it
+     * has a backing booking draft — so `hasScopeEntity()` is `true` here,
+     * and the assertion is on the ABSENCE of a cemetery entity specifically,
+     * not on the subject carrying zero scope entities.
      */
-    public function test_an_order_with_no_booking_draft_has_no_scope_entity(): void
+    public function test_an_order_with_no_booking_draft_has_no_cemetery_scope_entity(): void
     {
         $order = $this->makeOrder();
 
         $subject = (new ProvisionalAggregateNotificationSubjectSource)->subjectFor('order', $order->getKey());
 
         $this->assertNotNull($subject);
-        $this->assertFalse($subject->hasScopeEntity());
+        $this->assertTrue($subject->hasScopeEntity());
+        $this->assertNull($subject->scopeEntityType);
+        $this->assertCount(1, $subject->scopeEntities);
+        $this->assertSame(ScopeEntityType::BUSINESS_ENTITY, $subject->scopeEntities[0]->type);
+    }
+
+    /**
+     * NOTIF-01: every order subject also carries the platform's own
+     * `business_entity` scope as a SECOND scope entity, alongside the
+     * order's own cemetery scope — this is the load-bearing case that lets
+     * a platform admin resolve as a recipient for the first time.
+     */
+    public function test_an_order_with_a_cemetery_also_carries_the_platform_business_entity_scope(): void
+    {
+        $cemetery = $this->createCemetery();
+        $draft = BookingDraft::query()->create(['cemetery_id' => $cemetery->id]);
+        $order = $this->makeOrder($draft->id);
+
+        $subject = (new ProvisionalAggregateNotificationSubjectSource)->subjectFor('order', $order->getKey());
+
+        $this->assertNotNull($subject);
+        $this->assertCount(2, $subject->scopeEntities);
+
+        $types = array_map(static fn ($ref) => $ref->type, $subject->scopeEntities);
+        $this->assertContains(ScopeEntityType::CEMETERY, $types);
+        $this->assertContains(ScopeEntityType::BUSINESS_ENTITY, $types);
     }
 
     public function test_a_missing_order_row_resolves_to_null(): void
@@ -243,12 +284,209 @@ final class ProvisionalAggregateNotificationSubjectSourceTest extends TestCase
     }
 
     /**
+     * NOTIF-13: a visitation booking resolves the CEMETERY scope entity
+     * from `visitation_bookings.cemetery_id` — no owner reference exists
+     * (see `visitationBookingSubject()`'s own doc block for why, matching
+     * the `renewal` precedent).
+     */
+    public function test_a_visitation_booking_resolves_its_cemetery_scope_with_no_owner(): void
+    {
+        $cemetery = $this->createCemetery();
+
+        CemeteryVisitationPolicy::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'operating_hours' => [
+                'mon' => ['open' => '08:00', 'close' => '17:00'],
+                'tue' => ['open' => '08:00', 'close' => '17:00'],
+                'wed' => ['open' => '08:00', 'close' => '17:00'],
+                'thu' => ['open' => '08:00', 'close' => '17:00'],
+                'fri' => ['open' => '08:00', 'close' => '17:00'],
+                'sat' => ['open' => '08:00', 'close' => '17:00'],
+                'sun' => ['open' => '08:00', 'close' => '17:00'],
+            ],
+            'daily_capacity' => 10,
+        ]);
+
+        $booking = app(RequestVisitation::class)(
+            $cemetery,
+            CarbonImmutable::now()->addDays(3)->toDateString(),
+            2,
+            '0812-3456-7890',
+            'visitor@example.test',
+            null,
+            [],
+            'subject-source-test-'.Str::random(8),
+            'actor:customer',
+        );
+
+        $subject = (new ProvisionalAggregateNotificationSubjectSource)->subjectFor('visitation_booking', $booking->getKey());
+
+        $this->assertNotNull($subject);
+        $this->assertNull($subject->ownerRef);
+        $this->assertSame(ScopeEntityType::CEMETERY, $subject->scopeEntityType);
+        $this->assertSame((string) $cemetery->id, (string) $subject->scopeEntityId);
+    }
+
+    public function test_a_missing_visitation_booking_resolves_to_null(): void
+    {
+        $subject = (new ProvisionalAggregateNotificationSubjectSource)
+            ->subjectFor('visitation_booking', '00000000-0000-0000-0000-000000000000');
+
+        $this->assertNull($subject);
+    }
+
+    /**
      * `bookingDraftId` is accepted here rather than set via a later
      * `->save()` — `Order` is a guarded model (`OrderIsGuardedException`):
      * only `App\Domain\OrderWorkflow\Actions\RecordOrderStatusChange` may
      * update a persisted row, so every field this test needs must be
      * present at `create()` time.
      */
+    /**
+     * The load-bearing case for Batch 2E's `vendor_order` fix — a real
+     * `vendor_orders` row resolves the prefixed owner reference (see
+     * `EloquentRecipientAddressResolverTest` for the address-resolution
+     * side of this same reference) and the Vendor-column scope, where
+     * before this batch `vendor_order` fell through `default => null` and
+     * `vendor_order.decided.v1`/`vendor_order.complaint_filed.v1` resolved
+     * zero recipients.
+     */
+    public function test_a_real_vendor_order_resolves_the_prefixed_customer_reference_and_vendor_scope(): void
+    {
+        [$vendor, $order] = $this->makeVendorOrder();
+
+        $subject = (new ProvisionalAggregateNotificationSubjectSource)->subjectFor('vendor_order', $order->getKey());
+
+        $this->assertNotNull($subject);
+        $this->assertSame(
+            ProvisionalAggregateNotificationSubjectSource::VENDOR_ORDER_CUSTOMER_PREFIX.$order->getKey(),
+            $subject->ownerRef
+        );
+        $this->assertSame(ScopeEntityType::VENDOR, $subject->scopeEntityType);
+        $this->assertSame($vendor->id, (string) $subject->scopeEntityId);
+    }
+
+    public function test_a_missing_vendor_order_resolves_to_null(): void
+    {
+        $subject = (new ProvisionalAggregateNotificationSubjectSource)->subjectFor('vendor_order', 999_999);
+
+        $this->assertNull($subject);
+    }
+
+    /**
+     * The load-bearing case for Batch 2E's `marketplace_order` fix — an
+     * authenticated customer's `customer_ref` (already a `users.id`
+     * string, set by `Checkout`/`Cart`/`ProductDetail`) resolves straight
+     * through as `ownerRef`, no prefix, plus the Vendor-column scope. Where
+     * before this batch `marketplace_order` fell through `default =>
+     * null` and `marketplace_order.submitted.v1` resolved zero recipients.
+     */
+    public function test_a_marketplace_order_for_an_authenticated_customer_resolves_their_user_id_and_vendor_scope(): void
+    {
+        $user = User::factory()->create();
+        [$vendor, $order] = $this->makeMarketplaceOrder(customerRef: (string) $user->id);
+
+        $subject = (new ProvisionalAggregateNotificationSubjectSource)->subjectFor('marketplace_order', $order->getKey());
+
+        $this->assertNotNull($subject);
+        $this->assertSame((string) $user->id, $subject->ownerRef);
+        $this->assertSame(ScopeEntityType::VENDOR, $subject->scopeEntityType);
+        $this->assertSame($vendor->id, (string) $subject->scopeEntityId);
+    }
+
+    /**
+     * A guest checkout's `customer_ref` is NOT NULL but carries a PHP
+     * session id (`Checkout::placeOrder()`'s own `session()->getId()`
+     * branch), not a `users.id` — `ctype_digit()` rejects it, so no owner
+     * is resolved, but the Vendor-column scope still is, matching the
+     * anonymous-`booking_draft` precedent.
+     */
+    public function test_a_guest_marketplace_order_has_no_owner_but_keeps_its_vendor_scope(): void
+    {
+        [$vendor, $order] = $this->makeMarketplaceOrder(customerRef: 'a1b2c3d4e5f6g7h8session');
+
+        $subject = (new ProvisionalAggregateNotificationSubjectSource)->subjectFor('marketplace_order', $order->getKey());
+
+        $this->assertNotNull($subject);
+        $this->assertNull($subject->ownerRef);
+        $this->assertSame(ScopeEntityType::VENDOR, $subject->scopeEntityType);
+        $this->assertSame($vendor->id, (string) $subject->scopeEntityId);
+    }
+
+    public function test_a_missing_marketplace_order_resolves_to_null(): void
+    {
+        $subject = (new ProvisionalAggregateNotificationSubjectSource)
+            ->subjectFor('marketplace_order', '00000000-0000-0000-0000-000000000000');
+
+        $this->assertNull($subject);
+    }
+
+    /**
+     * @return array{0: Vendor, 1: VendorOrder}
+     */
+    private function makeVendorOrder(): array
+    {
+        $vendor = Vendor::query()->create(['name' => 'Vendor Subjek Uji', 'is_active' => true]);
+
+        $productId = DB::table('products')->insertGetId([
+            'code' => 'PRD-'.Str::random(8),
+            'category' => 'KARANGAN_BUNGA',
+            'name' => 'Produk Subjek Uji',
+            'description' => 'Deskripsi uji.',
+            'base_price_idr' => 100_000,
+            'price_version' => 1,
+            'is_active' => true,
+            'sort_order' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $listing = VendorListing::query()->create([
+            'vendor_id' => $vendor->id,
+            'product_id' => $productId,
+            'price_minor' => 150_000,
+            'availability_mode' => AvailabilityMode::STOCKED,
+            'evidence_requirement' => EvidenceRequirement::PHOTO,
+            'stock_quantity' => 5,
+            'is_active' => true,
+        ]);
+
+        $order = VendorOrder::query()->create([
+            'uuid' => (string) Str::uuid(),
+            'vendor_id' => $vendor->id,
+            'listing_id' => $listing->id,
+            'customer_name' => 'Pelanggan Subjek Uji',
+            'customer_phone' => '081234567891',
+            'customer_email' => 'subjek-uji@example.test',
+            'status' => 'MENUNGGU_VENDOR',
+        ]);
+
+        return [$vendor, $order];
+    }
+
+    /**
+     * @return array{0: Vendor, 1: MarketplaceOrder}
+     */
+    private function makeMarketplaceOrder(string $customerRef): array
+    {
+        $vendor = Vendor::query()->create(['name' => 'Vendor Marketplace Uji', 'is_active' => true]);
+
+        $order = MarketplaceOrder::query()->create([
+            'order_number' => 'MKT-SUBJECT-'.Str::upper(Str::random(8)),
+            'customer_ref' => $customerRef,
+            'entity_ref' => 'badan-usaha-subject-test',
+            'vendor_id' => $vendor->id,
+            'subtotal_minor' => 300_000,
+            'delivery_fee_minor' => 0,
+            'total_minor' => 300_000,
+            'payment_state' => PaymentState::BELUM_DIBAYAR,
+            'idempotency_key' => 'idem-subject-'.Str::random(12),
+            'placed_at' => CarbonImmutable::now(),
+        ]);
+
+        return [$vendor, $order];
+    }
+
     private function makeOrder(?string $bookingDraftId = null): Order
     {
         return Order::query()->create([

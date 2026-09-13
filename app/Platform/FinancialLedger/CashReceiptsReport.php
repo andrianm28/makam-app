@@ -7,6 +7,7 @@ namespace App\Platform\FinancialLedger;
 use App\Platform\FinancialLedger\Exceptions\InvalidLedgerReportException;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\LazyCollection;
 
 /**
  * The "receipts" report AC7 (`.kiro/specs/admin-operations/requirements.md`)
@@ -103,6 +104,75 @@ final class CashReceiptsReport
             rows: $rows,
             totalMinor: array_sum(array_column($rows, 'amount_minor')),
         );
+    }
+
+    /**
+     * PERF-14 — the CSV-export counterpart of `summary()`: a lazily
+     * evaluated, `cursor()`-based stream of the same underlying rows,
+     * never materialized as a full PHP array. Used ONLY by
+     * `ReceiptsReportPanel::exportCsv()`; `summary()` remains the
+     * on-screen path (capped, PHP-sorted for byte-exact determinism
+     * across SQLite/Postgres — see `sortRowsDeterministically()`'s own
+     * doc block).
+     *
+     * Deliberately sorts at the DATABASE level (`ORDER BY occurred_at,
+     * business_key`) rather than reproducing `sortRowsDeterministically()`
+     * in PHP — doing the latter would require pulling the entire result
+     * set into memory to `usort()` it, defeating the entire point of a
+     * cursor. A downloaded CSV does not need the byte-exact
+     * cross-database determinism `summary()`'s own doc block explains is
+     * for test assertions; `ORDER BY` on an indexed timestamp column is
+     * deterministic enough for a real export.
+     *
+     * @param  string|list<string>|null  $entityRef
+     * @return LazyCollection<int, array{business_key: string, source_type: string, source_id: string, entity_ref: string, occurred_at: string, amount_minor: int}>
+     *
+     * @throws InvalidLedgerReportException on a malformed period or an empty
+     *                                      entity-reference list.
+     */
+    public function cursor(string $period, string|array|null $entityRef = null): LazyCollection
+    {
+        $period = trim($period);
+        $this->assertPeriod($period);
+
+        if (is_array($entityRef) && $entityRef === []) {
+            throw InvalidLedgerReportException::forEmptyEntityScope();
+        }
+
+        $entityRefs = match (true) {
+            $entityRef === null => null,
+            is_array($entityRef) => array_values($entityRef),
+            default => [$entityRef],
+        };
+
+        [$start, $endExclusive] = LedgerPeriod::boundsFor($period);
+
+        return DB::table('journal_entries')
+            ->select([
+                'journal_batches.business_key AS business_key',
+                'journal_batches.source_type AS source_type',
+                'journal_batches.source_id AS source_id',
+                'journal_batches.entity_ref AS entity_ref',
+                'journal_batches.occurred_at AS occurred_at',
+                'journal_entries.amount_minor AS amount_minor',
+            ])
+            ->join('journal_batches', 'journal_batches.id', '=', 'journal_entries.batch_id')
+            ->where('journal_entries.account_code', ChartOfAccounts::CASH_BANK_ACCOUNT['code'])
+            ->where('journal_entries.direction', 'DR')
+            ->where('journal_batches.occurred_at', '>=', $start)
+            ->where('journal_batches.occurred_at', '<', $endExclusive)
+            ->when($entityRefs !== null, static fn ($query) => $query->whereIn('journal_batches.entity_ref', $entityRefs))
+            ->orderBy('journal_batches.occurred_at')
+            ->orderBy('journal_batches.business_key')
+            ->cursor()
+            ->map(static fn ($row): array => [
+                'business_key' => (string) $row->business_key,
+                'source_type' => (string) $row->source_type,
+                'source_id' => (string) $row->source_id,
+                'entity_ref' => (string) $row->entity_ref,
+                'occurred_at' => (string) $row->occurred_at,
+                'amount_minor' => (int) $row->amount_minor,
+            ]);
     }
 
     /**

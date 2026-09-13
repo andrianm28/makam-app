@@ -67,7 +67,19 @@ final class BookingPurgeStaleDraftsCommandTest extends TestCase
         $this->assertDatabaseCount('booking_drafts', 1);
     }
 
-    public function test_the_scheduler_runs_the_command_daily(): void
+    /**
+     * DISABLED 6 Sep 2026 (audit finding DOM-01, Critical — stop-gap in
+     * docs/superpowers/plans/2026-09-06-phase0-critical-stopgaps.md). The
+     * scheduler entry itself is commented out in routes/console.php because
+     * the predicate this command ran on had no dependency check: any draft
+     * past the retention window was deleted even when a live order, funeral
+     * case, or pre-need interest still referenced it. The command class
+     * above (still directly invocable, still fully tested) is unaffected —
+     * only its automatic daily trigger is paused. The permanent fix (a
+     * dependency-aware predicate) re-enables this schedule entry safely —
+     * see docs/superpowers/plans/2026-09-06-dom01-purge-dependency-guard.md.
+     */
+    public function test_the_scheduler_does_not_run_the_command_while_the_stop_gap_is_in_place(): void
     {
         $events = collect(app('Illuminate\Console\Scheduling\Schedule')->events());
 
@@ -75,8 +87,7 @@ final class BookingPurgeStaleDraftsCommandTest extends TestCase
             static fn ($event): bool => str_contains($event->command ?? $event->description ?? '', 'booking:purge-stale-drafts')
         );
 
-        $this->assertNotNull($matching, 'no schedule entry runs booking:purge-stale-drafts');
-        $this->assertSame('15 3 * * *', (string) $matching->expression);
+        $this->assertNull($matching, 'booking:purge-stale-drafts must stay off the schedule until the DOM-01 dependency guard lands');
     }
 
     private function makeDraftAged(int $days): BookingDraft

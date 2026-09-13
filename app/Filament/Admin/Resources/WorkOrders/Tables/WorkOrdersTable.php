@@ -9,6 +9,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * List table for the admin `WorkOrdersResource`.
@@ -18,6 +19,11 @@ final class WorkOrdersTable
     public static function configure(Table $table): Table
     {
         return $table
+            // PERF-11: `carePlan.name` and `vendor.name` below each ran a
+            // per-row query with no eager load. `modifyQueryUsing` carries
+            // every relation the columns read — same pattern
+            // `BookingOrdersTable::configure()` already uses.
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['carePlan', 'vendor']))
             ->columns([
                 TextColumn::make('reference')
                     ->label('Nomor')

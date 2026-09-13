@@ -23,6 +23,7 @@ use App\Domain\OrderWorkflow\OrderStatus;
 use App\Filament\Admin\Pages\PasswordReauthentication;
 use App\Filament\Admin\Resources\BookingOrders\BookingOrderResource;
 use App\Filament\Admin\Resources\BookingOrders\BookingOrderStatusBadge;
+use App\Filament\Shared\PanelFailure;
 use App\Filament\Support\OrderViewUrl;
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Platform\IdentityAccess\ActorContext;
@@ -243,7 +244,7 @@ final class TransitionOrderAction
             Notification::make()->success()->title('Transisi berhasil dicatat.')->send();
             redirect()->to(OrderViewUrl::for($order));
         } catch (\Throwable $exception) {
-            Notification::make()->danger()->title('Transisi gagal')->body($exception->getMessage())->send();
+            PanelFailure::notify($exception, 'Transisi gagal');
         }
     }
 }

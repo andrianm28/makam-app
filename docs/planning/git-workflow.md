@@ -7,23 +7,52 @@
 
 ---
 
-## 0. The constraint that shapes this whole plan
+## 0. The constraint that shaped this plan when it was written — now closed
+
+**Update (6 Sep 2026, CI-05 remediation,
+docs/superpowers/plans/2026-09-06-batch2g-cicd-hardening.md):** this
+section's premise is stale. The repo is now confirmed **public**:
 
 ```
-$ gh api repos/andrianm28/makam-app/branches/master/protection
+$ gh repo view --json visibility
+{"visibility":"PUBLIC"}
+```
+
+That reopens both classic branch protection and the repository-rulesets
+API — neither is gated behind a paid plan for a public repo. **Branch
+protection has not been enabled yet**; that is a separate, human-executed
+action (`gh api --method PUT`, per
+`docs/operations/runbooks/setup-cicd-self-hosted-runner.md:149-166`, tracked
+as Task 0.4 in the remediation plan above) — AI agents prepare this kind of
+change but do not execute it themselves (`AGENTS.md` §Infrastructure-agent
+execution). Until that human step runs, §4's discipline-only substitute
+below is still the operative process. Secret scanning availability was not
+re-verified as part of this correction; treat that specific line item as
+unconfirmed under the new visibility, not as still-blocked.
+
+The original private-repo evidence this section quoted (`isPrivate → true`,
+the two 403s) is kept below purely as a historical record of what was true
+on 25 Jul 2026 — it no longer describes this repository's current state:
+
+```
+$ gh api repos/andrianm28/makam-app/branches/master/protection   # 25 Jul 2026, when private
 {"message":"Upgrade to GitHub Pro or make this repository public to enable this feature.", "status":403}
 
-$ gh api repos/andrianm28/makam-app/rulesets
+$ gh api repos/andrianm28/makam-app/rulesets   # 25 Jul 2026, when private
 {"message":"Upgrade to GitHub Pro or make this repository public to enable this feature.", "status":403}
 
-$ gh repo view --json isPrivate → true
-$ gh api repos/andrianm28/makam-app/secret-scanning/alerts
+$ gh repo view --json isPrivate → true   # 25 Jul 2026
+$ gh api repos/andrianm28/makam-app/secret-scanning/alerts   # 25 Jul 2026
 {"message":"Secret scanning is disabled on this repository.", "status":404}
 ```
 
-**This repo is private on GitHub's Free plan.** Both classic branch protection *and* the newer repository-rulesets API are gated behind Pro/Team or a public repo — verified, not assumed. Secret scanning (GitHub Advanced Security) is likewise unavailable on a private Free repo. Most "industry best practice" git guides assume at least one of these exists. Here, none does, and that is not something this plan can configure around — it is a real product/cost decision (§8 OQ-G1).
-
-**Consequence:** every control below that would normally be *enforced by GitHub* has to be enforced by **process discipline** instead — CI status visible in the PR UI, a PR template that structurally forces the checks `AGENTS.md` already requires, and a human actually looking before merging. This plan is written for that reality, not for the reality a paid plan would offer.
+**Consequence, until Task 0.4 lands:** every control below that would
+normally be *enforced by GitHub* still has to be enforced by **process
+discipline** instead — CI status visible in the PR UI, a PR template that
+structurally forces the checks `AGENTS.md` already requires, and a human
+actually looking before merging. Once Task 0.4's branch protection is live,
+§4's table should be revisited row by row and the enforced columns adopted
+in place of the discipline-only substitutes.
 
 ---
 
@@ -75,19 +104,35 @@ This repo already numbers everything: `S1-T6`, `S2-T2a`, `ADR-0030`, finding IDs
 
 ---
 
-## 4. Since branch protection is unavailable: the process substitute
+## 4. Until branch protection is actually enabled: the process substitute
 
-Each row is a control a paid plan would enforce automatically; the right column is what actually holds it in place here today.
+**Update (6 Sep 2026, CI-05/COORD-17 remediation):** as of §0, this repo is
+confirmed public and branch protection is no longer plan-gated — but it has
+not been switched on yet (Task 0.4 in
+`docs/superpowers/plans/2026-09-06-remediasi-audit-makam.md` is the
+human-executed `gh api --method PUT` that does it). This section's table
+describes today's interim state, not a permanent limitation. Once Task 0.4
+lands, replace the right-hand column's discipline-based substitutes with the
+real enforced controls the left-hand column names, starting with "Human
+review before merge" — the recommended `gh api` payload's
+`required_pull_request_reviews[required_approving_review_count]=1` closes
+that row and COORD-17 (who reviews security/financial changes) in the same
+action.
 
-| Control | Would be (paid plan) | Actual substitute (Free, private) |
+Each row is a control classic branch protection enforces automatically once
+enabled; the right column is what holds it in place in the meantime.
+
+| Control | Would be (branch protection enabled) | Actual substitute (until Task 0.4 lands) |
 |---|---|---|
 | CI must pass before merge | Required status check, merge button disabled otherwise | CI result is visible on the PR page; **do not merge a red PR**. This is a discipline rule, not a gate — write it into the PR template (§5) so it cannot be silently skipped. |
 | No direct push to `master` | Protected branch rejects the push | Same discipline: always branch, always PR. `master`'s only history should be merge commits. |
 | Human review before merge | Required approving review | The ten `AGENTS.md`-mandated human gates (`sprint-plan.md` §10) already require a human to look at anything sensitive. Extend that: **every PR gets a human look before merge**, not just gated ones — cheap to hold as a norm, expensive to recover from if skipped. |
 | No force-push to shared history | Protected branch rejects force-push | `AGENTS.md`'s existing rule already covers this: never force-push to `master`. Force-push on a personal feature branch before it's reviewed is fine. |
-| Secret scanning / push protection | GitHub Advanced Security | `ci/verify-docs.sh` GATE 10 plus manual review already do this locally; §6 adds a client-side pre-commit hook as defence in depth, since there is no server-side equivalent available here. |
+| Secret scanning / push protection | GitHub Advanced Security | `ci/verify-docs.sh` GATE 10 plus manual review already do this locally; §6 adds a client-side pre-commit hook as defence in depth. Secret scanning's availability was not re-verified under the new public visibility as part of this correction — confirm separately before relying on it. |
 
-**If this changes:** the moment this repo is public or on a paid plan, revisit this entire section — classic branch protection or a ruleset should replace the discipline-only substitute with an enforced one. Flagged as **OQ-G1** (§8).
+**Status:** no longer an open question about plan/visibility (§0 resolved
+that) — now a pending human execution step. Tracked as Task 0.4 in the
+remediation plan, superseding **OQ-G1**'s original framing (§8).
 
 ---
 
@@ -160,7 +205,7 @@ Both reversible, neither touches application logic or live infrastructure. Liste
 | **CODEOWNERS** | Meaningful once there is more than one human reviewer with distinct areas of authority. Today there is one. Revisit alongside team growth. |
 | **Release/hotfix branches** | Same reasoning as GitFlow in §2 — there is no production branch yet to protect or hotfix. |
 | **Git LFS** | No large binary assets in this repo currently (docs, code, no media). Revisit if design assets or seed fixtures grow large. |
-| **Squash-vs-merge-vs-rebase policy** | All three are currently allowed (`mergeCommitAllowed`/`rebaseMergeAllowed`/`squashMergeAllowed` all `true`). Recommend **squash merge** as the default going forward — it turns a batch's several work-in-progress commits (like the six-bug CI fix sequence) into one clean unit on `master`, while the PR itself still preserves the full commit-by-commit history for anyone who needs it. Not restricting the other two options at the repo level, since that setting is gated behind the same Free-plan wall as §0 for *enforcement* — this is a norm, like the rest of §4. |
+| **Squash-vs-merge-vs-rebase policy** | All three are currently allowed (`mergeCommitAllowed`/`rebaseMergeAllowed`/`squashMergeAllowed` all `true`). Recommend **squash merge** as the default going forward — it turns a batch's several work-in-progress commits (like the six-bug CI fix sequence) into one clean unit on `master`, while the PR itself still preserves the full commit-by-commit history for anyone who needs it. This is a norm rather than an enforced repo setting for now — enforcing it is a separate repo-settings change from the branch-protection one Task 0.4 covers, not itself blocked by plan/visibility. |
 
 ---
 
@@ -178,14 +223,14 @@ This project already has **two** independent versioning axes that use the same-l
 4. **Adopt Conventional Commits subject lines** going forward only (§6.1).
 5. **On confirmation:** flip `delete_branch_on_merge` to `true` and add `.github/dependabot.yml` (§7) — both reversible, both already implied by existing project policy.
 6. **When there's a human-controlled signing key available:** enable SSH commit signing (§6.2).
-7. **Revisit §0 and §4** the moment this repo goes public or moves to a paid GitHub plan — real branch protection should replace the discipline-only substitute at that point, not before.
+7. **Done (6 Sep 2026):** the repo is confirmed public (§0). **Still pending, human-executed:** enable real branch protection (Task 0.4 in `docs/superpowers/plans/2026-09-06-remediasi-audit-makam.md`) and then replace §4's discipline-only substitutes with the enforced controls it turns on.
 
 ---
 
 ## NOT TESTED
 
 - No repo setting has been changed by this plan — §7's two actions are described, not executed.
-- Whether GitHub Pro/Team pricing is acceptable, or whether making the repo public is acceptable, was not asked and is not this plan's call — recorded as **OQ-G1**, an open question for the repo owner.
+- **OQ-G1 resolved 6 Sep 2026:** the repo owner made the repo public (`gh repo view --json visibility` → `PUBLIC`), settling the pricing/visibility question this item originally recorded. What remains NOT TESTED is the branch-protection API call itself (Task 0.4) — prepared, not executed by an agent, per `AGENTS.md` §Infrastructure-agent execution.
 - `.github/PULL_REQUEST_TEMPLATE.md` has not been created; §5 shows its proposed content, not a shipped file.
 - Conventional Commits adoption has not been retrofitted to any existing commit and this plan explicitly recommends against doing so.
 - ~~Whether `master` currently contains any commit that bypassed a PR~~ — **checked.** `git rev-list --count master` → 1; `master`'s only commit is `05f6f4d`, the original baseline import. No history to reconcile before treating "always PR" as the norm going forward.

@@ -119,7 +119,7 @@ final class MarkCyclePaidTest extends TestCase
         app(MarkCyclePaid::class)($cycle, 150000, 'pay-ref-003', 'webhook:system');
 
         $this->assertDatabaseHas('outbox_events', [
-            'event_name' => 'care.cycle_created.v1',
+            'event_name' => 'care.cycle_paid.v1',
             'event_version' => 1,
             'aggregate_type' => 'subscription_cycle',
             'aggregate_id' => (string) $cycle->getKey(),

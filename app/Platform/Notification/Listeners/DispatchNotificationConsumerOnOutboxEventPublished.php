@@ -18,7 +18,8 @@ use Illuminate\Support\Facades\Log;
  * notification-classified iff a `notification_templates` row exists whose
  * `outbox_event_name` equals the envelope's `event_name`. No matching row
  * means nothing is sent, silently and correctly (`outbox_event_name` is
- * NULL on 11 of the 17 matrix rows by design).
+ * NULL on 5 of the 18 matrix rows by design, as of the 07 Sep 2026 Batch
+ * M1a addition of `Renewal paid/verified (external)`).
  *
  * A PLAIN, non-queued listener — registered via `Event::listen()`, not
  * implementing `ShouldQueue` — because `App\Platform\Outbox\Jobs\

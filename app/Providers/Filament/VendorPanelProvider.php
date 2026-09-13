@@ -6,6 +6,7 @@ namespace App\Providers\Filament;
 
 use App\Filament\Vendor\Pages\Dashboard;
 use App\Filament\Vendor\Pages\EvidenceList;
+use App\Filament\Vendor\Pages\InAppNotifications;
 use App\Filament\Vendor\Pages\PayoutStatus;
 use App\Filament\Vendor\Pages\Profile;
 use App\Filament\Vendor\Pages\TransactionHistory;
@@ -82,6 +83,7 @@ final class VendorPanelProvider extends PanelProvider
             )
             ->pages([
                 Dashboard::class,
+                InAppNotifications::class,
                 TransactionHistory::class,
                 PayoutStatus::class,
                 EvidenceList::class,
