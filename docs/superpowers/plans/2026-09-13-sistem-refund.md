@@ -1,6 +1,6 @@
 # Rencana: sistem refund
 
-**Status:** Rencana — tenggat sudah diputuskan pemilik, R0 dan R1 mulai dibangun.
+**Status:** R0 selesai (PR #302). R1 terblokir satu keputusan desain — lihat §Tahap R1.
 **Tanggal:** 13 September 2026
 **Memblokir:** Tahap 4 dan Tahap 5 dari
 [`2026-09-13-bayar-penuh-di-muka-online-saja.md`](2026-09-13-bayar-penuh-di-muka-online-saja.md)
@@ -132,12 +132,70 @@ Status ditulis append-only mengikuti disiplin yang sudah dipakai
 
 ### Tahap R1 — Penolakan menciptakan kewajiban, otomatis
 
-`RecordOrderStatusChange` sudah melepas reservasi plot ketika pesanan masuk
-status terminal. Transisi ke `DITOLAK`/`DIBATALKAN` **pada pesanan yang sudah
-dibayar** kini juga membuat kewajiban refund, di dalam closure mutasi yang sama.
+> **TERBLOKIR sejak 13 Sep 2026 — bukan oleh pekerjaan, tapi oleh satu
+> keputusan desain yang bukan wewenang saya.** Rinciannya di bawah. R0 sudah
+> selesai dan berdiri sendiri tanpa ini.
 
-Admin tidak bisa menolak pesanan terbayar tanpa kewajiban ikut lahir. Itu bukan
-kebijakan — itu struktur.
+Rencana awal tahap ini berbunyi: `RecordOrderStatusChange` sudah melepas
+reservasi plot ketika pesanan masuk status terminal, jadi transisi ke
+`DITOLAK`/`DIBATALKAN` pada pesanan yang sudah dibayar cukup ikut membuat
+kewajiban refund di dalam closure mutasi yang sama.
+
+**Membangunnya membuktikan kalimat itu tidak bisa dijalankan hari ini**, dan
+alasannya lebih dalam dari sekadar kode yang belum ada.
+
+#### Tiga fakta yang saya verifikasi, bukan ingat
+
+1. `OrderTransition::ALLOWED` berbunyi `'DIBAYAR' => ['DIPROSES']`. **Tidak ada
+   satu pun status terminal yang bisa dicapai setelah `DIBAYAR`.** Jadi
+   "menolak pesanan yang sudah dibayar" bukan transisi yang sedang gagal — ia
+   bukan transisi yang ada.
+
+2. Itu bukan kelalaian. `docs/domain/order-lifecycle.md` §3 memutuskannya
+   dengan sengaja: *"Nothing terminal is reachable after `DIBAYAR`: once money
+   is confirmed, correction happens through a compensating financial action
+   (payment reversal), never a status edge."*
+
+3. Transisi terminal yang memang bisa terjadi selagi uang mungkin sudah
+   berpindah — `DIBATALKAN` dari `MENUNGGU_VERIFIKASI_PEMBAYARAN` (§3 sendiri
+   menyebut alasannya: *"unverified money may already have moved"*) dan
+   `KEDALUWARSA` dari `MENUNGGU_PEMBAYARAN` — keduanya milik **jalur manual**,
+   yang pemilik putuskan untuk dihapus seluruhnya.
+
+#### Yang sebenarnya sedang ditanyakan
+
+Dokumen kanonik itu **sudah menjawab** bentuk koreksi setelah pembayaran, dan
+jawabannya adalah tindakan finansial kompensasi — yaitu persis `refund_obligations`
+yang R0 bangun. Maka pertanyaannya bukan "bagaimana menyambungkan hook", tapi:
+
+> **Penolakan admin atas pesanan yang sudah dibayar itu sebuah status baru,
+> atau sebuah tindakan finansial kompensasi?**
+
+- Kalau **status**: `DIBAYAR → DITOLAK` harus ditambahkan, dan
+  `order-lifecycle.md` §3 harus diubah — mencabut aturan yang ia tetapkan
+  dengan sengaja.
+- Kalau **tindakan kompensasi**: pesanan tetap `DIBAYAR`, dan kewajiban lahir
+  dari transaksi tindakan itu sendiri, bukan dari perubahan status.
+
+Invarian R1 **tidak berubah** oleh jawaban mana pun: kewajiban dibuat oleh
+transaksi yang sama dengan yang menolak. Yang berubah hanyalah transaksi mana
+itu.
+
+#### Kenapa saya tidak memilih sendiri
+
+Ini menyentuh aturan siklus hidup pesanan dan uang pelanggan sekaligus.
+`AGENTS.md` §Infrastructure-agent execution mewajibkan review manusia sebelum
+perubahan finansial, dan mengubah §3 secara sepihak adalah mencabut keputusan
+domain yang sudah tertulis agar rencana saya sendiri bisa jalan — persis urutan
+terbalik yang tidak boleh.
+
+Ini juga **sudah dijadwalkan**: Tahap 2 dari
+[`2026-09-13-bayar-penuh-di-muka-online-saja.md`](2026-09-13-bayar-penuh-di-muka-online-saja.md)
+adalah "kosakata status". Di situlah keputusan ini seharusnya diambil, dan R1
+menunggunya.
+
+Saya **tidak** membangun hook yang tidak bisa dipicu. Penjaga yang tidak pernah
+menyala terlihat seperti perlindungan, dan itu lebih buruk daripada tidak ada.
 
 ### Tahap R2 — Eksekusi manual, dengan bukti
 
@@ -203,6 +261,9 @@ operator dan risiko kelalaian, bukan dengan kode.
 
 - ~~**Berapa tenggat eksekusi refund?**~~ **Terjawab 13 Sep 2026: 3 hari
   kerja.** R4 tidak lagi terblokir.
+- **Penolakan pesanan terbayar: status baru, atau tindakan kompensasi?**
+  Memblokir R1 sepenuhnya — lihat §Tahap R1. Ini satu-satunya hal yang
+  menghentikan pembangunan malam ini.
 - **Apakah hari libur nasional dilewati juga?** Implementasi pertama tidak
   melewatinya, dan alasannya ada di §Tenggat di atas. Menjawab "ya" menuntut
   sumber kalender resmi.
