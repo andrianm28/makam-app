@@ -336,3 +336,149 @@ Yang merusak kesan itu bukan cacat teknis melainkan **data**: nama badan
 usaha fiktif di setiap halaman, hotline fiktif di empat tempat, dan satu
 kontradiksi jumlah langkah yang terbaca oleh orang yang paling serius ingin
 memesan.
+
+---
+
+# Tahap 2 & 3 DIJALANKAN — dan Tahap 4, kompilasinya
+
+## Catatan instrumen, dinyatakan lebih dulu
+
+Jendela **tidak bisa turun ke 360px** — viewport terrender **606×597**.
+Chrome punya lebar minimum, dan emulasi perangkat butuh CDP yang host ini
+tidak punya. **Jadi semua temuan visual di bawah adalah pada ~606px, bukan
+360px.** Temuan hero mobile dari audit desain tidak bisa saya ulangi di sini;
+itu butuh pengukuran dari sesi yang punya emulasi.
+
+## Tahap 2 — perjalanan mendalam
+
+### Wizard pemesanan
+
+| Yang diperiksa | Hasil |
+|---|---|
+| Indikator langkah | "Langkah 1 dari 4" + bilah kemajuan — benar |
+| Klik kota **pertama** (Sukabumi) | *"Belum ada TPU/TPS terdaftar di kota ini"* + jalan keluar |
+| Klik Jakarta | Dua TPU/TPS, paket/kelas, tautan peta petak — bekerja |
+| Draft id salah bentuk | Terender di langkah 1, tidak 500 |
+
+**Harga yang dilihat pelanggan**, dan ini prasyarat keras rencana
+bayar-di-muka dalam bentuk yang bisa dilihat:
+
+```
+Rp 12.000.000 - Rp 22.000.000
+Sumber: Estimasi internal (data contoh) · per 08/08/2026
+Kisaran indikatif, Perlu konfirmasi.
+```
+
+**Rentang tidak bisa ditagih.** Setiap kartu membawa lencana "Perlu
+konfirmasi". Tahap 0 rencana A ada persis untuk ini.
+
+### Perpanjangan — tiga langkah, dan empty state yang LEBIH BAIK
+
+`/perpanjangan` punya **"Langkah 1 dari 3"**, dan **Sukabumi pertama di sini
+juga** — jadi corong buntu itu ada di **dua alur**, bukan satu. #304
+memperbaiki wizard dan direktori; **periksa apakah ia mencakup perpanjangan.**
+
+Tapi salinan kosongnya lebih baik daripada wizard pemesanan:
+
+> *"Belum ada TPU/TPS terdaftar di Sukabumi. Data TPU/TPS untuk kota ini
+> belum lengkap di sistem kami. **Ini tidak berarti tidak ada TPU/TPS di
+> Sukabumi — hanya belum terdaftar di sini.** Silakan pilih kota lain, atau
+> hubungi Bantuan."*
+
+Kalimat yang ditebalkan itu mencegah pengguna menyimpulkan sesuatu yang
+salah **tentang dunia nyata** dari ketiadaan **di data kami**. Itu prinsip
+"Jujur soal keterbatasan" diterapkan dengan benar, dan wizard pemesanan
+tidak mengatakannya.
+
+### Marketplace — model untuk katalog pemakaman
+
+Sembilan produk, **semuanya berlabel**: `CV Berkah Karangan Bunga (vendor
+contoh)`, `Estimasi internal (data contoh)`. Empty state keranjang lengkap
+dengan aksi: *"Keranjang Anda masih kosong… Lihat katalog."*
+
+**Marketplace melabeli data contohnya dengan benar dan katalog pemakaman
+tidak.** Itu perbandingan yang bisa langsung dipakai: polanya sudah ada di
+repo ini, hanya belum diterapkan ke pemakaman.
+
+### Foto kartu — state loading yang hilang
+
+Sembilan foto punya `loading="lazy"` dan `alt` yang benar
+(*"Foto TPS Jakarta Kemang"*), tetapi **tidak punya `width`/`height`**.
+Server mengirimnya dalam **60–70 ms**, jadi ini bukan masalah jaringan —
+ia sembilan JPEG ~220 KB yang didekode bersamaan.
+
+Akibatnya: **area foto kosong selama beberapa detik**, tanpa skeleton atau
+placeholder. Tinggi kartu tidak melompat (CSS menahannya), jadi bukan
+pergeseran tata letak — melainkan **state Loading yang design-system §6.1
+wajibkan dan tidak ada.**
+
+## Tahap 3 — dinding autentikasi
+
+**Tidak ada kebocoran.** Semua sesuai harapan:
+
+```
+/admin     302 -> /admin/login        /akun            302 -> /masuk
+/operator  302 -> /operator/login     /akun/draft      302 -> /masuk
+/vendor    302 -> /vendor/login       /akun/pesanan    302 -> /masuk
+                                      /akun/dokumen    302 -> /masuk
+                                      /akun/perpanjangan 302 -> /masuk
+```
+
+Ketiga halaman login: 200.
+
+**Koreksi terhadap rencana ini sendiri:** saya menulis "lima panel Filament".
+Salah. `app/Filament/Support/` dan `Shared/` adalah direktori kelas bantu
+(`OrderViewUrl`, `CemeteryOrderActionGate`) — bukan panel. **Ada tiga panel**:
+Admin, Operator, Vendor.
+
+**Di sinilah UAT berhenti.** Isi ketiga panel butuh kata sandi, dan itu batas
+yang tidak saya akali. Jalur terpenting yang belum diuji siapa pun:
+**admin mengkonfirmasi lalu menolak pesanan terbayar** — alur yang seluruh
+pekerjaan malam ini bangun.
+
+## Tahap 4 — kompilasi
+
+### Melanggar oracle
+
+| # | Temuan | Bukti |
+|---|---|---|
+| 1 | `/kenangan/<id salah bentuk>` → **HTTP 500** | Satu-satunya 500 di 30 rute. #304 memperbaikinya, belum di-merge |
+| 2 | Sukabumi pertama di **dua** corong | Pemesanan **dan** perpanjangan |
+| 3 | State Loading hilang pada foto kartu | 9 gambar tanpa `width`/`height`, area kosong beberapa detik |
+| 4 | `PT Contoh Makam Digital Indonesia` | **setiap halaman** |
+| 5 | `+62 812-0000-1234` | beranda (2×), `/bantuan`, artikel FAQ |
+| 6 | "sembilan langkah" vs "Langkah 1 dari 4" | 3 halaman, termasuk FAQ *"Bagaimana cara memesan makam?"* |
+| 7 | Katalog pemakaman tanpa label contoh | Sementara marketplace melabelinya dengan benar |
+
+### Berbeda dari harapan, tapi BUKAN pelanggaran
+
+- **"Checkout"** satu-satunya judul berbahasa Inggris. Produk ini menolak
+  "cart" demi "Keranjang", jadi ia menonjol — tapi ia pinjaman yang lazim.
+  Keputusan salinan, bukan cacat.
+- **Harga sebagai rentang** — benar untuk mode sekarang, dan berlabel jujur.
+  Ia jadi cacat hanya setelah bayar-di-muka mendarat.
+- **Tiga mode gate tertutup** menyatakan diri dengan jujur. Lulus.
+
+### Yang TIDAK bisa diuji, dinyatakan bukan didiamkan
+
+- **Isi tiga panel admin** — butuh kata sandi.
+- **360px sungguhan** — jendela tidak bisa turun ke sana; butuh emulasi CDP.
+- **Jalur pembayaran sampai selesai** — sengaja dihentikan sebelum membuat
+  sesi.
+- **Alur bayar-di-muka** — belum ada produsernya, dan `order_invoices`
+  **nol baris di seluruh dev**.
+
+### Empat kali saya menyimpulkan terlalu cepat, dan mengoreksinya
+
+Layak dicatat karena ini persis mode kegagalan yang UAT ada untuk
+menangkapnya, dan saya melakukannya sendiri:
+
+1. `ls | head -4` → "foto hilang". **Salah** — berkasnya ada, semuanya 200.
+2. Screenshot terlalu cepat → "gambar rusak". **Salah** — ia sedang memuat.
+3. `grep` tiga `<img>` pertama → "tanpa lazy-loading". **Salah** — kesembilan
+   foto punya `loading` dan `alt`.
+4. Klik `ref_4` mengenai tombol menu → "perpanjangan buntu tanpa pesan".
+   **Salah** — empty state-nya justru yang terbaik di seluruh situs.
+
+Keempatnya dari bertindak atas pengamatan **parsial atau terlalu dini**.
+Keempatnya terkoreksi hanya karena diukur ulang.
