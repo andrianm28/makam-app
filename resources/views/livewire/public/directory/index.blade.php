@@ -63,11 +63,18 @@
 
         {{-- AC1 + AC2 — the five launch cities, always all five, sourced from
              CemeteryPublicQuery::launchCities() (which reads
-             LaunchCityCode::KNOWN_CODES). A city with zero published
-             cemeteries still gets a chip: the negative criterion is "No
-             hidden omission of a required MVP city," so a city must never
-             disappear from this control just because today's data is thin.
-             Selecting it lands on the §6.2 empty state, which says so. --}}
+             LaunchCityCode::KNOWN_CODES). A CANONICAL city with zero
+             published cemeteries still gets a chip: the negative criterion
+             is "No hidden omission of a required MVP city," so one of the
+             five must never disappear from this control just because
+             today's data is thin. Selecting it lands on the §6.2 empty
+             state, which says so.
+
+             FN-2 (13 Sep 2026): an ADMIN-ADDED city beyond those five gets
+             a chip only once it has a published cemetery — see
+             CemeteryPublicQuery::launchCities()'s doc block for why the
+             two cases differ. Nothing on this page decides that; the
+             query seam does, for every city list on the site at once. --}}
         <nav aria-label="Filter kota" class="mb-4 flex flex-wrap justify-center gap-2">
             <button
                 type="button"

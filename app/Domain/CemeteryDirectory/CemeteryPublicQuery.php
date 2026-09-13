@@ -7,6 +7,7 @@ namespace App\Domain\CemeteryDirectory;
 use App\Domain\CemeteryCapability\Models\CemeteryPackage;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Str;
 
 /**
@@ -75,13 +76,15 @@ final class CemeteryPublicQuery
      * wording.
      *
      * ---------------------------------------------------------------------
-     * NEVER filter this to cities that have published cemeteries
+     * NEVER filter a CANONICAL launch city out of this list
      * ---------------------------------------------------------------------
-     * It is the one change to this method that looks like an obvious
-     * improvement and is actually the failure the spec's negative criteria
-     * name outright: "No hidden omission of a required MVP city." A launch
-     * city is a statement about where the platform operates, not a summary
-     * of today's inventory. A city with no onboarded operator is an honest
+     * Filtering `LaunchCityCode::KNOWN_CODES` down to the cities that
+     * happen to have published cemeteries today is the one change to this
+     * method that looks like an obvious improvement and is actually the
+     * failure the spec's negative criteria name outright: "No hidden
+     * omission of a required MVP city." A canonical launch city is a
+     * statement about where the platform operates, not a summary of today's
+     * inventory. A canonical city with no onboarded operator is an honest
      * empty state on the next screen (§6.2); dropping it from the filter
      * tells a grieving family the city is unserved. `AGENTS.md`'s "Never
      * remove a stakeholder MVP item merely because an external gate is
@@ -96,11 +99,41 @@ final class CemeteryPublicQuery
      * because every seeded city currently has published rows. Carry that
      * test forward with this method.
      *
+     * ---------------------------------------------------------------------
+     * FN-2, 13 Sep 2026 — an ADMIN-ADDED city with no inventory IS hidden
+     * ---------------------------------------------------------------------
+     * That rule protects the five cities the MVP promises. It was never a
+     * promise about rows an operator types into the admin panel. A
+     * `SUKABUMI` row was created by hand with `sort_order = 0`, so it
+     * sorted ahead of all five seeded cities, and the FIRST and most
+     * obvious click in the primary conversion funnel — "Pilih Lokasi" on
+     * `/pemesanan-makam` — landed a grieving family on "Belum ada TPU/TPS
+     * terdaftar di kota ini." The copy on that screen is honest; the
+     * problem is that the site advertised the city in the first place.
+     *
+     * So the rule is narrowed, not reversed:
+     *
+     *   - a code in `LaunchCityCode::KNOWN_CODES` is ALWAYS listed,
+     *     inventory or not — unchanged, and unchangeable;
+     *   - any OTHER active `launch_cities` row is listed only once it has
+     *     at least one published cemetery.
+     *
+     * Deliberately a code rule rather than a data edit: the row stays, and
+     * the city appears by itself the moment its first cemetery is
+     * published. A deleted row would have to be re-created by hand, and the
+     * next hand-created row would reintroduce the dead end.
+     *
+     * On an unreadable `cemeteries` table the un-confirmable extras are
+     * dropped and the canonical five remain — the same destination
+     * `LaunchCityQuery::activeCities()`'s own degradation contract already
+     * lands on when its read fails, so a degraded page never advertises a
+     * city this method could not confirm is served.
+     *
      * @return list<array{code: string, label: string}>
      */
     public static function launchCities(): array
     {
-        $cities = LaunchCityQuery::activeCities();
+        $cities = self::withServedNonCanonicalCitiesOnly(LaunchCityQuery::activeCities());
 
         if ($cities !== []) {
             return $cities;
@@ -113,6 +146,48 @@ final class CemeteryPublicQuery
             ],
             LaunchCityCode::KNOWN_CODES,
         );
+    }
+
+    /**
+     * FN-2's rule, applied to the table-backed catalogue: keep every
+     * canonical code untouched, keep a non-canonical code only when a
+     * published cemetery actually sits in it.
+     *
+     * @param  list<array{code: string, label: string}>  $cities
+     * @return list<array{code: string, label: string}>
+     */
+    private static function withServedNonCanonicalCitiesOnly(array $cities): array
+    {
+        $extraCodes = array_values(array_diff(
+            array_column($cities, 'code'),
+            LaunchCityCode::KNOWN_CODES,
+        ));
+
+        // The steady state: the catalogue is exactly the seeded five, so
+        // there is nothing a `cemeteries` read could remove. Not an
+        // optimisation for its own sake — it keeps the extra query off the
+        // booking wizard's, the renewal search's and the directory's render
+        // path on every environment that has never added a city by hand.
+        if ($extraCodes === []) {
+            return $cities;
+        }
+
+        try {
+            $servedCodes = Cemetery::query()
+                ->published()
+                ->whereIn('city', $extraCodes)
+                ->distinct()
+                ->pluck('city')
+                ->all();
+        } catch (QueryException) {
+            $servedCodes = [];
+        }
+
+        return array_values(array_filter(
+            $cities,
+            static fn (array $city): bool => LaunchCityCode::isKnown($city['code'])
+                || in_array($city['code'], $servedCodes, true),
+        ));
     }
 
     /**
