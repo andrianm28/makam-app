@@ -28,6 +28,46 @@ use App\Domain\OrderWorkflow\Exceptions\IllegalOrderTransitionException;
  *   - Nothing terminal is reachable after DIBAYAR. Once money is confirmed,
  *     §3's "compensating financial action" (PaymentReversal + reversing
  *     journal batch) is the correction mechanism, not a status edge.
+ *
+ * ---------------------------------------------------------------------------
+ * 13 Sep 2026 — the pay-in-full-upfront flow, and why the third bullet above
+ * is still true word for word
+ * ---------------------------------------------------------------------------
+ * `docs/superpowers/plans/2026-09-13-bayar-penuh-di-muka-online-saja.md`
+ * reverses the order of money and confirmation: the customer pays in full,
+ * THEN an admin decides. That creates a case the matrix above had no answer
+ * for — an admin refusing an order whose money has already arrived.
+ *
+ * The obvious edit would have been `DIBAYAR => [..., 'DITOLAK']`, and it is
+ * exactly what the third bullet forbids. It was not made. Instead the
+ * paid-but-undecided order lands on its OWN state,
+ * `DIBAYAR_MENUNGGU_KONFIRMASI`, and the refusal edge leaves THAT state, not
+ * `DIBAYAR`:
+ *
+ *     MENUNGGU_PEMBAYARAN -> DIBAYAR_MENUNGGU_KONFIRMASI
+ *                              |-> DIKONFIRMASI -> DIPROSES -> ...
+ *                              `-> DITOLAK_SETELAH_BAYAR (terminal)
+ *
+ * `DIBAYAR`'s own row is UNCHANGED — still `['DIPROSES']`, still no terminal
+ * edge, still corrected only by a compensating financial action. `DIBAYAR`
+ * keeps its exact old meaning: the settled state of the
+ * operator-confirms-first flow. Nothing that was true of an order at
+ * `DIBAYAR` yesterday is less true today, and no canonical rule was revoked
+ * to make room for the new flow.
+ *
+ * What the new branch costs instead is a NEW obligation, enforced one layer
+ * up: `Actions\RecordOrderStatusChange` refuses to write
+ * `DITOLAK_SETELAH_BAYAR` unless a `refund_obligations` row for the order
+ * already exists in the same transaction. The matrix makes the edge
+ * possible; that guard decides when it may be taken — the same two-layer
+ * split this class already applies to the conditional
+ * `DIVERIFIKASI -> PENAWARAN_TERKIRIM` edge.
+ *
+ * `DIBATALKAN`/`KEDALUWARSA` are deliberately absent from
+ * `DIBAYAR_MENUNGGU_KONFIRMASI`'s row. Money has arrived; the only ways out
+ * are an acceptance or a refusal that records the debt. A cancellation or a
+ * lapse would end the order while leaving the customer's money unaccounted
+ * for, which is the precise failure the refusal door exists to prevent.
  */
 final class OrderTransition
 {
@@ -38,12 +78,15 @@ final class OrderTransition
         'MENUNGGU_KETERSEDIAAN' => ['PENAWARAN_TERKIRIM', 'DITOLAK', 'DIBATALKAN'],
         'PENAWARAN_TERKIRIM' => ['DISETUJUI_PEMESAN', 'KEDALUWARSA', 'DIBATALKAN'],
         'DISETUJUI_PEMESAN' => ['MENUNGGU_PEMBAYARAN', 'KEDALUWARSA', 'DIBATALKAN'],
-        'MENUNGGU_PEMBAYARAN' => ['MENUNGGU_VERIFIKASI_PEMBAYARAN', 'DIBAYAR', 'KEDALUWARSA', 'DIBATALKAN'],
+        'MENUNGGU_PEMBAYARAN' => ['MENUNGGU_VERIFIKASI_PEMBAYARAN', 'DIBAYAR', 'DIBAYAR_MENUNGGU_KONFIRMASI', 'KEDALUWARSA', 'DIBATALKAN'],
         'MENUNGGU_VERIFIKASI_PEMBAYARAN' => ['DIBAYAR', 'DIBATALKAN'],
         'DIBAYAR' => ['DIPROSES'],
+        'DIBAYAR_MENUNGGU_KONFIRMASI' => ['DIKONFIRMASI', 'DITOLAK_SETELAH_BAYAR'],
+        'DIKONFIRMASI' => ['DIPROSES'],
         'DIPROSES' => ['SELESAI'],
         'SELESAI' => [],
         'DITOLAK' => [],
+        'DITOLAK_SETELAH_BAYAR' => [],
         'DIBATALKAN' => [],
         'KEDALUWARSA' => [],
     ];

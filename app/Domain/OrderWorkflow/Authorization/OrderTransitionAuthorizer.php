@@ -23,6 +23,16 @@ final class OrderTransitionAuthorizer implements OrderTransitionAuthorizerContra
         'mark_order_paid',
         'mark_marketplace_order_paid',
         'record_external_renewal_payment',
+        // Stage R1 of `docs/superpowers/plans/2026-09-13-sistem-refund.md`
+        // (13 Sep 2026). In the pay-in-full-upfront flow the customer's money
+        // has ALREADY arrived when these two are offered, so both decide the
+        // fate of funds in hand: `refuse_paid_order` opens a refund debt with
+        // a 3-working-day deadline, `confirm_paid_order` is the acceptance
+        // that makes the payment final. Same finance/admin gate as
+        // `mark_order_paid` above — a cemetery operator or restricted admin
+        // must not be able to settle or send back somebody's payment.
+        'refuse_paid_order',
+        'confirm_paid_order',
     ];
 
     public function __construct(

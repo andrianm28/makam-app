@@ -106,7 +106,13 @@ final class OrderTransitionTest extends TestCase
 
     public function test_terminal_states_are_absorbing(): void
     {
-        foreach ([OrderStatus::SELESAI, OrderStatus::DITOLAK, OrderStatus::DIBATALKAN, OrderStatus::KEDALUWARSA] as $terminal) {
+        foreach ([
+            OrderStatus::SELESAI,
+            OrderStatus::DITOLAK,
+            OrderStatus::DITOLAK_SETELAH_BAYAR,
+            OrderStatus::DIBATALKAN,
+            OrderStatus::KEDALUWARSA,
+        ] as $terminal) {
             self::assertTrue(OrderTransition::isTerminal($terminal));
 
             foreach (OrderStatus::cases() as $to) {
@@ -125,14 +131,108 @@ final class OrderTransitionTest extends TestCase
         OrderTransition::assertAllowed(OrderStatus::MASUK, OrderStatus::DIBAYAR);
     }
 
-    public function test_only_rejection_demands_a_reason(): void
+    /**
+     * Both refusals demand a reason, and nothing else does.
+     *
+     * `DITOLAK_SETELAH_BAYAR` joined this on 13 Sep 2026 (Stage R1) — it is
+     * the refusal of an order whose money has already arrived, and the reason
+     * is the only answer available to the customer asking why.
+     */
+    public function test_only_the_two_refusals_demand_a_reason(): void
     {
-        self::assertTrue(OrderStatus::DITOLAK->requiresReason());
+        $refusals = [OrderStatus::DITOLAK, OrderStatus::DITOLAK_SETELAH_BAYAR];
+
+        foreach ($refusals as $refusal) {
+            self::assertTrue($refusal->requiresReason(), "{$refusal->value} must demand a reason");
+        }
 
         foreach (OrderStatus::cases() as $status) {
-            if ($status !== OrderStatus::DITOLAK) {
+            if (! in_array($status, $refusals, true)) {
                 self::assertFalse($status->requiresReason(), "{$status->value} should not demand a reason");
             }
+        }
+    }
+
+    /**
+     * The pay-first branch, asserted as a shape rather than edge by edge: one
+     * way in, exactly two ways out, and the refusal absorbing.
+     */
+    public function test_the_pay_first_branch_offers_exactly_acceptance_or_refusal(): void
+    {
+        self::assertTrue(OrderTransition::isAllowed(
+            OrderStatus::MENUNGGU_PEMBAYARAN,
+            OrderStatus::DIBAYAR_MENUNGGU_KONFIRMASI,
+        ));
+
+        self::assertSame(
+            ['DIKONFIRMASI', 'DITOLAK_SETELAH_BAYAR'],
+            OrderTransition::allowedFrom(OrderStatus::DIBAYAR_MENUNGGU_KONFIRMASI),
+        );
+
+        // Money has arrived. Ending the order by cancellation or lapse would
+        // leave the customer's payment unaccounted for, so neither is an edge.
+        foreach ([OrderStatus::DIBATALKAN, OrderStatus::KEDALUWARSA] as $to) {
+            self::assertFalse(
+                OrderTransition::isAllowed(OrderStatus::DIBAYAR_MENUNGGU_KONFIRMASI, $to),
+                "DIBAYAR_MENUNGGU_KONFIRMASI -> {$to->value} would abandon money already received",
+            );
+        }
+
+        self::assertSame(['DIPROSES'], OrderTransition::allowedFrom(OrderStatus::DIKONFIRMASI));
+    }
+
+    /**
+     * The canonical rule this whole branch was shaped to avoid breaking:
+     * `docs/domain/order-lifecycle.md` §3's "Nothing terminal is reachable
+     * after `DIBAYAR`". The pay-first flow adds a refusal, and this asserts
+     * that the refusal is NOT reachable from `DIBAYAR` — it leaves the new
+     * pre-confirmation state instead, which is the entire reason that state
+     * exists.
+     */
+    public function test_the_new_refusal_did_not_give_dibayar_a_terminal_edge(): void
+    {
+        self::assertSame(['DIPROSES'], OrderTransition::allowedFrom(OrderStatus::DIBAYAR));
+
+        foreach ([OrderStatus::DIBAYAR, OrderStatus::DIKONFIRMASI, OrderStatus::DIPROSES, OrderStatus::SELESAI] as $from) {
+            self::assertFalse(
+                OrderTransition::isAllowed($from, OrderStatus::DITOLAK_SETELAH_BAYAR),
+                "{$from->value} -> DITOLAK_SETELAH_BAYAR must not be allowed",
+            );
+        }
+    }
+
+    /**
+     * DOM-08's protection must apply to every state in which money has
+     * arrived, or a paid customer's plot hold becomes releasable without the
+     * paid-order override on the new flow — silently, and only on the new
+     * flow.
+     */
+    public function test_every_state_where_money_has_arrived_counts_as_paid_or_later(): void
+    {
+        foreach ([
+            OrderStatus::DIBAYAR,
+            OrderStatus::DIBAYAR_MENUNGGU_KONFIRMASI,
+            OrderStatus::DIKONFIRMASI,
+            OrderStatus::DITOLAK_SETELAH_BAYAR,
+            OrderStatus::DIPROSES,
+            OrderStatus::SELESAI,
+        ] as $paid) {
+            self::assertTrue($paid->isPaidOrLater(), "{$paid->value} must count as paid-or-later");
+        }
+
+        foreach ([
+            OrderStatus::MASUK,
+            OrderStatus::DIVERIFIKASI,
+            OrderStatus::MENUNGGU_KETERSEDIAAN,
+            OrderStatus::PENAWARAN_TERKIRIM,
+            OrderStatus::DISETUJUI_PEMESAN,
+            OrderStatus::MENUNGGU_PEMBAYARAN,
+            OrderStatus::MENUNGGU_VERIFIKASI_PEMBAYARAN,
+            OrderStatus::DITOLAK,
+            OrderStatus::DIBATALKAN,
+            OrderStatus::KEDALUWARSA,
+        ] as $unpaid) {
+            self::assertFalse($unpaid->isPaidOrLater(), "{$unpaid->value} must not count as paid-or-later");
         }
     }
 
