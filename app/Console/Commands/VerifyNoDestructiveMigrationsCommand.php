@@ -11,10 +11,22 @@ use Symfony\Component\Process\Process;
 /**
  * CI gate: `docs/superpowers/specs/2026-09-05-cicd-automation-design.md`
  * §3.4. Runs as the `verify-migrations` job, a required PR status check
- * (branch protection, spec §2 decision 2) — this is the automated
- * replacement for the manual "read every migration before running it" step
- * every deploy has needed by hand so far (see `/opt/makam/compose/
- * compose.yml`'s own extensive comment history).
+ * (branch protection, spec §2 decision 2).
+ *
+ * This NARROWS, but does not replace, the manual "read every migration
+ * before running it" step every deploy has needed by hand so far (see
+ * `/opt/makam/compose/compose.yml`'s own extensive comment history) — it
+ * only catches destructive PHP-method/raw-SQL patterns this gate's own
+ * `DestructiveMigrationScanner` knows about, inside `up()` only (excluding
+ * `down()`'s own body), and only for files present in the given diff.
+ * DB-01 (batch M3a) is a concrete example of why this distinction matters:
+ * the scanner had two real blind spots for months (a helper method declared
+ * after `down()` was invisible to it, and `->change(`/`renameColumn`/
+ * `dropPrimary`/`DROP CONSTRAINT`/`ALTER COLUMN ... TYPE` were all missing
+ * from its pattern lists) before anyone noticed. `AGENTS.md`
+ * §Infrastructure-agent execution's mandatory human review before a
+ * destructive-migration-adjacent change stands in front of this gate
+ * regardless of what it currently does or doesn't flag.
  */
 final class VerifyNoDestructiveMigrationsCommand extends Command
 {

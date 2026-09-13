@@ -67,6 +67,34 @@ use InvalidArgumentException;
  */
 final class CreateCemeteryBlock
 {
+    /**
+     * PERF-16 — an explicit upper bound on `$capacity`, alongside the
+     * existing `< 1` lower-bound guard. No cemetery block in this
+     * codebase's seed data, tests, or product docs approaches four digits
+     * of plots — a real "blok" is physically bounded by land area, and
+     * this codebase's own examples describe one in the tens to low
+     * hundreds. 10,000 is generous enough that no legitimate operator
+     * input is ever rejected by it, while keeping a single request's
+     * plot-row materialization bounded to a fixed, small multiple of what
+     * any real block will ever need. This is a sanity/abuse guard, not a
+     * substitute for the chunked-insert fix below: even 10,000 rows × 6
+     * columns (60,000 bind params) would already sit under Postgres's
+     * 65,535 bind-parameter ceiling in a single statement, but chunking
+     * still protects PHP memory for the row-array itself and keeps this
+     * action correct if `MAX_CAPACITY` is ever raised later.
+     */
+    public const int MAX_CAPACITY = 10_000;
+
+    /**
+     * Insert the generated plot rows in chunks of this size — same
+     * reasoning as `MAX_CAPACITY`'s doc block: neither PHP memory nor
+     * Postgres's bind-parameter limit should be the constraint for a
+     * legitimately large but bounded block. 1,000 rows × 6 columns = 6,000
+     * bind params per statement, comfortably under Postgres's 65,535
+     * ceiling with wide headroom for future columns.
+     */
+    private const int INSERT_CHUNK_SIZE = 1000;
+
     public function __invoke(
         Cemetery $cemetery,
         string $code,
@@ -81,6 +109,12 @@ final class CreateCemeteryBlock
     ): CemeteryBlock {
         if ($capacity < 1) {
             throw new InvalidArgumentException('Cemetery block capacity must be at least 1.');
+        }
+
+        if ($capacity > self::MAX_CAPACITY) {
+            throw new InvalidArgumentException(
+                'Cemetery block capacity must not exceed '.self::MAX_CAPACITY.' plots.'
+            );
         }
 
         if ($cemetery->plot_tracking_mode !== PlotTrackingMode::GRANULAR) {
@@ -113,7 +147,11 @@ final class CreateCemeteryBlock
                     ];
                 }
 
-                GravePlot::query()->insert($plotRows);
+                // PERF-16 — chunked inserts, not one giant statement: see
+                // MAX_CAPACITY's/INSERT_CHUNK_SIZE's doc blocks above.
+                foreach (array_chunk($plotRows, self::INSERT_CHUNK_SIZE) as $chunk) {
+                    GravePlot::query()->insert($chunk);
+                }
 
                 Audit::record(
                     action: PlotInventoryAuditActions::GRAVE_PLOTS_GENERATED,

@@ -27,6 +27,11 @@ namespace App\Platform\Outbox;
  *   - `payment.received.v1`         -> critical  ("payment webhook processing")
  *   - `funeral_case.task_overdue.v1` -> urgent    ("overdue escalation")
  *   - `grave.import_completed.v1`    -> imports   ("10,000-row grave import")
+ *   - `marketplace_order.paid.v1`    -> critical  ("payment webhook processing")
+ *     — added 07 Sep 2026 (Batch M1a, QUE-02): `MarkMarketplaceOrderPaid` is
+ *     reached only from `ApplyPaymentSettlement::settleMarketplace()`, a
+ *     payment webhook path, the identical justification `payment.received.v1`
+ *     already cites above.
  *
  * Every other catalogue event name falls back to `DEFAULT_QUEUE`
  * (`default`) rather than guessing — deliberately incomplete, not silently
@@ -36,9 +41,13 @@ namespace App\Platform\Outbox;
  *
  * To route a future event explicitly, add one line to `ROUTES` below citing
  * the specific `queue-and-outbox.md` §2 text that justifies the queue
- * choice — the same evidentiary bar the three entries above were held to.
- * Do not add a case-by-case default guess; an unmapped event correctly
- * defaults to `default` until someone does this deliberately.
+ * choice — the same evidentiary bar the entries above were held to. Do not
+ * add a case-by-case default guess; an unmapped event correctly defaults to
+ * `default` until someone does this deliberately. (Batch M1a, 07 Sep 2026,
+ * deliberately left `renewal.marked_external.v1` and `vendor.order_
+ * assigned.v1` unrouted for exactly this reason — no §2 text ties either to
+ * a specific queue, and `renewal.marked_external.v1`'s own online sibling,
+ * `renewal.paid_online.v1`, is unrouted for the same reason.)
  */
 final class OutboxQueueRouter
 {
@@ -49,6 +58,7 @@ final class OutboxQueueRouter
         'payment.received.v1' => OutboxQueueName::Critical,
         'funeral_case.task_overdue.v1' => OutboxQueueName::Urgent,
         'grave.import_completed.v1' => OutboxQueueName::Imports,
+        'marketplace_order.paid.v1' => OutboxQueueName::Critical,
     ];
 
     public const OutboxQueueName DEFAULT_QUEUE = OutboxQueueName::Default;

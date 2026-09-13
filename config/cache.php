@@ -15,7 +15,18 @@ return [
     |
     */
 
-    'default' => env('CACHE_STORE', 'database'),
+    // PERF-07: default changed from 'database' to 'redis' 7 Sep 2026 — the
+    // 'database' default made the per-request rate limiter (and every
+    // other cache read) serialize on a single Postgres cache row under
+    // load. `docs/operations/redis-hardening.md` §4.1-4.2 already
+    // documents Redis (with `REDIS_PREFIX`/`CACHE_PREFIX` isolation) as
+    // the intended dev/stg/prod setup — this only changes the DEFAULT used
+    // when no `CACHE_STORE` env var is set; the live `.env.beta`/`.env.stg`
+    // files on the deployed host must still be updated to
+    // `CACHE_STORE=redis` by a human operator (AGENTS.md §Infrastructure-
+    // agent execution — production-affecting env-file changes are human-
+    // executed, not agent-executed).
+    'default' => env('CACHE_STORE', 'redis'),
 
     /*
     |--------------------------------------------------------------------------

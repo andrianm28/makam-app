@@ -119,9 +119,15 @@ final class CareHistoryPageRouteTest extends TestCase
             'status' => 'COMPLETED',
         ]);
 
+        // DB-03 (batch M3a) caught this: `care_plan_id` was previously
+        // written as `$subscription->getKey()` — a subscription id, not a
+        // care plan id. That silently "worked" only because
+        // `work_orders.care_plan_id` carried no DB-level FK before this
+        // batch; it now correctly fails loudly against the real
+        // `care_plans` row.
         $victimsWorkOrder = WorkOrder::query()->create([
             'reference' => 'WO-'.Str::upper(Str::random(8)),
-            'care_plan_id' => $subscription->getKey(),
+            'care_plan_id' => $carePlan->getKey(),
             'subscription_cycle_id' => $cycle->getKey(),
             'status' => 'completed',
         ]);

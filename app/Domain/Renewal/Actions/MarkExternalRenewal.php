@@ -16,6 +16,8 @@ use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\AuditSubject;
 use App\Platform\IdentityAccess\ActorContextResolver;
+use App\Platform\Outbox\Outbox;
+use App\Platform\Outbox\OutboxClassification;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Str;
@@ -104,6 +106,28 @@ final readonly class MarkExternalRenewal
                         'reason' => $reason,
                         'marked_at' => now(),
                     ]);
+
+                    // QUE-03 (Batch M1a, 07 Sep 2026): `renewal.marked_
+                    // external.v1` is already catalogued
+                    // (`event-catalog.md`) but had no producer at all
+                    // before this fix. References only — no
+                    // `evidence_reference`/`reason` (human-authored content,
+                    // AC7/AC14), mirroring `MarkRenewalPaidOnline`'s own
+                    // `renewal.paid_online.v1` payload shape minus
+                    // `paid_source_ref`, which has no analogue on this
+                    // offline path.
+                    Outbox::record(
+                        eventName: 'renewal.marked_external.v1',
+                        eventVersion: 1,
+                        aggregateType: 'renewal',
+                        aggregateId: $renewal->id,
+                        data: [
+                            'renewal_id' => $renewal->id,
+                            'grave_record_id' => $grave->id,
+                        ],
+                        classification: OutboxClassification::Internal,
+                        idempotencyKey: "renewal_marked_external:{$renewal->id}",
+                    );
 
                     return $renewal;
                 },

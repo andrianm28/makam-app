@@ -15,6 +15,7 @@ use App\Domain\Quotation\Models\QuoteLine;
 use App\Domain\Quotation\QuoteStatus;
 use App\Filament\Admin\Resources\BookingOrders\BookingOrderProductTypeLabel;
 use App\Filament\Admin\Resources\BookingOrders\BookingOrderStatusBadge;
+use App\Platform\FinancialLedger\Money;
 use App\Platform\IdentityAccess\Scopes\Models\ScopeAssignment;
 use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use Filament\Infolists\Components\RepeatableEntry;
@@ -255,7 +256,7 @@ final class BookingOrderInfolist
 
     private static function moneyString(int $amountMinor): string
     {
-        return 'Rp '.number_format($amountMinor / 100, 0, ',', '.');
+        return (new Money($amountMinor))->format();
     }
 
     /**

@@ -13,6 +13,8 @@ use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Audit\AuditSubject;
 use App\Platform\Correlation\CorrelationContext;
+use App\Platform\Outbox\Outbox;
+use App\Platform\Outbox\OutboxClassification;
 
 /**
  * The AC10 privileged write path for an ALREADY-OPEN renewal row — marks a
@@ -74,6 +76,23 @@ final readonly class MarkRenewalPaidExternally
                     'reason' => $reason,
                     'marked_at' => now(),
                 ]);
+
+                // QUE-03 (Batch M1a, 07 Sep 2026) — see
+                // `Actions\MarkExternalRenewal`'s identical addition for the
+                // full rationale; this is this action's own producer of the
+                // same catalogued, previously producer-less event.
+                Outbox::record(
+                    eventName: 'renewal.marked_external.v1',
+                    eventVersion: 1,
+                    aggregateType: 'renewal',
+                    aggregateId: $current->getKey(),
+                    data: [
+                        'renewal_id' => $current->getKey(),
+                        'grave_record_id' => $current->grave_record_id,
+                    ],
+                    classification: OutboxClassification::Internal,
+                    idempotencyKey: "renewal_marked_external:{$current->getKey()}",
+                );
             },
             action: 'RENEWAL_EXTERNAL_MARKING',
             subject: fn (): AuditSubject => new AuditSubject('renewal', (string) $renewal->getKey()),

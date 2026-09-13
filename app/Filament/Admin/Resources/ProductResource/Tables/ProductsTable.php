@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Admin\Resources\ProductResource\Tables;
 
 use App\Domain\Marketplace\MarketplaceProductCategory;
+use App\Platform\FinancialLedger\Money;
 use Filament\Actions\EditAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -45,7 +46,7 @@ final class ProductsTable
                     ->label('Harga dasar (Rp)')
                     ->formatStateUsing(fn (?int $state): ?string => $state === null
                         ? null
-                        : 'Rp '.number_format((float) $state, 0, ',', '.'))
+                        : (new Money(Money::fromDecimal((string) $state)))->format())
                     ->placeholder('Belum dipatok')
                     ->sortable(),
 

@@ -57,21 +57,28 @@ use Illuminate\Support\Facades\Log;
  *    naturally produces nothing from whatever subject a caller can
  *    actually supply today (see `RecipientResolverTest`'s ruling-6 test).
  *
- * A `$subject` carries at most ONE scope entity by design (see
- * `RecipientResolutionSubject`'s own doc block) — a real record with more
- * than one relevant scope entity is out of this task's scope; nothing in
- * the current matrix rows this task can exercise needs more than one.
+ * A `$subject` may carry MORE THAN ONE scope entity — NOTIF-01, 07 Sep
+ * 2026 (`docs/superpowers/plans/2026-09-07-batchm8b-notification-
+ * completeness.md`). `resolveScopedRecipients()` loops
+ * `$subject->scopeEntities`, resolving each independently through steps 3-4
+ * above; a record relevant to more than one recipient class (e.g. an
+ * order's cemetery scope AND the platform's own `business_entity` scope)
+ * now actually resolves both, where before only the first-and-only scope
+ * entity a subject could carry ever reached this method.
  *
  * ---------------------------------------------------------------------------
  * Overlapping-grant dedupe (ruling 2's third binding condition)
  * ---------------------------------------------------------------------------
  * Recipients are deduplicated on `(actor_ref, actor_role, scope_entity_type,
- * scope_entity_id)`. With a single-scope-entity subject this tuple can only
- * repeat if `actorsForEntity()` itself returned a duplicate, which it
- * already prevents (`->distinct()`) — the dedupe here is defensive
- * belt-and-braces for when a future subject shape carries more than one
- * scope entity, documented per ruling 2's requirement rather than left
- * implicit.
+ * scope_entity_id)`. Before NOTIF-01 this dedupe was defensive
+ * belt-and-braces (a single-scope-entity subject could only repeat this
+ * tuple if `actorsForEntity()` itself returned a duplicate, which it
+ * already prevents via `->distinct()`); with a multi-scope-entity subject
+ * it is now load-bearing — an actor holding grants on two of a subject's
+ * scope entities (e.g. a business_entity admin who is ALSO the cemetery's
+ * operator) must still resolve to one recipient per distinct
+ * `(role, scope_entity_type, scope_entity_id)` combination, never a
+ * cross-entity duplicate.
  */
 final class RecipientResolver
 {
@@ -166,14 +173,20 @@ final class RecipientResolver
      */
     private function resolveScopedRecipients(array $matrixRecipients, RecipientResolutionSubject $subject, array &$recipients, array &$seen): void
     {
-        if (! $subject->hasScopeEntity()) {
-            return;
+        foreach ($subject->scopeEntities as $scopeEntity) {
+            $this->resolveOneScopeEntity($matrixRecipients, $scopeEntity, $recipients, $seen);
         }
+    }
 
-        /** @var string $scopeEntityType */
-        $scopeEntityType = $subject->scopeEntityType;
-        /** @var int|string $scopeEntityId */
-        $scopeEntityId = $subject->scopeEntityId;
+    /**
+     * @param  array<string, string>  $matrixRecipients
+     * @param  list<Recipient>  $recipients
+     * @param  array<string, true>  $seen
+     */
+    private function resolveOneScopeEntity(array $matrixRecipients, ScopeEntityReference $scopeEntity, array &$recipients, array &$seen): void
+    {
+        $scopeEntityType = $scopeEntity->type;
+        $scopeEntityId = $scopeEntity->id;
 
         $role = $this->roleSource()->roleForScopeEntityType($scopeEntityType);
 

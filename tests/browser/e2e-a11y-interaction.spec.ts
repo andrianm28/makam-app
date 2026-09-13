@@ -106,7 +106,6 @@ test.describe('E2E-A11Y — keyboard navigation', () => {
         const email = page.locator('#customer-email');
         const address = page.locator('#customer-address');
         const relationship = page.locator('#customer-relationship');
-        const contactChannel = page.locator('#customer-contact-channel');
         const privacy = page.locator('#privacy-notice-accepted');
         // The checkbox's own <label> wraps a real <a> link ("Pemberitahuan
         // Privasi") AFTER the <input> in DOM order -- confirmed by reading
@@ -158,10 +157,6 @@ test.describe('E2E-A11Y — keyboard navigation', () => {
         await page.keyboard.press('Tab');
         await expect(relationship).toBeFocused();
         await relationship.selectOption(CUSTOMER.relationship);
-
-        await page.keyboard.press('Tab');
-        await expect(contactChannel).toBeFocused();
-        await contactChannel.selectOption(CUSTOMER.contactChannel);
 
         await page.keyboard.press('Tab');
         await expect(privacy).toBeFocused();

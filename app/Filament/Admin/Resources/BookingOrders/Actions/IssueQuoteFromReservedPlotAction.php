@@ -12,6 +12,7 @@ use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Filament\Admin\Resources\BookingOrders\BookingOrderResource;
+use App\Filament\Shared\PanelFailure;
 use App\Filament\Support\OrderViewUrl;
 use App\Platform\IdentityAccess\ActorContext;
 use Carbon\CarbonImmutable;
@@ -151,7 +152,7 @@ final class IssueQuoteFromReservedPlotAction
             Notification::make()->success()->title('Transisi berhasil dicatat.')->send();
             redirect()->to(OrderViewUrl::for($order));
         } catch (Throwable $exception) {
-            Notification::make()->danger()->title('Transisi gagal')->body($exception->getMessage())->send();
+            PanelFailure::notify($exception, 'Transisi gagal');
         }
     }
 }

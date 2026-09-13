@@ -44,6 +44,49 @@ final class MenuInteractionRecorder
     }
 
     /**
+     * PERF-06 — the batched counterpart of `impression()`: writes every
+     * given `(menuKey, route)` pair as ONE `impression` `insert()`
+     * statement instead of one `create()` call per pair. Used by
+     * `App\Jobs\RecordMenuImpressions`, the job the homepage now dispatches
+     * instead of calling `impression()` in a loop on the request path.
+     *
+     * `insert()` (not `create()` in a loop) deliberately bypasses Eloquent
+     * model events for these rows — there are none registered on
+     * `MenuInteractionEvent` to bypass (see that model's own doc block; it
+     * is a plain fillable model with no observers), so this is a pure
+     * perf win with no behavioural difference from four `create()` calls.
+     * Never throws — same swallow-after-`report()` discipline as
+     * `record()`, since a batch is just as replaceable-by-failure as a
+     * single write and must never turn into a queue-worker crash loop.
+     *
+     * @param  list<array{menuKey: string, route: string}>  $menus
+     */
+    public static function impressions(array $menus): void
+    {
+        if ($menus === []) {
+            return;
+        }
+
+        $occurredAt = CarbonImmutable::now();
+
+        $rows = array_map(
+            static fn (array $menu): array => [
+                'menu_key' => $menu['menuKey'],
+                'route' => $menu['route'],
+                'interaction' => 'impression',
+                'occurred_at' => $occurredAt,
+            ],
+            $menus,
+        );
+
+        try {
+            MenuInteractionEvent::query()->insert($rows);
+        } catch (Throwable $e) {
+            report($e);
+        }
+    }
+
+    /**
      * Record one click — "this menu was activated". Not currently called by
      * any part of this codebase (see the migration's own doc block for why
      * the click side is a named, real gap, not a silent omission); kept

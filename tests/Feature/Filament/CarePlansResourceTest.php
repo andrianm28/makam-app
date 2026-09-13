@@ -211,10 +211,12 @@ final class CarePlansResourceTest extends TestCase
     }
 
     // =====================================================================
-    // AC7 gate — pause and cancel actions
+    // ARCH-11 — pause and cancel actions are visible but disabled, since no
+    // pause/cancel policy configuration surface exists yet (AC7). See
+    // `PauseSubscriptionAction`/`CancelSubscriptionAction`'s own doc blocks.
     // =====================================================================
 
-    public function test_pause_action_shows_ac7_gate_notification(): void
+    public function test_pause_action_is_visible_but_disabled_pending_ac7_policy_configuration(): void
     {
         $plan = $this->makeCarePlan();
         $grave = $this->makeGravePlot();
@@ -235,11 +237,11 @@ final class CarePlansResourceTest extends TestCase
         $this->actingUserWithRole(ActorRole::ADMIN);
 
         Livewire::test(ViewSubscription::class, ['record' => $subscription->getKey()])
-            ->callAction('jeda')
-            ->assertNotified('Belum dapat diaktifkan');
+            ->assertActionVisible('jeda')
+            ->assertActionDisabled('jeda');
     }
 
-    public function test_cancel_action_shows_ac7_gate_notification(): void
+    public function test_cancel_action_is_visible_but_disabled_pending_ac7_policy_configuration(): void
     {
         $plan = $this->makeCarePlan();
         $grave = $this->makeGravePlot();
@@ -260,8 +262,8 @@ final class CarePlansResourceTest extends TestCase
         $this->actingUserWithRole(ActorRole::ADMIN);
 
         Livewire::test(ViewSubscription::class, ['record' => $subscription->getKey()])
-            ->callAction('batalkan')
-            ->assertNotified('Belum dapat diaktifkan');
+            ->assertActionVisible('batalkan')
+            ->assertActionDisabled('batalkan');
     }
 
     public function test_pause_action_is_hidden_for_non_active_subscriptions(): void

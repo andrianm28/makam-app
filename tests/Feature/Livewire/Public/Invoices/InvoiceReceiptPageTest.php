@@ -63,6 +63,32 @@ final class InvoiceReceiptPageTest extends TestCase
             ->assertNotFound();
     }
 
+    /**
+     * ARCH-14: `issued_at` is written via `CarbonImmutable::now()`
+     * (`IssueInvoice::__invoke()`) while storage/`now()` stay UTC
+     * (`config('app.timezone')`) — so the raw value is a UTC wall-clock
+     * instant. This freezes that instant to 2026-01-15 20:30:00 UTC, a time
+     * chosen specifically to cross a calendar day under the +7h Jakarta
+     * offset (2026-01-16 03:30 local), so a test that only happened to
+     * render the right HOUR by coincidence (e.g. a timezone-naive render
+     * that never converts) cannot also happen to get the right DATE. The
+     * receipt page must show the Jakarta-local rendering
+     * (`<x-mk.local-time>`, config('app.display_timezone')) — not the raw
+     * UTC instant a display bug would otherwise leak to a real customer.
+     */
+    public function test_the_receipt_page_renders_the_issued_date_in_jakarta_local_time(): void
+    {
+        $this->travelTo(CarbonImmutable::create(2026, 1, 15, 20, 30, 0, 'UTC'));
+
+        $order = $this->paidOrder();
+        $invoice = OrderInvoice::query()->where('order_id', $order->getKey())->sole();
+
+        Livewire::test(InvoiceReceiptPage::class, ['reference' => $invoice->reference])
+            ->assertOk()
+            ->assertSee('16 Januari 2026, 03:30')
+            ->assertDontSee('15 Januari 2026, 20:30');
+    }
+
     // -----------------------------------------------------------------
     // Fixtures — a real order walked to DIBAYAR via ApplyPaidEffects, the
     // same fixture shape `ApplyPaidEffectsTest` uses.

@@ -7,6 +7,7 @@ namespace App\Domain\CemeteryCapability\Actions;
 use App\Domain\CemeteryCapability\Models\CemeteryCapabilityProfile;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /**
  * Resolves "the" current capability profile for a cemetery — requirements.
@@ -74,5 +75,68 @@ final readonly class ResolveCemeteryCapabilityProfile
                 'superseded_at' => null,
             ],
         ));
+    }
+
+    /**
+     * Batch form of `__invoke()` — PERF-05. `CemeteryDirectoryIndex` and
+     * `BookingWizard` used to call `__invoke()` once per cemetery card
+     * (`$cemeteries->map(...)`), which is N queries for an N-cemetery
+     * directory page or booking step. This resolves every current profile
+     * for the given cemeteries in ONE `whereIn('cemetery_id', ...)` query,
+     * then applies the exact same "no current row => safe-default fallback"
+     * and "highest version_number wins" rules `__invoke()` applies per
+     * cemetery — so a caller switching from N calls of `__invoke()` to one
+     * call of `forMany()` gets identical results, not an approximation.
+     *
+     * @param  Collection<int, Cemetery>  $cemeteries
+     * @return array<string, CemeteryCapabilityProfile> keyed by cemetery_id
+     */
+    public function forMany(Collection $cemeteries): array
+    {
+        if ($cemeteries->isEmpty()) {
+            return [];
+        }
+
+        $cemeteriesById = $cemeteries->keyBy('id');
+        $cemeteryIds = $cemeteriesById->keys()->all();
+
+        /** @var Collection<int, CemeteryCapabilityProfile> $currentProfiles */
+        $currentProfiles = CemeteryCapabilityProfile::query()
+            ->whereIn('cemetery_id', $cemeteryIds)
+            ->current()
+            ->get();
+
+        // Mirrors `__invoke()`'s `orderByDesc('version_number')->first()`
+        // tiebreak per cemetery, without a second query per cemetery: group
+        // the single result set in PHP and keep only the highest version.
+        $highestVersionByCemeteryId = $currentProfiles
+            ->groupBy('cemetery_id')
+            ->map(fn (Collection $profiles): CemeteryCapabilityProfile => $profiles
+                ->sortByDesc('version_number')
+                ->first());
+
+        $result = [];
+
+        foreach ($cemeteriesById as $cemeteryId => $cemetery) {
+            $current = $highestVersionByCemeteryId->get($cemeteryId);
+
+            $result[$cemeteryId] = $current instanceof CemeteryCapabilityProfile
+                ? $current
+                : new CemeteryCapabilityProfile(array_merge(
+                    CemeteryCapabilityProfile::safeDefaults(),
+                    [
+                        'cemetery_id' => $cemetery->id,
+                        'version_number' => 0,
+                        'source' => 'system:safe-default-fallback',
+                        'owner' => null,
+                        'evidence' => null,
+                        'rollback_plan' => null,
+                        'effective_at' => Carbon::now(),
+                        'superseded_at' => null,
+                    ],
+                ));
+        }
+
+        return $result;
     }
 }

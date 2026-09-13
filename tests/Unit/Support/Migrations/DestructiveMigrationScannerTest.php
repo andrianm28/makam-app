@@ -215,6 +215,277 @@ PHP);
         $this->assertSame('violation', $violations[0]['status']);
     }
 
+    public function test_it_flags_a_destructive_call_in_a_private_helper_declared_after_down(): void
+    {
+        // The original blind spot: scan() sliced "up() start to down()
+        // start" as up()'s body. A private helper method declared AFTER
+        // down() — called FROM up() — fell outside that slice AND outside
+        // down()'s own body, so it was invisible to the old scanner.
+        $path = $this->writeFixture(<<<'PHP'
+<?php
+return new class extends \Illuminate\Database\Migrations\Migration {
+    public function up(): void
+    {
+        $this->dropLegacyColumn();
+    }
+
+    public function down(): void
+    {
+    }
+
+    private function dropLegacyColumn(): void
+    {
+        \Illuminate\Support\Facades\Schema::table('foo', function ($table) {
+            $table->dropColumn('legacy');
+        });
+    }
+};
+PHP);
+
+        $violations = (new DestructiveMigrationScanner)->scan($path);
+
+        $this->assertCount(1, $violations);
+        $this->assertSame('dropColumn', $violations[0]['pattern']);
+        $this->assertSame('violation', $violations[0]['status']);
+    }
+
+    public function test_it_flags_a_destructive_helper_after_down_when_down_is_declared_before_up(): void
+    {
+        // Same blind spot, opposite declaration order: down() declared
+        // FIRST in the file, up() second, and the destructive helper is
+        // declared after BOTH. A fix that only reasons about "down always
+        // comes after up" would miss this ordering.
+        $path = $this->writeFixture(<<<'PHP'
+<?php
+return new class extends \Illuminate\Database\Migrations\Migration {
+    public function down(): void
+    {
+    }
+
+    public function up(): void
+    {
+        $this->dropLegacyColumn();
+    }
+
+    private function dropLegacyColumn(): void
+    {
+        \Illuminate\Support\Facades\Schema::table('foo', function ($table) {
+            $table->dropColumn('legacy');
+        });
+    }
+};
+PHP);
+
+        $violations = (new DestructiveMigrationScanner)->scan($path);
+
+        $this->assertCount(1, $violations);
+        $this->assertSame('dropColumn', $violations[0]['pattern']);
+        $this->assertSame('violation', $violations[0]['status']);
+    }
+
+    public function test_it_still_excludes_downs_own_body_when_down_is_declared_before_up(): void
+    {
+        $path = $this->writeFixture(<<<'PHP'
+<?php
+return new class extends \Illuminate\Database\Migrations\Migration {
+    public function down(): void
+    {
+        \Illuminate\Support\Facades\Schema::table('foo', function ($table) {
+            $table->dropColumn('bar');
+        });
+    }
+
+    public function up(): void
+    {
+        \Illuminate\Support\Facades\Schema::table('foo', function ($table) {
+            $table->string('bar');
+        });
+    }
+};
+PHP);
+
+        $violations = (new DestructiveMigrationScanner)->scan($path);
+
+        $this->assertSame([], $violations);
+    }
+
+    public function test_it_excludes_downs_body_even_with_nested_braces(): void
+    {
+        // down()'s body here contains its own nested closure braces
+        // (Schema::table's callback) — a naive "next closing brace after
+        // down(" would truncate the exclusion at the closure's own `}`
+        // instead of down()'s, leaving the rest of down() (and its real
+        // DELETE FROM) exposed to the scanner.
+        $path = $this->writeFixture(<<<'PHP'
+<?php
+return new class extends \Illuminate\Database\Migrations\Migration {
+    public function up(): void
+    {
+        \Illuminate\Support\Facades\Schema::table('foo', function ($table) {
+            $table->string('bar');
+        });
+    }
+
+    public function down(): void
+    {
+        \Illuminate\Support\Facades\Schema::table('foo', function ($table) {
+            $table->dropColumn('bar');
+        });
+        \Illuminate\Support\Facades\DB::statement('DELETE FROM foo');
+    }
+};
+PHP);
+
+        $violations = (new DestructiveMigrationScanner)->scan($path);
+
+        $this->assertSame([], $violations);
+    }
+
+    public function test_it_flags_a_change_call(): void
+    {
+        $path = $this->writeFixture(<<<'PHP'
+<?php
+return new class extends \Illuminate\Database\Migrations\Migration {
+    public function up(): void
+    {
+        \Illuminate\Support\Facades\Schema::table('foo', function ($table) {
+            $table->string('bar', 100)->change();
+        });
+    }
+
+    public function down(): void
+    {
+    }
+};
+PHP);
+
+        $violations = (new DestructiveMigrationScanner)->scan($path);
+
+        $this->assertCount(1, $violations);
+        $this->assertSame('->change(', $violations[0]['pattern']);
+        $this->assertSame('violation', $violations[0]['status']);
+    }
+
+    public function test_it_flags_a_renamecolumn_call(): void
+    {
+        $path = $this->writeFixture(<<<'PHP'
+<?php
+return new class extends \Illuminate\Database\Migrations\Migration {
+    public function up(): void
+    {
+        \Illuminate\Support\Facades\Schema::table('foo', function ($table) {
+            $table->renameColumn('old_name', 'new_name');
+        });
+    }
+
+    public function down(): void
+    {
+    }
+};
+PHP);
+
+        $violations = (new DestructiveMigrationScanner)->scan($path);
+
+        $this->assertCount(1, $violations);
+        $this->assertSame('renameColumn', $violations[0]['pattern']);
+        $this->assertSame('violation', $violations[0]['status']);
+    }
+
+    public function test_it_flags_a_dropprimary_call(): void
+    {
+        $path = $this->writeFixture(<<<'PHP'
+<?php
+return new class extends \Illuminate\Database\Migrations\Migration {
+    public function up(): void
+    {
+        \Illuminate\Support\Facades\Schema::table('foo', function ($table) {
+            $table->dropPrimary();
+        });
+    }
+
+    public function down(): void
+    {
+    }
+};
+PHP);
+
+        $violations = (new DestructiveMigrationScanner)->scan($path);
+
+        $this->assertCount(1, $violations);
+        $this->assertSame('dropPrimary', $violations[0]['pattern']);
+        $this->assertSame('violation', $violations[0]['status']);
+    }
+
+    public function test_it_flags_a_raw_drop_constraint_statement(): void
+    {
+        $path = $this->writeFixture(<<<'PHP'
+<?php
+return new class extends \Illuminate\Database\Migrations\Migration {
+    public function up(): void
+    {
+        \Illuminate\Support\Facades\DB::statement('ALTER TABLE foo DROP CONSTRAINT foo_check');
+    }
+
+    public function down(): void
+    {
+    }
+};
+PHP);
+
+        $violations = (new DestructiveMigrationScanner)->scan($path);
+
+        $this->assertCount(1, $violations);
+        $this->assertSame('DROP CONSTRAINT', $violations[0]['pattern']);
+        $this->assertSame('violation', $violations[0]['status']);
+    }
+
+    public function test_it_flags_an_alter_column_type_statement(): void
+    {
+        $path = $this->writeFixture(<<<'PHP'
+<?php
+return new class extends \Illuminate\Database\Migrations\Migration {
+    public function up(): void
+    {
+        \Illuminate\Support\Facades\DB::statement('ALTER TABLE foo ALTER COLUMN bar TYPE integer');
+    }
+
+    public function down(): void
+    {
+    }
+};
+PHP);
+
+        $violations = (new DestructiveMigrationScanner)->scan($path);
+
+        $this->assertCount(1, $violations);
+        $this->assertSame('ALTER COLUMN ... TYPE', $violations[0]['pattern']);
+        $this->assertSame('violation', $violations[0]['status']);
+    }
+
+    public function test_it_does_not_flag_an_alter_column_set_not_null_statement(): void
+    {
+        // A bare `ALTER COLUMN` also appears in safe forms (SET NOT NULL,
+        // DROP DEFAULT, SET DEFAULT) that must not be flagged — only the
+        // co-occurrence with `TYPE` is destructive.
+        $path = $this->writeFixture(<<<'PHP'
+<?php
+return new class extends \Illuminate\Database\Migrations\Migration {
+    public function up(): void
+    {
+        \Illuminate\Support\Facades\DB::statement('ALTER TABLE foo ALTER COLUMN bar SET NOT NULL');
+    }
+
+    public function down(): void
+    {
+    }
+};
+PHP);
+
+        $violations = (new DestructiveMigrationScanner)->scan($path);
+
+        $this->assertSame([], $violations);
+    }
+
     public function test_it_does_not_flag_a_safe_index_swap(): void
     {
         // dropIndex/dropUnique were removed from the pattern list entirely
