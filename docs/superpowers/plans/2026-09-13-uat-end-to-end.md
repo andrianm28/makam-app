@@ -246,3 +246,93 @@ ratus piksel di bawah enam kartu pemakaman fiktif yang operatornya bernama
 seperti instansi pemerintah kota.
 
 Klaimnya benar tentang **tarif**. Ia tidak benar tentang **katalognya**.
+
+---
+
+# Tahap 1 SUDAH DIJALANKAN — 30 rute, termasuk dimensi bahasa
+
+Terhadap `dev.makam.co.id`, 13 Sep 2026. Tiap rute berparameter diuji **dua
+kali**: id yang sah-tapi-tidak-ada, dan id yang salah bentuk.
+
+## Satu kegagalan. Satu, di tiga puluh rute.
+
+```
+500  /kenangan/not-a-uuid        "Terjadi kesalahan pada sistem kami"
+```
+
+Itu satu-satunya HTTP 500 di seluruh sapuan. Bandingkan dengan saudaranya
+yang benar:
+
+| Masukan | Hasil |
+|---|---|
+| `/kenangan/<uuid sah, tak ada>` | 200 — *"Memorial tidak tersedia"* |
+| `/kenangan/not-a-uuid` | **500 — "Terjadi kesalahan pada sistem kami"** |
+| `/m/<token tak ada>` | 200 — *"Memorial tidak tersedia… hubungi mereka untuk memastikan kode masih berlaku"* |
+
+Perhatikan salinan `/m/` berkata **"kode"**, bukan "tautan" — tepat untuk
+konteks QR. Itu disiplin salinan yang baik, dan justru membuat 500-nya lebih
+menonjol: jalur yang sama, ditulis dengan hati-hati, kecuali satu cabang.
+
+**#304 memperbaikinya.** Belum di-merge.
+
+## Semua yang lain merosot dengan jujur
+
+Sepuluh rute berparameter dengan id palsu mengembalikan 404 bernama
+Indonesia atau state kosong di dalam halaman. Tidak ada yang bocor, tidak
+ada yang kosong tanpa penjelasan:
+
+- `/marketplace/pesanan/<tak ada>` → 200, *"Pesanan tidak ditemukan.
+  Periksa kembali nomor pesanan Anda."* — state kosong, bukan 404. Tepat.
+- `/kwitansi/MK-2026-C6RPDKX7` → 404. **Dan itu benar**: `order_invoices`
+  punya **nol baris** di seluruh dev, dan pesanan itu berstatus `MASUK`.
+  Tidak ada invoice, jadi tidak ada kwitansi.
+
+Temuan sampingan dari situ, dan ia menguatkan prasyarat Tahap 3 rencana
+bayar-di-muka: **nol invoice di dev berarti tidak satu pun pesanan pernah
+menyelesaikan jalur terbayar.** Sumber jumlah refund belum pernah dilatih
+sama sekali.
+
+## Bahasa
+
+**Navigasi dan judul konsisten berbahasa Indonesia, dan cocok satu sama
+lain** — nav berbunyi "Pemesanan Makam · Layanan Pemakaman · Perpanjangan
+Makam · FAQ · Masuk", dan tiap judul halaman memakai istilah yang sama.
+Tidak ada kebocoran kata Inggris di badan salinan mana pun.
+
+**Satu pengecualian: "Checkout".**
+
+```
+/marketplace/checkout   judul: "Checkout - Layanan Pemakaman"
+                        H1:     "Checkout"
+                        badan:  "Ringkasan pesanan · Data penerima ·
+                                 Buat pesanan · Keranjang Anda kosong"
+```
+
+Semua di sekitarnya bahasa Indonesia — produk ini bahkan menolak "cart"
+demi "Keranjang". Satu-satunya layar dalam perjalanan itu yang judulnya
+Inggris. "FAQ" dan "Pre-Need" juga pinjaman, tapi keduanya istilah domain
+yang lazim; "Checkout" punya padanan yang sudah dipakai produk ini sendiri.
+
+## Placeholder yang terlihat pengunjung, terhitung
+
+| Yang bocor | Di mana |
+|---|---|
+| `PT Contoh Makam Digital Indonesia` | **setiap halaman** (footer) |
+| `+62 812-0000-1234` | beranda (**dua kali**), `/bantuan`, artikel FAQ |
+| *"sembilan langkah"* vs wizard "Langkah 1 dari 4" | beranda, `/faq`, artikel FAQ |
+
+Kontradiksi sembilan-versus-empat itu muncul di **tiga halaman**, bukan
+satu — termasuk artikel FAQ yang judulnya persis *"Bagaimana cara memesan
+makam?"*, yaitu halaman yang paling mungkin dibaca orang yang benar-benar
+ingin memesan.
+
+## Vonis Tahap 1
+
+Tiga puluh rute, **satu kegagalan**. Pola *"degrade honestly instead of
+500ing"* benar-benar ditegakkan di mana-mana kecuali satu cabang. Salinannya
+konsisten, spesifik konteks, dan tidak mengarang.
+
+Yang merusak kesan itu bukan cacat teknis melainkan **data**: nama badan
+usaha fiktif di setiap halaman, hotline fiktif di empat tempat, dan satu
+kontradiksi jumlah langkah yang terbaca oleh orang yang paling serius ingin
+memesan.
