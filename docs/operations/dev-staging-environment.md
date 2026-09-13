@@ -216,7 +216,7 @@ Do not run routine `composer update`, frontend production build, or large depend
 ## 12. Backup and recovery
 
 - Development data is disposable unless a developer explicitly creates a short-lived backup.
-- Staging receives a daily encrypted logical PostgreSQL backup to remote object storage, with at least seven days of retention.
+- **Corrected 13 Sep 2026 — this line described a policy, and was being read as a description of reality.** What actually runs on the host: `/opt/makam/scripts/pg-backup.sh` dumps `makam_dev`, `makam_stg` AND `makam_beta` **every six hours**, gzip-compressed, to `/opt/makam/backups/pg` on the same disk as the database, with seven days of retention. It is **not daily**, **not encrypted** (gzip, not `age`), and **not remote**. The policy above remains the target; `backup-and-restore-runbook.md` §"Backup and restore state, 13 Sep 2026" holds the current truth and names the gap.
 - Configuration/secrets are recovered from secret management, not database dumps.
 - Staging restore is tested before initial production deployment and before high-risk migration.
 - Local Docker volumes are not backups.

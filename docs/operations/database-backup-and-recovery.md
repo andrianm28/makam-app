@@ -120,10 +120,15 @@ aspirational only if that decision is ever reversed. This host does not provide 
 guarantees, for any environment including production.
 
 - Development data is disposable by default.
-- Staging receives daily encrypted logical backups to self-hosted object storage, retained at least seven days.
+- Staging receives logical backups retained at least seven days. **Corrected 13 Sep 2026:** the cadence is every six hours, not daily, and the dumps are **not encrypted** — `pg-backup.sh` pipes `pg_dump` through `gzip`, not `age`. See `backup-and-restore-runbook.md` for what runs and what is still missing.
 - **Production backup strategy:** the same mitigation `ADR-0035` item 2 established for beta and
-  now extends to production — frequent (4–6 hourly) encrypted `pg_dump` snapshots, with a
-  documented, tested restore into a scratch database. A backup is not considered valid until
+  now extends to production — frequent (4–6 hourly) `pg_dump` snapshots, with a
+  documented, tested restore into a scratch database. **Correction, 13 Sep 2026:** the cadence
+  half of this is now real (six-hourly), and the tested restore is real and evidenced
+  (`backup-and-restore-runbook.md` §4b: beta's own automated dump restored and compared table by
+  table, 13 Sep 2026). The word "encrypted" is removed because it was never true of what runs —
+  claiming it in a policy document made the gap invisible. Encrypting the dumps and moving them
+  off the database's own disk is the open half of finding CI-01. A backup is not considered valid until
   restored (§4). This is the real, ongoing production backup strategy, not a temporary compromise
   pending a future migration to managed PostgreSQL.
 - Local Docker volumes are not backups, for any environment including production.
