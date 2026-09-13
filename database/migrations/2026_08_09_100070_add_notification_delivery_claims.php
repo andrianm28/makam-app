@@ -30,6 +30,7 @@ return new class extends Migration
             $table->string('provider_idempotency_key', 64)->nullable()->after('window_key');
             $table->string('claim_token', 36)->nullable()->after('provider_idempotency_key');
             $table->timestamp('claimed_at')->nullable()->after('claim_token');
+            // contract-approved: DB-01 — widening NOT NULL -> nullable only; no existing row's value is changed or dropped
             $table->unsignedBigInteger('template_version_id')->nullable()->change();
 
             $table->unique('provider_idempotency_key', 'notification_deliveries_provider_key_unique');

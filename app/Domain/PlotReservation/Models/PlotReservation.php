@@ -195,9 +195,30 @@ final class PlotReservation extends Model
      */
     public static function activeForDraft(BookingDraft $draft): ?self
     {
+        return self::activeForDraftId($draft->getKey());
+    }
+
+    /**
+     * `activeForDraft()`'s own query, keyed directly off a draft id rather
+     * than a loaded `BookingDraft` model. Exists for the one caller that
+     * legitimately does not have (and must not need) a live draft row:
+     * `PlotReservationExpiryScheduler`'s draft-scoped candidate pass finds
+     * stale `booking_draft_id`s straight from `plot_reservations` and only
+     * ever needed the id to re-derive the incumbent, never the draft's
+     * content — loading a `BookingDraft` first bought nothing but an
+     * avoidable query. (It could not, on its own, have caused the real
+     * "plot never returns to Tersedia" customer report of 7 Sep 2026 — this
+     * FK is `nullOnDelete()`, so a genuinely deleted draft's
+     * `booking_draft_id` is already NULL by the time this candidate query
+     * even runs, not merely a stale id pointing at nothing. See
+     * `activeForPlotId()`'s own doc block for the pass that actually closes
+     * that report.)
+     */
+    public static function activeForDraftId(int|string $draftId): ?self
+    {
         return self::incumbentOf(
             self::query()
-                ->where('booking_draft_id', $draft->getKey())
+                ->where('booking_draft_id', $draftId)
                 ->orderByDesc('created_at')
                 ->orderByDesc('id')
                 ->first()
@@ -233,8 +254,24 @@ final class PlotReservation extends Model
      */
     public static function activeForPlot(GravePlot $plot): ?self
     {
+        return self::activeForPlotId($plot->getKey());
+    }
+
+    /**
+     * `activeForPlot()`'s own query, keyed directly off a plot id. Used by
+     * `PlotReservationExpiryScheduler` for the one class of stale hold that
+     * cannot be re-derived through `activeForDraftId()`: a draft-anchored
+     * hold whose `booking_draft_id` has since been set to NULL by the
+     * `plot_reservations.booking_draft_id` foreign key's `nullOnDelete()`
+     * (see `2026_08_29_100000_add_booking_draft_hold_to_plot_reservations_
+     * table.php`'s own doc block for why that FK is null-on-delete, not
+     * restrict) — once nulled, the row can no longer be grouped by draft at
+     * all, only by plot.
+     */
+    public static function activeForPlotId(int|string $plotId): ?self
+    {
         $latest = self::query()
-            ->where('plot_id', $plot->getKey())
+            ->where('plot_id', $plotId)
             ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->first();

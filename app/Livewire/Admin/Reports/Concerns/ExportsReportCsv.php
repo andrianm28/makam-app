@@ -65,4 +65,31 @@ trait ExportsReportCsv
             ['Content-Type' => 'text/csv; charset=UTF-8'],
         );
     }
+
+    /**
+     * PERF-14 — the `cursor()`-backed counterpart of `streamCsv()`: each
+     * already-built CSV line is echoed as it is produced by `$lines`
+     * (typically a generator wrapping a `LazyCollection::cursor()`),
+     * instead of first collecting every line into one array and
+     * `implode()`-ing it. This is what actually keeps a large export from
+     * holding the full result set in PHP memory — `streamDownload()`
+     * alone does not do that if the callback still builds `$lines` as a
+     * complete array before echoing it.
+     *
+     * @param  iterable<string>  $lines  Complete CSV lines, header first —
+     *                                   each one already built via
+     *                                   `csvLine()`.
+     */
+    private function streamCsvRows(iterable $lines, string $filename): StreamedResponse
+    {
+        return response()->streamDownload(
+            static function () use ($lines): void {
+                foreach ($lines as $line) {
+                    echo $line."\n";
+                }
+            },
+            $filename,
+            ['Content-Type' => 'text/csv; charset=UTF-8'],
+        );
+    }
 }

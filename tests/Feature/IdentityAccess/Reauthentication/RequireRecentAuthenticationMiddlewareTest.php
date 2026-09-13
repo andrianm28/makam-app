@@ -7,13 +7,13 @@ namespace Tests\Feature\IdentityAccess\Reauthentication;
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Models\User;
 use App\Platform\Audit\Models\AuditEvent;
-use App\Platform\IdentityAccess\Models\ActorSession;
 use App\Platform\IdentityAccess\Reauthentication\Models\ReauthenticationEvent;
 use App\Platform\IdentityAccess\Reauthentication\ReauthenticationAuditActions;
 use App\Platform\IdentityAccess\Reauthentication\ReauthenticationOutcome;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
+use Tests\Support\EstablishesFreshActorSession;
 use Tests\TestCase;
 
 /**
@@ -32,6 +32,7 @@ use Tests\TestCase;
  */
 final class RequireRecentAuthenticationMiddlewareTest extends TestCase
 {
+    use EstablishesFreshActorSession;
     use RefreshDatabase;
 
     private const string SENSITIVE_REASON = 'bank_account_change';
@@ -76,23 +77,12 @@ final class RequireRecentAuthenticationMiddlewareTest extends TestCase
         app('router')->getRoutes()->refreshNameLookups();
     }
 
-    private function actorSessionAuthenticatedAt(User $user, CarbonImmutable $lastAuthenticatedAt): ActorSession
-    {
-        return ActorSession::query()->create([
-            'user_id' => $user->id,
-            'session_id' => 'test-session-'.$user->id,
-            'guard' => 'web',
-            'last_authenticated_at' => $lastAuthenticatedAt,
-        ]);
-    }
-
     public function test_a_recently_authenticated_actor_passes_through_untouched(): void
     {
         $user = User::factory()->create();
-        $this->actorSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10));
-        $this->actingAs($user);
 
-        $response = $this->get('/__test/sensitive-action');
+        $response = $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
+            ->get('/__test/sensitive-action');
 
         $response->assertOk();
         $response->assertJson(['ok' => true]);
@@ -118,10 +108,8 @@ final class RequireRecentAuthenticationMiddlewareTest extends TestCase
         $user = User::factory()->create();
         // 900 seconds is the documented default freshness window — 1 hour
         // ago is unambiguously stale under it.
-        $this->actorSessionAuthenticatedAt($user, CarbonImmutable::now()->subHour());
-        $this->actingAs($user);
-
-        $response = $this->get('/__test/sensitive-action');
+        $response = $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subHour())
+            ->get('/__test/sensitive-action');
 
         $response->assertRedirect(route('test.reauth.challenge'));
         $response->assertSessionHas('url.intended', url('/__test/sensitive-action'));
@@ -130,10 +118,9 @@ final class RequireRecentAuthenticationMiddlewareTest extends TestCase
     public function test_a_challenge_writes_both_a_reauthentication_event_and_an_audit_event(): void
     {
         $user = User::factory()->create();
-        $this->actorSessionAuthenticatedAt($user, CarbonImmutable::now()->subHour());
-        $this->actingAs($user);
 
-        $this->get('/__test/sensitive-action');
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subHour())
+            ->get('/__test/sensitive-action');
 
         $event = ReauthenticationEvent::query()->latest('id')->first();
         $this->assertNotNull($event);
@@ -153,8 +140,7 @@ final class RequireRecentAuthenticationMiddlewareTest extends TestCase
         // 2 minutes ago: fresh under the default 900s window, stale under a
         // tightened 60s window — same underlying timestamp both times, only
         // the config value changes.
-        $this->actorSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(120));
-        $this->actingAs($user);
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(120));
 
         $withDefaultConfig = $this->get('/__test/sensitive-action');
         $withDefaultConfig->assertOk();

@@ -6,6 +6,7 @@ namespace App\Filament\Admin\Resources\RenewalOrders\Schemas;
 
 use App\Domain\Renewal\Models\Renewal;
 use App\Filament\Admin\Resources\RenewalOrders\RenewalStatusBadge;
+use App\Platform\FinancialLedger\Money;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -113,6 +114,6 @@ final class RenewalOrderInfolist
             default => 'menunggu persetujuan',
         };
 
-        return 'Rp '.number_format($quote->amount_minor / 100, 0, ',', '.').' · '.$state;
+        return (new Money((int) $quote->amount_minor))->format().' · '.$state;
     }
 }

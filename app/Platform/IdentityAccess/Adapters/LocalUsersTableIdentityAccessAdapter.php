@@ -11,6 +11,7 @@ use App\Platform\IdentityAccess\Roles\ActorRoleReader;
 use App\Platform\IdentityAccess\Scopes\ScopeAssignmentReader;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Http\Request;
 
 /**
  * The MVP/local-auth `IdentityAccessAdapter` implementation — explicitly
@@ -58,6 +59,7 @@ final class LocalUsersTableIdentityAccessAdapter implements IdentityAccessAdapte
     public function __construct(
         private readonly ActorRoleReader $roles = new ActorRoleReader,
         private readonly ScopeAssignmentReader $scopes = new ScopeAssignmentReader,
+        private readonly Request $request = new Request,
     ) {}
 
     public function resolveActorContext(?Authenticatable $identity): ActorContext
@@ -67,13 +69,28 @@ final class LocalUsersTableIdentityAccessAdapter implements IdentityAccessAdapte
         }
 
         $identifier = $this->normalizeIdentifier($identity->getAuthIdentifier());
+        $sessionId = $this->currentSessionId();
 
         return new ActorContext(
             identityReference: $identifier,
             roles: $this->roles->rolesForActor($identifier),
             scopes: $this->scopes->scopeStringsForActor($identifier),
-            lastAuthenticatedAt: $this->resolveLastAuthenticatedAt($identity),
+            lastAuthenticatedAt: $this->resolveLastAuthenticatedAt($identity, $sessionId),
+            sessionId: $sessionId,
         );
+    }
+
+    /**
+     * `null` when there is no real, started HTTP session to scope against
+     * (a console/job context, or a plain unit test constructing this
+     * adapter directly with its default bare `Request`) — matching the
+     * same "best-effort, framework session id or nothing" convention
+     * `Actions\RecordActorSessionAuthentication` already established for
+     * WRITING this same column.
+     */
+    private function currentSessionId(): ?string
+    {
+        return $this->request->hasSession() ? $this->request->session()->getId() : null;
     }
 
     private function normalizeIdentifier(mixed $identifier): int|string
@@ -82,25 +99,38 @@ final class LocalUsersTableIdentityAccessAdapter implements IdentityAccessAdapte
     }
 
     /**
-     * Most recent non-revoked `actor_sessions` row for this identity.
+     * Most recent non-revoked `actor_sessions` row for this identity —
+     * scoped to THIS session when one is known (finding SEC-05, 6 Sep 2026
+     * audit).
      *
-     * This will be `null` for every actor until whatever future batch adds
-     * a login controller/flow that runs inside a real HTTP request — this
-     * batch's own `Listeners\RecordActorSessionOnLogin` populates the table
-     * on the standard `Illuminate\Auth\Events\Login` event (which Filament's
-     * built-in `/admin` login page already dispatches, since it
-     * authenticates through the same `web` guard), so it does become
-     * populated as soon as anyone actually logs in through that panel — but
-     * no login flow has been exercised by this batch itself. Flagged in the
-     * batch report as NOT TESTED for that reason.
+     * Before this fix, the query took the max `last_authenticated_at`
+     * across EVERY non-revoked session the actor holds, so a step-up
+     * challenge completed on one browser/device silently re-armed the
+     * 15-minute freshness window for a DIFFERENT, older, unattended session
+     * belonging to the same admin — the freshness proof and the session
+     * making the request were different things. Scoping by `session_id`
+     * (the same column `Actions\RecordActorSessionAuthentication` writes,
+     * keyed off the identical `$request->session()->getId()`) closes that
+     * gap for any real HTTP request, where a session id is always known.
+     *
+     * The `$sessionId === null` branch preserves the original cross-session
+     * lookup for the one legitimate case it still applies to: a
+     * console/job context with no HTTP session at all, where "which
+     * session" has no meaning — including this adapter's own pre-existing
+     * unit tests, which deliberately exercise cross-session precedence with
+     * no session in play.
      */
-    private function resolveLastAuthenticatedAt(Authenticatable $identity): ?CarbonImmutable
+    private function resolveLastAuthenticatedAt(Authenticatable $identity, ?string $sessionId): ?CarbonImmutable
     {
-        $timestamp = ActorSession::query()
+        $query = ActorSession::query()
             ->where('user_id', $identity->getAuthIdentifier())
-            ->whereNull('revoked_at')
-            ->orderByDesc('last_authenticated_at')
-            ->value('last_authenticated_at');
+            ->whereNull('revoked_at');
+
+        if ($sessionId !== null) {
+            $query->where('session_id', $sessionId);
+        }
+
+        $timestamp = $query->orderByDesc('last_authenticated_at')->value('last_authenticated_at');
 
         if ($timestamp === null) {
             return null;

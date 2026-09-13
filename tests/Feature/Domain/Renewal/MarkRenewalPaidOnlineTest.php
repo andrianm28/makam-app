@@ -183,7 +183,7 @@ final class MarkRenewalPaidOnlineTest extends TestCase
         $this->assertSame((string) $renewal->grave_record_id, (string) $event->payload['grave_record_id']);
 
         // `paid_source_ref` matches `MarkCyclePaid`'s own
-        // `care.cycle_created.v1` payload convention exactly — permitted in
+        // `care.cycle_paid.v1` payload convention exactly — permitted in
         // an outbox payload (not on `PayloadClassification::DENYLISTED_KEYS`),
         // unlike an audit row where AC14 keeps it out (see the audit-row
         // test below).

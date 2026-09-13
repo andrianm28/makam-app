@@ -38,7 +38,20 @@
     use App\Domain\ServiceCatalog\FulfillmentOwner;
     use App\Platform\FinancialLedger\Money;
 @endphp
-<div class="py-8 md:py-12">
+<div
+    class="py-8 md:py-12"
+    x-data
+    x-on:booking-wizard-cemetery-selected.window="
+        $nextTick(() => {
+            const target = document.getElementById('discovery-service-type-heading');
+            if (! target) return;
+            target.scrollIntoView({
+                behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+                block: 'start',
+            });
+        })
+    "
+>
     @php
         $mkControl = 'h-11 w-full rounded-md border bg-neutral-0 px-4 text-base text-neutral-900
             placeholder:text-neutral-500
@@ -275,7 +288,7 @@
                                         @if ($photoUrl)
                                             <img
                                                 src="{{ $photoUrl }}"
-                                                alt="Ilustrasi {{ $cemetery->name }}"
+                                                alt="Foto {{ $cemetery->name }}"
                                                 loading="lazy"
                                                 class="h-40 w-full object-cover"
                                             >
@@ -1024,35 +1037,6 @@
                         @enderror
                     </div>
 
-                    <div class="flex flex-col gap-1.5">
-                        <label for="customer-contact-channel" class="text-base font-medium text-neutral-800">
-                            Saluran Kontak yang Disukai
-                            <span class="text-danger-600" aria-hidden="true">*</span>
-                            <span class="sr-only">(wajib diisi)</span>
-                        </label>
-                        <p id="customer-contact-channel-hint" class="text-sm text-neutral-600">
-                            Tim kami akan menghubungi Anda lebih dahulu melalui saluran ini.
-                        </p>
-                        <select
-                            id="customer-contact-channel"
-                            wire:model="customerContactChannel"
-                            aria-describedby="customer-contact-channel-hint{{ $errors->has('customer_contact_channel') ? ' customer-contact-channel-error' : '' }}"
-                            @if ($errors->has('customer_contact_channel')) aria-invalid="true" @endif
-                            class="{{ $mkControl }} {{ $mkFieldState($errors->has('customer_contact_channel')) }}"
-                        >
-                            <option value="">Pilih saluran</option>
-                            @foreach (\App\Domain\Booking\BookingContactChannel::KNOWN_CODES as $ch)
-                                <option value="{{ $ch }}">{{ \App\Domain\Booking\BookingContactChannel::label($ch) }}</option>
-                            @endforeach
-                        </select>
-                        @error('customer_contact_channel')
-                            <p id="customer-contact-channel-error" class="flex items-start gap-1.5 text-sm text-danger-700" role="alert">
-                                <x-dynamic-component component="icon.alert-circle" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                                <span>{{ $message }}</span>
-                            </p>
-                        @enderror
-                    </div>
-
                     {{-- field.blade.php's checkbox rule: a 20px visual box
                          (`size-5`) inside a 44px clickable row, and the WHOLE
                          row is the label target, not just the box. --}}
@@ -1368,6 +1352,24 @@
                                     </x-mk.alert>
                                 @endif
 
+                                {{-- The ordinary outcome for a booking a visitor
+                                     just submitted: the order EXISTS and is
+                                     waiting on the operator, so this is
+                                     `pending`, never `danger`, and carries no
+                                     "something went wrong" framing. See
+                                     BookingWizard::$onlinePaymentPendingNotice. --}}
+                                @if ($onlinePaymentPendingNotice !== null)
+                                    <x-mk.alert
+                                        intent="pending"
+                                        icon="clock"
+                                        title="Pesanan Anda sudah kami terima"
+                                        live="polite"
+                                        class="mt-3"
+                                    >
+                                        <p class="text-sm">{{ $onlinePaymentPendingNotice }}</p>
+                                    </x-mk.alert>
+                                @endif
+
                                 @if ($onlinePaymentError !== null)
                                     <x-mk.alert
                                         intent="danger"
@@ -1678,26 +1680,45 @@
 
                     <div class="mt-6 flex flex-col gap-4">
                         {{-- §6.8 / AGENTS.md: "Do not claim WhatsApp/email
-                             delivery without delivery state." No delivery
-                             record exists anywhere in this lane, so no channel
-                             may be shown as "Terkirim"; each one is shown as
-                             not yet sent. Whether WhatsApp is a channel we have
-                             at all is G-WA-01's answer, read server-side and
+                             delivery without delivery state." NOTIF-09
+                             (`docs/superpowers/plans/2026-09-07-batchm8b-
+                             notification-completeness.md`): `$customerDeliveries`
+                             now carries this order's REAL
+                             `notification_deliveries` row per channel, when
+                             one already exists — rendered through the exact
+                             same `delivery-state-chip` partial the admin
+                             inbox uses, never a second rendering of the same
+                             states. The static "Belum dikirim" pending badge
+                             is kept ONLY for the genuine race where no
+                             delivery row exists yet (the outbox has not been
+                             drained in the few seconds since submission) —
+                             it is not a permanent placeholder any more.
+                             Whether WhatsApp is a channel we have at all is
+                             still G-WA-01's answer, read server-side and
                              handed here as `$whatsAppMode` — when it is the
-                             fallback mode, WhatsApp is not promised. --}}
+                             fallback mode, WhatsApp is not promised and no
+                             delivery row can ever exist for it. --}}
                         <x-mk.card>
                             <h3 class="text-base font-semibold text-neutral-900">Pemberitahuan</h3>
 
                             <ul class="flex flex-col gap-3">
                                 <li class="flex flex-wrap items-center justify-between gap-2">
                                     <span class="text-sm text-neutral-700">Email ke alamat yang Anda isi</span>
-                                    <x-mk.badge intent="pending" icon="clock">Belum dikirim</x-mk.badge>
+                                    @if ($customerDeliveries['EMAIL'] !== null)
+                                        @include('filament.admin.notifications.partials.delivery-state-chip', ['delivery' => $customerDeliveries['EMAIL']])
+                                    @else
+                                        <x-mk.badge intent="pending" icon="clock">Belum dikirim</x-mk.badge>
+                                    @endif
                                 </li>
 
                                 @if ($whatsAppMode === \App\Platform\FeatureGate\Modes\WhatsAppMode::WhatsApp)
                                     <li class="flex flex-wrap items-center justify-between gap-2">
                                         <span class="text-sm text-neutral-700">WhatsApp ke nomor yang Anda isi</span>
-                                        <x-mk.badge intent="pending" icon="clock">Belum dikirim</x-mk.badge>
+                                        @if ($customerDeliveries['WA'] !== null)
+                                            @include('filament.admin.notifications.partials.delivery-state-chip', ['delivery' => $customerDeliveries['WA']])
+                                        @else
+                                            <x-mk.badge intent="pending" icon="clock">Belum dikirim</x-mk.badge>
+                                        @endif
                                     </li>
                                 @else
                                     <li class="flex flex-wrap items-center justify-between gap-2">

@@ -5,25 +5,30 @@
 ```text
 /
 ├── /pemesanan-makam
-│   ├── /baru
-│   ├── /draft/{draftId}
-│   └── /konfirmasi/{orderReference}
+│   └── /draft/{draftId}
 ├── /marketplace
-│   ├── /kategori/{categorySlug}
 │   ├── /produk/{productCode}
 │   ├── /keranjang
 │   ├── /checkout
-│   └── /pesanan/{orderReference}
+│   └── /pesanan/{orderNumber}
+├── /pemakaman
+│   └── /{cemeterySlug}
+├── /kunjungan
+│   └── /{cemeterySlug}
 ├── /perpanjangan
 │   ├── /cari
-│   ├── /permohonan/{renewalReference}
-│   └── /konfirmasi/{renewalReference}
+│   ├── /konfirmasi
+│   └── /pembayaran
 ├── /preneed
 ├── /sertifikat/{subjectType}/{subjectId}
+├── /kwitansi/{reference}
+├── /langganan/{subscriptionReference}
+├── /riwayat-perawatan/{customerId}
+├── /kenangan/{profileId}
+├── /m/{token}
 ├── /faq
 │   ├── /kategori/{categorySlug}
 │   └── /{articleSlug}
-├── /pesanan/{orderReference}
 ├── /pembayaran
 │   ├── /kembali
 │   └── /batal
@@ -37,8 +42,37 @@
 ├── /keluar
 ├── /lupa-password
 ├── /reset-password/{token}
+├── /privasi
+├── /syarat-ketentuan
 └── /bantuan
 ```
+
+**Regenerated 07 Sep 2026 against a real `php artisan route:list` run
+(API-04 audit finding) — this tree drifted from the shipped route table in
+BOTH directions.** Removed because they never existed as routes:
+`/pemesanan-makam/baru` as a real page (it is only a legacy `RedirectController`
+alias, kept out of the documented tree the same way `/cemeteries` below is),
+`/pemesanan-makam/konfirmasi/{orderReference}`,
+`/marketplace/kategori/{categorySlug}`,
+`/perpanjangan/permohonan/{renewalReference}`, and a top-level
+`/pesanan/{orderReference}` — none of these route names are registered.
+Corrected: the renewal confirmation/payment routes carry no reference
+parameter (`/perpanjangan/konfirmasi`, `/perpanjangan/pembayaran` are
+session-scoped, not `{renewalReference}`-scoped), and the marketplace order
+route's parameter is `{orderNumber}`, not `{orderReference}`. Added because
+they were shipped but never documented: `/pemakaman` + `/pemakaman/
+{cemeterySlug}` (`cemeteries.index`/`cemeteries.show` — the public cemetery
+directory), `/kunjungan` + `/kunjungan/{cemeterySlug}`
+(`kunjungan.index`/`kunjungan.cemetery` — visitation booking, P4), `/kwitansi/
+{reference}` (`invoice.show`), `/langganan/{subscriptionReference}`
+(`langganan.status`, care-subscription status), `/riwayat-perawatan/
+{customerId}` (`riwayat-perawatan.index`, care history), `/kenangan/
+{profileId}` and `/m/{token}` (`memorial.family`/`memorial.show`, P4
+memorial), `/privasi` and `/syarat-ketentuan` (`legal.privacy`/`legal.terms`).
+Legacy redirect-only aliases exist and are deliberately NOT listed as first-
+class routes above (they carry no page of their own): `/cemeteries` and
+`/cemeteries/{cemeterySlug}` redirect to their `/pemakaman` equivalents, and
+`/memorial/{profileId}` redirects to its `/kenangan`/`/m` equivalent.
 
 `/preneed` dan `/sertifikat/{subjectType}/{subjectId}` (ditambahkan 16 Agu 2026, P5a — `docs/superpowers/specs/2026-08-16-p5a-certificates-preneed-design.md`; dirujuk oleh komentar rute di `routes/web.php`). `/preneed` adalah permukaan Pra-Pesan publik: registrasi minat + permintaan konsultasi, **tidak pernah di-gate** oleh `G-LEGAL-01` — saat gate tertutup halaman merender banner info `PreNeedMode::InterestOnly` yang tidak bisa ditutup ("registers interest; no payment created"), dan alur minat/konsultasi tetap berjalan. `/sertifikat/{subjectType}/{subjectId}` adalah tampilan status sertifikat pelanggan (AC6, state-only): `{subjectType}` adalah nama kelas penuh subjek yang di-URL-encode (konvensi yang sama dengan kolom `certificates.subject_type`), diselesaikan terhadap allowlist tertutup — tipe tak dikenal dan id tak dikenal 404 yang tidak bisa dibedakan (tanpa enumerasi); referensi vault dokumen dan nomor dokumen tidak pernah meninggalkan server.
 
@@ -87,22 +121,62 @@ Mobile:
 ```text
 /admin
 ├── /pemakaman
-├── /services
+├── /petak-makam
+├── /peta-plot
+├── /definisi-layanan
+├── /paket-layanan
 ├── /vendors
-├── /orders
+├── /pesanan-pemakaman
 ├── /pesanan-marketplace
-├── /renewals
-├── /payments
-├── /transactions
-├── /faq
-├── /reports
-└── /audit
+├── /pesanan-perpanjangan
+├── /pemesanan-kunjungan
+├── /kebijakan-kunjungan-pemakaman
+├── /kasus-preneed
+├── /persetujuan
+├── /sertifikat
+├── /rencana-perawatan
+├── /order-kerja
+├── /langganan
+├── /profil-kenangan
+├── /kasus-moderasi
+├── /keluhan-layanan
+├── /pembayaran
+├── /verifikasi-pembayaran
+├── /rekonsiliasi
+├── /laporan
+├── /laporan-keuangan
+├── /artikel-faq
+├── /log-audit
+├── /kota-peluncuran
+├── /pengaturan-situs
+├── /notifikasi-aplikasi
+├── /feature-gates
+└── /verifikasi-ulang-kata-sandi
 
 /vendor
 ├── /produk
 ├── /pesanan
 ├── /kalender
+├── /order-kerja
+├── /area-layanan
+├── /bukti
 ├── /transaksi
 ├── /pencairan
 └── /profil
 ```
+
+**Regenerated 07 Sep 2026 against a real `php artisan route:list` run
+(API-04 audit finding).** The previous tree was aspirational: `/services`,
+`/orders`, `/renewals`, `/payments`, `/transactions`, `/reports`, and
+`/audit` were never implemented under those English slugs — the shipped
+Filament admin panel uses Indonesian slugs consistent with the rest of the
+app (e.g. `pesanan-pemakaman` for orders, `pesanan-perpanjangan` for
+renewals, `pembayaran`/`rekonsiliasi` for payments/reconciliation, `laporan`
+for reports, `log-audit` for audit), and the previous tree also omitted more
+than half of the real admin resources entirely (plot inventory, service
+packages, preneed cases, agreements/certificates, care plans, work orders,
+moderation, complaints, launch cities, site settings, feature gates, the
+password-re-authentication challenge page). The `/vendor` tree gained
+`/order-kerja` (work orders, `filament.vendor.resources.order-kerja.*`) and
+`/area-layanan` (service areas) and `/bukti` (evidence list), which the
+previous version did not list; the rest of `/vendor` was already accurate.

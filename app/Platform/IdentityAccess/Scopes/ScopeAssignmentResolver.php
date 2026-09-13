@@ -48,17 +48,26 @@ use App\Platform\IdentityAccess\ActorContext;
  * `ScopeAssignmentReader` instance, so the query logic and the
  * `"entity_type:entity_id"` scope-string format exist in exactly one
  * place. This class's public API is unchanged by that extraction — every
- * existing consumer (`ScopeAssignmentGlobalScope`,
- * `DocumentVault\Policies\DocumentAccessPolicy`,
- * `Notification\RecipientResolver`) keeps working exactly as before.
+ * existing consumer (`DocumentVault\Policies\DocumentAccessPolicy`,
+ * `Notification\RecipientResolver`, `Notification
+ * \InAppNotificationInboxQuery`) keeps working exactly as before.
+ *
+ * STAT-04 (batch M5c, 7 Sep 2026): the declarative global-scope path this
+ * class was originally paired with — `HasScopeAssignments` +
+ * `ScopeAssignmentGlobalScope` — had zero production adopters and was
+ * deleted; see `docs/superpowers/plans/2026-09-07-batchm5c-dead-code-and-static-analysis.md`
+ * for why attaching it to real entity models now was judged too large for
+ * that batch to absorb safely (closed-by-default query scoping on
+ * cemetery/vendor/order/case/grave/business-entity models with no existing
+ * grant backfill would make those models invisible to every actor
+ * everywhere). This class is unaffected: its real consumers listed above
+ * all use it as an explicit, opt-in query constraint (design.md's other
+ * documented enforcement mechanism, "explicit builders"), which is the one
+ * actually in production today.
  *
  * `currentActorIdentifier()` stays here rather than moving to the reader:
  * it reads `$this->actorContext`, and the reader must never depend on
- * `ActorContext` for the reason above. `ScopeAssignmentGlobalScope` (the
- * actual query-level enforcement mechanism) reads `scope_assignments`
- * directly via `grantedEntityIds()`, keyed off `ActorContext
- * ::$identityReference` only — it works correctly independent of whether
- * `$scopes` is populated.
+ * `ActorContext` for the reason above.
  */
 final class ScopeAssignmentResolver
 {

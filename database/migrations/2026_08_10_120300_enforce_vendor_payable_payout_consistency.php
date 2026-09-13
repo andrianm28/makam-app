@@ -20,6 +20,7 @@ return new class extends Migration
             return;
         }
 
+        // contract-approved: DB-01 — safe CHECK-constraint widen (re-adds the same amount_minor > 0 check, no data loss)
         DB::statement('ALTER TABLE vendor_payables DROP CONSTRAINT IF EXISTS vendor_payables_amount_minor_check');
         DB::statement(
             'ALTER TABLE vendor_payables ADD CONSTRAINT vendor_payables_amount_minor_check CHECK (amount_minor > 0)'

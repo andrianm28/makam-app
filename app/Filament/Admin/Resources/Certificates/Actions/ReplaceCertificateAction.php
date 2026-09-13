@@ -8,8 +8,12 @@ use App\Domain\AgreementCertificate\Actions\ReplaceCertificate;
 use App\Domain\AgreementCertificate\CertificateStatus;
 use App\Domain\AgreementCertificate\Models\Certificate;
 use App\Domain\OrderWorkflow\Models\Order;
+use App\Filament\Admin\Pages\PasswordReauthentication;
 use App\Filament\Admin\Resources\Certificates\CertificatesResource;
+use App\Http\Middleware\RequireRecentAuthentication;
 use App\Platform\IdentityAccess\ActorContext;
+use App\Platform\IdentityAccess\Reauthentication\Exceptions\ReauthenticationRequiredException;
+use App\Platform\IdentityAccess\Reauthentication\ReauthenticationGuard;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
@@ -81,6 +85,17 @@ final class ReplaceCertificateAction
 
         if (! self::isIssuer()) {
             Notification::make()->danger()->title('Anda tidak berwenang mengganti sertifikat.')->send();
+
+            return;
+        }
+
+        try {
+            app(ReauthenticationGuard::class)->assertFresh($actor);
+        } catch (ReauthenticationRequiredException) {
+            session()->put(RequireRecentAuthentication::REASON_SESSION_KEY, 'certificate_replace');
+            session()->put('url.intended', route('filament.admin.resources.sertifikat.view', ['record' => $certificate->getKey()]));
+            Notification::make()->warning()->title('Perlu verifikasi ulang')->send();
+            redirect()->route(PasswordReauthentication::ROUTE_NAME);
 
             return;
         }

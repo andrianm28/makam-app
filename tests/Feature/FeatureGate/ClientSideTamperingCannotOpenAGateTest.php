@@ -6,11 +6,10 @@ namespace Tests\Feature\FeatureGate;
 
 use App\Platform\FeatureGate\EloquentGateRegistrySource;
 use App\Platform\FeatureGate\FeatureGateResolver;
+use App\Platform\FeatureGate\Models\FeatureGate;
 use App\Platform\FeatureGate\Providers\FeatureGateServiceProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
-use ReflectionClass;
-use ReflectionNamedType;
 use Tests\TestCase;
 
 /**
@@ -19,74 +18,110 @@ use Tests\TestCase;
  * enforcement point." tasks.md: "Add tests: client-side tampering cannot
  * open a gate."
  *
- * Two complementary proofs:
- *  1. Structural — neither `FeatureGateResolver` nor
- *     `EloquentGateRegistrySource` accepts an `Illuminate\Http\Request` (or
- *     anything request-shaped) as a constructor dependency at all, so there
- *     is no code path by which either class COULD read request input.
- *  2. Behavioural — even with a maximally hostile bound `request` instance
- *     in the container (query string, header, AND cookie all claiming the
- *     gate is open), resolving through the real container binding still
- *     returns the seeded, closed database state.
+ * Every test here makes the attack and checks the answer, rather than
+ * inspecting either class's constructor for a request-shaped dependency.
+ * A signature check proves only that today's wiring has no request in it;
+ * it says nothing about a facade call, a container lookup, or a global
+ * helper reaching the request from inside a method body — all of which are
+ * live ways to reintroduce exactly this bug while keeping the constructor
+ * clean. Sending the hostile input and reading the resolved state catches
+ * all of them.
+ *
+ * Each test pairs the attack with a control that flips the DATABASE row and
+ * re-reads. Without it, a gate subsystem that had broken closed — always
+ * answering `false` for every gate — would satisfy the attack assertion and
+ * leave this file permanently, silently green.
  */
 final class ClientSideTamperingCannotOpenAGateTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_feature_gate_resolver_has_no_request_shaped_constructor_dependency(): void
+    /**
+     * G-PAY-01 is seeded closed. Every plausible client-side channel an
+     * attacker could use to claim otherwise, bound as the live request.
+     */
+    private function bindHostileRequestClaiming(string $gateId): void
     {
-        $parameters = (new ReflectionClass(FeatureGateResolver::class))
-            ->getConstructor()
-            ?->getParameters() ?? [];
+        $request = Request::create('/', 'GET', [
+            $gateId => 'open',
+            'gate' => [$gateId => true],
+            'feature_gate_override' => "{$gateId}:open",
+        ]);
+        $request->headers->set("X-Feature-Gate-{$gateId}", 'open');
+        $request->cookies->set("feature_gate_{$gateId}", 'open');
 
-        foreach ($parameters as $parameter) {
-            $type = $parameter->getType();
-            $typeName = $type instanceof ReflectionNamedType ? $type->getName() : (string) $type;
-
-            $this->assertStringNotContainsStringIgnoringCase(
-                'Request',
-                $typeName,
-                "FeatureGateResolver must not depend on anything request-shaped (found: {$typeName})."
-            );
-        }
+        $this->app->instance('request', $request);
     }
 
-    public function test_eloquent_gate_registry_source_has_no_request_shaped_constructor_dependency(): void
+    private function openInTheDatabase(string $gateId): void
     {
-        $parameters = (new ReflectionClass(EloquentGateRegistrySource::class))
-            ->getConstructor()
-            ?->getParameters() ?? [];
-
-        foreach ($parameters as $parameter) {
-            $type = $parameter->getType();
-            $typeName = $type instanceof ReflectionNamedType ? $type->getName() : (string) $type;
-
-            $this->assertStringNotContainsStringIgnoringCase(
-                'Request',
-                $typeName,
-                "EloquentGateRegistrySource must not depend on anything request-shaped (found: {$typeName})."
-            );
-        }
+        FeatureGate::query()->where('gate_id', $gateId)->update(['state' => 'open']);
     }
 
     public function test_a_hostile_request_claiming_a_gate_is_open_has_no_effect_on_resolution(): void
     {
         $this->app->register(FeatureGateServiceProvider::class);
 
-        // G-PAY-01 seeds closed. Simulate every plausible client-side
-        // channel an attacker could use to try to claim it is open.
-        $request = Request::create('/', 'GET', [
-            'G-PAY-01' => 'open',
-            'gate' => ['G-PAY-01' => true],
-            'feature_gate_override' => 'G-PAY-01:open',
-        ]);
-        $request->headers->set('X-Feature-Gate-G-PAY-01', 'open');
-        $request->cookies->set('feature_gate_G-PAY-01', 'open');
+        $this->bindHostileRequestClaiming('G-PAY-01');
 
-        $this->app->instance('request', $request);
+        $this->assertFalse($this->app->make(FeatureGateResolver::class)->isOpen('G-PAY-01'));
+    }
 
-        $resolver = $this->app->make(FeatureGateResolver::class);
+    /**
+     * The control for the test above: the same hostile request is still
+     * bound, and the resolver now answers `true` — because the DATABASE row
+     * changed, which is the only input it honours. This is what makes the
+     * `assertFalse` above evidence of enforcement rather than evidence of a
+     * subsystem stuck on "closed".
+     */
+    public function test_the_resolver_follows_the_database_row_and_only_the_database_row(): void
+    {
+        $this->app->register(FeatureGateServiceProvider::class);
 
-        $this->assertFalse($resolver->isOpen('G-PAY-01'));
+        $this->bindHostileRequestClaiming('G-PAY-01');
+        $this->openInTheDatabase('G-PAY-01');
+
+        $this->assertTrue($this->app->make(FeatureGateResolver::class)->isOpen('G-PAY-01'));
+    }
+
+    /**
+     * The resolver caches per request, so the test above could in principle
+     * pass through a stale snapshot rather than a genuine re-read. Going at
+     * the registry source directly removes that layer: this is the class
+     * that actually touches the database, asked twice with the hostile
+     * request bound throughout.
+     */
+    public function test_the_registry_source_reads_database_state_and_ignores_the_request_entirely(): void
+    {
+        $this->bindHostileRequestClaiming('G-PAY-01');
+
+        $environment = (string) config('app.env');
+
+        $this->assertFalse(
+            (new EloquentGateRegistrySource($environment))->load()->isOpen('G-PAY-01'),
+            'A hostile request opened a gate at the registry source.'
+        );
+
+        $this->openInTheDatabase('G-PAY-01');
+
+        $this->assertTrue(
+            (new EloquentGateRegistrySource($environment))->load()->isOpen('G-PAY-01'),
+            'The registry source did not follow the database row — the assertion above proves nothing.'
+        );
+    }
+
+    /**
+     * The hostile input is aimed at a gate id that does not exist at all.
+     * Deny-by-default (AC10) must swallow it: a client must not be able to
+     * conjure an open gate by naming one, which is the failure mode a
+     * request-reading implementation would most likely have.
+     */
+    public function test_an_invented_gate_id_supplied_by_the_client_resolves_closed(): void
+    {
+        $this->app->register(FeatureGateServiceProvider::class);
+
+        $this->bindHostileRequestClaiming('G-NOT-A-REAL-GATE');
+
+        $this->assertFalse($this->app->make(FeatureGateResolver::class)->isOpen('G-NOT-A-REAL-GATE'));
     }
 }

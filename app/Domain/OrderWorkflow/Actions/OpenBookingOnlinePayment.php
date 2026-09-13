@@ -14,11 +14,13 @@ use App\Domain\Quotation\Models\Quote;
 use App\Platform\IdentityAccess\ActorContextResolver;
 use App\Platform\Payment\Actions\OpenPaymentSession;
 use App\Platform\Payment\Actions\OpenPaymentSessionCommand;
+use App\Platform\Payment\Exceptions\PaymentSessionOpeningDeniedException;
 use App\Platform\Payment\Models\PaymentSession;
 use App\Platform\Payment\OrderType;
 use App\Platform\SiteSettings\Models\SiteSetting;
 use App\Platform\SiteSettings\SettingsService;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 use RuntimeException;
 
 /**
@@ -79,20 +81,45 @@ final readonly class OpenBookingOnlinePayment
             $quote = $this->issueQuoteFor($order, $draft);
         }
 
-        return ($this->openPaymentSession)(new OpenPaymentSessionCommand(
-            orderType: OrderType::Booking,
-            orderRef: $order->reference,
-            // The current quote's total in integer minor units — the amount
-            // the six-condition guard's condition 5 verifies; never a
-            // client-supplied figure.
-            amountMinor: $quote->totalMinor()->toMinorInt(),
-            merchantRef: (string) $this->settings->setting(
-                SiteSetting::KEY_PAYMENT_MERCHANT_REF,
-                (string) config('payment.merchant_ref', ''),
-            ),
-            successReturnUrl: route('payments.return'),
-            cancelReturnUrl: route('payments.cancel'),
-        ));
+        // PAY-04 (PR #257): pre-generate the session id so it can be embedded
+        // in the return/cancel URLs BEFORE the `payment_sessions` row exists.
+        // Without it the return page has no `session` selector to resolve
+        // (`ReturnPageState::fromRequest()`) and can never say which session
+        // it is describing. Extracting this chain must not quietly drop that
+        // fix, so the id is generated here rather than left to the provider.
+        $paymentSessionId = (string) Str::uuid();
+
+        try {
+            return ($this->openPaymentSession)(new OpenPaymentSessionCommand(
+                orderType: OrderType::Booking,
+                orderRef: $order->reference,
+                // The current quote's total in integer minor units — the amount
+                // the six-condition guard's condition 5 verifies; never a
+                // client-supplied figure.
+                amountMinor: $quote->totalMinor()->toMinorInt(),
+                merchantRef: (string) $this->settings->setting(
+                    SiteSetting::KEY_PAYMENT_MERCHANT_REF,
+                    (string) config('payment.merchant_ref', ''),
+                ),
+                successReturnUrl: route('payments.return', ['session' => $paymentSessionId]),
+                cancelReturnUrl: route('payments.cancel', ['session' => $paymentSessionId]),
+                sessionId: $paymentSessionId,
+            ));
+        } catch (PaymentSessionOpeningDeniedException $denial) {
+            // Name the order the denial is about. `OpenPaymentSession` cannot:
+            // it is handed a reference and throws before establishing that the
+            // reference names anything. THIS class submitted the order a few
+            // lines above, so it is the one place that knows the order exists
+            // and what it is called.
+            //
+            // This matters to the customer, not just to logs: a denial by the
+            // three operator-owned conditions means the booking WAS accepted
+            // and is waiting on the operator, and the UI says so by quoting
+            // the reference back (the 8 Sep 2026 "payment failed" report).
+            // Re-thrown, never swallowed — the caller's fail-closed handling
+            // is unchanged.
+            throw $denial->withOrderReference($order->reference);
+        }
     }
 
     /**

@@ -30,6 +30,7 @@ use App\Domain\PreNeed\PreNeedGate;
 use App\Domain\PreNeed\PreNeedInstallmentState;
 use App\Filament\Admin\Pages\PasswordReauthentication;
 use App\Filament\Admin\Resources\PreNeedCases\PreNeedCaseResource;
+use App\Filament\Shared\PanelFailure;
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Platform\Audit\AuditSource;
 use App\Platform\IdentityAccess\ActorContext;
@@ -39,6 +40,8 @@ use App\Platform\IdentityAccess\Roles\ActorRole;
 use App\Platform\Payment\Actions\OpenPaymentSession;
 use App\Platform\Payment\Actions\OpenPaymentSessionCommand;
 use App\Platform\Payment\OrderType;
+use App\Platform\SiteSettings\Models\SiteSetting;
+use App\Platform\SiteSettings\SettingsService;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
@@ -453,11 +456,7 @@ final class PreNeedCaseActions
                 );
             });
         } catch (\Throwable $exception) {
-            Notification::make()
-                ->danger()
-                ->title('Gagal mengikat kesepakatan')
-                ->body($exception->getMessage())
-                ->send();
+            PanelFailure::notify($exception, 'Gagal mengikat kesepakatan');
 
             return;
         }
@@ -586,7 +585,8 @@ final class PreNeedCaseActions
                 orderType: OrderType::Booking,
                 orderRef: $order->reference,
                 amountMinor: $installment->amount_minor,
-                merchantRef: (string) config('payment.merchant_ref', ''),
+                merchantRef: (string) app(SettingsService::class)
+                    ->setting(SiteSetting::KEY_PAYMENT_MERCHANT_REF, (string) config('payment.merchant_ref', '')),
                 successReturnUrl: $returnUrl,
                 cancelReturnUrl: $returnUrl,
             ));
@@ -601,11 +601,7 @@ final class PreNeedCaseActions
 
             redirect()->route('filament.admin.resources.kasus-preneed.view', ['record' => $case->getKey()]);
         } catch (\Throwable $exception) {
-            Notification::make()
-                ->danger()
-                ->title('Gagal membuat tautan pembayaran')
-                ->body($exception->getMessage())
-                ->send();
+            PanelFailure::notify($exception, 'Gagal membuat tautan pembayaran');
         }
     }
 
@@ -700,11 +696,7 @@ final class PreNeedCaseActions
 
             return false;
         } catch (\Throwable $exception) {
-            Notification::make()
-                ->danger()
-                ->title('Aksi gagal')
-                ->body($exception->getMessage())
-                ->send();
+            PanelFailure::notify($exception, 'Aksi gagal');
 
             return false;
         }

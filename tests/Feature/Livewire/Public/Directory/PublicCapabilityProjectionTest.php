@@ -9,7 +9,6 @@ use App\Domain\CemeteryCapability\Models\CemeteryCapabilityProfile;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Livewire\Public\Directory\Support\PublicCapabilityProjection;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use ReflectionClass;
 use Tests\TestCase;
 
 /**
@@ -25,8 +24,9 @@ use Tests\TestCase;
  *
  *   1. against the real `docs/contracts/openapi.yaml` contract, so the
  *      allowlist cannot drift from the schema it claims to implement;
- *   2. against the class's own structure via reflection, so a future
- *      property cannot be added without failing here;
+ *   2. against the projected object's own contents, using sentinel values
+ *      planted in the restricted modes, so a future property or accessor
+ *      that carried one through cannot be added without failing here;
  *   3. against real seeded data through the actual query path.
  */
 final class PublicCapabilityProjectionTest extends TestCase
@@ -83,28 +83,53 @@ final class PublicCapabilityProjectionTest extends TestCase
     }
 
     /**
-     * Structural, not behavioural — the same instinct as
-     * `tests/Feature/FeatureGate/ClientSideTamperingCannotOpenAGateTest.php`'s
-     * reflection walk proving the gate resolver has no request-shaped
-     * dependency. Here: the projection has no property whose name could
-     * carry a restricted mode, so no code path exists by which one could
-     * leak, regardless of what a future view tries to render.
+     * The class doc block calls its guarantee structural — no property, no
+     * accessor, no array key for a restricted mode — so the obvious test is a
+     * reflection walk over the property names. This asserts the same guarantee
+     * by its consequence instead: a profile whose restricted modes carry
+     * unmistakable sentinel VALUES is projected, and neither sentinel is
+     * anywhere in the resulting object.
+     *
+     * Value-based beats name-based here for two reasons. A property list only
+     * catches a leak that is *named* for what it leaks — a `registryMode`
+     * property — and misses the restricted value arriving inside an
+     * innocuously named field, or through an accessor, a `__get`, or a
+     * `jsonSerialize()` added later. And `json_encode()` of the object is the
+     * shape a Blade view or a Livewire payload would actually receive, which
+     * is the surface AC12's negative criterion is about.
      */
-    public function test_projection_class_has_no_property_for_a_restricted_mode(): void
+    public function test_no_restricted_mode_value_survives_into_the_projected_object(): void
     {
-        $properties = array_map(
-            static fn (\ReflectionProperty $property): string => $property->getName(),
-            (new ReflectionClass(PublicCapabilityProjection::class))->getProperties(),
-        );
+        $sentinels = [
+            'registry_mode' => 'REGISTRY-SENTINEL-'.bin2hex(random_bytes(6)),
+            'certificate_mode' => 'CERTIFICATE-SENTINEL-'.bin2hex(random_bytes(6)),
+        ];
 
-        $this->assertSame(
-            ['availabilityMode', 'bookingMode', 'mapMode', 'visitationMode'],
-            $properties,
-        );
+        $profile = new CemeteryCapabilityProfile(array_merge(
+            CemeteryCapabilityProfile::safeDefaults(),
+            $sentinels,
+        ));
 
-        foreach ($properties as $property) {
-            $this->assertStringNotContainsStringIgnoringCase('registry', $property);
-            $this->assertStringNotContainsStringIgnoringCase('certificate', $property);
+        // Non-vacuity: the sentinels really are on the profile handed in, so
+        // the assertions below are about the projection withholding them and
+        // not about a fixture that never carried them.
+        foreach ($sentinels as $attribute => $sentinel) {
+            $this->assertSame($sentinel, $profile->{$attribute});
+        }
+
+        $projection = PublicCapabilityProjection::from($profile);
+
+        foreach ($sentinels as $attribute => $sentinel) {
+            $this->assertStringNotContainsString(
+                $sentinel,
+                (string) json_encode($projection),
+                "The projected object carries [{$attribute}] onto a public surface."
+            );
+            $this->assertStringNotContainsString(
+                $sentinel,
+                (string) json_encode($projection->toArray()),
+                "The projection's wire shape carries [{$attribute}] onto a public surface."
+            );
         }
     }
 

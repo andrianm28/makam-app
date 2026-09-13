@@ -15,6 +15,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * `/vendor/order-kerja` — the vendor's care work order queue.
@@ -37,6 +38,16 @@ final class WorkOrdersResource extends Resource
     public static function infolist(Schema $schema): Schema
     {
         return WorkOrderInfolist::configure($schema);
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        // PERF-11: `WorkOrdersTable`'s `carePlan.name` column ran a per-row
+        // query with no eager load. `ScopesToCurrentVendor::
+        // getEloquentQuery()` still runs first (`applyVendorScope()` over
+        // `parent::getEloquentQuery()`) so overriding here does not touch
+        // the vendor-scoping guarantee that trait's own doc block describes.
+        return self::applyVendorScope(parent::getEloquentQuery())->with(['carePlan']);
     }
 
     public static function table(Table $table): Table

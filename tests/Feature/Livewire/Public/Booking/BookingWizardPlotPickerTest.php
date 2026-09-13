@@ -9,6 +9,8 @@ use App\Domain\Booking\Actions\StartBookingDraft;
 use App\Domain\Booking\BookingServiceType;
 use App\Domain\Booking\BookingWizardStep;
 use App\Domain\Booking\Models\BookingDraft;
+use App\Domain\CemeteryCapability\CemeteryPackageAvailabilityStatus;
+use App\Domain\CemeteryCapability\Models\CemeteryPackage;
 use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
@@ -756,5 +758,241 @@ final class BookingWizardPlotPickerTest extends TestCase
 
         Livewire::test(BookingWizard::class, ['draftId' => $draft->id])
             ->assertDontSee('Petak:');
+    }
+
+    /**
+     * PERF-03. `pickerBlocks()` used to eager-load EVERY `CemeteryBlock` and
+     * EVERY `GravePlot` of the selected cemetery with no bound — re-run on
+     * every `wire:poll.5s` tick while the picker is open. This proves the
+     * bound is real: with `booking.plot_picker_max_blocks` configured to 2,
+     * seeding 4 blocks returns only 2.
+     */
+    public function test_picker_blocks_are_bounded_by_config(): void
+    {
+        config(['booking.plot_picker_max_blocks' => 2]);
+
+        $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+
+        foreach (['BLOK-A', 'BLOK-B', 'BLOK-C', 'BLOK-D'] as $code) {
+            $block = CemeteryBlock::query()->create([
+                'cemetery_id' => $cemetery->getKey(),
+                'code' => $code,
+                'name' => $code,
+                'capacity' => 1,
+            ]);
+            GravePlot::query()->create(['block_id' => $block->getKey(), 'slot' => '001', 'plot_state' => PlotState::AVAILABLE]);
+        }
+
+        $draftId = $this->draftIdAtDiscovery();
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->call('openPickerFor', $cemetery->id);
+
+        $blocks = $component->instance()->pickerBlocks();
+
+        $this->assertCount(2, $blocks, 'Expected pickerBlocks() to stop at the configured block limit instead of loading every block.');
+    }
+
+    /**
+     * PERF-03, the nested half of the same bound: `plots` was eager-loaded
+     * with no limit either. With `booking.plot_picker_max_plots_per_block`
+     * configured to 3, seeding 6 plots in one block returns only 3.
+     */
+    public function test_picker_plots_per_block_are_bounded_by_config(): void
+    {
+        config(['booking.plot_picker_max_plots_per_block' => 3]);
+
+        $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+        $block = CemeteryBlock::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'code' => 'BLOK-A',
+            'name' => 'Blok A',
+            'capacity' => 6,
+        ]);
+
+        for ($i = 1; $i <= 6; $i++) {
+            GravePlot::query()->create([
+                'block_id' => $block->getKey(),
+                'slot' => str_pad((string) $i, 3, '0', STR_PAD_LEFT),
+                'plot_state' => PlotState::AVAILABLE,
+            ]);
+        }
+
+        $draftId = $this->draftIdAtDiscovery();
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->call('openPickerFor', $cemetery->id);
+
+        $blocks = $component->instance()->pickerBlocks();
+
+        $this->assertCount(3, $blocks->first()->plots, 'Expected the eager-loaded plots relation to stop at the configured per-block limit instead of loading every plot.');
+    }
+
+    /**
+     * @return array{cemetery: Cemetery, packageA: CemeteryPackage, packageB: CemeteryPackage, blockA: CemeteryBlock, blockB: CemeteryBlock, plotA: GravePlot, plotB: GravePlot}
+     */
+    private function cemeteryWithTwoPackagedBlocks(): array
+    {
+        $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+
+        $packageA = CemeteryPackage::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'name' => 'Makam Tumpang — Kelas A',
+            'availability_status' => CemeteryPackageAvailabilityStatus::AVAILABLE,
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+        $packageB = CemeteryPackage::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'name' => 'Makam Tumpang — Kelas B',
+            'availability_status' => CemeteryPackageAvailabilityStatus::AVAILABLE,
+            'sort_order' => 2,
+            'is_active' => true,
+        ]);
+
+        $blockA = CemeteryBlock::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'code' => 'BLOK-A',
+            'name' => 'Blok A',
+            'capacity' => 1,
+        ]);
+        $plotA = GravePlot::query()->create([
+            'block_id' => $blockA->getKey(),
+            'slot' => '001',
+            'plot_state' => PlotState::AVAILABLE,
+            'cemetery_package_id' => $packageA->getKey(),
+        ]);
+
+        $blockB = CemeteryBlock::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'code' => 'BLOK-B',
+            'name' => 'Blok B',
+            'capacity' => 1,
+        ]);
+        $plotB = GravePlot::query()->create([
+            'block_id' => $blockB->getKey(),
+            'slot' => '001',
+            'plot_state' => PlotState::AVAILABLE,
+            'cemetery_package_id' => $packageB->getKey(),
+        ]);
+
+        return compact('cemetery', 'packageA', 'packageB', 'blockA', 'blockB', 'plotA', 'plotB');
+    }
+
+    public function test_picker_blocks_only_shows_the_selected_packages_blocks_and_plots(): void
+    {
+        $fixture = $this->cemeteryWithTwoPackagedBlocks();
+        $draftId = $this->draftIdAtDiscovery();
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->call('openPickerFor', $fixture['cemetery']->id, $fixture['packageA']->getKey());
+
+        $blocks = $component->instance()->pickerBlocks();
+
+        $this->assertCount(1, $blocks, 'Expected only the block generated against the selected package to appear.');
+        $this->assertSame('BLOK-A', $blocks->first()->code);
+        $this->assertCount(1, $blocks->first()->plots);
+        $this->assertSame($fixture['plotA']->id, $blocks->first()->plots->first()->id);
+
+        $component->assertDontSee('BLOK-B');
+    }
+
+    public function test_picker_blocks_shows_the_other_packages_blocks_and_plots_when_that_package_is_selected(): void
+    {
+        $fixture = $this->cemeteryWithTwoPackagedBlocks();
+        $draftId = $this->draftIdAtDiscovery();
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->call('openPickerFor', $fixture['cemetery']->id, $fixture['packageB']->getKey());
+
+        $blocks = $component->instance()->pickerBlocks();
+
+        $this->assertCount(1, $blocks);
+        $this->assertSame('BLOK-B', $blocks->first()->code);
+        $this->assertSame($fixture['plotB']->id, $blocks->first()->plots->first()->id);
+    }
+
+    public function test_holding_a_plot_from_a_different_package_than_selected_is_rejected(): void
+    {
+        $fixture = $this->cemeteryWithTwoPackagedBlocks();
+        $draftId = $this->draftIdAtDiscovery();
+
+        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->call('openPickerFor', $fixture['cemetery']->id, $fixture['packageA']->getKey())
+            // Client-supplied plot id belongs to packageB's block, even
+            // though packageA was selected — simulates a stale render or a
+            // direct Livewire call bypassing pickerBlocks()'s own filter.
+            ->call('holdPlotForDiscovery', $fixture['cemetery']->id, $fixture['packageA']->getKey(), $fixture['plotB']->id)
+            ->assertHasErrors(['plot']);
+
+        $this->assertDatabaseMissing('plot_reservations', ['plot_id' => $fixture['plotB']->id]);
+    }
+
+    public function test_holding_a_plot_from_the_selected_package_succeeds(): void
+    {
+        $fixture = $this->cemeteryWithTwoPackagedBlocks();
+        $draftId = $this->draftIdAtDiscovery();
+
+        Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->call('openPickerFor', $fixture['cemetery']->id, $fixture['packageA']->getKey())
+            ->call('holdPlotForDiscovery', $fixture['cemetery']->id, $fixture['packageA']->getKey(), $fixture['plotA']->id)
+            ->assertHasNoErrors(['plot']);
+
+        $this->assertDatabaseHas('plot_reservations', ['plot_id' => $fixture['plotA']->id]);
+    }
+
+    /**
+     * Real UAT against `dev.makam.co.id` (8 Sep 2026) found a cemetery whose
+     * granular inventory was never segmented by package at all — every
+     * plot's `cemetery_package_id` is null even though the cemetery has
+     * multiple named packages/classes. An earlier version of the
+     * package-scoping fix used a strict `=` comparison, which made this
+     * kind of block vanish behind "Belum ada plot terdaftar" the instant
+     * ANY package was selected — a worse regression than the cross-package
+     * leak the scoping exists to close. This is the real-data shape that
+     * proves the fix must treat a null-package plot as visible/holdable no
+     * matter which package is selected, not just when no package is
+     * selected at all.
+     */
+    public function test_picker_blocks_still_shows_unsegmented_plots_regardless_of_selected_package(): void
+    {
+        $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+
+        $package = CemeteryPackage::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'name' => 'Makam Tumpang',
+            'availability_status' => CemeteryPackageAvailabilityStatus::AVAILABLE,
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $block = CemeteryBlock::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'code' => 'BLOK-A',
+            'name' => 'Blok A',
+            'capacity' => 1,
+        ]);
+        $plot = GravePlot::query()->create([
+            'block_id' => $block->getKey(),
+            'slot' => '001',
+            'plot_state' => PlotState::AVAILABLE,
+            'cemetery_package_id' => null,
+        ]);
+
+        $draftId = $this->draftIdAtDiscovery();
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->call('openPickerFor', $cemetery->id, $package->getKey());
+
+        $blocks = $component->instance()->pickerBlocks();
+
+        $this->assertCount(1, $blocks, 'An unsegmented block must still appear when a package is selected.');
+        $this->assertCount(1, $blocks->first()->plots);
+        $this->assertSame($plot->id, $blocks->first()->plots->first()->id);
+
+        $component->call('holdPlotForDiscovery', $cemetery->id, $package->getKey(), $plot->id)
+            ->assertHasNoErrors(['plot']);
+
+        $this->assertDatabaseHas('plot_reservations', ['plot_id' => $plot->id]);
     }
 }

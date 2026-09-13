@@ -311,7 +311,7 @@
                                 @if ($photoUrl)
                                     <img
                                         src="{{ $photoUrl }}"
-                                        alt="Ilustrasi {{ $cemetery->name }}"
+                                        alt="Foto {{ $cemetery->name }}"
                                         loading="lazy"
                                         class="h-40 w-full object-cover"
                                     >
