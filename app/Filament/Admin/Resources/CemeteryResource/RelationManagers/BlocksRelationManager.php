@@ -114,6 +114,12 @@ final class BlocksRelationManager extends RelationManager
                     ->required()
                     ->numeric()
                     ->minValue(1)
+                    // PERF-16 — mirrors CreateCemeteryBlock::MAX_CAPACITY,
+                    // the authoritative floor enforced action-side; this
+                    // is the UI-side rejection so an operator gets an
+                    // inline validation message instead of a thrown
+                    // exception.
+                    ->maxValue(CreateCemeteryBlock::MAX_CAPACITY)
                     ->helperText('Plot dibuat otomatis dengan slot 001..N.'),
 
                 Select::make('cemetery_package_id')

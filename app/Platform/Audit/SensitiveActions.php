@@ -143,6 +143,26 @@ final class SensitiveActions
         // payment-state changes above.
         'SUBSCRIPTION_PAUSED',
         'SUBSCRIPTION_CANCELLED',
+
+        // Added for finding SEC-02 (6 Sep 2026 audit). Written by
+        // `App\Filament\Admin\Resources\SiteSettings\Pages\EditSiteSettings`
+        // whenever a save touches any `bank_transfer_*` key — the manual-
+        // payment destination account shown on the booking wizard's Step 8
+        // fallback card. Redirecting real customer payments to the wrong
+        // account with no recorded justification is the same risk category
+        // as `PAYMENT_REFUND`/`VENDOR_PAYOUT` above.
+        'SITE_SETTING_BANK_TRANSFER_UPDATED',
+        // Added by Batch M1c (QUE-04, `docs/architecture/queue-and-outbox
+        // .md` §8: "Manual replay requires privileged permission, reason,
+        // and audit"). Written by `App\Console\Commands\OutboxReplayCommand`
+        // — the only write path that manually resets a stuck/failed outbox
+        // row's claim so `outbox:publish` re-claims and re-publishes it. A
+        // forced replay can re-fire a domain event a second time (consumers
+        // must already be idempotent per `queue-and-outbox.md` §7, but the
+        // operator decision to force it is still a deliberate override of
+        // the normal automatic pipeline), the same "override with
+        // consequences" category as `PLOT_OVERRIDE`/`GATE_CHANGE` above.
+        'OUTBOX_EVENT_REPLAY',
     ];
 
     public static function requiresReason(string $action): bool

@@ -32,6 +32,7 @@ return new class extends Migration
             return;
         }
 
+        // contract-approved: DB-01 — safe CHECK-constraint widen (adds 'allowed' to the allowed set only, no data loss)
         DB::statement('ALTER TABLE payment_intents DROP CONSTRAINT IF EXISTS payment_intents_decision_check');
         DB::statement("ALTER TABLE payment_intents ADD CONSTRAINT payment_intents_decision_check CHECK (decision IN ('denied', 'allowed'))");
     }

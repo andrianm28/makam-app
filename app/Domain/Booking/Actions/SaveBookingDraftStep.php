@@ -86,7 +86,7 @@ final readonly class SaveBookingDraftStep
             BookingWizardStep::DISCOVERY => self::validateDiscovery($payload),
             BookingWizardStep::CUSTOMER_AND_DECEASED_DATA => [
                 ...self::validateCustomerData($payload),
-                ...self::validateDeceasedData($payload),
+                ...self::validateDeceasedData($payload, $draft->service_type),
             ],
             BookingWizardStep::PAYMENT => self::validatePayment($payload, app(ModeResolver::class)->paymentMode()),
             default => [],
@@ -122,16 +122,29 @@ final readonly class SaveBookingDraftStep
                     'customer_email' => self::trimmed($payload['customer_email']),
                     'customer_address' => self::trimmed($payload['customer_address']),
                     'customer_relationship' => $payload['customer_relationship'],
-                    'customer_contact_channel' => $payload['customer_contact_channel'],
+                    // No longer collected by the wizard UI (removed 7 Sep
+                    // 2026) — `?? null` guards a caller that omits the key
+                    // entirely, matching the deceased fields' own pattern
+                    // just below.
+                    'customer_contact_channel' => $payload['customer_contact_channel'] ?? null,
                     // Stamped from the server clock, reached only because
                     // validation above observed a genuine `true`. This is the
                     // record that consent happened, so its time must come
                     // from us, not from whoever sent the request.
                     'privacy_notice_accepted_at' => Carbon::now()->toDateTimeString(),
-                    'deceased_full_name' => self::trimmed($payload['deceased_full_name']),
-                    'deceased_date_of_birth' => $payload['deceased_date_of_birth'],
-                    'deceased_date_of_death' => $payload['deceased_date_of_death'],
-                    'deceased_relationship' => $payload['deceased_relationship'],
+                    // `nullIfBlank`, not `trimmed`/raw passthrough — deceased
+                    // fields are now OPTIONAL for Pre-Need (and dates are
+                    // optional for every service type; see
+                    // `validateDeceasedData()`), so a caller may omit any of
+                    // these keys entirely. `?? null` guards the now-possible
+                    // missing array key, and `nullIfBlank` gives "not
+                    // stated" the same single NULL representation this
+                    // column already used for `deceased_gender` — never an
+                    // empty string.
+                    'deceased_full_name' => self::nullIfBlank($payload['deceased_full_name'] ?? null),
+                    'deceased_date_of_birth' => self::nullIfBlank($payload['deceased_date_of_birth'] ?? null),
+                    'deceased_date_of_death' => self::nullIfBlank($payload['deceased_date_of_death'] ?? null),
+                    'deceased_relationship' => self::nullIfBlank($payload['deceased_relationship'] ?? null),
                     // One representation of "not stated", not two: an empty
                     // string and null both mean unknown, and a column holding
                     // both forces every reader to test for each.
@@ -464,10 +477,18 @@ final readonly class SaveBookingDraftStep
             $errors['customer_relationship'] = ['Hubungan tidak valid.'];
         }
 
+        // No longer collected on Step 6 — the "Saluran Kontak yang Disukai"
+        // field was removed from the wizard at the product owner's request
+        // (7 Sep 2026, relayed via WhatsApp). Optional-but-validated-if-
+        // present rather than deleted outright: `customer_contact_channel`
+        // stays a real, nullable `BookingDraft` column and
+        // `BookingContactChannel::label()` already degrades gracefully for
+        // a null/unknown code on the confirmation screen (its own doc
+        // block), so an already-submitted draft that carries a value from
+        // before this change, or any future caller that still sends one,
+        // is still checked rather than silently accepted.
         $channel = $payload['customer_contact_channel'] ?? null;
-        if (! is_string($channel) || $channel === '') {
-            $errors['customer_contact_channel'] = ['Saluran kontak yang disukai harus dipilih.'];
-        } elseif (! BookingContactChannel::isKnown($channel)) {
+        if (is_string($channel) && $channel !== '' && ! BookingContactChannel::isKnown($channel)) {
             $errors['customer_contact_channel'] = ['Saluran kontak tidak valid.'];
         }
 
@@ -486,23 +507,54 @@ final readonly class SaveBookingDraftStep
     }
 
     /**
+     * `$serviceType` is `$draft->service_type`, persisted by the earlier
+     * DISCOVERY step (`validateServiceType()`) — never taken from this
+     * step's own `$payload`, which has no such key. `null` here means "no
+     * DISCOVERY save has actually happened yet" (only reachable through a
+     * hand-built draft in a test, since `validateStepSequencing()` already
+     * refuses this step on a real caller until DISCOVERY is complete) and is
+     * treated the same as every non-`PRE_NEED` type: full name and
+     * relationship stay mandatory.
+     *
+     * UXB-02: this validator used to require full deceased data
+     * unconditionally, which made the Pre-Need path — where the family may
+     * not yet know who the eventual occupant even is — permanently
+     * unable to pass this step. `booking-wizard-fields.md`'s own Step 7
+     * copy ("Isi sebisa Anda") already promised optional-but-best-effort
+     * data; this validator now matches it for BOTH branches on the two date
+     * fields, and additionally waives full name/relationship for Pre-Need.
+     *
      * @param  array<string, mixed>  $payload
      * @return array<string, list<string>>
      */
-    private static function validateDeceasedData(array $payload): array
+    private static function validateDeceasedData(array $payload, ?string $serviceType): array
     {
         $errors = [];
 
+        $isPreNeed = $serviceType === BookingServiceType::PRE_NEED;
+
         $fullName = $payload['deceased_full_name'] ?? null;
-        if (! is_string($fullName) || trim($fullName) === '' || mb_strlen($fullName) < 3) {
+        $fullNameProvided = is_string($fullName) && trim($fullName) !== '';
+
+        if (! $isPreNeed && ! $fullNameProvided) {
             $errors['deceased_full_name'] = ['Nama almarhum harus diisi minimal 3 karakter.'];
-        } elseif (mb_strlen($fullName) > 191) {
+        } elseif ($fullNameProvided && mb_strlen(trim($fullName)) < 3) {
+            $errors['deceased_full_name'] = ['Nama almarhum harus diisi minimal 3 karakter.'];
+        } elseif ($fullNameProvided && mb_strlen($fullName) > 191) {
             $errors['deceased_full_name'] = ['Nama almarhum terlalu panjang.'];
         }
 
         $dob = $payload['deceased_date_of_birth'] ?? null;
         $dod = $payload['deceased_date_of_death'] ?? null;
+        $dobProvided = $dob !== null && $dob !== '';
+        $dodProvided = $dod !== null && $dod !== '';
 
+        // Both dates are OPTIONAL-but-validated-if-present, for every
+        // service type — the Blade copy above this step already says "Isi
+        // sebisa Anda" ("fill in what you can") for the whole Data Almarhum
+        // section, which this validator previously contradicted by
+        // demanding both dates unconditionally.
+        //
         // `is_string` FIRST, and `\Throwable` rather than `\Exception`:
         // `Carbon::parse()` given an array raises a TypeError, which is an
         // Error and not an Exception, so it escaped the old `catch` and
@@ -516,28 +568,28 @@ final readonly class SaveBookingDraftStep
         // input shape nobody thought to enumerate — including whatever a
         // future narrowing of this check would let through.
         $parsedDob = null;
-        if ($dob === null || $dob === '') {
-            $errors['deceased_date_of_birth'] = ['Tanggal lahir almarhum harus diisi.'];
-        } elseif (! is_string($dob)) {
-            $errors['deceased_date_of_birth'] = ['Format tanggal lahir tidak valid.'];
-        } else {
-            try {
-                $parsedDob = Carbon::parse($dob);
-            } catch (\Throwable) {
+        if ($dobProvided) {
+            if (! is_string($dob)) {
                 $errors['deceased_date_of_birth'] = ['Format tanggal lahir tidak valid.'];
+            } else {
+                try {
+                    $parsedDob = Carbon::parse($dob);
+                } catch (\Throwable) {
+                    $errors['deceased_date_of_birth'] = ['Format tanggal lahir tidak valid.'];
+                }
             }
         }
 
         $parsedDod = null;
-        if ($dod === null || $dod === '') {
-            $errors['deceased_date_of_death'] = ['Tanggal meninggal harus diisi.'];
-        } elseif (! is_string($dod)) {
-            $errors['deceased_date_of_death'] = ['Format tanggal meninggal tidak valid.'];
-        } else {
-            try {
-                $parsedDod = Carbon::parse($dod);
-            } catch (\Throwable) {
+        if ($dodProvided) {
+            if (! is_string($dod)) {
                 $errors['deceased_date_of_death'] = ['Format tanggal meninggal tidak valid.'];
+            } else {
+                try {
+                    $parsedDod = Carbon::parse($dod);
+                } catch (\Throwable) {
+                    $errors['deceased_date_of_death'] = ['Format tanggal meninggal tidak valid.'];
+                }
             }
         }
 
@@ -552,9 +604,11 @@ final readonly class SaveBookingDraftStep
         }
 
         $relationship = $payload['deceased_relationship'] ?? null;
-        if (! is_string($relationship) || $relationship === '') {
+        $relationshipProvided = is_string($relationship) && $relationship !== '';
+
+        if (! $isPreNeed && ! $relationshipProvided) {
             $errors['deceased_relationship'] = ['Hubungan dengan pemesan harus dipilih.'];
-        } elseif (! BookingRelationshipCode::isKnown($relationship)) {
+        } elseif ($relationshipProvided && ! BookingRelationshipCode::isKnown($relationship)) {
             $errors['deceased_relationship'] = ['Hubungan tidak valid.'];
         }
 

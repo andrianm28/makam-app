@@ -84,7 +84,11 @@ final class SubscriptionsResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        return Subscription::query()->latest('created_at');
+        // PERF-11: `SubscriptionsTable`'s `grave.slot` and `carePlan.name`
+        // columns each ran a per-row query with no eager load. Mirrors
+        // `GravePlotsResource::getEloquentQuery()`'s own `with([...])`
+        // override.
+        return Subscription::query()->with(['grave', 'carePlan'])->latest('created_at');
     }
 
     public static function getPages(): array

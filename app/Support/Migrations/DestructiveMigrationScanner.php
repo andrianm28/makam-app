@@ -40,6 +40,9 @@ final class DestructiveMigrationScanner
         'dropForeign',
         'DB::delete',
         '->truncate(',
+        '->change(',
+        'renameColumn',
+        'dropPrimary',
     ];
 
     /** Case-insensitive raw-SQL fragments (matched via stripos). @var list<string> */
@@ -48,6 +51,7 @@ final class DestructiveMigrationScanner
         'DROP COLUMN',
         'DELETE FROM',
         'TRUNCATE',
+        'DROP CONSTRAINT',
     ];
 
     /**
@@ -62,25 +66,28 @@ final class DestructiveMigrationScanner
         }
 
         $stripped = $this->stripComments($original);
-        $upStart = $this->findFunctionOffset($stripped, 'up');
 
-        if ($upStart === null) {
+        if ($this->findFunctionOffset($stripped, 'up') === null) {
             return [];
         }
 
-        $downStart = $this->findFunctionOffset($stripped, 'down');
-        $upBody = $downStart !== null && $downStart > $upStart
-            ? substr($stripped, $upStart, $downStart - $upStart)
-            : substr($stripped, $upStart);
+        // Scan the WHOLE file, not just an "up() start to down() start" slice
+        // — a private helper method declared textually AFTER down() (called
+        // FROM up()) falls outside that slice and was previously invisible
+        // to this scanner. The only region deliberately excluded is down()'s
+        // own brace-matched body, blanked out (not deleted) so line numbers
+        // for everything else in the file stay accurate. This is correct
+        // regardless of which method — up() or down() — is declared first.
+        $searchSpace = $this->excludeDownBody($stripped);
 
-        $upBodyStartLine = substr_count($stripped, "\n", 0, $upStart) + 1;
         $originalLines = explode("\n", $original);
 
         $findings = [];
 
-        foreach (explode("\n", $upBody) as $offset => $lineText) {
+        foreach (explode("\n", $searchSpace) as $offset => $lineText) {
+            $lineNumber = $offset + 1;
+
             foreach ($this->matchedPatterns($lineText) as $pattern) {
-                $lineNumber = $upBodyStartLine + $offset;
                 $precedingLine = $originalLines[$lineNumber - 2] ?? '';
                 $overridden = str_contains($precedingLine, 'contract-approved');
 
@@ -93,6 +100,66 @@ final class DestructiveMigrationScanner
         }
 
         return $findings;
+    }
+
+    /**
+     * Blanks out down()'s own declaration-plus-body (brace-matched, so
+     * nested braces inside it — e.g. `Schema::table('x', function ($t) {
+     * ... })` — don't truncate the exclusion early) while preserving every
+     * newline, so line numbers for the rest of the file are unaffected. If
+     * down() cannot be found or its brace cannot be matched, the source is
+     * returned unchanged (fail open to scanning, not to skipping).
+     */
+    private function excludeDownBody(string $source): string
+    {
+        $downStart = $this->findFunctionOffset($source, 'down');
+
+        if ($downStart === null) {
+            return $source;
+        }
+
+        $braceOpen = strpos($source, '{', $downStart);
+
+        if ($braceOpen === false) {
+            return $source;
+        }
+
+        $braceClose = $this->matchBrace($source, $braceOpen);
+
+        if ($braceClose === null) {
+            return $source;
+        }
+
+        $downRegion = substr($source, $downStart, $braceClose + 1 - $downStart);
+        $blanked = (string) preg_replace('/[^\n]/', ' ', $downRegion);
+
+        return substr($source, 0, $downStart).$blanked.substr($source, $braceClose + 1);
+    }
+
+    /**
+     * Given the offset of an opening `{`, returns the offset of its
+     * matching closing `}` by depth counting. Does not account for braces
+     * inside string literals — out of scope for this migration-hygiene
+     * scanner, which already blanks comments before this runs.
+     */
+    private function matchBrace(string $source, int $openOffset): ?int
+    {
+        $depth = 0;
+        $length = strlen($source);
+
+        for ($i = $openOffset; $i < $length; $i++) {
+            if ($source[$i] === '{') {
+                $depth++;
+            } elseif ($source[$i] === '}') {
+                $depth--;
+
+                if ($depth === 0) {
+                    return $i;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -112,6 +179,15 @@ final class DestructiveMigrationScanner
             if (stripos($lineText, $pattern) !== false) {
                 $matched[] = $pattern;
             }
+        }
+
+        // `ALTER COLUMN ... TYPE ...` narrows/widens a column's storage
+        // type and can silently truncate or reject existing data — but a
+        // bare `ALTER COLUMN` also appears in safe forms this gate must not
+        // flag (`SET NOT NULL`, `DROP DEFAULT`, `SET DEFAULT`), so only
+        // flag it when the same line also mentions `TYPE`.
+        if (stripos($lineText, 'ALTER COLUMN') !== false && stripos($lineText, 'TYPE') !== false) {
+            $matched[] = 'ALTER COLUMN ... TYPE';
         }
 
         return $matched;

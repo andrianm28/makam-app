@@ -22,9 +22,9 @@ use Filament\Tables\Table;
  * Money presentation
  * ---------------------------------------------------------------------------
  * `total_minor` is integer minor units at `config('money.minor_units')` = 2,
- * so `'Rp '.number_format($state / 100, 0, ',', '.')` renders e.g.
- * `250000` as `Rp 2.500` — the same `Rp` presentation the public
- * marketplace presenter uses (whole-rupiah, thousand separators).
+ * rendered through `Money::format()` — e.g. `250000` renders as `Rp 2.500`,
+ * the same `Rp` presentation the public marketplace presenter uses
+ * (whole-rupiah, thousand separators).
  *
  * ---------------------------------------------------------------------------
  * Authorization on row actions
@@ -58,7 +58,8 @@ final class MarketplaceOrdersTable
 
                 TextColumn::make('total_minor')
                     ->label('Total')
-                    ->formatStateUsing(fn (int $state): string => 'Rp '.number_format($state / 100, 0, ',', '.'))
+                    // @phpstan-ignore method.notFound (moneyRupiah() is a Macroable macro — AppServiceProvider::boot())
+                    ->moneyRupiah()
                     ->sortable(),
 
                 TextColumn::make('payment_state')

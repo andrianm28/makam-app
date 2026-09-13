@@ -67,6 +67,21 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // DB-05 (batch M3a): ran completely unguarded before this fix, on
+        // EVERY `php artisan migrate` including a real production deploy —
+        // writing fictional vendor names and prices into a live production
+        // marketplace. See `config/example_data.php`'s own doc block on why
+        // this flag defaults TRUE (not false), and why
+        // `app()->isProduction()` is an unconditional, independent guard
+        // regardless of the flag.
+        if (! config('example_data.seed_vendors_and_listings')) {
+            return;
+        }
+
+        if (app()->isProduction()) {
+            return;
+        }
+
         // The five vendors and nine listings are defined in
         // App\Support\ExampleData\VendorListingExampleData. It skips
         // (never fails on) a product code the catalogue seed did not

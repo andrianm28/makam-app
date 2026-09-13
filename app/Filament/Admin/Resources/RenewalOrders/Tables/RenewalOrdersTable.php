@@ -8,6 +8,7 @@ use App\Domain\Renewal\Models\Renewal;
 use App\Domain\Renewal\Models\RenewalQuote;
 use App\Domain\Renewal\RenewalStatus;
 use App\Filament\Admin\Resources\RenewalOrders\RenewalStatusBadge;
+use App\Platform\FinancialLedger\Money;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -84,7 +85,7 @@ final class RenewalOrdersTable
             return 'Belum ada penawaran';
         }
 
-        return 'Rp '.number_format(self::minorAmountOf($quote) / 100, 0, ',', '.');
+        return (new Money(self::minorAmountOf($quote)))->format();
     }
 
     private static function minorAmountOf(RenewalQuote $quote): int

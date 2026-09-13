@@ -33,7 +33,10 @@ final class SubscriptionStatusPageTest extends TestCase
             'name' => 'Perawatan Bulanan Standar',
             'product_code' => 'GRAVE_CARE_MONTHLY',
             'frequency' => CarePlanFrequency::Monthly->value,
-            'price_minor' => 150000,
+            // ARCH-06: real minor units at `config('money.minor_units')` = 2 —
+            // 15_000_000 minor units is Rp 150.000, not 150000 (that value
+            // was the pre-fix bug's own assumption baked into the fixture).
+            'price_minor' => 15_000_000,
             'currency' => 'IDR',
             'checklist_template' => ['membersihkan makam'],
             'status' => 'active',

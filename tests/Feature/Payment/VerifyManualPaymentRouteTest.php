@@ -16,7 +16,6 @@ use App\Platform\FinancialLedger\Money;
 use App\Platform\FinancialLedger\VendorPayableAssessmentTrigger;
 use App\Platform\FinancialLedger\VendorPayableEligibility;
 use App\Platform\IdentityAccess\ActorContext;
-use App\Platform\IdentityAccess\Models\ActorSession;
 use App\Platform\IdentityAccess\Reauthentication\Models\ReauthenticationEvent;
 use App\Platform\IdentityAccess\Roles\ActorRole;
 use App\Platform\IdentityAccess\Roles\Models\ActorRoleAssignment;
@@ -28,6 +27,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\Support\EstablishesFreshActorSession;
 use Tests\TestCase;
 
 /**
@@ -55,6 +55,7 @@ use Tests\TestCase;
  */
 final class VerifyManualPaymentRouteTest extends TestCase
 {
+    use EstablishesFreshActorSession;
     use RefreshDatabase;
 
     private const int TOTAL_MINOR = 325_000_00;
@@ -143,16 +144,7 @@ final class VerifyManualPaymentRouteTest extends TestCase
      */
     private function freshlyAuthenticatedUser(): User
     {
-        $user = User::factory()->create();
-
-        ActorSession::query()->create([
-            'user_id' => $user->id,
-            'session_id' => 'test-session-'.$user->id,
-            'guard' => 'web',
-            'last_authenticated_at' => CarbonImmutable::now()->subSeconds(10),
-        ]);
-
-        return $user;
+        return User::factory()->create();
     }
 
     /**
@@ -302,7 +294,7 @@ final class VerifyManualPaymentRouteTest extends TestCase
         $user = $this->authorizedUser();
         $verification = $this->submittedVerification();
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->verifyUrl($verification), [
                 'decision' => 'approve',
                 'reason' => 'Proof matched provider statement',
@@ -335,7 +327,7 @@ final class VerifyManualPaymentRouteTest extends TestCase
         $user = $this->freshlyAuthenticatedUser();
         $verification = $this->submittedVerification();
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->verifyUrl($verification), [
                 'decision' => 'approve',
                 'reason' => 'Proof matched provider statement',
@@ -358,7 +350,7 @@ final class VerifyManualPaymentRouteTest extends TestCase
         $user = $this->authorizedUser(ActorRole::CUSTOMER);
         $verification = $this->submittedVerification();
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->verifyUrl($verification), [
                 'decision' => 'approve',
                 'reason' => 'Proof matched provider statement',
@@ -389,7 +381,7 @@ final class VerifyManualPaymentRouteTest extends TestCase
         $user = $this->authorizedUser(ActorRole::ADMIN);
         $verification = $this->submittedVerification();
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->verifyUrl($verification), [
                 'decision' => 'approve',
                 'reason' => 'Proof matched provider statement',
@@ -406,7 +398,7 @@ final class VerifyManualPaymentRouteTest extends TestCase
         $this->grantRole($user, ActorRole::FINANCE)->revoke();
         $verification = $this->submittedVerification();
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->verifyUrl($verification), [
                 'decision' => 'approve',
                 'reason' => 'Proof matched provider statement',
@@ -442,12 +434,12 @@ final class VerifyManualPaymentRouteTest extends TestCase
             ['paymentVerification' => $unknownId],
         );
 
-        $unknown = $this->actingAs($user)->post($unknownUrl, [
+        $unknown = $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))->post($unknownUrl, [
             'decision' => 'approve',
             'reason' => 'Proof matched provider statement',
         ]);
 
-        $existing = $this->actingAs($user)->post($this->verifyUrl($real), [
+        $existing = $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))->post($this->verifyUrl($real), [
             'decision' => 'approve',
             'reason' => 'Proof matched provider statement',
         ]);
@@ -486,7 +478,7 @@ final class VerifyManualPaymentRouteTest extends TestCase
             ['paymentVerification' => (string) Str::uuid()],
         );
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($unknownUrl, [
                 'decision' => 'approve',
                 'reason' => 'Proof matched provider statement',
@@ -514,7 +506,7 @@ final class VerifyManualPaymentRouteTest extends TestCase
         $user = $this->authorizedUser($role);
         $verification = $this->submittedVerification();
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->verifyUrl($verification), [
                 'decision' => 'approve',
                 'reason' => 'Proof matched provider statement',
@@ -538,7 +530,7 @@ final class VerifyManualPaymentRouteTest extends TestCase
         $user = $this->authorizedUser($role);
         $verification = $this->submittedVerification();
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->verifyUrl($verification), [
                 'decision' => 'approve',
                 'reason' => 'Proof matched provider statement',
@@ -568,7 +560,7 @@ final class VerifyManualPaymentRouteTest extends TestCase
         $this->grantRole($user, ActorRole::RESTRICTED_ADMIN);
         $verification = $this->submittedVerification();
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->verifyUrl($verification), [
                 'decision' => 'approve',
                 'reason' => 'Proof matched provider statement',
@@ -589,7 +581,7 @@ final class VerifyManualPaymentRouteTest extends TestCase
         $user = $this->freshlyAuthenticatedUser();
         $verification = $this->submittedVerification();
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->verifyUrl($verification), [
                 // Missing `decision` and `reason` entirely — a well-formed
                 // request would be a 422 here.
@@ -611,7 +603,7 @@ final class VerifyManualPaymentRouteTest extends TestCase
         $user = $this->authorizedUser();
         $verification = $this->submittedVerification();
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->verifyUrl($verification), [
                 'decision' => 'approve',
                 'reason' => '',
@@ -634,7 +626,7 @@ final class VerifyManualPaymentRouteTest extends TestCase
         $user = $this->authorizedUser();
         $verification = $this->submittedVerification();
 
-        $response = $this->actingAs($user)
+        $response = $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->verifyUrl($verification), [
                 'decision' => 'approve',
                 'reason' => $reason,
@@ -663,7 +655,7 @@ final class VerifyManualPaymentRouteTest extends TestCase
         $user = $this->authorizedUser();
         $verification = $this->submittedVerification();
 
-        $this->actingAs($user)
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))
             ->post($this->verifyUrl($verification), [
                 'decision' => 'definitely-approve',
                 'reason' => 'Some reason',
@@ -713,7 +705,7 @@ final class VerifyManualPaymentRouteTest extends TestCase
         $user = $this->authorizedUser();
         $verification = $this->submittedVerification();
 
-        $this->actingAs($user)->post($this->verifyUrl($verification), [
+        $this->actingAsWithSessionAuthenticatedAt($user, CarbonImmutable::now()->subSeconds(10))->post($this->verifyUrl($verification), [
             'decision' => 'approve',
             'reason' => 'Proof matched provider statement',
         ]);

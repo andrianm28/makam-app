@@ -24,8 +24,6 @@ use App\Platform\Payment\SessionState;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
-use ReflectionMethod;
-use ReflectionNamedType;
 use Tests\TestCase;
 
 /**
@@ -117,6 +115,14 @@ final class PaymentGuardFailClosedTest extends TestCase
                     $result = ($this->guardWithPaymentGate($gateOpen))($order, $amount);
                     $evaluations++;
 
+                    // The behavioural replacement for a reflection check on
+                    // `__invoke()`'s declared return type: across the whole
+                    // input matrix, every evaluation hands back a real result
+                    // object and never `null`. A caller that received `null` would
+                    // read `$result->isAllowed()` as a fatal rather than as a
+                    // denial — which is a fail-OPEN in the shape of a crash.
+                    $this->assertInstanceOf(GuardResult::class, $result);
+
                     $this->assertFalse(
                         $result->isAllowed(),
                         'The guard produced a PASS — ruling 1b-L3-01 requires no reachable pass outcome.'
@@ -135,13 +141,36 @@ final class PaymentGuardFailClosedTest extends TestCase
         );
     }
 
-    public function test_the_guard_always_returns_a_non_nullable_guard_result(): void
+    /**
+     * The declared return type is now proved by use rather than by
+     * reflection: `test_no_input_combination_reaches_a_pass_outcome` asserts
+     * `assertInstanceOf(GuardResult::class, $result)` on all sixteen
+     * evaluations of the input matrix, which is the same claim made against
+     * the values callers actually receive.
+     *
+     * What is left here is the case that matrix cannot produce. Every input in
+     * it is a valid one, so none of them exercises the guard's behaviour when
+     * the evaluation itself goes wrong — and "returns null on the unhappy
+     * path" is precisely the shape a fail-open would take. The order is
+     * deleted underneath the guard between construction and evaluation, so the
+     * guard meets a subject that no longer resolves.
+     */
+    public function test_the_guard_returns_a_denial_rather_than_null_when_its_subject_vanishes(): void
     {
-        $returnType = (new ReflectionMethod(GuardPaymentSession::class, '__invoke'))->getReturnType();
+        $order = Order::query()->create([
+            'reference' => 'MK-VANISHED-'.strtoupper(substr(bin2hex(random_bytes(4)), 0, 8)),
+            'product_type' => ProductType::AT_NEED_SERVICE_ORDER->value,
+            'status' => OrderStatus::MASUK->value,
+        ]);
 
-        $this->assertInstanceOf(ReflectionNamedType::class, $returnType);
-        $this->assertSame(GuardResult::class, $returnType->getName());
-        $this->assertFalse($returnType->allowsNull());
+        $guard = $this->guardWithPaymentGate(open: true);
+
+        Order::query()->whereKey($order->getKey())->delete();
+
+        $result = $guard($order, new Money(1_500_000_00));
+
+        $this->assertInstanceOf(GuardResult::class, $result);
+        $this->assertTrue($result->isDenied(), 'A guard evaluation against a vanished order must deny, not pass.');
     }
 
     public function test_the_session_creation_and_provider_seams_are_not_built_by_this_task(): void

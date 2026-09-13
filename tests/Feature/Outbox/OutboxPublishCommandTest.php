@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace Tests\Feature\Outbox;
 
 use App\Console\Commands\OutboxPublishCommand;
-use App\Platform\Outbox\Jobs\PublishOutboxEventJob;
+use App\Platform\Outbox\Events\OutboxEventPublished;
 use App\Platform\Outbox\Models\OutboxEvent;
 use App\Platform\Outbox\Outbox;
 use App\Platform\Outbox\OutboxClassification;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -72,9 +73,22 @@ final class OutboxPublishCommandTest extends TestCase
         Queue::assertNothingPushed();
     }
 
+    /**
+     * QUE-04: `dispatched_at` is now stamped by `PublishOutboxEventJob::
+     * handle()` itself, once the publish has actually happened — not by
+     * `OutboxPublisher::dispatchOne()` the moment the job is handed to the
+     * queue driver (see that job's own class doc block). `Queue::fake()`
+     * intercepts the dispatch before the job ever runs, so it can no longer
+     * prove `dispatched_at` gets set — it only proves the command claims and
+     * pushes the row, which is what it is used for below. `Event::fake()`
+     * instead lets the real (test env: `QUEUE_CONNECTION=sync`) job run and
+     * fire `OutboxEventPublished`, which is the actual "did this publish"
+     * proof this test now needs — the same pattern
+     * `Tests\Feature\Outbox\OutboxRecoveryTest` already establishes.
+     */
     public function test_it_dispatches_a_waiting_event_and_marks_it_dispatched(): void
     {
-        Queue::fake();
+        Event::fake([OutboxEventPublished::class]);
 
         $row = Outbox::record(
             eventName: 'payment.received.v1',
@@ -89,9 +103,9 @@ final class OutboxPublishCommandTest extends TestCase
 
         $this->artisan('outbox:publish')->assertExitCode(0);
 
-        Queue::assertPushed(
-            PublishOutboxEventJob::class,
-            fn (PublishOutboxEventJob $job): bool => $job->outboxEventId === $row->getKey()
+        Event::assertDispatched(
+            OutboxEventPublished::class,
+            fn (OutboxEventPublished $event): bool => $event->envelope['event_id'] === $row->getKey()
         );
 
         $this->assertNotNull(
@@ -109,7 +123,10 @@ final class OutboxPublishCommandTest extends TestCase
      */
     public function test_it_drains_a_backlog_larger_than_a_single_batch(): void
     {
-        Queue::fake();
+        // See test_it_dispatches_a_waiting_event_and_marks_it_dispatched()'s
+        // doc block: `Event::fake()` (not `Queue::fake()`) lets the real
+        // sync-queue job run so `dispatched_at` is genuinely observable.
+        Event::fake([OutboxEventPublished::class]);
 
         $this->recordEvents(7);
 
@@ -121,7 +138,7 @@ final class OutboxPublishCommandTest extends TestCase
             'Every event must be dispatched, not just the first batch.'
         );
 
-        Queue::assertPushed(PublishOutboxEventJob::class, 7);
+        Event::assertDispatched(OutboxEventPublished::class, 7);
     }
 
     /**
@@ -130,7 +147,10 @@ final class OutboxPublishCommandTest extends TestCase
      */
     public function test_it_stops_at_the_max_batches_cap_and_warns(): void
     {
-        Queue::fake();
+        // See test_it_dispatches_a_waiting_event_and_marks_it_dispatched()'s
+        // doc block for why this needs the real sync-queue job to run
+        // rather than `Queue::fake()`.
+        Event::fake([OutboxEventPublished::class]);
 
         $this->recordEvents(6);
 

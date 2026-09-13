@@ -16,6 +16,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * `/vendor/produk` — the vendor's own catalogue listings.
@@ -53,6 +54,15 @@ final class VendorListingResource extends Resource
     public static function table(Table $table): Table
     {
         return VendorListingsTable::configure($table);
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        // PERF-11: `VendorListingsTable`'s `product.name`/`product.category`
+        // columns each ran a per-row query with no eager load. Chained onto
+        // `ScopesToCurrentVendor::getEloquentQuery()`'s scoped base the same
+        // way `WorkOrdersResource` does above.
+        return self::applyVendorScope(parent::getEloquentQuery())->with(['product']);
     }
 
     public static function getPages(): array

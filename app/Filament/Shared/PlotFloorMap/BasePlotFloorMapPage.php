@@ -231,8 +231,10 @@ abstract class BasePlotFloorMapPage extends Page
 
         return CemeteryBlock::query()
             ->where('cemetery_id', $cemetery->getKey())
-            ->with(['plots' => fn (HasMany $query): HasMany => $query->orderBy('slot')])
+            ->with(['plots' => fn (HasMany $query): HasMany => $query->orderBy('slot')
+                ->limit((int) config('booking.plot_picker_max_plots_per_block'))])
             ->orderBy('code')
+            ->limit((int) config('booking.plot_picker_max_blocks'))
             ->get();
     }
 

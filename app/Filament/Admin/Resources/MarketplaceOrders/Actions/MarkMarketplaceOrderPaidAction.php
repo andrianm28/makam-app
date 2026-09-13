@@ -9,6 +9,7 @@ use App\Domain\Marketplace\Models\MarketplaceOrder;
 use App\Domain\OrderWorkflow\Authorization\Contracts\OrderTransitionAuthorizerContract;
 use App\Filament\Admin\Pages\PasswordReauthentication;
 use App\Filament\Admin\Resources\MarketplaceOrders\MarketplaceOrderResource;
+use App\Filament\Shared\PanelFailure;
 use App\Http\Middleware\RequireRecentAuthentication;
 use App\Platform\Audit\AuditSource;
 use App\Platform\Correlation\CorrelationContext;
@@ -94,7 +95,7 @@ final class MarkMarketplaceOrderPaidAction
 
                     return;
                 } catch (\Throwable $exception) {
-                    Notification::make()->danger()->title($exception->getMessage())->send();
+                    PanelFailure::notify($exception, 'Otorisasi gagal');
 
                     return;
                 }
@@ -111,7 +112,7 @@ final class MarkMarketplaceOrderPaidAction
                     );
                     Notification::make()->success()->title('Pesanan ditandai dibayar.')->send();
                 } catch (\Throwable $exception) {
-                    Notification::make()->danger()->title('Gagal menandai pembayaran')->body($exception->getMessage())->send();
+                    PanelFailure::notify($exception, 'Gagal menandai pembayaran');
                 }
             });
     }
@@ -126,7 +127,9 @@ final class MarkMarketplaceOrderPaidAction
             app(OrderTransitionAuthorizerContract::class)->authorizeTransition(app(ActorContext::class), 'mark_marketplace_order_paid');
 
             return true;
-        } catch (\Throwable) {
+        } catch (\Throwable $exception) {
+            report($exception);
+
             return false;
         }
     }

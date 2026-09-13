@@ -6,7 +6,6 @@ namespace App\Console\Commands;
 
 use App\Support\Design\BrandAssetBuilder;
 use Illuminate\Console\Command;
-use RuntimeException;
 use Throwable;
 
 /**
@@ -44,7 +43,7 @@ class BuildBrandAssets extends Command
                 public_path(),
                 whiteKey: $whiteKey,
             );
-        } catch (RuntimeException|Throwable $e) {
+        } catch (Throwable $e) {
             $this->error("Failed to build brand assets: {$e->getMessage()}");
 
             return self::FAILURE;

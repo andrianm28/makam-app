@@ -31,7 +31,7 @@
                 <div>
                     <dt class="font-medium text-neutral-500">Tanggal diterbitkan</dt>
                     <dd class="mt-1 text-neutral-700">
-                        {{ $invoice->issued_at->translatedFormat('j F Y, H:i') }}
+                        <x-mk.local-time :at="$invoice->issued_at" />
                     </dd>
                 </div>
 

@@ -24,8 +24,10 @@ use App\Platform\Payment\PaymentAuditActions;
 use App\Platform\Payment\PaymentVerificationStatus;
 use App\Platform\Payment\SubmitManualPayment;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -46,9 +48,9 @@ use Throwable;
  * `marketplace_orders.order_number` or the submission is refused before any
  * row is written, and the stated amount/currency are validated and stored.
  *
- * Also structurally pins the ruling's hard prohibition: this action must
- * never reference `payment_sessions`, `PaymentSession`, `SessionState`, or
- * any `app/Domain/OrderWorkflow/` file.
+ * Also behaviourally pins the ruling's hard prohibition, by observing
+ * every statement the action actually executed: no payment-session access
+ * at all, and no write to any booking order aggregate table.
  */
 final class SubmitManualPaymentTest extends TestCase
 {
@@ -340,37 +342,145 @@ final class SubmitManualPaymentTest extends TestCase
         $this->assertSame($order->id, $verification->order_id);
     }
 
-    public function test_it_never_references_payment_sessions_or_the_booking_order_aggregate(): void
+    /**
+     * Replaces a `file_get_contents()` + `assertStringNotContainsString()`
+     * scan of `SubmitManualPayment.php`.
+     *
+     * A source-text grep cannot see indirection. It only ever read the one
+     * action file, so everything the action reaches *through* a
+     * collaborator — `UploadDocument` and the vault seam behind it — was
+     * invisible to it, and a forbidden table reached via a variable name, a
+     * facade, a relation or a queued listener stayed invisible even inside
+     * that file. It also breaks spuriously on any rename, since the
+     * forbidden strings are class and constant names rather than behaviour.
+     *
+     * This runs the real action down both paths (with and without a proof
+     * file, so the document-vault collaborator is inside the capture) and
+     * observes what the database actually saw.
+     */
+    public function test_submitting_writes_only_its_own_tables_and_never_reaches_sessions_or_a_booking_order(): void
     {
-        $source = $this->withoutComments((string) file_get_contents(base_path('app/Platform/Payment/SubmitManualPayment.php')));
+        Queue::fake();
+
+        $this->marketplaceOrder('order-scope-1');
+        $this->marketplaceOrder('order-scope-2');
+
+        $statements = [];
+        DB::listen(function (QueryExecuted $query) use (&$statements): void {
+            $statements[] = $query->sql;
+        });
+
+        $this->action->submit(
+            reference: 'order-scope-1',
+            paymentMethod: 'bank_transfer',
+            paymentReference: 'TRX-1',
+            instructions: null,
+            amountMinor: self::TOTAL_MINOR,
+            currency: 'IDR',
+            proofFile: null,
+            actorRef: null,
+            actorRole: 'guest',
+            source: AuditSource::Api,
+        );
+
+        $this->action->submit(
+            reference: 'order-scope-2',
+            paymentMethod: 'qris',
+            paymentReference: 'QRIS-1',
+            instructions: null,
+            amountMinor: self::TOTAL_MINOR,
+            currency: 'IDR',
+            proofFile: $this->uploadedFile($this->minimalPdf(), 'bukti-bayar.pdf', 'application/pdf'),
+            actorRef: 42,
+            actorRole: 'customer',
+            source: AuditSource::Api,
+        );
+
+        // Anchor: an empty capture would make every assertion below pass
+        // for the wrong reason.
+        $this->assertNotEmpty($statements, 'The submit action executed no queries at all.');
+
+        $written = $this->writtenTables($statements);
+
+        $this->assertSame(
+            [],
+            array_values(array_diff($written, ['payment_verifications', 'documents', 'outbox_events', 'audit_events'])),
+            'Submission may write its own verification row, the vault document and its outbox event, and its audit event — nothing else. In particular it must never write to any order table.'
+        );
+        $this->assertContains('payment_verifications', $written, 'The verification row itself was never written.');
+        $this->assertContains('documents', $written, 'The proof file was never handed to the document vault.');
 
         foreach ([
+            // `payment_sessions` / `PaymentSession` / `SessionState`.
             'payment_sessions',
-            'PaymentSession',
-            'SessionState',
-            'OrderWorkflow',
-            'Journal::post',
-            'MENUNGGU_VERIFIKASI_PEMBAYARAN',
-        ] as $forbidden) {
-            $this->assertStringNotContainsString($forbidden, $source, "SubmitManualPayment.php references [{$forbidden}]");
+            'payment_intents',
+            // `Journal::post`.
+            'journal_batches',
+            'journal_entries',
+            // `OrderWorkflow` — the booking order aggregate, whose
+            // `MENUNGGU_VERIFIKASI_PEMBAYARAN` status this action must
+            // never set. `marketplace_orders` is deliberately absent: PAY-02
+            // requires the reference to resolve against it, and the write
+            // allowlist above already proves that access is read-only.
+            'orders',
+            'order_status_events',
+            'order_parties',
+            'order_documents',
+            'order_invoices',
+        ] as $forbiddenTable) {
+            $this->assertNoStatementTouches($statements, $forbiddenTable);
         }
 
         $this->assertSame(0, PaymentSession::query()->count());
     }
 
-    private function withoutComments(string $source): string
+    /**
+     * The distinct tables written to, sorted. Fails loudly on a write whose
+     * target cannot be identified rather than skipping it — an unparsed
+     * statement must never be mistaken for a clean run.
+     *
+     * @param  list<string>  $statements
+     * @return list<string>
+     */
+    private function writtenTables(array $statements): array
     {
-        $code = '';
+        $tables = [];
 
-        foreach (token_get_all($source) as $token) {
-            if (is_array($token) && in_array($token[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+        foreach ($statements as $sql) {
+            if (preg_match('/^\s*(?:insert|update|delete|truncate)\b/i', $sql) !== 1) {
                 continue;
             }
 
-            $code .= is_array($token) ? $token[1] : $token;
+            if (preg_match('/^\s*(?:insert\s+into|update|delete\s+from|truncate)\s+"?([A-Za-z0-9_.]+)"?/i', $sql, $matches) !== 1) {
+                $this->fail("Could not identify the target table of write statement: {$sql}");
+            }
+
+            if (! in_array($matches[1], $tables, true)) {
+                $tables[] = $matches[1];
+            }
         }
 
-        return $code;
+        sort($tables);
+
+        return $tables;
+    }
+
+    /**
+     * Asserts no captured statement — read or write — names `$table`. The
+     * identifier boundaries matter: `orders` must not match inside
+     * `marketplace_orders`, nor `documents` inside `order_documents`.
+     *
+     * @param  list<string>  $statements
+     */
+    private function assertNoStatementTouches(array $statements, string $table): void
+    {
+        foreach ($statements as $sql) {
+            $this->assertDoesNotMatchRegularExpression(
+                '/(?<![A-Za-z0-9_])'.preg_quote($table, '/').'(?![A-Za-z0-9_])/i',
+                $sql,
+                "A statement referenced the forbidden table [{$table}]: {$sql}"
+            );
+        }
     }
 
     private function uploadedFile(string $content, string $filename, string $mimeType): UploadedFile

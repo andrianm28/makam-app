@@ -19,7 +19,8 @@
 > design-system delivery-state contract (`docs/design/design-system.md` §6.8:
 > `success` "Terkirim" · `pending` "Sedang dikirim" · `neutral` "WhatsApp
 > belum tersedia"; the UI may claim a delivery only from a recorded
-> `notification_deliveries` state, AC4). The 17 event rows, their order, and
+> `notification_deliveries` state, AC4). The 18 event rows (07 Sep 2026: +1,
+> `Renewal paid/verified (external)`, Batch M1a QUE-03), their order, and
 > their cell texts are canonical and pinned by the module's tests; do not
 > reorder, drop, or reword a row without changing those tests in the same
 > change.
@@ -70,7 +71,41 @@
 | Vendor evidence uploaded | EMAIL/WA | optional | none | IN_APP | TBD | TBD |
 | Renewal submitted | EMAIL/WA | IN_APP | IN_APP/EMAIL | none | TBD | TBD |
 | Renewal paid/verified | EMAIL/WA + invoice | IN_APP | IN_APP | none | TBD | TBD |
+| Renewal paid/verified (external) | EMAIL/WA + invoice | IN_APP | IN_APP | none | TBD | TBD |
 | Reminder due | EMAIL/WA | optional | optional | none | TBD | TBD |
+| Visitation booking requested | none | none | IN_APP | none | TBD | TBD |
+| Visitation booking confirmed | none | none | IN_APP | none | TBD | TBD |
+
+> **07 Sep 2026 addition — NOTIF-13** (Phase 3, Batch M8b,
+> `docs/superpowers/plans/2026-09-07-batchm8b-notification-completeness.md`).
+> `RequestVisitation::book()` and `ChangeVisitationBookingStatus::__invoke()`
+> already recorded `visit.booking_requested.v1`/`visit.booking_confirmed.v1`
+> onto the outbox with no matching subject/template mapping, so the
+> visitation journey's own confirmation copy claimed the request was "sent
+> to the operator" while nothing was ever notified and the operator had no
+> surface to see it at all. Customer is `none`, not a channel silently
+> dropped: no visitor-account concept exists anywhere in this codebase (a
+> visit request's `contact_phone`/`contact_email` are not a
+> `scope_assignments.actor_identifier`-shaped reference to a real actor),
+> matching the `Renewal submitted`/`Renewal paid/verified` rows' own
+> precedent above. Admin platform is `none` for the same reason every other
+> row in this document that is NOT genuinely a platform-wide concern stays
+> `none` — a visitation request is cemetery-operational, not a platform-admin
+> one. Pengelola TPU/TPS is the entire point of this addition: an operator
+> holding a grant on the booking's cemetery now gets a real `IN_APP` row —
+> see `ProvisionalAggregateNotificationSubjectSource::
+> visitationBookingSubject()`'s own doc block for the full resolution.
+
+> **Row added — 07 Sep 2026 (Phase 3 Batch M1a, QUE-03).** `Renewal paid/
+> verified (external)` carries the SAME recipient facts as `Renewal paid/
+> verified` — it is the identical real-world event (a renewal reaching a
+> settled state), reached via the offline/admin path
+> (`Actions\MarkExternalRenewal` / `Actions\MarkRenewalPaidExternally`,
+> catalogued event `renewal.marked_external.v1`) rather than the online
+> webhook path (`Actions\MarkRenewalPaidOnline`, `renewal.paid_online.v1`).
+> A separate row exists only because `notification_templates.event_name`
+> is unique per row and the online path's row already claims `Renewal paid/
+> verified` — not because the recipient policy differs.
 
 ## Delivery rules
 

@@ -44,11 +44,12 @@ final class CarePlanForm
                     ->native(false),
 
                 TextInput::make('price_minor')
-                    ->label('Harga (dalam satuan kecil)')
+                    ->label('Harga')
                     ->required()
                     ->numeric()
+                    ->minValue(0.01)
                     ->prefix('Rp')
-                    ->helperText('Harga dalam satuan terkecil (misal: 250000 untuk Rp 250.000)'),
+                    ->helperText('Harga per siklus dalam rupiah (misal: 250000 untuk Rp 250.000).'),
 
                 Select::make('vendor_id')
                     ->label('Vendor')
