@@ -6,6 +6,7 @@ namespace Tests\Feature\Http;
 
 use App\Domain\OrderWorkflow\Models\Order;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -33,9 +34,27 @@ use Tests\TestCase;
  *     in-page state with an explanation and a way forward, and a 200
  *     carrying that state is the honest answer rather than a bare 404.
  *
- * SQLite would mask every one of these: it happily compares a string to a
- * uuid column and simply matches nothing. This suite runs on PostgreSQL,
- * which is the only place the bug is visible.
+ * ---------------------------------------------------------------------------
+ * THESE TESTS ARE MEANINGLESS ON SQLITE — so the driver is ENFORCED, not
+ * merely stated
+ * ---------------------------------------------------------------------------
+ * SQLite happily compares a string to a uuid column and simply matches
+ * nothing, so every assertion below passes on SQLite whether or not the
+ * guards exist. PostgreSQL is the only place the bug is visible at all.
+ *
+ * That used to be a sentence in this doc block, which is a statement and not
+ * a guard — the same distinction this branch spent a commit making about a
+ * schedule test. It matters here because the default really is SQLite:
+ * `phpunit.xml:59-60` sets `DB_CONNECTION=sqlite` / `DB_DATABASE=:memory:`
+ * WITHOUT `force="true"`, so a pre-set environment variable wins. CI sets
+ * `DB_CONNECTION=pgsql` against a `postgres:18` service and is fine; a
+ * developer running plain `vendor/bin/phpunit` is not, and would have got
+ * six reassuring green ticks proving nothing.
+ *
+ * `setUp()` therefore asserts the driver. A `markTestSkipped` was the
+ * alternative and was rejected: a skip is skimmed past in a long run,
+ * whereas these tests going red is exactly the signal someone needs before
+ * they conclude the guards work.
  */
 final class MalformedPublicIdDegradesHonestlyTest extends TestCase
 {
@@ -50,6 +69,16 @@ final class MalformedPublicIdDegradesHonestlyTest extends TestCase
         // Full-layout renders reach layouts/app.blade.php's `@vite(...)`;
         // this host has no frontend build.
         $this->withoutVite();
+
+        $this->assertSame(
+            'pgsql',
+            DB::connection()->getDriverName(),
+            'These tests assert that a non-UUID id does NOT 500. Only PostgreSQL raises SQLSTATE 22P02 on '
+            .'that comparison — SQLite matches nothing and every assertion below passes whether or not the '
+            .'guards exist, so a green run here on SQLite proves nothing at all. `phpunit.xml` pins '
+            .'`DB_CONNECTION=sqlite` without `force="true"`, so set DB_CONNECTION=pgsql (plus DB_HOST/'
+            .'DB_PORT/DB_DATABASE/DB_USERNAME/DB_PASSWORD) in the environment and re-run. CI already does.'
+        );
     }
 
     public function test_the_memorial_family_page_renders_its_not_visible_state(): void
