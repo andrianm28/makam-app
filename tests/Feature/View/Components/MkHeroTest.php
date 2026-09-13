@@ -48,6 +48,57 @@ final class MkHeroTest extends TestCase
         $this->assertStringContainsString('alt=""', $html);
     }
 
+    /**
+     * Regression test for Task C1 (kamboja design-language plan §2.7/§7,
+     * option M2), 13 Sep 2026.
+     *
+     * The finding: measured on a 360x740 viewport (deviceScaleFactor 2,
+     * mobile true) the homepage's `Pesan Makam` CTA sat at y = 1048 px,
+     * because this component rendered its 256 px photo band ABOVE the text
+     * panel that carries the CTA. M2 reverses that on mobile only, via CSS
+     * `order` — so the DOM order must stay photo-then-text (the photo is
+     * decorative, alt="", and this keeps reading/tab order untouched) while
+     * the rendered order below `md` is text-then-photo.
+     *
+     * This asserts all three halves of that contract, because any one of
+     * them alone can silently regress: the flex context that makes `order`
+     * apply at all, the `order-last` that does the lifting, and the `md:`
+     * resets that keep desktop byte-identical to what it was.
+     */
+    public function test_the_photo_renders_after_the_text_panel_on_mobile_only(): void
+    {
+        $html = Blade::render(
+            '<x-mk.hero image="/images/cemetery-garden-01.jpg" heading="Tenang, hormat, terpercaya." :cta="[\'label\' => \'Pemesanan Makam\', \'href\' => \'/pemesanan-makam\']" />'
+        );
+
+        // 1. `order` only applies inside a flex (or grid) container, and the
+        //    `md:block` reset is what restores the desktop formatting
+        //    context exactly rather than approximately.
+        $this->assertStringContainsString(
+            'relative flex flex-col overflow-hidden rounded-lg md:block',
+            $html
+        );
+
+        // 2. The photo is the element that moves, and only below `md`.
+        $this->assertMatchesRegularExpression(
+            '#<picture class="[^"]*\border-last\b[^"]*\bmd:order-none\b[^"]*">#',
+            $html
+        );
+
+        // 3. DOM order is deliberately NOT changed — the reorder is purely
+        //    visual, so the decorative photo never moves ahead of the
+        //    heading and CTA in reading or tab order.
+        $picturePosition = strpos($html, '<picture');
+        $headingPosition = strpos($html, '<h1');
+        $this->assertIsInt($picturePosition);
+        $this->assertIsInt($headingPosition);
+        $this->assertLessThan(
+            $headingPosition,
+            $picturePosition,
+            'The reorder must be CSS-only: <picture> must still precede <h1> in the DOM.'
+        );
+    }
+
     public function test_it_throws_without_a_heading(): void
     {
         // Blade wraps every exception thrown while compiling/rendering a
