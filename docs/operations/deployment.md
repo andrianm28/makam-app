@@ -11,7 +11,7 @@ Development and staging may share the temporary host defined in `dev-staging-env
 ## 2. Combined development/staging topology
 
 ```text
-Ubuntu 22.04 LTS — 2 vCPU / 4 GB
+Ubuntu host — see host-facts.md for the specification
   -> host reverse proxy/TLS
   -> dev web container
   -> staging web container

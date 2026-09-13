@@ -73,7 +73,7 @@ Every deploy records release identifier and restarts Horizon/Pulse gracefully. D
 
 ## 7. Lightweight non-production profile
 
-For the Ubuntu 22.04 2/4 host:
+For the non-production host (specification in [`host-facts.md`](host-facts.md)):
 
 - monitor host CPU, RAM, swap, load, OOM, disk, and container restarts;
 - keep structured logs short and environment-tagged;

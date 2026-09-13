@@ -28,10 +28,10 @@ This document pins the supported application technology line and separates produ
 | Environment | Host/runtime baseline | Status |
 |---|---|---|
 | Local developer | Containerized application runtime; host OS flexible | Accepted |
-| Combined development + staging | **Ubuntu 22.04 LTS host, 2 vCPU / 4 GB RAM**; application/database/cache versions supplied by containers | Accepted temporary non-production baseline |
+| Combined development + staging | **Ubuntu LTS host — specification canonical in [`docs/operations/host-facts.md`](../operations/host-facts.md)**; application/database/cache versions supplied by containers | Accepted temporary non-production baseline |
 | Production | **Ubuntu 24.04 LTS or managed equivalent** | Required production baseline |
 
-Ubuntu 22.04 on the combined host is the host operating system only. It must not force the application to use the host's default PHP/PostgreSQL packages. The runtime remains PHP 8.5, PostgreSQL 18, and Redis 8.2 through immutable images.
+The combined host's operating system (see `docs/operations/host-facts.md`) is the HOST operating system only. It must not force the application to use the host's default PHP/PostgreSQL packages. The runtime remains PHP 8.5, PostgreSQL 18, and Redis 8.2 through immutable images.
 
 The combined host must be migrated or replaced before it becomes production and before its supported maintenance window is no longer acceptable to the organization.
 
@@ -43,7 +43,7 @@ The combined host must be migrated or replaced before it becomes production and 
 | Filament 5 | Laravel/Livewire/Tailwind intersection in pinned lockfile |
 | Horizon | Redis-backed queues; not Redis Cluster |
 | Pulse | Optional/lightweight in non-production; production dashboard authorization required |
-| Ubuntu 22.04 combined host | Docker/Compose and kernel/runtime compatibility verified in CI/staging |
+| Combined host OS (`docs/operations/host-facts.md`) | Docker/Compose and kernel/runtime compatibility verified in CI/staging |
 
 The project uses the stricter intersection represented by the lockfiles and immutable image.
 
@@ -67,13 +67,13 @@ Rules:
 1. Commit all lockfiles.
 2. Build from a clean lockfile installation, never an unconstrained production update.
 3. Pin runtime images by immutable digest when supported.
-4. Build Composer and frontend assets in CI, not on the 2/4 host.
+4. Build Composer and frontend assets in CI, not on the combined host.
 5. Database/Redis minor upgrades require pre-production validation and backup.
 6. Dependency updates pass CI, security review, and staging smoke tests.
 
 ## 6. Non-production host constraints
 
-The Ubuntu 22.04 2/4 host is valid only when:
+The combined non-production host (`docs/operations/host-facts.md`) is valid only when:
 
 - development and staging use separate application secrets and logical data scope;
 - PostgreSQL and Redis are shared instances, not duplicated per environment;
@@ -110,6 +110,6 @@ Not baseline requirements:
 - separate React/Vue/Svelte frontend;
 - GraphQL;
 - Kafka;
-- local MinIO or always-on malware scanner on the 2/4 host.
+- local MinIO or always-on malware scanner on the combined host.
 
 They require measured need and a new ADR.

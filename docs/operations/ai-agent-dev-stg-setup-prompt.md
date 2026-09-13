@@ -50,18 +50,16 @@ Tailwind CSS  4.1+
 Node.js       24 LTS for CI/build
 PostgreSQL    18.x
 Redis         8.2.x, non-cluster
-Host OS       Ubuntu 22.04 LTS for combined dev+staging only
+Host OS       Ubuntu LTS — see docs/operations/host-facts.md
 Runtime       PHP-FPM behind Nginx or Caddy
 ```
 
 Available host:
 
 ```text
-Host OS : Ubuntu 22.04 LTS
-CPU     : 2 vCPU
-RAM     : 4 GB
-Swap    : target 2–4 GB emergency buffer
-Purpose : development + staging only
+See docs/operations/host-facts.md for OS, CPU, RAM, swap and disk.
+That file is canonical and this block deliberately does not restate it.
+Purpose : development + staging (and, since 23 Aug 2026, beta) only
 ```
 
 Production is separate and is outside this task.
@@ -158,7 +156,7 @@ One PostgreSQL instance and one Redis instance may be shared, but application id
 
 ### Resource limits
 
-The 2 vCPU/4 GB host is a runtime target, not a build or load-generation machine.
+The host is a runtime target, not a build or load-generation machine — regardless of how much headroom [`host-facts.md`](host-facts.md) reports.
 
 Do not run:
 

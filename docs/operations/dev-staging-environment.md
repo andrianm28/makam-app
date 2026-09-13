@@ -185,7 +185,7 @@ when a feature needs asynchronous behavior.
 
 ## 10. Build and deployment
 
-The 2/4 host is a runtime target, not a build machine.
+The host is a runtime target, not a build machine — see [`host-facts.md`](host-facts.md) for its specification.
 
 ```text
 Git push
