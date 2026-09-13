@@ -1,3 +1,9 @@
+---
+verification: historical
+verification-note: >-
+  A record of one dependency fix applied on 24 Aug 2026.
+---
+
 # npm audit fix: nanoid (applied 24 Aug 2026, CI verification pending)
 
 ## Status

@@ -1,3 +1,10 @@
+---
+verification: verified
+last-verified: 2026-09-13
+verification-note: >-
+  Environment topology (which containers exist, what supervises queues, what runs the scheduler) checked against the live host on this date.
+---
+
 # Runbook: Roll Back a Deploy — v0.1
 
 ## Status

@@ -1,3 +1,9 @@
+---
+verification: unverified
+verification-note: >-
+  Nobody has checked this document against the live system. Treat every operational claim in it as unconfirmed until someone does and stamps a date here.
+---
+
 # Runbook: Rotate the `makam_dev`/`makam_stg`/`postgres_admin` database access values — v0.1
 
 ## Status

@@ -1,3 +1,9 @@
+---
+verification: historical
+verification-note: >-
+  A dated record of the adrivm to yiemvm migration. Its figures describe the hosts as they were on 17 Aug 2026 and are correct as history.
+---
+
 # Makam Environment Migration — adrivm → yiemvm
 
 **Date:** 17 Aug 2026

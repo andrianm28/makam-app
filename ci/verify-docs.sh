@@ -546,6 +546,101 @@ else
   fail "host-facts.md last-verified date is missing, malformed, or stale"
 fi
 
+# ---------------------------------------------------------------------------
+head2 "GATE 18 — every operations document declares whether anyone has checked it"
+# ---------------------------------------------------------------------------
+# W4 found that operations documents drift silently, and that the drift is
+# invisible precisely because a confident-sounding document reads the same
+# whether or not anyone has ever checked it. Four separate documents claimed
+# the backups were "daily encrypted ... to remote object storage"; none of
+# those three words was true. A rollback runbook told an operator to restart
+# containers that do not exist. Nothing in the corpus distinguished a claim
+# somebody had verified from a claim somebody had merely written.
+#
+# So every .md under docs/operations/ must declare one of three states in YAML
+# front matter, and the honest one is the default:
+#
+#   verification: verified     someone checked this document's substantive
+#                              claims against the live system. REQUIRES
+#                              `last-verified: YYYY-MM-DD`, max 90 days old.
+#   verification: historical   a dated record of a past event. Correct as
+#                              history; never re-verified; no date required.
+#   verification: unverified   nobody has checked it. REQUIRES a
+#                              `verification-note` saying so plainly.
+#
+# `verification-note` is required in all three cases. For `verified` it says
+# WHAT was checked, which is what stops a one-line correction being passed off
+# as a whole-document verification — the distinction this gate exists to keep.
+#
+# This gate deliberately cannot tell whether a document is CORRECT. It tells
+# you whether anyone has claimed to check it, and when. That is the honest
+# limit of what a mechanical check can know, and it is stated here so nobody
+# reads a green gate as "the runbooks are accurate".
+python3 - <<'OPSVERIFY'
+import datetime, pathlib, re, sys
+
+MAX_AGE_DAYS = 90
+VALID = {"verified", "historical", "unverified"}
+base = pathlib.Path("docs/operations")
+files = sorted(list(base.glob("*.md")) + list(base.glob("runbooks/*.md")))
+errs = []
+tally = {"verified": 0, "historical": 0, "unverified": 0}
+today = datetime.date.today()
+
+if not files:
+    print("    no operations documents found - is the path right?", file=sys.stderr)
+    sys.exit(1)
+
+for p in files:
+    rel = str(p)
+    text = p.read_text(encoding="utf-8")
+    m = re.match(r"---\n(.*?)\n---\n", text, re.S)
+    if not m:
+        errs.append(f"{rel}: no YAML front matter (needs a verification: field)")
+        continue
+    fm = m.group(1)
+
+    state = re.search(r"^verification:\s*(\S+)\s*$", fm, re.M)
+    if not state:
+        errs.append(f"{rel}: front matter has no verification: field")
+        continue
+    state = state.group(1)
+    if state not in VALID:
+        errs.append(f"{rel}: verification: {state!r} not one of {sorted(VALID)}")
+        continue
+    tally[state] += 1
+
+    if "verification-note:" not in fm:
+        errs.append(f"{rel}: verification: {state} without a verification-note")
+
+    if state == "verified":
+        d = re.search(r"^last-verified:\s*(\d{4})-(\d{2})-(\d{2})\s*$", fm, re.M)
+        if not d:
+            errs.append(f"{rel}: verification: verified without last-verified: YYYY-MM-DD")
+            continue
+        when = datetime.date(int(d.group(1)), int(d.group(2)), int(d.group(3)))
+        if when > today:
+            errs.append(f"{rel}: last-verified {when} is in the future")
+        elif (today - when).days > MAX_AGE_DAYS:
+            errs.append(f"{rel}: last-verified {when} is {(today - when).days} days old (max {MAX_AGE_DAYS})")
+
+if errs:
+    for e in errs[:20]:
+        print(f"    {e}", file=sys.stderr)
+    if len(errs) > 20:
+        print(f"    ... and {len(errs) - 20} more", file=sys.stderr)
+    sys.exit(1)
+
+print(f"    {len(files)} operations documents: {tally['verified']} verified, "
+      f"{tally['historical']} historical, {tally['unverified']} unverified")
+print("    (this gate proves only that the state is DECLARED, never that a document is correct)")
+OPSVERIFY
+if [ $? -eq 0 ]; then
+  pass "every operations document declares its verification state"
+else
+  fail "an operations document is missing or misdeclaring its verification state"
+fi
+
 printf '\n'
 if [ "$FAIL" -eq 0 ]; then
   printf '\033[32mRESULT: ALL DOC GATES PASS\033[0m\n'; exit 0

@@ -1,3 +1,10 @@
+---
+verification: verified
+last-verified: 2026-09-13
+verification-note: >-
+  Running services, Redis key namespaces and the presence of config/horizon.php checked against the live host on this date.
+---
+
 # Redis Hardening — `requirepass` + Per-Environment Isolation
 
 Status: **prepared, not applied.** Sprint task S2-T6 (`docs/planning/sprint-plan.md`

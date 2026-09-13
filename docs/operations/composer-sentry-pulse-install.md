@@ -1,3 +1,9 @@
+---
+verification: historical
+verification-note: >-
+  A record of one preparation task and its state at the time.
+---
+
 # Installing Sentry + Pulse (prepared, not executed)
 
 ## Status

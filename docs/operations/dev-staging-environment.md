@@ -1,3 +1,9 @@
+---
+verification: unverified
+verification-note: >-
+  NOT verified as a whole. Two claims were checked on 13 Sep 2026: the host specification (now canonical in host-facts.md) and the backup cadence/encryption line. Everything else remains unchecked.
+---
+
 # Combined Development and Staging Environment — Ubuntu 24.04, 8 vCPU / 31 GB — v0.6
 
 > **Updated 17 Aug 2026 — host migration (adrivm → yiemvm).** The combined host

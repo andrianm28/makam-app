@@ -1,3 +1,9 @@
+---
+verification: historical
+verification-note: >-
+  A checklist produced for one setup engagement; it records what that engagement was asked to do.
+---
+
 # AI-Agent Dev+Staging Execution Checklist
 
 Use this checklist when authorizing an AI agent to execute `ai-agent-dev-stg-setup-prompt.md`.

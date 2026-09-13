@@ -1,3 +1,9 @@
+---
+verification: unverified
+verification-note: >-
+  NOT verified as a whole. Only the host specification and the backup claims were checked on 13 Sep 2026.
+---
+
 # AI Agent Master Prompt — Setup Development + Staging + Developer Tooling
 
 ## Purpose

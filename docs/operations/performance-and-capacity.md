@@ -1,3 +1,9 @@
+---
+verification: unverified
+verification-note: >-
+  NOT verified as a whole. Only the host-specification reference was corrected on 13 Sep 2026.
+---
+
 # Performance and Capacity Baseline — v0.4
 
 ## 1. Objective
