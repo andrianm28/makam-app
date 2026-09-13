@@ -86,10 +86,31 @@ turun ke 24.802px, dan `<h1>` meresolusi ke Nunito 45px/700.
 - Tidak ada tangkapan layar situs hidup, jadi tidak ada klaim "rasanya begini" yang berdiri di atas
   pengamatan langsung.
 
-**Satu-satunya cara menutup celah ini:** tangkapan layar dari mesin pemilik produk sendiri
-(desktop + mobile, halaman penuh). Lihat §14 OQ-K1.
+**Celah ini sebagian sudah ditutup** — lihat §0.3: tangkapan hidup desktop diperoleh 13 Sep 2026
+melalui peramban pemilik. Bagian **mobile** masih terbuka (OQ-K1).
 
-### 0.3 Bukti makam.co.id
+### 0.3 Tangkapan langsung situs hidup — 13 Sep 2026, **menutup sebagian celah §0.2**
+
+Setelah bagian di atas ditulis, kamboja.co.id **berhasil ditangkap hidup** melalui Chrome milik
+pemilik produk di jaringannya sendiri (ekstensi claude-in-chrome). Blokir DNS di §0.1 bersifat
+lokal pada host pengembangan ini saja; peramban pemilik menjangkaunya normal.
+
+Berkas tangkapan, diperiksa langsung untuk dokumen ini:
+`/tmp/user/1000/claude-chrome-screenshots-NzS80z/screenshot-1789314614128-1.jpg` (hero, 1568×764),
+`…-2.jpg` (baris kartu), `…-1789314643099-5.jpg` (testimoni).
+
+**Apa yang ini ubah:** setiap klaim yang sebelumnya bertanda "rekonstruksi arsip" untuk hero,
+tombol, kartu, dan testimoni kini **terverifikasi langsung** dan ditandai demikian di bawah. Yang
+paling penting, ini **menyelesaikan ketidakcocokan §13.1 — dan menyelesaikannya berlawanan dengan
+arsip, mendukung dokumen repo yang sudah ada.**
+
+**Apa yang ini TIDAK ubah:** tangkapan hanya **desktop**. Upaya mengecilkan jendela ke 390×844
+dilaporkan berhasil tetapi viewport terender tetap 1200px — Chrome menahan lebar jendela minimum,
+sehingga hasilnya tata letak desktop pada jendela sempit, bukan viewport mobile. **Perilaku mobile
+kamboja tetap NOT VERIFIED** (§1.4b), dan tidak disimpulkan dari tangkapan desktop. Separuh-mobile
+OQ-K1 tetap terbuka.
+
+### 0.4 Bukti makam.co.id
 
 Langsung dari situs hidup `https://makam.co.id/` (meresolusi normal), dimuat di Chrome pada
 viewport 1440×900, semua nilai dibaca dari `getComputedStyle` dan `getBoundingClientRect`, bukan
@@ -256,6 +277,63 @@ ditiru, dan yang paling tidak bisa dibeli dengan token.
 masing-masing) — Islam, Kristen, dan guci/Tionghoa, berdampingan, ukuran sama.
 
 **Motif merek:** `bunga-kamboja-asuransi-banner.webp` (485×485) — bunga kamboja itu sendiri.
+
+### 1.5a Hero, terverifikasi langsung — 13 Sep 2026
+
+Dibaca dari tangkapan hidup (§0.3), bukan rekonstruksi.
+
+| Unsur | Yang terlihat |
+|---|---|
+| **Banner darurat di atas nav** | Bidang magenta selebar halaman: *"Perlu layanan kedukaan sekarang?"*, tombol pil **putih** berikon telepon `0822 1111 1415`, *"Silahkan hubungi Hotline kami (24 jam)"*, dan cetak kecil *"Hanya dikhususkan untuk laporan meninggal member Kamboja dan Layanan Kedukaan (On Demand)."* Di kanan: *"Kami siap dalam melayani segala keperluan kedukaan anda."* + tombol tutup (×) — **banner ini bisa ditutup** |
+| Navigasi | Wordmark gradien magenta huruf kecil; `Proteksi Kedukaan` · `Layanan Kedukaan ▾` · `Tentang Kami ▾` · `F.A.Q` · `Blog`; `Login Member` sebagai pil magenta |
+| **Foto hero** | *Full-bleed*, ±55% kanan, mengalir ke belakang salinan. Keluarga tertawa di luar ruang, cahaya siang, kandid |
+| **Judul hero** | *"Untuk Mereka, Jika Hari itu Tiba"* — **gelap `#263238`, bukan magenta, bukan putih** |
+| CTA ganda | Pil gradien terisi berikon perisai + chevron (`Proteksi Kedukaan Berjangka`); pil outline berikon dokumen + chevron, label magenta (`Jasa Kedukaan`) |
+| Bukti sosial | **Di bawah kedua CTA**, kecil, rata kiri: Google Reviews (5 bintang), Trustpilot (5 bintang hijau), *"Rated Excellent 5.0/5.0"* |
+| Bantuan mengambang | Tombol WhatsApp hijau kanan-bawah dengan gelembung *"Perlu Bantuan? WhatsApp Kami"* |
+
+**Urutan itu sendiri adalah temuan.** Emosi lebih dulu (foto + judul), lalu aksi (dua CTA), baru
+bukti institusional (badge) — badge berada **di bawah** gambar emosional, bukan menggantikannya.
+Urutan ini dapat dipindahkan ke Makam.co.id tanpa satu pun device terlarang, karena yang dipinjam
+adalah susunannya, bukan warnanya. Lihat U1.
+
+Perhatikan juga cetak kecil pada banner darurat: kamboja membatasi janji hotline 24 jamnya pada
+member dan layanan On Demand. Itu **pembatasan klaim yang jujur**, sejenis dengan banner
+ketersediaan Makam.co.id hari ini — bukan device pemasaran. Lihat U7.
+
+### 1.5b Kartu produk, terverifikasi langsung
+
+| Unsur | Yang terlihat |
+|---|---|
+| Penempatan | Kedua kartu **menumpang di atas tepi bawah foto hero**, ditarik naik — bukan dimulai setelah foto selesai |
+| Permukaan | Putih, radius besar, bayangan lembut, padding longgar |
+| Ikon | Ikon putih di dalam kotak membulat magenta (perisai; nisan) |
+| **Judul dua nada** | Baris pertama magenta, baris kedua nyaris hitam — *"**Proteksi Kedukaan** / Berjangka"*, *"**Jasa Pengurusan** / Kedukaan On Demand"* |
+| **Angka uang** | *"Proteksi hingga **IDR 100 juta**"*, *"Mulai dari **IDR 15.000.000**"* — dirender **hijau dan dalam muka huruf yang berbeda dari teks isi** |
+| Butir | Lingkaran magenta terisi dengan centang putih |
+| CTA ganda per kartu | Tautan teks + chevron (`Baca Selengkapnya ›`) **dan** pil magenta terisi (`Daftar Sekarang` / `Estimasi Biaya`) |
+| Salinan | *"Muslim & Non-muslim"* muncul di badan kartu On Demand |
+
+**Dua koreksi terhadap bagian arsip:**
+
+1. Tombol `#1E73BE` yang muncul pada rekonstruksi memang **biru bawaan Oxygen**, seperti yang §0.2
+   duga. Di situs hidup tombol-tombol itu **magenta**. Dugaan itu kini terkonfirmasi.
+2. **Angka uang memakai aksen tersendiri — hijau — yang berbeda dari magenta merek.** Ini
+   mengkonfirmasi ADR-0037 rekomendasi 1 (*"exactly one, different, accent colour for money/price
+   figures"*), yang sampai tangkapan ini hanya bisa dicatat sebagai tidak dikonfirmasi dan tidak
+   dibantah. Makam.co.id sudah memiliki padanannya, `--mk-text-price` (ADR-0037), dan token itu
+   **belum dipakai di beranda**. Lihat U3 dan Tahap 6.
+
+### 1.5c Testimoni, terverifikasi langsung
+
+Bukan kutipan yang ditulis sendiri. Setiap kartu memuat foto avatar, nama asli
+(*"muhammad wildan athar"*, *"Endah Darwati"*, *"fadly fadil"*), stempel waktu relatif (*"5 bulan
+yang lalu"*), lima bintang emas, **lencana terverifikasi biru**, dan **tanda "G" Google** di pojok.
+Disusun sebagai korsel dengan panah lanjut, dan di bawahnya CTA `Berikan ulasan`.
+
+Ini penting untuk N7: yang membuat blok ini bekerja bukan tata letaknya, melainkan **kenyataan
+bahwa ulasannya nyata dan dapat ditelusuri ke Google**. Menyalin tata letaknya tanpa ulasan nyata
+akan menghasilkan persis "testimonials-as-decoration" yang §2.3 larang.
 
 ### 1.6 Aparatus kepercayaan
 
@@ -478,7 +556,10 @@ cubic-bezier(0.2,0,0,1)`). Tombol primer 160×52 lolos ambang sentuh 44px. Banne
 | A3 | Fotografi dokumenter milik sendiri, resolusi tinggi, dengan izin dan disclaimer | Foto TPU/TPS nyata, satu foto per lokasi, plus catatan sumber | §2.2 "Imagery: Real cemeteries/gardens, daylight" + baris "Trust signals: named source" |
 | A4 | Ikonografi lintas-agama berukuran setara | Ikon layanan yang tidak mengasumsikan satu agama | Sesuai pasar Jabodetabek; tidak bertabrakan dengan aturan mana pun |
 | A5 | Bukti/kepercayaan diletakkan tinggi, dekat hero | **Hanya jika ada konten nyata** — lihat §3.2 N7 | §3.3d sudah memesan slotnya; ADR-0037 rekomendasi 3 sudah menahan pembangunannya |
-| A6 | Hero yang dipimpin tipografi, dengan sepasang CTA dan bukti langsung | Beri bobot pada panel teks hero; foto tetap terpisah | Hero kamboja sendiri **tidak** punya foto — hanya logo Google Review + Trustpilot |
+| A6 | **Hero terpadu: foto *full-bleed*, salinan di atasnya, dua CTA, lalu bukti kecil di bawah** — DIPERBARUI setelah tangkapan hidup (§1.5a) | Satukan foto dan pesan alih-alih dua balok terpisah (§2.4). **Tanpa scrim** — kontras dari komposisi sisi terang, lihat §4.3 | Terverifikasi langsung. Syaratnya fotografi yang punya sisi terang; belum kita punya (OQ-K3/K4), jadi tetap di luar tahap (OQ-K5) |
+| A9 | **Judul dua nada** — baris pertama warna merek, baris kedua netral gelap | `primary-600` + `neutral-900` dalam satu `<h3>` | Hierarki tanpa ukuran atau device baru; pasang kontras `primary heading on surface-raised` sudah ada |
+| A10 | **Kartu menumpang tepi bawah media hero** | Tarik baris kartu layanan naik ke atas tepi bawah hero | Murni tata letak, nol token baru; mengikat hero ke section berikutnya |
+| A11 | **Angka uang memakai aksen tersendiri** | Pakai `--mk-text-price` yang sudah ada (ADR-0037) dan belum terpakai di beranda | Terverifikasi langsung (§1.5b) — ini persis tujuan token itu dibuat |
 | A7 | Suara orang-kedua yang hangat dan berpihak pada keluarga | "Untuk keluarga Anda" alih-alih "dalam satu platform" | §2.2 "Copy voice: Plain Indonesian, direct" tidak melarang kehangatan |
 | A8 | Kartu produk besar dengan ikon besar dan daftar manfaat | Bedakan kartu layanan dari kartu daftar (§2.3) | §3.3 dan §3.3b sudah punya primitifnya |
 
@@ -579,20 +660,35 @@ scrim hero opsional di §4.3, yang sengaja tidak masuk tahap mana pun.
 - Tidak ada token gradien — N2.
 - Tidak ada perubahan `--mk-duration-*` — N9.
 
-### 4.3 Opsional, di luar tahap mana pun — scrim hero
+### 4.3 Teks di atas foto — **DIKOREKSI 13 Sep 2026 setelah tangkapan hidup**
 
-Jika nanti diputuskan teks hero harus berada **di atas** foto (bukan di bawahnya seperti §2.4),
-maka diperlukan satu token scrim, misalnya `--mk-scrim-hero`. Ini **tidak** diusulkan dalam
-rencana ini karena dua alasan:
+Versi pertama bagian ini menyatakan bahwa hero kamboja tidak menaruh teks di atas foto, sehingga
+mengusulkan scrim berarti mengarang. **Itu keliru, dan penyebabnya arsip yang tidak lengkap
+(§13.1).** Tangkapan hidup menunjukkan hero kamboja justru *full-bleed* dengan salinan di atas
+gambar.
 
-1. Hero kamboja sendiri tidak melakukannya — device itu tidak ada dalam bukti. Mengusulkannya
-   berarti mengarang.
-2. **`verify-contrast.py` tidak bisa menegaskan kontras teks di atas foto.** Ia membandingkan dua
-   token warna; sebuah foto bukan token. Menambahkan pasang palsu "putih di atas scrim" akan lulus
-   gate sambil tidak membuktikan apa pun tentang piksel yang sebenarnya.
+**Tetapi caranya bukan scrim** — dan ini justru bagian yang penting. Tidak ada lapisan gelap di atas
+foto. Kontras diperoleh dari **komposisi**: sisi kiri gambar secara alami terang (latar
+interior/jendela yang terbakar cahaya), subjek berada di kanan, dan salinan diletakkan di atas
+bagian terang itu dalam warna gelap `#263238`. Judul hero **tidak** putih; ia gelap di atas terang.
 
-Jika hal ini tetap diinginkan, ia butuh ADR sendiri **dan** metode verifikasi baru (pengukuran
-piksel terender pada gambar terburuk), bukan sekadar entri di `PAIRS`. Dicatat di §14 OQ-K5.
+Konsekuensinya untuk Makam.co.id ada dua, dan keduanya mengubah usulan:
+
+1. **Token scrim kemungkinan besar tidak diperlukan.** Tidak ada `--mk-scrim-hero` yang diusulkan.
+   Ini menghapus satu token, satu ADR, dan satu metode verifikasi baru dari rencana.
+2. **Bebannya berpindah dari token ke seleksi gambar.** Teknik ini hanya bekerja bila foto memang
+   punya sisi terang yang cukup luas dan konsisten di setiap breakpoint. Itu disiplin arah seni,
+   bukan sesuatu yang bisa dijamin CSS.
+
+**Yang tidak berubah:** `verify-contrast.py` tetap **tidak bisa** menegaskan kontras teks di atas
+foto. Ia membandingkan dua token warna; sebuah foto bukan token. Jadi seandainya pola ini diadopsi,
+gerbangnya tetap harus berupa pengukuran piksel terender pada gambar terburuk — bukan entri baru di
+`PAIRS`, yang akan lulus tanpa membuktikan apa pun.
+
+Karena itu pola ini **tetap di luar tahap mana pun** dan tetap menjadi OQ-K5, tetapi alasannya kini
+berbeda: bukan lagi "tidak ada buktinya", melainkan "buktinya ada, dan syaratnya adalah fotografi
+yang belum kita punya" (§9, OQ-K3/OQ-K4). Foto udara drone yang dipakai hari ini tidak punya sisi
+terang seperti itu.
 
 ---
 
@@ -799,6 +895,11 @@ Bila fotografi tetap dipakai, empat aturan, semuanya turunan token:
    "Largest hero image ≤ 120 KB" jelas mengandaikan pipeline yang sama untuk media lain.
 3. **Jangan pernah memotong wajah.** Tidak berlaku hari ini (tidak ada wajah di foto pemakaman),
    tetapi berlaku saat OQ-K4 dijawab ya.
+3b. **Bila hero terpadu (A6) diinginkan, sisi terang adalah kriteria seleksi, bukan efek CSS.**
+   Tangkapan hidup menunjukkan kamboja meletakkan salinan gelap di atas bagian gambar yang memang
+   terang, tanpa scrim (§4.3). Foto udara drone yang dipakai hari ini tidak memenuhi syarat itu —
+   permukaannya padat dan berwarna penuh dari tepi ke tepi. Jadi A6 bukan pekerjaan CSS; ia
+   pekerjaan pengadaan foto.
 4. **`alt` yang jujur.** Hari ini `alt="Foto TPU Bekasi Jatiasih"` pada foto pemakaman lain. Bila
    register foto dipertahankan, `alt` harus menyebut apa foto itu sebenarnya.
 
@@ -812,12 +913,15 @@ Brief meminta kejujuran dua arah. Ini dia.
 
 | # | Pola | Bukti | Bisa diadopsi? |
 |---|---|---|---|
-| U1 | **Bukti sosial di dalam hero**, bukan di kaki halaman — Google Reviews + Trustpilot ada di section 0 | DOM terarsip section 0 hanya memuat dua gambar, keduanya logo ulasan | **Polanya ya, isinya tidak** — Makam belum punya listing ulasan (N7, OQ-K6) |
-| U2 | **Dua jalur produk dinyatakan di layar pertama** — "Proteksi Berjangka" vs "Jasa On Demand", masing-masing dengan harga mulai | Section 0 CTA ganda; section 1 dua kartu dengan "Mulai dari IDR …" | **Ya.** Makam punya At-Need vs Pre-Need (`benchmark-validation-2026-07.md` menyimpulkannya sebagai dua journey berbeda) tetapi beranda tidak menyatakannya di layar pertama |
-| U3 | **Harga mulai ditampilkan di kartu produk**, bukan disembunyikan | "Mulai dari IDR 15.000.000", "Biaya mulai IDR 35.000 per bulan" | **Ya** — dan Makam sudah punya `--mk-text-price` (ADR-0037) yang dibuat persis untuk ini |
+| U1 | **Urutan hero: emosi → aksi → bukti.** Foto keluarga + judul, lalu dua CTA, baru badge ulasan kecil di bawahnya | **Tangkapan hidup** §1.5a | **Urutannya ya, isinya tidak.** Susunan ini tidak memakai satu pun device terlarang. Tetapi badge-nya butuh ulasan nyata (N7, OQ-K6) |
+| U2 | **Dua jalur produk dinyatakan di layar pertama** — "Proteksi Berjangka" vs "Jasa On Demand", masing-masing dengan harga mulai | **Tangkapan hidup** §1.5a/§1.5b: CTA ganda di hero, dua kartu menumpang di atas foto | **Ya.** Makam punya At-Need vs Pre-Need (`benchmark-validation-2026-07.md` menyimpulkannya sebagai dua journey berbeda) tetapi beranda tidak menyatakannya di layar pertama |
+| U3 | **Harga mulai ditonjolkan dengan aksen tersendiri** — hijau, muka huruf berbeda, terpisah dari warna merek | **Tangkapan hidup** §1.5b: "Proteksi hingga IDR 100 juta", "Mulai dari IDR 15.000.000" | **Ya** — dan Makam sudah punya `--mk-text-price` (ADR-0037) yang dibuat persis untuk ini dan **belum dipakai di beranda** |
 | U4 | **Halaman panjang dan longgar** | §1.4 | **Ya** — Tahap 1 |
 | U5 | **Disclaimer foto di halaman** | §1.5 | **Ya** — §9.2 |
-| U6 | **Kanal bantuan mengambang persisten** (WhatsApp) | Terlihat pada rekonstruksi | **Sebagian.** §6.10 sudah mewajibkan support escape hatch; yang kurang adalah persistensinya di halaman pemasaran |
+| U6 | **Kanal bantuan mengambang persisten** (WhatsApp, dengan gelembung label) | **Tangkapan hidup** §1.5a | **Sebagian.** §6.10 sudah mewajibkan support escape hatch; yang kurang adalah persistensinya di halaman pemasaran |
+| U7 | **Banner darurat yang membatasi janjinya sendiri** — hotline 24 jam, tetapi cetak kecil membatasinya pada member dan layanan On Demand; banner dapat ditutup | **Tangkapan hidup** §1.5a | **Ya, dan Makam sudah hampir melakukannya.** Banner `warning` Makam sudah jujur soal keterbatasan; yang bisa dipinjam adalah **memberi nomor bantuan bobot visual tombol**, bukan hanya tautan teks, dan membuat banner dapat ditutup. Tidak boleh menambah janji layanan apa pun selama `G-OPS-01` tertutup (N10) |
+| U8 | **Judul dua nada** pada kartu — baris pertama warna merek, baris kedua nyaris hitam | **Tangkapan hidup** §1.5b | **Ya.** Hierarki dalam satu judul tanpa menambah ukuran atau device baru; `primary-600` di atas putih sudah terverifikasi AA sebagai teks besar (`primary heading on surface-raised`, pasang yang sudah ada) |
+| U9 | **Kartu menumpang tepi bawah foto hero** | **Tangkapan hidup** §1.5b | **Ya** — mengikat hero ke section berikutnya, kebalikan dari dua balok terpisah Makam (§2.4). Murni tata letak, nol token baru |
 
 ### 10.2 Di mana Makam lebih baik — dan harus dilindungi
 
@@ -884,18 +988,22 @@ suite `tests/browser/*.spec.ts`, plus pemeriksaan 320px untuk setiap state §6 y
 - [ ] **Tahap 2 — Alternasi permukaan + bidang merek.** Tambah `--mk-surface-quiet` (butuh ADR);
   selang-seling tint antar section sehingga batas section terbaca tanpa garis pembatas (§4.4:
   *"Proximity carries the grouping — do not reach for divider lines"*); perluas bidang merek
-  (footer, medallion) sehingga `primary` tidak lagi hanya mengisi satu elemen (§2.2).
+  (footer, medallion) sehingga `primary` tidak lagi hanya mengisi satu elemen (§2.2). Termasuk U7:
+  beri nomor bantuan pada banner ketersediaan bobot visual tombol, **tanpa** menambah janji layanan
+  apa pun (N10).
 - [ ] **Tahap 3 — Mobile: naikkan CTA.** Terapkan M2 (§7), ukur ulang posisi CTA pada 360×740,
   laporkan angkanya. **Tidak boleh terpisah lebih dari satu rilis dari Tahap 1**, karena Tahap 1
   memanjangkan halaman.
 - [ ] **Tahap 4 — Hierarki komponen.** Varian penekanan `<x-mk.card>`; perbesar
-  `<x-mk.icon-medallion>` pada kartu layanan; beri bobot panel teks `<x-mk.hero>`. Tanpa scrim,
-  tanpa overlay.
+  `<x-mk.icon-medallion>` pada kartu layanan; judul dua nada (A9/U8); tarik baris kartu naik ke
+  tepi bawah media hero (A10/U9); beri bobot panel teks `<x-mk.hero>`. Tanpa scrim, tanpa overlay —
+  hero terpadu A6 menunggu fotografi (OQ-K5).
 - [ ] **Tahap 5 — Register citra.** Terapkan aturan §9.3 setelah OQ-K3/OQ-K10 dijawab; bangun
   turunan AVIF/WebP untuk media kartu; perbaiki `alt`. **Terblokir pada input pemilik.**
-- [ ] **Tahap 6 — Dua jalur di layar pertama (U2/U3).** Nyatakan At-Need vs Pre-Need pada beranda
-  dengan harga mulai memakai `--mk-text-price`. **Perubahan §4.5 — butuh review kontrak produk,
-  bukan keputusan desain.**
+- [ ] **Tahap 6 — Dua jalur di layar pertama (U2/U3/A11).** Nyatakan At-Need vs Pre-Need pada
+  beranda dengan harga mulai memakai `--mk-text-price` — token yang ADR-0037 buat persis untuk ini
+  dan yang hari ini belum dipakai di beranda. **Perubahan §4.5 — butuh review kontrak produk, bukan
+  keputusan desain** (OQ-K11).
 - [ ] **Tahap 7 — Suara salinan.** Hero dan judul section bergeser ke orang kedua yang hangat,
   **tanpa** eufemisme (A7 + N8). Butuh persetujuan pemilik atas teksnya.
 - [ ] **Tahap 8 — Sinkronisasi dokumen.** `design-system.md` §2.1 SURFACES, §2.2 (aturan register
@@ -923,26 +1031,37 @@ dikerjakan di repo ini**, dan rencana ini melanjutkannya, tidak menggantikannya:
 | [`benchmark-validation-2026-07.md`](../../research/benchmark-validation-2026-07.md) | kamboja dikutip untuk At-Need/Pre-Need, bukan desain | Dipakai sebagai dasar U2 (dua journey), tidak diubah |
 | `CemeteryExampleData.php` doc block | Kerangka kejujuran + pembalikan foto 8 Sep 2026 | §9 membangun di atasnya; tidak ada pembalikan sepihak |
 
-### 13.1 Satu ketidakcocokan yang harus diselesaikan, bukan dipilih diam-diam
+### 13.1 Satu ketidakcocokan — diangkat, lalu diuji, lalu **diselesaikan**
 
-`design-system.md` §2.2 dan ADR-0037 Context 2 sama-sama menyatakan:
+Urutannya dibiarkan terlihat karena itulah nilainya: ditandai belum terverifikasi, diuji, lalu
+dikoreksi. Bukan dihapus dan diganti kesimpulan akhir.
+
+**Apa yang dinyatakan dokumen repo.** `design-system.md` §2.2 dan ADR-0037 Context 2 sama-sama
+menyatakan:
 
 > *"kamboja.co.id's hero photography is deliberately warm, joyful family photography — grandparents
 > with grandchildren, a father with his kids"*
 
-Bukti yang terkumpul untuk dokumen ini **tidak menemukan foto apa pun di hero**. Section 0 pada DOM
-terarsip 10 Mei 2026 hanya memuat dua gambar: `google-review.png` dan `trustpilot-logo.png`. Foto
-keluarga hangat memang ada di situs (`proteksi-family.jpg`, 1046×572), tetapi pada section 9, bukan
-hero.
+**Apa yang arsip tunjukkan (dan mengapa itu menyesatkan).** DOM terarsip 10 Mei 2026 **tidak memuat
+foto apa pun di hero** — section 0 hanya berisi `google-review.png` dan `trustpilot-logo.png`. Atas
+dasar itu dokumen ini semula menandai pernyataan §2.2 sebagai **NOT VERIFIED**, mendaftar tiga
+kemungkinan penjelasan, dan sengaja **tidak** menyatakan §2.2 salah.
 
-**Tiga penjelasan mungkin, semuanya belum diuji:** (a) foto hero adalah `background-image` CSS yang
-berada di CSS per-halaman yang tidak terarsip (§0.2); (b) situs berubah antara 26 Agu 2026 dan
-snapshot 10 Mei 2026 — perhatikan bahwa snapshot ini **lebih tua** dari review 26 Agu, sehingga
-urutan waktunya tidak sederhana; (c) review 26 Agu melihat halaman lain.
+**Apa yang tangkapan hidup tunjukkan — 13 Sep 2026 (§0.3).** Hero **memang** memakai fotografi
+keluarga yang hangat. Foto *full-bleed* menempati kira-kira 55% kanan hero dan mengalir ke belakang
+salinan di kiri: seorang ayah menggendong anak di punggung, satu anak lagi, dan seorang perempuan,
+semuanya tertawa, di luar ruang, cahaya siang, kedalaman ruang dangkal. Kandid dan dokumenter —
+bukan pose stok.
 
-**Status: NOT VERIFIED.** Rencana ini tidak mengubah §2.2 dan tidak menyatakan §2.2 salah. Tangkapan
-layar dari pemilik (OQ-K1) menyelesaikannya. Sampai itu, §3.1 A6 sengaja dirumuskan sebagai "beri
-bobot pada panel teks", bukan "tiru hero berfoto", karena rumusan itu benar di kedua kemungkinan.
+**Putusan: §2.2 dan ADR-0037 BENAR. Arsipnya yang tidak lengkap.** Penjelasan (a) yang didaftar
+semula terbukti: foto hero adalah gambar latar CSS yang hidup di CSS per-halaman Oxygen, dan CSS itu
+tertangkap 0 byte (§0.2). Tidak ada dokumen repo yang perlu diperbaiki. Yang perlu diperbaiki adalah
+kepercayaan terhadap arsip sebagai bukti tata letak — dan itu sudah tercermin di §15.
+
+**Konsekuensi untuk rencana ini.** §3.1 A6 semula dirumuskan hati-hati sebagai "beri bobot pada
+panel teks" justru supaya benar di kedua kemungkinan. Kini kemungkinannya tertutup, jadi A6 boleh
+dinyatakan lebih kuat — lihat §4.3, yang **dikoreksi**: kamboja memang menaruh teks di atas foto,
+tetapi tanpa scrim gelap. Itu mengubah rekomendasi teknis, bukan hanya catatan kaki.
 
 ---
 
@@ -953,7 +1072,7 @@ tidak menyajikan apa pun sebagai sudah disepakati.
 
 | ID | Pertanyaan | Mengapa menghalangi |
 |---|---|---|
-| **OQ-K1** | Bisakah dikirim tangkapan layar halaman penuh kamboja.co.id (desktop **dan mobile**) dari mesin sendiri? | Situs diblokir DNS dari host ini (§0.1). Bukti berumur 4 bulan, CSS per-halaman hilang, dan **seluruh perilaku mobile kamboja NOT VERIFIED** (§1.4b). Ini juga menyelesaikan ketidakcocokan §13.1 |
+| **OQ-K1** | ~~Desktop~~ **TERJAWAB 13 Sep 2026** (§0.3) — menyelesaikan §13.1. **Yang masih dibutuhkan: tangkapan MOBILE nyata** (perangkat asli atau device-mode DevTools, bukan jendela sempit) | Chrome menahan lebar jendela minimum, sehingga percobaan 390×844 menghasilkan tata letak desktop pada 1200px. **Seluruh perilaku mobile kamboja tetap NOT VERIFIED** (§1.4b, §15) — dan mobile adalah kasus utama produk ini (§7) |
 | **OQ-K2** | "Dibuat seperti kamboja" berarti (a) **warna dan bentuknya** — magenta, gradien, tombol pil — atau (b) **kehangatan dan kepenuhannya**, dengan identitas Earth/Leaf tetap? | Jika (a), ADR-0034 dan §2.3 harus dibatalkan lewat ADR baru, dan seluruh rencana ini berubah. Rencana ini mengasumsikan **(b)** |
 | **OQ-K3** | Apakah ada foto TPU/TPS nyata — milik sendiri atau berlisensi — untuk lokasi yang tampil di direktori? Satu per lokasi | **Memblokir Tahap 5.** Hari ini empat foto dipakai bergilir untuk sembilan lokasi fiktif (§9.1) |
 | **OQ-K10** | Jika jawaban OQ-K3 tidak, pilih satu: **(i)** kembali ke ilustrasi untuk lokasi tanpa foto sendiri (§9.3, menyelaraskan dengan marketplace); **(ii)** pertahankan foto stok tetapi tambahkan kapsion sumber terlihat di setiap kartu, seperti disclaimer kamboja; **(iii)** pertahankan apa adanya | Arahan 8 Sep 2026 memilih foto stok secara eksplisit. Rekomendasi saya **(i)**, dengan **(ii)** sebagai kompromi yang dapat diterima. **(iii)** membuat klaim yang tidak bisa dipertanggungjawabkan (§9.2) |
@@ -969,15 +1088,21 @@ tidak menyajikan apa pun sebagai sudah disepakati.
 
 ## 15. NOT VERIFIED — daftar lengkap
 
-- Tampilan kamboja.co.id **hari ini**. Semua bukti dari arsip; halaman 10 Mei 2026, stylesheet
-  30 Mei 2026.
-- **Seluruh perilaku tata letak mobile kamboja** (§1.4b). Blok `@media (max-width: 479px)` di
-  `universal.css` hanya mengubah ±50 deklarasi; pekerjaan mobile yang sesungguhnya ada di CSS
-  per-halaman yang tidak terarsip. Tidak ada klaim mobile kamboja di dokumen ini.
-- *Padding* tingkat-section kamboja, gambar latar section, dan warna final tombol non-hero — CSS
-  per-halaman tidak terarsip (§0.2). Tinggi section di §1.4 berasal dari rekonstruksi dan hanya
-  indikatif.
-- Apakah hero kamboja memuat foto (§13.1).
+- **Tampilan mobile kamboja — seluruhnya.** Ini celah terbesar yang tersisa. Tangkapan hidup §0.3
+  hanya desktop: upaya mengecilkan jendela ke 390×844 dilaporkan berhasil tetapi viewport terender
+  tetap 1200px, sehingga hasilnya tata letak desktop pada jendela sempit. Blok
+  `@media (max-width: 479px)` di `universal.css` hanya mengubah ±50 deklarasi, jadi arsip juga
+  tidak menutupinya (§1.4b). **Tidak ada satu pun klaim mobile kamboja di dokumen ini**, dan tidak
+  satu pun disimpulkan dari tangkapan desktop. OQ-K1 separuh-mobile tetap terbuka.
+- Tampilan kamboja **di bawah lipatan hero** pada 13 Sep 2026. Tangkapan hidup menutup hero, baris
+  kartu, dan testimoni. Section lain (layanan lainnya, mitra, aktivitas layanan, FAQ, liputan pers,
+  footer) masih bersandar pada arsip 10 Mei 2026.
+- *Padding* tingkat-section kamboja dan gambar latar section di luar hero — CSS per-halaman tidak
+  terarsip (§0.2). Tinggi section di §1.4 berasal dari rekonstruksi dan hanya indikatif.
+- Nilai hex persis untuk aksen uang hijau kamboja (§1.5b). Terlihat jelas hijau dan berbeda dari
+  magenta merek, tetapi dibaca dari tangkapan JPEG, bukan disampling dari CSS — `#41B78A` dan
+  `#07BA28` ada di `universal.css`, tetapi mana yang dipakai untuk angka uang tidak dipastikan.
+  Tidak berdampak: Makam memakai `--mk-text-price` sendiri, bukan warna kamboja.
 - Apakah elemen < 44px di §2.7 benar-benar melanggar §7.3 — yang diukur kotak elemen, bukan area
   sentuh. Verifikasi masuk Tahap 1.
 - Jumlah total baris `cemeteries` di basis data produksi. Yang dihitung adalah **sembilan lokasi
@@ -991,7 +1116,8 @@ tidak menyajikan apa pun sebagai sudah disepakati.
   Loading, error, otorisasi, dan pending **tidak** dipicu atau diamati; §6 adalah usulan atas dasar
   dokumen, bukan atas dasar pengamatan.
 - Dampak visual dari setiap usulan. Tidak ada yang diimplementasikan — ini rencana.
-- Klaim ADR-0037 bahwa kamboja memakai *"exactly one accent colour for urgency … and exactly one,
-  different, accent colour for money"*. Sampling `universal.css` menemukan `#D23574` mendominasi
-  dan aksen kecil `#41B78A`, `#07BA28`, `#F70000`, tetapi peran per-aksen tidak dapat dipisahkan
-  tanpa CSS per-halaman. Tidak dikonfirmasi dan tidak dibantah.
+- ~~Klaim ADR-0037 soal aksen uang~~ — **TERKONFIRMASI 13 Sep 2026**, dipindahkan ke §1.5b. Angka
+  uang kamboja dirender hijau dalam muka huruf tersendiri, terpisah dari magenta merek. Separuh
+  klaim yang lain (*"exactly one accent colour for urgency"*) juga konsisten dengan tangkapan:
+  banner darurat memakai magenta merek, bukan warna keempat. Dicatat di sini sebagai riwayat, bukan
+  sebagai celah.
