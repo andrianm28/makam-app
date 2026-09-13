@@ -8,6 +8,7 @@ use App\Domain\Booking\Models\BookingDraft;
 use App\Domain\OrderWorkflow\Exceptions\OrderIsGuardedException;
 use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\PlotReservation\Models\PlotReservation;
+use App\Platform\Payment\Models\PaymentSession;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -51,6 +52,8 @@ use InvalidArgumentException;
  *   - `applyStatus()` — `status` alone (Task 2).
  *   - `stampPaidSource()` — `paid_via` + `paid_source_ref` alone (Task 7),
  *     and only for a caller holding a persisted `DIBAYAR` event.
+ *   - `linkPaymentSession()` — `payment_session_id` alone (H-2), and only
+ *     for a caller holding a persisted `payment_sessions` row.
  *
  * The flags are separate on purpose: collapsing them into one would let a
  * status write also move the money-source columns.
@@ -115,6 +118,14 @@ final class Order extends Model
      * versa) with no caller ever asking for it.
      */
     private bool $paidSourceWriteAuthorized = false;
+
+    /**
+     * Set only for the duration of `linkPaymentSession()`. A THIRD flag, for
+     * the same reason the second one exists: `payment_session_id` is written
+     * on a customer-triggered path (opening a checkout) that must never be
+     * able to move `status` or the money-source columns as a side effect.
+     */
+    private bool $paymentSessionWriteAuthorized = false;
 
     public function status(): OrderStatus
     {
@@ -246,6 +257,49 @@ final class Order extends Model
     }
 
     /**
+     * The THIRD door: `orders.payment_session_id` alone — the creation-time
+     * handle on the checkout currently trying to pay this order. See
+     * `2026_09_13_120000_add_payment_session_id_to_orders_table.php` for why
+     * the column exists at all and why it lives here rather than on
+     * `payment_sessions`.
+     *
+     * Authorization follows the same principle as the two doors above:
+     * decided against the DATABASE, never against the instance handed in.
+     * The token is the persisted `payment_sessions` row itself. `$session
+     * ->exists` is deliberately not consulted — it is a public,
+     * caller-writable property, so it is a claim rather than evidence, the
+     * same reasoning `applyStatus()` documents. An unsaved
+     * `new PaymentSession([...])` therefore cannot link itself to an order,
+     * which matters because the sweep treats a linked live session as a
+     * reason NOT to expire an order: a forgeable link would be a way to pin
+     * a plot indefinitely without ever paying for it.
+     *
+     * This is narrower than the other two doors in one way worth stating:
+     * it does not require the session to be in any particular state. A
+     * session is linked at the instant it is opened, when its state is
+     * necessarily `AWAITING_PAYMENT`; asserting that here would duplicate
+     * `OpenPaymentSession`'s own invariant in a second place, and would
+     * wrongly refuse a future caller that legitimately re-links.
+     *
+     * @throws OrderIsGuardedException when no such session row exists.
+     */
+    public function linkPaymentSession(PaymentSession $session): void
+    {
+        if (! PaymentSession::query()->whereKey($session->getKey())->exists()) {
+            throw OrderIsGuardedException::forOperation('linkPaymentSession');
+        }
+
+        $this->paymentSessionWriteAuthorized = true;
+
+        try {
+            $this->forceFill(['payment_session_id' => $session->getKey()]);
+            $this->save();
+        } finally {
+            $this->paymentSessionWriteAuthorized = false;
+        }
+    }
+
+    /**
      * Is there a persisted `order_status_events` row, for THIS order, that
      * records exactly this move? One indexed primary-key lookup.
      */
@@ -277,7 +331,11 @@ final class Order extends Model
      */
     protected function performUpdate(Builder $query): bool
     {
-        if (! $this->statusWriteAuthorized && ! $this->paidSourceWriteAuthorized) {
+        if (
+            ! $this->statusWriteAuthorized
+            && ! $this->paidSourceWriteAuthorized
+            && ! $this->paymentSessionWriteAuthorized
+        ) {
             throw OrderIsGuardedException::forOperation('performUpdate');
         }
 
@@ -300,6 +358,20 @@ final class Order extends Model
     public function bookingDraft(): BelongsTo
     {
         return $this->belongsTo(BookingDraft::class, 'booking_draft_id');
+    }
+
+    /**
+     * The checkout attempt currently associated with this order, or null.
+     * Deliberately NOT in `$fillable`: the column is unreachable through
+     * mass assignment by design, because at `create()` time — the one write
+     * path this model leaves open — no session can exist yet. The only way
+     * in is `linkPaymentSession()`.
+     *
+     * @return BelongsTo<PaymentSession, $this>
+     */
+    public function paymentSession(): BelongsTo
+    {
+        return $this->belongsTo(PaymentSession::class, 'payment_session_id');
     }
 
     public function statusEvents(): HasMany

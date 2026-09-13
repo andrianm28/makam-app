@@ -90,7 +90,7 @@ final readonly class OpenBookingOnlinePayment
         $paymentSessionId = (string) Str::uuid();
 
         try {
-            return ($this->openPaymentSession)(new OpenPaymentSessionCommand(
+            $session = ($this->openPaymentSession)(new OpenPaymentSessionCommand(
                 orderType: OrderType::Booking,
                 orderRef: $order->reference,
                 // The current quote's total in integer minor units — the amount
@@ -105,6 +105,31 @@ final readonly class OpenBookingOnlinePayment
                 cancelReturnUrl: route('payments.cancel', ['session' => $paymentSessionId]),
                 sessionId: $paymentSessionId,
             ));
+
+            // H-2: record, on the ORDER, that a checkout is now open for it.
+            // Without this the hourly `orders:expire-stale-quotes` sweep has
+            // no way to distinguish "nobody is paying this order" from
+            // "the customer is on the provider's payment page right now",
+            // and expires the second case — releasing the plot for resale
+            // while the money is in flight. See
+            // `QuoteExpiryScheduler::expireDueOrders()` for the reader and
+            // the migration's doc block for why a column rather than a join.
+            //
+            // NOT atomic with the session row, and that is a deliberate
+            // trade rather than an oversight. `OpenPaymentSession` makes a
+            // blocking HTTP call to the provider before it writes anything,
+            // so wrapping both in one transaction would hold a database
+            // transaction open across a network round trip — on a 2 vCPU
+            // host with a pooled connection, that is its own outage shape.
+            // The residual window is: session committed, process dies here,
+            // order never learns of it. That order then behaves exactly as
+            // it does today (pre-fix), which is strictly no worse than the
+            // status quo rather than a regression this introduces. Closing
+            // it properly needs the provider call moved out of the write
+            // path entirely; that is a larger change than this fix.
+            $order->linkPaymentSession($session);
+
+            return $session;
         } catch (PaymentSessionOpeningDeniedException $denial) {
             // Name the order the denial is about. `OpenPaymentSession` cannot:
             // it is handed a reference and throws before establishing that the
