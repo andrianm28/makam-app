@@ -1,5 +1,16 @@
 # Remediasi Penuh Temuan Audit Makam.co.id — Implementation Plan
 
+> **Catatan disisipkan 13 September 2026 — sumber kebenaran temuan sudah pindah.**
+> Rencana ini menunjuk `report-data.json` di scratchpad sesi sebagai sumber tunggal
+> daftar 343 temuan. Lokasi itu **ephemeral dan di luar version control**, sehingga
+> program tidak bisa dihentikan dengan aman tanpa kehilangan catatan sisa pekerjaan.
+> Seluruh isinya kini ada di [`docs/remediation/findings.yml`](../../remediation/findings.yml)
+> beserta status per temuan — lihat [`docs/remediation/README.md`](../../remediation/README.md).
+> Rujuk ke sana, bukan ke path scratchpad mana pun di dokumen ini.
+>
+> Sisa dokumen ini dibiarkan apa adanya sebagai catatan historis (`AGENTS.md` §Development
+> methodology: `docs/superpowers/` bersifat append-only).
+
 ## Context
 
 Audit teknik menyeluruh 23-dimensi dijalankan pada 6 September 2026 terhadap commit `53626f59` (identik dengan yang live di `dev.makam.co.id` dan `makam.co.id`/beta). Menghasilkan 342 temuan setelah dedup dan verifikasi adversarial dua lensa untuk setiap temuan Critical/High, ditambah fase ketiga yang menutup seluruh 33 celah yang fase pertama tandai tak-teruji. Laporan lengkap: `https://claude.ai/code/artifact/d331e5e4-456b-444d-b2c4-771a3be7ff61`. Data mentah semua 342 temuan (id, severity, dimensi, pernyataan terverifikasi, rekomendasi, file:line) ada di `/tmp/user/1000/claude-1000/-home-ubuntu-makam-app/2e81212b-3e2a-4bf3-8ced-ace5d15e3f91/scratchpad/coordinator/report-data.json` — **ini sumber kebenaran tunggal untuk daftar lengkap**, jangan diduplikasi ke file lain; plan ini mengutip hanya yang perlu dieksekusi segera secara rinci dan mendeskripsikan strategi batching untuk sisanya per AGENTS.md §Documentation.
