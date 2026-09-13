@@ -13,7 +13,16 @@ Related documents:
 - [`deploy-production.md`](deploy-production.md) — the deploy procedure this reverses, using the identical `APP_IMAGE` promotion mechanism Step 3 below describes / [`deploy-stg-vhost.md`](deploy-stg-vhost.md) covers the staging nginx vhost, a different concern (routing, not artifact promotion) — not the deploy procedure this runbook reverses.
 - [`../../architecture/queue-and-outbox.md`](../../architecture/queue-and-outbox.md) §7-8 — outbox retry/replay semantics referenced in Step 5 below
 
-**Environment note.** This procedure is parameterized by environment, but not every environment runs every component persistently. Per `docs/operations/dev-staging-environment.md` §9: only the staging profile runs a persistent Horizon process (`stg-horizon`) and a persistent scheduler (host cron invoking `schedule:run` once a minute); the development profile has no always-on Horizon or scheduler at all — both are run manually there. Where a step below references `<horizon-service>` or a scheduler restart, treat it as inapplicable to an environment that doesn't run that component persistently.
+**Environment note — CORRECTED 13 Sep 2026.** The paragraph this replaces described a topology that is now inverted in every particular, and acting on it during a rollback would have sent an operator looking for containers that do not exist.
+
+What it said | What is actually true (see [`host-facts.md`](../host-facts.md), canonical)
+--- | ---
+Staging runs a persistent Horizon process `stg-horizon` | **No staging application runs at all.** `stg-placeholder` is an `nginx:alpine` page. There is no `stg-horizon`, no `stg-web`.
+Staging's scheduler is host cron invoking `schedule:run` | Beta's scheduler is a **container**, `beta-scheduler`, running `schedule:work`. No host cron invokes `schedule:run`.
+Development has no always-on worker or scheduler | **It does, since 13 Sep 2026:** `dev-worker` and `dev-scheduler`. (It also had a scheduler until 25 Aug 2026, then silently lost one for three weeks — which is how six expired plot holds were never swept.)
+Horizon supervisors exist to pause/restart | **Nothing runs Horizon.** `beta-worker` and `dev-worker` run plain `php artisan queue:work`. `config/horizon.php` exists in the repo, but no process on the host reads it.
+
+So: every `<horizon-service>` reference and every `horizon:pause-supervisor` step below is **inapplicable to every environment that exists today**. Restarting the queue consumer means restarting `beta-worker` or `dev-worker`. Those steps are left in place rather than deleted, because they become correct again the day a Horizon supervisor is actually deployed — but they must not be followed as written now.
 
 ## When to use this — the 7 real triggers (`ci-cd-and-release.md` §6)
 

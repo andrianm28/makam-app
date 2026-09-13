@@ -11,9 +11,13 @@ are the deliverables; neither has been executed against the live
 
 - Enabling `requirepass` on a Redis instance that every app container
   already talks to **requires a coordinated restart** of `redis` and every
-  service that connects to it (`dev-web`, `stg-web`, `stg-horizon`,
-  `dev-worker`, `stg-batch-worker` — see
-  [`docker-compose.dev-stg.yml`](examples/docker-compose.dev-stg.yml)).
+  service that connects to it. The authoritative list of what actually runs
+  is [`host-facts.md`](host-facts.md) — as of 13 Sep 2026: `dev-web`,
+  `dev-worker`, `dev-scheduler`, `beta-web`, `beta-worker`,
+  `beta-scheduler`. **`stg-web`, `stg-horizon` and `stg-batch-worker` do not
+  exist**; staging is an `nginx:alpine` placeholder. The service names in
+  [`docker-compose.dev-stg.yml`](examples/docker-compose.dev-stg.yml) are a
+  design-time example, not the live topology.
   A restart on a live shared instance is exactly the class of change
   `AGENTS.md` §Infrastructure-agent execution requires a human to review
   before it happens.
@@ -35,9 +39,9 @@ closes:
 | Requirement | Current | After this change |
 |---|---|---|
 | `requirepass` set | **No** — `redis-cli ping` succeeds unauthenticated from any container on `backend` | Yes, via docker secret file |
-| Redis client-level prefix differs dev/stg | Not yet configured on the live host (no `.env.dev`/`.env.stg` exist yet — app containers are still placeholders per `compose.deployed-reference.yml`) | `REDIS_PREFIX=makam_dev:` / `makam_stg:` |
+| Redis client-level prefix differs dev/beta | **Configured and verified 13 Sep 2026** — live Redis keys are namespaced `makam_dev_queues:*` and `makam_beta_queues:*`, so a dev worker cannot consume beta's jobs. (The old note here said `.env.dev`/`.env.stg` did not exist and the app containers were placeholders; both stopped being true long ago.) | in place |
 | Cache prefix differs dev/stg | Not yet configured | `CACHE_PREFIX=makam_dev_cache:` / `makam_stg_cache:` |
-| Horizon namespace differs dev/stg | Not yet configured; only `stg-horizon` runs Horizon today | `HORIZON_PREFIX=makam-dev:` / `makam-stg:` |
+| Horizon namespace differs dev/beta | **Nothing runs Horizon.** `beta-worker`, `dev-worker`, `beta-scheduler` and `dev-scheduler` all run plain `queue:work` / `schedule:work` (see [`host-facts.md`](host-facts.md)). A stale `makamcoid_horizon` key namespace survives in Redis from an earlier attempt and has no live supervisor behind it. | not applicable while no Horizon runs |
 | Queue name strings differ dev/stg | **No** — see §4.4 finding | Not resolved by this task (out of file scope, flagged below) |
 
 The internal-network-only mitigation reduces exploitability but does not
@@ -142,9 +146,11 @@ CACHE_PREFIX=makam_stg_cache:
 
 `laravel/horizon` (`^5.0`, already in `composer.json`) reads its own
 internal key namespace — separate from both prefixes above — from
-`env('HORIZON_PREFIX', 'horizon:')` once `config/horizon.php` is published
-(`php artisan horizon:install`; that file does not exist in this repo yet,
-so there is nothing to edit here — this is a note for whoever publishes
+`env('HORIZON_PREFIX', 'horizon:')` from `config/horizon.php`, which **does
+now exist in this repository** (corrected 13 Sep 2026 — this paragraph
+previously said it did not). What is still true is that nothing on the host
+supervises queues with Horizon, so editing that prefix changes nothing
+running today — this remains a note for whoever publishes
 it). Horizon uses this prefix for its supervisor/master locks, metrics,
 and internal queue bookkeeping, on top of whatever `REDIS_PREFIX` already
 scopes at the client level. Only `stg-horizon` runs Horizon today
