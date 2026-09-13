@@ -86,6 +86,27 @@ return Application::configure(basePath: dirname(__DIR__))
         //    trusting it would re-open header spoofing to anything else on
         //    that LAN.
         //
+        //    **THE /12 IS NOT SUFFICIENT ON ITS OWN, and the closer is not
+        //    in this file.** Unrelated stacks hold bridges across
+        //    172.17–172.27 on this host. A co-tenant container can connect
+        //    to the host nginx on :443 with a forged `X-Forwarded-For`;
+        //    because the vhosts APPEND (`$proxy_add_x_forwarded_for`),
+        //    Symfony's right-to-left walk discards 172.19.0.1, then discards
+        //    the co-tenant's own 172.x, and lands on the forged value —
+        //    spoofing client IP against the login and payment-webhook
+        //    throttles. Trusting `X-Forwarded-Proto` from the same range
+        //    lets a co-tenant force `http://` into generated URLs.
+        //    Narrowing further is NOT the answer: it reintroduces the
+        //    renumbering outage
+        //    `test_a_legitimate_request_through_the_real_proxy_shape_still_resolves_correctly`
+        //    exists to catch. The answer is
+        //    `proxy_set_header X-Forwarded-For $remote_addr;` — OVERWRITE,
+        //    not append — in the live vhosts, which makes the /12's width
+        //    irrelevant. That is an `/opt/makam/` change this repository
+        //    cannot make; it is recorded as a REQUIRED companion step in
+        //    this task's report, not as optional hardening. Do not read this
+        //    array as evidence the IP path is fully closed.
+        //
         // 2. `headers:` — which forwarded headers may be believed. Laravel's
         //    default bitmask is FOR|HOST|PORT|PROTO|PREFIX|AWS_ELB. Only the
         //    TWO the nginx vhosts actually set are kept, because a trusted
@@ -153,15 +174,27 @@ return Application::configure(basePath: dirname(__DIR__))
         // deploy-stg-vhost.md`) not currently enabled; including it now
         // means enabling that vhost later cannot 400 the whole site.
         //
-        // `127.0.0.1` and `localhost` are NOT cosmetic. The runtime image's
-        // HEALTHCHECK requests `http://127.0.0.1:8080/up`, so its `Host` is
-        // `127.0.0.1:8080` and `getHost()` strips the port before matching.
-        // Omit that entry and the health probe takes a 400
-        // SuspiciousOperationException, the container is marked unhealthy,
-        // and a deploy rolls itself back — the exact "correct-looking change
-        // takes the site down" failure this task was told to avoid. A forged
-        // `Host: 127.0.0.1` is harmless in return: it yields a reset link
-        // pointing at the recipient's own loopback.
+        // `127.0.0.1` and `localhost` are here for the container's own
+        // HEALTHCHECK. Be precise about what is established and what is not,
+        // because the tempting version of this comment overstates it:
+        //
+        // - ESTABLISHED: the runtime image's HEALTHCHECK requests
+        //   `http://127.0.0.1:8080/up` (`Dockerfile`), so its `Host` header
+        //   is `127.0.0.1:8080`; and `getHost()` strips the port before
+        //   matching the allowlist, so `127.0.0.1` is the string that has to
+        //   match. Both are covered by
+        //   `test_the_trusted_host_allowlist_is_anchored_and_covers_every_live_host`.
+        // - NOT ESTABLISHED: that omitting the entry would actually break
+        //   the probe. That needs something in the `/up` path to call
+        //   `getHost()`, and nobody has confirmed anything does. It has
+        //   never been observed, and the allowlist is inert inside the test
+        //   suite (see below), so the suite cannot settle it either.
+        //
+        // The entry stays because it is either load-bearing or free: a
+        // forged `Host: 127.0.0.1` yields a reset link pointing at the
+        // recipient's own loopback, which is worth nothing to an attacker.
+        // Removing it is a bet on the unproven half above, so don't — but do
+        // not repeat the 400 as fact either.
         $middleware->trustHosts(at: [
             '^makam\.co\.id$',
             '^www\.makam\.co\.id$',

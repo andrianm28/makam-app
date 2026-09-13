@@ -7,7 +7,9 @@ namespace Tests\Feature\Http;
 use App\Models\User;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Http\Middleware\TrustHosts;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Symfony\Component\HttpFoundation\Exception\SuspiciousOperationException;
 use Tests\TestCase;
 
 /**
@@ -209,45 +211,120 @@ final class TrustedProxiesAndHostsTest extends TestCase
      * from inside this suite — an HTTP-level test of it would pass whether or
      * not `trustHosts(...)` is registered at all, which is worse than no test.
      *
-     * So assert the patterns themselves, the same way
-     * `Symfony\Component\HttpFoundation\Request::getHost()` consumes them:
-     * as case-insensitive regular expressions, unanchored unless the pattern
-     * anchors itself. That unanchored-ness is the trap this test exists for —
-     * a bare `'makam.co.id'` would be a regex matching
-     * `makamXcoZid.attacker.example`.
+     * So take the configured patterns and hand them to the real consumer:
+     * `Request::setTrustedHosts()` followed by an actual `getHost()` call.
+     * An earlier version of this test ran `preg_match()` over the patterns
+     * itself, which tested our BELIEF about how Symfony consumes them rather
+     * than Symfony — a future release that auto-anchored patterns would have
+     * left it green while the behaviour underneath changed.
+     *
+     * Two properties fall out of driving the real consumer that a regex
+     * re-implementation could not have shown: that `getHost()` strips the
+     * port before matching (the `127.0.0.1:8080` case below, which is the
+     * container HEALTHCHECK's literal `Host` header), and that a rejection
+     * is a thrown `SuspiciousOperationException` rather than a falsy return.
      */
     public function test_the_trusted_host_allowlist_is_anchored_and_covers_every_live_host(): void
     {
-        $patterns = (new TrustHosts($this->app))->hosts();
+        // `app.url` is read ONLY by `TrustHosts::allSubdomainsOfApplicationUrl()`,
+        // which `subdomains: false` never reaches — which is precisely why this
+        // test has to pin it. Under PHPUnit `app.url` falls back to
+        // `http://localhost` (`config/app.php`; `phpunit.xml` sets no
+        // APP_URL), so flipping the flag to `subdomains: true` would append
+        // `^(.+\.)?localhost$` — harmless against every hostname asserted
+        // below, and the mutant would survive unnoticed. The deployed values
+        // are what make the flag observable: on beta (APP_ENV=production)
+        // `APP_URL=https://makam.co.id`, so the same flip appends
+        // `^(.+\.)?makam\.co\.id$` and silently trusts every subdomain.
+        // `true` is also Laravel's default if the argument is ever dropped.
+        foreach (['https://makam.co.id', 'https://dev.makam.co.id'] as $appUrl) {
+            config(['app.url' => $appUrl]);
 
-        $matches = static fn (string $host): bool => (bool) array_filter(
-            $patterns,
-            static fn (string $pattern): bool => (bool) preg_match('{'.$pattern.'}i', $host),
-        );
+            $patterns = (new TrustHosts($this->app))->hosts();
 
-        // Every hostname an nginx vhost on the deployment host routes to the
-        // application, plus the loopback host the container's own
-        // `HEALTHCHECK` sends (`http://127.0.0.1:8080/up` — `getHost()`
-        // strips the port before matching). Omitting the loopback entry is
-        // how a trusted-hosts change takes the site down: the health probe
-        // would get a 400 SuspiciousOperationException and the container
-        // would be marked unhealthy.
-        foreach (['makam.co.id', 'www.makam.co.id', 'dev.makam.co.id', 'stg.makam.co.id', '127.0.0.1', 'localhost'] as $host) {
-            $this->assertTrue($matches($host), "Trusted-host allowlist does not cover {$host}.");
+            // Every hostname an nginx vhost on the deployment host routes to
+            // the application, plus the loopback authority the container's own
+            // HEALTHCHECK sends verbatim (`Dockerfile`:
+            // `file_get_contents("http://127.0.0.1:8080/up")`).
+            foreach (['makam.co.id', 'www.makam.co.id', 'dev.makam.co.id', 'stg.makam.co.id', '127.0.0.1', '127.0.0.1:8080', 'localhost'] as $authority) {
+                $expected = explode(':', $authority)[0];
+
+                $this->assertSame(
+                    $expected,
+                    $this->hostSymfonyResolves($patterns, $authority),
+                    "Trusted-host allowlist does not cover {$authority} (app.url {$appUrl}).",
+                );
+            }
+
+            foreach ([
+                self::EVIL_HOST,
+                // Not a wildcard: `trustHosts(..., subdomains: false)` is
+                // deliberate, so a subdomain takeover cannot be escalated
+                // into reset-link poisoning. One entry per app.url value
+                // above, so that BOTH deployed values pin the flag.
+                'evil.makam.co.id',
+                'evil.dev.makam.co.id',
+                // The unanchored-regex trap: `Request::setTrustedHosts()`
+                // wraps each pattern as `{...}i` and anchors nothing, so a
+                // bare `'makam.co.id'` would match all three of these.
+                'makamXcoZid.attacker.example',
+                'makam.co.id.attacker.example',
+                'attacker.example',
+            ] as $authority) {
+                $this->assertTrue(
+                    $this->symfonyRejects($patterns, $authority),
+                    "Trusted-host allowlist wrongly covers {$authority} (app.url {$appUrl}).",
+                );
+            }
         }
+    }
 
-        foreach ([
-            self::EVIL_HOST,
-            // Not a wildcard: `trustHosts(..., subdomains: false)` is
-            // deliberate, so a subdomain takeover cannot be escalated into
-            // reset-link poisoning.
-            'evil.makam.co.id',
-            // The unanchored-regex trap.
-            'makamXcoZid.attacker.example',
-            'makam.co.id.attacker.example',
-            'attacker.example',
-        ] as $host) {
-            $this->assertFalse($matches($host), "Trusted-host allowlist wrongly covers {$host}.");
+    /**
+     * Symfony's trusted-host state is static and process-wide, so a test that
+     * sets it must put it back or every later test in the same process
+     * inherits an allowlist that rejects `localhost`.
+     */
+    protected function tearDown(): void
+    {
+        Request::setTrustedHosts([]);
+
+        parent::tearDown();
+    }
+
+    /**
+     * A rejection is reported as this sentinel rather than allowed to
+     * propagate, so a missing allowlist entry fails with THIS test's message
+     * ("Trusted-host allowlist does not cover X") instead of surfacing as an
+     * uncaught `SuspiciousOperationException` and a vendor stack trace. The
+     * mutant dies either way; only the diagnostic differs, and the diagnostic
+     * is what the next reader gets.
+     *
+     * @param  array<int, string>  $patterns
+     */
+    private function hostSymfonyResolves(array $patterns, string $authority): string
+    {
+        Request::setTrustedHosts($patterns);
+
+        try {
+            return Request::create('http://'.$authority.'/')->getHost();
+        } catch (SuspiciousOperationException) {
+            return '<rejected as untrusted>';
+        }
+    }
+
+    /**
+     * @param  array<int, string>  $patterns
+     */
+    private function symfonyRejects(array $patterns, string $authority): bool
+    {
+        Request::setTrustedHosts($patterns);
+
+        try {
+            Request::create('http://'.$authority.'/')->getHost();
+
+            return false;
+        } catch (SuspiciousOperationException) {
+            return true;
         }
     }
 }
