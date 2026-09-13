@@ -359,6 +359,84 @@ done < <(find public/images resources/images -type f \
 if [ "$img_fail" -eq 0 ]; then pass "no oversized images under public/images or resources/images"
 else fail "image weight budget exceeded"; fi
 
+# ---------------------------------------------------------------------------
+head2 "GATE 15 — remediation findings ledger is well-formed"
+# ---------------------------------------------------------------------------
+# docs/remediation/findings.yml is the single source of truth for the 343
+# audit findings (W0). Before it existed the only copy lived in an ephemeral
+# agent scratchpad outside version control, so the programme could not be
+# stopped safely. A ledger nobody validates drifts back into uselessness, so
+# this gate asserts the shape every consumer relies on: unique ids, a closed
+# status vocabulary, and a status_note wherever a status was hand-corrected
+# away from the mechanical derivation.
+#
+# Deliberately parsed WITHOUT PyYAML: ci/verify-docs.sh must run with no
+# application code and no pip install (see this file's own header), and
+# PyYAML is not guaranteed on the CI image. The file is generated to a
+# strict shape, so a line-oriented reader is sufficient and dependency-free.
+if [ ! -f docs/remediation/findings.yml ]; then
+  fail "docs/remediation/findings.yml is missing"
+else
+  python3 - <<'LEDGER' || fail "findings ledger is malformed"
+import re, sys
+
+VALID_STATUS = {"open", "mitigated", "in_review", "resolved"}
+VALID_SEV = {"Critical", "High", "Medium", "Low", "Info"}
+
+records, cur = [], None
+for line in open("docs/remediation/findings.yml"):
+    m = re.match(r"- id: (\S+)$", line)
+    if m:
+        cur = {"id": m.group(1)}
+        records.append(cur)
+        continue
+    if cur is None:
+        continue
+    m = re.match(r"  (\w+):\s*(.*)$", line)
+    if m:
+        cur[m.group(1)] = m.group(2).strip()
+
+errs = []
+if not records:
+    errs.append("no records parsed")
+
+seen = set()
+for r in records:
+    rid = r["id"]
+    if rid in seen:
+        errs.append(f"{rid}: duplicate id")
+    seen.add(rid)
+    # Dimension prefixes may contain digits (I18N), so not [A-Z]+ alone.
+    if not re.fullmatch(r"[A-Z][A-Z0-9]*-\d+", rid):
+        errs.append(f"{rid}: id is not <DIM>-<NN>")
+    if r.get("severity") not in VALID_SEV:
+        errs.append(f"{rid}: severity {r.get('severity')!r} not in {sorted(VALID_SEV)}")
+    if r.get("status") not in VALID_STATUS:
+        errs.append(f"{rid}: status {r.get('status')!r} not in {sorted(VALID_STATUS)}")
+    for key in ("statement", "recommendation", "status_evidence", "status_verified"):
+        if key not in r:
+            errs.append(f"{rid}: missing {key}")
+    # A hand-corrected status must carry the quotation that justifies it.
+    if r.get("status_verified") == "true" and "status_note" not in r:
+        errs.append(f"{rid}: status_verified true without status_note")
+    # Anything claimed closed must name the PR that closed it.
+    if r.get("status") in {"resolved", "mitigated", "in_review"} and r.get("status_evidence") == "[]":
+        errs.append(f"{rid}: status {r['status']} with empty status_evidence")
+
+if errs:
+    for e in errs[:20]:
+        print(f"    {e}", file=sys.stderr)
+    if len(errs) > 20:
+        print(f"    ... and {len(errs) - 20} more", file=sys.stderr)
+    sys.exit(1)
+
+print(f"    {len(records)} findings, ids unique, status vocabulary closed")
+LEDGER
+  if [ "$FAIL" -eq 0 ]; then
+    pass "remediation findings ledger is well-formed"
+  fi
+fi
+
 printf '\n'
 if [ "$FAIL" -eq 0 ]; then
   printf '\033[32mRESULT: ALL DOC GATES PASS\033[0m\n'; exit 0
