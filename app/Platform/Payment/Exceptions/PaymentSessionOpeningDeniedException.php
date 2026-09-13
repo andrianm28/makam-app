@@ -44,6 +44,7 @@ final class PaymentSessionOpeningDeniedException extends RuntimeException
         string $message,
         private readonly ?GuardResult $result,
         private readonly string $publicMessage,
+        private readonly ?string $orderReference = null,
     ) {
         parent::__construct($message);
     }
@@ -88,6 +89,45 @@ final class PaymentSessionOpeningDeniedException extends RuntimeException
         }
 
         return $this->result;
+    }
+
+    /**
+     * The human-facing reference of the order whose opening was denied, when
+     * the thrower knew it — `orders.reference`, the same string the customer
+     * is quoted everywhere else.
+     *
+     * Null by default and deliberately so: `OpenPaymentSession` itself is
+     * given an order REFERENCE by its command but throws before it has
+     * established that the reference names anything, so it does not claim
+     * one. The caller that submitted the order — today
+     * `App\Domain\OrderWorkflow\Actions\OpenBookingOnlinePayment` — attaches
+     * it on the way out via `withOrderReference()`, because that caller is the
+     * one that actually created the order.
+     *
+     * A consumer must treat null as "unknown", never as "no order": it means
+     * this particular thrower did not name one, not that none exists.
+     */
+    public function orderReference(): ?string
+    {
+        return $this->orderReference;
+    }
+
+    /**
+     * A copy of this denial carrying the order reference, preserving the
+     * guard result, both messages, and the class of the original.
+     *
+     * A new instance rather than a mutation: this exception is readonly by
+     * construction, and a denial that has already been reported must not
+     * change shape underneath whoever holds it.
+     */
+    public function withOrderReference(string $orderReference): self
+    {
+        return new self(
+            $this->getMessage(),
+            $this->result,
+            $this->publicMessage,
+            $orderReference,
+        );
     }
 
     /**
