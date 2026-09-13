@@ -88,11 +88,33 @@ return Application::configure(basePath: dirname(__DIR__))
         //
         // 2. `headers:` — which forwarded headers may be believed. Laravel's
         //    default bitmask is FOR|HOST|PORT|PROTO|PREFIX|AWS_ELB. Only the
-        //    three the nginx vhosts actually set are kept. `HOST` is the
-        //    finding itself. `PREFIX` is dropped for the same class of
-        //    reason (`X-Forwarded-Prefix` rewrites the base path of every
-        //    generated URL and nothing sets it), and `AWS_ELB` because there
-        //    is no AWS anywhere in this project (CLAUDE.md §6).
+        //    TWO the nginx vhosts actually set are kept, because a trusted
+        //    header that nothing in our own infrastructure sets is pure
+        //    attack surface with no consumer:
+        //
+        //    - `HOST` — the finding itself.
+        //    - `PORT` — no vhost in this stack sets `X-Forwarded-Port`
+        //      (grep the live configs: they set `Host`, `X-Real-IP`,
+        //      `X-Forwarded-For` and `X-Forwarded-Proto`, and nothing else).
+        //      Trusting it let a client choose the port in every generated
+        //      absolute URL — `https://makam.co.id:1337/reset-password/…`.
+        //      Lower severity than the HOST defect because the DOMAIN stays
+        //      ours, so it is link-breakage rather than takeover, but it is
+        //      the same shape of bug and it has no upside. Dropping it is
+        //      provably safe rather than merely safer: with both PORT and
+        //      HOST untrusted, `Request::getPort()` falls through to the
+        //      `Host` header, which carries no port, and returns 443 from
+        //      the scheme — which is the correct answer behind an
+        //      HTTPS-terminating proxy. Covered by
+        //      `test_a_spoofed_x_forwarded_port_does_not_reach_the_generated_url`.
+        //    - `PREFIX` — same class of reason: `X-Forwarded-Prefix` rewrites
+        //      the base path of every generated URL and nothing sets it.
+        //    - `AWS_ELB` — there is no AWS anywhere in this project
+        //      (CLAUDE.md §6).
+        //
+        //    If a future topology puts a load balancer in front that DOES
+        //    set `X-Forwarded-Port` on a non-standard port, re-add PORT in
+        //    the same commit that introduces it — not before.
         $middleware->trustProxies(
             at: [
                 '127.0.0.1',
@@ -100,7 +122,6 @@ return Application::configure(basePath: dirname(__DIR__))
                 '172.16.0.0/12',
             ],
             headers: Request::HEADER_X_FORWARDED_FOR
-                | Request::HEADER_X_FORWARDED_PORT
                 | Request::HEADER_X_FORWARDED_PROTO,
         );
 

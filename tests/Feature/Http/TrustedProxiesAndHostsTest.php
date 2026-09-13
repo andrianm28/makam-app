@@ -113,6 +113,43 @@ final class TrustedProxiesAndHostsTest extends TestCase
         $this->assertSame('makam.co.id', $response->json('host'));
     }
 
+    /**
+     * `X-Forwarded-Port` is the same defect shape as `X-Forwarded-Host`, one
+     * severity down: the domain stays ours, so a forged port breaks the link
+     * rather than redirecting the victim to an attacker. It is dropped from
+     * the trusted bitmask because NO nginx config in this stack sets it —
+     * the live vhosts set `Host`, `X-Real-IP`, `X-Forwarded-For` and
+     * `X-Forwarded-Proto`, and nothing else — so trusting it was attack
+     * surface with no consumer.
+     *
+     * Dropping it is provably correct, not merely safer. With both PORT and
+     * HOST untrusted, `Request::getPort()` falls past both trusted-header
+     * branches to the `Host` header, which behind these vhosts carries no
+     * port, and returns 443 from the scheme. `getHttpHost()` then omits the
+     * port entirely because it is the default for https. That is why this
+     * test asserts the ABSENCE of any `:port`, not the presence of `:443`.
+     */
+    public function test_a_spoofed_x_forwarded_port_does_not_reach_the_generated_url(): void
+    {
+        $response = $this->withServerVariables(['REMOTE_ADDR' => self::PROXY_IP])
+            ->get('http://makam.co.id/__sec_n1__/probe', [
+                'X-Forwarded-Port' => '1337',
+                'X-Forwarded-For' => self::CLIENT_IP,
+                'X-Forwarded-Proto' => 'https',
+            ]);
+
+        $response->assertOk();
+
+        $actionUrl = (string) $response->json('action_url');
+
+        $this->assertStringNotContainsString(
+            ':1337',
+            $actionUrl,
+            'A client-supplied X-Forwarded-Port reached the password-reset link.',
+        );
+        $this->assertStringStartsWith('https://makam.co.id/reset-password/SAMPLE', $actionUrl);
+    }
+
     public function test_a_spoofed_x_forwarded_for_from_an_untrusted_source_does_not_change_the_client_ip(): void
     {
         // REMOTE_ADDR is a public address here: a client talking to the
