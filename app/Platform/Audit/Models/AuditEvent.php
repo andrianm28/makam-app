@@ -26,21 +26,28 @@ use Illuminate\Database\Eloquent\Model;
  * AC1 (append-only) — what update()/performUpdate()/delete() below
  * actually guarantee, and what they do NOT
  * ---------------------------------------------------------------------------
- * This is application-level defense-in-depth ONLY, not the real
- * enforcement design.md names: "no UPDATE/DELETE grant on
- * audit_events for the application role." This project cannot grant
- * that today — see finding N-1 (`docs/planning/sprint-plan.md`) and
- * the migration's own doc block for why, and
- * `app/Platform/Audit/sql/revoke-audit-mutations.sql` for the exact
- * statements to run once that gap closes.
+ * UPDATED 7 Sep 2026 (OBS-01): the real, role-independent enforcement now
+ * EXISTS — `2026_09_07_100000_enforce_audit_events_append_only.php` adds a
+ * `BEFORE UPDATE OR DELETE ON audit_events FOR EACH ROW` PL/pgSQL trigger
+ * (`reject_audit_history_mutation()`, `ERRCODE 42501`), the same mechanism
+ * `journal_batches`/`journal_entries` already use. That trigger — not this
+ * class — is the actual database-level control; it fires for every role,
+ * every connection, and every write path, including the two the overrides
+ * below cannot reach (see immediately below). PostgreSQL 18 only; SQLite
+ * (the local/unit-test driver) has no equivalent, which is why
+ * `tests/Feature/Audit/AuditEventAppendOnlyTest.php` runs its trigger
+ * assertions against the real Postgres connection.
  *
- * The overrides below stop:
+ * The overrides below remain as application-level defense-in-depth: they
+ * fail fast, in PHP, before a doomed statement ever reaches the database,
+ * and they stop:
  *   - `$event->update([...])`
  *   - `$event->outcome = 'denied'; $event->save();` (the `exists ===
  *     true` path, via `performUpdate()`)
  *   - `$event->delete()`
  *
- * They do NOT stop, and cannot stop, from PHP alone:
+ * Previously (before the trigger existed) they did NOT stop, from PHP
+ * alone, and the DATABASE now does:
  *   - `AuditEvent::query()->update([...])` / `AuditEvent::where(...)
  *     ->update([...])` — that goes through
  *     `Illuminate\Database\Eloquent\Builder`, not this `Model` class,
@@ -53,16 +60,19 @@ use Illuminate\Database\Eloquent\Model;
  *   - A second ORM/driver instance, a `psql` session, or any future
  *     service with direct database credentials.
  *
- * The only enforcement that closes ALL of those paths is the
- * database-level REVOKE design.md names, which this project cannot
- * apply today (finding N-1: only one Postgres role per environment,
- * which both owns the database and runs the application — there is no
- * distinct, lower-privileged role to revoke from). Until that role
- * split lands, AC1 is PARTIALLY satisfied: real for the
- * ORM-instance-method path above, absent for every other path. Do not
- * treat this class as having "solved" AC1 — see
- * `2026_07_26_110000_create_audit_events_table.php`'s doc block for
- * the full accounting.
+ * The trigger added by OBS-01 closes ALL of the paths above — it fires on
+ * every `UPDATE`/`DELETE`, regardless of which query builder, ORM, driver,
+ * or `psql` session issued it, and regardless of role (including the
+ * owning/migration role). A `REVOKE`-based design.md control (see
+ * `app/Platform/Audit/sql/revoke-audit-mutations.sql`, still NOT EXECUTED —
+ * blocked on finding N-1: only one Postgres role per environment, which
+ * both owns the database and runs the application) would be role-scoped and
+ * by construction could never constrain that owning role; the trigger is
+ * strictly stronger on that axis, and is a complement, not a substitute,
+ * for the still-blocked `REVOKE` (a superuser can `ALTER TABLE ... DISABLE
+ * TRIGGER`, which a `REVOKE` cannot be talked out of). See
+ * `2026_09_07_100000_enforce_audit_events_append_only.php`'s own doc block
+ * for the complete reasoning, mirrored from the journal migration's.
  */
 final class AuditEvent extends Model
 {

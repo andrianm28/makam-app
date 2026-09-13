@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Domain\PlotReservation\Actions;
 
+use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotInventory\PlotState;
+use App\Domain\PlotReservation\Exceptions\PlotReservationOrderAlreadyPaidException;
 use App\Domain\PlotReservation\Exceptions\PlotReservationTransitionException;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PlotReservation\PlotReservationAuditActions;
@@ -62,6 +64,29 @@ use Illuminate\Support\Facades\DB;
  * `booking_draft_id` is carried forward from `$current` exactly like
  * `order_id`, so a released row never silently drops which draft it
  * belongs to.
+ *
+ * ---------------------------------------------------------------------------
+ * Batch M3b (DOM-08) — the paid-order guard
+ * ---------------------------------------------------------------------------
+ * `$overridePaidOrder` defaults to `false`: when the chain's `order_id`
+ * names an order that is already `DIBAYAR` or later
+ * (`OrderStatus::isPaidOrLater()`), releasing would silently return a
+ * paid-for plot to available inventory, so this throws
+ * `PlotReservationOrderAlreadyPaidException` instead. The order lookup is a
+ * plain, UNLOCKED read — this is a defense-in-depth admin/operator guard,
+ * not a strict-consistency invariant, and taking `lockForUpdate()` on the
+ * Order row here (after the Plot row above) would invert the Order-then-Plot
+ * lock ordering `RecordOrderStatusChange`/`ReservePlot` document, risking a
+ * deadlock against that call path for no correctness benefit. When the
+ * caller explicitly passes `overridePaidOrder: true` for a paid order, the
+ * transition proceeds but the audit row is written under
+ * `PlotReservationAuditActions::PLOT_RESERVATION_RELEASED_PAID_ORDER_OVERRIDE`
+ * instead of the plain `PLOT_RESERVATION_RELEASED` — a distinct,
+ * `SensitiveActions`-listed action name, never a reuse of the routine one,
+ * so the audit trail can tell an ordinary pre-payment release apart from a
+ * paid-order override. A reservation with no `order_id` (a draft-anchored
+ * hold) or an order that is not yet paid skips this check entirely, exactly
+ * as before this batch.
  */
 final readonly class ReleasePlotReservation
 {
@@ -71,6 +96,7 @@ final readonly class ReleasePlotReservation
         string $actorRole,
         ?string $reason = null,
         AuditSource $auditSource = AuditSource::Panel,
+        bool $overridePaidOrder = false,
     ): PlotReservation {
         return DB::transaction(function () use (
             $reservation,
@@ -78,6 +104,7 @@ final readonly class ReleasePlotReservation
             $actorRole,
             $auditSource,
             $reason,
+            $overridePaidOrder,
         ): PlotReservation {
             $plot = GravePlot::query()->lockForUpdate()->findOrFail($reservation->plot_id);
 
@@ -91,6 +118,20 @@ final readonly class ReleasePlotReservation
                 throw PlotReservationTransitionException::forTransition(
                     $current instanceof PlotReservation ? (string) $current->state : 'none',
                     PlotReservationState::RELEASED
+                );
+            }
+
+            $orderIsPaid = false;
+
+            if ($current->order_id !== null) {
+                $order = Order::query()->find($current->order_id);
+                $orderIsPaid = $order instanceof Order && $order->status()->isPaidOrLater();
+            }
+
+            if ($orderIsPaid && ! $overridePaidOrder) {
+                throw PlotReservationOrderAlreadyPaidException::forReservation(
+                    (string) $reservation->getKey(),
+                    (string) $current->order_id,
                 );
             }
 
@@ -119,7 +160,9 @@ final readonly class ReleasePlotReservation
             $this->emitStateChanged($row, (string) $plot->getKey(), (string) $current->state);
 
             Audit::record(
-                action: PlotReservationAuditActions::PLOT_RESERVATION_RELEASED,
+                action: $orderIsPaid
+                    ? PlotReservationAuditActions::PLOT_RESERVATION_RELEASED_PAID_ORDER_OVERRIDE
+                    : PlotReservationAuditActions::PLOT_RESERVATION_RELEASED,
                 subject: new AuditSubject('plot_reservation', $row->getKey()),
                 outcome: AuditOutcome::Allowed,
                 actorRef: $actorReference,

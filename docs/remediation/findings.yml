@@ -131,12 +131,17 @@
   category: "step-up-authentication"
   effort: M
   audit_verdict: CONFIRMED
-  status: in_review
-  status_evidence: [open#242]
+  status: resolved
+  status_evidence: [merged#242]
   status_verified: true
   status_note: >-
-    PR #240 hanya menyebutnya sebagai pekerjaan terpisah; perbaikan sesungguhnya ada di PR #242 yang
-    masih terbuka - satu-satunya temuan Critical yang belum tertutup.
+    PR #242 merged 13 September 2026 - temuan Critical terakhir yang tertutup. Konflik merge
+    pada SensitiveActions.php diselesaikan dengan mempertahankan KEDUA entri aditif
+    (SITE_SETTING_BANK_TRANSFER_UPDATED dari PR ini dan OUTBOX_EVENT_REPLAY dari Batch M1c),
+    bukan memilih salah satu. Kegagalan GitGuardian pada PR ini diverifikasi sebagai false
+    positive: nilai yang ditandai adalah APP_KEY uji yang sudah dideklarasikan di
+    phpunit.xml:42 dan sudah ada di beberapa dokumen trunk, dan tidak dipakai di konfigurasi
+    produksi /opt/makam/compose manapun.
   files:
     - "app/Filament/Admin/Resources/SiteSettings/Pages/EditSiteSettings.php:79"
     - "app/Filament/Admin/Resources/SiteSettings/Schemas/SiteSettingsForm.php:51"
@@ -514,9 +519,14 @@
   category: "step-up-authentication"
   effort: M
   audit_verdict: CONFIRMED
-  status: in_review
-  status_evidence: [open#243]
-  status_verified: false
+  status: resolved
+  status_evidence: [merged#243]
+  status_verified: true
+  status_note: >-
+    PR #243 merged 13 September 2026. Diverifikasi langsung di trunk, bukan dari klaim PR:
+    ketiga aksi sertifikat kini memanggil ReauthenticationGuard::assertFresh() sebelum mutasi -
+    CreateCertificateAction.php:184, RevokeCertificateAction.php:84, ReplaceCertificateAction.php:93 -
+    dan mengarahkan ke PasswordReauthentication saat ReauthenticationRequiredException dilempar.
   files:
     - "app/Filament/Admin/Resources/Certificates/Actions/CreateCertificateAction.php:169"
     - "app/Filament/Admin/Resources/Certificates/Actions/RevokeCertificateAction.php:69"
@@ -545,9 +555,14 @@
   category: "session-management"
   effort: M
   audit_verdict: CONFIRMED
-  status: in_review
-  status_evidence: [open#243]
-  status_verified: false
+  status: resolved
+  status_evidence: [merged#243]
+  status_verified: true
+  status_note: >-
+    PR #243 merged 13 September 2026. Diverifikasi langsung di trunk: bootstrap/app.php:105
+    menambahkan middleware AuthenticateSession (Illuminate Session) ke grup `web`, sehingga cookie
+    sesi yang dicuri berhenti berlaku setelah reset kata sandi pada rute publik (/akun, /masuk,
+    /daftar, reset password) - bukan hanya pada panel Filament yang sudah mendaftarkannya sendiri.
   files:
     - "app/Livewire/Public/Auth/ResetPasswordPage.php:70"
     - "bootstrap/app.php:39"
@@ -574,9 +589,18 @@
   category: "step-up-authentication"
   effort: M
   audit_verdict: CONFIRMED
-  status: in_review
-  status_evidence: [open#243, open#251]
-  status_verified: false
+  status: resolved
+  status_evidence: [merged#243]
+  status_verified: true
+  status_note: >-
+    PR #243 merged 13 September 2026. Diverifikasi langsung di trunk:
+    LocalUsersTableIdentityAccessAdapter::resolveLastAuthenticatedAt() kini menerima id sesi dan
+    menambahkan predikat where('session_id', ...) bila sesi HTTP diketahui; cabang null hanya
+    menyisakan perilaku lintas-sesi untuk konteks console/job yang memang tidak punya sesi.
+    Temuan ini SEBELUMNYA juga mencantumkan PR #251 sebagai bukti, dan itu keliru: #251
+    (SEC-06/07/08/12) menyatakan sendiri bahwa ia dibangun DI ATAS perbaikan SEC-05 Batch 2A
+    tanpa meregresinya - jadi #251 bukan prasyarat penutupan SEC-05, dan statusnya yang masih
+    terbuka tidak lagi menahan temuan ini.
   files:
     - "app/Platform/IdentityAccess/Adapters/LocalUsersTableIdentityAccessAdapter.php:97"
     - "app/Http/Middleware/RequireRecentAuthentication.php:170"
@@ -607,9 +631,15 @@
   category: "inventory-correctness"
   effort: M
   audit_verdict: PARTIALLY_CONFIRMED
-  status: in_review
-  status_evidence: [open#246]
-  status_verified: false
+  status: resolved
+  status_evidence: [merged#246]
+  status_verified: true
+  status_note: >-
+    PR #246 merged 13 September 2026. Diverifikasi langsung di trunk:
+    app/Domain/OrderWorkflow/Actions/RecordOrderStatusChange.php:303 memeriksa apakah status
+    tujuan termasuk DIBATALKAN/DITOLAK/KEDALUWARSA lalu memanggil ReleasePlotReservation atas
+    PlotReservation::activeForOrder() di baris 308-322. SELESAI sengaja dikecualikan - pesanan
+    yang tuntas tetap memegang klaim plotnya.
   files:
     - "app/Domain/PlotReservation/Actions/ConvertDraftHoldToOrderReservation.php:106"
     - "app/Domain/PlotReservation/PlotReservationExpiryScheduler.php:96"

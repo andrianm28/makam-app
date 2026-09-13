@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Platform\DocumentVault\Jobs;
 
+use App\Platform\Correlation\Concerns\CarriesCorrelationId;
 use App\Platform\DocumentVault\Actions\ScanDocument;
 use App\Platform\DocumentVault\DocumentState;
 use App\Platform\DocumentVault\Models\Document;
@@ -40,6 +41,7 @@ use Illuminate\Queue\SerializesModels;
  */
 final class ScanDocumentJob implements ShouldQueue
 {
+    use CarriesCorrelationId;
     use Dispatchable;
     use InteractsWithQueue;
     use Queueable;
@@ -47,10 +49,14 @@ final class ScanDocumentJob implements ShouldQueue
 
     public function __construct(
         public readonly string $documentId,
-    ) {}
+    ) {
+        $this->captureCorrelationContext();
+    }
 
     public function handle(ScanDocument $scanDocument): void
     {
+        $this->restoreCorrelationContext();
+
         $document = Document::query()->findOrFail($this->documentId);
 
         if (! $this->scannable($document)) {
