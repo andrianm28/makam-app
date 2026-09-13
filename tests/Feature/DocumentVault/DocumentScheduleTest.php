@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\DocumentVault;
 
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Artisan;
 use Tests\TestCase;
 
@@ -26,7 +27,7 @@ use Tests\TestCase;
  * sites register the same work.
  *
  * ---------------------------------------------------------------------------
- * Why `schedule:list` and not `app(Schedule::class)->events()`
+ * Why `schedule:list` is called and its output thrown away
  * ---------------------------------------------------------------------------
  * `ApplicationBuilder::withSchedule()` registers its callback through
  * `Artisan::starting()`, so a `bootstrap/app.php` schedule entry only
@@ -34,18 +35,39 @@ use Tests\TestCase;
  * Resolving `Schedule` straight out of the container in a test sees the
  * `routes/console.php` entries and NOTHING from `withSchedule()` — verified
  * by re-introducing the duplicate registration and watching a container-
- * based version of this test stay green. Running `schedule:list` is what
- * makes both registration sites visible, which is the whole point here.
+ * based version of this test stay green, and independently replicated in
+ * review (container-resolved Schedule: 1 hit; after a console boot: 2).
+ *
+ * That constraint says only that SOMETHING must boot the console
+ * application first. It does not say the assertion has to be made against
+ * rendered text. So `schedule:list` is called for its boot side effect and
+ * its output discarded, and the assertion runs against the structured
+ * `Schedule::events()` — same detection, with no dependence on a display
+ * format Laravel is free to change in any minor release.
+ *
+ * Historical, and the reason this test no longer parses that output:
+ * `ScheduleListCommand` prints a SECOND line per event carrying the event
+ * description when `$this->output->isVerbose()` (`:233-236`). For the
+ * surviving entry that second line also contains `reconcile-storage-cleanup`,
+ * so a text-counting version of this test would have counted one
+ * registration twice. It was unreachable in practice — `Artisan::call()`
+ * runs at `VERBOSITY_NORMAL` and PHPUnit's own `-v` does not propagate into
+ * it — but only until someone passed `['-v' => true]`. Asserting on
+ * `events()` removes the hazard rather than relying on nobody doing that.
  */
 final class DocumentScheduleTest extends TestCase
 {
     public function test_document_storage_reconciliation_is_scheduled_exactly_once(): void
     {
+        // Called for its side effect only — booting the console application
+        // is what makes `withSchedule()` entries exist. The output is not read.
         Artisan::call('schedule:list');
 
-        $entries = collect(preg_split('/\R/', Artisan::output()) ?: [])
-            ->map(static fn (string $line): string => trim($line))
-            ->filter(static fn (string $line): bool => str_contains($line, 'reconcile-storage-cleanup'))
+        $entries = collect(app(Schedule::class)->events())
+            ->map(static fn ($event): string => trim(
+                ($event->command ?? '').' '.$event->getSummaryForDisplay().' '.($event->description ?? '')
+            ))
+            ->filter(static fn (string $summary): bool => str_contains($summary, 'reconcile-storage-cleanup'))
             ->values();
 
         $this->assertCount(
