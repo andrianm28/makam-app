@@ -185,6 +185,23 @@ final class SensitiveActions
         // they had already paid — a grieving family, in this domain. Same
         // money-adjacent category as `PAYMENT_REFUND` above.
         'REFUND_OBLIGATION_OPENED',
+        // Added by Stage R2 of the same plan. Written by
+        // `App\Domain\RefundObligation\Actions\ExecuteRefundObligation` and
+        // `ConfirmRefundObligation` — the only paths by which an obligation
+        // leaves `TERUTANG`.
+        //
+        // Listed for a blunter reason than `REFUND_OBLIGATION_OPENED` above.
+        // SumoPod cannot refund, so execution is a bank transfer an operator
+        // makes by hand, outside anything this system observes. Nothing
+        // verifies that the money moved at the moment the claim is recorded;
+        // the operator's stated justification is therefore part of the
+        // evidence rather than a courtesy, and the same is true of the
+        // confirmation that closes the debt for good. Same money-adjacent
+        // category as `PAYMENT_REFUND`/`VENDOR_PAYOUT` above, and the same
+        // "an entry nobody had to justify is indistinguishable from one
+        // nobody authorised" reasoning.
+        'REFUND_OBLIGATION_EXECUTED',
+        'REFUND_OBLIGATION_CONFIRMED',
     ];
 
     public static function requiresReason(string $action): bool
