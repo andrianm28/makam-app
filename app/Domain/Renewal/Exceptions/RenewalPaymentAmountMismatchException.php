@@ -7,9 +7,16 @@ namespace App\Domain\Renewal\Exceptions;
 use RuntimeException;
 
 /**
- * Thrown by `Actions\MarkRenewalPaidOnline` when the settled amount does not
- * EXACTLY equal the renewal's latest quote `amount_minor`, or when the
- * renewal carries no quote to check against.
+ * Batch M1b (PAY-03, 7 Sep 2026): `Actions\MarkRenewalPaidOnline` no longer
+ * throws this — it returns an `App\Platform\Payment\SettlementAnomaly`
+ * instead (see that Action's own doc block for why). This class is kept for
+ * its static factories' message-formatting convenience and in case a future
+ * caller has a real use for a thrown form of the same condition; it is not
+ * currently thrown anywhere in this codebase.
+ *
+ * Historically: thrown by `Actions\MarkRenewalPaidOnline` when the settled
+ * amount does not EXACTLY equal the renewal's latest quote `amount_minor`,
+ * or when the renewal carries no quote to check against.
  *
  * Mirrors `Domain\CareSubscription\Exceptions\CyclePaymentAmountMismatchException`
  * / `Domain\Marketplace\Exceptions\MarketplacePaymentAmountMismatchException`:
