@@ -164,17 +164,39 @@ return new class extends Migration
                 "CHECK (status IN ('{$statuses}'))"
             );
 
-            // The status column is a cache of the timestamps above, so the
-            // database refuses the combinations that would make it a lie:
-            // executed without an execution stamp, or confirmed without both.
-            // Without this, a bug that writes the status but not the stamp
-            // produces an obligation that looks paid and has no evidence —
-            // exactly the failure this whole table exists to prevent.
+            // The status column is a cache of the stamps AND the evidence
+            // above, so the database refuses every combination that would
+            // make it a lie: executed without an execution stamp, confirmed
+            // without both stamps, or either of those without the transfer
+            // reference and the proof of transfer.
+            //
+            // The evidence columns are named here deliberately, and an
+            // earlier revision of this migration did not name them. That
+            // revision constrained only `executed_at`/`confirmed_at`, which
+            // left the plan's own central invariant — "nothing closes an
+            // obligation except a recorded execution WITH ITS EVIDENCE, not
+            // an admin marking it done, not expiry" — resting on a single
+            // application-layer check with no database backstop. Stage R2's
+            // mutation M1 demonstrated that empirically: with the Action's
+            // check removed, an evidence-free execution committed
+            // successfully, because nothing below the Action objected.
+            //
+            // A debt owed back to a family that has already paid deserves
+            // more than one enforcement point. It is the same lesson this
+            // repository learned about its own design tokens: the rule with
+            // a mechanical guard is the rule that gets followed.
+            //
+            // TERUTANG requires the evidence columns to be NULL for the same
+            // reason it requires the stamps to be — proof of a transfer that
+            // has not happened is not a state this ledger has a meaning for.
             DB::statement(
                 'ALTER TABLE refund_obligations ADD CONSTRAINT refund_obligations_status_stamps_check '.
-                "CHECK ( (status = 'TERUTANG' AND executed_at IS NULL AND confirmed_at IS NULL) ".
-                "OR (status = 'DIEKSEKUSI' AND executed_at IS NOT NULL AND confirmed_at IS NULL) ".
-                "OR (status = 'TERKONFIRMASI' AND executed_at IS NOT NULL AND confirmed_at IS NOT NULL) )"
+                "CHECK ( (status = 'TERUTANG' AND executed_at IS NULL AND confirmed_at IS NULL ".
+                'AND execution_reference IS NULL AND execution_evidence_path IS NULL) '.
+                "OR (status = 'DIEKSEKUSI' AND executed_at IS NOT NULL AND confirmed_at IS NULL ".
+                'AND execution_reference IS NOT NULL AND execution_evidence_path IS NOT NULL) '.
+                "OR (status = 'TERKONFIRMASI' AND executed_at IS NOT NULL AND confirmed_at IS NOT NULL ".
+                'AND execution_reference IS NOT NULL AND execution_evidence_path IS NOT NULL) )'
             );
 
             // A debt of zero or less is not a debt.
