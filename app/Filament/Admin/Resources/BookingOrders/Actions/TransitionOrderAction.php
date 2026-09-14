@@ -6,6 +6,7 @@ namespace App\Filament\Admin\Resources\BookingOrders\Actions;
 
 use App\Domain\OrderWorkflow\Actions\CancelOrder;
 use App\Domain\OrderWorkflow\Actions\CompleteOrder;
+use App\Domain\OrderWorkflow\Actions\ConfirmPaidOrder;
 use App\Domain\OrderWorkflow\Actions\ExpireOrder;
 use App\Domain\OrderWorkflow\Actions\GrantOrderPaymentOpening;
 use App\Domain\OrderWorkflow\Actions\IssueOrderQuote;
@@ -13,12 +14,14 @@ use App\Domain\OrderWorkflow\Actions\ManualPaymentVerification;
 use App\Domain\OrderWorkflow\Actions\MarkOrderPaid;
 use App\Domain\OrderWorkflow\Actions\ProcessOrder;
 use App\Domain\OrderWorkflow\Actions\RecordBuyerApproval;
+use App\Domain\OrderWorkflow\Actions\RefusePaidOrder;
 use App\Domain\OrderWorkflow\Actions\RejectOrder;
 use App\Domain\OrderWorkflow\Actions\RequestAvailability;
 use App\Domain\OrderWorkflow\Actions\VerifyOrder;
 use App\Domain\OrderWorkflow\Authorization\Contracts\OrderTransitionAuthorizerContract;
 use App\Domain\OrderWorkflow\Exceptions\OrderActionNotAuthorisedException;
 use App\Domain\OrderWorkflow\Models\Order;
+use App\Domain\OrderWorkflow\Models\OrderInvoice;
 use App\Domain\OrderWorkflow\OrderStatus;
 use App\Filament\Admin\Pages\PasswordReauthentication;
 use App\Filament\Admin\Resources\BookingOrders\BookingOrderResource;
@@ -26,6 +29,7 @@ use App\Filament\Admin\Resources\BookingOrders\BookingOrderStatusBadge;
 use App\Filament\Shared\PanelFailure;
 use App\Filament\Support\OrderViewUrl;
 use App\Http\Middleware\RequireRecentAuthentication;
+use App\Platform\Audit\AuditSource;
 use App\Platform\IdentityAccess\ActorContext;
 use App\Platform\IdentityAccess\Reauthentication\Exceptions\ReauthenticationRequiredException;
 use App\Platform\IdentityAccess\Reauthentication\ReauthenticationGuard;
@@ -93,6 +97,19 @@ final class TransitionOrderAction
         'MENUNGGU_PEMBAYARAN' => 'authorize_payment_opening',
         'MENUNGGU_VERIFIKASI_PEMBAYARAN' => 'manual_payment_verification',
         'DIBAYAR' => 'mark_order_paid',
+        // Stage R1 (13 Sep 2026), the pay-in-full-upfront pair.
+        //
+        // `DIBAYAR_MENUNGGU_KONFIRMASI` is deliberately ABSENT from this map
+        // even though `OrderTransition::ALLOWED` makes the edge legal. An
+        // order arrives at that status because money actually landed — the
+        // payment-settlement path puts it there — and an admin button that
+        // declares "paid, awaiting confirmation" by hand would be a way to
+        // mark an order paid from the panel with no payment behind it, which
+        // `AGENTS.md` §Domain and financial invariants forbids. A target with
+        // no entry here fails `authorized()` and is never rendered, the same
+        // way `MASUK` already is.
+        'DIKONFIRMASI' => 'confirm_paid_order',
+        'DITOLAK_SETELAH_BAYAR' => 'refuse_paid_order',
         'DIPROSES' => 'process_order',
         'SELESAI' => 'complete_order',
         'DITOLAK' => 'reject_order',
@@ -115,6 +132,15 @@ final class TransitionOrderAction
         'authorize_payment_opening',
         'manual_payment_verification',
         'mark_order_paid',
+        // Stage R1. Both decide the fate of money already in hand:
+        // `refuse_paid_order` creates a refund debt with a deadline, and
+        // `confirm_paid_order` is the acceptance that makes a paid order
+        // final. Treating either as a routine operator transition would put
+        // a customer's payment behind the weakest gate on this screen, so
+        // both take the finance/admin role gate AND the fresh
+        // re-authentication `run()` applies to this list.
+        'refuse_paid_order',
+        'confirm_paid_order',
     ];
 
     public static function make(OrderStatus $to, Order $order): Action
@@ -225,6 +251,26 @@ final class TransitionOrderAction
         $actorRef = (string) $actor->identityReference;
         $actorRole = BookingOrderResource::auditRoleFor($actor);
 
+        // Checked here — after authorization and re-authentication, before
+        // anything is dispatched — because the honest failure message is one
+        // this operator is entitled to see, and `PanelFailure` would
+        // (correctly) reduce an unreviewed exception to the generic "system
+        // error" text. See `refundAmountFor()` for why a missing invoice
+        // stops the refusal rather than being worked around.
+        if ($to === OrderStatus::DITOLAK_SETELAH_BAYAR && self::invoiceFor($order) === null) {
+            Notification::make()
+                ->danger()
+                ->title('Penolakan tidak dapat diproses')
+                ->body(
+                    'Pesanan ini tidak memiliki faktur, sehingga jumlah yang harus dikembalikan '
+                    .'tidak dapat dipastikan. Hubungi tim keuangan sebelum menolak pesanan yang '
+                    .'sudah dibayar.'
+                )
+                ->send();
+
+            return;
+        }
+
         try {
             match ($to) {
                 OrderStatus::DIVERIFIKASI => app(VerifyOrder::class)($order, $actorRef, $actorRole, $reason),
@@ -234,6 +280,8 @@ final class TransitionOrderAction
                 OrderStatus::MENUNGGU_PEMBAYARAN => app(GrantOrderPaymentOpening::class)($order, (int) $actorRef, $actorRef, $actorRole, $reason),
                 OrderStatus::MENUNGGU_VERIFIKASI_PEMBAYARAN => app(ManualPaymentVerification::class)($order, $actorRef, $actorRole, $reason ?? 'Pembayaran manual dicatat.'),
                 OrderStatus::DIBAYAR => app(MarkOrderPaid::class)($order, $actorRef, $actorRole, $reason),
+                OrderStatus::DIKONFIRMASI => app(ConfirmPaidOrder::class)($order, $actorRef, $actorRole, $reason),
+                OrderStatus::DITOLAK_SETELAH_BAYAR => self::refusePaidOrder($order, $actorRef, $actorRole, $reason ?? ''),
                 OrderStatus::DIPROSES => app(ProcessOrder::class)($order, $actorRef, $actorRole, $reason),
                 OrderStatus::SELESAI => app(CompleteOrder::class)($order, $actorRef, $actorRole, $reason),
                 OrderStatus::DITOLAK => app(RejectOrder::class)($order, $actorRef, $actorRole, $reason ?? ''),
@@ -246,5 +294,68 @@ final class TransitionOrderAction
         } catch (\Throwable $exception) {
             PanelFailure::notify($exception, 'Transisi gagal');
         }
+    }
+
+    /**
+     * The refusal path — the only transition on this screen that needs a
+     * number as well as a decision.
+     *
+     * `RefusePaidOrder` opens a refund obligation, and the amount on that
+     * obligation is what somebody will eventually transfer back to a grieving
+     * family. It is therefore sourced from `order_invoices` — the record of
+     * what this customer was actually billed, written once by
+     * `Actions\IssueInvoice` on the paid path and never rewritten — and from
+     * nowhere else. Not from the quote (which can be superseded), not from a
+     * form field (an operator typo becomes a money bug), and above all not
+     * from a default: an invented refund amount is a money bug whichever
+     * direction it errs in.
+     *
+     * When no invoice row exists the refusal does NOT proceed. `run()`
+     * refuses it before this method is reached and tells the operator why.
+     * That is deliberate and is the conservative half of the trade: an order
+     * left at `DIBAYAR_MENUNGGU_KONFIRMASI` is a visible, recoverable stuck
+     * order, while a refusal recorded against a guessed amount is a wrong
+     * number in the ledger that nobody will question.
+     */
+    private static function refusePaidOrder(
+        Order $order,
+        string $actorRef,
+        string $actorRole,
+        string $reason,
+    ): void {
+        $invoice = self::invoiceFor($order);
+
+        if ($invoice === null) {
+            // Unreachable via `run()`, which checks first. Kept so this
+            // method can never be called into a guessed amount if a future
+            // caller forgets that check.
+            throw new \RuntimeException(
+                "Order [{$order->getKey()}] has no invoice; the refund amount cannot be determined."
+            );
+        }
+
+        app(RefusePaidOrder::class)->handle(
+            order: $order,
+            refundAmountMinor: (int) $invoice->amount_minor,
+            currency: (string) $invoice->currency,
+            // Left null on purpose, not forgotten. `refund_obligations
+            // .payment_session_id` is documented as "when it is known", and
+            // an Order has no link to its payment session in this schema:
+            // `payment_intents` carries no `order_id`, and
+            // `orders.paid_source_ref` holds the PROVIDER TRANSACTION id
+            // (`ApplyPaymentSettlement::settleBooking()`), not a session id.
+            // Passing either would put a wrong foreign key on a money row.
+            // Recorded as a finding in this task's report.
+            paymentSessionId: null,
+            reason: $reason,
+            actorRef: $actorRef,
+            actorRole: $actorRole,
+            source: AuditSource::Panel,
+        );
+    }
+
+    private static function invoiceFor(Order $order): ?OrderInvoice
+    {
+        return OrderInvoice::query()->where('order_id', $order->getKey())->first();
     }
 }

@@ -213,12 +213,34 @@ final class StatusIntent
             // it is unverified until an admin confirms it.
             'MENUNGGU_VERIFIKASI_PEMBAYARAN' => ['intent' => self::INTENT_PENDING, 'icon' => 'clock'],
             'DIBAYAR' => ['intent' => self::INTENT_SUCCESS, 'icon' => 'banknote'],
+            // The pay-in-full-upfront flow (13 Sep 2026). `pending`, not
+            // `success`, and for the same normative reason
+            // `MENUNGGU_VERIFIKASI_PEMBAYARAN` above is: the money has
+            // arrived but nothing has been decided, and a green badge here
+            // would tell a grieving family their booking is settled while an
+            // admin is still free to refuse it. The clock icon says what is
+            // true — somebody is waiting on somebody else.
+            'DIBAYAR_MENUNGGU_KONFIRMASI' => ['intent' => self::INTENT_PENDING, 'icon' => 'clock'],
+            // `success` here and NOT `check-badge`: the admin has accepted,
+            // which is a real outcome, but `SELESAI` keeps `check-badge` to
+            // itself — "paid does not mean completed" (§3.7) is the rule this
+            // whole flow is most at risk of blurring, and two different
+            // success icons is how the two stay distinguishable at a glance.
+            'DIKONFIRMASI' => ['intent' => self::INTENT_SUCCESS, 'icon' => 'check-circle'],
             'DIPROSES' => ['intent' => self::INTENT_INFO, 'icon' => 'cog'],
             // `DIBAYAR` != `SELESAI` — design-system.md §3.7 states this
             // explicitly: "Paid does not mean completed." Do not collapse
             // these two into one "done" intent.
             'SELESAI' => ['intent' => self::INTENT_SUCCESS, 'icon' => 'check-badge'],
             'DITOLAK' => ['intent' => self::INTENT_DANGER, 'icon' => 'x-circle'],
+            // Refused while holding the customer's money. `danger` and
+            // `x-circle` are shared with `DITOLAK` deliberately: to the
+            // person reading the badge both mean "your order was refused",
+            // and inventing a distinct colour for the money case would be
+            // presentation inventing a distinction the design system has not
+            // made. The distinction that matters is carried by the LABEL and
+            // by the `refund_obligations` row, not by the palette.
+            'DITOLAK_SETELAH_BAYAR' => ['intent' => self::INTENT_DANGER, 'icon' => 'x-circle'],
             'DIBATALKAN' => ['intent' => self::INTENT_NEUTRAL, 'icon' => 'slash'],
             'KEDALUWARSA' => ['intent' => self::INTENT_NEUTRAL, 'icon' => 'clock-x'],
         ],

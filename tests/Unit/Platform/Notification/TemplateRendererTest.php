@@ -82,7 +82,13 @@ final class TemplateRendererTest extends TestCase
      * was added additively at the end of the table. Raised 18 -> 20 the
      * same day (NOTIF-13, Batch M8b): "Visitation booking requested" and
      * "Visitation booking confirmed" were added additively after that —
-     * every row this test already depended on is unchanged.
+     * every row this test already depended on is unchanged. Raised 20 -> 21
+     * on 13 Sep 2026 (Stage R1, `docs/superpowers/plans/2026-09-13-sistem-
+     * refund.md`): "Order refused after payment", again appended at the end,
+     * again leaving every earlier row's position untouched. It is a separate
+     * row from "Availability confirmed/rejected" on purpose — telling a
+     * customer who has already paid in full that their order was refused is
+     * not the same message as telling one who has not.
      */
     public function test_the_reconciled_matrix_parses_end_to_end(): void
     {
@@ -90,7 +96,7 @@ final class TemplateRendererTest extends TestCase
 
         $rows = $source->rows();
 
-        $this->assertCount(20, $rows);
+        $this->assertCount(21, $rows);
 
         $headerColumns = array_keys($rows[0]['recipients']);
         foreach ($rows as $row) {

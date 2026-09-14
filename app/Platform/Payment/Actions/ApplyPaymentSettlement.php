@@ -11,7 +11,6 @@ use App\Domain\Marketplace\Actions\MarkMarketplaceOrderPaid;
 use App\Domain\Marketplace\Models\MarketplaceOrder;
 use App\Domain\OrderWorkflow\Actions\ApplyPaidEffects;
 use App\Domain\OrderWorkflow\Models\Order;
-use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\OrderWorkflow\PaidTrigger;
 use App\Domain\OrderWorkflow\PaidTriggerSource;
 use App\Domain\Renewal\Actions\MarkRenewalPaidOnline;
@@ -379,11 +378,34 @@ final readonly class ApplyPaymentSettlement
 
         // Duplicate-arrival detection (whole-branch review fix wave): the
         // claim guarantees this (provider, transaction) pair is new, so an
-        // order that is DIBAYAR with a paid source OTHER than this event's
-        // transaction was paid by an earlier, independent payment — a second
-        // charge that must surface at reconciliation, never silently
-        // swallowed by `ApplyPaidEffects::alreadyPaid()`.
-        if ($order->status === OrderStatus::DIBAYAR->value
+        // order whose money has already arrived, carrying a paid source OTHER
+        // than this event's transaction, was paid by an earlier, independent
+        // payment — a second charge that must surface at reconciliation,
+        // never silently swallowed by `ApplyPaidEffects::alreadyPaid()`.
+        //
+        // 13 Sep 2026 (finding H-1): the status half of this pair was a raw
+        // comparison against the literal `DIBAYAR`, the same narrowing
+        // `OpenPaymentSession::assertOrderNotAlreadyPaid()` carried — read
+        // that method's doc block for the full reasoning. Here the
+        // consequence was one step worse: a second charge against an order
+        // past `DIBAYAR` was not merely permitted, it was not even RECORDED
+        // as a duplicate arrival, so nothing would surface at reconciliation
+        // and no one would ever learn the customer had been charged twice.
+        //
+        // The `paid_source_ref` mismatch half of the pair is deliberately
+        // unchanged and still ANDed: it is what distinguishes a genuine
+        // second transaction from this same transaction arriving again, and
+        // without it every legitimate retry would be logged as a duplicate.
+        //
+        // A paid-or-later order with a NULL `paid_source_ref` now also
+        // records a duplicate arrival (`(string) null` is `''`, which never
+        // equals a transaction id). That is the intended direction: an order
+        // that reached a paid state without its money source stamped is
+        // exactly the anomaly reconciliation needs to see. The record is
+        // audit-only (`AuditOutcome::Denied`) and changes no state, so a
+        // false positive costs a line in the trail, while a false negative
+        // costs a customer a silent second charge.
+        if ($order->status()->isPaidOrLater()
             && (string) $order->paid_source_ref !== (string) $event->provider_transaction_id) {
             $this->recordDuplicateArrival($event);
         }

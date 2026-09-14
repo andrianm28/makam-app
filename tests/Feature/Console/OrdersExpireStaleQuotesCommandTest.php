@@ -141,6 +141,35 @@ final class OrdersExpireStaleQuotesCommandTest extends TestCase
         $this->assertSame(OrderStatus::DIBAYAR, $order->fresh()->status());
     }
 
+    /**
+     * Stage R1 (13 Sep 2026). The sweep runs hourly (`routes/console.php`)
+     * and drives orders to `KEDALUWARSA`, after which
+     * `RecordOrderStatusChange` releases the plot. Doing that to an order
+     * sitting at `DIBAYAR_MENUNGGU_KONFIRMASI` would expire a booking the
+     * customer has already paid for in full and return their plot to
+     * inventory, while their money stays in the account and no refund
+     * obligation is ever opened.
+     *
+     * Checked and pinned because this branch introduced that status — the
+     * shape `test_an_already_terminal_order_is_untouched` above uses for
+     * `DIBAYAR`, extended to the pay-first landing state.
+     */
+    public function test_an_order_paid_and_awaiting_confirmation_is_never_expired(): void
+    {
+        $order = $this->makeOrder(OrderStatus::MENUNGGU_PEMBAYARAN);
+        $quote = $this->issueQuote($order, CarbonImmutable::now()->subDay());
+        $this->forceAccepted($quote, CarbonImmutable::now()->subDays(2));
+        Order::query()
+            ->where('id', $order->getKey())
+            ->update(['status' => OrderStatus::DIBAYAR_MENUNGGU_KONFIRMASI->value]);
+
+        $this->artisan('orders:expire-stale-quotes')
+            ->assertExitCode(0)
+            ->expectsOutputToContain('Expired 0 order(s)');
+
+        $this->assertSame(OrderStatus::DIBAYAR_MENUNGGU_KONFIRMASI, $order->fresh()->status());
+    }
+
     public function test_the_command_is_idempotent_across_repeated_runs(): void
     {
         $order = $this->makeOrder(OrderStatus::DISETUJUI_PEMESAN);

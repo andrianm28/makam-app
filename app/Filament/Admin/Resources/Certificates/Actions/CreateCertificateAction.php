@@ -158,6 +158,13 @@ final class CreateCertificateAction
      */
     private static function eligibleOrders(): Collection
     {
+        // This literal is the query-side twin of
+        // `CertificateEligibilityPolicy::orderSettlementRule()` and must
+        // always say the same thing it does — read that method's doc block
+        // (13 Sep 2026) for why neither was converted to `isPaidOrLater()`
+        // and what Tahap 3 owes both of them. Changing one without the other
+        // makes the picker offer orders the policy then refuses, or hide
+        // orders it would accept.
         return Order::query()
             ->where('status', OrderStatus::DIBAYAR->value)
             ->whereNotIn(

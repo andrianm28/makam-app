@@ -80,6 +80,13 @@ final class ViewPreNeedCase extends ViewRecord
     /**
      * The settlement action's render precondition (see the class doc
      * block) — the pre-need order must already be paid.
+     *
+     * 13 Sep 2026: the render-side twin of `Actions\SettlePreNeed`'s own
+     * check, and kept identical to it on purpose. Read that Action's comment
+     * for why neither was converted to `OrderStatus::isPaidOrLater()` —
+     * briefly, that predicate is true for `DITOLAK_SETELAH_BAYAR`, and a
+     * refused order whose money is owed back must not offer a settle button.
+     * Both must change together when Tahap 3 settles the question.
      */
     private function orderIsPaid(PreNeedCase $record): bool
     {

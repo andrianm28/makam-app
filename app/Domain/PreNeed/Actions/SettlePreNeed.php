@@ -83,6 +83,17 @@ final readonly class SettlePreNeed
 
         $order = $orderId !== null ? Order::query()->lockForUpdate()->find($orderId) : null;
 
+        // 13 Sep 2026: deliberately still the `DIBAYAR` literal and NOT
+        // `OrderStatus::isPaidOrLater()` — same reasoning as
+        // `CertificateEligibilityPolicy::orderSettlementRule()`'s doc block.
+        // `isPaidOrLater()` is true for `DITOLAK_SETELAH_BAYAR`, so using it
+        // here would let a pre-need case settle against an order that was
+        // refused and whose money is owed back to the customer. Under the
+        // pay-first flow a legitimately paid order sits at `DIKONFIRMASI`
+        // rather than `DIBAYAR`, so this fails closed until Tahap 3 decides
+        // which statuses may settle a case. Unreachable meanwhile: paid
+        // Pre-Need is impossible while the legal gate is closed
+        // (`AGENTS.md` §Domain and financial invariants).
         if (! $order instanceof Order || $order->status() !== OrderStatus::DIBAYAR) {
             throw IllegalPreNeedCaseTransitionException::orderNotPaid((string) $current->getKey());
         }

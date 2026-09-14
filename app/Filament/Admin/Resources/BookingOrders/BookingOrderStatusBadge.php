@@ -41,9 +41,19 @@ final class BookingOrderStatusBadge
             OrderStatus::MENUNGGU_PEMBAYARAN => 'Menunggu Pembayaran',
             OrderStatus::MENUNGGU_VERIFIKASI_PEMBAYARAN => 'Menunggu Verifikasi Pembayaran',
             OrderStatus::DIBAYAR => 'Dibayar',
+            // "Dibayar, Menunggu Konfirmasi" and not the shorter "Menunggu
+            // Konfirmasi": an admin scanning the table must be able to see
+            // that money has already arrived without opening the record, and
+            // the shorter label reads like any other queue.
+            OrderStatus::DIBAYAR_MENUNGGU_KONFIRMASI => 'Dibayar, Menunggu Konfirmasi',
+            OrderStatus::DIKONFIRMASI => 'Dikonfirmasi',
             OrderStatus::DIPROSES => 'Diproses',
             OrderStatus::SELESAI => 'Selesai',
             OrderStatus::DITOLAK => 'Ditolak',
+            // The word "setelah pembayaran" is the point of this status
+            // existing: a report must never let a refusal that owes somebody
+            // money read the same as one that owes nothing.
+            OrderStatus::DITOLAK_SETELAH_BAYAR => 'Ditolak Setelah Pembayaran',
             OrderStatus::DIBATALKAN => 'Dibatalkan',
             OrderStatus::KEDALUWARSA => 'Kedaluwarsa',
         };

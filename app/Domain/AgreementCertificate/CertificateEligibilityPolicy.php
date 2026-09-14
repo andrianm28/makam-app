@@ -55,6 +55,41 @@ final class CertificateEligibilityPolicy
         return (bool) $rule($subject);
     }
 
+    /**
+     * ------------------------------------------------------------------
+     * 13 Sep 2026 — why this is NOT `isPaidOrLater()`, and what it owes
+     * Tahap 3
+     * ------------------------------------------------------------------
+     * The pay-first flow adds statuses in which money has arrived but this
+     * literal no longer matches, so once Tahap 3 ships a producer, no
+     * pay-first order will be eligible for its settlement certificate. That
+     * gap is real and is recorded as a Tahap-3 prerequisite.
+     *
+     * It was deliberately NOT closed by swapping in
+     * `OrderStatus::isPaidOrLater()`, the way the two payment gates in
+     * `App\Platform\Payment` were (finding H-1). That predicate answers "has
+     * money arrived", and this rule needs a strictly narrower question —
+     * "was this order SETTLED":
+     *
+     *   - `DITOLAK_SETELAH_BAYAR` answers TRUE to `isPaidOrLater()`. Money
+     *     did arrive; the order was then refused and a refund obligation
+     *     owes it back. Issuing a settlement certificate for it would
+     *     certify the settlement of an order this system is in debt over.
+     *   - `DIBAYAR_MENUNGGU_KONFIRMASI` also answers true, and is arguably
+     *     just as wrong: no admin has accepted the order yet, so there is
+     *     nothing settled to certify.
+     *
+     * Deciding which of the new statuses may carry a settlement certificate
+     * is a product call, not a mechanical refactor, so it is left to whoever
+     * ships Tahap 3 with the facts stated rather than guessed here. Failing
+     * closed (no certificate) is the safe direction to wait in; the unsafe
+     * direction would have been a certificate issued for a refused order.
+     *
+     * `App\Filament\Admin\Resources\Certificates\Actions\CreateCertificateAction`
+     * carries the same literal for the picker query and MUST be changed in
+     * the same edit, or the picker and this policy disagree about what is
+     * eligible.
+     */
     private static function orderSettlementRule(Model $subject): bool
     {
         return $subject instanceof Order

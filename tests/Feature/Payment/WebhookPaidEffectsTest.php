@@ -288,6 +288,76 @@ final class WebhookPaidEffectsTest extends TestCase
         $this->assertStringNotContainsString('pay_first_1', $serialized);
     }
 
+    /**
+     * Finding H-1 regression (13 Sep 2026), the settlement half.
+     *
+     * The test above pins the duplicate-arrival record for an order sitting
+     * at `DIBAYAR`. The detector compared the order's status against that one
+     * literal, so an order that had MOVED ON from `DIBAYAR` — to `DIPROSES`,
+     * to `SELESAI`, or under the pay-first flow to any of the new paid
+     * statuses — failed the check and its second charge was **not recorded at
+     * all**. Not merely permitted: invisible. Nothing would surface at
+     * reconciliation and nobody would ever learn the customer had been
+     * charged twice.
+     *
+     * `DIPROSES` is used because it is reachable on trunk today without any
+     * of this branch's new statuses, which makes this a regression test for
+     * a hole that predates the pay-first flow rather than one this branch
+     * introduced.
+     */
+    public function test_a_second_payment_for_an_order_that_moved_past_paid_is_still_an_audited_duplicate(): void
+    {
+        $order = $this->bookingOrder('MK-2026-DUP-0002');
+        $this->acceptedQuote($order, self::TOTAL_MINOR);
+        $this->paymentSession('pay_moved_1', self::TOTAL_MINOR);
+
+        $this->deliver(dataOverrides: [
+            'payment_id' => 'pay_moved_1',
+            'order_id' => 'MK-2026-DUP-0002',
+            'amount' => self::TOTAL_DECIMAL,
+        ])->assertOk();
+
+        // The order moves on, exactly as a real fulfilment would take it.
+        app(RecordOrderStatusChange::class)(
+            $order->fresh(),
+            OrderStatus::DIPROSES,
+            'actor:admin-1',
+            'admin',
+        );
+        $this->assertSame(OrderStatus::DIPROSES->value, $order->fresh()->status);
+
+        // A second, independent provider transaction for the same order.
+        $this->paymentSession('pay_moved_2', self::TOTAL_MINOR);
+
+        $this->deliver(
+            id: 'msg_duplicate_moved',
+            dataOverrides: [
+                'payment_id' => 'pay_moved_2',
+                'order_id' => 'MK-2026-DUP-0002',
+                'amount' => self::TOTAL_DECIMAL,
+            ],
+        )->assertOk();
+
+        // Exactly-once paid effects are unchanged: the order stays where
+        // fulfilment put it and still names the FIRST transaction.
+        $fresh = $order->fresh();
+        $this->assertSame(OrderStatus::DIPROSES->value, $fresh->status);
+        $this->assertSame('pay_moved_1', $fresh->paid_source_ref);
+        $this->assertSame(1, $this->paidEventCount($order));
+
+        // The part that was missing: the second charge is recorded.
+        $secondEvent = ProviderEvent::query()
+            ->where('provider_transaction_id', 'pay_moved_2')
+            ->sole();
+
+        $audit = AuditEvent::query()
+            ->where('action', PaymentAuditActions::DUPLICATE_ARRIVAL)
+            ->sole();
+        $this->assertSame('provider_event', $audit->subject_type);
+        $this->assertSame($secondEvent->getKey(), $audit->subject_id);
+        $this->assertSame('denied', $audit->outcome);
+    }
+
     // -----------------------------------------------------------------
     // Marketplace: a claimed payment.completed marks the order paid and
     // re-assesses the vendor payable.
