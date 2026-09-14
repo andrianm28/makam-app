@@ -269,6 +269,17 @@
   --mk-surface-sunken: var(--color-neutral-100);
   --mk-surface-warm: var(--color-primary-50);      /* ADR-0034: warm-cream
     role now lives in the Earth family, not Leaf — trust/quiet sections. */
+  --mk-surface-quiet: var(--color-secondary-50);   /* ADR-0040: the THIRD page
+    band, so consecutive page sections can alternate and their boundaries read
+    without a divider line (design-system.md §4.4: "Proximity carries the
+    grouping — do not reach for divider lines"). Pure alias — #F2F9F3, the
+    exact value the homepage already painted by reaching for the raw
+    `bg-secondary-50` primitive, which §2's own header forbids ("Always
+    reference the SEMANTIC token in component CSS, not the primitive"). A
+    surface TINT in Leaf 50, squarely inside §1.2(b)'s cage: never a fill,
+    badge, button, or alert. Contrast needs no new verify-contrast.py pair —
+    "text-default on secondary-50" and "text-strong on secondary-50" are both
+    already asserted there, and no value changed. */
   --mk-surface-inverse: var(--color-primary-900);  /* footer */
   --mk-surface-overlay: rgb(13 17 17 / 0.55);      /* modal backdrop */
   --mk-surface-disabled: var(--color-neutral-100);

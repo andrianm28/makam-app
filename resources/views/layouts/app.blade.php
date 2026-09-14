@@ -152,7 +152,14 @@
         {{ $slot }}
     </main>
 
-    <footer class="bg-primary-900 px-4 py-8 text-neutral-0 md:px-6 lg:px-8">
+    {{-- Vertical padding `py-8` -> `py-section lg:py-section-lg` on 14 Sep 2026
+         (ADR-0040 D6). `py-8` was the same 32px half-rhythm value Tahap 1
+         (commit ebdeec7e) removed from every other band on every public page;
+         the footer was the one band left on the old value, which made the
+         page's largest brand field also its thinnest-breathing one. Now it
+         consumes --mk-section-gap / --mk-section-gap-lg like everything above
+         it. Colour, links, copy and structure are unchanged. --}}
+    <footer class="bg-primary-900 px-4 py-section text-neutral-0 md:px-6 lg:px-8 lg:py-section-lg">
         <div class="mx-auto flex max-w-content flex-col items-center gap-4 text-center">
             <a href="/" class="inline-flex items-center gap-2" aria-label="makam.co.id — beranda">
                 <x-mk.logo variant="inverse" :size="28" />

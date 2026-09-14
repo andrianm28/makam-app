@@ -13,6 +13,7 @@ use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\PlotState;
 use App\Platform\Analytics\Models\MenuInteractionEvent;
 use App\Platform\FeatureGate\Models\FeatureGate;
+use App\Support\ContactInfo;
 use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
@@ -200,6 +201,91 @@ final class HomePageRouteTest extends TestCase
         // path data (icon/exclamation-triangle.blade.php's own `d` attribute),
         // not the (never-rendered) string "icon.exclamation-triangle".
         $response->assertSee('M12 9v3.75', false);
+    }
+
+    /**
+     * The kamboja plan's U7, button-weight half only: the hotline inside
+     * the Urgent banner carries the visual weight of a button rather than
+     * an inline text link.
+     *
+     * U7's other half — making the banner dismissible — was implemented as
+     * ADR-0040 D4 and reverted the same day, before this branch was pushed.
+     * §6.9 grants dismissibility "**only** for informational modes", and
+     * this is the one gate its table gives `urgent` intent instead of
+     * `info`. `UrgentMode::fallback()`'s doc block carries the full
+     * argument; the last assertion of this test asserts the ABSENCE of a
+     * close control so that reversal cannot quietly undo itself.
+     *
+     * The N10 half of U7 is the half that matters and is asserted first:
+     * not one word of the copy changed, so no service promise was added
+     * while `G-OPS-01` is closed. `assertDontSee` on the false claims is
+     * kept in the test above; here the positive assertion is that every
+     * original word is still present and in the same order.
+     */
+    public function test_urgent_banner_hotline_carries_button_weight_and_stays_undismissible(): void
+    {
+        $response = $this->get('/');
+
+        $response->assertOk();
+
+        $phone = ContactInfo::phone();
+        $telHref = 'tel:+'.preg_replace('/[^0-9]/', '', $phone);
+
+        // The number is still a real dial link with the `+` kept (a handset
+        // reads `tel:62…` as a domestic number) …
+        $response->assertSee('href="'.$telHref.'"', false);
+        // … and it is now rendered by <x-mk.button variant="secondary">,
+        // whose border is the assertion that distinguishes a button from
+        // the plain underlined <a> this used to be. `secondary`, never
+        // `primary`: design-system.md §2.3 allows one primary action per
+        // view and that is the hero's "Pesan Makam".
+        $response->assertSee('border-primary-600', false);
+
+        // Copy unchanged — the exact words that surrounded the number
+        // before U7 are all still on the page (plan N10).
+        $response->assertSee('hotline di bawah ini dapat dihubungi kapan pun');
+        $response->assertSee('untuk menanyakan ketersediaan');
+        $response->assertSee($phone);
+        $response->assertSee('hubungi Bantuan');
+
+        // NOT dismissible. <x-mk.alert> renders its close control only when
+        // `dismissible` is true, so the absence of §3.8's Indonesian close
+        // label is the observable proof that this banner cannot be waved
+        // away on the path to choosing Urgent at Step 3.
+        $response->assertDontSee('aria-label="Tutup"', false);
+    }
+
+    /**
+     * ADR-0040 D5: consecutive homepage bands alternate, so a section
+     * boundary is legible without the divider line design-system.md §4.4
+     * forbids ("Proximity carries the grouping — do not reach for divider
+     * lines").
+     *
+     * Asserted as classes rather than pixels because that is what a
+     * server-rendered response can honestly prove. The `surface-quiet` /
+     * `surface-warm` utilities themselves are compiled by Tailwind, and
+     * their presence in `app.css` is what makes these classes mean
+     * anything — that half is verified by the frontend job's build, not
+     * here. What this test does catch is the regression that actually
+     * matters: someone reverting a band to the raw primitive, or the
+     * alternation collapsing back to one uniform surface.
+     */
+    public function test_homepage_sections_alternate_surfaces_without_divider_lines(): void
+    {
+        $response = $this->get('/');
+
+        $response->assertOk();
+
+        // Both tinted bands present, written as the SEMANTIC utilities.
+        $response->assertSee('class="surface-quiet py-section lg:py-section-lg"', false);
+        $response->assertSee('class="surface-warm py-section lg:py-section-lg"', false);
+
+        // And not as the raw primitives they replaced (tokens.css §2:
+        // "Always reference the SEMANTIC token in component CSS, not the
+        // primitive"). Scoped to the full-bleed band class strings so this
+        // never trips on an unrelated legitimate use of the primitive.
+        $response->assertDontSee('class="bg-secondary-50 py-section', false);
+        $response->assertDontSee('class="bg-primary-50 py-section', false);
     }
 
     public function test_urgent_banner_is_absent_when_g_ops_01_is_open(): void
