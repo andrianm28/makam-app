@@ -25,13 +25,20 @@ use UnitEnum;
 /**
  * ADM-070 (`docs/product/screen-inventory.md`) — the admin surface for
  * reviewing `payment_verifications`: manual proof-of-payment submissions and
- * the finance/restricted-admin decision recorded against each one. The
- * WRITE side of that decision already exists and is untouched by this
- * resource — `App\Platform\Payment\Http\Controllers\
- * VerifyManualPaymentController` / `App\Platform\Payment\
- * VerifyManualPayment` — this class only lets staff BROWSE the resulting
- * rows. Read-only by construction: `getPages()` below registers only
- * `index`/`view`, never `create`/`edit`.
+ * the finance/restricted-admin decision recorded against each one.
+ *
+ * `getPages()` below still registers only `index`/`view`, never
+ * `create`/`edit` — there is nothing to create or edit here, a
+ * `payment_verifications` row is only ever produced by the customer-facing
+ * `SubmitManualPayment` path. FIL-04 remediation closed the real gap this
+ * class's doc block used to describe: the View page now carries the
+ * decision header actions themselves
+ * (`Pages\ViewPaymentVerification::getHeaderActions()`, backed by
+ * `Actions\DecidePaymentVerificationAction`/`Actions\
+ * RecordPaymentReversalAction`), calling the SAME write APIs the raw HTTP
+ * endpoints (`Http\Controllers\VerifyManualPaymentController`,
+ * `Http\Controllers\RecordPaymentReversalController`) already exposed with
+ * no admin UI in front of them.
  *
  * ---------------------------------------------------------------------------
  * Access: the same "coarse mount gate + fail-closed query" shape
