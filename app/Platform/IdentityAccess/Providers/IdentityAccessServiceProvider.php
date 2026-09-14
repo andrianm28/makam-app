@@ -10,8 +10,14 @@ use App\Platform\IdentityAccess\Adapters\LocalUsersTableIdentityAccessAdapter;
 use App\Platform\IdentityAccess\Contracts\IdentityAccessAdapter;
 use App\Platform\IdentityAccess\Listeners\RecordActorSessionOnLogin;
 use App\Platform\IdentityAccess\Listeners\RecordActorSessionOnLogout;
+use App\Platform\IdentityAccess\Listeners\RecordAuthAuditOnLockout;
+use App\Platform\IdentityAccess\Listeners\RecordAuthAuditOnLogin;
+use App\Platform\IdentityAccess\Listeners\RecordAuthAuditOnLoginFailed;
+use App\Platform\IdentityAccess\Listeners\RecordAuthAuditOnLogout;
 use App\Platform\IdentityAccess\MasterData\Contracts\MasterDataAdminAuthorizerContract;
 use App\Platform\IdentityAccess\MasterData\MasterDataAdminAuthorizer;
+use Illuminate\Auth\Events\Failed;
+use Illuminate\Auth\Events\Lockout;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 use Illuminate\Contracts\Auth\Factory as AuthFactory;
@@ -66,5 +72,13 @@ final class IdentityAccessServiceProvider extends ServiceProvider
     {
         Event::listen(Login::class, RecordActorSessionOnLogin::class);
         Event::listen(Logout::class, RecordActorSessionOnLogout::class);
+
+        // SEC-08: the authentication audit trail. Registered alongside the
+        // `actor_sessions` bookkeeping listeners above — these write to
+        // `audit_events` instead, and never touch `actor_sessions`.
+        Event::listen(Login::class, RecordAuthAuditOnLogin::class);
+        Event::listen(Failed::class, RecordAuthAuditOnLoginFailed::class);
+        Event::listen(Lockout::class, RecordAuthAuditOnLockout::class);
+        Event::listen(Logout::class, RecordAuthAuditOnLogout::class);
     }
 }
