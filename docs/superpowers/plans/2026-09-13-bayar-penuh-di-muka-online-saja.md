@@ -147,6 +147,13 @@ pelanggan bisa membayar penuh untuk petak yang sama.
 
 - Perluas `PaymentCheckoutClient` dengan `refund()`.
 - **SumoPod tidak mendukung refund API** — dikonfirmasi pemilik 13 Sep 2026.
+  Diperjelas pemilik 14 Sep 2026: penyedia ini **hanya mendukung *withdraw* ke
+  akun utama**. Jadi bukan sekadar "tidak ada endpoint refund" — tidak ada
+  jalur apa pun yang mengembalikan uang ke sumbernya, dan tidak ada jalur yang
+  mengirimnya langsung ke pelanggan. Satu refund selalu dua perpindahan manual:
+  withdraw ke rekening utama, lalu transfer ke pelanggan. Konsekuensinya untuk
+  tenggat dan untuk antarmuka operator ada di
+  [rencana refund](2026-09-13-sistem-refund.md) §Tahap R2.
   Jadi tahap ini tidak bisa diselesaikan dengan penyedia yang ada sekarang; ia
   menunggu sistem refund yang akan direncanakan terpisah. Yang masih bisa
   dikerjakan lebih awal: memperluas kontrak `PaymentCheckoutClient` dengan
