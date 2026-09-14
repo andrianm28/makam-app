@@ -482,3 +482,85 @@ menangkapnya, dan saya melakukannya sendiri:
 
 Keempatnya dari bertindak atas pengamatan **parsial atau terlalu dini**.
 Keempatnya terkoreksi hanya karena diukur ulang.
+
+---
+
+## Tahap 5 — Perjalanan pengguna interaktif A1–A10 (14 Sep 2026)
+
+Tahap 0–4 memeriksa **permukaan**: 30 rute, status, judul, penanda. Tahap 5
+menjalankan **perjalanannya** di Chrome, sampai menulis baris nyata di dev —
+draft, pesanan, sesi pembayaran, item keranjang.
+
+**Yang dijalankan sampai tuntas:** A1 pemesanan makam (4 langkah, sampai
+pesanan `MK-2026-2ZGKBMFI` terbit), A2 perpanjangan (3 langkah, sampai
+redirect ke `pay-sandbox.sumopod.com` dan sesi Rp 4.000.000 tercatat),
+A3 marketplace (filter → detail → keranjang → checkout), A4 direktori +
+detail TPU, A5 kunjungan, A6 pre-need, A7 FAQ, A8 bantuan, A9 legal,
+A10 memorial/sertifikat/kwitansi.
+
+**23 temuan.** Empat High, sepuluh Medium, lima Low, dua LULUS yang layak
+dicatat, satu keputusan pemilik, dan satu koreksi terhadap temuan Tahap 0.
+
+### Empat temuan High
+
+| # | Temuan | Bukti terkuat |
+|---|---|---|
+| A3-01 | Harga & vendor di daftar ≠ di detail, **kesembilan produk**, di **beta** | "Paket Bunga Tabur" Rp 175.000 → Rp 7.500.000 (42,9×) |
+| A10-01 | Tiga rute publik **HTTP 500** pada ID tak berbentuk UUID, di dev **dan** beta | `SQLSTATE[22P02] invalid input syntax for type uuid` |
+| A4-03 | Halaman TPU menjanjikan "tidak ada petak yang terkunci"; wizard mengunci petak dalam satu klik | `plot_tracking_mode` vs `cemetery_capability_profiles` |
+| A7-01 | FAQ menjelaskan alur **sembilan langkah**; wizard punya **empat** | dua artikel terbit di beta |
+
+A10-01 yang paling langsung bisa dikerjakan: idiom penjaganya sudah ada
+di repo ini (`Str::isUuid()`, dua belas berkas), dan salah satu baris
+yang benar berada **dua fungsi di atas** salah satu baris yang rusak
+(`RenewalPayment.php:130` benar, `:168` tidak).
+
+### Satu pola yang muncul dua kali, dan hanya terlihat karena dijalankan
+
+Kedua perjalanan yang melibatkan uang meminta pengguna menekan tombol
+bayar **tanpa satu angka pun di layar**:
+
+- A1 langkah 3: `innerText.match(/Rp[\s ][\d.]+/g)` → `[]`
+- A2 layar bayar: nominal **dan** nama almarhum sama-sama hilang; judulnya
+  menyusut jadi "Perpanjangan masa sewa makam." — kalimat yang terbaca
+  seperti terpotong di tempat nama seharusnya berada
+
+Datanya ada dan benar — sesi pembayaran yang dikirim ke penyedia tercatat
+`amount_minor = 400000000` (Rp 4.000.000), persis sesuai tarif. Ia hanya
+tidak dirender pada layar tempat keputusan diambil.
+
+Ini tidak muncul di Tahap 0–4 karena probe rute tidak pernah sampai ke
+langkah 3.
+
+### Temuan Tahap 0 yang dikoreksi
+
+Baris 1 tabel Tahap 4 berbunyi: *"`/kenangan/<id salah bentuk>` → HTTP 500.
+Satu-satunya 500 di 30 rute. #304 memperbaikinya."*
+
+Dua hal salah di situ. **Bukan satu-satunya** — ada tiga
+(`/perpanjangan/pembayaran` dan `/perpanjangan/konfirmasi` dengan
+`?perpanjangan=` tak berbentuk UUID juga 500, di kedua host). Dan
+**#304 tidak memperbaikinya**: ketiganya masih 500 hari ini di dev dan
+beta. Lihat A10-01.
+
+### Dua LULUS yang layak dicatat
+
+- **Idempotensi pesanan**, diverifikasi di basis data bukan di UI: dua
+  klik "Bayar Sekarang" → satu baris `orders`, dijaga
+  `idempotency_key='booking:<draft-id>'`, dan nol sesi pembayaran baru.
+- **Kota tanpa data tidak disembunyikan**: Sukabumi tetap muncul di filter
+  `/pemakaman` dengan empty state yang menjelaskan dan dua jalan keluar —
+  persis yang diwajibkan aturan "NEVER filter this" pada
+  `CemeteryPublicQuery::launchCities()`.
+
+### Yang tetap tidak bisa diuji, dinyatakan bukan didiamkan
+
+**B (akun), C (admin), D (operator), E (vendor) — 41 perjalanan — belum
+diuji.** Kelimanya butuh masuk dengan kata sandi, dan memasukkan kata
+sandi adalah batas yang tidak saya akali. Gerbangnya sendiri sudah
+diverifikasi: kelima rute `/akun/*` dan ketiga panel mengalihkan ke
+halaman masuknya masing-masing dengan benar.
+
+Perjalanan A1 berhenti di langkah 4 karena alasan produk, bukan alasan
+alat: pembayaran baru dibuka setelah admin mengonfirmasi ketersediaan.
+Menyelesaikannya butuh satu tindakan admin.
