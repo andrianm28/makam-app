@@ -8,6 +8,7 @@ use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSubject;
 use Illuminate\Auth\Events\Logout;
+use Illuminate\Contracts\Auth\Authenticatable;
 
 /**
  * SEC-08: audits every logout on the standard
@@ -30,7 +31,18 @@ final class RecordAuthAuditOnLogout
 
     public function handle(Logout $event): void
     {
-        $actorRef = $event->user?->getAuthIdentifier();
+        // `Illuminate\Auth\Events\Logout::$user` is an UNTYPED promoted
+        // property; only its constructor docblock claims
+        // `Authenticatable`, and PHPStan believes that docblock. At runtime
+        // the event genuinely can carry null — `RecordActorSessionOnLogout
+        // Test` states this in its own comment, and the nullsafe below is
+        // what keeps a logout with no resolvable actor from fataling on an
+        // unauthenticated path. The annotation states the real runtime type
+        // rather than deleting the guard to satisfy the analyser.
+        /** @var Authenticatable|null $user */
+        $user = $event->user;
+
+        $actorRef = $user?->getAuthIdentifier();
 
         Audit::record(
             action: self::ACTION,

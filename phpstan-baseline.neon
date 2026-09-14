@@ -1261,18 +1261,6 @@ parameters:
 			path: tests/Feature/IdentityAccess/RecordActorSessionOnLoginTest.php
 
 		-
-			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertTrue\(\) with true will always evaluate to true\.$#'
-			identifier: method.alreadyNarrowedType
-			count: 1
-			path: tests/Feature/IdentityAccess/RecordActorSessionOnLogoutTest.php
-
-		-
-			message: '#^Parameter \#2 \$user of class Illuminate\\Auth\\Events\\Logout constructor expects Illuminate\\Contracts\\Auth\\Authenticatable, null given\.$#'
-			identifier: argument.type
-			count: 1
-			path: tests/Feature/IdentityAccess/RecordActorSessionOnLogoutTest.php
-
-		-
 			message: '#^Parameter \#1 \$panel of method App\\Models\\User\:\:canAccessPanel\(\) expects Filament\\Panel, Mockery\\MockInterface given\.$#'
 			identifier: argument.type
 			count: 3
