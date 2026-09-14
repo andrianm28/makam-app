@@ -204,9 +204,17 @@ final class HomePageRouteTest extends TestCase
     }
 
     /**
-     * ADR-0040 D4 / the kamboja plan's U7: the hotline inside the Urgent
-     * banner carries the visual weight of a button rather than an inline
-     * text link, and the banner can be dismissed.
+     * The kamboja plan's U7, button-weight half only: the hotline inside
+     * the Urgent banner carries the visual weight of a button rather than
+     * an inline text link.
+     *
+     * U7's other half — making the banner dismissible — was implemented as
+     * ADR-0040 D4 and reverted the same day, before this branch was pushed.
+     * §6.9 grants dismissibility "**only** for informational modes", and
+     * this is the one gate its table gives `urgent` intent instead of
+     * `info`. `UrgentMode::fallback()`'s doc block carries the full
+     * argument; the last assertion of this test asserts the ABSENCE of a
+     * close control so that reversal cannot quietly undo itself.
      *
      * The N10 half of U7 is the half that matters and is asserted first:
      * not one word of the copy changed, so no service promise was added
@@ -214,7 +222,7 @@ final class HomePageRouteTest extends TestCase
      * kept in the test above; here the positive assertion is that every
      * original word is still present and in the same order.
      */
-    public function test_urgent_banner_hotline_carries_button_weight_and_the_banner_is_dismissible(): void
+    public function test_urgent_banner_hotline_carries_button_weight_and_stays_undismissible(): void
     {
         $response = $this->get('/');
 
@@ -240,9 +248,11 @@ final class HomePageRouteTest extends TestCase
         $response->assertSee($phone);
         $response->assertSee('hubungi Bantuan');
 
-        // Dismissible (ADR-0040 D4). <x-mk.alert> renders its close control
-        // only when `dismissible` is true, with §3.8's Indonesian label.
-        $response->assertSee('aria-label="Tutup"', false);
+        // NOT dismissible. <x-mk.alert> renders its close control only when
+        // `dismissible` is true, so the absence of §3.8's Indonesian close
+        // label is the observable proof that this banner cannot be waved
+        // away on the path to choosing Urgent at Step 3.
+        $response->assertDontSee('aria-label="Tutup"', false);
     }
 
     /**

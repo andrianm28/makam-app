@@ -12,16 +12,20 @@ use Tests\TestCase;
  * mode values, not a bare boolean. design-system.md §6.9's banner table for
  * `G-OPS-01` is the authority for the two assertions below that matter
  * most: `CapacityUnknown` uses `urgent` intent (not `info`, unlike every
- * other mode) and — since ADR-0040 D4, 14 Sep 2026 — IS dismissible.
+ * other mode) and is never dismissible.
  *
- * That second assertion was `assertFalse` until ADR-0040. It changed
- * because the decision changed, not to make code pass: §6.9's literal rule
- * is "Dismissible only for informational modes — never for one that changes
- * how a user must pay", and closing `G-OPS-01` changes what the platform
- * can claim about Urgent acceptance, not how anyone pays. `PaymentModeTest`
- * and `PreNeedModeTest` still assert `assertFalse` for their own modes,
- * which really do alter the payment path — the distinction is the point of
- * the rule, so do not "align" those with this one.
+ * Those two assertions are ONE fact, not two. §6.9 reads "Dismissible
+ * **only** for informational modes — never for one that changes how a user
+ * must pay", and `urgent` is the intent §6.9's table gives this gate
+ * *instead of* `info`. So the first assertion is the reason for the second:
+ * a non-informational banner is outside the grant before the payment clause
+ * is reached.
+ *
+ * ADR-0040 D4 flipped this to `assertTrue` on 14 Sep 2026, reading only the
+ * payment clause. Reverted the same day, unpushed — see `UrgentMode::
+ * fallback()`'s own doc block for why the dismissible siblings it cited
+ * (`GraveSearchMode`, `WhatsAppMode`, `MemorialMode`) argue the other way:
+ * all three are `intent: 'info'`.
  */
 final class UrgentModeTest extends TestCase
 {
@@ -40,12 +44,12 @@ final class UrgentModeTest extends TestCase
         $this->assertNull(UrgentMode::AcceptingRequests->fallback());
     }
 
-    public function test_capacity_unknown_fallback_is_urgent_intent_and_dismissible(): void
+    public function test_capacity_unknown_fallback_is_urgent_intent_and_never_dismissible(): void
     {
         $fallback = UrgentMode::CapacityUnknown->fallback();
 
         $this->assertNotNull($fallback);
         $this->assertSame('urgent', $fallback->intent);
-        $this->assertTrue($fallback->dismissible);
+        $this->assertFalse($fallback->dismissible);
     }
 }

@@ -2,7 +2,7 @@
 
 - **Status:** Accepted (design-token + public-view change; no security/authorization/financial/privacy code touched — see Consequences)
 - **Date:** 14 Sep 2026
-- **Supersedes in part:** `App\Platform\FeatureGate\Modes\UrgentMode`'s "never dismissible" doc-block reasoning (D4 below). No other ADR is superseded; ADR-0034's palette and ADR-0037's "one accent, one purpose" rule are both unchanged and both constrain this one.
+- **Supersedes:** nothing. D4 below *considered* reversing `App\Platform\FeatureGate\Modes\UrgentMode`'s "never dismissible" reasoning and then withdrew it the same day; that reasoning stands unchanged. No ADR is superseded; ADR-0034's palette and ADR-0037's "one accent, one purpose" rule are both unchanged and both constrain this one.
 
 ## Context
 
@@ -129,24 +129,48 @@ element actually **filled** with the brand colour, which is the specific deficit
 the documented closed list at two while the component accepts three would be a rank-2/rank-3
 conflict, which §9.1 calls a defect.
 
-### D4 — The `G-OPS-01` banner becomes dismissible, and its hotline gets button weight
+### D4 — The `G-OPS-01` hotline gets button weight. Its banner stays UNDISMISSIBLE.
 
-This is the plan's U7, and it **reverses** the reasoning in `UrgentMode::fallback()`'s doc block.
-Stating that plainly: that doc block argued the banner belongs to §6.9's "never dismissible" class.
-§6.9's literal rule is narrower — *"Dismissible **only** for informational modes — never for one
-that changes how a user must pay."* Closing `G-OPS-01` does not change how anyone pays; it changes
-what the platform can honestly say about Urgent/At-Need acceptance. `PaymentMode::ManualCoordination`
-and `PreNeedMode::InterestOnly` stay non-dismissible because they genuinely do change the payment
-path. `GraveSearchMode`, `WhatsAppMode` and `MemorialMode` are already dismissible on exactly this
-distinction; `UrgentMode` is being moved to the side of that line §6.9's own wording puts it on.
+This is the plan's U7, and only half of U7 survived.
 
-Two changes follow, and the second matters more than the first:
+**The dismissibility half was implemented, then reverted the same day, before this branch was
+pushed. It is recorded here rather than deleted, because a decision that was made and withdrawn
+is more useful to the next reader than a decision that appears never to have been considered.**
 
-1. `UrgentMode::CapacityUnknown` returns `dismissible: true`. `<x-mk.alert>` only wires its Alpine
-   `x-data`/`x-show` when `dismissible` is true; if JS never runs the banner simply stays visible,
-   which is the safe failure mode. The close control is already a 44 px `touch-target` with
-   `aria-label="Tutup"` (§3.8).
-2. The hotline number inside the banner moves from an inline underlined link to
+The withdrawn argument ran: §6.9's literal rule is *"Dismissible **only** for informational modes
+— never for one that changes how a user must pay"*, closing `G-OPS-01` does not change how anyone
+pays, and `GraveSearchMode`/`WhatsAppMode`/`MemorialMode` are already dismissible on exactly that
+distinction — so `UrgentMode` belongs with them.
+
+**What refutes it is the citation itself.** That rule has two clauses, and the argument used only
+the second. The first clause — "**only** for informational modes" — is a grant, and the second
+carves an exception out of it. `UrgentMode` never enters the grant: §6.9's own banner table gives
+`info` to `PaymentMode`, `WhatsAppMode`, `PreNeedMode` and `GraveSearchMode`, and gives this gate
+`urgent` instead. The code matches the table exactly — measured across the enum family:
+
+| Mode | intent | dismissible |
+|---|---|---|
+| `GraveSearchMode` | `info` | true |
+| `MemorialMode` | `info` | true |
+| `WhatsAppMode` | `info` | true |
+| `PaymentMode` | `info` | **false** |
+| `PreNeedMode` | `info` | **false** |
+| `UrgentMode` | **`urgent`** | **false** |
+
+The dismissible set is exactly {informational modes that do not touch the payment path}. All three
+siblings the argument cited are `info`. `UrgentMode` is in neither half of the rule, and making it
+dismissible would have left it the only non-informational dismissible banner in the product.
+
+`UrgentModeTest`'s own doc block already recorded the distinguishing fact, in a sentence the flip
+left standing: `CapacityUnknown` "uses `urgent` intent (not `info`, unlike every other mode)".
+
+So `UrgentMode::CapacityUnknown` keeps `dismissible: false`, its unit test keeps `assertFalse`, and
+`HomePageRouteTest` now asserts the **absence** of `aria-label="Tutup"` so this reversal cannot
+quietly undo itself.
+
+One change follows:
+
+1. The hotline number inside the banner moves from an inline underlined link to
    `<x-mk.button variant="secondary">` — white fill, `primary-700` label, `primary-600` border, 44 px
    high. **`secondary`, deliberately not `primary`:** §2.3's "exactly one primary action per view"
    belongs to `Pesan Makam`, and a second brand-filled button at the top of the page would both
@@ -156,7 +180,7 @@ Two changes follow, and the second matters more than the first:
 the same title, the same "Jam operasional dan cakupan layanan Urgent … berbeda-beda di setiap
 TPU/TPS" body, the same `hotline di bawah ini dapat dihubungi kapan pun untuk menanyakan
 ketersediaan`, the same phone number, the same `atau`, the same `hubungi Bantuan` link, the same
-trailing full stop. Only the phone number's *visual weight* and the banner's dismissibility change.
+trailing full stop. Only the phone number's *visual weight* changes.
 No 24/7 claim, no response-time claim, no acceptance claim — `G-OPS-01` is still closed and the
 banner still says so. `design-system.md` §6.9's row for this gate ("operating hours and coverage,
 **no acceptance claim**, hotline shown") is satisfied before and after.
@@ -220,16 +244,17 @@ What this does **not** do:
   and N9 prohibitions all hold.
 - **No dark mode** (`OQ-07` still open), no `dark:` utility added.
 - **Not a security/authorization/financial/privacy change** under `AGENTS.md`'s human-review trigger
-  list. D4 changes a banner's dismissibility and a phone number's visual weight; it changes no gate
-  value, no server-side mode resolution, and no payment path. The gate state is still read from the
+  list. D4 changes a phone number's visual weight; it changes no gate value, no server-side mode
+  resolution, no payment path, and — after the reversal recorded in D4 — no banner behaviour. The gate state is still read from the
   server (§6.9), and `G-OPS-01` itself is untouched.
 
 Risks / revisit criteria:
 
-- **D4 is the one to watch.** If analytics or support volume ever suggest visitors are dismissing
-  the Urgent banner and then arriving surprised at Step 3, revisit `dismissible: true` first — it is
-  a one-line revert in `UrgentMode::fallback()` plus its test. The banner is per-page-load state
-  (Alpine, not persisted), so a dismissal never survives a navigation.
+- **Do not re-litigate D4's dismissibility half without re-reading §6.9's FIRST clause.** It was
+  argued, implemented, and withdrawn inside one day on this branch, and the argument that failed is
+  a persuasive one — it cites three real dismissible siblings. The refutation is that all three are
+  `intent: 'info'` and this gate is `intent: 'urgent'`. The table in D4 is there so the next reader
+  spends a minute on it rather than a day.
 - If `surface-quiet` and `surface-page` prove indistinguishable to real users at typical mobile
   brightness (`#F2F9F3` vs `#F7F8F8` is a subtle step by design — this is a calm-palette product,
   not a high-contrast one), the fix is a deeper band (`secondary-100`, already a permitted tint
