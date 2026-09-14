@@ -1,0 +1,59 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Feature\View\Components;
+
+use Illuminate\Support\Facades\Blade;
+use Tests\TestCase;
+
+/**
+ * <x-mk.icon-medallion>'s `size` scale — design-system.md §3.3a.
+ *
+ * `xl` was added 14 Sep 2026 for the kamboja plan's Tahap 4 ("perbesar
+ * <x-mk.icon-medallion> pada kartu layanan"). Same class-string rationale
+ * as MkCardTest: the `$sizes`/`$iconSizes` maps must stay static literal
+ * strings or Tailwind's `@source` scanner generates no CSS for them and
+ * the tile silently renders unstyled while every other test stays green.
+ */
+final class MkIconMedallionTest extends TestCase
+{
+    public function test_xl_renders_a_64px_tile_with_a_proportional_mark(): void
+    {
+        $html = Blade::render('<x-mk.icon-medallion icon="document-text" tone="earth" size="xl" />');
+
+        // 4rem tile / 1.75rem mark, both on tokens.css's 4px --spacing
+        // scale — the ~45% mark-to-tile ratio `md` and `lg` already use.
+        $this->assertStringContainsString('size-16', $html);
+        $this->assertStringContainsString('size-7', $html);
+        $this->assertStringNotContainsString('size-11', $html);
+        $this->assertStringNotContainsString('size-13', $html);
+    }
+
+    public function test_the_existing_sizes_are_unchanged_by_the_xl_addition(): void
+    {
+        $md = Blade::render('<x-mk.icon-medallion icon="document-text" tone="earth" />');
+        $lg = Blade::render('<x-mk.icon-medallion icon="document-text" tone="earth" size="lg" />');
+
+        $this->assertStringContainsString('size-11', $md);
+        $this->assertStringContainsString('size-5', $md);
+        $this->assertStringContainsString('size-13', $lg);
+        $this->assertStringContainsString('size-6', $lg);
+    }
+
+    public function test_xl_is_a_size_only_and_carries_no_tone_of_its_own(): void
+    {
+        // Tahap 4 is explicitly SIZE only: the `brand` fill Tahap 2 added
+        // (ADR-0040 D3) must not travel with the new size, and `earth`
+        // must still render its tint at `xl`.
+        $earth = Blade::render('<x-mk.icon-medallion icon="document-text" tone="earth" size="xl" />');
+        $brand = Blade::render('<x-mk.icon-medallion icon="document-text" tone="brand" size="xl" />');
+
+        $this->assertStringContainsString('bg-primary-100', $earth);
+        $this->assertStringContainsString('text-primary-800', $earth);
+        $this->assertStringNotContainsString('bg-primary-600', $earth);
+
+        $this->assertStringContainsString('bg-primary-600', $brand);
+        $this->assertStringContainsString('text-neutral-0', $brand);
+    }
+}
