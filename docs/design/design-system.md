@@ -955,6 +955,19 @@ Grid gap: `gap-4` mobile → `md:gap-6`.
 
 `--mk-section-gap` 40 px mobile / `--mk-section-gap-lg` 64 px desktop between page sections. `--mk-stack-gap` 16 px inside a card. `--mk-field-gap` 20 px between form fields. Heading to its content: 8 px. Content to next heading: 32 px. Proximity carries the grouping — do not reach for divider lines.
 
+**Four `@utility` entries in `app.css` make those tokens the easy thing to write (added 13–14 Sep 2026, kamboja plan Tahap 1–2).** Use them; do not restate the numbers as Tailwind spacing utilities.
+
+| Utility | Emits | Use for |
+|---|---|---|
+| `py-section` | `padding-block: var(--mk-section-gap)` | vertical padding of a page section, mobile |
+| `py-section-lg` | `padding-block: var(--mk-section-gap-lg)` | the same, from `lg` |
+| `surface-quiet` | `background: var(--mk-surface-quiet)` | the third page band, for alternation ([ADR-0040](../adr/0040-add-surface-quiet-and-widen-the-brand-field.md) D1/D2) |
+| `surface-warm` | `background: var(--mk-surface-warm)` | trust/reassurance sections (§2.3) |
+
+Why these exist at all, stated plainly because it is the more useful half: **a rule with a mechanical guard is followed, and a rule without one is not.** An audit on 13 Sep 2026 found 31 of the 94 `--mk-*` tokens had zero consumers, and they clustered precisely in the scales no gate protects — spacing, gutters, control heights, icon sizes, borders. Every `--mk-z-*` token IS consumed, because GATE 11 forbids a raw z-index; both focus tokens are consumed, because GATE 12 forbids suppressing focus. §4.4's own numbers had been carried by `--mk-section-gap` since `tokens.css` was written and consumed by nothing: every section on every page hardcoded `py-5 lg:py-8` — 20/32 px, exactly half the mandate — and no gate objected, because `py-5` is a legitimate Tailwind utility rather than the hardcoded hex GATE 2 and GATE 3 look for.
+
+**Surface alternation.** Consecutive page sections may alternate between `--mk-surface-page`, `surface-quiet`, and `surface-warm` so a section boundary reads without the divider line this section forbids. Alternate deliberately — the point is the boundary, so two adjacent bands must differ, and a page that tints every section has simply moved the uniformity somewhere else.
+
 ### 4.5 Homepage section order (**normative** — IA §3)
 
 1. Header/navigation
@@ -1044,6 +1057,8 @@ Covered in §1.6 (tokens). Design rules:
 ```
 
 Every skeleton carries an `sr-only` announcement; a screen-reader user hears nothing from a pulsing box.
+
+**A page-level skeleton follows §4.4's rhythm, not its own (added 14 Sep 2026, kamboja plan Tahap 8).** "Mirrors the real layout" is a CLS requirement before it is an aesthetic one: a skeleton padded differently from the section it stands in for shifts the page at the moment content arrives, which is exactly what the < 0.1 budget above measures. So a skeleton standing in for a whole page section takes `py-section lg:py-section-lg` like the section will, and inherits that section's surface utility if it has one. The inline example above is a **within-section** skeleton — a list of results inside an already-padded container — and correctly carries no section padding of its own.
 
 ### 6.2 Empty
 
