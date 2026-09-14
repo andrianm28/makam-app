@@ -443,6 +443,11 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
         Schema::dropIfExists('funeral_cases');
         Schema::dropIfExists('pre_need_interests');
         Schema::dropIfExists('order_invoices');
+        // `refund_obligations` FKs `orders` (Stage R0 of
+        // `docs/superpowers/plans/2026-09-13-sistem-refund.md`), so it must
+        // precede `orders` here for the same 2BP01 reason this list already
+        // orders everything else.
+        Schema::dropIfExists('refund_obligations');
         Schema::dropIfExists('orders');
         Schema::dropIfExists('booking_drafts');
         Schema::dropIfExists('renewal_external_markings');
