@@ -11,6 +11,8 @@ use App\Platform\DocumentVault\DocumentState;
 use App\Platform\DocumentVault\DocumentValidator;
 use App\Platform\DocumentVault\Jobs\ScanDocumentJob;
 use App\Platform\DocumentVault\Models\Document;
+use App\Platform\DocumentVault\Policies\DocumentAccessPolicy;
+use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use App\Platform\Outbox\Outbox;
 use App\Platform\Outbox\OutboxClassification;
 use App\Platform\Outbox\OutboxQueueName;
@@ -91,6 +93,20 @@ use Throwable;
  * `resume()` code as every other kind; its larger `maxSizeBytes()` and its
  * `scannerRequired()` are read from `DocumentKind` itself, never branched
  * on here by kind.
+ *
+ * ---------------------------------------------------------------------------
+ * VAULT-06 — `$ownerType` is validated at the write boundary
+ * ---------------------------------------------------------------------------
+ * `Policies\DocumentAccessPolicy` can only resolve a record relationship for
+ * `owner_type === DocumentAccessPolicy::OWNER_TYPE_ACTOR` or one of
+ * `ScopeEntityType::KNOWN_TYPES` (see that policy's own class doc block).
+ * Any other value silently has no relationship source and is denied by
+ * every future `canView()` check — a real access-control gap that used to
+ * be discoverable only by reading the policy's source, not by anything at
+ * write time. `upload()` now asserts `$ownerType` is one of those before a
+ * single byte is written to quarantine, so a bad owner type is caught
+ * immediately at the caller, never silently persisted as a document nobody
+ * (not even an admin) will ever be able to view.
  */
 final readonly class UploadDocument
 {
@@ -112,6 +128,8 @@ final readonly class UploadDocument
         ?string $clientUploadId,
         array $meta,
     ): Document {
+        $this->assertResolvableOwnerType($ownerType);
+
         return DB::transaction(function () use ($kind, $file, $ownerType, $ownerId, $clientUploadId, $meta): Document {
             $existing = $this->findExisting($clientUploadId, $ownerType, (string) $ownerId);
 
@@ -299,6 +317,26 @@ final readonly class UploadDocument
 
             throw $exception;
         }
+    }
+
+    /**
+     * VAULT-06 — see class doc block.
+     *
+     * @throws InvalidArgumentException when `$ownerType` is not
+     *                                  `DocumentAccessPolicy::OWNER_TYPE_ACTOR`
+     *                                  and not one of `ScopeEntityType::KNOWN_TYPES`.
+     */
+    private function assertResolvableOwnerType(string $ownerType): void
+    {
+        if ($ownerType === DocumentAccessPolicy::OWNER_TYPE_ACTOR || ScopeEntityType::isKnown($ownerType)) {
+            return;
+        }
+
+        throw new InvalidArgumentException(
+            "Unresolvable document owner_type [{$ownerType}]. DocumentAccessPolicy can only authorize ".
+            'owner_type '.DocumentAccessPolicy::OWNER_TYPE_ACTOR.' or one of ScopeEntityType::KNOWN_TYPES ('.
+            implode(', ', ScopeEntityType::KNOWN_TYPES).'); any other value would be silently unauthorizable.'
+        );
     }
 
     private function findExisting(?string $clientUploadId, string $ownerType, string $ownerId): ?Document

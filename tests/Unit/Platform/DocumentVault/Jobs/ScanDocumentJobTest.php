@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Platform\DocumentVault\Jobs;
 
 use App\Platform\Audit\Models\AuditEvent;
+use App\Platform\DocumentVault\Actions\PromoteDocument;
 use App\Platform\DocumentVault\Actions\ScanDocument;
 use App\Platform\DocumentVault\Adapters\LocalFilesystemObjectStorage;
 use App\Platform\DocumentVault\Adapters\MockScanner;
@@ -15,6 +16,7 @@ use App\Platform\DocumentVault\Models\Document;
 use App\Platform\DocumentVault\Models\DocumentScan;
 use App\Platform\DocumentVault\ScanVerdict;
 use App\Platform\DocumentVault\StoragePathPolicy;
+use App\Platform\Outbox\Models\OutboxEvent;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -31,6 +33,11 @@ use Tests\TestCase;
  * ACCEPTED, the exact race with the synchronous issuance pipeline — makes
  * the job a no-op instead of a failed/retried job, while still-scannable
  * states (QUARANTINED, SCANNING) keep scanning.
+ *
+ * VAULT-01: a CLEAN verdict now also promotes the document through
+ * `Actions\PromoteDocument` — see `ScanDocumentJob`'s own class doc block
+ * for why that call lives here rather than inside `Actions\ScanDocument`
+ * itself.
  */
 final class ScanDocumentJobTest extends TestCase
 {
@@ -70,7 +77,7 @@ final class ScanDocumentJobTest extends TestCase
 
         $this->expectException(ModelNotFoundException::class);
 
-        $job->handle(app(ScanDocument::class));
+        $job->handle(app(ScanDocument::class), $this->promoteDocument());
     }
 
     public function test_handle_noops_on_an_already_accepted_document_without_changing_state(): void
@@ -78,7 +85,7 @@ final class ScanDocumentJobTest extends TestCase
         $document = $this->acceptedDocument();
 
         $job = new ScanDocumentJob($document->id);
-        $job->handle($this->scanDocument());
+        $job->handle($this->scanDocument(), $this->promoteDocument());
 
         $this->assertSame(DocumentState::Accepted, $document->fresh()->state);
         $this->assertSame('accepted', $document->fresh()->storage_prefix);
@@ -86,29 +93,45 @@ final class ScanDocumentJobTest extends TestCase
         $this->assertSame(0, AuditEvent::query()->where('action', 'DOCUMENT_SCAN')->count());
     }
 
-    public function test_handle_scans_a_quarantined_document(): void
+    /**
+     * VAULT-01 regression test: before the fix, `handle()` only called
+     * `Actions\ScanDocument::scan()` and a CLEAN verdict left the document
+     * stuck in SCANNING forever — no caller on this async path ever promoted
+     * it. This is "a caller that will actually exercise this path" (the
+     * async pipeline `Livewire\Public\Memorial\MemorialFamilyPage::uploadMedia()`
+     * relies on, via its own `attachAcceptedUploads()` polling for
+     * `DocumentState::Accepted` rows).
+     */
+    public function test_handle_promotes_a_clean_quarantined_document_to_accepted(): void
     {
         $document = $this->documentWithBytes($this->minimalPdf());
 
         $job = new ScanDocumentJob($document->id);
-        $job->handle($this->scanDocument());
+        $job->handle($this->scanDocument(), $this->promoteDocument());
 
         $scan = DocumentScan::query()->sole();
         $this->assertSame(ScanVerdict::Clean, $scan->verdict);
         $this->assertSame(1, $scan->attempt);
         $this->assertSame($document->checksum_sha256, $scan->checksum_sha256);
-        $this->assertSame(DocumentState::Scanning, $document->fresh()->state);
+        $this->assertSame(DocumentState::Accepted, $document->fresh()->state);
+        $this->assertSame('accepted', $document->fresh()->storage_prefix);
+        $this->assertFileExists("{$this->root}/KTP/accepted/{$document->storage_key}");
+        $this->assertSame(
+            'DOCUMENT_ACCEPTED',
+            AuditEvent::query()->where('action', 'DOCUMENT_ACCEPTED')->sole()->action,
+        );
+        $this->assertSame('document.accepted.v1', OutboxEvent::query()->sole()->event_name);
     }
 
-    public function test_handle_keeps_scanning_a_scanning_document(): void
+    public function test_handle_promotes_a_clean_scanning_document_to_accepted(): void
     {
         $document = $this->documentWithBytes($this->minimalPdf());
         $document->transitionTo(DocumentState::Scanning);
 
         $job = new ScanDocumentJob($document->id);
-        $job->handle($this->scanDocument());
+        $job->handle($this->scanDocument(), $this->promoteDocument());
 
-        $this->assertSame(DocumentState::Scanning, $document->fresh()->state);
+        $this->assertSame(DocumentState::Accepted, $document->fresh()->state);
         $this->assertSame(1, DocumentScan::query()->count());
         $this->assertSame(ScanVerdict::Clean, DocumentScan::query()->sole()->verdict);
     }
@@ -119,6 +142,14 @@ final class ScanDocumentJobTest extends TestCase
             new LocalFilesystemObjectStorage($this->root),
             $this->paths,
             new MockScanner,
+        );
+    }
+
+    private function promoteDocument(): PromoteDocument
+    {
+        return new PromoteDocument(
+            new LocalFilesystemObjectStorage($this->root),
+            $this->paths,
         );
     }
 

@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Tests\Feature\Domain\Marketplace;
 
 use App\Domain\Marketplace\Exceptions\ProductMustHavePhotoToActivateException;
+use App\Domain\Marketplace\Exceptions\ProductPhotoFailedScanException;
 use App\Domain\Marketplace\MarketplaceProductCategory;
 use App\Domain\Marketplace\Models\Product;
 use App\Domain\Marketplace\ProductCode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use Tests\TestCase;
 
@@ -254,6 +256,63 @@ final class ProductCatalogueSeedTest extends TestCase
             'is_active' => false,
             'photo_path' => null,
         ]);
+    }
+
+    /**
+     * VAULT-02: a marketplace product photo is written to the PUBLIC disk
+     * (never the vault quarantine), so a malware scan at this `saving`
+     * hook — via `Actions\ScanProductPhoto`, the SAME `MalwareScanner`
+     * contract `Actions\ScanDocument` uses for restricted vault documents —
+     * is the only gate this file ever passes through. A non-CLEAN verdict
+     * (here, the published EICAR standard antivirus test string —
+     * `Adapters\MockScanner`'s own fixture) must refuse the save AND remove
+     * the file from public storage.
+     */
+    public function test_a_new_photo_that_fails_the_malware_scan_is_rejected_and_removed(): void
+    {
+        $product = Product::findByCode(ProductCode::FLOWER_BOARD);
+        $this->assertNotNull($product);
+
+        $diskPath = 'marketplace/products/eicar-test.png';
+        Storage::disk('public')->put(
+            $diskPath,
+            'X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*',
+        );
+
+        $product->photo_path = $diskPath;
+
+        try {
+            $this->expectException(ProductPhotoFailedScanException::class);
+
+            $product->save();
+        } finally {
+            $this->assertFalse(
+                Storage::disk('public')->exists($diskPath),
+                'A file that failed the malware scan must not be left on the public disk.',
+            );
+        }
+    }
+
+    /**
+     * The other half of VAULT-02: a genuinely clean upload still saves
+     * normally — the scan gate is a real gate, not a blanket refusal.
+     */
+    public function test_a_new_clean_photo_passes_the_malware_scan_and_saves(): void
+    {
+        $product = Product::findByCode(ProductCode::FLOWER_BOARD);
+        $this->assertNotNull($product);
+
+        $diskPath = 'marketplace/products/clean-test.png';
+        Storage::disk('public')->put($diskPath, 'not malware, just bytes');
+
+        $product->photo_path = $diskPath;
+        $product->save();
+
+        $this->assertDatabaseHas('products', [
+            'code' => ProductCode::FLOWER_BOARD,
+            'photo_path' => $diskPath,
+        ]);
+        $this->assertTrue(Storage::disk('public')->exists($diskPath));
     }
 
     /**
