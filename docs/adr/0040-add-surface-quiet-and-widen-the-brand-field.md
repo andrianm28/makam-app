@@ -247,9 +247,20 @@ empty `<div>` on BOTH dev and beta:
     curl https://dev.makam.co.id/ | grep -c plot-preview-heading   -> 0
     curl https://makam.co.id/     | grep -c plot-preview-heading   -> 0
 
+Naming those two hosts precisely, because the second one is easy to misread: `dev.makam.co.id` is
+served by `makam-nonprod-dev-web-1`, and the apex `makam.co.id` is served by
+`makam-nonprod-beta-web-1` — the public beta — which carries `APP_ENV=production` on the apex
+domain. It is the beta by deployment intent and the production domain by address; there is no third
+host. Every measurement in this subsection was taken against those two containers.
+
 That is a defect, not a configuration choice. `config('marketing.homepage_plot_preview_cemetery_slugs')`
 is populated on both hosts — `["tpu-petamburan","tpu-karet-bivak"]` — and **neither slug exists in
-either `cemeteries` table**. So `$showcase` comes back empty and `@unless ($unavailable ||
+either `cemeteries` table**. The absence is not limited to those two: all four cemeteries that
+`2026_08_24_100000_backfill_photo_and_maps_url_for_real_cemeteries.php:9-11` describes as the
+"4 REAL, named cemeteries currently live on `dev`/`stg`/`beta`" are absent from both, and all ten
+rows that do exist carry `Contoh` addresses. That is a larger fact than this ADR's scope and is
+reported to the owner separately; what it settles HERE is only that the current hero/card adjacency
+is the product of missing data, not of layout. So `$showcase` comes back empty and `@unless ($unavailable ||
 empty($showcase))` swallows the whole section, silently: no log, and `$unavailable` never trips
 because the query succeeds and simply returns nothing.
 
