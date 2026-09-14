@@ -331,6 +331,12 @@ parameters:
 			path: app/Filament/Admin/Resources/Reconciliations/ReconciliationsResource.php
 
 		-
+			message: '#^Method App\\Filament\\Admin\\Resources\\RefundObligations\\RefundObligationsResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<App\\Domain\\RefundObligation\\Models\\RefundObligation\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Filament/Admin/Resources/RefundObligations/RefundObligationsResource.php
+
+		-
 			message: '#^Parameter \#1 \$renewal of static method App\\Filament\\Admin\\Resources\\RenewalOrders\\Actions\\ExpireRenewalAction\:\:make\(\) expects App\\Domain\\Renewal\\Models\\Renewal, Illuminate\\Database\\Eloquent\\Model\|int\|string\|null given\.$#'
 			identifier: argument.type
 			count: 1

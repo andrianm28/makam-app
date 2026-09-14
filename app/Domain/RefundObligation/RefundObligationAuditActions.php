@@ -22,4 +22,24 @@ final class RefundObligationAuditActions
      * be explained to the customer it belongs to.
      */
     public const string OPENED = 'REFUND_OBLIGATION_OPENED';
+
+    /**
+     * An operator recorded that they have transferred the money, with a
+     * transfer reference and stored evidence — Stage R2. On
+     * `SensitiveActions::ACTIONS` for a blunter reason than `OPENED`: this is
+     * the only event in the whole ledger that claims somebody's debt has been
+     * paid, and the system never sees the money move. Nothing verifies the
+     * claim at the moment it is made, so the operator's stated justification
+     * is a load-bearing part of the record rather than a courtesy.
+     */
+    public const string EXECUTED = 'REFUND_OBLIGATION_EXECUTED';
+
+    /**
+     * Receipt was confirmed — Stage R2, the terminal transition. Listed for
+     * the same reason as `EXECUTED`: this says a grieving family has their
+     * money back, and it is the last thing anybody writes about that debt.
+     * A confirmation nobody had to justify is indistinguishable from one
+     * entered to make a queue shorter.
+     */
+    public const string CONFIRMED = 'REFUND_OBLIGATION_CONFIRMED';
 }
