@@ -225,6 +225,43 @@ the same half-rhythm value Tahap 1 removed from every other band. It becomes
 No colour, link, copy, or structure changes; the `primary-900` field simply stops being the one
 band still on the old rhythm.
 
+### D7 — A10/U9 ("service cards ride up over the hero's bottom edge") is DEFERRED, not dropped
+
+Scoped into Tahap 4 and taken out of it. Recorded here so the next reader does not re-derive it.
+
+**Why it could not be built as specified.** The plan characterises A10/U9 as *"murni tata letak,
+nol token baru"*. On the homepage the service-card section is not adjacent to `<x-mk.hero>`:
+`<livewire:public.home.plot-availability-preview />` sits between them, placed there by
+`docs/superpowers/specs/2026-09-05-marketing-hero-plot-preview-design.md` §4.4 ("Sits directly
+under the hero, ahead of the four service cards") and locked by `HomePageRouteTest`, which asserts
+the preview's heading renders after the hero and before `services-heading`.
+
+A negative-top-margin overlap therefore only produces the intended visual when the preview renders
+nothing. Making it work in general means moving the preview below the cards — reversing another
+document's explicit placement decision and rewriting its test. That is no longer "pure layout, zero
+new tokens", and the change of cost category is the signal the item does not belong in this stage.
+
+**Why the current adjacency must NOT be relied on.** Measured 14 Sep 2026, the preview renders an
+empty `<div>` on BOTH dev and beta:
+
+    curl https://dev.makam.co.id/ | grep -c plot-preview-heading   -> 0
+    curl https://makam.co.id/     | grep -c plot-preview-heading   -> 0
+
+That is a defect, not a configuration choice. `config('marketing.homepage_plot_preview_cemetery_slugs')`
+is populated on both hosts — `["tpu-petamburan","tpu-karet-bivak"]` — and **neither slug exists in
+either `cemeteries` table**. So `$showcase` comes back empty and `@unless ($unavailable ||
+empty($showcase))` swallows the whole section, silently: no log, and `$unavailable` never trips
+because the query succeeds and simply returns nothing.
+
+So the cards look adjacent to the hero today only because a section is broken. Ship an overlap
+against that, fix the config, and the overlap breaks in production. The config fix is operator data
+and is reported to the owner separately; it is deliberately not made here.
+
+**Revisit criteria.** A10/U9 becomes buildable the moment either (a) the preview's placement is
+deliberately revisited by whoever owns that spec, or (b) the hero's immediate successor is settled
+in a way that does not depend on conditional rendering. Neither is a design-system decision, which
+is why this ADR defers rather than rules.
+
 ## Consequences
 
 What this unblocks:
