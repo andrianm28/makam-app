@@ -13,6 +13,7 @@ use App\Filament\Admin\Pages\Reports;
 use App\Filament\Admin\Widgets\FailedPaymentExceptionQueueWidget;
 use App\Filament\Admin\Widgets\FinancialOverviewWidget;
 use App\Filament\Admin\Widgets\OrderStatusOverviewWidget;
+use App\Filament\Admin\Widgets\OverdueRefundObligationQueueWidget;
 use App\Filament\Admin\Widgets\PlatformOverviewWidget;
 use App\Http\Middleware\AssignCorrelationId;
 use Filament\Http\Middleware\Authenticate;
@@ -250,6 +251,7 @@ class AdminPanelProvider extends PanelProvider
                 PlatformOverviewWidget::class,
                 OrderStatusOverviewWidget::class,
                 FinancialOverviewWidget::class,
+                OverdueRefundObligationQueueWidget::class,
                 FailedPaymentExceptionQueueWidget::class,
             ])
             ->middleware([
