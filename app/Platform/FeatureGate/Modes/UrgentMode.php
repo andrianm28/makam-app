@@ -61,19 +61,40 @@ enum UrgentMode: string
      * `resources/views/components/mk/alert.blade.php`'s own `$intents` array
      * before using it here.
      *
-     * Never dismissible — same reasoning `PaymentMode::ManualCoordination`
-     * documents for itself: an honest "capacity unknown, call us" state is
-     * not something a user should be able to dismiss and forget. Closing
-     * this gate does not change how a user pays, but it does change what
-     * the platform can honestly promise about same-day/At-Need handling,
-     * which is exactly the class of fact §6.9's dismissibility rule reserves
-     * for "never dismissible".
+     * REVERSED 14 Sep 2026 by ADR-0040 D4 — this mode is now dismissible.
+     *
+     * The previous text of this paragraph argued the opposite: that an honest
+     * "capacity unknown, call us" state is "exactly the class of fact §6.9's
+     * dismissibility rule reserves for 'never dismissible'". It is not.
+     * §6.9's rule is narrower than that reading, verbatim: *"Dismissible
+     * **only** for informational modes — never for one that changes how a
+     * user must pay."* Closing `G-OPS-01` changes what the platform can
+     * honestly CLAIM about Urgent/At-Need acceptance; it does not change how
+     * anyone pays. `PaymentMode::ManualCoordination` and
+     * `PreNeedMode::InterestOnly` stay non-dismissible because they really do
+     * alter the payment path. `GraveSearchMode`, `WhatsAppMode` and
+     * `MemorialMode` are already dismissible on precisely this distinction —
+     * this enum is being moved to the side of the line §6.9's own wording
+     * puts it on, not given a carve-out.
+     *
+     * What does NOT change, and is the part that matters: the banner's copy.
+     * It still states hours and coverage, still makes no acceptance claim,
+     * and still shows the hotline (§6.9's own row for this gate). Nothing
+     * about the gate, its server-side resolution, or the booking wizard's
+     * Urgent choice at Step 3 changes here. `<x-mk.alert>` only wires its
+     * Alpine `x-data`/`x-show` when `dismissible` is true, so with JS absent
+     * the banner simply stays visible — the safe failure mode — and a
+     * dismissal is per-page-load state that never survives a navigation.
+     *
+     * If this proves wrong (visitors dismissing the banner and arriving
+     * surprised at Step 3), the revert is this one argument value plus its
+     * unit test. ADR-0040's "Risks / revisit criteria" names it first.
      */
     public function fallback(): ?GateFallback
     {
         return match ($this) {
             self::AcceptingRequests => null,
-            self::CapacityUnknown => new GateFallback(intent: 'urgent', dismissible: false),
+            self::CapacityUnknown => new GateFallback(intent: 'urgent', dismissible: true),
         };
     }
 }

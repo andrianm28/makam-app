@@ -101,8 +101,24 @@
     actual markup, not just its position. Instead the banner below is the
     FIRST thing this view renders (immediately after the header, visually
     "directly below" it) using `<x-mk.alert>` exactly as built. Substance
-    (first, prominent, truthful, never dismissible) over a pixel-identical
-    match to a schematic diagram.
+    (first, prominent, truthful) over a pixel-identical match to a
+    schematic diagram.
+
+    UPDATED 14 Sep 2026 (ADR-0040 D4, the plan's U7): this parenthetical
+    used to end "…truthful, never dismissible". The banner is now
+    dismissible, because §6.9's literal rule is "Dismissible ONLY for
+    informational modes — never for one that changes how a user must pay",
+    and a closed `G-OPS-01` changes what the platform can honestly claim
+    about Urgent acceptance, not how anyone pays. Dismissibility is still
+    NOT decided here: it comes from `UrgentMode::fallback()` on the server
+    (see that enum's doc block for the full reversal record), and this view
+    only renders `$urgentFallback->dismissible` — §6.9's "the UI must read
+    the server value" is unchanged. The hotline number inside the banner
+    also moved from an inline link to a `secondary` <x-mk.button>; every
+    word of the copy is byte-identical, only weight and dismissibility
+    changed, so no service promise was added (plan N10, `G-OPS-01` still
+    closed). `secondary`, not `primary`: §2.3 allows exactly one primary
+    action per view and that is `Pesan Makam`.
 
     --- UPDATED 19 Aug 2026 — hand-written buttons converted to <x-mk.button> ---
     Previously hand-written (see docs/planning/sprint-plan.md finding N-14
@@ -143,15 +159,28 @@
                 dan diperiksa langsung pada saat Anda mengajukan permintaan. Kami belum dapat menjamin penerimaan
                 otomatis di luar kapasitas yang tersedia saat ini — hotline di bawah ini dapat dihubungi kapan pun
                 untuk menanyakan ketersediaan.
-                {{-- The leading `+` is KEPT. Stripping it (as this line did until 8 Aug
+
+                {{-- U7 (ADR-0040 D4): the number moves into <x-mk.alert>'s own
+                     `action` slot and gains button weight. The words are
+                     UNCHANGED and in the same order — number, "atau", "hubungi
+                     Bantuan", full stop — because N10 forbids adding any service
+                     promise while `G-OPS-01` is closed; only the weight changed.
+                     `variant="secondary"` (white fill, primary-700 label,
+                     primary-600 border, 44px) and NOT `primary`: §2.3 allows one
+                     primary action per view and that is the hero's "Pesan Makam".
+
+                     The leading `+` is KEPT. Stripping it (as this line did until 8 Aug
                      2026) yields `tel:6281200001234`, which a handset reads as a
                      DOMESTIC number and dials wrongly; `+62…` is an unambiguous
                      international dial string. Found while building PUB-060, which
                      had already made the opposite call — see App\Livewire\Public\
                      Support\HelpCentre::telHref(). --}}
-                <a href="tel:+{{ preg_replace('/[^0-9]/', '', ContactInfo::phone()) }}" class="font-medium underline underline-offset-2">{{ ContactInfo::phone() }}</a>
-                atau
-                <a href="/bantuan" class="font-medium underline underline-offset-2">hubungi Bantuan</a>.
+                <x-slot:action>
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                        <x-mk.button variant="secondary" :href="'tel:+' . preg_replace('/[^0-9]/', '', ContactInfo::phone())">{{ ContactInfo::phone() }}</x-mk.button>
+                        <span>atau <a href="/bantuan" class="font-medium underline underline-offset-2">hubungi Bantuan</a>.</span>
+                    </div>
+                </x-slot:action>
             </x-mk.alert>
         </div>
     @endif
@@ -248,14 +277,24 @@
          UPDATED 19 Aug 2026 — full-bleed bg-secondary-50 band (the Leaf
          tint moved here from the trust band, section 6, which now
          correctly uses bg-primary-50 — see that section's own comment for
-         why). Each step is a real <x-mk.card> (non-interactive — nothing
+         why).
+         UPDATED 14 Sep 2026 (ADR-0040) — that same colour is now written
+         as `surface-quiet`, the named semantic token, instead of the raw
+         `bg-secondary-50` primitive tokens.css §2's header forbids
+         reaching for. Identical pixels; this band is the first
+         alternation point in the page's page/quiet/page/warm/page/quiet/
+         page order. The step numerals changed tone `leaf` -> `brand`: they
+         sit on white cards, not on this band, and they are four of the
+         elements ADR-0040 adds to the one element that previously carried
+         a brand FILL rather than brand ink.
+         Each step is a real <x-mk.card> (non-interactive — nothing
          to click here) instead of a hand-rolled bordered <li>, per
          design-system.md §9.2 MUST #2 ("extend primitives rather than
          forking"). The numeral moves into <x-mk.icon-medallion>'s default
          slot rather than an icon — a number is the correct affordance for
          an ordered <ol> item; see icon-medallion.blade.php's own doc block
          for why Cara Kerja specifically does not use icons. --}}
-    <section aria-labelledby="how-it-works-heading" class="bg-secondary-50 py-section lg:py-section-lg">
+    <section aria-labelledby="how-it-works-heading" class="surface-quiet py-section lg:py-section-lg">
         <div class="mx-auto max-w-content px-4 md:px-6 lg:px-8">
             <h2 id="how-it-works-heading" class="mb-6 text-center text-2xl font-semibold text-neutral-900">
                 Cara Kerja
@@ -270,7 +309,7 @@
                     <li wire:key="how-it-works-{{ $index }}">
                         <x-mk.card class="h-full">
                             <div class="space-y-2">
-                                <x-mk.icon-medallion tone="leaf">{{ $index + 1 }}</x-mk.icon-medallion>
+                                <x-mk.icon-medallion tone="brand">{{ $index + 1 }}</x-mk.icon-medallion>
                                 <h3 class="text-base font-semibold text-neutral-900">{{ $step['title'] }}</h3>
                                 <p class="text-sm text-neutral-600">{{ $step['body'] }}</p>
                             </div>
@@ -358,8 +397,18 @@
          (Earth, not Leaf) — design-system.md §2.3's DO and §4.5 item 6
          both say explicitly to use it for trust/reassurance sections. The
          Leaf tint moved to the Cara Kerja band (section 4) instead, which
-         is what actually produces the page's warm/leaf/warm rhythm. --}}
-    <section aria-labelledby="trust-heading" class="bg-primary-50 py-section lg:py-section-lg">
+         is what actually produces the page's warm/leaf/warm rhythm.
+
+         UPDATED 14 Sep 2026 (ADR-0040): `bg-primary-50` becomes
+         `surface-warm`. Identical pixels — `--mk-surface-warm` has mapped
+         to `--color-primary-50` since ADR-0034; what it lacked was a
+         utility, which is exactly why this call site wrote the primitive.
+         §4.5 item 6 names the TOKEN, so the token is now what the markup
+         says. The `leaf` medallions below stay leaf: with the Cara Kerja
+         numerals now `brand`, both tint tones remain in real use and the
+         trust points keep the quieter of the two, which is the right
+         weight for a reassurance section. --}}
+    <section aria-labelledby="trust-heading" class="surface-warm py-section lg:py-section-lg">
         <div class="mx-auto max-w-content px-4 md:px-6 lg:px-8">
             <h2 id="trust-heading" class="mb-6 text-center text-2xl font-semibold text-neutral-900">
                 Kenapa Makam.co.id
@@ -439,40 +488,42 @@
          gracefully (HomePage::render()'s own try/catch); §6.2 empty state
          for the (rare, hard to trigger against real seed data) case where
          the query succeeds but returns nothing. --}}
-    <section aria-labelledby="faq-highlights-heading" class="mx-auto max-w-content px-4 py-section md:px-6 lg:px-8 lg:py-section-lg">
-        <h2 id="faq-highlights-heading" class="mb-6 text-center text-2xl font-semibold text-neutral-900">
-            Pertanyaan yang Sering Diajukan
-        </h2>
+    <section aria-labelledby="faq-highlights-heading" class="surface-quiet py-section lg:py-section-lg">
+        <div class="mx-auto max-w-content px-4 md:px-6 lg:px-8">
+            <h2 id="faq-highlights-heading" class="mb-6 text-center text-2xl font-semibold text-neutral-900">
+                Pertanyaan yang Sering Diajukan
+            </h2>
 
-        @if ($faqHighlightsUnavailable)
-            <x-mk.alert intent="pending" title="Pertanyaan populer sedang tidak tersedia" live="polite">
-                Anda tetap dapat menjelajahi seluruh FAQ kami.
-                <a href="{{ route('faq.index') }}" class="underline underline-offset-2">Lihat semua FAQ</a>.
-            </x-mk.alert>
-        @elseif ($faqHighlights->isEmpty())
-            <div class="flex flex-col items-center gap-3 py-8 text-center">
-                <p class="text-base text-neutral-600">Belum ada pertanyaan unggulan saat ini.</p>
-                <a href="{{ route('faq.index') }}" class="text-base font-medium text-primary-700 underline underline-offset-2">
-                    Lihat semua FAQ
-                </a>
-            </div>
-        @else
-            <ul class="grid grid-cols-1 gap-4 md:grid-cols-2" aria-label="Pertanyaan unggulan">
-                @foreach ($faqHighlights as $article)
-                    <li wire:key="faq-highlight-{{ $article->id }}">
-                        <x-mk.card as="a" interactive :href="route('faq.show', ['articleSlug' => $article->slug])" class="h-full touch-target">
-                            <h3 class="text-base font-semibold text-neutral-900">{{ $article->title }}</h3>
-                            <p class="text-sm text-neutral-600">{{ $article->summary }}</p>
-                        </x-mk.card>
-                    </li>
-                @endforeach
-            </ul>
-            <div class="mt-6 text-center">
-                <x-mk.button variant="secondary" :href="route('faq.index')">
-                    Lihat semua FAQ
-                </x-mk.button>
-            </div>
-        @endif
+            @if ($faqHighlightsUnavailable)
+                <x-mk.alert intent="pending" title="Pertanyaan populer sedang tidak tersedia" live="polite">
+                    Anda tetap dapat menjelajahi seluruh FAQ kami.
+                    <a href="{{ route('faq.index') }}" class="underline underline-offset-2">Lihat semua FAQ</a>.
+                </x-mk.alert>
+            @elseif ($faqHighlights->isEmpty())
+                <div class="flex flex-col items-center gap-3 py-8 text-center">
+                    <p class="text-base text-neutral-600">Belum ada pertanyaan unggulan saat ini.</p>
+                    <a href="{{ route('faq.index') }}" class="text-base font-medium text-primary-700 underline underline-offset-2">
+                        Lihat semua FAQ
+                    </a>
+                </div>
+            @else
+                <ul class="grid grid-cols-1 gap-4 md:grid-cols-2" aria-label="Pertanyaan unggulan">
+                    @foreach ($faqHighlights as $article)
+                        <li wire:key="faq-highlight-{{ $article->id }}">
+                            <x-mk.card as="a" interactive :href="route('faq.show', ['articleSlug' => $article->slug])" class="h-full touch-target">
+                                <h3 class="text-base font-semibold text-neutral-900">{{ $article->title }}</h3>
+                                <p class="text-sm text-neutral-600">{{ $article->summary }}</p>
+                            </x-mk.card>
+                        </li>
+                    @endforeach
+                </ul>
+                <div class="mt-6 text-center">
+                    <x-mk.button variant="secondary" :href="route('faq.index')">
+                        Lihat semua FAQ
+                    </x-mk.button>
+                </div>
+            @endif
+        </div>
     </section>
 
     {{-- Section 8: Customer-service CTA — requirements.md AC5. Distinct
@@ -480,7 +531,12 @@
          choosing" invitation, not a gate-state notice. --}}
     <section aria-labelledby="cs-cta-heading" class="mx-auto max-w-content px-4 py-section md:px-6 lg:px-8 lg:py-section-lg">
         <div class="mx-auto flex max-w-prose flex-col items-center gap-3 rounded-lg border border-primary-200 bg-primary-50 p-6 text-center md:p-8">
-            <x-mk.icon-medallion icon="question-mark-circle" tone="earth" size="lg" />
+            {{-- tone `earth` -> `brand` 14 Sep 2026 (ADR-0040 D3): a real
+                 primary-600 field, not another primary-100 tint on the
+                 primary-50 card it already sits on. `size="lg"` is unchanged —
+                 medallion SIZING on service cards is Tahap 4 of the kamboja
+                 plan, not this change. --}}
+            <x-mk.icon-medallion icon="question-mark-circle" tone="brand" size="lg" />
             <h2 id="cs-cta-heading" class="text-xl font-semibold text-neutral-900">
                 Butuh Bantuan Memilih Layanan?
             </h2>
