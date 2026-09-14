@@ -111,6 +111,108 @@ final class HomePageRouteTest extends TestCase
     }
 
     /**
+     * A9/U8 — two-tone service-card headings (kamboja plan Tahap 4,
+     * design-system.md §3.3b).
+     *
+     * The load-bearing assertion here is the third one: the four product
+     * labels §9.2 MUST NOT 9 protects must survive the split VERBATIM once
+     * markup is stripped. Tahap 4 is a visual-hierarchy stage and is
+     * forbidden from touching copy, so a heading that renders
+     * "Pemesanan  Makam" or drops a word is a copy change wearing a
+     * styling change's clothes — and neither
+     * `test_all_four_menus_appear_in_ac1s_exact_order` nor the
+     * `assertSee()` tests below would catch it, because the header nav
+     * renders all four labels contiguously and would satisfy both on its
+     * own.
+     */
+    public function test_service_card_headings_render_two_tone_without_altering_a_label(): void
+    {
+        $response = $this->get('/');
+        $response->assertOk();
+
+        $body = $response->getContent();
+        $this->assertNotFalse($body);
+
+        // Scoped to Section 3's grid by its own aria-label, so the header
+        // nav's copies of the same four labels cannot satisfy this test.
+        $gridStart = strpos($body, 'aria-label="Layanan utama"');
+        $this->assertNotFalse($gridStart, 'Expected Section 3\'s service-card grid.');
+        $gridEnd = strpos($body, '</ul>', $gridStart);
+        $this->assertNotFalse($gridEnd);
+        $grid = substr($body, $gridStart, $gridEnd - $gridStart);
+
+        $headingCount = preg_match_all('#<h3[^>]*>(.*?)</h3>#s', $grid, $matches);
+        $this->assertSame(4, $headingCount, 'Expected four service-card headings in the grid.');
+
+        $labels = ['Pemesanan Makam', 'Layanan Pemakaman', 'Perpanjangan Makam', 'FAQ'];
+
+        foreach ($matches[1] as $index => $headingInner) {
+            $text = trim((string) preg_replace('/\s+/', ' ', strip_tags($headingInner)));
+            $this->assertSame(
+                $labels[$index],
+                $text,
+                "Service-card heading $index must read exactly its product label."
+            );
+        }
+
+        // The first three labels are multi-word, so they carry the device:
+        // lead word in brand ink, remainder near-black, two block spans
+        // inside ONE <h3>.
+        $this->assertMatchesRegularExpression(
+            '#<span class="block text-primary-600">Pemesanan</span>\s*<span class="block">Makam</span>#',
+            $matches[1][0]
+        );
+        $this->assertMatchesRegularExpression(
+            '#<span class="block text-primary-600">Layanan</span>\s*<span class="block">Pemakaman</span>#',
+            $matches[1][1]
+        );
+        $this->assertMatchesRegularExpression(
+            '#<span class="block text-primary-600">Perpanjangan</span>\s*<span class="block">Makam</span>#',
+            $matches[1][2]
+        );
+
+        // "FAQ" is one word: no second tone exists, so it gets no brand
+        // line at all rather than rendering wholly in brand ink, which
+        // would give the last card in AC1's stakeholder order the loudest
+        // heading on the row.
+        $this->assertStringNotContainsString('text-primary-600', $matches[1][3]);
+    }
+
+    /**
+     * Tahap 4 butir 1 + 2 — the four service cards are the page's journey
+     * entrances, so they render `<x-mk.card emphasis="strong">` (resting
+     * `shadow-md`, `border-primary-200`) and the 64 px `xl` medallion,
+     * rather than the same treatment every other card on the page uses.
+     */
+    public function test_service_cards_render_as_strong_cards_with_the_xl_medallion(): void
+    {
+        $response = $this->get('/');
+        $response->assertOk();
+
+        $body = $response->getContent();
+        $this->assertNotFalse($body);
+
+        $gridStart = strpos($body, 'aria-label="Layanan utama"');
+        $this->assertNotFalse($gridStart);
+        $gridEnd = strpos($body, '</ul>', $gridStart);
+        $this->assertNotFalse($gridEnd);
+        $grid = substr($body, $gridStart, $gridEnd - $gridStart);
+
+        // Anchored on the card root's RESTING classes, in order. A bare
+        // `assertStringContainsString('shadow-md')` is vacuous here: every
+        // interactive card already emits `hover:shadow-md`, so it passed
+        // even with `emphasis="strong"` mutated down to `shadow-sm`
+        // (verified by mutation, 14 Sep 2026 — this is the repaired form).
+        $this->assertMatchesRegularExpression(
+            '#class="block rounded-lg border shadow-md border-primary-200 bg-neutral-0#',
+            $grid
+        );
+        $this->assertStringNotContainsString('border-neutral-200', $grid);
+        // 64px tile — design-system.md §3.3a's `xl`.
+        $this->assertStringContainsString('size-16', $grid);
+    }
+
+    /**
      * Brand visual refresh Phase 2
      * (docs/superpowers/plans/2026-08-25-brand-visual-refresh-phase2-homepage.md
      * Task 1) — proves the hero renders via the real `<x-mk.hero>` component

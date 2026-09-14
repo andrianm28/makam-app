@@ -86,15 +86,26 @@
         );
     }
 
+    // `xl` added 14 Sep 2026 (kamboja plan Tahap 4, device A8 "kartu produk
+    // besar dengan ikon besar"): SIZE only — no new tone, no change to the
+    // `brand` fill Tahap 2 added. 44 -> 52 px (`lg`) is an 18% step and
+    // barely reads as a hierarchy signal on the homepage's service cards;
+    // 64 px does. Every value stays on tokens.css's 4 px `--spacing` scale
+    // (`size-16` = 4rem, `size-7` = 1.75rem), so no design value is
+    // hardcoded and no token was added. The 7/16 icon-to-tile ratio (44%)
+    // matches `md` (20/44 = 45%) and `lg` (24/52 = 46%) rather than
+    // inventing a new proportion.
     $sizes = [
         'md' => 'size-11',
         'lg' => 'size-13',
+        'xl' => 'size-16',
     ];
     $sizeClasses = $sizes[$size] ?? $sizes['md'];
 
     $iconSizes = [
         'md' => 'size-5',
         'lg' => 'size-6',
+        'xl' => 'size-7',
     ];
     $iconSizeClasses = $iconSizes[$size] ?? $iconSizes['md'];
 

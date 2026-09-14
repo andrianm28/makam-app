@@ -136,7 +136,18 @@
         </picture>
     @endif
 
-    <div class="flex flex-col gap-4 bg-primary-50 p-6 md:p-8">
+    {{-- PANEL WEIGHT (Tahap 4 butir 5, kamboja plan §2.4). The measured
+         complaint is not the panel's colour, it is its mass: the hero renders
+         as "dua balok yang tidak pernah bersentuhan", a 384 px photo band
+         above a 252 px text panel, so the photo reads as the hero and the
+         message reads as a caption under it. The panel gains padding
+         (24 -> 32 px mobile, 32 -> 48 px from `md`), which is the only
+         weight axis available without touching the photo. Both values sit on
+         tokens.css's 4 px `--spacing` scale; `bg-primary-50`, `gap-4`
+         (= `--mk-stack-gap`) and the heading scale are unchanged, and NO
+         scrim, overlay, or gradient is introduced — the unified hero (A6)
+         is deliberately out of every stage until OQ-K5 is answered. --}}
+    <div class="flex flex-col gap-4 bg-primary-50 p-8 md:p-12">
         <h1 class="{{ $headingClasses }}">{{ $heading }}</h1>
 
         {{ $slot }}
