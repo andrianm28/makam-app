@@ -38,17 +38,17 @@
    * to artwork and the caged `secondary` family (see §1.2). Brand, primary
    * CTA, links, active nav, focus ring, informational surfaces.
    * ------------------------------------------------------------------------ */
-  --color-primary-50:  #F9F4F0;
-  --color-primary-100: #F0E6DE;
-  --color-primary-200: #E0CAB8;
-  --color-primary-300: #C9A386;
-  --color-primary-400: #B47E55;
-  --color-primary-500: #986943; /* thin AA margin (4.73:1) if ever used as white-text fill -- prefer 600 for fills, see design-system.md */
-  --color-primary-600: #563B26; /* base — white label AA 10.25:1 — sampled directly from the real logo (docs/design/brand/source/logo.png), resolves OQ-12 */
-  --color-primary-700: #47311F; /* hover / link on light */
-  --color-primary-800: #382719; /* pressed */
-  --color-primary-900: #2A1D13; /* footer, inverse header */
-  --color-primary-950: #1B120C;
+  --color-primary-50:  #F5F7F6;
+  --color-primary-100: #EAEDEB;
+  --color-primary-200: #D0D7D4;
+  --color-primary-300: #A9B6B0;
+  --color-primary-400: #7A8E85; /* white label 3.48:1 -- LARGE TEXT ONLY, never a body-copy fill */
+  --color-primary-500: #50695D; /* white label AA 5.97:1 -- usable, but 600 is the brand fill */
+  --color-primary-600: #29483A; /* FOREST -- the 2026 guideline's primary, verbatim. White label AA 10.08:1. ADR-0041. */
+  --color-primary-700: #223B30; /* hover / link on light -- white 12.09:1 */
+  --color-primary-800: #1B3026; /* pressed -- white 14.02:1 */
+  --color-primary-900: #14241D; /* footer, inverse header -- white 16.16:1 */
+  --color-primary-950: #0E1814;
 
   /* ---------------------------------------------------------------------------
    * 1.2 COLOUR — SECONDARY "Leaf" (hue ~132°, green)
@@ -62,34 +62,34 @@
    * surface tint, 700–900 as text on those tints, 300–400 as decorative
    * rule/icon.
    * ------------------------------------------------------------------------ */
-  --color-secondary-50:  #F2F9F3;
-  --color-secondary-100: #E1F1E4;
-  --color-secondary-200: #C0E1C6;
-  --color-secondary-300: #93CC9E;
-  --color-secondary-400: #67B777;
-  --color-secondary-500: #4FA660;
-  --color-secondary-600: #336B3E; /* sampled directly from the real logo (docs/design/brand/source/logo.png), resolves OQ-12 */
-  --color-secondary-700: #2A5833;
-  --color-secondary-800: #214629;
-  --color-secondary-900: #19351F;
-  --color-secondary-950: #102113;
+  --color-secondary-50:  #F4F6F5;
+  --color-secondary-100: #E6ECE9;
+  --color-secondary-200: #C7D4CC;
+  --color-secondary-300: #8FA99A; /* SAGE -- the guideline's secondary, verbatim. ADR-0041 anchors it at 300, NOT 600, because Sage is LIGHT (white label 2.53:1) and 600 is this file's slot for a fill that carries a white label. */
+  --color-secondary-400: #788E81;
+  --color-secondary-500: #64766C; /* white label AA 4.83:1 */
+  --color-secondary-600: #505F56; /* white label AA 6.75:1 -- the fill slot, Sage darkened */
+  --color-secondary-700: #3F4A44;
+  --color-secondary-800: #313934;
+  --color-secondary-900: #222925;
+  --color-secondary-950: #151917;
 
   /* ---------------------------------------------------------------------------
    * 1.3 COLOUR — NEUTRAL (slightly cool, harmonises with Petrol)
    * ------------------------------------------------------------------------ */
   --color-neutral-0:   #FFFFFF;
-  --color-neutral-50:  #F7F8F8;
-  --color-neutral-100: #EEF0F0;
-  --color-neutral-200: #DCE0E0; /* decorative divider only — see §6.3 */
-  --color-neutral-300: #C1C7C7; /* decorative border only — see §6.3 */
-  --color-neutral-400: #98A0A0;
-  --color-neutral-450: #7F8787; /* INTERACTIVE BORDER — AA-non-text 3.67:1 */
-  --color-neutral-500: #6F7878; /* placeholder — AA 4.53:1 on white */
-  --color-neutral-600: #576060; /* muted / helper text — AA 6.47:1 */
-  --color-neutral-700: #444B4B; /* body text — AA 8.92:1 */
-  --color-neutral-800: #2D3333; /* headings — AA 12.86:1 */
-  --color-neutral-900: #1A1F1F; /* display headings — AA 16.67:1 */
-  --color-neutral-950: #0D1111;
+  --color-neutral-50:  #F7F4ED; /* IVORY -- the guideline's background, verbatim. ADR-0041. */
+  --color-neutral-100: #EBE8E2;
+  --color-neutral-200: #DDDBD4; /* decorative divider only -- see design-system.md 6.3 */
+  --color-neutral-300: #C3C2BC; /* decorative border only -- see design-system.md 6.3 */
+  --color-neutral-400: #9B9B96;
+  --color-neutral-450: #888883; /* INTERACTIVE BORDER -- non-text 3.56:1 on white, 3.24:1 on Ivory */
+  --color-neutral-500: #6E6F6B; /* placeholder -- AA 5.06:1 on white, 4.61:1 on Ivory */
+  --color-neutral-600: #5C5D5A; /* muted / helper text -- AA 6.63:1 / 6.03:1 */
+  --color-neutral-700: #444643; /* body text -- AA 9.53:1 / 8.68:1 */
+  --color-neutral-800: #303330; /* CHARCOAL -- the guideline's text colour, verbatim. AA 12.79:1 / 11.64:1. ADR-0041. */
+  --color-neutral-900: #232523; /* display headings -- AA 15.44:1 / 14.05:1 */
+  --color-neutral-950: #161716;
 
   /* ---------------------------------------------------------------------------
    * 1.4 COLOUR — SEMANTIC
@@ -97,17 +97,17 @@
    *                                       warning 39 | danger 352
    * ------------------------------------------------------------------------ */
   /* SUCCESS — DIBAYAR, SELESAI, upload accepted, autosave confirmed */
-  --color-success-50:  #EEF8F1;
-  --color-success-100: #D5EEDD;
-  --color-success-200: #A8DCBB;
-  --color-success-300: #71C393;
-  --color-success-400: #3EA46B;
-  --color-success-500: #1F8A4F;
-  --color-success-600: #1C7A44; /* white label AA 5.36:1 */
-  --color-success-700: #166237;
-  --color-success-800: #134E2D;
-  --color-success-900: #104026;
-  --color-success-950: #062314;
+  --color-success-50:  #F0F6F7;
+  --color-success-100: #DDEBEC;
+  --color-success-200: #B1D0D4;
+  --color-success-300: #81B3BA;
+  --color-success-400: #4B939D;
+  --color-success-500: #247C87;
+  --color-success-600: #0C6D7A; /* TEAL, not green -- ADR-0041 D7. White label AA 6.03:1. Hue 187.1 deg, 34.2 deg from the Forest brand primary: a status chip must never be mistakable for a brand fill. */
+  --color-success-700: #0A5C66;
+  --color-success-800: #084A53;
+  --color-success-900: #063B42;
+  --color-success-950: #042327;
 
   /* WARNING — MENUNGGU_*, quote expiring, scan pending, URGENT time pressure */
   --color-warning-50:  #FDF6EB;
