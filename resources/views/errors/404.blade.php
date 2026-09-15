@@ -63,13 +63,13 @@
     verbatim from `resources/css/tokens.css` (line numbers as of this
     writing) and MUST be kept in sync by hand if that file's values ever
     change:
-      --color-neutral-50  #F7F8F8  (tokens.css:81  → --mk-surface-page)
+      --color-neutral-50  #F7F4ED  (tokens.css:81  → --mk-surface-page)
       --color-neutral-0   #FFFFFF  (tokens.css:80)
-      --color-neutral-700 #444B4B  (tokens.css:89  → --mk-text-default)
-      --color-neutral-800 #2D3333  (tokens.css:90  → heading)
-      --color-neutral-600 #576060  (tokens.css:88  → --mk-text-muted)
-      --color-primary-600 #563B26  (tokens.css:47  → primary button bg)
-      --color-primary-700 #47311F  (tokens.css:48  → primary button hover)
+      --color-neutral-700 #444643  (tokens.css:89  → --mk-text-default)
+      --color-neutral-800 #303330  (tokens.css:90  → heading)
+      --color-neutral-600 #5C5D5A  (tokens.css:88  → --mk-text-muted)
+      --color-primary-600 #29483A  (tokens.css:47  → primary button bg)
+      --color-primary-700 #223B30  (tokens.css:48  → primary button hover)
       --radius-md          0.5rem  (tokens.css:219 → button/input radius)
     The font stack is the SAME non-brand fallback chain `--font-sans`
     already ends in (tokens.css:170-171) — no `Poppins`/`Inter var`
@@ -111,8 +111,8 @@
         body {
             margin: 0;
             min-height: 100vh;
-            background: #F7F8F8;
-            color: #444B4B;
+            background: #F7F4ED;
+            color: #444643;
             font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             -webkit-font-smoothing: antialiased;
         }
@@ -130,8 +130,8 @@
             text-align: center;
         }
         .errpage a.errpage-logo { display: inline-flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; text-decoration: none; }
-        .errpage h1 { font-size: 1.125rem; font-weight: 600; color: #2D3333; margin: 0; }
-        .errpage p { max-width: 42rem; font-size: 1rem; color: #576060; margin: 0; }
+        .errpage h1 { font-size: 1.125rem; font-weight: 600; color: #303330; margin: 0; }
+        .errpage p { max-width: 42rem; font-size: 1rem; color: #5C5D5A; margin: 0; }
         .errpage .errpage-actions { padding-top: 0.5rem; }
         .errpage .btn {
             display: inline-flex;
@@ -143,8 +143,8 @@
             font-weight: 500;
             text-decoration: none;
         }
-        .errpage .btn-primary { background: #563B26; color: #FFFFFF; }
-        .errpage .btn-primary:hover { background: #47311F; }
+        .errpage .btn-primary { background: #29483A; color: #FFFFFF; }
+        .errpage .btn-primary:hover { background: #223B30; }
     </style>
 </head>
 <body>
