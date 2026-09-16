@@ -7720,6 +7720,40 @@
     ($table->timestamp('occurred_at', 6)) for the append-only event tables (audit_events,
     outbox_events, order_status_events) and an id tiebreaker to that ORDER BY.
 
+- id: DB-13
+  dim: DB
+  severity: High
+  category: "release-readiness / silent-noop"
+  effort: S
+  audit_verdict: CONFIRMED
+  status: in_review
+  status_evidence: [pr#325]
+  status_verified: false
+  files:
+    - "app/Console/Commands/PurgeExampleDataCommand.php:198"
+    - "tests/Feature/Console/PurgeExampleDataCommandTest.php:35"
+    - "docs/adr/0035-beta-launch-accepted-risks.md:105"
+  statement: >-
+    example-data:purge mengenali data contoh dengan mencocokkan nilai yang generator ExampleData
+    hasilkan sekarang (CemeteryExampleData::slugs(), ::graveRecords() nama, VendorListingExampleData
+    nama vendor). Commit 15075d8e (13 Agu 2026) mengganti baris fixture literal dengan yang
+    dibangkitkan prosedural, sedangkan dev dan beta di-seed 26 Juli. Sejak hari itu purge tidak bisa
+    melihat baris lama. Diukur 16 Sep 2026 terhadap kedua database hidup - pemakaman 10 ada / 0
+    cocok, catatan makam 30 ada / 16 cocok - sehingga sepuluh pemakaman fiktif dan empat belas
+    catatan makam fiktif tetap tayang di beta publik sementara perintah keluar dengan kode 0.
+    ADR-0035 mencatat perintah ini sebagai mitigasi peluncuran, dan rencana rilis beta baris 367
+    sudah menetapkan kriterianya (nol baris GraveRecordSource::CONTOH) tanpa pernah memeriksanya.
+    Test perintah ini tidak bisa menangkapnya: ia membangun fixture dengan CemeteryExampleData lalu
+    menegaskan terhadap CemeteryExampleData, fungsi yang sama di kedua sisi persamaan.
+  recommendation: >-
+    Jangan lebarkan penghapusannya - baris yang tak tercocok dirujuk oleh cemetery_blocks,
+    grave_plots, visitation_bookings, dan memorial_profiles yang semuanya restrictOnDelete,
+    sehingga melebarkan penghapusan memicu pelanggaran FK yang me-rollback seluruh purge dan
+    mengubah pembersihan parsial menjadi nol pembersihan. Sebagai gantinya laporkan sisa fiktif
+    setelah purge memakai penanda yang beku - grave_records.source = contoh, dan cemeteries.address
+    berawalan "Jl. Contoh" yang ditulis migrasi teraplikasi - lalu keluar dengan kode gagal supaya
+    lingkungan yang masih kotor tidak bisa dianggap bersih. Pembuangan baris beta beserta
+    dependennya adalah keputusan operator, bukan keputusan perintah ini.
 - id: DEP-15
   dim: DEP
   severity: Info
