@@ -9,6 +9,21 @@ not yet executed. This ADR records the decision for the whole adoption, not
 only what has shipped so far — see [`docs/superpowers/plans/2026-08-17-brand-identity-adoption.md`](../superpowers/plans/2026-08-17-brand-identity-adoption.md)
 for per-task status.
 
+> **SUPERSEDED IN FULL on colour and typography, 15 Sep 2026** — by
+> [ADR-0041](0041-brand-guideline-2026-supersedes-adr-0034.md). The product
+> owner supplied an official Brand Guideline (Version 1.0, 2026) and
+> confirmed, asked directly, that it **replaces** this palette. Earth
+> `#563B26` is no longer the primary and Leaf `#336B3E` is no longer caged as
+> a tint-only colour: the guideline makes Forest `#29483A` primary, Sage
+> `#8FA99A` secondary, and adds Sand `#D8C6A5` as an accent this ADR never
+> had. Inter and Poppins give way to Plus Jakarta Sans and Lora.
+>
+> Nothing below is rewritten — ADRs are records, not living documents — but
+> **do not take any colour or font value from this file as current.** Read
+> ADR-0041 and `design-system.md` §1.2 instead. The reasoning below stays
+> useful for one thing: it explains why these values were sampled from the
+> logo, which is precisely the gap a written guideline closes.
+
 > **Superseded in part, 21 Aug 2026** — OQ-12 (real brand hex, resolved). The
 > PROVISIONAL colour values recorded throughout this ADR were derived from a
 > chat-reviewed render, not the official logo. They are now superseded by
