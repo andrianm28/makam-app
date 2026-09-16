@@ -3,7 +3,7 @@
 
     <x-mk.logo> — official Makam.co.id brand mark (ADR-0034, OQ-02 resolved).
     Raster assets from public/brand/ (Task-3 pipeline; PROVISIONAL until OQ-12
-    official artwork). The wordmark is LIVE TEXT (Poppins 600 via font-display,
+    official artwork). The wordmark is LIVE TEXT (Plus Jakarta Sans 600 via font-display; face changed by ADR-0041,
     lowercase per the brand render) — never baked pixels: crisp, accessible,
     token-coloured. Props: size (px), variant (normal|inverse — closed list,
     throws like <x-mk.badge>'s intent), wordmark (bool).

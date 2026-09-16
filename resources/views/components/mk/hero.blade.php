@@ -20,7 +20,7 @@
               §2.3 DO: exactly one primary action per view.
 
     Heading typography is text-4xl (mobile) / lg:text-5xl (desktop) with
-    font-display (Poppins 600) and tracking-tight, matching
+    font-display (Plus Jakarta Sans 600; face changed by ADR-0041) and tracking-tight, matching
     design-system.md §1.4's typography scale table verbatim ("text-4xl |
     h1, hero (mobile)", "text-5xl | Hero (desktop, lg:)") and the
     font-display row ("h1/h2, hero, header wordmark only") -- larger than

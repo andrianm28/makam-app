@@ -167,14 +167,19 @@
    * access-restricted, and third-party font fetches leak visitor IPs on a page
    * where the visitor is arranging a funeral. Subset: latin + latin-ext.
    * ------------------------------------------------------------------------ */
-  --font-sans: "Inter var", "Inter", ui-sans-serif, system-ui, -apple-system,
+  --font-sans: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system,
                "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-display: "Poppins", "Inter var", "Inter", ui-sans-serif, system-ui,
+  /* ADR-0041: ONE family for body and headings. The guideline gives Plus
+   * Jakarta Sans every surface this app has; it is variable, so heading
+   * weight costs no second file the way Poppins-600 did. Lora -- the
+   * guideline's second face -- is scoped to quote/storytelling surfaces
+   * that do not exist yet, so it is not loaded (see app.css). */
+  --font-display: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", ui-sans-serif, system-ui,
                   sans-serif;
   /* Documents (certificate/agreement/invoice print, design-system.md §8.5)
    * keep serif gravitas and NEVER inherit the brand display face. Consumed
    * by print.css when that file is built — declared now so no document can
-   * silently pick up Poppins (ADR-0034). */
+   * silently pick up the brand display face (ADR-0034; face changed by ADR-0041). */
   --font-document: "Source Serif 4", "Lora", ui-serif, Georgia, Cambria, serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
