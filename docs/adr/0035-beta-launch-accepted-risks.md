@@ -105,6 +105,16 @@ was deliberately not reused (see `compose.yml`'s own comment on `beta-web` for w
 example/demo data purged (`example-data:purge --force`), `/health/ready` and `/up` both verified reachable on
 `127.0.0.1:8083`.
 
+> **Correction, 16 Sep 2026 — the purge named above ran and removed almost nothing.**
+> This paragraph records what was done on 19 Aug and what was believed at the time. The command
+> was executed; the sentence "example/demo data purged" was not true of its result. `example-data:purge`
+> identifies example rows by matching the values the `ExampleData` generators emit at the moment it
+> runs, and those values had been replaced five days earlier; beta's rows were seeded on 26 Jul.
+> Ten fabricated cemeteries were never removed, and the command exited 0. This correction does not
+> restate the finding — see `DB-13` in `docs/remediation/findings.yml` for the measurements, the
+> reason widening the deletes would make beta worse, and what is left for an operator to decide.
+> The line above is left standing as the record of what was believed; it is not amended.
+
 Host loss is a total outage with an RTO measured in hours (manual redeploy from the last GHCR image and
 restored backup), not automated failover.
 
