@@ -251,13 +251,47 @@
         @endphp
         <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-4" aria-label="Layanan utama">
             @foreach ($primaryMenus as $key => $menu)
+                @php
+                    // A9/U8 — two-tone heading (kamboja plan §3.1 A9, §3.3 U8,
+                    // Tahap 4). The label is SPLIT for rendering, never
+                    // rewritten: same words, same order, so the four product
+                    // labels §9.2 MUST-NOT 9 protects are byte-identical when
+                    // read. `explode(..., 2)` keeps everything after the first
+                    // space together, so "Pemesanan Makam" reads
+                    // brand("Pemesanan") + near-black("Makam"), and a
+                    // three-word label would keep its last two words together
+                    // rather than fragmenting.
+                    //
+                    // Single-word labels ("FAQ") get NO brand line and render
+                    // exactly as they did before this change. A two-tone device
+                    // needs two parts; colouring a lone word brand would hand
+                    // the LAST card in AC1's stakeholder order the loudest
+                    // heading on the row, inverting the emphasis the order
+                    // exists to express. The fallback is also today's markup,
+                    // so the degenerate case degrades to the shipped state.
+                    [$headingLead, $headingRest] = array_pad(explode(' ', $menu['label'], 2), 2, null);
+                @endphp
                 <li wire:key="service-card-{{ $key }}">
-                    <x-mk.card as="a" interactive :href="$menu['route']" class="h-full touch-target">
+                    <x-mk.card as="a" interactive emphasis="strong" :href="$menu['route']" class="h-full touch-target">
                         <div class="space-y-3">
                             @if (isset($serviceIcons[$key]))
-                                <x-mk.icon-medallion :icon="$serviceIcons[$key]" tone="earth" />
+                                {{-- `size="xl"` (64px), Tahap 4 butir 2 — SIZE only;
+                                     `tone="earth"` is unchanged from Tahap 2. --}}
+                                <x-mk.icon-medallion :icon="$serviceIcons[$key]" tone="earth" size="xl" />
                             @endif
-                            <h3 class="text-lg font-semibold text-neutral-900">{{ $menu['label'] }}</h3>
+                            {{-- `text-primary-600` on the card's `bg-neutral-0`
+                                 is `primary heading on surface-raised`, an
+                                 EXISTING asserted pair in
+                                 docs/design/verify-contrast.py — no new pair,
+                                 no new token. --}}
+                            <h3 class="text-lg font-semibold text-neutral-900">
+                                @if ($headingRest !== null)
+                                    <span class="block text-primary-600">{{ $headingLead }}</span>
+                                    <span class="block">{{ $headingRest }}</span>
+                                @else
+                                    {{ $menu['label'] }}
+                                @endif
+                            </h3>
                             <p class="text-base text-neutral-600">{{ $serviceDescriptions[$key] ?? '' }}</p>
                         </div>
                     </x-mk.card>
@@ -510,7 +544,14 @@
                 <ul class="grid grid-cols-1 gap-4 md:grid-cols-2" aria-label="Pertanyaan unggulan">
                     @foreach ($faqHighlights as $article)
                         <li wire:key="faq-highlight-{{ $article->id }}">
-                            <x-mk.card as="a" interactive :href="route('faq.show', ['articleSlug' => $article->slug])" class="h-full touch-target">
+                            {{-- `emphasis="quiet"` (Tahap 4 butir 1): §2.3 of the
+                                 kamboja plan measured these 600x130 answer rows
+                                 rendering the same raised-card treatment as the
+                                 286x242 service cards above. They keep the same
+                                 border and the same interactive affordance; only
+                                 the resting elevation drops to `shadow-none`, so
+                                 a row reads as a row. --}}
+                            <x-mk.card as="a" interactive emphasis="quiet" :href="route('faq.show', ['articleSlug' => $article->slug])" class="h-full touch-target">
                                 <h3 class="text-base font-semibold text-neutral-900">{{ $article->title }}</h3>
                                 <p class="text-sm text-neutral-600">{{ $article->summary }}</p>
                             </x-mk.card>
