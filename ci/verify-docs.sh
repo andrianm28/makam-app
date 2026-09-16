@@ -641,6 +641,74 @@ else
   fail "an operations document is missing or misdeclaring its verification state"
 fi
 
+head2 "GATE 19 — no finding still cites a pull request that has already merged"
+# ---------------------------------------------------------------------------
+# `docs/remediation/findings.yml` is the single source of truth for remediation
+# progress, and its `status_evidence` records which PR a finding is waiting on:
+# `open#244` while that PR is in review, `merged#244` once it lands. Nothing
+# rewrites the first into the second. A merge closes the PR on GitHub and
+# leaves the ledger asserting the work is still in flight.
+#
+# It had drifted by fifteen entries, across five PRs (#244, #251, #255, #266,
+# #325), every one of them merged on 16 Sep 2026. The backlog read fifteen
+# items worse than it was, and every one of those entries named a PR anyone
+# could have checked in a second.
+#
+# The evidence is local: a squash-free merge writes "Merge pull request #N"
+# into the commit subject, so `git log` answers this with no network call,
+# which `ci/verify-docs.sh` may not make (see this file's header).
+#
+# THE VACUITY GUARD IS THE POINT OF THIS GATE, NOT A PRECAUTION.
+# `actions/checkout` clones one commit deep by default. Under a shallow clone
+# `git log --grep` finds no merge commits at all, every lookup returns "not
+# merged", and the gate passes while checking nothing — the exact failure this
+# ledger entry (DB-13) was opened about. So the gate first demands that
+# history be present, and FAILS when it is not rather than reporting a pass it
+# did not earn. If this starts failing with "history is unavailable", the fix
+# is `fetch-depth: 0` on the job, never removing the check.
+if [ ! -f docs/remediation/findings.yml ]; then
+  fail "docs/remediation/findings.yml is missing"
+else
+  # Counting merge commits is NOT a sufficient shallowness probe, and the
+  # first version of this gate used one. A `--depth 1` clone of a branch whose
+  # tip happens to BE a merge shows exactly one merge commit, so a `-lt 1`
+  # guard sails through while the gate can see a single PR. Measured against a
+  # real `git clone --depth 1` of this repository: 1 merge commit visible, gate
+  # passed, checking nothing. `--is-shallow-repository` answers the actual
+  # question and prints a plain true/false.
+  IS_SHALLOW=$(git rev-parse --is-shallow-repository 2>/dev/null || echo unknown)
+  MERGE_COMMITS=$(git log --format='%s' 2>/dev/null | grep -c '^Merge pull request #' || true)
+  if [ "$IS_SHALLOW" != "false" ]; then
+    fail "git history is shallow or unavailable (--is-shallow-repository = ${IS_SHALLOW}) — this gate cannot run; set fetch-depth: 0 on this job"
+  else
+    # Read the merge subjects ONCE into a variable and pattern-match in pure
+    # shell. The obvious `git log | grep -q` is wrong under this script's
+    # `set -o pipefail` (line 13): `grep -q` exits on its first match, `git
+    # log` dies of SIGPIPE, pipefail propagates that non-zero, and a FOUND
+    # match reads as NOT FOUND. That defect made the first version of this
+    # gate pass against a ledger deliberately seeded with a stale `open#244`
+    # -- caught only by mutation-testing the gate, which is why it is tested.
+    # `case` needs no subprocess, so there is no pipeline to mis-report.
+    # "request #${num} " cannot match #1${num} : the literal "request #"
+    # anchors the number's left edge, and the trailing space its right.
+    MERGE_SUBJECTS=$(git log --format='%s' 2>/dev/null | grep '^Merge pull request #' || true)
+    STALE=""
+    for ref in $(grep -o 'open#[0-9]\+' docs/remediation/findings.yml | sort -u); do
+      num=${ref#open#}
+      case "$MERGE_SUBJECTS" in
+        *"Merge pull request #${num} "*) STALE="${STALE} #${num}" ;;
+      esac
+    done
+    if [ -n "$STALE" ]; then
+      printf '    ledger still cites as open:%s\n' "$STALE" >&2
+      fail "a finding cites open#N for a pull request that has already merged — update status/status_evidence"
+    else
+      printf '    %s merge commits visible; no finding cites a merged PR as open\n' "$MERGE_COMMITS"
+      pass "no finding cites an already-merged pull request as open"
+    fi
+  fi
+fi
+
 printf '\n'
 if [ "$FAIL" -eq 0 ]; then
   printf '\033[32mRESULT: ALL DOC GATES PASS\033[0m\n'; exit 0

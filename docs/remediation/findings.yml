@@ -384,8 +384,8 @@
   category: "operations/missing-surface"
   effort: M
   audit_verdict: CONFIRMED
-  status: in_review
-  status_evidence: [open#244]
+  status: resolved
+  status_evidence: [merged#244]
   status_verified: false
   files:
     - "app/Filament/Admin/Resources/PaymentVerifications/PaymentVerificationsResource.php:116"
@@ -3670,8 +3670,8 @@
   category: "financial-integrity"
   effort: S
   audit_verdict: UNVERIFIED
-  status: in_review
-  status_evidence: [open#255, merged#220]
+  status: resolved
+  status_evidence: [merged#255, merged#220]
   status_verified: false
   files:
     - "app/Domain/Marketplace/Actions/MarkMarketplaceOrderPaid.php:129"
@@ -3692,8 +3692,8 @@
   category: "operability"
   effort: M
   audit_verdict: UNVERIFIED
-  status: in_review
-  status_evidence: [open#255]
+  status: resolved
+  status_evidence: [merged#255]
   status_verified: false
   files:
     - "app/Platform/Payment/ProcessWebhookEvent.php:189"
@@ -3714,8 +3714,8 @@
   category: "audit-integrity"
   effort: M
   audit_verdict: UNVERIFIED
-  status: in_review
-  status_evidence: [open#255]
+  status: resolved
+  status_evidence: [merged#255]
   status_verified: false
   files:
     - "app/Domain/Renewal/Actions/MarkRenewalPaidOnline.php:111"
@@ -3780,8 +3780,8 @@
   category: "audit-integrity"
   effort: S
   audit_verdict: UNVERIFIED
-  status: in_review
-  status_evidence: [open#255]
+  status: resolved
+  status_evidence: [merged#255]
   status_verified: false
   files:
     - "app/Domain/OrderWorkflow/Actions/MarkOrderPaid.php:20"
@@ -4642,8 +4642,8 @@
   category: "session-management"
   effort: S
   audit_verdict: UNVERIFIED
-  status: in_review
-  status_evidence: [open#251]
+  status: resolved
+  status_evidence: [merged#251]
   status_verified: false
   files:
     - "app/Platform/IdentityAccess/Listeners/RecordActorSessionOnLogout.php:39"
@@ -4664,8 +4664,8 @@
   category: "step-up-authentication"
   effort: S
   audit_verdict: UNVERIFIED
-  status: in_review
-  status_evidence: [open#251]
+  status: resolved
+  status_evidence: [merged#251]
   status_verified: false
   files:
     - "app/Http/Controllers/Admin/FinanceExportController.php:80"
@@ -4687,8 +4687,8 @@
   category: "audit-logging"
   effort: S
   audit_verdict: UNVERIFIED
-  status: in_review
-  status_evidence: [open#251]
+  status: resolved
+  status_evidence: [merged#251]
   status_verified: false
   files:
     - "app/Platform/IdentityAccess/Providers/IdentityAccessServiceProvider.php:65"
@@ -4755,8 +4755,8 @@
   category: "documentation-drift"
   effort: S
   audit_verdict: UNVERIFIED
-  status: in_review
-  status_evidence: [open#251]
+  status: resolved
+  status_evidence: [merged#251]
   status_verified: false
   files:
     - "docs/security/security-baseline.md:5"
@@ -5237,8 +5237,8 @@
   category: "correctness/lifecycle"
   effort: M
   audit_verdict: CONFIRMED
-  status: in_review
-  status_evidence: [open#266]
+  status: resolved
+  status_evidence: [merged#266]
   status_verified: false
   files:
     - "app/Platform/DocumentVault/Actions/ScanDocument.php:204"
@@ -5268,8 +5268,8 @@
   category: "security/upload-bypass"
   effort: M
   audit_verdict: UNVERIFIED
-  status: in_review
-  status_evidence: [open#266]
+  status: resolved
+  status_evidence: [merged#266]
   status_verified: false
   files:
     - "app/Filament/Admin/Resources/ProductResource/Schemas/ProductForm.php:127"
@@ -5291,8 +5291,8 @@
   category: "security/upload-bypass"
   effort: M
   audit_verdict: UNVERIFIED
-  status: in_review
-  status_evidence: [open#266]
+  status: resolved
+  status_evidence: [merged#266]
   status_verified: false
   files:
     - "app/Filament/Admin/Resources/Reconciliations/Actions/UploadProviderStatementAction.php:126"
@@ -5312,8 +5312,8 @@
   category: "privacy/data-protection"
   effort: L
   audit_verdict: UNVERIFIED
-  status: in_review
-  status_evidence: [open#266]
+  status: resolved
+  status_evidence: [merged#266]
   status_verified: false
   files:
     - "app/Platform/DocumentVault/Adapters/LocalFilesystemObjectStorage.php:29"
@@ -5335,8 +5335,8 @@
   category: "authorization/correctness"
   effort: M
   audit_verdict: UNVERIFIED
-  status: in_review
-  status_evidence: [open#266]
+  status: resolved
+  status_evidence: [merged#266]
   status_verified: false
   files:
     - "app/Platform/DocumentVault/Policies/DocumentAccessPolicy.php:193"
@@ -7726,8 +7726,8 @@
   category: "release-readiness / silent-noop"
   effort: S
   audit_verdict: CONFIRMED
-  status: in_review
-  status_evidence: [pr#325]
+  status: resolved
+  status_evidence: [merged#325]
   status_verified: false
   files:
     - "app/Console/Commands/PurgeExampleDataCommand.php:198"
