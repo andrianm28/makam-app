@@ -49,7 +49,11 @@ use LogicException;
  * @property string|null $opened_by_actor_ref
  * @property string $opened_reason
  * @property CarbonImmutable|null $executed_at
+ * @property string|null $executed_by_actor_ref
+ * @property string|null $execution_reference
+ * @property string|null $execution_evidence_path
  * @property CarbonImmutable|null $confirmed_at
+ * @property string|null $confirmed_by_actor_ref
  */
 final class RefundObligation extends Model
 {

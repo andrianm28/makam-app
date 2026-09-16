@@ -168,6 +168,21 @@ final class SensitiveActionsTest extends TestCase
      * back to them. The reason is mandatory because it is the only answer
      * available to a customer asking why their order was refused after they
      * had already paid.
+     *
+     * UPDATED 14 Sep 2026 — Stage R2 of the same plan added
+     * `REFUND_OBLIGATION_EXECUTED`/`REFUND_OBLIGATION_CONFIRMED`, written by
+     * `App\Domain\RefundObligation\Actions\ExecuteRefundObligation`/
+     * `ConfirmRefundObligation` — the only two paths by which an obligation
+     * leaves `TERUTANG`. SumoPod cannot refund, so execution is a bank
+     * transfer an operator makes by hand, outside anything this system
+     * observes: nothing verifies that the money moved at the moment the claim
+     * is recorded, which makes the operator's stated justification part of the
+     * evidence rather than a courtesy. Same money-adjacent category as
+     * `PAYMENT_REFUND`/`VENDOR_PAYOUT` already on this list.
+     *
+     * This assertion going red on that addition is the control working, not a
+     * regression — the expected list is updated here, deliberately, rather
+     * than the assertion being loosened.
      */
     public function test_the_list_contains_the_requirements_named_actions_plus_the_documented_additions(): void
     {
@@ -204,6 +219,8 @@ final class SensitiveActionsTest extends TestCase
                 'PLOT_RESERVATION_RELEASED_PAID_ORDER_OVERRIDE',
                 'PLOT_RESERVATION_EXPIRED_PAID_ORDER_OVERRIDE',
                 'REFUND_OBLIGATION_OPENED',
+                'REFUND_OBLIGATION_EXECUTED',
+                'REFUND_OBLIGATION_CONFIRMED',
             ],
             SensitiveActions::ACTIONS
         );
