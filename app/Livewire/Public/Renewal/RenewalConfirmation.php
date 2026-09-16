@@ -8,6 +8,7 @@ use App\Domain\Renewal\Models\Renewal;
 use App\Domain\Renewal\RenewalJourneyStep;
 use App\Domain\Renewal\RenewalWizardScreen;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Url;
 use Livewire\Component;
 
@@ -34,9 +35,15 @@ final class RenewalConfirmation extends Component
 
     public function render(): View
     {
-        $renewal = $this->perpanjangan === ''
-            ? null
-            : Renewal::query()->find($this->perpanjangan);
+        // UXO-01: `renewals.id` is `uuid`, so a non-UUID `?perpanjangan=`
+        // raised SQLSTATE 22P02 instead of reaching the not-found state
+        // below. The empty-string case was already handled; a malformed
+        // value now lands in the same place, because from the visitor's side
+        // "the link was truncated" and "the link is wrong" are one problem
+        // with one honest answer.
+        $renewal = Str::isUuid($this->perpanjangan)
+            ? Renewal::query()->find($this->perpanjangan)
+            : null;
 
         return view('livewire.public.renewal.confirmation', [
             'renewal' => $renewal,

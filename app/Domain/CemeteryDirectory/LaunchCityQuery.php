@@ -32,6 +32,16 @@ final class LaunchCityQuery
      * "known" (drafts referencing it stay valid) while removing it from the
      * public lists.
      *
+     * This is the raw catalogue, and the admin form and the directory's own
+     * `in:` validation list are its correct consumers: an operator must be
+     * able to assign the FIRST cemetery in a new city (otherwise the city
+     * could never become non-empty), and an old `?city=` link must reach an
+     * honest empty state rather than a validation error. The public city
+     * LISTS go through `CemeteryPublicQuery::launchCities()` instead, which
+     * narrows this to "the canonical five, plus any admin-added city that
+     * actually has a published cemetery" (FN-2 — read that method's doc
+     * block before adding a new caller here).
+     *
      * ---------------------------------------------------------------------
      * Degradation contract: a failed read returns [], never throws
      * ---------------------------------------------------------------------

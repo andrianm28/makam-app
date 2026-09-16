@@ -467,12 +467,14 @@ refresh introduced, used inside `<x-mk.card>`'s default slot (service cards, Car
 trust points), never as a standalone status indicator.
 
 **Props:** `icon` (`icon.*` component name; omit and use the default slot for a numeral instead)
-· `tone` (`earth` | `leaf`, closed list) · `size` (`md` 44px default | `lg` 52px).
+· `tone` (`earth` | `leaf` | `brand`, closed list) · `size` (`md` 44px default | `lg` 52px).
 
 **Base:** `rounded-xl` (never `rounded-full` — §1.5 restricts that to avatars/stepper-dots/
 progress-tracks). `earth` → `bg-primary-100 text-primary-800`. `leaf` → `bg-secondary-100
 text-secondary-800` — a surface-tint usage already inside the Leaf cage (§1.2(b), §9.2 MUST-NOT
 #7), not an exception to it. Both pairs are asserted in `docs/design/verify-contrast.py`.
+
+**`brand` — added 14 Sep 2026, [ADR-0040](../adr/0040-add-surface-quiet-and-widen-the-brand-field.md) D3.** `brand` → `bg-primary-600 text-neutral-0`: a genuine Earth **fill**, not a tint like the other two — the same fill `<x-mk.button variant="primary">` uses, at medallion scale. It exists because a survey of the live homepage found the brand colour filling exactly one element on the entire page while appearing 46 times as text. `white on primary-600` is already asserted in `verify-contrast.py` (10.25:1), so no new pair was needed. This tone does **not** loosen the adjacency rule below — a filled tile reads louder than a tint, so it applies more strongly. It is also not a precedent for a `secondary` fill tone: Leaf stays caged by §1.2(b) and §9.2 MUST NOT 7, and a Leaf medallion fill remains forbidden.
 
 Always `aria-hidden="true"` — decorative only, never a substitute for a real text label (same
 rule `<x-mk.badge>`'s `dot` prop follows). Never placed adjacent to order/payment/availability

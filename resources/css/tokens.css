@@ -308,6 +308,26 @@
     the three-band alternation ADR-0040 D1/D2 exists for. Sand is the warm one,
     and now it is here. 41/765 from quiet; all ten surface pairs clear the
     10/765 floor verify-contrast.py enforces. */
+  --mk-surface-quiet: var(--color-secondary-50);   /* ADR-0040: the THIRD page
+    band, so consecutive page sections can alternate and their boundaries read
+    without a divider line (design-system.md §4.4: "Proximity carries the
+    grouping — do not reach for divider lines"). Pure alias, no literal: the
+    homepage used to paint this by reaching for the raw `bg-secondary-50`
+    primitive, which §2's own header forbids ("Always reference the SEMANTIC
+    token in component CSS, not the primitive").
+
+    VALUE CORRECTED 16 Sep 2026. This comment used to name the colour as
+    "#F2F9F3, the exact value the homepage already painted". That was true of
+    Leaf; ADR-0041 replaced Leaf with Sage and `secondary-50` is now #F4F6F5.
+    The token was right the whole time and the sentence describing it was not —
+    which is why an alias states its INTENT and lets `tokens.css` hold the
+    number, rather than restating a hex that can drift underneath it.
+
+    A surface TINT in Sage 50, squarely inside §1.2(b)'s cage: never a fill,
+    badge, button, or alert. Contrast needs no new verify-contrast.py pair —
+    "text-default on secondary-50" and "text-strong on secondary-50" are both
+    already asserted there. Surface-vs-surface separation IS newly asserted
+    (the 10/765 floor), and this band clears `--mk-surface-warm` by 41. */
   --mk-surface-inverse: var(--color-primary-900);  /* footer */
   --mk-surface-overlay: rgb(13 17 17 / 0.55);      /* modal backdrop */
   --mk-surface-disabled: var(--color-neutral-100);

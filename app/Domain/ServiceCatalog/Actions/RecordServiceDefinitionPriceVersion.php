@@ -7,13 +7,7 @@ namespace App\Domain\ServiceCatalog\Actions;
 use App\Domain\ServiceCatalog\Models\PriceVersion;
 use App\Domain\ServiceCatalog\Models\ServiceDefinition;
 use App\Domain\ServiceCatalog\ServiceCatalogAuditActions;
-use App\Platform\Audit\Audit;
-use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
-use App\Platform\Audit\AuditSubject;
-use Carbon\CarbonImmutable;
-use Illuminate\Support\Facades\DB;
-use InvalidArgumentException;
 
 /**
  * Records a new current price for a `service_definitions` row — the ONLY
@@ -92,74 +86,23 @@ final readonly class RecordServiceDefinitionPriceVersion
         string $actorRole = 'admin',
         AuditSource $auditSource = AuditSource::Panel,
     ): PriceVersion {
-        // Shape assertion, not `is_numeric()` — see this class's own doc
-        // block. At most 10 integer digits and at most 2 fractional digits
-        // is exactly `decimal(12,2)`'s domain, so a value that passes here
-        // reaches the column without the database silently changing it.
-        if (preg_match('/^\d{1,10}(\.\d{1,2})?$/', $amount) !== 1) {
-            throw new InvalidArgumentException(
-                'Price version amount must be a plain decimal string with at most 10 integer digits '.
-                "and at most 2 fractional digits — the decimal(12,2) column's exact domain. ".
-                "Got [{$amount}]."
-            );
-        }
-
-        // Zero rejected WITHOUT casting to float: given the shape above, a
-        // string of nothing but zeros and an optional decimal point is the
-        // only zero it admits.
-        if (ltrim(str_replace('.', '', $amount), '0') === '') {
-            throw new InvalidArgumentException('Price version amount must be greater than zero.');
-        }
-
-        if (trim($currency) === '') {
-            throw new InvalidArgumentException('Price version currency must not be blank.');
-        }
-
-        // AC3 / SensitiveActions: this action requires a mandatory, non-blank
-        // reason. Checked here — before DB::transaction() opens — so a
-        // blank/whitespace-only reason fails as a plain argument error, not
-        // a half-open transaction that Audit::record() only rejects once
-        // already inside it.
-        if (trim($reason) === '') {
-            throw new InvalidArgumentException('Price version reason must not be blank.');
-        }
-
-        return DB::transaction(function () use ($serviceDefinition, $amount, $currency, $source, $actorReference, $actorRole, $auditSource, $reason): PriceVersion {
-            /** @var ServiceDefinition $serviceDefinition */
-            $serviceDefinition = ServiceDefinition::query()->lockForUpdate()->findOrFail($serviceDefinition->id);
-
-            $current = $serviceDefinition->priceVersions()->whereNull('superseded_at')->lockForUpdate()->first();
-            $nextVersionNumber = ((int) $serviceDefinition->priceVersions()->max('version_number')) + 1;
-            $now = CarbonImmutable::now();
-
-            if ($current !== null) {
-                $current->forceFill(['superseded_at' => $now])->save();
-            }
-
-            $priceVersion = PriceVersion::create([
-                'priceable_type' => ServiceDefinition::class,
-                'priceable_id' => $serviceDefinition->id,
-                'version_number' => $nextVersionNumber,
-                'amount' => $amount,
-                'currency' => strtoupper(trim($currency)),
-                'source' => $source,
-                'effective_from' => $now,
-                'superseded_at' => null,
-                'recorded_by' => (string) $actorReference,
-            ]);
-
-            Audit::record(
-                action: ServiceCatalogAuditActions::PRICE_VERSION_RECORDED,
-                subject: new AuditSubject('service_definition', $serviceDefinition->id, $nextVersionNumber),
-                outcome: AuditOutcome::Allowed,
-                actorRef: $actorReference,
-                actorRole: $actorRole,
-                source: $auditSource,
-                reason: $reason,
-                metadata: ['note' => "Recorded price version {$nextVersionNumber}."],
-            );
-
-            return $priceVersion;
-        });
+        // Delegates to `RecordPriceVersion`, which is this method's own former
+        // body moved verbatim — same validation, same locking, same audit
+        // shape. This wrapper survives rather than being deleted because its
+        // typed `ServiceDefinition` signature is what 29 existing test methods
+        // and every panel call site already speak, and because the audit
+        // action name below is service-specific and must stay that way.
+        return app(RecordPriceVersion::class)(
+            priceable: $serviceDefinition,
+            amount: $amount,
+            auditAction: ServiceCatalogAuditActions::PRICE_VERSION_RECORDED,
+            subjectType: 'service_definition',
+            actorReference: $actorReference,
+            reason: $reason,
+            currency: $currency,
+            source: $source,
+            actorRole: $actorRole,
+            auditSource: $auditSource,
+        );
     }
 }

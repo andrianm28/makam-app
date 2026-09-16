@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Platform\Payment;
 
 use App\Platform\Payment\Models\PaymentSession;
+use Illuminate\Support\Str;
 
 /**
  * Display-only, webhook-driven state for the browser return pages
@@ -52,7 +53,16 @@ final readonly class ReturnPageState
     {
         $session = null;
 
-        if ($sessionKey !== null && $sessionKey !== '') {
+        // UXO-01: `payment_sessions.id` is `uuid`, and this key arrives
+        // straight off a provider return URL's `?session=` — the single most
+        // likely public URL to be truncated, re-typed, or copied out of a
+        // chat message. PostgreSQL raises SQLSTATE 22P02 on a non-UUID
+        // comparison rather than matching nothing, so the return page 500'd
+        // instead of falling through to the pending state below. Falling
+        // through is also the only safe answer: `AGENTS.md` §Domain and
+        // financial invariants, "Never mark paid from browser return URL" —
+        // an unresolvable session is never evidence of payment.
+        if ($sessionKey !== null && $sessionKey !== '' && Str::isUuid($sessionKey)) {
             $session = PaymentSession::query()->find($sessionKey);
         }
 

@@ -593,6 +593,38 @@ final class PreNeedCaseActions
 
             $installment->forceFill(['payment_session_id' => $session->getKey()])->save();
 
+            // H-2: this is the SECOND surface that opens a real booking
+            // session against a real `orders` row, and it had the same
+            // defect as the booking wizard. A pre-need order sits in
+            // `GuardPaymentSession::CONFIRMED_STATUSES`, whose first three
+            // values are exactly `QuoteExpiryScheduler::EXPIRABLE_STATUSES`,
+            // and it carries a bound quote and a real plot reservation. An
+            // instalment plan runs for months while a quote lasts 30 days,
+            // so by the time an operator issues the link for instalment 2
+            // the quote has usually lapsed — and without this line the
+            // hourly sweep expires the order and releases the grave while
+            // the customer is on the payment page.
+            //
+            // Absorbed and reported for the same reason as the wizard's
+            // copy: the session is already committed and SumoPod is already
+            // hosting a payable page, so a throw here would lose the link
+            // (the notification below never fires) in exchange for a
+            // protection that is only ever an optimisation.
+            //
+            // KNOWN PARTIAL COVERAGE, stated rather than implied: `orders`
+            // holds ONE session id, and a pre-need plan can have several
+            // instalments with live sessions at once. The column tracks the
+            // most recently opened one, so if a later instalment's session
+            // dies while an earlier one is still live, the order reads as
+            // unprotected. That is strictly better than today (no
+            // protection at all) but it is not complete, and completing it
+            // needs a one-to-many link this task did not open.
+            try {
+                $order->linkPaymentSession($session);
+            } catch (\Throwable $linkFailure) {
+                report($linkFailure);
+            }
+
             Notification::make()
                 ->success()
                 ->title('Tautan pembayaran dibuat.')

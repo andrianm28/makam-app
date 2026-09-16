@@ -27,6 +27,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
+use Tests\Support\RequiresUuidTypeEnforcement;
 use Tests\TestCase;
 
 /**
@@ -44,6 +45,7 @@ use Tests\TestCase;
 final class RenewalPaymentTest extends TestCase
 {
     use RefreshDatabase;
+    use RequiresUuidTypeEnforcement;
 
     private const string MERCHANT_REF = 'mk-merchant-dev';
 
@@ -710,6 +712,10 @@ final class RenewalPaymentTest extends TestCase
      */
     public function test_a_malformed_makam_parameter_reports_not_found_rather_than_crashing(): void
     {
+        $this->requiresUuidTypeEnforcement(
+            "RenewalPayment's Str::isUuid() guards on the remembered grave id (grave_records.id)"
+        );
+
         $this->openTheDataGate();
         RenewalGraveSelection::remember('not-a-uuid');
 

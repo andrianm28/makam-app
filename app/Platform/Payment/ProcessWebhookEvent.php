@@ -188,7 +188,24 @@ final readonly class ProcessWebhookEvent
             // row ever reaches it.
             if ($event->provider_transaction_id !== null) {
                 if ($this->isSettling($event)) {
-                    $this->settlement->settle($event);
+                    $anomaly = $this->settlement->settle($event);
+
+                    // Batch M1b (PAY-03): a non-null return is a permanent,
+                    // well-understood settlement anomaly (the target will
+                    // never become settle-able for THIS event), not a
+                    // transient failure — see `SettlementAnomaly`'s own doc
+                    // block. Moved to `MANUAL_REVIEW` and audited HERE, inside
+                    // the transaction that is actually going to commit, which
+                    // is the whole point: never `PROCESSED`, never a paid
+                    // session, and the audit row survives because nothing
+                    // rolls back.
+                    if ($anomaly instanceof SettlementAnomaly) {
+                        $event->markStatus(ProviderEventStatus::ManualReview, $anomaly->rejectionDetail);
+
+                        $this->auditSettlementAnomaly($event, $anomaly);
+
+                        return ProcessWebhookEventOutcome::SettlementAnomaly;
+                    }
                 } else {
                     $this->settlement->applyOutcome($event);
                 }
@@ -298,6 +315,38 @@ final readonly class ProcessWebhookEvent
                 $incumbent->getKey(),
                 $incumbent->status,
             )],
+        );
+    }
+
+    /**
+     * Batch M1b (PAY-03) — the SAME shape as `auditSettlementConflict()`
+     * above, generalised for any settlement Action that returns a
+     * `SettlementAnomaly` instead of throwing. Runs inside the caller's claim
+     * transaction (the one that is actually going to commit), so this row is
+     * durable the moment that transaction commits — the whole point of the
+     * return-an-outcome shape over the record-then-throw shape
+     * `MarkRenewalPaidOnline`'s own doc block traces as the PAY-03 bug.
+     *
+     * `subject` defaults to the `provider_events` row (`auditSettlementConflict()`'s
+     * own subject) when the anomaly does not name a more specific one; a
+     * caller that resolved a real domain target (e.g. `MarkRenewalPaidOnline`
+     * naming the `Renewal`) supplies it instead so an operator can jump
+     * straight there, matching what the erased `RENEWAL_PAID_ONLINE_REFUSED`
+     * rows used to point at before this fix.
+     */
+    private function auditSettlementAnomaly(ProviderEvent $event, SettlementAnomaly $anomaly): void
+    {
+        Audit::record(
+            action: $anomaly->auditAction,
+            subject: $anomaly->subject ?? new AuditSubject('provider_event', $event->getKey()),
+            outcome: AuditOutcome::Denied,
+            // No authenticated actor by nature — a provider holds no
+            // credential of ours. Same reasoning as `auditSettlementConflict()`.
+            actorRef: null,
+            actorRole: 'provider',
+            source: AuditSource::Api,
+            correlationId: $event->correlation_id,
+            metadata: ['note' => $anomaly->note],
         );
     }
 }

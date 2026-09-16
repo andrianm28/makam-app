@@ -203,6 +203,37 @@ Karena SumoPod tidak mendukung refund, eksekusi hari ini adalah transfer bank
 manual oleh operator. Sistem tidak memindahkan uangnya; sistem **menagih
 operator** dan menyimpan buktinya.
 
+#### Jalur uangnya dua hop, bukan satu — dikonfirmasi pemilik 14 Sep 2026
+
+Pemilik menyatakan mekanisme penyedianya lebih spesifik daripada "tidak
+mendukung refund": **SumoPod hanya mendukung *withdraw* ke akun utama.** Uang
+yang sudah terkumpul tidak bisa dikembalikan ke sumbernya, dan tidak bisa
+dikirim langsung ke pelanggan dari sana.
+
+Jadi satu refund adalah dua perpindahan, keduanya manual, keduanya di luar
+sistem ini:
+
+```
+SumoPod  --withdraw-->  rekening utama Makam.co.id  --transfer-->  pelanggan
+```
+
+Tiga konsekuensi yang tidak terlihat kalau jalurnya dianggap satu hop:
+
+1. **Tenggat 3 hari kerja harus menyerap waktu settlement withdraw**, yang
+   bukan milik kita dan tidak kita kendalikan. Kalau withdraw memakan dua hari
+   kerja, operator punya satu hari untuk sisanya. Tenggatnya tetap 3 hari kerja
+   — yang berubah adalah berapa banyak dari angka itu yang benar-benar tersedia
+   bagi manusia yang mengerjakannya.
+2. **Kewajiban bisa terutang sementara uangnya belum ada di rekening yang bisa
+   mentransfer.** Buku kewajiban R0 mencatat utangnya sejak penolakan; ia tidak
+   tahu, dan tidak perlu tahu, di mana dananya berada saat itu. Yang perlu tahu
+   adalah operator, dan R4 harus berisik sebelum tenggatnya lewat, bukan pada
+   saat lewat.
+3. **Ini menjadikan R2 keadaan permanen, bukan jembatan** — kecuali dan sampai
+   pertanyaan penyedia di bawah dijawab dengan perpindahan. Pertanyaan itu tetap
+   terbuka; yang tertutup hanyalah harapan bahwa penyedia sekarang bisa
+   menutupnya.
+
 Antarmuka admin: daftar kewajiban terutang diurut tenggat, aksi "catat eksekusi"
 yang mewajibkan jumlah, tanggal, rujukan transfer, dan unggahan bukti. Aksi ini
 masuk `SensitiveActions` — beralasan wajib, teraudit.
@@ -275,7 +306,12 @@ operator dan risiko kelalaian, bukan dengan kode.
   baru, di alur yang sudah sensitif. Menyentuh privasi — butuh review manusia.
 - **Apakah pindah ke penyedia yang mendukung refund sedang dipertimbangkan?**
   Jawabannya menentukan apakah Tahap R2 adalah jembatan pendek atau keadaan
-  permanen.
+  permanen. **Masih terbuka.** Yang sudah tertutup hanyalah setengahnya:
+  pemilik mengonfirmasi 14 Sep 2026 bahwa SumoPod hanya mendukung *withdraw ke
+  akun utama*, jadi penyedia sekarang **tidak akan** menutupnya (lihat §Tahap
+  R2). Sampai pertanyaan ini dijawab, perlakukan R2 sebagai keadaan permanen —
+  itu asumsi yang lebih aman dari dua-duanya, karena ia menuntut antarmuka
+  operator yang layak dipakai berulang, bukan sekadar ditahan sebentar.
 
 ## Urutan yang mengikat
 

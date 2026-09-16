@@ -36,6 +36,28 @@ use Filament\Schemas\Schema;
  * stored.)
  *
  * ---------------------------------------------------------------------------
+ * "Aktif" is necessary but NOT sufficient — the helper text must say so
+ * ---------------------------------------------------------------------------
+ * FN-2 narrowed `CemeteryPublicQuery::launchCities()`: a city outside
+ * `LaunchCityCode::KNOWN_CODES` reaches the public city lists only once it
+ * has a published cemetery. This form is the ONLY place an operator meets
+ * that rule, and until 13 Sep 2026 its `is_active` helper text said only
+ * that an inactive city is hidden — which reads as "tick Aktif and the city
+ * appears."
+ *
+ * It no longer does. An operator who adds a city, ticks Aktif, loads the
+ * site and sees nothing has no way to tell a failed save from a rule nobody
+ * told them about, and the obvious next move is to change something else at
+ * random. That is the same defect FN-2 fixed, one layer up: `SUKABUMI`
+ * reached the live booking funnel because a human used this panel and the
+ * panel did not state the consequence.
+ *
+ * So the copy is part of the rule, not decoration around it. If the rule in
+ * `launchCities()` changes, this sentence changes with it — and
+ * `LaunchCityResourceTest` asserts the precondition is still named here, so
+ * deleting it fails rather than quietly stranding the next operator.
+ *
+ * ---------------------------------------------------------------------------
  * Write path: the model, wrapped in `Audit::wrap` by the pages
  * ---------------------------------------------------------------------------
  * No launch-city write Domain Action exists — the design doc's "route
@@ -76,7 +98,10 @@ final class LaunchCityForm
                     ->default(true)
                     ->helperText(
                         'Kota nonaktif tetap dikenali pemesanan tersimpan, tetapi tidak ditampilkan '
-                        .'pada daftar kota publik.'
+                        .'pada daftar kota publik. Untuk kota baru, Aktif saja belum cukup: kota '
+                        .'tersebut baru muncul pada daftar kota publik (pemesanan, direktori, '
+                        .'perpanjangan) setelah ada TPU/TPS berstatus "Dipublikasikan" di dalamnya. '
+                        .'Lima kota peluncuran bawaan selalu ditampilkan.'
                     ),
 
                 TextInput::make('sort_order')

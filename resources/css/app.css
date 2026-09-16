@@ -69,6 +69,31 @@
 @utility py-section    { padding-block: var(--mk-section-gap); }
 @utility py-section-lg { padding-block: var(--mk-section-gap-lg); }
 
+/* -----------------------------------------------------------------------------
+ * Section surfaces — design-system.md §4.4, ADR-0040.
+ *
+ * §4.4 ends "Proximity carries the grouping — do not reach for divider lines."
+ * Rhythm alone (the two utilities above) only carries that when consecutive
+ * bands differ; nine sections all painted --mk-surface-page read as one
+ * undifferentiated column no matter how much air sits between them. These two
+ * utilities are what lets a page alternate its bands instead.
+ *
+ * Same reason the `z-*` and `py-section` blocks above exist: the semantic
+ * token is the thing you are supposed to write, and a `@utility` is what makes
+ * writing it as easy as reaching for the raw `bg-secondary-50` / `bg-primary-50`
+ * primitive that tokens.css §2's header explicitly forbids ("Always reference
+ * the SEMANTIC token in component CSS, not the primitive").
+ *
+ * `surface-warm` is NOT a new token — --mk-surface-warm has existed since
+ * ADR-0034; it simply had no utility, which is precisely why every call site
+ * reached past it. `surface-quiet` is the new one (ADR-0040).
+ *
+ * Bare names, not `bg-*`: matches `touch-target`/`py-section` above and keeps
+ * these out of Tailwind's own `bg-` functional-utility namespace entirely.
+ * -------------------------------------------------------------------------- */
+@utility surface-quiet { background-color: var(--mk-surface-quiet); }
+@utility surface-warm  { background-color: var(--mk-surface-warm); }
+
 /* Enforces the 44 px touch floor without hand-written px anywhere. */
 @utility touch-target {
   min-height: var(--mk-touch-min);

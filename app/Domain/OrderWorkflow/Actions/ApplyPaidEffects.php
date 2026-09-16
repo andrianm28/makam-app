@@ -172,6 +172,11 @@ final readonly class ApplyPaidEffects
             OrderStatus::DIBAYAR,
             $trigger->actorRef,
             $trigger->actorRole,
+            // Batch M1b, PAY-07: forwarded so `MarkOrderPaid`'s admin-supplied
+            // reason actually reaches `order_status_events.reason` instead of
+            // being silently discarded. Null on the webhook trigger site —
+            // see `PaidTrigger`'s own doc block for why that stays null.
+            $trigger->reason,
         );
 
         $order->stampPaidSource($event, $trigger->source->value, $trigger->sourceId);

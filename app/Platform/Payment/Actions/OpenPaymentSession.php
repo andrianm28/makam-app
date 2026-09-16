@@ -216,6 +216,7 @@ final readonly class OpenPaymentSession
             amountMinor: $command->amountMinor,
             successReturnUrl: $command->successReturnUrl,
             cancelReturnUrl: $command->cancelReturnUrl,
+            expiresInHours: $this->checkoutExpiryHours($command->orderType),
         ));
 
         $actor = $this->actors->resolve();
@@ -532,6 +533,67 @@ final readonly class OpenPaymentSession
         );
 
         throw PaymentSessionOrderAlreadyPaidException::forReference($renewal->reference);
+    }
+
+    /**
+     * How long the provider's hosted payment link may live, in whole hours.
+     *
+     * ---------------------------------------------------------------------
+     * Why this is set at all, when it never used to be
+     * ---------------------------------------------------------------------
+     * `expiresInHours` was left null here, so SumoPod applied its own
+     * default — and ADR-0033 records that default as **24 hours, which is
+     * also its maximum**. Measured on dev 14 Sep 2026, every
+     * `payment_sessions` row ever created carries
+     * `expires_at = created_at + 24h`, confirming the default was in force.
+     *
+     * For a BOOKING that is a promise the platform cannot keep. The plot
+     * behind that link is held for `plot-reservation.draft_hold_ttl_minutes`
+     * (60 at time of writing). A link outliving its hold means a customer
+     * can pay, successfully, for a plot that has already gone back to
+     * `available` and may belong to someone else — the oversell case the
+     * pay-first plan names as its most important risk.
+     *
+     * ---------------------------------------------------------------------
+     * Booking only, deliberately
+     * ---------------------------------------------------------------------
+     * Renewal and Marketplace sessions hold no plot. Nothing about them
+     * argues for a short window, and shortening it would be a regression
+     * for a customer paying a renewal invoice at their own pace. They keep
+     * the provider default by returning null, exactly as before this change.
+     *
+     * ---------------------------------------------------------------------
+     * This NARROWS the window; it does not close it
+     * ---------------------------------------------------------------------
+     * The provider's field is granular to whole HOURS, and the hold starts
+     * earlier than the session does — the customer picks a plot at step 1
+     * and reaches payment at step 3, minutes later. So even a 1-hour link
+     * can outlive the remaining hold by up to an hour. The worst case
+     * improves from ~24 hours to ~1 hour, a 24x narrowing, and no arithmetic
+     * available here can do better while the unit is hours.
+     *
+     * Closing it entirely is Tahap 3's anti-oversell condition, which
+     * refuses a settlement whose plot is no longer held by the payer. This
+     * method is a mitigation and is documented as one.
+     */
+    private function checkoutExpiryHours(OrderType $orderType): ?int
+    {
+        if ($orderType !== OrderType::Booking) {
+            return null;
+        }
+
+        $holdMinutes = (int) config('plot-reservation.draft_hold_ttl_minutes');
+
+        if ($holdMinutes < 1) {
+            return null;
+        }
+
+        // Round UP: a link shorter than the hold would strand a customer who
+        // is still legitimately paying, which is the worse of the two
+        // failures. Clamped to ADR-0033's documented maximum of 24 so a
+        // misconfigured hold can never produce a request the provider
+        // rejects.
+        return min(24, max(1, (int) ceil($holdMinutes / 60)));
     }
 
     /**

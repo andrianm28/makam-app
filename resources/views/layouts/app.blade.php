@@ -136,6 +136,43 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ $title ?? 'Makam.co.id' }}</title>
+    {{-- FN-4, 13 Sep 2026 — until this block, the whole <head> was charset,
+         viewport, <title>, two icons and @vite. There was no description, no
+         canonical, and no og:*/twitter:* anywhere in resources/views at all.
+         The owner's actual launch channel is a WhatsApp group, so every
+         recipient of the launch link saw a bare https://makam.co.id with no
+         card, no title and no image — for a funeral-services site, a link
+         that looks like nothing is a link nobody opens.
+
+         $description is an optional per-page override, same convention as
+         $title: a screen with something more specific to say passes it
+         through ->layout(...), and every other page falls back to
+         App\Support\SiteMeta (the ONE place that sentence is written —
+         a second hand-written copy here is the drift AGENTS.md
+         §Documentation forbids).
+
+         asset() and not a relative path: og:image must be an absolute URL
+         or the card renders with no image. url()->current() drops the query
+         string, which is what a canonical should do — ?city=BEKASI is the
+         same directory page. --}}
+    @php
+        $metaDescription = $description ?? \App\Support\SiteMeta::description();
+        $metaImage = asset(\App\Support\SiteMeta::ogImagePath());
+    @endphp
+    <meta name="description" content="{{ $metaDescription }}">
+    <link rel="canonical" href="{{ url()->current() }}">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Makam.co.id">
+    <meta property="og:locale" content="id_ID">
+    <meta property="og:title" content="{{ $title ?? 'Makam.co.id' }}">
+    <meta property="og:description" content="{{ $metaDescription }}">
+    <meta property="og:url" content="{{ url()->current() }}">
+    <meta property="og:image" content="{{ $metaImage }}">
+    <meta property="og:image:alt" content="{{ \App\Support\SiteMeta::ogImageAlt() }}">
+    {{-- X/Twitter falls back to the og:* title, description and image once a
+         card type is declared, so this one tag is all that is needed to turn
+         the bare link into a large card there too. --}}
+    <meta name="twitter:card" content="summary_large_image">
     <link rel="icon" href="{{ asset('favicon.ico') }}" sizes="any">
     <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -152,7 +189,14 @@
         {{ $slot }}
     </main>
 
-    <footer class="bg-primary-900 px-4 py-8 text-neutral-0 md:px-6 lg:px-8">
+    {{-- Vertical padding `py-8` -> `py-section lg:py-section-lg` on 14 Sep 2026
+         (ADR-0040 D6). `py-8` was the same 32px half-rhythm value Tahap 1
+         (commit ebdeec7e) removed from every other band on every public page;
+         the footer was the one band left on the old value, which made the
+         page's largest brand field also its thinnest-breathing one. Now it
+         consumes --mk-section-gap / --mk-section-gap-lg like everything above
+         it. Colour, links, copy and structure are unchanged. --}}
+    <footer class="bg-primary-900 px-4 py-section text-neutral-0 md:px-6 lg:px-8 lg:py-section-lg">
         <div class="mx-auto flex max-w-content flex-col items-center gap-4 text-center">
             <a href="/" class="inline-flex items-center gap-2" aria-label="makam.co.id — beranda">
                 <x-mk.logo variant="inverse" :size="28" />

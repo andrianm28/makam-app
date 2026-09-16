@@ -229,6 +229,57 @@ final class OpenPaymentSessionTest extends TestCase
         ]);
     }
 
+    /**
+     * The hosted payment link must not outlive the plot hold behind it.
+     *
+     * `expiresInHours` used to be left null, so SumoPod applied its own
+     * default — ADR-0033 records that as 24 hours, and every
+     * `payment_sessions` row on dev confirmed it. A booking link valid for a
+     * day, behind a plot held for an hour, lets a customer pay successfully
+     * for a grave that has already returned to `available`.
+     *
+     * This asserts the value actually reaching the provider's wire, not the
+     * request object, because the request object is exactly what a future
+     * refactor could stop forwarding.
+     */
+    public function test_a_booking_link_is_capped_to_the_plot_hold_window(): void
+    {
+        config(['plot-reservation.draft_hold_ttl_minutes' => 60]);
+
+        $this->guardWithPaymentGate(open: true);
+        $this->fullySatisfiedOrder();
+        $this->fakeProviderSuccess();
+
+        app(OpenPaymentSession::class)($this->command());
+
+        Http::assertSent(function ($request): bool {
+            $body = $request->data();
+
+            return ($body['expires_in_hours'] ?? null) === 1;
+        });
+    }
+
+    /**
+     * Rounds UP, and never past ADR-0033's documented maximum of 24.
+     *
+     * Up rather than down because a link shorter than the hold strands a
+     * customer who is still legitimately paying — the worse of the two
+     * failures. The clamp means a misconfigured hold can never produce a
+     * request the provider rejects outright.
+     */
+    public function test_a_longer_hold_rounds_up_and_clamps_at_the_provider_maximum(): void
+    {
+        config(['plot-reservation.draft_hold_ttl_minutes' => 61]);
+
+        $this->guardWithPaymentGate(open: true);
+        $this->fullySatisfiedOrder();
+        $this->fakeProviderSuccess();
+
+        app(OpenPaymentSession::class)($this->command());
+
+        Http::assertSent(fn ($request): bool => ($request->data()['expires_in_hours'] ?? null) === 2);
+    }
+
     public function test_the_opening_writes_an_allowed_intent_and_audit_in_the_same_transaction(): void
     {
         $this->guardWithPaymentGate(open: true);

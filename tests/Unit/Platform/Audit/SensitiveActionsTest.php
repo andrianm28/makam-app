@@ -160,6 +160,14 @@ final class SensitiveActionsTest extends TestCase
      * `ExpirePlotReservation`'s `overridePaidOrder` path) — reversing a
      * paid customer's plot hold is the same mandatory-reason category as
      * `PAYMENT_REFUND`/`PAYMENT_CHARGEBACK` already on this list.
+     * UPDATED 13 Sep 2026 — Stage R0 of
+     * `docs/superpowers/plans/2026-09-13-sistem-refund.md` added
+     * `REFUND_OBLIGATION_OPENED`, written by
+     * `App\Domain\RefundObligation\Actions\OpenRefundObligation` when a
+     * paid order is rejected and the customer's money becomes a debt owed
+     * back to them. The reason is mandatory because it is the only answer
+     * available to a customer asking why their order was refused after they
+     * had already paid.
      */
     public function test_the_list_contains_the_requirements_named_actions_plus_the_documented_additions(): void
     {
@@ -175,6 +183,7 @@ final class SensitiveActionsTest extends TestCase
                 'JOURNAL_REVERSAL',
                 'PRICE_VERSION_RECORDED',
                 'SERVICE_DEFINITION_PRICE_VERSION_RECORDED',
+                'CEMETERY_PACKAGE_PRICE_VERSION_RECORDED',
                 'SERVICE_DEFINITION_CREATED',
                 'SERVICE_DEFINITION_UPDATED',
                 'MFA_RESET',
@@ -194,6 +203,7 @@ final class SensitiveActionsTest extends TestCase
                 'OUTBOX_EVENT_REPLAY',
                 'PLOT_RESERVATION_RELEASED_PAID_ORDER_OVERRIDE',
                 'PLOT_RESERVATION_EXPIRED_PAID_ORDER_OVERRIDE',
+                'REFUND_OBLIGATION_OPENED',
             ],
             SensitiveActions::ACTIONS
         );

@@ -152,7 +152,10 @@ Managed PostgreSQL 18 + pg_trgm
 Managed Redis 8.2 + Horizon
 Transactional outbox
 Private S3-compatible quarantine/storage
-Session auth + privileged TOTP MFA
+Session auth + privileged password re-authentication (7 Sep 2026: TOTP MFA
+was built, then removed entirely on 22 Aug 2026 — see
+docs/adr/0024-use-session-auth-and-mfa.md's superseding note and
+docs/security/authentication-and-mfa.md)
 Pulse + error tracking + uptime + DB/Redis metrics
 Immutable CI build + expand/contract migrations
 Backup/PITR + restore tests

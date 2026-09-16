@@ -12,6 +12,7 @@ use App\Domain\GraveRegistry\Models\GraveRecord;
 use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Support\CemeteryFixture;
+use Tests\Support\RequiresUuidTypeEnforcement;
 use Tests\TestCase;
 
 /**
@@ -44,6 +45,7 @@ use Tests\TestCase;
 final class GraveRegistryPublicQueryTest extends TestCase
 {
     use RefreshDatabase;
+    use RequiresUuidTypeEnforcement;
 
     // =====================================================================
     // AC14 — the three access modes and their field projections
@@ -422,8 +424,20 @@ final class GraveRegistryPublicQueryTest extends TestCase
         $this->assertSame([], $outcome->restrictedResults);
     }
 
+    /**
+     * Not on the sweep's list of vacuous tests, but found by mutating the
+     * guard below for the malformed-identifier test and watching THIS one die
+     * too: an empty `cemeteryId` is not a valid `uuid` literal either, so
+     * without `GraveRegistryPublicQuery.php`'s `Str::isUuid()` guard this
+     * raises SQLSTATE 22P02 on PostgreSQL and silently matches nothing on
+     * SQLite. Same guard, same driver dependence, same gate.
+     */
     public function test_a_search_with_no_cemetery_returns_nothing(): void
     {
+        $this->requiresUuidTypeEnforcement(
+            "GraveRegistryPublicQuery::search() -> matchedRecords()'s Str::isUuid() guard on grave_records.cemetery_id"
+        );
+
         $outcome = GraveRegistryPublicQuery::search(
             GraveSearchCriteria::make(cemeteryId: '', name: 'Contoh')
         );
@@ -437,13 +451,19 @@ final class GraveRegistryPublicQueryTest extends TestCase
      * comparing it against a non-UUID string is a database type error, not
      * a miss — without the shape guard this would 500 a public search form.
      *
-     * Note this test would pass on SQLite even with the guard removed
-     * (SQLite compares the string happily and finds nothing), so it only
-     * genuinely protects the behaviour on the CI/production driver. Written
-     * down rather than left as a false sense of coverage.
+     * This test used to carry a note that it would pass on SQLite even with
+     * the guard removed, and was left that way. `requiresUuidTypeEnforcement()`
+     * now closes that hole: on the CI/production driver the assertion below
+     * really does fail if `GraveRegistryPublicQuery.php`'s `Str::isUuid()`
+     * guard is deleted (verified by deleting it), and on a driver that cannot
+     * type-check a `uuid` column the test refuses to report a pass at all.
      */
     public function test_a_malformed_cemetery_identifier_returns_nothing_instead_of_erroring(): void
     {
+        $this->requiresUuidTypeEnforcement(
+            "GraveRegistryPublicQuery::search() -> matchedRecords()'s Str::isUuid() guard on grave_records.cemetery_id"
+        );
+
         foreach (['garbage', '../../etc/passwd', "' OR 1=1 --", '12345'] as $tampered) {
             $outcome = GraveRegistryPublicQuery::search(
                 GraveSearchCriteria::make(cemeteryId: $tampered, name: 'Contoh')

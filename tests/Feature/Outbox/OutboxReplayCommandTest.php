@@ -11,6 +11,7 @@ use App\Platform\Outbox\Outbox;
 use App\Platform\Outbox\OutboxClassification;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\RequiresUuidTypeEnforcement;
 use Tests\TestCase;
 
 /**
@@ -21,6 +22,7 @@ use Tests\TestCase;
 final class OutboxReplayCommandTest extends TestCase
 {
     use RefreshDatabase;
+    use RequiresUuidTypeEnforcement;
 
     public function test_replay_clears_the_claim_and_makes_the_row_immediately_available(): void
     {
@@ -99,6 +101,13 @@ final class OutboxReplayCommandTest extends TestCase
 
     public function test_replay_skips_an_unknown_id_without_aborting_eligible_ones(): void
     {
+        // The 'does-not-exist' id below is not UUID-shaped, so what this really
+        // proves is that one bad id does not abort the eligible ones in the same
+        // batch — which only means anything where a bad id COULD abort them.
+        $this->requiresUuidTypeEnforcement(
+            "OutboxReplayCommand::replayOne()'s UUID-shape regex on outbox_events.id"
+        );
+
         $row = $this->recordFixtureEvent();
 
         $this->artisan('outbox:replay', [

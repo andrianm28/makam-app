@@ -17,10 +17,12 @@ use App\Platform\DocumentVault\DocumentKind;
 use App\Platform\DocumentVault\DocumentState;
 use App\Platform\DocumentVault\Models\Document;
 use App\Platform\IdentityAccess\ActorContext;
+use App\Platform\IdentityAccess\Scopes\ScopeEntityType;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Livewire\Component;
 use Livewire\Features\SupportFileUploads\WithFileUploads;
@@ -119,7 +121,16 @@ final class MemorialFamilyPage extends Component
 
     public function mount(string $profileId): void
     {
-        $this->profile = MemorialProfile::query()->find($profileId);
+        // UXO-01: `memorial_profiles.id` is `uuid`, and PostgreSQL raises
+        // SQLSTATE 22P02 rather than matching nothing when a non-UUID string
+        // is compared against it — a truncated share link or a typo gave the
+        // visitor a 500 instead of this page's own not-visible state. Same
+        // `Str::isUuid()` guard this codebase already uses before every other
+        // client-supplied uuid lookup (`BookingDraftQuery`,
+        // `DownloadDocument`, `PreNeedInterestPage::resolveSubject()`).
+        $this->profile = Str::isUuid($profileId)
+            ? MemorialProfile::query()->find($profileId)
+            : null;
 
         if (! $this->profile instanceof MemorialProfile || ! $this->profile->hasActiveEditor(app(ActorContext::class))) {
             $this->visible = false;
@@ -206,8 +217,13 @@ final class MemorialFamilyPage extends Component
         app(UploadDocument::class)->upload(
             DocumentKind::ProductImage,
             $file,
-            'memorial_profile',
-            (string) $this->profile->getKey(),
+            // VAULT-06: 'memorial_profile' is not a resolvable
+            // `DocumentAccessPolicy` owner type. `grave_record_id` is the
+            // ONE link `MemorialProfile` has into a scope-checkable entity
+            // (AC7 — `grave_record_id` is unique per profile, so this stays
+            // a precise per-profile filter), so scope by grave instead.
+            ScopeEntityType::GRAVE,
+            (string) $this->profile->grave_record_id,
             null,
             $mime !== false && $mime !== null ? ['mime_declared' => $mime] : [],
         );
@@ -284,8 +300,8 @@ final class MemorialFamilyPage extends Component
     private function attachAcceptedUploads(): void
     {
         $accepted = Document::query()
-            ->where('owner_type', 'memorial_profile')
-            ->where('owner_id', (string) $this->profile->getKey())
+            ->where('owner_type', ScopeEntityType::GRAVE)
+            ->where('owner_id', (string) $this->profile->grave_record_id)
             ->where('state', DocumentState::Accepted->value)
             ->pluck('id');
 
@@ -351,8 +367,8 @@ final class MemorialFamilyPage extends Component
         $media = $this->profile->media()->orderByDesc('created_at')->get();
 
         $pendingUploads = Document::query()
-            ->where('owner_type', 'memorial_profile')
-            ->where('owner_id', (string) $this->profile->getKey())
+            ->where('owner_type', ScopeEntityType::GRAVE)
+            ->where('owner_id', (string) $this->profile->grave_record_id)
             ->where('state', '!=', DocumentState::Accepted->value)
             ->orderByDesc('created_at')
             ->get();

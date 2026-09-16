@@ -152,6 +152,33 @@ final class OpenPaymentSessionMarketplaceTest extends TestCase
             && $request['order_id'] === 'MKT-ORD-1');
     }
 
+    /**
+     * The booking-only expiry cap must not reach Marketplace.
+     *
+     * `OpenPaymentSession::checkoutExpiryHours()` shortens the provider's
+     * hosted-link lifetime to the plot-hold window, because a booking link
+     * outliving its hold lets a customer pay for a grave that has already
+     * gone back to `available`. A marketplace order holds no plot, so
+     * nothing argues for a short window and shortening it would be a
+     * regression for a customer paying at their own pace.
+     *
+     * Asserted on the WIRE, not on the request object: the absence of the
+     * key is the whole claim, and only the outgoing payload proves the
+     * provider is left to apply its own default.
+     */
+    public function test_a_marketplace_link_is_not_capped_to_the_plot_hold_window(): void
+    {
+        config(['plot-reservation.draft_hold_ttl_minutes' => 60]);
+
+        $this->guardWithPaymentGate(open: true);
+        $this->makeOrder();
+        $this->fakeProviderSuccess();
+
+        app(OpenPaymentSession::class)($this->command());
+
+        Http::assertSent(fn ($request): bool => ! array_key_exists('expires_in_hours', $request->data()));
+    }
+
     public function test_the_opening_writes_an_allowed_intent_and_audit(): void
     {
         $this->guardWithPaymentGate(open: true);

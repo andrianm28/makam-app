@@ -46,6 +46,7 @@ use App\Platform\Payment\PaymentProviders;
 use App\Platform\Payment\SessionState;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
@@ -495,6 +496,47 @@ final class BookingWizardOnlinePaymentTest extends TestCase
                 && str_contains((string) $body['success_return_url'], 'session='.$session->id)
                 && str_contains((string) $body['cancel_return_url'], 'session='.$session->id);
         });
+    }
+
+    /**
+     * H-2 review, IMPORTANT-3. `OpenBookingOnlinePayment` links the new
+     * session to its order for the expiry sweep's benefit. That link write
+     * happens AFTER the session row is committed and after the provider is
+     * already hosting a live, payable checkout page — so if it were allowed
+     * to throw, the exception would escape into `BookingWizard`'s generic
+     * `catch (Throwable)`, the customer would be told payment failed, and a
+     * payable session would exist whose `payment_link_url` nobody was ever
+     * shown. Losing a live payment link is strictly worse than the stale
+     * expiry the link exists to prevent.
+     *
+     * The failure is forced the bluntest honest way: the session row is
+     * deleted the instant it is created, so `Order::linkPaymentSession()`'s
+     * existence check genuinely fails and genuinely throws. The customer
+     * must still be redirected to the checkout.
+     */
+    public function test_a_failing_session_link_never_costs_the_customer_their_checkout(): void
+    {
+        $this->withPaymentGate(open: true);
+        $this->fakeProviderSuccess();
+
+        $draftId = $this->journeyToPayment()->get('draftId');
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
+        $component->call('openOnlinePayment');
+
+        $order = $this->chainOrderFor($draftId);
+        $this->operatorCompletes($order);
+
+        PaymentSession::created(function (PaymentSession $session): void {
+            DB::table('payment_sessions')->where('id', $session->getKey())->delete();
+        });
+
+        $component->call('openOnlinePayment')
+            ->assertRedirect('https://checkout.sumopod.com/x');
+
+        // The link really did fail — otherwise this test would be passing
+        // for the wrong reason and would not be exercising the absorb at all.
+        $this->assertNull($order->fresh()->payment_session_id);
     }
 
     /**
