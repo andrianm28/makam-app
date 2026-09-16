@@ -12,6 +12,7 @@ use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\OrderWorkflow\Actions\ApplyPaidEffects;
+use App\Domain\OrderWorkflow\Actions\GrantOrderPaymentOpening;
 use App\Domain\OrderWorkflow\Actions\RecordOrderStatusChange;
 use App\Domain\OrderWorkflow\Actions\SubmitBookingDraft;
 use App\Domain\OrderWorkflow\Models\Order;
@@ -75,10 +76,21 @@ use Tests\TestCase;
  * - settlement via the verified-payment path (order walked to DIBAYAR);
  * - the ⚠️ ledgered call-site: `AcceptPreNeedAgreement` receives the CASE's
  *   OWN quote id, and the Lane-1 agreement row binds the same quote (AC2);
- * - the per-installment payment link is FAIL-CLOSED: a guarded opening
- *   request for an installment amount never creates a `payment_sessions`
- *   row (the approved guard's `amount == quote total` + no-partial-payment
- *   contract — the wiring's honest refusal; see the report finding).
+ * - the per-installment payment link is FAIL-CLOSED for a PARTIAL amount: a
+ *   guarded opening request for an installment amount smaller than the quote
+ *   total never creates a `payment_sessions` row (the approved guard's
+ *   `amount == quote total` + no-partial-payment contract).
+ *
+ * (H-2, 13 Sep 2026) That bullet used to read as though the amount rule were
+ * the only thing refusing this action, and the older fail-closed test's name
+ * says the same. Measured while fixing H-2: with the amount made correct, the
+ * opening is STILL denied — by `confirmation_valid_or_reservation_active`,
+ * `quote_accepted_and_unexpired` and `authorized_opening`, and
+ * `amount_matches_quote_total` is not among the reasons. Those three are
+ * operator-owned, not closed: once the operator processes the order the way
+ * `TransitionOrderAction` does, a session really does open. Both facts now
+ * have their own test, because reading the old one as proof that this path
+ * could never open a session is exactly the mistake H-2's first pass made.
  */
 final class PreNeedCaseResourceTest extends TestCase
 {
@@ -445,6 +457,162 @@ final class PreNeedCaseResourceTest extends TestCase
         $this->assertSame(0, PaymentSession::query()->count());
         $this->assertNull($installment->fresh()->payment_session_id);
         $this->assertSame(1, PaymentIntent::query()->count());
+    }
+
+    /**
+     * H-2 review, CRITICAL-1 — the end-to-end proof that a pre-need payment
+     * link links its session to the ORDER, not only to the instalment.
+     *
+     * This is the second surface that opens a real booking session against a
+     * real `orders` row. Without the link, the hourly
+     * `orders:expire-stale-quotes` sweep cannot see the open checkout, and an
+     * instalment plan runs for months while a quote lasts 30 days — so the
+     * sweep expires the order and `ReleasePlotReservation` returns the grave
+     * to `AVAILABLE` while the customer is on the payment page.
+     *
+     * Every step here uses machinery that already exists in this repository,
+     * and each one satisfies a named guard condition:
+     *
+     *   - `walkOrderTo(DISETUJUI_PEMESAN)` — the same helper the settlement
+     *     test uses.
+     *   - `$quote->accept(...)` — condition 3, exactly as
+     *     `test_settlement_via_the_verified_payment_path` does it.
+     *   - `GrantOrderPaymentOpening` for the LAST step rather than
+     *     `RecordOrderStatusChange` — this is what production does
+     *     (`TransitionOrderAction`), and it is what writes condition 4's
+     *     order-scoped grant while moving the order to
+     *     `MENUNGGU_PEMBAYARAN`, satisfying condition 2 as well.
+     *   - a single instalment equal to the quote total — condition 5, which
+     *     is the one condition a genuine multi-instalment amount fails (see
+     *     the fail-closed test above).
+     *
+     * Nothing here is speculative scaffolding: the pre-need lane REQUIRES
+     * this journey, because `SettlePreNeed::apply()` refuses unless the order
+     * reached `DIBAYAR`, which is only reachable through these statuses.
+     */
+    public function test_a_per_installment_payment_link_links_its_session_to_the_order(): void
+    {
+        $this->bindGateRegistryWith(['G-LEGAL-01' => true, 'G-PAY-01' => true]);
+
+        $admin = User::factory()->create();
+        $this->grantRoleTo($admin, ActorRole::ADMIN);
+        $this->actingAs($admin);
+        $this->seedActorSession($admin, CarbonImmutable::now());
+
+        $this->configurePaymentMerchant();
+        $this->fakeProviderSuccess();
+
+        $case = $this->agreedCase();
+        $quote = Quote::query()->findOrFail($case->fresh()->quote_id);
+
+        // Condition 5: one instalment for the whole quote total.
+        app(SchedulePreNeedPayments::class)(
+            $case->fresh(),
+            [['amount_minor' => $quote->totalMinor()->toMinorInt(), 'due_date' => '2026-09-01']],
+            'actor:admin-1',
+            'admin',
+        );
+
+        $case = $case->fresh();
+        $order = $case->order();
+
+        // Condition 3.
+        $quote->accept(CarbonImmutable::now(), 'actor:admin-1');
+
+        // Conditions 2 and 4: the operator processes the order, taking the
+        // final step through the grant-writing Action production uses.
+        $this->walkOrderTo($order, OrderStatus::DISETUJUI_PEMESAN);
+        app(GrantOrderPaymentOpening::class)(
+            $order->fresh(),
+            $admin->id,
+            'actor:admin-1',
+            'admin',
+        );
+
+        $installment = PreNeedPaymentScheduleItem::query()
+            ->where('pre_need_case_id', $case->getKey())
+            ->firstOrFail();
+
+        Livewire::test(ViewPreNeedCase::class, ['record' => $case->getKey()])
+            ->callAction('payment_link_'.$installment->getKey());
+
+        $session = PaymentSession::query()->sole();
+
+        // Pre-existing behaviour, unchanged.
+        $this->assertSame($session->getKey(), $installment->fresh()->payment_session_id);
+
+        // The H-2 fix: the ORDER knows too, so the sweep can protect it.
+        $this->assertSame(
+            $session->getKey(),
+            $order->fresh()->payment_session_id,
+            'the order must carry the session link or the expiry sweep cannot protect it',
+        );
+    }
+
+    /**
+     * The fail-closed companion to the test above: an order the operator has
+     * NOT processed is refused, which is the guard working correctly.
+     *
+     * This deliberately removes condition 5 from the picture — the instalment
+     * is the full quote total — so the denial can only come from the
+     * operator-owned conditions, and the assertion names all three. It is
+     * here because the older fail-closed test above attributes its refusal to
+     * the amount rule, and that attribution is wrong: with the amount made
+     * correct, the opening is still denied, and `amount_matches_quote_total`
+     * is not among the reasons.
+     *
+     * What this does NOT show — and an earlier revision of this file wrongly
+     * claimed it did — is that the path is unreachable. It is reachable; the
+     * test above reaches it. This pins the BEFORE state of the operator
+     * journey, not the absence of one.
+     */
+    public function test_a_per_installment_payment_link_is_refused_before_the_operator_processes_the_order(): void
+    {
+        $this->bindGateRegistryWith(['G-LEGAL-01' => true, 'G-PAY-01' => true]);
+
+        $admin = User::factory()->create();
+        $this->grantRoleTo($admin, ActorRole::ADMIN);
+        $this->actingAs($admin);
+        $this->seedActorSession($admin, CarbonImmutable::now());
+
+        $this->configurePaymentMerchant();
+        $this->fakeProviderSuccess();
+
+        $case = $this->agreedCase();
+        $quote = Quote::query()->findOrFail($case->fresh()->quote_id);
+
+        // The full quote total, so the amount condition CANNOT be the cause.
+        app(SchedulePreNeedPayments::class)(
+            $case->fresh(),
+            [['amount_minor' => $quote->totalMinor()->toMinorInt(), 'due_date' => '2026-09-01']],
+            'actor:admin-1',
+            'admin',
+        );
+
+        $case = $case->fresh();
+        $installment = PreNeedPaymentScheduleItem::query()
+            ->where('pre_need_case_id', $case->getKey())
+            ->firstOrFail();
+
+        Livewire::test(ViewPreNeedCase::class, ['record' => $case->getKey()])
+            ->callAction('payment_link_'.$installment->getKey())
+            ->assertNotified('Gagal membuat tautan pembayaran');
+
+        $this->assertSame(0, PaymentSession::query()->count());
+        $this->assertNull($case->order()?->fresh()->payment_session_id);
+
+        $intent = PaymentIntent::query()->latest('evaluated_at')->firstOrFail();
+
+        $this->assertSame('denied', $intent->decision);
+        $this->assertSame(
+            [
+                'confirmation_valid_or_reservation_active',
+                'quote_accepted_and_unexpired',
+                'authorized_opening',
+            ],
+            $intent->denied_conditions,
+            'the amount condition must NOT be among these — if it is, the fixture stopped testing what it claims',
+        );
     }
 
     // ---------------------------------------------------------------------
