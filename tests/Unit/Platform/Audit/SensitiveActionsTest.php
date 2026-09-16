@@ -183,6 +183,7 @@ final class SensitiveActionsTest extends TestCase
                 'JOURNAL_REVERSAL',
                 'PRICE_VERSION_RECORDED',
                 'SERVICE_DEFINITION_PRICE_VERSION_RECORDED',
+                'CEMETERY_PACKAGE_PRICE_VERSION_RECORDED',
                 'SERVICE_DEFINITION_CREATED',
                 'SERVICE_DEFINITION_UPDATED',
                 'MFA_RESET',

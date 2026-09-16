@@ -38,6 +38,12 @@ final class SensitiveActions
         'JOURNAL_REVERSAL',
         'PRICE_VERSION_RECORDED',
         'SERVICE_DEFINITION_PRICE_VERSION_RECORDED',
+        // A grave package's firm bookable price. Money the customer is
+        // charged for the plot itself, which the pay-in-full-upfront flow
+        // (docs/superpowers/plans/2026-09-13-bayar-penuh-di-muka-online-saja.md)
+        // makes the largest single line on an order. Same mandatory-reason
+        // category as the service-fee price above it.
+        'CEMETERY_PACKAGE_PRICE_VERSION_RECORDED',
 
         // Added by the admin-managed master-data batch Task 6
         // (`app/Filament/Admin/Resources/ServiceDefinitionResource/`), written

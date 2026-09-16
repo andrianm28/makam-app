@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace App\Domain\ServiceCatalog\Models;
 
+use App\Domain\ServiceCatalog\Concerns\HasVersionedPrice;
+use App\Domain\ServiceCatalog\Contracts\Priceable;
 use App\Domain\ServiceCatalog\FulfillmentOwner;
 use App\Domain\ServiceCatalog\ServiceCategory;
 use App\Domain\ServiceCatalog\ServiceCode;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 /**
  * Eloquent model for `service_definitions` — see the migration
@@ -24,8 +25,10 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
  * definition"/"delete service definition" write action for exactly that
  * reason.
  */
-final class ServiceDefinition extends Model
+final class ServiceDefinition extends Model implements Priceable
 {
+    use HasVersionedPrice;
+
     protected $table = 'service_definitions';
 
     /**
@@ -77,37 +80,23 @@ final class ServiceDefinition extends Model
         return $this->hasMany(ServicePackageItem::class, 'service_definition_id');
     }
 
-    /**
-     * This service's own price history — see `Models\PriceVersion`'s own
-     * class-level doc block for the append-only/`morphTo` shape.
+    /*
+     * `priceVersions()` and `currentPriceVersion()` now live in
+     * `Concerns\HasVersionedPrice`, shared with `Domain\CemeteryCapability\
+     * Models\CemeteryPackage`. The bodies are unchanged; only their home
+     * moved, so this class's existing price tests still prove the behaviour.
      *
-     * @return MorphMany<PriceVersion, $this>
+     * One fact worth keeping from the doc block that used to sit here,
+     * because it is about THIS model and not about the mechanism: in practice
+     * `currentPriceVersion()` is never `null` for a service in any
+     * environment. Since `2026_07_26_220000_seed_service_definition_dummy_
+     * operational_data.php` landed, all 12 seeded codes carry a v1 dev-only
+     * placeholder price out of the box — that migration's own doc block
+     * carries the "not real catalogue pricing" disclaimer. The nullable
+     * return type is still correct and still load-bearing, because a service
+     * whose price rows were removed reaches it; it is simply not the shipped
+     * state.
      */
-    public function priceVersions(): MorphMany
-    {
-        return $this->morphMany(PriceVersion::class, 'priceable');
-    }
-
-    /**
-     * The one row (if any) with `superseded_at IS NULL` — this service's
-     * currently-in-effect price.
-     *
-     * In practice this is never `null` in any environment: since
-     * `2026_07_26_220000_seed_service_definition_dummy_operational_data.php`
-     * landed, every one of the 12 seeded codes carries a v1 dev-only
-     * placeholder price out of the box (that migration's own doc block has
-     * the "not real catalogue pricing" disclaimer). The nullable return type
-     * is still correct and still load-bearing — a caller must handle the
-     * case, which is reachable for a service whose price rows were removed —
-     * but it is not the shipped state. (This doc block previously read "the
-     * seeded catalogue ships with none", which stopped being true the day
-     * that migration landed; corrected 09 Aug 2026 by the ServiceCatalog
-     * Superpowers retrofit, F9.)
-     */
-    public function currentPriceVersion(): ?PriceVersion
-    {
-        return $this->priceVersions()->whereNull('superseded_at')->orderByDesc('version_number')->first();
-    }
 
     public function scopeActive(Builder $query): void
     {
