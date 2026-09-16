@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Domain\RefundObligation\RefundObligationDeadlineQuery;
 use App\Platform\Notification\DeliveryState;
 use App\Platform\Observability\SpineDegradedException;
 use Illuminate\Console\Command;
@@ -22,8 +23,16 @@ use Illuminate\Support\Facades\DB;
  * the order, the quote) succeeds and looks healthy.
  *
  * ---------------------------------------------------------------------------
- * Four independent signals, any one of which is a real problem
+ * Six independent signals, any one of which is a real problem
  * ---------------------------------------------------------------------------
+ * Signals 1-4 detect MACHINERY that has stopped. Signals 5-6, added 14 Sep
+ * 2026 by the refund plan's R4, detect something different in kind: a PERSON
+ * who has not acted, on money the platform already took from a bereaved
+ * family and owes back. No retry drains those, and no amount of healthy
+ * infrastructure makes them go away — which is precisely why they belong in
+ * the one command an operator is already watching, rather than in a table
+ * someone has to remember to open.
+ *
  *   1. An `outbox_events` row unwatched (`dispatched_at IS NULL`) for longer
  *      than `--stale-outbox-minutes` — the publisher
  *      (`Console\Commands\OutboxPublishCommand`) has stopped running, or
@@ -46,7 +55,17 @@ use Illuminate\Support\Facades\DB;
  *      command's own coverage. Same recent-window shape as signal 3, for
  *      the same statelessness reason.
  *
- * Each is independently actionable and independently caused, so all four
+ *   5. A `refund_obligations` row still `TERUTANG` past its `due_at` — money
+ *      taken from a family and not returned by the deadline the owner set
+ *      (3 working days). Refund plan R4.
+ *   6. A `refund_obligations` row still `TERUTANG` and falling due within
+ *      `--refund-due-soon-hours`. Signal 5 alone would be too late to help:
+ *      the provider supports withdraw-to-main-account only, so execution is
+ *      two manual bank movements and the first settles on the provider's
+ *      clock. An alarm at the deadline fires after it could have been acted
+ *      on; this one fires while there is still time to start.
+ *
+ * Each is independently actionable and independently caused, so all six
  * are always checked and reported together — one exception per problem
  * found, not one exception for "something is wrong."
  *
@@ -76,9 +95,11 @@ final class SpineWatchdogCommand extends Command
         {--stuck-outbox-minutes=10 : Alert when an outbox event has been claimed and pushed to the queue this long without publishing}
         {--stale-delivery-minutes=15 : Alert when a notification delivery has waited this long queued}
         {--failed-jobs-window-minutes=5 : Alert on any failed job within this recent window}
-        {--failed-deliveries-window-minutes=15 : Alert on any permanently-failed notification delivery within this recent window}';
+        {--failed-deliveries-window-minutes=15 : Alert on any permanently-failed notification delivery within this recent window}
+        {--refund-due-soon-hours=24 : Warn when an unpaid refund obligation is this close to its deadline}';
 
-    protected $description = 'Detect a silently stalled outbox publisher or notification queue worker.';
+    protected $description = 'Detect a silently stalled outbox publisher or notification queue worker, '
+        .'and refund debt running out of time.';
 
     public function handle(): int
     {
@@ -88,10 +109,12 @@ final class SpineWatchdogCommand extends Command
             $this->checkStaleDeliveries((int) $this->option('stale-delivery-minutes')),
             $this->checkRecentFailures((int) $this->option('failed-jobs-window-minutes')),
             $this->checkFailedDeliveries((int) $this->option('failed-deliveries-window-minutes')),
+            $this->checkOverdueRefundObligations(),
+            $this->checkRefundObligationsDueSoon((int) $this->option('refund-due-soon-hours')),
         ]);
 
         if ($problems === []) {
-            $this->info('Spine healthy: outbox draining, deliveries flowing, no recent failed jobs.');
+            $this->info('Spine healthy: outbox draining, deliveries flowing, no recent failed jobs, no refund debt running late.');
 
             return self::SUCCESS;
         }
@@ -199,5 +222,75 @@ final class SpineWatchdogCommand extends Command
 
         return "{$count} notification delivery(ies) permanently failed in the last {$minutes} minute(s). ".
             'Check the admin "Notifikasi gagal" page.';
+    }
+
+    /**
+     * Refund plan R4, first half: a debt past its deadline and still unpaid.
+     *
+     * This one differs in kind from the four signals above it. Those detect
+     * MACHINERY that has stopped — a publisher, a worker, a job. This detects
+     * a PERSON who has not acted, on money the platform already took from a
+     * family and owes back. Nothing will retry it, nothing will drain it, and
+     * no amount of healthy infrastructure makes it go away.
+     *
+     * The plan's own sentence for this state, kept beside the check that
+     * finds it: *"Kewajiban yang diam adalah kewajiban yang dilupakan, dan
+     * yang menanggung lupanya adalah keluarga yang sudah membayar."*
+     *
+     * Counts and a deadline only — no order reference, no amount, no actor.
+     * Per this class's own "Restricted data" section, and because a refund
+     * obligation is attached to a bereaved family by definition.
+     */
+    private function checkOverdueRefundObligations(): ?string
+    {
+        $deadlines = app(RefundObligationDeadlineQuery::class);
+
+        $count = $deadlines->overdueCount();
+
+        if ($count === 0) {
+            return null;
+        }
+
+        $oldest = $deadlines->oldestOverdueDueAt();
+        $since = $oldest === null ? '' : " Oldest deadline passed at {$oldest}.";
+
+        return "{$count} refund obligation(s) are PAST their execution deadline and still unpaid.".$since.
+            ' Money was taken and has not been returned. Open the admin "Kewajiban Refund" list, '.
+            'which is ordered by deadline.';
+    }
+
+    /**
+     * Refund plan R4, second half — and the half the plan did not originally
+     * ask for.
+     *
+     * R4 as written says overdue obligations must be loud. The owner then
+     * supplied a fact (14 Sep 2026) that makes "overdue" too late to be the
+     * only signal: SumoPod supports **withdraw to the main account only**, so
+     * a refund is two manual bank movements, and the first settles on the
+     * provider's clock rather than ours.
+     *
+     * An operator who first hears about a debt ON its deadline cannot start a
+     * withdraw and finish a transfer in zero time. So the alarm that actually
+     * prevents a missed deadline is this one, not the one above — the one
+     * above reports a failure that already happened.
+     *
+     * Deliberately a separate message rather than a severity flag on the
+     * first: the two demand different actions. "Begin the withdraw" and "this
+     * family has waited too long and someone must tell them why" are not the
+     * same instruction, and collapsing them would lose the one that is still
+     * actionable.
+     */
+    private function checkRefundObligationsDueSoon(int $hours): ?string
+    {
+        $count = app(RefundObligationDeadlineQuery::class)->dueSoonCount($hours);
+
+        if ($count === 0) {
+            return null;
+        }
+
+        return "{$count} refund obligation(s) fall due within {$hours} hour(s) and are still unpaid. ".
+            'The provider supports withdraw-to-main-account only, so execution is two manual bank '.
+            'movements and the first settles on the provider\'s clock — start the withdraw now, not '.
+            'on the deadline.';
     }
 }
