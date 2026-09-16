@@ -44,6 +44,8 @@ This document is the **single source of truth for visual design decisions**. It 
 
 `v0.4` (26 Aug 2026): three governance additions from a kamboja.co.id competitive-benchmark review — see [ADR-0037](../adr/0037-price-emphasis-and-one-accent-one-purpose.md). §1.2(d) codifies "one accent, one purpose" as an explicit rule (with a matching §9.2 MUST NOT 13), generalizing the discipline §1.2(b) already applied informally to Leaf. §2.2 gains positive imagery guidance (candid warmth when people are present) alongside its existing constraints-only list. §3.3d reserves the `<x-mk.trust-badge-strip>` pattern as documentation only — explicitly not built, pending real partner/review content. `tokens.css` gains one new token, `--mk-text-price` (Earth `primary-800`), for confirmed monetary figures only; no existing token value changed and §7.1's 49 asserted pairs are unaffected.
 
+`v0.5` (16 Sep 2026): **the palette is rebased onto the official Brand Guideline 2026** — [ADR-0041](../adr/0041-brand-guideline-2026-supersedes-adr-0034.md), which supersedes ADR-0034 on colour and typography. Forest `#29483A` replaces Earth as `primary`, Sage `#8FA99A` replaces Leaf as the caged `secondary` (anchored at **300**, not 600 — white on Sage is 2.53:1), Ivory `#F7F4ED` and Charcoal `#303330` become the page background and strongest body text. **`success` moves off green to teal `#0C6D7A`** (§1.2(e)): a green brand primary sat 7.4° from the green `success`, inside §7.1's ≥30° rule, and the owner chose to move the status colour rather than weaken the gate. §1.2(a) and (b) are rewritten — (b)'s cage survives every palette this document has had, but its justification changes from hue to **measured contrast**. §1.2(e) is new. §7.1's transcript is re-run, not edited. Sand `#D8C6A5` is in the guideline but deliberately **not** yet a token: under §1.2(d) an accent needs one designated purpose first. Typography (Plus Jakarta Sans, Lora) is **not** in this revision — the faces are self-hosted npm packages and changing them needs a build this host cannot run.
+
 ---
 
 ## 1. Design tokens
@@ -72,32 +74,74 @@ Why two layers: `--color-primary-600` says *what*, `--mk-text-link` says *why*. 
 
 | Family | Base (600) | Hue | Role |
 |---|---|---|---|
-| **Primary — "Earth"** | `#563B26` | 26° | Brand, primary CTA, links, active nav, focus ring |
-| **Secondary — "Leaf"** | `#336B3E` | 132° | Surface tint + accent **only** (never a fill, badge, button, or alert) |
-| **Neutral** | `#576060` | — | Text, borders, surfaces, dividers |
-| **Success** | `#1C7A44` | 146° | `DIBAYAR`, `SELESAI`, upload accepted, autosave saved |
+| **Primary — "Forest"** | `#29483A` | 153° | Brand, primary CTA, links, active nav, focus ring |
+| **Secondary — "Sage"** | `#8FA99A` *(at 300)* | 144° | Surface tint + accent **only** (never a fill, badge, button, or alert) |
+| **Neutral** | `#5C5D5A` | — | Text, borders, surfaces, dividers — warm-toned, anchored on Ivory/Charcoal |
+| **Success** | `#0C6D7A` | 187° | `DIBAYAR`, `SELESAI`, upload accepted, autosave saved — **teal, not green**, see (e) |
 | **Warning** | `#9A6300` | 39° | All `MENUNGGU_*`, quote expiring, scan pending, Urgent |
-| **Danger** | `#A32435` | 352° | `DITOLAK`, validation error, payment failed, file rejected — hue tuned **−11°** (was 3°) to restore ≥30° separation from Earth `primary` (ADR-0034 D4) |
+| **Danger** | `#A32435` | 352° | `DITOLAK`, validation error, payment failed, file rejected — hue tuned **−11°** (was 3°) to restore ≥30° separation from the then-Earth `primary` (ADR-0034 D4); the tuning is unchanged and still clears Forest by 199° |
 | **Info** | `#3A4E9B` | 228° | Gated-fallback mode banners, neutral system notices |
 
-**OQ-12 resolved 21 Aug 2026.** The real official logo (`docs/design/brand/source/logo.png`)
-replaced the earlier render-based estimate. Every Earth/Leaf hex above is sampled directly from
-that file (`docs/design/brand/sample-logo-colours.php`) and the full 50-950 ramp is derived from
-those anchors by `docs/design/brand/generate-ramp.php` (position-based lightness interpolation
-along the same curve the original ramp used, holding hue+saturation fixed — see that script's own
-doc comment for the method). No value here is an estimate any longer.
+Three brand values sit outside this table because they are not `600` shades:
+**Ivory** `#F7F4ED` is `--color-neutral-50` (the page background), **Charcoal**
+`#303330` is `--color-neutral-800` (body text at its strongest), and **Sand**
+`#D8C6A5` — the guideline's accent — **is not wired yet**: under (d) below,
+every accent needs one designated purpose before it gets a token, and
+inventing one would be guessing.
+
+**Superseded 15 Sep 2026 by the official Brand Guideline ([ADR-0041](../adr/0041-brand-guideline-2026-supersedes-adr-0034.md)).**
+The four brand values above — Forest, Sage, Ivory, Charcoal — are transcribed
+**verbatim** from
+[`MAKAM_CO_ID_Brand_Guideline_Visual_2026.pdf`](brand/source/MAKAM_CO_ID_Brand_Guideline_Visual_2026.pdf)
+page 07, and each 50-950 ramp is generated from its guideline value as the
+anchor, with every step's contrast measured rather than assumed.
+
+Sage is anchored at **300, not 600**. `600` is `tokens.css`'s convention for
+"a fill that carries a white label", and Sage fails that at 2.53:1. Putting
+the guideline's secondary there would have made every `secondary-600`
+consumer illegible.
+
+> **The previous note said:** *"OQ-12 resolved 21 Aug 2026 — the real official
+> logo replaced the earlier render-based estimate. Every Earth/Leaf hex above
+> is sampled directly from that file."* That was true and careful work, and it
+> is exactly what a guideline supersedes: sampling a logo tells you what
+> colours the mark uses, not which of them leads the interface. The logo still
+> draws its infinity curve in brown (guideline page 06) — brown simply stopped
+> being a UI role.
 
 **Three deliberate decisions worth stating, because they look wrong at first glance:**
 
-**(a) Primary is Earth brown, not teal — OQ-01 resolved.** v0.1 chose Petrol teal as a deliberately *provisional* primary, made only because [OQ-02](#11-open-questions) had no prior identity to defer to, and deliberately "not green" so a brand CTA could never be confused with a `success` badge. On 17 Aug 2026 the stakeholder supplied the official Makam.co.id brand identity — a render plus the *Filosofi Logo Makam.co.id* philosophy text — which **reverses** that choice: *"dark brown = earth, calm, stability, warmth, respect, humanist (deliberately 'not too tech')."* [ADR-0034](../adr/0034-adopt-makam-brand-identity.md) records the decision. The old green-CTA-vs-success-badge ambiguity that justified avoiding green as primary no longer needs a hue-avoidance answer — it is now avoided **structurally**: brand fills are Earth brown, and `secondary` (Leaf, below) is caged so it never fills a button, badge, or alert regardless of how close its hue sits to `success`. **OQ-01, OQ-02, and OQ-12 are all resolved** — see the note above the palette table.
+**(a) Primary is Forest green — and the green-vs-success problem is back, answered a third way.** This paragraph has now been rewritten twice, and the history is the argument, so it is kept rather than replaced.
 
-**(b) Secondary is constrained, not equal — Sandstone retired, Leaf inherits the cage.** The philosophy text reads the mark's eight radial leaves as "life, growth, renewal," so `secondary` becomes **Leaf** green (`#336B3E`, hue ≈132°, sampled from the official logo per the OQ-12 note above), replacing Sandstone. The restricted-usage cage is unchanged and, if anything, matters *more* now: Leaf sits only ≈14° from `success` (≈146°) — a comparable-magnitude collision to the one Sandstone previously had with `warning` (≈6.5°), not a smaller one — so any Leaf fill would misread as a status success. Secondary stays **restricted by usage**: shades 50–200 as surface tint, 700–900 as text on those tints, 300–400 as decorative rules/icons. It is **never** a filled badge, alert, or button. A restrained palette is also correct for this domain: one brand colour, one accent, four semantics, neutrals.
+v0.1 chose Petrol teal deliberately "not green", so a brand CTA could never be confused with a `success` badge. ADR-0034 then made it Earth brown and declared the ambiguity solved **structurally** — brand fills were brown, and green was caged in `secondary`.
+
+The 2026 Brand Guideline makes the brand colour **green** (Forest `#29483A`, hue 153°). That removes the structure ADR-0034 relied on, and the collision returns for real: measured against the then-`success` green (146°), Forest sat **7.4° away**, far inside the ≥30° rule §7.1 enforces. Two greens, one meaning "our brand" and one meaning "your payment succeeded", on a screen read by someone arranging a funeral.
+
+Three answers were possible: move `success`, grant Forest an exception, or go back to the guideline. The product owner chose to **move `success` to teal** ([ADR-0041](../adr/0041-brand-guideline-2026-supersedes-adr-0034.md) D7, and (e) below). So hue-separation — the v0.1 answer — is the live mechanism again, and the structural cage from ADR-0034 is *additionally* still in force on `secondary`. Both belts, because the brand now occupies the hue that used to be the reason for only one of them.
+
+**OQ-01, OQ-02 and OQ-12 remain resolved**; the guideline is a better source than the logo sample that closed OQ-12, not a reopening of it.
+
+**(b) Secondary is constrained, not equal — Leaf retired, Sage inherits the cage, and the cage's reason changed.** `secondary` is now **Sage** `#8FA99A`, the guideline's own secondary, anchored at **300** rather than 600 (see the note under the table).
+
+The cage survives every palette change this document has been through — Sandstone had it, Leaf inherited it, Sage inherits it now — but **its justification is no longer hue**. Leaf was caged because it sat ≈14° from `success` and a Leaf fill would misread as a success chip. With `success` moved to teal (187°), Sage at 144° is 43° clear of it. That argument is gone.
+
+What replaces it is stronger and does not depend on where any hue sits: **Sage is light.** White on Sage is 2.53:1 — it fails AA outright, so a Sage button or filled badge cannot carry a legible white label at all. And Sage against Ivory is 2.30:1, under WCAG 1.4.11's 3:1 floor, so Sage cannot draw a border or a focus ring either.
+
+Secondary stays **restricted by usage**: shades 50–200 as surface tint, 300 as the guideline's own Sage for tinted bands, 700–900 as text on those tints, 400 as decorative rules/icons. It is **never** a filled badge, alert, or button — now for a reason a contrast checker can prove, rather than one a hue chart suggests.
 
 A `secondary-100` tile carrying a `secondary-800` icon (`<x-mk.icon-medallion tone="leaf">`, added 19 Aug 2026) is a surface-tint-plus-text usage, not a fill — it stays inside the cage, not an exception to it. It is `aria-hidden`, decorative only, and never appears adjacent to order/payment/availability data where a status reading could attach to it.
 
+**(e) Success is teal `#0C6D7A`, not green — and this is the one place the guideline was overruled by measurement.** Added 15 Sep 2026, [ADR-0041](../adr/0041-brand-guideline-2026-supersedes-adr-0034.md) D7.
+
+The guideline names no status colours at all. It names a brand colour, and that colour is green — which put `primary` 7.4° from a `success` green that has meant "your payment went through" since v0.1. §7.1's ≥30° rule exists for exactly this: *a brand button must never read as a success badge*.
+
+Moving `success` was the owner's decision among three options (the others being an exception for Forest, or going back to the guideline's author). Teal at 187° clears Forest by 34°, `info` by 40°, and holds AA 6.03:1 with a white label.
+
+**State the cost, because it is real:** green stops meaning "succeeded". That is a convention users bring with them, not one this product invented, and no amount of internal consistency makes a teal chip read as "paid" on first sight. What buys it back is the rule already in force everywhere else here — §2.3's "no colour-only status": every status carries an icon **and** an Indonesian text label, so the colour was never the only carrier of the meaning. This change makes that rule load-bearing rather than belt-and-braces.
+
 **(c) Danger is muted brick `#A32435`, not a bright red.** Users on this site are frequently in the first hours of bereavement. A saturated alarm red is hostile. `#A32435` holds 7.34:1 on white — it is *more* legible than a typical bright red while reading as serious rather than panicked. (Hue tuned −11° from the v0.1 value, `#A32A24`, by ADR-0034 D4 — see the danger row above.)
 
-**(d) One accent, one purpose — governance rule, added 26 Aug 2026 (kamboja.co.id benchmark).** A competitive review of kamboja.co.id found it uses exactly one accent colour for urgency (its emergency hotline) and exactly one, different, accent colour for money/price figures — never reused for anything else. This design system already applies that discipline informally: (b) above cages Leaf to "surface tint + accent **only**," `danger` is reserved for errors/rejection, `warning` for waiting/urgency, `success` for confirmed payment, `info` for system notices. This paragraph makes the discipline an explicit, general rule rather than a set of family-specific carve-outs: **every accent/semantic colour token in `tokens.css` has exactly one designated purpose across the whole application, and must not be reused for a different semantic meaning elsewhere, even where it would be visually convenient.** A colour choosing to *look* like a good fit for a second meaning is not a licence to reuse it — a new meaning gets a new token (which may still reuse an existing family's shade, per §9.4, if that shade has no other plain-usage purpose yet — see `--mk-text-price` below) or, if none fits, a properly-verified new one. This is the same reasoning §1.2(b) already gives for why Leaf can never fill a status chip: a shared hue with a second meaning is read as the *first* meaning by a user under stress. Enforced at §9.2 MUST NOT 13.
+**(d) One accent, one purpose — governance rule, added 26 Aug 2026 (kamboja.co.id benchmark).** A competitive review of kamboja.co.id found it uses exactly one accent colour for urgency (its emergency hotline) and exactly one, different, accent colour for money/price figures — never reused for anything else. This design system already applies that discipline informally: (b) above cages Sage to "surface tint + accent **only**," `danger` is reserved for errors/rejection, `warning` for waiting/urgency, `success` for confirmed payment, `info` for system notices. This paragraph makes the discipline an explicit, general rule rather than a set of family-specific carve-outs: **every accent/semantic colour token in `tokens.css` has exactly one designated purpose across the whole application, and must not be reused for a different semantic meaning elsewhere, even where it would be visually convenient.** A colour choosing to *look* like a good fit for a second meaning is not a licence to reuse it — a new meaning gets a new token (which may still reuse an existing family's shade, per §9.4, if that shade has no other plain-usage purpose yet — see `--mk-text-price` below) or, if none fits, a properly-verified new one. This is the same reasoning §1.2(b) already gives for why Sage can never fill a status chip: a shared hue with a second meaning is read as the *first* meaning by a user under stress. Enforced at §9.2 MUST NOT 13.
 
 **"Urgent" is an alias, not a new colour.** `information-architecture.md` §4 requires `Urgent` to have visual priority, and `AGENTS.md` forbids implying a service claim while gate `G-OPS-01` is closed. So `--mk-intent-urgent-*` aliases the warning family with a strong left border, and **must always ship with an explicit availability label**. No new hue, no implied promise.
 
@@ -1143,74 +1187,75 @@ Target: **WCAG 2.1 Level AA**. `lang="id"` on `<html>`.
 
 Verified by [`verify-contrast.py`](verify-contrast.py) against `resources/css/tokens.css`.
 
-Real output, re-run 21 Aug 2026 (OQ-12 resolution — Earth/Leaf ramps regenerated from the real
-official logo, replacing the earlier render-based estimate; §1.2) against the shipped
-`tokens.css` (ADR-0034):
+Real output, re-run 16 Sep 2026 — the Brand Guideline 2026 rebase
+([ADR-0041](../adr/0041-brand-guideline-2026-supersedes-adr-0034.md)): Forest/Sage/Ivory/Charcoal
+replace Earth/Leaf, and `success` moves off green to teal (§1.2(e)). Run against the shipped
+`tokens.css`:
 
 ```
-$ python3 docs/design/verify-contrast.py
 WCAG contrast verification — resources/css/tokens.css
 79 colour tokens parsed, 49 pairs asserted
 
-PASS   16.67  (min 4.5)  text-strong on surface-raised  #1A1F1F on #FFFFFF
-PASS   12.86  (min 4.5)  headings on surface-raised  #2D3333 on #FFFFFF
-PASS    8.92  (min 4.5)  text-default (body) on surface-raised  #444B4B on #FFFFFF
-PASS    6.47  (min 4.5)  text-muted on surface-raised  #576060 on #FFFFFF
-PASS    4.53  (min 4.5)  text-placeholder on surface-raised  #6F7878 on #FFFFFF
-PASS    8.39  (min 4.5)  text-default on surface-page  #444B4B on #F7F8F8
-PASS    8.17  (min 4.5)  text-default on surface-warm  #444B4B on #F9F4F0
-PASS   14.21  (min 4.5)  text-strong on secondary-100  #1A1F1F on #E1F1E4
-PASS    8.34  (min 4.5)  text-default on secondary-50  #444B4B on #F2F9F3
-PASS   15.58  (min 4.5)  text-strong on secondary-50  #1A1F1F on #F2F9F3
-PASS    3.96  (min 3.0)  text-disabled on surface-disabled  #6F7878 on #EEF0F0
-PASS   10.25  (min 4.5)  white on primary-600  #FFFFFF on #563B26
-PASS   12.16  (min 4.5)  white on primary-700 (hover)  #FFFFFF on #47311F
-PASS    5.36  (min 4.5)  white on success-600  #FFFFFF on #1C7A44
+PASS   15.44  (min 4.5)  text-strong on surface-raised  #232523 on #FFFFFF
+PASS   12.79  (min 4.5)  headings on surface-raised  #303330 on #FFFFFF
+PASS    9.53  (min 4.5)  text-default (body) on surface-raised  #444643 on #FFFFFF
+PASS    6.63  (min 4.5)  text-muted on surface-raised  #5C5D5A on #FFFFFF
+PASS    5.06  (min 4.5)  text-placeholder on surface-raised  #6E6F6B on #FFFFFF
+PASS    8.68  (min 4.5)  text-default on surface-page  #444643 on #F7F4ED
+PASS    8.86  (min 4.5)  text-default on surface-warm  #444643 on #F5F7F6
+PASS   12.89  (min 4.5)  text-strong on secondary-100  #232523 on #E6ECE9
+PASS    8.78  (min 4.5)  text-default on secondary-50  #444643 on #F4F6F5
+PASS   14.22  (min 4.5)  text-strong on secondary-50  #232523 on #F4F6F5
+PASS    4.14  (min 3.0)  text-disabled on surface-disabled  #6E6F6B on #EBE8E2
+PASS   10.08  (min 4.5)  white on primary-600  #FFFFFF on #29483A
+PASS   12.09  (min 4.5)  white on primary-700 (hover)  #FFFFFF on #223B30
+PASS    6.03  (min 4.5)  white on success-600  #FFFFFF on #0C6D7A
 PASS    5.05  (min 4.5)  white on warning-600  #FFFFFF on #9A6300
 PASS    7.34  (min 4.5)  white on danger-600  #FFFFFF on #A32435
 PASS    9.37  (min 4.5)  white on danger-700 (hover)  #FFFFFF on #871D2C
 PASS    7.66  (min 4.5)  white on info-600  #FFFFFF on #3A4E9B
-PASS   11.13  (min 4.5)  primary-700 on primary-50  #47311F on #F9F4F0
-PASS   11.60  (min 4.5)  primary-800 on primary-100  #382719 on #F0E6DE
-PASS    6.82  (min 4.5)  success-700 on success-50  #166237 on #EEF8F1
-PASS    7.94  (min 4.5)  success-800 on success-100  #134E2D on #D5EEDD
+PASS   11.24  (min 4.5)  primary-700 on primary-50  #223B30 on #F5F7F6
+PASS   11.90  (min 4.5)  primary-800 on primary-100  #1B3026 on #EAEDEB
+PASS    7.03  (min 4.5)  success-700 on success-50  #0A5C66 on #F0F6F7
+PASS    8.12  (min 4.5)  success-800 on success-100  #084A53 on #DDEBEC
 PASS    5.99  (min 4.5)  warning-700 on warning-50  #855400 on #FDF6EB
 PASS    7.25  (min 4.5)  warning-800 on warning-100  #6A4400 on #FAEACB
 PASS    8.49  (min 4.5)  danger-700 on danger-50  #871D2C on #FDF1F2
 PASS    9.01  (min 4.5)  danger-800 on danger-100  #6E1825 on #FBDCDF
 PASS    8.65  (min 4.5)  info-700 on info-50  #31417F on #F1F3FC
 PASS    9.28  (min 4.5)  info-800 on info-100  #293568 on #E0E5F8
-PASS    7.72  (min 4.5)  secondary-700 on secondary-50  #2A5833 on #F2F9F3
-PASS    9.08  (min 4.5)  secondary-800 on secondary-100  #214629 on #E1F1E4
-PASS   10.25  (min 4.5)  text-link on surface-raised  #563B26 on #FFFFFF
-PASS   12.16  (min 4.5)  text-link-hover on surface-raised  #47311F on #FFFFFF
-PASS   11.43  (min 4.5)  text-link on surface-page  #47311F on #F7F8F8
+PASS    8.51  (min 4.5)  secondary-700 on secondary-50  #3F4A44 on #F4F6F5
+PASS    9.93  (min 4.5)  secondary-800 on secondary-100  #313934 on #E6ECE9
+PASS   10.08  (min 4.5)  text-link on surface-raised  #29483A on #FFFFFF
+PASS   12.09  (min 4.5)  text-link-hover on surface-raised  #223B30 on #FFFFFF
+PASS   11.01  (min 4.5)  text-link on surface-page  #223B30 on #F7F4ED
 PASS    7.34  (min 4.5)  error text on surface-raised  #A32435 on #FFFFFF
-PASS    3.67  (min 3.0)  border-interactive on surface-raised  #7F8787 on #FFFFFF
-PASS    3.45  (min 3.0)  border-interactive on surface-page  #7F8787 on #F7F8F8
-PASS    3.36  (min 3.0)  border-interactive on surface-warm  #7F8787 on #F9F4F0
-PASS   10.25  (min 3.0)  focus ring on surface-raised  #563B26 on #FFFFFF
-PASS    9.63  (min 3.0)  focus ring on surface-page  #563B26 on #F7F8F8
-PASS    9.38  (min 3.0)  focus ring on surface-warm  #563B26 on #F9F4F0
-PASS    4.42  (min 3.0)  focus ring inverse on primary-600  #C9A386 on #563B26
+PASS    3.56  (min 3.0)  border-interactive on surface-raised  #888883 on #FFFFFF
+PASS    3.24  (min 3.0)  border-interactive on surface-page  #888883 on #F7F4ED
+PASS    3.31  (min 3.0)  border-interactive on surface-warm  #888883 on #F5F7F6
+PASS   10.08  (min 3.0)  focus ring on surface-raised  #29483A on #FFFFFF
+PASS    9.18  (min 3.0)  focus ring on surface-page  #29483A on #F7F4ED
+PASS    9.37  (min 3.0)  focus ring on surface-warm  #29483A on #F5F7F6
+PASS    4.80  (min 3.0)  focus ring inverse on primary-600  #A9B6B0 on #29483A
 PASS    7.34  (min 3.0)  border-error on surface-raised  #A32435 on #FFFFFF
 PASS    4.70  (min 3.0)  urgent border on urgent bg  #9A6300 on #FDF6EB
-PASS   10.25  (min 3.0)  primary heading on surface-raised  #563B26 on #FFFFFF
-PASS    4.73  (min 3.0)  white on primary-500 (large only)  #FFFFFF on #986943
-PASS   16.36  (min 4.5)  white on surface-inverse  #FFFFFF on #2A1D13
-PASS   13.31  (min 4.5)  primary-100 on surface-inverse  #F0E6DE on #2A1D13
-PASS   10.37  (min 4.5)  primary-200 on surface-inverse  #E0CAB8 on #2A1D13
-PASS   16.67  (min 4.5)  white on neutral-900  #FFFFFF on #1A1F1F
+PASS   10.08  (min 3.0)  primary heading on surface-raised  #29483A on #FFFFFF
+PASS    5.97  (min 3.0)  white on primary-500 (large only)  #FFFFFF on #50695D
+PASS   16.16  (min 4.5)  white on surface-inverse  #FFFFFF on #14241D
+PASS   13.70  (min 4.5)  primary-100 on surface-inverse  #EAEDEB on #14241D
+PASS   11.04  (min 4.5)  primary-200 on surface-inverse  #D0D7D4 on #14241D
+PASS   15.44  (min 4.5)  white on neutral-900  #FFFFFF on #232523
 
 Hue separation of semantic families (600 shade):
-  primary      26.2 deg
-  success     145.5 deg
+  primary     152.9 deg
+  success     187.1 deg
   info        227.6 deg
   danger      352.0 deg
-  secondary   131.8 deg
+  secondary   144.0 deg
   warning      38.6 deg
 
 RESULT: PASS — all 49 pairs meet WCAG 2.1 AA
+```
 ```
 
 Selected measured ratios (full output above):
@@ -1653,15 +1698,20 @@ Also recommended: `axe-core` in the browser-test suite, and a Lighthouse budget 
 ## 10. Quick reference
 
 ```
-COLOUR    primary-600 #563B26  brand/CTA/link/focus (Earth — logo-sampled, OQ-12 resolved)
-          success-600 #1C7A44  DIBAYAR, SELESAI
+COLOUR    primary-600 #29483A  brand/CTA/link/focus (FOREST — guideline 2026, ADR-0041)
+          success-600 #0C6D7A  DIBAYAR, SELESAI  ← TEAL, not green (§1.2(e))
           warning-600 #9A6300  MENUNGGU_*, Urgent, scan pending
           danger-600  #A32435  DITOLAK, error, failed (hue tuned −11°, ADR-0034)
           info-600    #3A4E9B  gated-fallback banners
-          neutral-700 #444B4B  body text
-          neutral-450 #7F8787  interactive borders  ← not 300
-          secondary   #336B3E  Leaf — surface/accent ONLY, never a fill (logo-sampled, OQ-12 resolved)
-          text-price  #382719  (primary-800) monetary figures ONLY — confirmed price/fee/total, never indicative
+          neutral-50  #F7F4ED  IVORY — page background (guideline 2026)
+          neutral-700 #444643  body text
+          neutral-800 #303330  CHARCOAL — strongest body text (guideline 2026)
+          neutral-450 #888883  interactive borders  ← not 300
+          secondary-300 #8FA99A SAGE — surface/accent ONLY, never a fill (guideline 2026; white on it is 2.53:1)
+          text-price  #1B3026  (primary-800) monetary figures ONLY — confirmed price/fee/total, never indicative
+
+          Sand #D8C6A5 is in the guideline but NOT yet a token — it needs one
+          designated purpose first (§1.2(d)).
 
 Each accent/semantic token above has exactly ONE purpose app-wide (§1.2(d), §9.2 MUST NOT 13).
 
@@ -1690,7 +1740,7 @@ These require a decision from design, product, or brand. **Each is a real fork, 
 
 | ID | Question | Default in force | Blocks |
 |---|---|---|---|
-| **OQ-01** | Is **Petrol teal** the accepted brand primary? A green primary is culturally resonant for an Indonesian cemetery brand but collides with `success` (§1.2a). If green is mandated, `success` must move to teal and every §7.1 pair must be re-verified. | **Resolved (Earth, ADR-0034), 17 Aug 2026.** The official brand identity mandates Earth brown (`#563B26`, logo-sampled per OQ-12) as primary; Petrol is retired. The green-vs-success ambiguity this question worried about is now solved structurally, not by hue-avoidance: brand fills are brown, `secondary` (Leaf) never fills anything (§1.2b). | Whole palette — resolved |
+| **OQ-01** | Is **Petrol teal** the accepted brand primary? A green primary is culturally resonant for an Indonesian cemetery brand but collides with `success` (§1.2a). If green is mandated, `success` must move to teal and every §7.1 pair must be re-verified. | **Resolved (Earth, ADR-0034), 17 Aug 2026.** The official brand identity mandates Earth brown (`#563B26`, logo-sampled per OQ-12) as primary; Petrol is retired. **Re-answered 16 Sep 2026 (ADR-0041): green IS mandated after all, and this row predicted exactly what that costs** — *"If green is mandated, `success` must move to teal and every §7.1 pair must be re-verified"*. Both happened: `success` is now teal `#0C6D7A` and all 49 pairs were re-run. The Aug 2026 answer below is kept as the record of the intervening decision. The green-vs-success ambiguity was then solved structurally, not by hue-avoidance: brand fills were brown, `secondary` (Leaf) never fills anything (§1.2b). | Whole palette — resolved |
 | **OQ-02** | Is there an existing Makam.co.id brand identity — logo, colour, typeface? The live site at `makam.co.id` is a static landing page (14 KB `index.html`) not derived from this repo; it was **not** treated as brand authority here. | **Resolved, 17 Aug 2026 (ADR-0034).** The stakeholder supplied an official identity render plus the *Filosofi Logo Makam.co.id* philosophy text in chat on 17 Aug 2026; it is now authoritative. See §1.2, §1.4. | §1.2, §1.4 — resolved |
 | **OQ-03** | Is **Inter + Source Serif 4** acceptable, and is there budget/licence for a commercial alternative? Both chosen are open-licence and self-hostable. | **Amended, 17 Aug 2026 (ADR-0034).** Poppins added as `--font-display` (`h1`/`h2`, hero, header wordmark; philosophy: "modern, clean, digital, friendly, professional"), self-hosted via `@fontsource/poppins`, latin subset, weight 600 only. Inter is retained for body/UI/`h3`/`h4`/Filament. Source Serif 4 is retained too, moved to the new `--font-document` token (documents only, §1.4) so it can never be silently replaced by Poppins. | §1.4, §4.6 |
 | **OQ-12** | Official brand hex values, a vector source for the mark, and a horizontal lockup are still outstanding. Every Earth/Leaf hex adopted in this pass was derived from a chat-reviewed render, not sampled from confirmed brand collateral (ADR-0034 D9), and every raster asset built from it (§8, Task 3 — `mark-96`, `mark-inverse-96`, `lockup-320`/`640`, `favicon.ico`, `apple-touch-icon.png`) is provisional for the same reason. | **Resolved 21 Aug 2026.** The real official logo (`docs/design/brand/source/logo.png`) is now in hand. `primary` Earth `#563B26` and `secondary` Leaf `#336B3E` are sampled directly from it (`docs/design/brand/sample-logo-colours.php`), and the full 50–950 ramps are regenerated from those anchors (`docs/design/brand/generate-ramp.php`) — see the OQ-12 note in §1.2. `primary-500` was found to carry only a thin AA margin as a white-text fill (4.73:1, §7.1 finding 4) and is documented as fill-ineligible in §3.1. The vector logo source and horizontal lockup asset rebuild are tracked separately (§8, Task 3) and are **not** part of this resolution. | §1.2, §3.1, §7.1 — resolved (hex values); §1.4, §8 raster assets — still outstanding |
