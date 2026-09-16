@@ -129,6 +129,14 @@ use Illuminate\Support\Facades\DB;
  */
 final class PurgeExampleDataCommand extends Command
 {
+    /**
+     * The address prefix the 26 Jul 2026 seed migration wrote on every
+     * fabricated cemetery. See `unpurgedFabricatedRows()` for why an applied
+     * migration's literal is durable evidence where `CemeteryExampleData`'s
+     * generated slugs are not.
+     */
+    private const string FABRICATED_ADDRESS_PREFIX = 'Jl. Contoh';
+
     protected $signature = 'example-data:purge {--force : Required. Purges without this flag are refused.}';
 
     protected $description = 'Remove fabricated cemetery/vendor/grave-record example data before a public beta launch.';
@@ -159,17 +167,29 @@ final class PurgeExampleDataCommand extends Command
 
         if ($total === 0) {
             $this->info('Nothing to purge — no example-data rows were found. Already clean, or never seeded.');
-
-            return self::SUCCESS;
-        }
-
-        foreach ($counts as $label => $count) {
-            if ($count > 0) {
-                $this->info(sprintf('%-28s %d', $label, $count));
+        } else {
+            foreach ($counts as $label => $count) {
+                if ($count > 0) {
+                    $this->info(sprintf('%-28s %d', $label, $count));
+                }
             }
+
+            $this->info("Purged {$total} example-data row(s) total.");
         }
 
-        $this->info("Purged {$total} example-data row(s) total.");
+        // A purge that deleted every row it could MATCH is not the same as an
+        // environment with no fabricated data left in it, and until now both
+        // reported success identically. Checked on every run, including the
+        // "already clean" path above — that message is the most misleading of
+        // the two, because it is exactly what an environment seeded before
+        // 13 Aug 2026 prints while still serving ten fabricated cemeteries.
+        $survivors = $this->unpurgedFabricatedRows();
+
+        if ($survivors !== []) {
+            $this->reportUnpurged($survivors);
+
+            return self::FAILURE;
+        }
 
         return self::SUCCESS;
     }
@@ -227,5 +247,123 @@ final class PurgeExampleDataCommand extends Command
             'cemetery_packages (cascaded)' => $cemeteryPackagesCascaded,
             'products (dummy columns reset)' => $productsReset,
         ];
+    }
+
+    /**
+     * The fabricated rows this command did NOT remove.
+     *
+     * -----------------------------------------------------------------------
+     * Why a purge can leave fabricated data behind and still report success
+     * -----------------------------------------------------------------------
+     * `purge()` identifies example data by matching the values the
+     * `ExampleData` generators produce *right now*:
+     * `CemeteryExampleData::slugs()`, `::graveRecords()`'s names,
+     * `VendorListingExampleData::vendors()`'s names. That is an identity
+     * test against live code, and live code moves.
+     *
+     * It moved on 13 Aug 2026. Commit `15075d8e` ("generate cemetery example
+     * data procedurally (no literal rows)") replaced the literal fixture
+     * rows — `tpu-jakarta-menteng`, `TPU Jakarta Menteng` — with generated
+     * ones: `tpu-jakarta-1`, and so on. Every environment seeded before that
+     * commit still holds the literal rows, and from that day on `purge()`
+     * could not see them. Measured 16 Sep 2026 against the live databases:
+     *
+     *              cemeteries          grave_records
+     *   beta       10 present, 0 matched   30 present, 16 matched
+     *   dev        10 present, 0 matched   30 present, 16 matched
+     *
+     * Nothing failed. The command deleted what it could match, reported the
+     * count, and exited 0 — while ten fabricated cemeteries and fourteen
+     * fabricated grave records stayed on a public site.
+     *
+     * -----------------------------------------------------------------------
+     * Why this reports rather than deletes
+     * -----------------------------------------------------------------------
+     * Widening the deletes is the obvious fix and it is the wrong one. Both
+     * widenings make beta strictly worse, because `purge()` runs inside a
+     * single `DB::transaction`:
+     *
+     *   - The ten unmatched cemeteries are referenced by `cemetery_blocks`
+     *     (2), `grave_plots` (9) and `visitation_bookings` (1), all
+     *     `restrictOnDelete`.
+     *   - One of the fourteen unmatched grave records is referenced by a
+     *     `memorial_profiles` row, likewise `restrictOnDelete`.
+     *
+     * Deleting either set therefore raises a foreign key violation, which
+     * rolls back the WHOLE purge — including the vendors and grave records
+     * it removes successfully today. A partial clean would become no clean
+     * at all. Removing those rows needs an operator who can decide what
+     * happens to the dependents; this command cannot decide that, so it
+     * says so instead of guessing.
+     *
+     * -----------------------------------------------------------------------
+     * What counts as evidence here, and why it does not rot the same way
+     * -----------------------------------------------------------------------
+     * These two markers are frozen where `slugs()` is not:
+     *
+     *   - `grave_records.source = 'contoh'`. `GraveRecordSource::CONTOH`'s
+     *     own doc block states the rule this relies on: "A row carrying this
+     *     source is never real business data." It is a column written at
+     *     seed time, not a value recomputed from today's generator.
+     *   - `cemeteries.address` beginning "Jl. Contoh". That string lives in
+     *     `2026_07_26_190300_seed_cemeteries_and_capability_profiles.php`,
+     *     an applied migration — immutable by this repository's own rule
+     *     that applied migrations are not rewritten. "Contoh" is the
+     *     established marker word for fabricated content here, cited as
+     *     such by `GraveRecordSource::CONTOH`.
+     *
+     * Neither is a guess about intent; both were written by the seeder to
+     * say "this is fabricated".
+     *
+     * -----------------------------------------------------------------------
+     * This mechanizes an acceptance criterion that already existed
+     * -----------------------------------------------------------------------
+     * `docs/superpowers/plans/2026-08-18-public-beta-release.md` line 367
+     * already sets the bar — "Zero occurrences of 'Contoh', zero
+     * `GraveRecordSource::CONTOH` rows, no dummy prices" — and
+     * `docs/adr/0035-beta-launch-accepted-risks.md` records running this
+     * command as the mitigation. The criterion was written; nothing checked
+     * it. This is the check.
+     *
+     * @return array<string, int> label => surviving row count, non-zero only
+     */
+    private function unpurgedFabricatedRows(): array
+    {
+        $survivors = [
+            'cemeteries (alamat "Jl. Contoh")' => DB::table('cemeteries')
+                ->where('address', 'like', self::FABRICATED_ADDRESS_PREFIX.'%')
+                ->count(),
+            'grave_records (source=contoh)' => DB::table('grave_records')
+                ->where('source', GraveRecordSource::CONTOH)
+                ->count(),
+        ];
+
+        return array_filter($survivors, static fn (int $count): bool => $count > 0);
+    }
+
+    /**
+     * @param  array<string, int>  $survivors
+     */
+    private function reportUnpurged(array $survivors): void
+    {
+        $this->newLine();
+        $this->error('Data fiktif masih tertinggal setelah purge.');
+        $this->line(
+            'Baris ini membawa penanda data contoh yang ditulis oleh seeder, tetapi tidak cocok '.
+            'dengan nilai yang generator ExampleData hasilkan sekarang, sehingga purge tidak melihatnya.'
+        );
+        $this->newLine();
+
+        foreach ($survivors as $label => $count) {
+            $this->line(sprintf('  %-34s %d', $label, $count));
+        }
+
+        $this->newLine();
+        $this->line(
+            'Menghapusnya butuh keputusan operator: baris-baris ini dirujuk oleh tabel yang '.
+            'restrictOnDelete (cemetery_blocks, grave_plots, visitation_bookings, memorial_profiles), '.
+            'jadi menghapusnya dari sini akan me-rollback seluruh purge. Lihat doc block '.
+            'unpurgedFabricatedRows() untuk rinciannya.'
+        );
     }
 }
