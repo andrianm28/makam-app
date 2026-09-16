@@ -1258,23 +1258,38 @@ Hue separation of semantic families (600 shade):
 
 RESULT: PASS — all 49 pairs meet WCAG 2.1 AA
 ```
-```
+
+**Surfaces are asserted against EACH OTHER too, added 16 Sep 2026.** Every
+other assertion here measures a foreground against a background; none measured
+two backgrounds. That gap let a real regression through: the Brand Guideline
+rebase and the kamboja surface-alternation work merge with no conflict and all
+18 gates passing, and land `--mk-surface-warm` and `--mk-surface-quiet` 3/765
+apart in RGB — invisible, which quietly turns §4.4's divider-free alternation
+into a no-op. `verify-contrast.py` now compares all five `--mk-surface-*`
+aliases pairwise and fails below **10/765**. That floor is derived, not chosen:
+the palette shipped before the rebase held its tightest pair at 11/765 and
+every other at 14 or more.
+
+It is Manhattan distance in sRGB, not a perceptual metric — adequate because
+every surface compared is a near-white tint, and deliberately not used for
+saturated colours. Surfaces whose alias does not resolve are NAMED in the
+output rather than silently skipped.
 
 Selected measured ratios (full output above):
 
 | Pair | Ratio | Min |
 |---|---|---|
-| body text `neutral-700` on white | **8.92** | 4.5 |
-| muted `neutral-600` on white | **6.47** | 4.5 |
-| placeholder `neutral-500` on white | **4.53** | 4.5 |
-| white on `primary-600` (Earth, primary button) | **10.25** | 4.5 |
-| white on `success-600` | **5.36** | 4.5 |
+| body text `neutral-700` on white | **9.53** | 4.5 |
+| muted `neutral-600` on white | **6.63** | 4.5 |
+| placeholder `neutral-500` on white | **5.06** | 4.5 |
+| white on `primary-600` (Forest, primary button) | **10.08** | 4.5 |
+| white on `success-600` (teal, §1.2(e)) | **6.03** | 4.5 |
 | white on `warning-600` | **5.05** | 4.5 |
 | white on `danger-600` (tuned, ADR-0034) | **7.34** | 4.5 |
 | white on `info-600` | **7.66** | 4.5 |
 | badge `*-800` on `*-100` (all six families) | **7.25 – 11.60** | 4.5 |
-| link `primary-600` on white | **10.25** | 4.5 |
-| `border-interactive` on white / page / warm | **3.67 / 3.45 / 3.36** | 3.0 |
+| link `primary-600` on white | **10.08** | 4.5 |
+| `border-interactive` on white / page / warm | **3.56 / 3.24 / 3.31** | 3.0 |
 | focus ring `primary-600` on white | **10.25** | 3.0 |
 | inverse focus ring `primary-300` on `primary-600` | **4.42** | 3.0 |
 | white on `surface-inverse` (footer) | **16.36** | 4.5 |

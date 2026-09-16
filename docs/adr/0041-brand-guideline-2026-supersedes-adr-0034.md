@@ -176,6 +176,10 @@ as its own justification cannot be reviewed independently of it.
 - **OQ-B3 — Does Lora ship at all before a quote/storytelling surface
   exists?** Loading a second webfont that nothing renders is weight without
   benefit; the first Lora consumer should arrive with it.
+- **OQ-B4 — RESOLVED 16 Sep 2026: Sand becomes the accent, and
+  `--mk-surface-warm` points at `accent-100`.** See D8 below. The question and
+  its evidence are kept as written, because the reasoning is what justifies D8.
+
 - **OQ-B4 — `--mk-surface-warm` is now COOL, and it collides with
   `--mk-surface-quiet`. Resolve before the brand chain and the kamboja chain
   both land.** This is the one thing in this rebase that a green build hides,
@@ -218,3 +222,40 @@ as its own justification cannot be reviewed independently of it.
   Recording it rather than doing it, because adding a colour family is the
   kind of decision this ADR exists to make explicitly rather than absorb into
   a merge.
+
+## D8 — Sand is wired as `--color-accent-*`, and `--mk-surface-warm` uses it
+
+Resolves OQ-B4, and answers the half of OQ-B2 that mattered: Sand sat unwired
+because §1.2(d) requires an accent to have exactly one designated purpose
+first. It now has one — the trust/reassurance surface (§2.3) — and that is
+precisely the purpose the rebase broke.
+
+Two calls the measurements made rather than taste:
+
+- **Anchored at 200.** Sand's luminance (0.577) sits closest to that ramp
+  position across every sibling family. The guideline value is transcribed
+  verbatim rather than nudged to fit a slot, the same discipline that put
+  Sage at 300.
+- **The surface is `accent-100`, not `accent-50`.** Sand and Ivory are the
+  same warm family: a Sand tint at 80% white lands *exactly* on Ivory
+  `#F7F4ED`. A naive `accent-50` would have duplicated `--color-neutral-50`
+  and moved the collision instead of closing it, so `accent-50` is mixed
+  lighter than a sibling 50 and the surface takes 100.
+
+All ten surface pairs now clear the 10/765 floor; `warm` vs `quiet` goes from
+**3** to **41**. Text on the new warm surface: Charcoal 10.60:1, Forest 8.36:1.
+
+### Merging this with the kamboja chain — two things to expect
+
+Verified by trial merge, not predicted:
+
+1. **`tokens.css` CONFLICTS**, and the resolution is mechanical: take this
+   branch's `--mk-surface-warm: var(--color-accent-100)` and keep the kamboja
+   chain's `--mk-surface-quiet: var(--color-secondary-50)`. Dropping the old
+   `primary-50` warm definition is the whole of it. Resolved that way, the
+   gate passes with all five surfaces compared.
+2. **One stale claim survives the merge and no gate catches it.** The kamboja
+   comment on `--mk-surface-quiet` states its value as *"#F2F9F3, the exact
+   value the homepage already painted"*. After the rebase `secondary-50` is
+   `#F4F6F5`. The token is correct; the sentence describing it is not. Fix it
+   in the same commit that resolves the conflict.

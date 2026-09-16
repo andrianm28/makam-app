@@ -75,6 +75,35 @@
   --color-secondary-950: #151917;
 
   /* ---------------------------------------------------------------------------
+   * 1.2b COLOUR -- ACCENT "Sand" (hue ~38 deg, warm)
+   * The 2026 Brand Guideline's third brand colour, added 16 Sep 2026 by
+   * ADR-0041 D8. It sat unwired for a day because design-system.md 1.2(d)
+   * requires an accent to have exactly ONE designated purpose before it gets
+   * a token -- and it now has one: the trust/reassurance surface (2.3).
+   *
+   * Anchored at 200, not 600. Sand's luminance (0.577) sits closest to this
+   * ramp position across every sibling family, and the guideline value is
+   * transcribed verbatim rather than nudged to fit a slot -- the same
+   * discipline that put Sage at 300.
+   *
+   * Sand and Ivory are the SAME warm family: a Sand tint at 80% white lands
+   * exactly on Ivory #F7F4ED. That is why accent-50 is mixed lighter than a
+   * sibling 50 would be -- otherwise it would duplicate --color-neutral-50
+   * and the two would be indistinguishable tokens with different names.
+   * ------------------------------------------------------------------------ */
+  --color-accent-50:  #FBF9F6;
+  --color-accent-100: #F0E9DD; /* --mk-surface-warm; charcoal AA 10.60:1, forest 8.36:1 */
+  --color-accent-200: #D8C6A5; /* SAND -- the guideline's accent, verbatim. ADR-0041. */
+  --color-accent-300: #B5A68B;
+  --color-accent-400: #978B74;
+  --color-accent-500: #796F5C; /* white label AA 4.95:1 */
+  --color-accent-600: #5F5749; /* white label AA 7.13:1 -- the fill slot */
+  --color-accent-700: #494338;
+  --color-accent-800: #363229;
+  --color-accent-900: #25221C;
+  --color-accent-950: #161410;
+
+  /* ---------------------------------------------------------------------------
    * 1.3 COLOUR — NEUTRAL (slightly cool, harmonises with Petrol)
    * ------------------------------------------------------------------------ */
   --color-neutral-0:   #FFFFFF;
@@ -272,19 +301,33 @@
   --mk-surface-page: var(--color-neutral-50);
   --mk-surface-raised: var(--color-neutral-0);
   --mk-surface-sunken: var(--color-neutral-100);
-  --mk-surface-warm: var(--color-primary-50);      /* ADR-0034: warm-cream
-    role now lives in the Earth family, not Leaf — trust/quiet sections. */
+  --mk-surface-warm: var(--color-accent-100);     /* ADR-0041 D8: trust/quiet
+    sections. Was primary-50 -- which the brand rebase turned COOL, because
+    primary stopped being brown. A token named "warm" holding a cool grey is a
+    contradiction, and it also landed 3/765 from --mk-surface-quiet, collapsing
+    the three-band alternation ADR-0040 D1/D2 exists for. Sand is the warm one,
+    and now it is here. 41/765 from quiet; all ten surface pairs clear the
+    10/765 floor verify-contrast.py enforces. */
   --mk-surface-quiet: var(--color-secondary-50);   /* ADR-0040: the THIRD page
     band, so consecutive page sections can alternate and their boundaries read
     without a divider line (design-system.md §4.4: "Proximity carries the
-    grouping — do not reach for divider lines"). Pure alias — #F2F9F3, the
-    exact value the homepage already painted by reaching for the raw
-    `bg-secondary-50` primitive, which §2's own header forbids ("Always
-    reference the SEMANTIC token in component CSS, not the primitive"). A
-    surface TINT in Leaf 50, squarely inside §1.2(b)'s cage: never a fill,
+    grouping — do not reach for divider lines"). Pure alias, no literal: the
+    homepage used to paint this by reaching for the raw `bg-secondary-50`
+    primitive, which §2's own header forbids ("Always reference the SEMANTIC
+    token in component CSS, not the primitive").
+
+    VALUE CORRECTED 16 Sep 2026. This comment used to name the colour as
+    "#F2F9F3, the exact value the homepage already painted". That was true of
+    Leaf; ADR-0041 replaced Leaf with Sage and `secondary-50` is now #F4F6F5.
+    The token was right the whole time and the sentence describing it was not —
+    which is why an alias states its INTENT and lets `tokens.css` hold the
+    number, rather than restating a hex that can drift underneath it.
+
+    A surface TINT in Sage 50, squarely inside §1.2(b)'s cage: never a fill,
     badge, button, or alert. Contrast needs no new verify-contrast.py pair —
     "text-default on secondary-50" and "text-strong on secondary-50" are both
-    already asserted there, and no value changed. */
+    already asserted there. Surface-vs-surface separation IS newly asserted
+    (the 10/765 floor), and this band clears `--mk-surface-warm` by 41. */
   --mk-surface-inverse: var(--color-primary-900);  /* footer */
   --mk-surface-overlay: rgb(13 17 17 / 0.55);      /* modal backdrop */
   --mk-surface-disabled: var(--color-neutral-100);
