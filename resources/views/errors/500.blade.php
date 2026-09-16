@@ -39,8 +39,8 @@
         body {
             margin: 0;
             min-height: 100vh;
-            background: #F7F8F8;
-            color: #444B4B;
+            background: #F7F4ED;
+            color: #444643;
             font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             -webkit-font-smoothing: antialiased;
         }
@@ -58,8 +58,8 @@
             text-align: center;
         }
         .errpage a.errpage-logo { display: inline-flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; text-decoration: none; }
-        .errpage h1 { font-size: 1.125rem; font-weight: 600; color: #2D3333; margin: 0; }
-        .errpage p { max-width: 42rem; font-size: 1rem; color: #576060; margin: 0; }
+        .errpage h1 { font-size: 1.125rem; font-weight: 600; color: #303330; margin: 0; }
+        .errpage p { max-width: 42rem; font-size: 1rem; color: #5C5D5A; margin: 0; }
         .errpage .errpage-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.75rem; padding-top: 0.5rem; }
         .errpage .btn {
             display: inline-flex;
@@ -71,10 +71,10 @@
             font-weight: 500;
             text-decoration: none;
         }
-        .errpage .btn-primary { background: #563B26; color: #FFFFFF; }
-        .errpage .btn-primary:hover { background: #47311F; }
-        .errpage .btn-secondary { background: #FFFFFF; color: #563B26; border: 1px solid #563B26; }
-        .errpage .btn-secondary:hover { background: #F7F8F8; }
+        .errpage .btn-primary { background: #29483A; color: #FFFFFF; }
+        .errpage .btn-primary:hover { background: #223B30; }
+        .errpage .btn-secondary { background: #FFFFFF; color: #29483A; border: 1px solid #29483A; }
+        .errpage .btn-secondary:hover { background: #F7F4ED; }
     </style>
 </head>
 <body>
