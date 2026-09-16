@@ -176,3 +176,45 @@ as its own justification cannot be reviewed independently of it.
 - **OQ-B3 — Does Lora ship at all before a quote/storytelling surface
   exists?** Loading a second webfont that nothing renders is weight without
   benefit; the first Lora consumer should arrive with it.
+- **OQ-B4 — `--mk-surface-warm` is now COOL, and it collides with
+  `--mk-surface-quiet`. Resolve before the brand chain and the kamboja chain
+  both land.** This is the one thing in this rebase that a green build hides,
+  so it is written down with its numbers.
+
+  The two chains were built in parallel against the same trunk. A trial merge
+  of `feat/brand-2026-typography` into `docs/kamboja-tahap8-design-system-sync`
+  auto-merges cleanly — no conflict markers, all 18 gates PASS — and produces
+  a page that has lost a band:
+
+  | Token | Resolves to | Value | Tone |
+  |---|---|---|---|
+  | `--mk-surface-page` | `neutral-50` | `#F7F4ED` | **warm** (Ivory) |
+  | `--mk-surface-warm` | `primary-50` | `#F5F7F6` | **cool** |
+  | `--mk-surface-quiet` | `secondary-50` | `#F4F6F5` | **cool** |
+
+  Two independent problems:
+
+  1. **`warm` is cool.** `primary-50` used to be a tint of Earth brown
+     (`#F9F4F0`); it is now a tint of Forest green. A token named `warm`,
+     whose doc comment reads "warm-cream role", holds a cool grey-green. The
+     name and the value contradict.
+  2. **`warm` and `quiet` are 3/765 apart in RGB** — imperceptible. ADR-0040
+     D1/D2 added `surface-quiet` precisely so consecutive sections could
+     alternate and a boundary would read *without* the divider line §4.4
+     forbids. With two of the three bands identical, that alternation
+     collapses to page-vs-white and Tahap 2's premise is gone.
+
+  No gate catches this. GATE 1 asserts TEXT contrast; nothing asserts that two
+  surfaces are distinguishable from each other. Both chains pass everything.
+
+  **The likely answer is Sand, and it also answers OQ-B2's sibling question.**
+  The guideline's accent is a warm sand tone, `--mk-surface-warm` wants to be
+  warm, and §1.2(d) requires an accent to have exactly one designated purpose
+  before it becomes a token. "The trust/reassurance surface" (§2.3) is one
+  purpose. Measured: a Sand tint at `#F4EFE6` sits 15/765 from Ivory and
+  22/765 from the Sage-tinted `quiet` — a real three-band separation — while
+  holding Charcoal at 11.17:1 and Forest at 8.81:1.
+
+  Recording it rather than doing it, because adding a colour family is the
+  kind of decision this ADR exists to make explicitly rather than absorb into
+  a merge.
