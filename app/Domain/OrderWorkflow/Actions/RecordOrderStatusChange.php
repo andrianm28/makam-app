@@ -6,12 +6,14 @@ namespace App\Domain\OrderWorkflow\Actions;
 
 use App\Domain\OrderWorkflow\Exceptions\OrderAlreadyOpenedException;
 use App\Domain\OrderWorkflow\Exceptions\OrderAlreadyPaidException;
+use App\Domain\OrderWorkflow\Exceptions\RefusalWithoutRefundObligationException;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\Models\OrderStatusEvent;
 use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\OrderWorkflow\OrderTransition;
 use App\Domain\PlotReservation\Actions\ReleasePlotReservation;
 use App\Domain\PlotReservation\Models\PlotReservation;
+use App\Domain\RefundObligation\Models\RefundObligation;
 use App\Platform\Audit\Audit;
 use App\Platform\Audit\AuditOutcome;
 use App\Platform\Audit\AuditSource;
@@ -51,17 +53,20 @@ use InvalidArgumentException;
  *    `DIBAYAR` case specifically — see the migration's own doc block).
  * 2. `OrderTransition::assertAllowed()` — throws `IllegalOrderTransitionException`
  *    before anything is written.
- * 3. Blank-reason rejection when `$to->requiresReason()` (true only for
- *    `DITOLAK`). Delegates to `Audit::reasonIsBlank()` — the same
+ * 3. Blank-reason rejection when `$to->requiresReason()` (true for `DITOLAK`
+ *    and `DITOLAK_SETELAH_BAYAR`). Delegates to `Audit::reasonIsBlank()` — the same
  *    Unicode-aware check the audit layer itself uses — rather than
  *    reimplementing it (`task-2-brief.md` ambiguity 2: "do not write your
  *    own blank/empty-string check"). Deliberately NOT done by adding
  *    `ORDER_STATUS_CHANGED` to `SensitiveActions::ACTIONS`: that list makes
- *    a reason mandatory for every occurrence of the action, but only
- *    `DITOLAK` needs one here — the other twelve transitions must keep
+ *    a reason mandatory for every occurrence of the action, but only the two
+ *    refusal statuses need one here — every other transition must keep
  *    working with no reason at all.
- * 4. Insert the `order_status_events` row, then update `orders.status`.
- * 5. Emit `order.status_changed.v1` via the existing `Outbox` — the only
+ * 4. The refund-obligation precondition for `DITOLAK_SETELAH_BAYAR` — read
+ *    this class's "The single door out of a paid order" section below for
+ *    what it is and why it lives here rather than in the caller.
+ * 5. Insert the `order_status_events` row, then update `orders.status`.
+ * 6. Emit `order.status_changed.v1` via the existing `Outbox` — the only
  *    catalogued order event (`docs/contracts/event-catalog.md:20`); no new
  *    event name is invented.
  *
@@ -70,6 +75,39 @@ use InvalidArgumentException;
  * never be committed separately." If `assertAllowed()` or the blank-reason
  * check throws, the transaction (containing zero writes so far) rolls
  * back and the exception propagates to the caller untouched.
+ *
+ * ---------------------------------------------------------------------------
+ * The single door out of a paid order (Stage R1, 13 Sep 2026)
+ * ---------------------------------------------------------------------------
+ * `DITOLAK_SETELAH_BAYAR` means "the admin refused this order while holding
+ * the customer's money." Writing it without recording the debt owed back
+ * would produce exactly the outcome
+ * `docs/superpowers/plans/2026-09-13-sistem-refund.md` exists to make
+ * impossible: a grieving family that has paid in full, an order marked
+ * refused, and no row anywhere saying their money must come back.
+ *
+ * So this Action refuses the write unless a `refund_obligations` row for the
+ * order ALREADY EXISTS, checked under the same transaction and after the same
+ * row lock as everything else here. It is a data precondition, not a flag: a
+ * boolean argument or a token object would be something a caller asserts,
+ * while this is something the caller must already have done. There is no
+ * value that makes it true.
+ *
+ * `Actions\RefusePaidOrder` is the only intended caller — it opens the
+ * obligation first, then calls this Action, inside one transaction. Any other
+ * caller gets `RefusalWithoutRefundObligationException`, whose message names
+ * that Action.
+ *
+ * ---------------------------------------------------------------------------
+ * Cross-context coupling, stated rather than assumed
+ * ---------------------------------------------------------------------------
+ * This adds a second read of another bounded context's table to this class,
+ * alongside the `PlotReservation` read below, and for the same kind of
+ * reason: the invariant spans both contexts and can only be enforced where
+ * the transaction is. `App\Domain\RefundObligation` is read-only from here —
+ * no obligation is created, updated, or interpreted; the only question asked
+ * is whether one exists. Opening one stays the sole responsibility of
+ * `App\Domain\RefundObligation\Actions\OpenRefundObligation`.
  */
 final readonly class RecordOrderStatusChange
 {
@@ -255,6 +293,22 @@ final readonly class RecordOrderStatusChange
                     );
                 }
 
+                // The single door out of a paid order — see this class's own
+                // doc block section of that name. Positioned here
+                // deliberately: AFTER the row lock, so a concurrent
+                // transaction cannot delete the obligation between the check
+                // and the write, and BEFORE the event insert, so a refusal
+                // with no debt behind it never reaches the table at all.
+                //
+                // `exists()` and not a load: this Action has no business
+                // reading an obligation's amount, deadline, or status. The
+                // only question it is entitled to ask is whether the debt has
+                // been recorded.
+                if ($to === OrderStatus::DITOLAK_SETELAH_BAYAR
+                    && ! RefundObligation::query()->where('order_id', $current->getKey())->exists()) {
+                    throw RefusalWithoutRefundObligationException::forOrder((string) $current->getKey());
+                }
+
                 $event = OrderStatusEvent::query()->create([
                     'order_id' => $current->getKey(),
                     'from_status' => $from->value,
@@ -300,7 +354,21 @@ final readonly class RecordOrderStatusChange
                 // forever with no lifecycle action left to release it.
                 // `SELESAI` (completed) is deliberately excluded: that plot
                 // claim is meant to stay in force.
-                if (in_array($to, [OrderStatus::DIBATALKAN, OrderStatus::DITOLAK, OrderStatus::KEDALUWARSA], true)) {
+                //
+                // `DITOLAK_SETELAH_BAYAR` joined this list on 13 Sep 2026
+                // (Stage R1). A refused paid order must return its plot to
+                // inventory for exactly the same reason a refused unpaid one
+                // does — the order is over, and leaving the plot claimed
+                // forever helps nobody, least of all the next family needing
+                // it. The customer's interest in that plot is not extinguished
+                // silently: it is carried by the `refund_obligations` row the
+                // guard above proved exists.
+                if (in_array($to, [
+                    OrderStatus::DIBATALKAN,
+                    OrderStatus::DITOLAK,
+                    OrderStatus::DITOLAK_SETELAH_BAYAR,
+                    OrderStatus::KEDALUWARSA,
+                ], true)) {
                     // `$current` is the ORDER row, already locked with
                     // `lockForUpdate()` above — lock ordering here follows
                     // `ReservePlot`'s documented precedent of locking the
@@ -319,12 +387,34 @@ final readonly class RecordOrderStatusChange
                         // `Audit::wrap()` transaction. This is safe: Laravel
                         // treats a nested `DB::transaction()` call as a
                         // savepoint, not a second real transaction.
+                        //
+                        // `overridePaidOrder` is derived from the TARGET
+                        // status, not hardcoded, and it must be. By this
+                        // line `applyStatus()` has already committed the new
+                        // status within this transaction, and
+                        // `ReleasePlotReservation`'s DOM-08 guard re-reads
+                        // the order and asks `isPaidOrLater()`. For
+                        // `DITOLAK_SETELAH_BAYAR` that is now TRUE, so
+                        // without the override the release would throw
+                        // `PlotReservationOrderAlreadyPaidException` and the
+                        // whole refusal would roll back — the plot stranded
+                        // forever, which is the exact failure UNBUILT-01
+                        // closed. Passing `true` unconditionally instead
+                        // would be worse in the other direction: an ordinary
+                        // `DITOLAK`/`DIBATALKAN`/`KEDALUWARSA` release would
+                        // be audited under the sensitive
+                        // `PLOT_RESERVATION_RELEASED_PAID_ORDER_OVERRIDE`
+                        // action, drowning the real overrides in routine
+                        // noise. Keying off `isPaidOrLater()` asks the same
+                        // question the guard itself asks, so the two cannot
+                        // drift when a status is later added to that list.
                         app(ReleasePlotReservation::class)(
                             $activeReservation,
                             $actorRef,
                             $actorRole,
                             "order transitioned to {$to->value}: releasing its plot reservation",
                             AuditSource::Api,
+                            overridePaidOrder: $to->isPaidOrLater(),
                         );
                     }
                 }

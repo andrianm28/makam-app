@@ -191,6 +191,22 @@ final class SensitiveActions
         // they had already paid — a grieving family, in this domain. Same
         // money-adjacent category as `PAYMENT_REFUND` above.
         'REFUND_OBLIGATION_OPENED',
+        // Added by Stage R1 of the same plan. `DITOLAK_SETELAH_BAYAR` is an
+        // `OrderStatus` value, listed here for exactly the reason `DITOLAK`
+        // heads this list: `RecordOrderStatusChange` records a transition
+        // under the target status's own name when that name is on this list,
+        // so without this entry an admin refusing a PAID order would be
+        // audited as a generic `ORDER_STATUS_CHANGED` with the platform's
+        // mandatory-reason control never evaluating — and
+        // `audit_events WHERE action = 'DITOLAK_SETELAH_BAYAR'` would come
+        // back empty for the one query a reviewer would actually run.
+        //
+        // A separate entry from `DITOLAK` because they are separate facts: a
+        // refusal before any money moved carries nothing, and a refusal while
+        // holding a grieving family's money carries a debt and a deadline.
+        // Collapsing them here would undo in the audit trail the distinction
+        // the status vocabulary was split to make.
+        'DITOLAK_SETELAH_BAYAR',
         // Added by Stage R2 of the same plan. Written by
         // `App\Domain\RefundObligation\Actions\ExecuteRefundObligation` and
         // `ConfirmRefundObligation` — the only paths by which an obligation

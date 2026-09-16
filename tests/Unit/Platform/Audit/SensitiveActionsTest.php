@@ -21,6 +21,7 @@ final class SensitiveActionsTest extends TestCase
     {
         return [
             'DITOLAK' => ['DITOLAK'],
+            'DITOLAK_SETELAH_BAYAR' => ['DITOLAK_SETELAH_BAYAR'],
             'plot override' => ['PLOT_OVERRIDE'],
             'tariff-source change' => ['TARIFF_SOURCE_CHANGE'],
             'gate change' => ['GATE_CHANGE'],
@@ -168,6 +169,12 @@ final class SensitiveActionsTest extends TestCase
      * back to them. The reason is mandatory because it is the only answer
      * available to a customer asking why their order was refused after they
      * had already paid.
+     * ALSO UPDATED 13 Sep 2026 — Stage R1 of the same plan added
+     * `DITOLAK_SETELAH_BAYAR`, the `OrderStatus` an admin lands an order on
+     * when refusing it AFTER the customer's money arrived. Listed for the
+     * same reason `DITOLAK` heads this list, and separately from it because
+     * a refusal that carries a debt and a deadline is not the same fact as
+     * one that carries nothing.
      *
      * UPDATED 14 Sep 2026 — Stage R2 of the same plan added
      * `REFUND_OBLIGATION_EXECUTED`/`REFUND_OBLIGATION_CONFIRMED`, written by
@@ -219,6 +226,7 @@ final class SensitiveActionsTest extends TestCase
                 'PLOT_RESERVATION_RELEASED_PAID_ORDER_OVERRIDE',
                 'PLOT_RESERVATION_EXPIRED_PAID_ORDER_OVERRIDE',
                 'REFUND_OBLIGATION_OPENED',
+                'DITOLAK_SETELAH_BAYAR',
                 'REFUND_OBLIGATION_EXECUTED',
                 'REFUND_OBLIGATION_CONFIRMED',
             ],

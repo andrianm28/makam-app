@@ -8,6 +8,8 @@ use App\Domain\OrderWorkflow\Actions\RecordOrderStatusChange;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\Models\OrderStatusEvent;
 use App\Domain\OrderWorkflow\OrderStatus;
+use App\Domain\RefundObligation\Actions\OpenRefundObligation;
+use App\Platform\Audit\AuditSource;
 use App\Platform\Notification\Models\NotificationEvent;
 use App\Platform\Outbox\Jobs\PublishOutboxEventJob;
 use App\Platform\Outbox\Models\OutboxEvent;
@@ -131,6 +133,52 @@ final class OrderNotificationTest extends TestCase
         $order = $this->makeOrderAtStatus(OrderStatus::DIVERIFIKASI);
 
         $this->assertNoNotificationFor($this->transition($order, OrderStatus::DITOLAK, 'Data pemesan tidak lengkap'));
+    }
+
+    /**
+     * Stage R1, 13 Sep 2026 — and the point of asserting it end to end rather
+     * than just asserting the listener's `match` arm: a matrix label with no
+     * `notification_templates` row behind it fails at RUNTIME, at the exact
+     * moment a customer who has already paid in full needs to be told their
+     * order was refused. Driving the real outbox publish proves the row
+     * exists and resolves, not merely that the mapping was written.
+     */
+    public function test_refusal_after_payment_notification_uses_its_own_matrix_row(): void
+    {
+        $order = $this->makeOrderAtStatus(OrderStatus::MENUNGGU_PEMBAYARAN);
+        $this->transition($order, OrderStatus::DIBAYAR_MENUNGGU_KONFIRMASI);
+
+        app(OpenRefundObligation::class)->handle(
+            order: $order->fresh(),
+            amountMinor: 1_500_000_00,
+            currency: 'IDR',
+            paymentSessionId: null,
+            reason: 'petak tidak lagi tersedia',
+            actorRef: 'actor:admin-1',
+            actorRole: 'admin',
+            source: AuditSource::Panel,
+        );
+
+        $this->assertNotificationFor(
+            $this->transition($order, OrderStatus::DITOLAK_SETELAH_BAYAR, 'petak tidak lagi tersedia'),
+            'Order refused after payment',
+        );
+    }
+
+    /**
+     * The distinction the separate row exists to make, asserted as a
+     * difference rather than as two independent facts: a plain `DITOLAK` on
+     * the availability path must NOT be routed to the paid-refusal message,
+     * and the paid refusal must NOT be routed to the availability one.
+     */
+    public function test_a_plain_rejection_never_uses_the_paid_refusal_message(): void
+    {
+        $order = $this->makeOrderAtStatus(OrderStatus::MENUNGGU_KETERSEDIAAN);
+
+        $this->assertNotificationFor(
+            $this->transition($order, OrderStatus::DITOLAK, 'Tidak tersedia pada tanggal diminta'),
+            'Availability confirmed/rejected',
+        );
     }
 
     public function test_payment_opened_notification_dispatched_when_order_enters_menunggu_pembayaran(): void

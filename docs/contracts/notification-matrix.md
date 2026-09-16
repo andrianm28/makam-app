@@ -19,11 +19,14 @@
 > design-system delivery-state contract (`docs/design/design-system.md` §6.8:
 > `success` "Terkirim" · `pending` "Sedang dikirim" · `neutral` "WhatsApp
 > belum tersedia"; the UI may claim a delivery only from a recorded
-> `notification_deliveries` state, AC4). The 18 event rows (07 Sep 2026: +1,
-> `Renewal paid/verified (external)`, Batch M1a QUE-03), their order, and
-> their cell texts are canonical and pinned by the module's tests; do not
-> reorder, drop, or reword a row without changing those tests in the same
-> change.
+> `notification_deliveries` state, AC4). The 21 event rows (07 Sep 2026: +1,
+> `Renewal paid/verified (external)`, Batch M1a QUE-03; 07 Sep 2026: +2,
+> `Visitation booking requested`/`Visitation booking confirmed`, Batch M8b
+> NOTIF-13 — an addition this count had not previously recorded, corrected
+> 13 Sep 2026; 13 Sep 2026: +1, `Order refused after payment`, Stage R1),
+> their order, and their cell texts are canonical and pinned by the module's
+> tests; do not reorder, drop, or reword a row without changing those tests
+> in the same change.
 >
 > **Cell-value ruling — `optional`.** An `optional` cell means the recipient
 > is emitted **when the record has the recipient** — the customer owner
@@ -75,6 +78,34 @@
 | Reminder due | EMAIL/WA | optional | optional | none | TBD | TBD |
 | Visitation booking requested | none | none | IN_APP | none | TBD | TBD |
 | Visitation booking confirmed | none | none | IN_APP | none | TBD | TBD |
+| Order refused after payment | EMAIL/WA | IN_APP | IN_APP | none | TBD | TBD |
+
+### `Order refused after payment` — added 13 Sep 2026 (Stage R1)
+
+A **separate row from `Availability confirmed/rejected`**, which is the row a
+plain `DITOLAK` uses. The two are not the same message and must never share a
+template: one tells a customer their request could not proceed, the other
+tells a customer who has **already paid in full** that their order was
+refused and their money is owed back. Sending the first text to the second
+person is the failure this row exists to prevent.
+
+Appended rather than inserted, so no existing row's position changes — the
+precedent the two `Visitation booking` rows set on 07 Sep 2026.
+
+`Finance` stays `TBD`, consistent with every other row, and that is a
+recorded gap rather than a decision: a refund obligation is finance's work,
+but `App\Platform\Notification\RecipientRole` has no finance role and
+`RecipientRoleColumns::SCOPE_ROLE_COLUMNS` has no finance column, so any value
+other than `TBD` here would resolve to no recipients while reading as though
+it resolved to some. Notifying finance of an outstanding obligation is Stage
+R4's deadline work (`docs/superpowers/plans/2026-09-13-sistem-refund.md`),
+which needs the role to exist first.
+
+`outbox_event_name` is deliberately NULL for this row. Like `Order
+processing` and `Order completed`, it is reached by
+`App\Domain\OrderWorkflow\Listeners\DispatchOrderNotifications`
+discriminating on `order.status_changed.v1`'s `to_status`, and the lookup is
+by `event_name` alone — see `ConsumeOutboxNotificationJob`'s doc block.
 
 > **07 Sep 2026 addition — NOTIF-13** (Phase 3, Batch M8b,
 > `docs/superpowers/plans/2026-09-07-batchm8b-notification-completeness.md`).
