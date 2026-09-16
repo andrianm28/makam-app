@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.7 — 14 September 2026
+
+- Menghubungkan ritme vertikal §4.4 ke tokennya sendiri: `@utility py-section` / `py-section-lg`, dipakai 27 view publik. Sebelumnya setiap section di setiap halaman menulis `py-5 lg:py-8` — 20/32 px, tepat separuh dari yang §4.4 wajibkan — dan tidak ada gate yang keberatan, karena `py-5` adalah utilitas Tailwind yang sah, bukan hex hardcoded yang GATE 2 dan GATE 3 cari.
+- Menambahkan `--mk-surface-quiet`, pita halaman ketiga, beserta `@utility surface-quiet` / `surface-warm`, sehingga batas antar-section terbaca tanpa garis pembatas yang §4.4 larang — ADR-0040 D1/D2.
+- Memperluas bidang warna merek: `<x-mk.icon-medallion>` mendapat tone `brand` (isian `primary-600` sungguhan, bukan tint), dan footer mengikuti ritme section — ADR-0040 D3/D6. Survei beranda hidup menemukan warna merek mengisi **tepat satu** elemen di seluruh halaman sementara muncul 46 kali sebagai warna teks.
+- Memberi `<x-mk.card>` sumbu penekanan, memperbesar medallion pada kartu layanan, dan judul dua nada `primary-600` + `neutral-900` dalam satu `<h3>` (A9/U8) — delapan belas kartu beranda sebelumnya identik, sehingga hierarki sepenuhnya bergantung pada ukuran kotak.
+- Menaikkan bobot visual nomor hotline pada banner ketersediaan menjadi tombol sekunder, **tanpa mengubah satu kata pun salinannya** — `G-OPS-01` masih tertutup dan tidak ada klaim layanan baru yang ditambahkan.
+- Menegaskan kembali bahwa banner `G-OPS-01` **tidak dapat ditutup**: §6.9 memberi dismissibility "only for informational modes", dan banner ini satu-satunya yang ber-intent `urgent`, bukan `info` — ADR-0040 D4 mencatat argumen sebaliknya yang sempat dibuat lalu ditarik.
+- Menunda A10/U9 ("kartu menumpang tepi bawah hero") keluar dari Tahap 4 dengan alasan tercatat — ADR-0040 D7.
+
 ## v0.6 — 23 Juli 2026
 
 - Mengadopsi identitas brand resmi Makam.co.id: palet Earth/Leaf menggantikan Petrol/Sandstone, font display Poppins (self-hosted, latin 600), logo raster nyata pada header/footer, favicon set, serta sinkronisasi ulang palet Filament — ADR-0034 (OQ-01/OQ-02 resolved). Seluruh nilai warna brand dan aset raster bersifat PROVISIONAL menunggu OQ-12 (nilai hex resmi, sumber vektor, dan horizontal lockup).

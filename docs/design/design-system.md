@@ -209,6 +209,8 @@ Never use an odd value. `p-[13px]` is a lint failure (§9.5).
 
 **Elevation** — five soft levels, tinted with the neutral hue rather than pure black. `xs` inputs · `sm` cards · `md` dropdowns/sticky footer · `lg` modal · `xl` bottom sheet. Restraint is the point: heavy shadows read as marketing.
 
+*Clarified 14 Sep 2026 (kamboja plan Tahap 4):* `sm` names the **default** card, which is `<x-mk.card>`'s `emphasis="base"`. §3.3's `emphasis` axis lets a card rest at `none` (`quiet` — a list row, not a raised object) or at `md` (`strong` — a journey entrance), the latter being the level every interactive card already reaches on hover. `lg` and `xl` stay reserved for modals and bottom sheets: no card, at any emphasis, rests or hovers there.
+
 **Z-index** — named layers, `--mk-z-*`. **A raw `z-index` or `z-[9999]` anywhere in the codebase is a lint failure.**
 
 ```
@@ -448,10 +450,20 @@ Checkbox/radio: 20 px box inside a **44 px** clickable row; the whole row is the
 
 ### 3.3 Card — `<x-mk.card>`
 
-**Props:** `as` (`div`|`a`|`article`) · `padding` (`none`|`sm`|`md`|`lg`) · `interactive` · `intent` · `media` · `header` · `footer`.
+**Props:** `as` (`div`|`a`|`article`) · `padding` (`none`|`sm`|`md`|`lg`) · `emphasis` (`quiet`|`base`|`strong`) · `interactive` · `intent` · `media` · `header` · `footer`.
 
 **Base:** `bg-white rounded-lg border border-neutral-200 shadow-sm`
 **Padding:** mobile `p-4`, `md:p-6`.
+
+**`emphasis` — added 14 Sep 2026, kamboja plan Tahap 4 (`docs/superpowers/plans/2026-09-13-kamboja-design-language.md` §2.3).** A survey of the live homepage found eighteen cards rendering one identical treatment — one `neutral-0` surface, one `radius-lg`, one 1 px `neutral-200` border, one `shadow-sm` — for a 286×242 service card (the entrance to a whole journey), a 389×402 TPU/TPS content card, and a 600×130 FAQ answer row. Hierarchy was carried entirely by box size. `emphasis` is that missing axis. It changes **only** the resting elevation and, when no `intent` is set, the border colour; radius, background, and padding are untouched, and no token was added.
+
+| `emphasis` | Resting | Border (no `intent`) | Interactive hover shadow | Use for |
+|---|---|---|---|---|
+| `quiet` | `shadow-none` | `border-neutral-200` | `hover:shadow-sm` | An answer/list row — FAQ highlights |
+| `base` *(default)* | `shadow-sm` | `border-neutral-200` | `hover:shadow-md` | Everything else; byte-identical to the pre-`emphasis` card |
+| `strong` | `shadow-md` | `border-primary-200` | `hover:shadow-md` | A journey entrance — the four homepage service cards |
+
+`strong` rests at the level §3.3's `interactive` rule already lets any card reach on hover; see §1.5's clarification. It deliberately does **not** hover to `shadow-lg` (reserved for modals), so its hover feedback is the border and the `hover:bg-primary-50` tint, consistent with §5's colour-only hover rule. An `intent` card keeps owning its own border **and** background — `emphasis` then contributes elevation only, never competing with the intent surface, the same precedence the `hover:bg-primary-50` tint follows. An unrecognised value falls back to `base`.
 **Interactive** (whole card is a link — TPU/TPS card, product card): add `hover:border-primary-300 hover:shadow-md focus-within:ring-2 focus-within:ring-primary-600 focus-within:ring-offset-2 transition-[border-color,box-shadow,background-color] duration-fast`. A card with no `intent` set also gets `hover:bg-primary-50` (added 19 Aug 2026, homepage visual refresh) — an intent card keeps its own `$intentSurfaces` background instead, never competing with it. Colour-only; no transform (§5's interaction table: hover Transform is `none`).
 
 Interactive cards must contain **exactly one** focusable anchor; the standard technique (§3.3b) is to make the card's **root element** the `<a>` itself (`as="a"` + `interactive` + `:href`), not an overlay trick — never nest multiple links inside a clickable card (keyboard trap + confusing tab order).
@@ -467,7 +479,7 @@ refresh introduced, used inside `<x-mk.card>`'s default slot (service cards, Car
 trust points), never as a standalone status indicator.
 
 **Props:** `icon` (`icon.*` component name; omit and use the default slot for a numeral instead)
-· `tone` (`earth` | `leaf` | `brand`, closed list) · `size` (`md` 44px default | `lg` 52px).
+· `tone` (`earth` | `leaf` | `brand`, closed list) · `size` (`md` 44px default | `lg` 52px | `xl` 64px).
 
 **Base:** `rounded-xl` (never `rounded-full` — §1.5 restricts that to avatars/stepper-dots/
 progress-tracks). `earth` → `bg-primary-100 text-primary-800`. `leaf` → `bg-secondary-100
@@ -479,6 +491,8 @@ text-secondary-800` — a surface-tint usage already inside the Leaf cage (§1.2
 Always `aria-hidden="true"` — decorative only, never a substitute for a real text label (same
 rule `<x-mk.badge>`'s `dot` prop follows). Never placed adjacent to order/payment/availability
 data, so it never carries a status reading despite `leaf` sitting near the `success` hue.
+
+**`xl` (64 px) — added 14 Sep 2026, kamboja plan Tahap 4.** Size only: no new tone, no change to `brand`. The homepage's four service cards use it, because 44 → 52 px is an 18 % step that does not read as hierarchy at card scale. Tile `size-16`, mark `size-7` — both on `tokens.css`'s 4 px `--spacing` scale, keeping the same ~45 % mark-to-tile ratio `md` and `lg` already use. `xl` is for a card that is a **journey entrance** (`<x-mk.card emphasis="strong">`); it is not a licence to enlarge every medallion on a page.
 
 Icon-medallion is the sanctioned content device for §3.3b's nav-card pattern when the card has no
 real photo — see §3.3b's "Content" rule.
@@ -528,6 +542,7 @@ A **whole-card-is-the-link** pattern for building primary navigation and service
 - **Content, with a photo** — `media` slot: full-bleed image clipped to the card's rounded corners. Use `alt=""` if decorative (the adjacent heading carries the text), or a real `alt` only if the image conveys unique information.
 - **Content, without a photo** — use §3.3a's `<x-mk.icon-medallion>` in the default slot instead of a `media` slot (the homepage nav-card use case).
 - Either way: badge, heading, description, or other text follows. Avoid multiple competing links; the card itself is the single navigation target.
+- **Two-tone heading (added 14 Sep 2026, kamboja plan Tahap 4, devices A9/U8).** A nav-card heading may render its first word in `text-primary-600` and the remainder in `text-neutral-900`, as two `block` spans inside **one** `<h3>` — hierarchy inside a heading without a second size or a new device. `primary heading on surface-raised` is an already-asserted pair in `verify-contrast.py`; no new pair and no new token. Two rules bound it: the label is **split, never rewritten** (same words, same order — §9.2 MUST NOT 9 still applies in full), and a **single-word label gets no brand line at all**, rendering exactly as an untreated heading, because a two-tone device needs two parts and colouring a lone word brand would give the least-emphasised card in the row the loudest heading.
 - **Intent** — leave blank (`intent` prop omitted) so the `interactive` hover includes the `hover:bg-primary-50` tint, reinforcing the clickability. If an intent is needed (e.g. to show availability status), the `hover:bg-primary-50` suppresses automatically; see §3.3 `interactive` rules.
 
 **Grid layout** — use the established card-grid pattern from §4.3:
@@ -559,7 +574,15 @@ rendering a blank one.
 
 **Base:** root `<div>` is `relative overflow-hidden rounded-lg`. When `image` is given, an `<img>`
 (`h-64 md:h-96 w-full object-cover`) renders above a `bg-primary-50` content surface holding the
-heading, an optional slot, and the CTA (`flex flex-col gap-4 p-6 md:p-8`).
+heading, an optional slot, and the CTA (`flex flex-col gap-4 p-8 md:p-12`).
+
+*Panel weight, 14 Sep 2026 (kamboja plan Tahap 4, §2.4).* That padding was `p-6 md:p-8` until this
+change. §2.4 measured the hero as "two blocks that never touch" — a 384 px photo band above a
+252 px text panel — so the photo read as the hero and the message read as a caption beneath it.
+Padding is the only weight axis available without touching the photo, and both values stay on the
+4 px `--spacing` scale. What was **not** done, deliberately: no scrim, no overlay, no gradient over
+the photo. The unified hero (copy over a full-bleed photo) needs a scrim token, an ADR, and a new
+contrast-verification method, and stays out of every stage until **OQ-K5** is answered.
 
 **Heading typography:** `font-display text-4xl font-semibold tracking-tight text-neutral-900
 lg:text-5xl`, matching §1.4's hero row (`text-4xl` mobile / `lg:text-5xl` desktop) verbatim. These
@@ -976,6 +999,19 @@ Grid gap: `gap-4` mobile → `md:gap-6`.
 
 `--mk-section-gap` 40 px mobile / `--mk-section-gap-lg` 64 px desktop between page sections. `--mk-stack-gap` 16 px inside a card. `--mk-field-gap` 20 px between form fields. Heading to its content: 8 px. Content to next heading: 32 px. Proximity carries the grouping — do not reach for divider lines.
 
+**Four `@utility` entries in `app.css` make those tokens the easy thing to write (added 13–14 Sep 2026, kamboja plan Tahap 1–2).** Use them; do not restate the numbers as Tailwind spacing utilities.
+
+| Utility | Emits | Use for |
+|---|---|---|
+| `py-section` | `padding-block: var(--mk-section-gap)` | vertical padding of a page section, mobile |
+| `py-section-lg` | `padding-block: var(--mk-section-gap-lg)` | the same, from `lg` |
+| `surface-quiet` | `background: var(--mk-surface-quiet)` | the third page band, for alternation ([ADR-0040](../adr/0040-add-surface-quiet-and-widen-the-brand-field.md) D1/D2) |
+| `surface-warm` | `background: var(--mk-surface-warm)` | trust/reassurance sections (§2.3) |
+
+Why these exist at all, stated plainly because it is the more useful half: **a rule with a mechanical guard is followed, and a rule without one is not.** An audit on 13 Sep 2026 found 31 of the 94 `--mk-*` tokens had zero consumers, and they clustered precisely in the scales no gate protects — spacing, gutters, control heights, icon sizes, borders. Every `--mk-z-*` token IS consumed, because GATE 11 forbids a raw z-index; both focus tokens are consumed, because GATE 12 forbids suppressing focus. §4.4's own numbers had been carried by `--mk-section-gap` since `tokens.css` was written and consumed by nothing: every section on every page hardcoded `py-5 lg:py-8` — 20/32 px, exactly half the mandate — and no gate objected, because `py-5` is a legitimate Tailwind utility rather than the hardcoded hex GATE 2 and GATE 3 look for.
+
+**Surface alternation.** Consecutive page sections may alternate between `--mk-surface-page`, `surface-quiet`, and `surface-warm` so a section boundary reads without the divider line this section forbids. Alternate deliberately — the point is the boundary, so two adjacent bands must differ, and a page that tints every section has simply moved the uniformity somewhere else.
+
 ### 4.5 Homepage section order (**normative** — IA §3)
 
 1. Header/navigation
@@ -1065,6 +1101,8 @@ Covered in §1.6 (tokens). Design rules:
 ```
 
 Every skeleton carries an `sr-only` announcement; a screen-reader user hears nothing from a pulsing box.
+
+**A page-level skeleton follows §4.4's rhythm, not its own (added 14 Sep 2026, kamboja plan Tahap 8).** "Mirrors the real layout" is a CLS requirement before it is an aesthetic one: a skeleton padded differently from the section it stands in for shifts the page at the moment content arrives, which is exactly what the < 0.1 budget above measures. So a skeleton standing in for a whole page section takes `py-section lg:py-section-lg` like the section will, and inherits that section's surface utility if it has one. The inline example above is a **within-section** skeleton — a list of results inside an already-padded container — and correctly carries no section padding of its own.
 
 ### 6.2 Empty
 
