@@ -93,19 +93,32 @@ final class OrderReadModelTest extends TestCase
         }
     }
 
-    public function test_manual_fallback_is_available_for_pre_payment_non_terminal_statuses(): void
+    /**
+     * ------------------------------------------------------------------
+     * Why these three tests derive their status lists instead of writing
+     * them out
+     * ------------------------------------------------------------------
+     * They used to carry hand-written lists, and that is precisely why they
+     * stayed green when the three pay-first statuses were added on 13 Sep
+     * 2026 while `resolveNextAction()` silently returned `null` for two of
+     * them — breaking the AC12 guarantee `OrderReadModel`'s own doc block
+     * states, on a page a customer sees right after paying in full.
+     *
+     * A hand-written list cannot fail on the one change these tests exist to
+     * guard: somebody adding a case to `OrderStatus`. Deriving the lists
+     * from `OrderStatus::cases()`, partitioned by
+     * `OrderTransition::isTerminal()` — the same authority the read model
+     * itself branches on — means a new case is covered the moment it is
+     * added, with nothing to remember.
+     *
+     * `StatusIntent` was caught by exactly this shape
+     * (`OrderTransitionTest::test_every_status_is_renderable_through_status_intent`
+     * iterates `cases()`); this read model was missed because it was not.
+     * Do not convert these back to literal lists.
+     */
+    public function test_manual_fallback_is_available_for_every_non_terminal_status(): void
     {
-        $prePaymentStatuses = [
-            OrderStatus::MASUK,
-            OrderStatus::DIVERIFIKASI,
-            OrderStatus::MENUNGGU_KETERSEDIAAN,
-            OrderStatus::PENAWARAN_TERKIRIM,
-            OrderStatus::DISETUJUI_PEMESAN,
-            OrderStatus::MENUNGGU_PEMBAYARAN,
-            OrderStatus::MENUNGGU_VERIFIKASI_PEMBAYARAN,
-        ];
-
-        foreach ($prePaymentStatuses as $status) {
+        foreach ($this->nonTerminalStatuses() as $status) {
             $order = $this->makeOrder($status);
             $view = OrderReadModel::forOrder($order);
 
@@ -118,36 +131,20 @@ final class OrderReadModelTest extends TestCase
 
     public function test_next_action_is_null_for_terminal_statuses(): void
     {
-        $terminalStatuses = [
-            OrderStatus::SELESAI,
-            OrderStatus::DITOLAK,
-            OrderStatus::DIBATALKAN,
-            OrderStatus::KEDALUWARSA,
-        ];
-
-        foreach ($terminalStatuses as $status) {
+        foreach ($this->terminalStatuses() as $status) {
             $order = $this->makeOrder($status);
             $view = OrderReadModel::forOrder($order);
 
-            self::assertNull($view->nextAction);
+            self::assertNull(
+                $view->nextAction,
+                "Terminal status {$status->value} should have no next action"
+            );
         }
     }
 
     public function test_next_action_is_present_for_non_terminal_statuses(): void
     {
-        $nonTerminalStatuses = [
-            OrderStatus::MASUK,
-            OrderStatus::DIVERIFIKASI,
-            OrderStatus::MENUNGGU_KETERSEDIAAN,
-            OrderStatus::PENAWARAN_TERKIRIM,
-            OrderStatus::DISETUJUI_PEMESAN,
-            OrderStatus::MENUNGGU_PEMBAYARAN,
-            OrderStatus::MENUNGGU_VERIFIKASI_PEMBAYARAN,
-            OrderStatus::DIBAYAR,
-            OrderStatus::DIPROSES,
-        ];
-
-        foreach ($nonTerminalStatuses as $status) {
+        foreach ($this->nonTerminalStatuses() as $status) {
             $order = $this->makeOrder($status);
             $view = OrderReadModel::forOrder($order);
 
@@ -156,6 +153,53 @@ final class OrderReadModelTest extends TestCase
                 "Status {$status->value} should have a next action"
             );
         }
+    }
+
+    /**
+     * A status whose money has arrived must never read as though the payment
+     * is still outstanding — the second half of the same miss.
+     * `DITOLAK_SETELAH_BAYAR` is included: the order was refused, but the
+     * money did arrive and is owed back, so `pending` would be a false
+     * statement about the payment.
+     */
+    public function test_channel_delivery_is_not_pending_once_money_has_arrived(): void
+    {
+        foreach (OrderStatus::cases() as $status) {
+            if (! $status->isPaidOrLater()) {
+                continue;
+            }
+
+            $order = $this->makeOrder($status);
+            $view = OrderReadModel::forOrder($order);
+
+            self::assertNotSame(
+                'pending',
+                $view->channelDeliveryState,
+                "Status {$status->value} reads as an unpaid order on the customer's own detail page"
+            );
+        }
+    }
+
+    /**
+     * @return list<OrderStatus>
+     */
+    private function nonTerminalStatuses(): array
+    {
+        return array_values(array_filter(
+            OrderStatus::cases(),
+            static fn (OrderStatus $status): bool => ! OrderTransition::isTerminal($status),
+        ));
+    }
+
+    /**
+     * @return list<OrderStatus>
+     */
+    private function terminalStatuses(): array
+    {
+        return array_values(array_filter(
+            OrderStatus::cases(),
+            static fn (OrderStatus $status): bool => OrderTransition::isTerminal($status),
+        ));
     }
 
     private function makeOrder(OrderStatus $status): Order

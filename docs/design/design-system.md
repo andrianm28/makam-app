@@ -701,9 +701,12 @@ Components must **not** switch on enum strings. Resolve status → intent in one
 | `MENUNGGU_PEMBAYARAN` | `pending` | clock | Awaiting user action |
 | `MENUNGGU_VERIFIKASI_PEMBAYARAN` | `pending` | clock | Manual fallback. **Never `success`** |
 | `DIBAYAR` | `success` | banknote | Money confirmed |
+| `DIBAYAR_MENUNGGU_KONFIRMASI` | `pending` | clock | Pay-in-full-upfront flow. Money arrived, admin has not decided. **Never `success`** — the booking is not settled while it can still be refused |
+| `DIKONFIRMASI` | `success` | check-circle | Admin accepted a paid order. Distinct icon from `SELESAI`: **paid does not mean completed** |
 | `DIPROSES` | `info` | cog | Fulfilment underway |
 | `SELESAI` | `success` | check-badge | Terminal success |
 | `DITOLAK` | `danger` | x-circle | Terminal. **Reason mandatory** |
+| `DITOLAK_SETELAH_BAYAR` | `danger` | x-circle | Terminal. **Reason mandatory.** Same intent and icon as `DITOLAK` on purpose — both read as "refused" to the customer. The difference (money is owed back) is carried by the label and the refund obligation, not by the palette |
 | `DIBATALKAN` | `neutral` | slash | Terminal, not an error |
 | `KEDALUWARSA` | `neutral` | clock-x | Terminal, expiry is factual not alarming |
 

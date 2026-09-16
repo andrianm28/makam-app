@@ -110,6 +110,27 @@ final class DispatchOrderNotifications
             $toStatus === OrderStatus::PENAWARAN_TERKIRIM->value => 'Availability confirmed/rejected',
             $toStatus === OrderStatus::DITOLAK->value
                 && $fromStatus === OrderStatus::MENUNGGU_KETERSEDIAAN->value => 'Availability confirmed/rejected',
+            // Stage R1, 13 Sep 2026 — a DIFFERENT row from the DITOLAK arm
+            // directly above, on purpose, and this is the decision the task
+            // brief asked to be made rather than assumed.
+            //
+            // A plain DITOLAK tells somebody their request could not
+            // proceed. DITOLAK_SETELAH_BAYAR tells somebody who has already
+            // paid in full — in this domain, a grieving family arranging a
+            // burial — that the order was refused and their money is coming
+            // back. Routing it through "Availability confirmed/rejected"
+            // would send the first text to the second person, and say
+            // nothing at all about the money. So it gets its own matrix row
+            // and its own template.
+            //
+            // No `$fromStatus` discrimination is needed or wanted:
+            // `OrderTransition::ALLOWED` gives DITOLAK_SETELAH_BAYAR exactly
+            // one inbound edge (from DIBAYAR_MENUNGGU_KONFIRMASI), so the
+            // target status alone already identifies the situation
+            // completely. Adding a from-check would be a condition that can
+            // only ever be true, hiding a future second edge instead of
+            // failing on it.
+            $toStatus === OrderStatus::DITOLAK_SETELAH_BAYAR->value => 'Order refused after payment',
             $toStatus === OrderStatus::MENUNGGU_PEMBAYARAN->value => 'Payment opened',
             $toStatus === OrderStatus::DIPROSES->value => 'Order processing',
             $toStatus === OrderStatus::SELESAI->value => 'Order completed',
