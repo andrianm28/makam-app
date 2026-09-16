@@ -173,14 +173,14 @@ Never use an odd value. `p-[13px]` is a lint failure (§9.5).
 
 | Token | Stack | Where |
 |---|---|---|
-| `--font-sans` | Inter var → system fallback | Public site only. **Superseded, 26 Aug 2026 (explicit owner decision):** admin/vendor Filament panels no longer use this token or any custom font at all — see §8.3's updated note. Brand voice, including typography, is a public-surface concern only. |
-| `--font-display` | Poppins → Inter var → system fallback | `h1`/`h2`, hero, header wordmark **only** (ADR-0034 D7). Self-hosted via `@fontsource/poppins`, latin subset, weight **600 only**. `h3`/`h4` stay Inter — Poppins' wide geometry hurts at small sizes. Measured initial route payload (Poppins latin-600 + Inter latin, gzipped woff2, Task 2): **≈56 KB** (8 KB Poppins + 48 KB Inter) — under the §4.6 60 KB budget. |
+| `--font-sans` | Plus Jakarta Sans Variable → system fallback | Public site only. **Superseded, 26 Aug 2026 (explicit owner decision):** admin/vendor Filament panels no longer use this token or any custom font at all — see §8.3's updated note. Brand voice, including typography, is a public-surface concern only. |
+| `--font-display` | Plus Jakarta Sans Variable → system fallback | `h1`/`h2`, hero, header wordmark. **Face changed 16 Sep 2026 ([ADR-0041](../adr/0041-brand-guideline-2026-supersedes-adr-0034.md)):** the guideline gives Plus Jakarta Sans "website • app • social • corporate" — every surface this app has — so ONE family now does body and headings where Inter+Poppins did. It is variable, so heading weight costs no second file. Measured initial route payload (latin subset, woff2): **26.7 KB**, down from ≈56 KB (48 Inter + 8 Poppins) — half the §4.6 budget. `latin-ext` (21.2 KB) ships with its own `unicode-range` and never downloads for Indonesian. **Lora is NOT loaded**: the guideline scopes it to "emotional headline • quote • storytelling", surfaces that do not exist yet, and its 36.9 KB would put the payload at 63.6 KB — over budget, to render nothing (ADR-0041 OQ-B3). |
 | `--font-document` | Source Serif 4 / Lora → Georgia | Certificate/agreement/invoice documents **only**, consumed by `print.css` (§8.5) once it is built. Holds the value `--font-display` carried before ADR-0034, verbatim — added specifically so a document can never silently inherit the new Poppins brand face. |
 | `--font-mono` | JetBrains Mono → system | Order reference, payment reference, audit IDs |
 
 **Self-hosting is mandatory.** No Google Fonts, no CDN. Two reasons, both from existing baselines: staging is `noindex` and access-restricted ([`security-baseline.md`](../security/security-baseline.md) §Non-production isolation), and a third-party font request leaks the visitor's IP and referrer on pages where that visitor is arranging a funeral or uploading a death certificate. Subset to `latin` + `latin-ext`; Indonesian needs no extra ranges.
 
-`--font-display` (Poppins) ships site-wide as part of `app.css` (§4.6 budget covers it as part of the initial route payload) and applies only to `h1`/`h2`; it is never used on the booking wizard's own body copy. `--font-document` is a separate, unrelated stack reserved for printed documents (§8.5) — it does not load on any public route today because `print.css` does not exist yet.
+`--font-display` (Plus Jakarta Sans, the same family as `--font-sans` since ADR-0041) ships site-wide as part of `app.css` (§4.6 budget covers it as part of the initial route payload) and applies only to `h1`/`h2`; it is never used on the booking wizard's own body copy. `--font-document` is a separate, unrelated stack reserved for printed documents (§8.5) — it does not load on any public route today because `print.css` does not exist yet.
 
 **Scale** (mobile-first; 16 px root; `rem`-based so browser zoom works)
 
@@ -998,7 +998,7 @@ Derived from [`performance-and-capacity.md`](../operations/performance-and-capac
 |---|---|
 | CSS shipped (gzip) | ≤ 45 KB |
 | JS shipped, public pages (gzip) | ≤ 60 KB (Livewire + Alpine + app) |
-| Font payload, initial route | ≤ 60 KB (Inter variable, latin subset, `woff2`, `font-display: swap`) |
+| Font payload, initial route | ≤ 60 KB (Plus Jakarta Sans variable, latin subset, `woff2`, `font-display: swap`) — currently **26.7 KB**, ADR-0041 |
 | `--font-display` serif | Loaded only on hero + document routes |
 | Largest hero image | ≤ 120 KB, `AVIF`/`WebP`, explicit `width`/`height` |
 | Icons | Inline SVG sprite, tree-shaken. **No icon font.** |
@@ -1431,11 +1431,11 @@ Tailwind 4 moved theme configuration **into CSS** via `@theme`. `tokens.css` is 
 
 /* Self-hosted fonts — no CDN (see §1.4). */
 @font-face {
-  font-family: "Inter var";
+  font-family: "Plus Jakarta Sans Variable";
   font-style: normal;
-  font-weight: 100 900;
+  font-weight: 200 800;
   font-display: swap;
-  src: url("/fonts/inter-var-latin.woff2") format("woff2");
+  src: url("/fonts/plus-jakarta-sans-latin-wght-normal.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+2000-206F;
 }
 ```
