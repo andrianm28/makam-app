@@ -176,6 +176,15 @@ final class SensitiveActions
         // above, so a recorded justification is mandatory.
         'PLOT_RESERVATION_RELEASED_PAID_ORDER_OVERRIDE',
         'PLOT_RESERVATION_EXPIRED_PAID_ORDER_OVERRIDE',
+        // Added by Stage R0 of
+        // `docs/superpowers/plans/2026-09-13-sistem-refund.md`. Written by
+        // `App\Domain\RefundObligation\Actions\OpenRefundObligation` when a
+        // paid order is rejected and the customer's money becomes a debt.
+        // The reason is mandatory because it is the only thing that can be
+        // read back to the customer asking why their order was refused after
+        // they had already paid — a grieving family, in this domain. Same
+        // money-adjacent category as `PAYMENT_REFUND` above.
+        'REFUND_OBLIGATION_OPENED',
     ];
 
     public static function requiresReason(string $action): bool
