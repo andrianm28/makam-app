@@ -60,6 +60,15 @@ def hue(hex_colour: str) -> float:
 # --------------------------------------------------------------------------- #
 TOKEN_RE = re.compile(r"--(color-[a-z]+-\d+)\s*:\s*(#[0-9A-Fa-f]{3,8})\s*;")
 
+# Semantic surface aliases, e.g. `--mk-surface-page: var(--color-neutral-50);`.
+#
+# Deliberately matches only the `var(...)` FORM. `@media print` redefines
+# `--mk-surface-page` to a literal `#FFFFFF`, and that override belongs to a
+# different medium — a print sheet has no alternating page bands to keep
+# distinguishable. Requiring `var()` skips it without needing to reason about
+# block nesting.
+SURFACE_ALIAS_RE = re.compile(r"--(mk-surface-[a-z]+)\s*:\s*var\(\s*--(color-[a-z]+-\d+)\s*\)")
+
 
 def load_tokens(path: pathlib.Path) -> dict:
     text = path.read_text(encoding="utf-8")
@@ -67,6 +76,24 @@ def load_tokens(path: pathlib.Path) -> dict:
     if not tokens:
         sys.exit(f"ERROR: no --color-*-<shade> tokens found in {path}")
     return tokens
+
+
+def load_surfaces(path: pathlib.Path, tokens: dict) -> dict:
+    """Resolve `--mk-surface-*` aliases to the hex they ultimately name.
+
+    Returns `{alias: hex}`. An alias pointing at a primitive this file does
+    not define is skipped rather than guessed at — the caller reports which
+    surfaces it actually compared, so a silently-dropped one is visible in
+    the output rather than quietly reducing coverage.
+    """
+    text = path.read_text(encoding="utf-8")
+    resolved = {}
+    for alias, primitive in SURFACE_ALIAS_RE.findall(text):
+        if alias in resolved:  # first definition wins; later blocks are overrides
+            continue
+        if primitive in tokens:
+            resolved[alias] = tokens[primitive]
+    return resolved
 
 
 # --------------------------------------------------------------------------- #
@@ -158,6 +185,63 @@ HUE_FAMILIES = ["primary", "success", "info", "danger"]
 # primary/success/info/danger.
 HUE_EXCEPTIONS: set[tuple[str, str]] = set()
 
+# ---------------------------------------------------------------------------
+# Page surfaces must stay distinguishable FROM EACH OTHER
+# ---------------------------------------------------------------------------
+# Every assertion above this line measures a foreground against a background.
+# None of them measures two BACKGROUNDS against each other, and that gap let a
+# real regression through on 16 Sep 2026:
+#
+# The Brand Guideline rebase (ADR-0041) and the kamboja surface-alternation
+# work (ADR-0040) were built in parallel. They merge with no conflict and all
+# 18 gates pass — and on the merged result `--mk-surface-warm` and
+# `--mk-surface-quiet` land 3/765 apart in RGB. That is invisible. ADR-0040
+# D1/D2 added `surface-quiet` precisely so consecutive sections could alternate
+# and a boundary would read WITHOUT the divider line design-system.md §4.4
+# forbids; with two of three bands identical, the alternation silently becomes
+# a no-op.
+#
+# It was found by hand-merging the two branches and looking. Nothing would have
+# found it next time, which is exactly the failure mode this repository already
+# documents about its own tokens: 31 of 94 `--mk-*` tokens had zero consumers,
+# clustered in the scales no gate protects, while every `--mk-z-*` is consumed
+# because GATE 11 forbids a raw z-index. The rule with a mechanical guard is
+# followed.
+#
+# THRESHOLD, derived rather than chosen: the palette that shipped before the
+# rebase held its five surfaces at a minimum separation of 11/765 (page vs
+# quiet) with every other pair at 14 or more. 10 is the floor just under the
+# tightest separation this design system actually shipped and nobody reported
+# as indistinguishable — so it fails the 3/765 collapse without second-guessing
+# a spacing that already worked in production.
+#
+# HONEST LIMIT: this is Manhattan distance in sRGB, not a perceptual metric.
+# It is adequate here because every surface in the list is a near-white tint,
+# where sRGB distance tracks perception closely enough to catch a collapse. It
+# would be the wrong tool for comparing saturated colours, and it is not used
+# for any.
+SURFACE_MIN_SEPARATION = 10
+SURFACE_TOKENS = [
+    "mk-surface-page",
+    "mk-surface-raised",
+    "mk-surface-sunken",
+    "mk-surface-warm",
+    "mk-surface-quiet",
+]
+
+
+def _rgb(hex_colour: str) -> tuple[int, int, int]:
+    h = hex_colour.lstrip("#")
+    if len(h) == 3:
+        h = "".join(ch * 2 for ch in h)
+    return tuple(int(h[i : i + 2], 16) for i in (0, 2, 4))  # type: ignore[return-value]
+
+
+def rgb_distance(a: str, b: str) -> int:
+    """Manhattan distance in sRGB, 0-765. See SURFACE_MIN_SEPARATION."""
+    x, y = _rgb(a), _rgb(b)
+    return sum(abs(x[i] - y[i]) for i in range(3))
+
 
 def resolve(tokens: dict, ref: str) -> str:
     if ref.startswith("#"):
@@ -216,6 +300,32 @@ def main() -> int:
                      tokens[f"color-{b}-600"], delta, HUE_MIN_SEPARATION)
                 )
                 print(f"FAIL  {delta:6.1f}  (min {HUE_MIN_SEPARATION} deg)  hue separation {a}/{b}")
+
+    surfaces = load_surfaces(pathlib.Path(args.tokens), tokens)
+    compared = [(n, surfaces[n]) for n in SURFACE_TOKENS if n in surfaces]
+    missing = [n for n in SURFACE_TOKENS if n not in surfaces]
+
+    print("\nPage surfaces must stay distinguishable from each other:")
+    for name, value in compared:
+        print(f"  {name:20s} {value}")
+    if missing:
+        # Named, not silently dropped: a surface that stops resolving reduces
+        # this gate's coverage, and that has to be visible rather than inferred
+        # from a shorter list.
+        print(f"  NOT COMPARED (alias did not resolve): {', '.join(missing)}")
+
+    for i, (name_a, hex_a) in enumerate(compared):
+        for name_b, hex_b in compared[i + 1 :]:
+            gap = rgb_distance(hex_a, hex_b)
+            if gap < SURFACE_MIN_SEPARATION:
+                failures.append(
+                    (f"surface separation {name_a}/{name_b}", hex_a, hex_b,
+                     float(gap), float(SURFACE_MIN_SEPARATION))
+                )
+                print(
+                    f"FAIL  {gap:6d}  (min {SURFACE_MIN_SEPARATION}/765 RGB)  "
+                    f"surface separation {name_a}/{name_b}"
+                )
 
     print()
     if failures:
