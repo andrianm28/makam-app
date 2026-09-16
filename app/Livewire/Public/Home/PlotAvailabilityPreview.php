@@ -63,7 +63,49 @@ final class PlotAvailabilityPreview extends Component
                 $showcase = Cache::remember(
                     $cacheKey,
                     self::CACHE_TTL_SECONDS,
-                    fn (): array => $this->buildShowcase($slugs),
+                    function () use ($slugs): array {
+                        $built = $this->buildShowcase($slugs);
+
+                        // CONFIGURED BUT RESOLVING TO NOTHING IS A DEFECT, NOT
+                        // A SETTING — and until now the two were the same
+                        // thing to everyone downstream.
+                        //
+                        // `buildShowcase()` drops a slug with `continue` for
+                        // three unrelated reasons: no published cemetery by
+                        // that slug, the cemetery is not granular-tier, or it
+                        // has no blocks. All three yield an empty array, the
+                        // Blade's `@unless` swallows the whole section, and the
+                        // page renders as though this feature had been
+                        // deliberately switched off.
+                        //
+                        // It was: measured 14 Sep 2026, this section rendered
+                        // NOTHING on dev and on the public beta, because the
+                        // configured slugs (`tpu-petamburan`, `tpu-karet-bivak`)
+                        // exist in neither database. Nothing logged it. The
+                        // copy it was hiding is the page's only claim of real
+                        // data — "Data plot di bawah ini nyata ... bukan
+                        // ilustrasi" — so its absence removed exactly the thing
+                        // it was there to prove.
+                        //
+                        // The visitor still sees nothing; a missing section is
+                        // the right rendering either way, and a public page is
+                        // no place for a configuration error. The difference is
+                        // that an operator now hears about it.
+                        //
+                        // Inside the cache closure on purpose: this fires on a
+                        // cache miss, so at most once per CACHE_TTL_SECONDS
+                        // rather than on every request.
+                        //
+                        // Slugs are public URL identifiers, not restricted data
+                        // (`AGENTS.md` §Observability) — and naming them is the
+                        // whole value, since "some slug resolved to nothing" is
+                        // not actionable.
+                        if ($built === []) {
+                            report(new PlotPreviewMisconfiguredException($slugs));
+                        }
+
+                        return $built;
+                    },
                 );
             } catch (Throwable $e) {
                 report($e);

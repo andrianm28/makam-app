@@ -13,8 +13,10 @@ use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\PlotInventory\PlotState;
 use App\Livewire\Public\Home\PlotAvailabilityPreview;
+use App\Livewire\Public\Home\PlotPreviewMisconfiguredException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -34,6 +36,96 @@ final class PlotAvailabilityPreviewTest extends TestCase
             'address' => 'Jl. Contoh No. 1',
             'plot_tracking_mode' => $trackingMode,
         ]);
+    }
+
+    /**
+     * OFF-ON-PURPOSE stays silent.
+     *
+     * An empty setting is the shipped default, and it means an operator has
+     * not pointed this section at anything yet. That is a state, not a fault,
+     * and reporting it would train whoever reads the error tracker to ignore
+     * this signal.
+     */
+    public function test_an_empty_configuration_is_silent(): void
+    {
+        Exceptions::fake();
+
+        config(['marketing.homepage_plot_preview_cemetery_slugs' => []]);
+
+        Livewire::test(PlotAvailabilityPreview::class)
+            ->assertDontSee('Lihat Contoh Ketersediaan Plot');
+
+        Exceptions::assertNotReported(PlotPreviewMisconfiguredException::class);
+    }
+
+    /**
+     * CONFIGURED-BUT-BROKEN is reported — the whole point of this pair.
+     *
+     * Measured on 14 Sep 2026, the shipped default named two slugs that
+     * existed in neither the dev database nor the public beta's. The section
+     * rendered nothing on both hosts and NOTHING SAID SO, which is
+     * indistinguishable from the test above. The visitor still sees nothing
+     * here — a missing section is the right page either way, and a public
+     * page is no place for a configuration error — but an operator now hears
+     * about it.
+     */
+    public function test_a_configuration_that_resolves_to_nothing_is_reported(): void
+    {
+        Exceptions::fake();
+
+        config(['marketing.homepage_plot_preview_cemetery_slugs' => ['tpu-tidak-ada']]);
+
+        Livewire::test(PlotAvailabilityPreview::class)
+            ->assertDontSee('Lihat Contoh Ketersediaan Plot');
+
+        Exceptions::assertReported(
+            fn (PlotPreviewMisconfiguredException $e): bool => in_array('tpu-tidak-ada', $e->slugs, true)
+        );
+    }
+
+    /**
+     * The report NAMES the slugs, because "something resolved to nothing" is
+     * not actionable and "tpu-petamburan resolved to nothing" is one query
+     * away from a fix.
+     */
+    public function test_the_report_names_the_offending_slugs(): void
+    {
+        Exceptions::fake();
+
+        config(['marketing.homepage_plot_preview_cemetery_slugs' => ['tpu-petamburan', 'tpu-karet-bivak']]);
+
+        Livewire::test(PlotAvailabilityPreview::class);
+
+        Exceptions::assertReported(function (PlotPreviewMisconfiguredException $e): bool {
+            return str_contains($e->getMessage(), 'tpu-petamburan')
+                && str_contains($e->getMessage(), 'tpu-karet-bivak')
+                && str_contains($e->getMessage(), 'HOMEPAGE_PLOT_PREVIEW_CEMETERY_SLUGS');
+        });
+    }
+
+    /**
+     * A WORKING configuration reports nothing. Without this, all three tests
+     * above would pass against a component that reported on every render.
+     */
+    public function test_a_working_configuration_reports_nothing(): void
+    {
+        Exceptions::fake();
+
+        $cemetery = $this->makeCemetery('tpu-granular-ok', PlotTrackingMode::GRANULAR);
+
+        CemeteryBlock::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'code' => 'BLOK-A',
+            'name' => 'Blok A',
+            'capacity' => 1,
+        ])->plots()->create(['slot' => '001', 'plot_state' => PlotState::AVAILABLE]);
+
+        config(['marketing.homepage_plot_preview_cemetery_slugs' => ['tpu-granular-ok']]);
+
+        Livewire::test(PlotAvailabilityPreview::class)
+            ->assertSee('Lihat Contoh Ketersediaan Plot');
+
+        Exceptions::assertNotReported(PlotPreviewMisconfiguredException::class);
     }
 
     public function test_renders_nothing_when_no_configured_cemetery_is_granular(): void
