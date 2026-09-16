@@ -13,6 +13,19 @@ use Tests\TestCase;
  * `G-OPS-01` is the authority for the two assertions below that matter
  * most: `CapacityUnknown` uses `urgent` intent (not `info`, unlike every
  * other mode) and is never dismissible.
+ *
+ * Those two assertions are ONE fact, not two. §6.9 reads "Dismissible
+ * **only** for informational modes — never for one that changes how a user
+ * must pay", and `urgent` is the intent §6.9's table gives this gate
+ * *instead of* `info`. So the first assertion is the reason for the second:
+ * a non-informational banner is outside the grant before the payment clause
+ * is reached.
+ *
+ * ADR-0040 D4 flipped this to `assertTrue` on 14 Sep 2026, reading only the
+ * payment clause. Reverted the same day, unpushed — see `UrgentMode::
+ * fallback()`'s own doc block for why the dismissible siblings it cited
+ * (`GraveSearchMode`, `WhatsAppMode`, `MemorialMode`) argue the other way:
+ * all three are `intent: 'info'`.
  */
 final class UrgentModeTest extends TestCase
 {

@@ -61,13 +61,35 @@ enum UrgentMode: string
      * `resources/views/components/mk/alert.blade.php`'s own `$intents` array
      * before using it here.
      *
-     * Never dismissible — same reasoning `PaymentMode::ManualCoordination`
-     * documents for itself: an honest "capacity unknown, call us" state is
-     * not something a user should be able to dismiss and forget. Closing
-     * this gate does not change how a user pays, but it does change what
-     * the platform can honestly promise about same-day/At-Need handling,
-     * which is exactly the class of fact §6.9's dismissibility rule reserves
-     * for "never dismissible".
+     * Never dismissible, and the reason is the FIRST half of §6.9's rule,
+     * not the second.
+     *
+     * §6.9 verbatim: *"Dismissible **only** for informational modes — never
+     * for one that changes how a user must pay."* Two clauses. The first
+     * grants dismissibility to informational modes and withholds it from
+     * everything else; the second carves an exception OUT of that grant.
+     *
+     * This mode is the only one in the enum family that is not
+     * informational. §6.9's own banner table assigns `info` to
+     * `PaymentMode`, `WhatsAppMode`, `PreNeedMode` and `GraveSearchMode`,
+     * and assigns THIS gate `urgent` intent instead — and the code matches
+     * that table exactly: every other mode carries `intent: 'info'`, this
+     * one carries `intent: 'urgent'`. Clause one therefore excludes it
+     * before clause two is ever reached.
+     *
+     * ADR-0040 D4 (14 Sep 2026) briefly flipped this to `true`, reasoning
+     * from clause two alone — that closing `G-OPS-01` changes what the
+     * platform can CLAIM, not how anyone pays — and cited
+     * `GraveSearchMode`/`WhatsAppMode`/`MemorialMode` as dismissible
+     * siblings. That citation is what settles it in the other direction:
+     * all three of those are `intent: 'info'`. The dismissible set is
+     * exactly {info modes that do not touch the payment path}; this mode
+     * is in neither half. The flip was reverted the same day, before the
+     * branch was pushed.
+     *
+     * The honest "capacity unknown, call us" state is also precisely the
+     * one a visitor should not be able to dismiss and forget on the way to
+     * choosing Urgent at Step 3.
      */
     public function fallback(): ?GateFallback
     {

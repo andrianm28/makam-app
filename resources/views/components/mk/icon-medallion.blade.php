@@ -33,7 +33,25 @@
     as a `success` state (Leaf sits ~23° from success on the hue wheel,
     design-system.md §1.2(b)) — it is `aria-hidden` and marketing-only.
 
-    --- Two internal $tones entries MUST be static complete literal strings ---
+    --- Why `tone="brand"` exists, and why it is a fill where the other two
+        are tints (added 14 Sep 2026, ADR-0040) ---
+    `earth` and `leaf` both paint a 100-shade tile with an 800-shade mark on
+    it. Neither is a brand FIELD, and the kamboja benchmark's §2.2 survey of
+    the live homepage found the brand colour filling exactly one element on
+    the whole page (the 160x52 `Pesan Makam` button) while appearing 46 times
+    as text — brand as ink, almost never as area. `brand` renders
+    `bg-primary-600 text-neutral-0`: a genuine Earth field, the same fill
+    <x-mk.button variant="primary"> uses, at medallion scale.
+    Contrast needs no new verify-contrast.py pair — "white on primary-600"
+    is already asserted there at 10.25:1. The tile is aria-hidden
+    decoration, so that is a floor it clears, not one it must meet.
+    This tone does NOT relax §3.3a's "never adjacent to order/payment/
+    availability data" rule — it tightens the reason for it, because a filled
+    tile reads louder than a tint. It is also not a licence to fill a
+    medallion with any other family: `secondary` (Leaf) stays caged by
+    §1.2(b)/§9.2 MUST-NOT #7 and must never gain a fill tone here.
+
+    --- Three internal $tones entries MUST be static complete literal strings ---
     Never build the class name by interpolating $tone at request time (e.g.
     "bg-secondary-{...}"). Tailwind's @source scanner reads file TEXT for
     literal class-shaped strings; it cannot execute PHP, so an interpolated
@@ -59,6 +77,7 @@
     $tones = [
         'earth' => 'bg-primary-100 text-primary-800',
         'leaf'  => 'bg-secondary-100 text-secondary-800',
+        'brand' => 'bg-primary-600 text-neutral-0',
     ];
 
     if (! array_key_exists($tone, $tones)) {
