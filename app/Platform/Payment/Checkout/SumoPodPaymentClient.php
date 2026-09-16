@@ -8,6 +8,7 @@ use App\Platform\FinancialLedger\Money;
 use App\Platform\Payment\Checkout\Contracts\PaymentCheckoutClient;
 use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutProviderException;
 use App\Platform\Payment\Checkout\Exceptions\PaymentCheckoutUnavailableException;
+use App\Platform\Payment\Checkout\Exceptions\PaymentRefundNotSupportedException;
 use App\Platform\Payment\PaymentProviders;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\ConnectionException;
@@ -106,6 +107,49 @@ final readonly class SumoPodPaymentClient implements PaymentCheckoutClient
             'provider_url' => (string) ($providerConfig['base_url'] ?? ''),
             'api_key' => (string) ($providerConfig['api_key'] ?? ''),
         ]);
+    }
+
+    /**
+     * Always false, and it is a fact about the provider rather than about
+     * this environment's configuration.
+     *
+     * Confirmed by the product owner, 13-14 Sep 2026: SumoPod supports
+     * **withdraw to the main account only**. Money that has been collected
+     * cannot be returned to its source and cannot be sent to the customer
+     * from there, so a refund is two manual bank movements — withdraw, then
+     * transfer — neither of which this client can perform.
+     *
+     * It does NOT consult config: an unconfigured environment and a
+     * fully-provisioned one are equally unable to refund, and making this
+     * depend on a credential would suggest the capability appears once the
+     * key is set.
+     */
+    public function supportsRefund(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Refuses before doing anything, because there is nothing it could do.
+     *
+     * No URL is constructed and no request is made — the failure is known
+     * from the provider's capabilities, not discovered from a response. That
+     * distinction matters here specifically: this module already shipped, and
+     * reverted, a feature built against a guessed SumoPod endpoint that
+     * returned real 404s in production (`PaymentCheckoutClient`'s note on the
+     * absent `fetchStatus`). Guessing a refund endpoint would repeat it on a
+     * path where the wrong answer means a family is told their money was
+     * returned when it was not.
+     *
+     * The obligation is settled instead through the refund plan's manual
+     * execution stage, which records the transfer reference and its evidence
+     * and refuses to close without both.
+     */
+    public function refund(RefundPaymentRequest $request): PaymentRefundResult
+    {
+        throw PaymentRefundNotSupportedException::forProvider(
+            (string) config('payment.default', PaymentProviders::SUMOPOD_SANDBOX)
+        );
     }
 
     public function createPayment(CreatePaymentRequest $request): PaymentCheckoutResult
