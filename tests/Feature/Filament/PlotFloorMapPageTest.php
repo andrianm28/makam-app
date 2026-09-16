@@ -22,6 +22,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 use Tests\Support\GrantsActorRoles;
+use Tests\Support\RequiresUuidTypeEnforcement;
 use Tests\TestCase;
 
 /**
@@ -37,6 +38,7 @@ final class PlotFloorMapPageTest extends TestCase
 {
     use GrantsActorRoles;
     use RefreshDatabase;
+    use RequiresUuidTypeEnforcement;
 
     protected function setUp(): void
     {
@@ -219,6 +221,22 @@ final class PlotFloorMapPageTest extends TestCase
     // Untrusted-input safety (correction 7: uuid columns on real Postgres)
     // -----------------------------------------------------------------
 
+    /**
+     * Deliberately NOT gated with `requiresUuidTypeEnforcement()`, unlike the
+     * malformed-plot-id test below, and the reason is worth recording because
+     * it is not obvious.
+     *
+     * `selectedCemetery()` does check `Str::isUuid()`, but its NEXT line is an
+     * `array_key_exists($this->cemeteryId, $this->cemeteryOptions())` scope
+     * check — a plain PHP array lookup against real cemetery ids. Delete the
+     * `Str::isUuid()` guard and 'not-a-uuid' still fails that lookup and still
+     * returns null, on BOTH drivers: measured, the mutation leaves this file
+     * green on PostgreSQL. So the shape guard is genuine defence in depth here
+     * rather than the thing standing between this input and a query, and this
+     * test proves the authorization seam, which is driver-independent.
+     *
+     * Gating it would have traded real SQLite coverage for nothing.
+     */
     public function test_a_malformed_cemetery_id_renders_the_prompt_instead_of_erroring(): void
     {
         $actor = $this->admin();
@@ -233,6 +251,10 @@ final class PlotFloorMapPageTest extends TestCase
 
     public function test_a_malformed_plot_id_on_open_plot_resolves_to_nothing_instead_of_erroring(): void
     {
+        $this->requiresUuidTypeEnforcement(
+            "BasePlotFloorMapPage::resolvePlot()'s Str::isUuid() guard on grave_plots.id"
+        );
+
         $actor = $this->admin();
         $cemetery = $this->granularCemeteryWithBlock($actor);
 
