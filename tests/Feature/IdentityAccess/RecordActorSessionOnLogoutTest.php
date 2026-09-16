@@ -4,107 +4,97 @@ declare(strict_types=1);
 
 namespace Tests\Feature\IdentityAccess;
 
+use App\Livewire\Public\Auth\LoginPage;
 use App\Models\User;
-use App\Platform\IdentityAccess\Listeners\RecordActorSessionOnLogout;
 use App\Platform\IdentityAccess\Models\ActorSession;
-use Carbon\CarbonImmutable;
-use Illuminate\Auth\Events\Logout;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Http\Request;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
- * `RecordActorSessionOnLogout` — self-logout bookkeeping only. See the
- * class's own doc block for exactly why this is not AC7 (revoke every
- * session for the actor).
+ * SEC-06 regression: `RecordActorSessionOnLogout` used to match on
+ * `$request->session()->getId()`, which is stale by the time `/keluar`
+ * fires `Logout` — `LoginPage::login()` calls `session()->regenerate()`
+ * AFTER `auth()->attempt()` already fired `Login` (and therefore
+ * `RecordActorSessionOnLogin`) under the pre-regeneration session id. A
+ * unit test that constructs the `Logout` event and calls `handle()`
+ * directly (the previous version of this file) can set up a session id
+ * that happens to match and never observe that bug at all — only a real
+ * login through `LoginPage` (so `auth()->attempt()` and
+ * `session()->regenerate()` run in their real order) followed by a real
+ * `POST /keluar` exercises the actual event ordering that broke revocation.
  */
 final class RecordActorSessionOnLogoutTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_marks_the_current_sessions_row_revoked(): void
+    private const string PASSWORD = 'correct-horse-battery-staple';
+
+    public function test_logging_out_after_a_real_login_revokes_that_logins_actor_session_row(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['password' => self::PASSWORD]);
 
-        $store = $this->app->make('session')->driver('array');
-        $store->start();
+        Livewire::test(LoginPage::class)
+            ->set('email', $user->email)
+            ->set('password', self::PASSWORD)
+            ->call('login')
+            ->assertRedirect(route('akun.index'));
 
-        ActorSession::query()->create([
-            'user_id' => $user->id,
-            'session_id' => $store->getId(),
-            'guard' => 'web',
-            'last_authenticated_at' => CarbonImmutable::now(),
-        ]);
-
-        $request = Request::create('/admin/logout');
-        $request->setLaravelSession($store);
-        $this->app->instance(Request::class, $request);
-
-        (new RecordActorSessionOnLogout($this->app))->handle(new Logout('web', $user));
+        $this->assertTrue(auth()->check());
 
         $row = ActorSession::query()
             ->where('user_id', $user->id)
-            ->where('session_id', $store->getId())
+            ->where('guard', 'web')
             ->firstOrFail();
 
-        $this->assertNotNull($row->revoked_at);
+        $this->assertNull($row->revoked_at, 'A fresh login must not already be revoked.');
+
+        $this->post(route('logout'))->assertRedirect(route('login'));
+
+        $this->assertFalse(auth()->check());
+
+        $row->refresh();
+
+        $this->assertNotNull(
+            $row->revoked_at,
+            'Logging out must revoke the actor_sessions row this login actually created, '.
+            'even though the framework session id rotated between login and logout.',
+        );
     }
 
-    public function test_does_not_touch_a_different_users_session(): void
+    public function test_logging_out_does_not_touch_another_users_actor_session_row(): void
     {
-        $loggingOutUser = User::factory()->create();
+        $loggingOutUser = User::factory()->create(['password' => self::PASSWORD]);
         $otherUser = User::factory()->create();
-
-        $store = $this->app->make('session')->driver('array');
-        $store->start();
 
         ActorSession::query()->create([
             'user_id' => $otherUser->id,
             'session_id' => 'other-users-session',
             'guard' => 'web',
-            'last_authenticated_at' => CarbonImmutable::now(),
+            'last_authenticated_at' => now(),
         ]);
 
-        $request = Request::create('/admin/logout');
-        $request->setLaravelSession($store);
-        $this->app->instance(Request::class, $request);
+        Livewire::test(LoginPage::class)
+            ->set('email', $loggingOutUser->email)
+            ->set('password', self::PASSWORD)
+            ->call('login')
+            ->assertRedirect(route('akun.index'));
 
-        (new RecordActorSessionOnLogout($this->app))->handle(new Logout('web', $loggingOutUser));
+        $this->post(route('logout'))->assertRedirect(route('login'));
 
-        $row = ActorSession::query()->where('user_id', $otherUser->id)->firstOrFail();
-        $this->assertNull($row->revoked_at);
+        $otherRow = ActorSession::query()->where('user_id', $otherUser->id)->firstOrFail();
+
+        $this->assertNull($otherRow->revoked_at);
     }
 
-    public function test_null_user_on_the_event_is_a_no_op(): void
+    public function test_a_guest_hitting_the_logout_route_is_a_no_op(): void
     {
-        $request = Request::create('/admin/logout');
-        $this->app->instance(Request::class, $request);
+        // No authenticated user at all — Laravel's own `auth:web` middleware
+        // on `/keluar` refuses this before the Logout event can even fire,
+        // but the listener itself must also survive a null-user event
+        // without throwing (Laravel's Logout event permits a null user).
+        $this->post(route('logout'))->assertRedirect(route('login'));
 
-        // Must not throw when $event->user is null (Laravel's Logout event
-        // allows this — e.g. logging out an already-guest request).
-        (new RecordActorSessionOnLogout($this->app))->handle(new Logout('web', null));
-
-        $this->assertTrue(true);
-    }
-
-    public function test_no_bound_session_is_a_no_op(): void
-    {
-        $user = User::factory()->create();
-
-        ActorSession::query()->create([
-            'user_id' => $user->id,
-            'session_id' => 'some-session',
-            'guard' => 'web',
-            'last_authenticated_at' => CarbonImmutable::now(),
-        ]);
-
-        $request = Request::create('/admin/logout');
-        $this->app->instance(Request::class, $request);
-        $this->assertFalse($request->hasSession());
-
-        (new RecordActorSessionOnLogout($this->app))->handle(new Logout('web', $user));
-
-        $row = ActorSession::query()->where('user_id', $user->id)->firstOrFail();
-        $this->assertNull($row->revoked_at);
+        $this->assertSame(0, ActorSession::query()->count());
     }
 }
