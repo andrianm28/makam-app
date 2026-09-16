@@ -84,6 +84,20 @@ use Throwable;
  * Filament upload field, and `ProviderStatementCsvParser`'s strict
  * structural parsing (exact header, exact column count, a row cap) before
  * any byte of the file influences a database write.
+ *
+ * ---------------------------------------------------------------------------
+ * VAULT-03 (Phase 3 Batch M9): this open question is now answered
+ * ---------------------------------------------------------------------------
+ * `docs/adr/0023-quarantine-all-untrusted-files.md` Amendment 2 records the
+ * approved exemption this class's own doc block above only flagged: the
+ * file's genuine transience (unconditionally deleted in `run()`'s `finally`
+ * block below, every path) and parse-only handling
+ * (`ProviderStatementCsvParser` never executes/templates content) were
+ * verified end-to-end before that amendment was written, and are the reason
+ * this stays outside the vault rather than gaining a
+ * `DocumentKind::PROVIDER_STATEMENT` case. That amendment is flagged for
+ * mandatory human security-architecture sign-off — treat this as a proposed,
+ * reasoned exemption, not a closed decision, until reviewed.
  */
 final class UploadProviderStatementAction
 {
