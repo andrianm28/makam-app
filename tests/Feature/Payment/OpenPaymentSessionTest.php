@@ -42,6 +42,7 @@ use App\Platform\SiteSettings\SettingsService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -466,6 +467,96 @@ final class OpenPaymentSessionTest extends TestCase
         $this->assertSame('order', $audit->subject_type);
         $this->assertSame((string) $order->getKey(), $audit->subject_id);
         $this->assertSame('denied', $audit->outcome);
+    }
+
+    /**
+     * Every status in which the customer's money has already arrived.
+     *
+     * @return array<string, array{0: OrderStatus}>
+     */
+    public static function paidOrLaterStatusProvider(): array
+    {
+        return [
+            'DIBAYAR' => [OrderStatus::DIBAYAR],
+            'DIBAYAR_MENUNGGU_KONFIRMASI' => [OrderStatus::DIBAYAR_MENUNGGU_KONFIRMASI],
+            'DIKONFIRMASI' => [OrderStatus::DIKONFIRMASI],
+            'DITOLAK_SETELAH_BAYAR' => [OrderStatus::DITOLAK_SETELAH_BAYAR],
+            'DIPROSES' => [OrderStatus::DIPROSES],
+            'SELESAI' => [OrderStatus::SELESAI],
+        ];
+    }
+
+    /**
+     * Finding H-1 regression (13 Sep 2026). The test above pins the single
+     * `DIBAYAR` case; this one pins the QUESTION that case was always a
+     * proxy for — "has this order's money already arrived" — across every
+     * status for which the answer is yes.
+     *
+     * The refusal was a raw comparison against the literal `DIBAYAR`, so it
+     * answered a narrower question than it meant. Two consequences, and the
+     * second is the one that made this urgent:
+     *
+     *   - Already true before the pay-first flow: `DIPROSES` and `SELESAI`
+     *     are past `DIBAYAR` and could open a second payment session.
+     *   - Made far worse by the pay-first flow: every status added to
+     *     `isPaidOrLater()` stayed chargeable. A customer whose payment had
+     *     arrived and was awaiting admin confirmation could be charged a
+     *     second full amount — in this domain, a grieving family charged
+     *     twice for one burial.
+     *
+     * Driven through the full `OpenPaymentSession` entry point rather than
+     * calling the predicate directly, because the bug was never in
+     * `isPaidOrLater()` — it was in a call site that did not ask it.
+     */
+    #[DataProvider('paidOrLaterStatusProvider')]
+    public function test_no_order_whose_money_has_arrived_can_open_a_second_session(OrderStatus $status): void
+    {
+        $this->guardWithPaymentGate(open: true);
+        $order = $this->makeOrder($status);
+        $this->acceptedQuote($order);
+        $user = $this->adminActor();
+        $this->grantOrderScope((string) $user->id, $order);
+        Http::fake();
+
+        try {
+            app(OpenPaymentSession::class)($this->command());
+            $this->fail("An order at {$status->value} was allowed to open a second payment session.");
+        } catch (PaymentSessionOrderAlreadyPaidException) {
+            // Expected.
+        }
+
+        // Refused BEFORE the guard and before any provider call, so there is
+        // no session, no intent, and no money movement — the same shape the
+        // `DIBAYAR` case above asserts.
+        $this->assertSame(0, PaymentSession::query()->count());
+        $this->assertSame(0, PaymentIntent::query()->count());
+        Http::assertNothingSent();
+
+        $audit = AuditEvent::query()
+            ->where('action', PaymentAuditActions::SESSION_OPENING_REFUSED)
+            ->sole();
+        $this->assertSame('order', $audit->subject_type);
+        $this->assertSame((string) $order->getKey(), $audit->subject_id);
+        $this->assertSame('denied', $audit->outcome);
+    }
+
+    /**
+     * The other half of the predicate, so the test above cannot pass by
+     * refusing everything. An order that has NOT been paid must still reach
+     * the guard and open its session normally.
+     */
+    public function test_an_unpaid_order_still_opens_its_session(): void
+    {
+        $this->guardWithPaymentGate(open: true);
+        $this->fullySatisfiedOrder();
+        $this->fakeProviderSuccess();
+
+        app(OpenPaymentSession::class)($this->command());
+
+        $this->assertSame(1, PaymentSession::query()->count());
+        $this->assertSame(0, AuditEvent::query()
+            ->where('action', PaymentAuditActions::SESSION_OPENING_REFUSED)
+            ->count());
     }
 
     public function test_a_provider_failure_leaves_no_intent_and_no_session(): void
