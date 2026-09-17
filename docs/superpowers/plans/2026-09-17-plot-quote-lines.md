@@ -224,7 +224,7 @@ final class QuoteLinePlotColumnsTest extends TestCase
         $this->expectExceptionMessageMatches('/quote_lines_line_family_check/');
 
         DB::table('quote_lines')->insert($this->row([
-            'grave_plot_id' => (string) Str::uuid(),
+            'grave_plot_id' => 1,
         ]));
     }
 
@@ -266,7 +266,7 @@ final class QuoteLinePlotColumnsTest extends TestCase
      * would pass on an FK violation just as happily as on the CHECK, and the
      * test could not tell "the CHECK works" from "some constraint works".
      */
-    private function realQuoteId(): string
+    private function realQuoteId(): int
     {
         // Build the cheapest valid `quotes` row this schema allows; read
         // `database/migrations/2026_08_12_100040_create_quotes_table.php` for
@@ -282,14 +282,7 @@ final class QuoteLinePlotColumnsTest extends TestCase
      */
     private function row(array $family): array
     {
-        // No `created_at`/`updated_at`: `quote_lines` has no timestamp columns
-        // (`QuoteLine::$timestamps = false`) and naming them raises a 42703
-        // before the CHECK can fire. An explicit `id` IS required: the UUID
-        // primary key has no database default, and `HasUuids` only assigns one
-        // on Eloquent's `creating` event, which a raw `DB::table()->insert()`
-        // never fires.
         return array_merge([
-            'id' => (string) Str::uuid(),
             'quote_id' => $this->realQuoteId(),
             'price_version_id' => 1,
             'price_version_number' => 1,
@@ -357,13 +350,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('quote_lines', function (Blueprint $table): void {
-            // `foreignUuid`, NOT `foreignId`: `grave_plots.id` is
-            // `$table->uuid('id')->primary()`
-            // (`2026_08_16_100010_create_grave_plots_table.php:54`), so a
-            // bigint FK fails with a PostgreSQL datatype mismatch.
-            // `cemetery_packages.id` really is `$table->id()`, so the next
-            // column stays `foreignId` — the pair is mixed on purpose.
-            $table->foreignUuid('grave_plot_id')
+            $table->foreignId('grave_plot_id')
                 ->nullable()
                 ->after('service_definition_id')
                 ->constrained('grave_plots')
@@ -829,16 +816,7 @@ Expected: PASS. If an existing test asserts the old "one line family" message, u
 
 - [ ] **Step 11: Mutation-test the combination rule**
 
-Predict first: adding `[self::PACKAGE_LINE, self::PLOT_LINE]` to `LEGAL_FAMILY_SETS` should kill exactly `test_a_plot_line_may_not_share_a_quote_with_a_package_line`.
-
-**The order of that literal is load-bearing, and getting it wrong makes the
-mutation inert.** `$present` is `sort()`ed before the `in_array(..., true)`
-comparison, so it is always alphabetical — `['package', 'plot']`. An unsorted
-literal `[PLOT, PACKAGE]` can therefore never match anything, the guard keeps
-refusing the combination, and the suite stays green. A green suite there is
-NOT a passed mutation test; it is a mutation that never happened. (Measured:
-the first draft of this step used the unsorted literal and killed nothing
-across 48 tests.)
+Predict first: adding `[self::PLOT_LINE, self::PACKAGE_LINE]` to `LEGAL_FAMILY_SETS` should kill exactly `test_a_plot_line_may_not_share_a_quote_with_a_package_line`.
 
 Apply the mutation, `grep` the file to confirm it landed, run the suite, compare against the prediction, restore, confirm green. Report the difference between prediction and result.
 
@@ -903,6 +881,14 @@ final class UnpricedBookingPlotException extends RuntimeException
         return new self(
             "Cemetery package [{$packageId}] has no current firm price version, so the held plot ".
             'cannot be charged. An operator must record a price before this order can be quoted.'
+        );
+    }
+
+    public static function forMissingPlot(int|string $plotId): self
+    {
+        return new self(
+            "The booking draft holds grave plot [{$plotId}], which no longer exists. The hold and "
+            .'the plot have diverged; refusing to quote against a plot that cannot be read.'
         );
     }
 
@@ -976,9 +962,30 @@ final class ComposeQuoteLinesPlotTest extends TestCase
 
         app(ComposeQuoteLinesFromBookingDraft::class)($this->draftWithCrossCemeteryPackage());
     }
+
+    /**
+     * The other half of what used to be one compound condition.
+     *
+     * Without this, deleting the `$plot === null` branch leaves every other
+     * test green — the cross-cemetery test cannot reach it, because its plot
+     * exists. Assert on the MESSAGE, not just the class: both branches throw
+     * the same exception type, so the class alone cannot tell them apart.
+     */
+    public function test_a_hold_whose_plot_no_longer_exists_is_refused(): void
+    {
+        $this->expectException(UnpricedBookingPlotException::class);
+        $this->expectExceptionMessageMatches('/no longer exists/');
+
+        app(ComposeQuoteLinesFromBookingDraft::class)($this->draftWhoseHeldPlotWasDeleted());
+    }
 }
 ```
 
+> **`selected_services` may not be empty.** Every draft fixture here must
+> carry `ServiceCode::BASIC_CODES`; `SaveBookingDraftStep::validateServices()`
+> requires them, and a fixture built with `[]` errors with
+> `BookingStepValidationException` before it reaches anything this task tests.
+>
 > **Start from the draft fixture that already exists.**
 > `tests/Feature/Domain/Quotation/ComposeQuoteLinesFromBookingDraftTest.php:52`
 > has `draftWithSelectedServices(array $services)`. Every helper here is that
@@ -1048,7 +1055,21 @@ Then add the method:
 
         $plot = GravePlot::query()->with('block')->find($hold->plot_id);
 
-        if ($plot === null || (string) $package->cemetery_id !== (string) $plot->block?->cemetery_id) {
+        // TWO branches, not one compound condition. A missing plot is not a
+        // cross-cemetery package, and collapsing them would make the thrown
+        // message say "package [X] belongs to a different cemetery" when the
+        // truth is that the held plot does not exist — a message that actively
+        // misleads whoever reads it next.
+        //
+        // Splitting them also makes each clause pinnable: a single
+        // `A || B` throwing one exception lets a test for B pass while A is
+        // deleted, which is exactly the gap Task 3's review found in
+        // `normalizePlotLine()`'s polymorphic check.
+        if ($plot === null) {
+            throw UnpricedBookingPlotException::forMissingPlot($hold->plot_id);
+        }
+
+        if ((string) $package->cemetery_id !== (string) $plot->block?->cemetery_id) {
             throw UnpricedBookingPlotException::forCrossCemeteryPackage($packageId);
         }
 
@@ -1093,7 +1114,26 @@ Expected: PASS. A draft with no hold must still quote exactly as before — that
 
 - [ ] **Step 7: Mutation-test the vehicle rule**
 
-Predict first: changing `$draft->cemetery_package_id` to `$plot->cemetery_package_id` — the rule spec D3 forbids — should kill `test_a_draft_with_a_held_plot_emits_a_plot_line_first` and `test_a_held_plot_with_no_package_on_the_draft_is_refused`.
+Two mutations, not one.
+
+**Mutation A — the pricing vehicle.** Change the vehicle to the plot's own
+indicative reference, which spec D3 forbids. Write it as
+`$hold->plot?->cemetery_package_id`, **not** `$plot->cemetery_package_id`:
+`$plot` is not fetched until further down the method, so the latter does not
+compile at the line being mutated and the "mutation" is a syntax error rather
+than a behaviour change.
+
+Predict first: it should kill
+`test_a_draft_with_a_held_plot_emits_a_plot_line_first` and
+`test_a_held_plot_with_no_package_on_the_draft_is_refused`. (Measured during
+execution: it killed a third as well — the deleted-plot test, whose expected
+message no longer matched. Predict two, expect to explain a third.)
+
+**Mutation B — the split branches.** Delete the `$plot === null` branch
+entirely. Predict which tests die, then run it. If it kills nothing, the
+missing-plot test is not reaching that branch and must be rebuilt until it
+does. This mutation exists because Tasks 2 and 3 BOTH shipped a clause no test
+pinned, in both cases inside a condition that another test appeared to cover.
 
 If it kills NOTHING, the tests do not distinguish the two vehicles and a fixture must be added where the plot's package and the draft's package differ — that is the whole of D3, and a test suite that cannot tell them apart has not tested it.
 
@@ -1161,6 +1201,20 @@ final class PlotPickerPricingGateTest extends TestCase
         $component->assertSee('Harga paket ini belum tersedia');
     }
 
+    /**
+     * The other half of what used to be one compound condition.
+     *
+     * Deleting the `$package === null` branch leaves every other test green:
+     * the unpriced-package test cannot reach it, because its package exists.
+     */
+    public function test_a_selection_naming_a_package_that_no_longer_exists_asks_for_a_package_again(): void
+    {
+        $component = $this->wizardAtPickerWhoseSelectedPackageWasDeleted();
+
+        $component->assertSee('Pilih paket terlebih dahulu');
+        $component->assertDontSee('Harga paket ini belum tersedia');
+    }
+
     public function test_the_picker_offers_every_plot_when_the_package_is_priced(): void
     {
         $component = $this->wizardAtPickerWithPricedPackage();
@@ -1207,7 +1261,20 @@ In `app/Livewire/Public/Booking/BookingWizard.php`, immediately after the existi
         // price; it is written as one gate because that is what is true now.)
         $package = CemeteryPackage::query()->find($this->pickerCemeteryPackageId);
 
-        if ($package === null || $package->currentPriceVersion() === null) {
+        // TWO branches, not one compound condition — and here the split
+        // changes what the visitor is told, not just what a test can pin.
+        // A package row that has gone means the draft's selection is no
+        // longer valid, and the action is to pick a package again; telling
+        // that visitor "this package has no price yet" would be false, and
+        // would point them at an operator instead of at the one control that
+        // fixes it.
+        if ($package === null) {
+            $this->pickerUnpricedReason = 'no-package';
+
+            return new \Illuminate\Support\Collection;
+        }
+
+        if ($package->currentPriceVersion() === null) {
             $this->pickerUnpricedReason = 'no-price';
 
             return new \Illuminate\Support\Collection;
@@ -1254,7 +1321,21 @@ Expected: `RESULT: ALL DOC GATES PASS`
 
 - [ ] **Step 7: Mutation-test the gate in the open direction**
 
-Predict first: deleting the `no-price` branch should kill exactly `test_the_picker_offers_nothing_when_the_selected_package_has_no_firm_price`. Then, separately, make the gate ALWAYS close (return the empty collection unconditionally) and confirm it kills `test_the_picker_offers_every_plot_when_the_package_is_priced` — a gate that only closes must not pass.
+Three mutations.
+
+**A.** Delete the `no-price` branch. Predict first: it should kill exactly
+`test_the_picker_offers_nothing_when_the_selected_package_has_no_firm_price`.
+
+**B.** Delete the `$package === null` branch. Predict first, then run. If it
+kills nothing, the deleted-package test is not reaching it and must be rebuilt
+until it does. This mutation exists because Tasks 2, 3 and 4 each contained a
+clause inside a compound condition that no test pinned — three for three.
+
+**C.** Make the gate ALWAYS close (return the empty collection
+unconditionally). It must kill
+`test_the_picker_offers_every_plot_when_the_package_is_priced` — a gate that
+only ever closes would otherwise pass every "it is closed" test while testing
+nothing.
 
 Apply each, confirm on disk, run, compare against prediction, restore, confirm green.
 
