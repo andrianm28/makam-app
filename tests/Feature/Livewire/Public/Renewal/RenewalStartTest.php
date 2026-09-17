@@ -725,9 +725,19 @@ final class RenewalStartTest extends TestCase
             ->assertOk()
             // The bare count, gone.
             ->assertDontSee('0 data makam cocok dengan pencarian Anda')
-            // 1. What is empty, and where — named from the generated
-            //    cemetery, never a literal.
-            ->assertSee('Data makam tidak ditemukan di '.CemeteryExampleData::bySlug(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])[1].'.')
+            // 1. What is empty, and where — named from the STORED cemetery,
+            //    never a literal and no longer from the generator.
+            //
+            //    This assertion encloses the name: the sentence ends in a full
+            //    stop immediately after it. That is why it is the only one in
+            //    this file that broke when
+            //    `2026_09_17_100000_mark_fabricated_cemetery_names_as_examples`
+            //    began appending "(pemakaman contoh)" — every bare
+            //    `assertSee($name)`/`assertDontSee($name)` nearby still holds,
+            //    because those match a substring and a suffix cannot hide one.
+            //    An enclosed assertion has no such slack, and should read the
+            //    column the page reads.
+            ->assertSee('Data makam tidak ditemukan di '.$this->storedCemeteryName(CemeteryFixture::id('package', 0)).'.')
             // 2. Why — and explicitly not "the grave does not exist".
             ->assertSee('Registri makam kami belum tentu lengkap, jadi hasil ini belum tentu berarti makam yang Anda cari tidak ada.')
             // 3. What to do next.
@@ -1346,5 +1356,11 @@ final class RenewalStartTest extends TestCase
             ->assertNoRedirect();
 
         $this->assertNull(RenewalGraveSelection::current());
+    }
+
+    /** The cemetery name as STORED — what the page renders, marker included. */
+    private function storedCemeteryName(string $cemeteryId): string
+    {
+        return (string) DB::table('cemeteries')->where('id', $cemeteryId)->value('name');
     }
 }
