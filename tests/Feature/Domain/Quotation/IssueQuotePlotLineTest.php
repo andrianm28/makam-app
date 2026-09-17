@@ -103,6 +103,46 @@ final class IssueQuotePlotLineTest extends TestCase
         $this->issue($order, [$line]);
     }
 
+    /**
+     * Review finding (Task 3 fix round 1): the polymorphic-priceable check
+     * is `$priceVersion->priceable_type !== CemeteryPackage::class ||
+     * (int) $priceVersion->priceable_id !== $cemeteryPackageId` — two
+     * clauses ORed together. `test_a_price_version_belonging_to_another_
+     * package_is_refused` only exercises the SECOND clause (same type,
+     * different id). This test isolates the FIRST clause: a `PriceVersion`
+     * for a DIFFERENT priceable kind (`ServiceDefinition`) whose
+     * `priceable_id` deliberately COLLIDES with the plot's
+     * `cemetery_package_id` — a non-colliding id would be caught by the
+     * second clause alone and would prove nothing about the first.
+     * `version_number` is a value the seeded `ServiceDefinition` price
+     * versions never use, so this insert cannot collide with
+     * `price_versions_priceable_version_unique`.
+     */
+    public function test_a_price_version_of_a_different_priceable_type_with_a_colliding_id_is_refused(): void
+    {
+        $order = $this->makeOrder();
+
+        [$plot, $package] = $this->makePlotAndPackage();
+        $cemeteryPackageId = (int) $package->getKey();
+
+        $collidingPrice = PriceVersion::query()->create([
+            'priceable_type' => ServiceDefinition::class,
+            'priceable_id' => $cemeteryPackageId,
+            'version_number' => 999,
+            'amount' => '75000000.00',
+            'currency' => 'IDR',
+            'source' => 'test fixture',
+            'effective_from' => Carbon::now(),
+            'recorded_by' => 'test',
+        ]);
+
+        $line = $this->plotLine(plot: $plot, package: $package, priceVersion: $collidingPrice);
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $this->issue($order, [$line]);
+    }
+
     public function test_a_package_from_another_cemetery_than_the_plot_is_refused(): void
     {
         $order = $this->makeOrder();
