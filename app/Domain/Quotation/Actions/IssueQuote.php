@@ -20,6 +20,7 @@ use App\Platform\Outbox\OutboxClassification;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 use OverflowException;
 
@@ -495,8 +496,30 @@ final readonly class IssueQuote
         string $lineCurrency,
         string $fulfillmentOwner,
     ): array {
+        // Spec: "a plot line is always quantity 1" — a plot is a unique
+        // physical unit, unlike a service or package line, which may
+        // legitimately repeat. The composer already hardcodes 1
+        // (`ComposeQuoteLinesFromBookingDraft::plotLines()`), so this is a
+        // guard-layer backstop against any other caller.
+        if ($quantity !== 1) {
+            throw new InvalidArgumentException(
+                "Quote line [{$index}] is a plot line and must have quantity exactly 1, got [{$quantity}]."
+            );
+        }
+
         $gravePlotId = $this->requiredString($line, 'grave_plot_id', $index);
         $cemeteryPackageId = (int) $this->requiredInt($line, 'cemetery_package_id', $index);
+
+        // `grave_plots.id` is a UUID column; comparing a non-UUID string
+        // against it is a Postgres type error (`SQLSTATE[22P02]`), not a
+        // miss — the same reason `BookingWizard::holdPlotForDiscovery()`
+        // guards with `Str::isUuid()` before ever querying. Refusing here
+        // keeps the readable-message contract layer 2 promises.
+        if (! Str::isUuid($gravePlotId)) {
+            throw new InvalidArgumentException(
+                "Quote line [{$index}] references grave plot [{$gravePlotId}], which is not a valid UUID."
+            );
+        }
 
         $plot = GravePlot::query()->with('block')->find($gravePlotId);
 

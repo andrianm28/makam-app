@@ -168,6 +168,106 @@ final class IssueQuotePlotLineTest extends TestCase
         $this->issue($order, [$line]);
     }
 
+    /**
+     * Review finding I-1: `normalizePlotLine()`'s current-version check is
+     * `! $priceVersion instanceof PriceVersion || ! $priceVersion->isCurrent()
+     * || ...`, mirroring `normalizeServiceLine()`'s identical clause — but
+     * only the service branch had a test that superseded the version first.
+     * A superseded, stale package price must not be frozen onto a plot line.
+     */
+    public function test_a_superseded_price_version_is_refused(): void
+    {
+        $order = $this->makeOrder();
+
+        [$plot, $package] = $this->makePlotAndPackage();
+        $price = $this->packagePriceVersion($package);
+
+        // The one legal price-version mutation: stamp superseded_at.
+        $price->forceFill(['superseded_at' => Carbon::now()])->save();
+
+        $line = $this->plotLine(plot: $plot, package: $package, priceVersion: $price);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/not the current price version/i');
+
+        $this->issue($order, [$line]);
+    }
+
+    /**
+     * Review finding M-4: `normalizePlotLine()`'s anchor cross-check ORs
+     * three clauses (`unit_amount`, `currency`, `version_number`), but only
+     * `unit_amount` had a dedicated test — the same three-clauses-one-test
+     * shape I-1 closed a few lines up.
+     */
+    public function test_a_currency_contradicting_the_frozen_version_is_refused(): void
+    {
+        $order = $this->makeOrder();
+        $line = $this->plotLine(currency: 'USD');
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/contradicts/i');
+
+        $this->issue($order, [$line]);
+    }
+
+    public function test_a_version_number_contradicting_the_frozen_version_is_refused(): void
+    {
+        $order = $this->makeOrder();
+        $line = $this->plotLine(priceVersionNumber: 999);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/contradicts/i');
+
+        $this->issue($order, [$line]);
+    }
+
+    /**
+     * Review finding M-1: the spec says "a plot line is always quantity 1";
+     * the composer hardcodes it, but `IssueQuote` itself must refuse a
+     * caller that does not.
+     */
+    public function test_a_quantity_other_than_one_is_refused(): void
+    {
+        $order = $this->makeOrder();
+        $line = $this->plotLine(quantity: 5);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/quantity exactly 1/i');
+
+        $this->issue($order, [$line]);
+
+        self::assertSame(0, Quote::query()->count());
+    }
+
+    /**
+     * Review finding M-2: a non-UUID `grave_plot_id` must surface the
+     * readable exception layer 2 promises, not a raw Postgres
+     * `SQLSTATE[22P02]` `QueryException` from comparing a non-UUID string
+     * against the real `uuid` column.
+     */
+    public function test_a_non_uuid_grave_plot_id_is_refused_with_a_readable_message(): void
+    {
+        $order = $this->makeOrder();
+        [, $package] = $this->makePlotAndPackage();
+        $price = $package->currentPriceVersion() ?? $this->packagePriceVersion($package);
+
+        $line = [
+            'grave_plot_id' => 'not-a-uuid',
+            'cemetery_package_id' => (int) $package->getKey(),
+            'price_version_id' => (int) $price->getKey(),
+            'price_version_number' => (int) $price->version_number,
+            'quantity' => 1,
+            'unit_amount' => (string) $price->amount,
+            'currency' => (string) $price->currency,
+            'fulfillment_owner' => FulfillmentOwner::CEMETERY_OPERATOR,
+        ];
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/not a valid UUID/i');
+
+        $this->issue($order, [$line]);
+    }
+
     // -------------------------------------------------------------------
     // New fixture: a cemetery + block + plot + package + current PriceVersion.
     // -------------------------------------------------------------------
@@ -189,6 +289,8 @@ final class IssueQuotePlotLineTest extends TestCase
         ?CemeteryPackage $package = null,
         ?PriceVersion $priceVersion = null,
         ?string $unitAmount = null,
+        ?string $currency = null,
+        ?int $priceVersionNumber = null,
         int $quantity = 1,
     ): array {
         if ($plot === null && $package === null) {
@@ -201,10 +303,10 @@ final class IssueQuotePlotLineTest extends TestCase
             'grave_plot_id' => (string) $plot->getKey(),
             'cemetery_package_id' => (int) $package->getKey(),
             'price_version_id' => (int) $price->getKey(),
-            'price_version_number' => (int) $price->version_number,
+            'price_version_number' => $priceVersionNumber ?? (int) $price->version_number,
             'quantity' => $quantity,
             'unit_amount' => $unitAmount ?? (string) $price->amount,
-            'currency' => (string) $price->currency,
+            'currency' => $currency ?? (string) $price->currency,
             'fulfillment_owner' => FulfillmentOwner::CEMETERY_OPERATOR,
         ];
     }
