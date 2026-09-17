@@ -4,9 +4,18 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Database\Migrations;
 
+use App\Domain\CemeteryCapability\CemeteryPackageAvailabilityStatus;
+use App\Domain\CemeteryCapability\Models\CemeteryPackage;
+use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
+use App\Domain\CemeteryDirectory\CemeteryType;
+use App\Domain\CemeteryDirectory\LaunchCityCode;
+use App\Domain\CemeteryDirectory\Models\Cemetery;
+use App\Domain\CemeteryDirectory\PlotTrackingMode;
 use App\Domain\OrderWorkflow\Models\Order;
 use App\Domain\OrderWorkflow\OrderStatus;
 use App\Domain\OrderWorkflow\ProductType;
+use App\Domain\PlotInventory\Models\CemeteryBlock;
+use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\Quotation\Actions\IssueQuote;
 use App\Domain\ServiceCatalog\Models\ServiceDefinition;
 use App\Domain\ServiceCatalog\ServiceCode;
@@ -78,6 +87,98 @@ final class QuoteLinePlotColumnsTest extends TestCase
     }
 
     /**
+     * The positive case none of the five rejection tests cover: a real PLOT
+     * line — both `grave_plot_id` and `cemetery_package_id` set, referencing
+     * real rows so the FKs are satisfied too, both service columns null —
+     * must be ACCEPTED. Without this, a mutation making the PLOT arm
+     * permanently unsatisfiable (e.g. flipping `cemetery_package_id IS NOT
+     * NULL` to `IS NULL` inside that arm) passes every other test in this
+     * file silently, because every other test already expects rejection for
+     * an unrelated reason.
+     */
+    public function test_the_check_accepts_a_valid_plot_line(): void
+    {
+        $plot = $this->makeGravePlot();
+        $package = $this->makeCemeteryPackage();
+
+        $id = (string) Str::uuid();
+
+        DB::table('quote_lines')->insert($this->row([
+            'grave_plot_id' => (string) $plot->getKey(),
+            'cemetery_package_id' => (int) $package->getKey(),
+        ], $id));
+
+        $this->assertDatabaseHas('quote_lines', [
+            'id' => $id,
+            'grave_plot_id' => $plot->getKey(),
+            'cemetery_package_id' => $package->getKey(),
+            'service_definition_id' => null,
+            'service_package_version_id' => null,
+        ]);
+    }
+
+    /**
+     * Isolates the SERVICE arm's "excludes `cemetery_package_id`" clause.
+     * `test_the_check_refuses_a_row_mixing_a_service_key_with_a_plot_key`
+     * sets `grave_plot_id` too, so that row is already rejected by the
+     * SERVICE arm's `grave_plot_id IS NULL` requirement alone — a mutation
+     * removing only `AND cemetery_package_id IS NULL` from the SERVICE arm
+     * (leaving `grave_plot_id IS NULL` intact) would not be caught by it.
+     * This row leaves `grave_plot_id` null and sets only
+     * `cemetery_package_id` alongside `service_definition_id`, so it is
+     * refused only by the clause this test exists to pin.
+     */
+    public function test_the_check_refuses_a_row_mixing_a_service_key_with_a_package_key(): void
+    {
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessageMatches('/quote_lines_line_family_check/');
+
+        DB::table('quote_lines')->insert($this->row([
+            'service_definition_id' => 1,
+            'cemetery_package_id' => 1,
+        ]));
+    }
+
+    private function makeCemetery(): Cemetery
+    {
+        return Cemetery::query()->create([
+            'type' => CemeteryType::TPU,
+            'publication_status' => CemeteryPublicationStatus::PUBLISHED,
+            'name' => 'TPU Uji Coba',
+            'slug' => 'tpu-uji-coba-'.Str::lower(Str::random(6)),
+            'city' => LaunchCityCode::JAKARTA,
+            'address' => 'Jl. Contoh No. 1',
+            'plot_tracking_mode' => PlotTrackingMode::GRANULAR,
+        ]);
+    }
+
+    private function makeGravePlot(): GravePlot
+    {
+        $cemetery = $this->makeCemetery();
+        $block = CemeteryBlock::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'code' => 'BLOK-A',
+            'name' => 'Blok A',
+            'capacity' => 1,
+        ]);
+
+        return GravePlot::query()->create([
+            'block_id' => $block->getKey(),
+            'slot' => '001',
+            'plot_state' => 'available',
+        ]);
+    }
+
+    private function makeCemeteryPackage(): CemeteryPackage
+    {
+        return CemeteryPackage::query()->create([
+            'cemetery_id' => $this->makeCemetery()->getKey(),
+            'name' => 'Makam Uji',
+            'availability_status' => CemeteryPackageAvailabilityStatus::AVAILABLE,
+        ]);
+    }
+
+    /**
      * A real quote, so `quote_id` cannot trip the FK before the CHECK fires.
      *
      * Every test here asserts the exception message names
@@ -136,10 +237,10 @@ final class QuoteLinePlotColumnsTest extends TestCase
      * @param  array<string, mixed>  $family
      * @return array<string, mixed>
      */
-    private function row(array $family): array
+    private function row(array $family, ?string $id = null): array
     {
         return array_merge([
-            'id' => (string) Str::uuid(),
+            'id' => $id ?? (string) Str::uuid(),
             'quote_id' => $this->realQuoteId(),
             'price_version_id' => 1,
             'price_version_number' => 1,
