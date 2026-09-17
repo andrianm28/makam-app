@@ -9,6 +9,7 @@ use App\Domain\Booking\Actions\StartBookingDraft;
 use App\Domain\Booking\BookingServiceType;
 use App\Domain\Booking\BookingWizardStep;
 use App\Domain\Booking\Models\BookingDraft;
+use App\Domain\CemeteryCapability\Actions\RecordCemeteryPackagePriceVersion;
 use App\Domain\CemeteryCapability\CemeteryPackageAvailabilityStatus;
 use App\Domain\CemeteryCapability\Models\CemeteryPackage;
 use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
@@ -66,6 +67,26 @@ final class BookingWizardPlotPickerTest extends TestCase
             'slot' => '001',
             'plot_state' => PlotState::AVAILABLE,
         ]);
+    }
+
+    /**
+     * A package that can actually be charged (spec D4/D5, Task 5's plot
+     * picker pricing gate) — most fixtures in this file predate that gate
+     * and only need a package that clears it, not any particular price.
+     */
+    private function pricedPackageFor(Cemetery $cemetery): CemeteryPackage
+    {
+        $package = CemeteryPackage::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'name' => 'Makam Single',
+            'availability_status' => CemeteryPackageAvailabilityStatus::AVAILABLE,
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        app(RecordCemeteryPackagePriceVersion::class)($package, '4500000.00', 'user:1', 'Penetapan harga awal');
+
+        return $package;
     }
 
     /**
@@ -137,12 +158,13 @@ final class BookingWizardPlotPickerTest extends TestCase
     public function test_the_picker_renders_for_a_granular_cemetery_at_discovery(): void
     {
         $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+        $package = $this->pricedPackageFor($cemetery);
         $block = CemeteryBlock::query()->create(['cemetery_id' => $cemetery->getKey(), 'code' => 'BLOK-A', 'name' => 'Blok A', 'capacity' => 1]);
         GravePlot::query()->create(['block_id' => $block->getKey(), 'slot' => '001', 'plot_state' => 'available']);
         $draftId = $this->draftIdAtDiscovery();
 
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
-            ->call('openPickerFor', $cemetery->id)
+            ->call('openPickerFor', $cemetery->id, $package->getKey())
             ->assertSee('BLOK-A')
             ->assertSee('001');
     }
@@ -170,13 +192,14 @@ final class BookingWizardPlotPickerTest extends TestCase
     {
         $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
         $this->makePlotIn($cemetery);
+        $package = $this->pricedPackageFor($cemetery);
         $draftId = $this->draftIdAtDiscovery();
 
         $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
 
         $this->makeCemeteryBlocksUnreadable();
 
-        $component->call('openPickerFor', $cemetery->id)
+        $component->call('openPickerFor', $cemetery->id, $package->getKey())
             ->assertOk()
             ->assertSee('Peta plot sedang tidak dapat dimuat')
             ->assertDontSee('Belum ada plot terdaftar');
@@ -772,6 +795,7 @@ final class BookingWizardPlotPickerTest extends TestCase
         config(['booking.plot_picker_max_blocks' => 2]);
 
         $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+        $package = $this->pricedPackageFor($cemetery);
 
         foreach (['BLOK-A', 'BLOK-B', 'BLOK-C', 'BLOK-D'] as $code) {
             $block = CemeteryBlock::query()->create([
@@ -786,7 +810,7 @@ final class BookingWizardPlotPickerTest extends TestCase
         $draftId = $this->draftIdAtDiscovery();
 
         $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
-            ->call('openPickerFor', $cemetery->id);
+            ->call('openPickerFor', $cemetery->id, $package->getKey());
 
         $blocks = $component->instance()->pickerBlocks();
 
@@ -803,6 +827,7 @@ final class BookingWizardPlotPickerTest extends TestCase
         config(['booking.plot_picker_max_plots_per_block' => 3]);
 
         $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+        $package = $this->pricedPackageFor($cemetery);
         $block = CemeteryBlock::query()->create([
             'cemetery_id' => $cemetery->getKey(),
             'code' => 'BLOK-A',
@@ -821,7 +846,7 @@ final class BookingWizardPlotPickerTest extends TestCase
         $draftId = $this->draftIdAtDiscovery();
 
         $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
-            ->call('openPickerFor', $cemetery->id);
+            ->call('openPickerFor', $cemetery->id, $package->getKey());
 
         $blocks = $component->instance()->pickerBlocks();
 
@@ -849,6 +874,13 @@ final class BookingWizardPlotPickerTest extends TestCase
             'sort_order' => 2,
             'is_active' => true,
         ]);
+
+        // Task 5's plot picker pricing gate (spec D4/D5) refuses to offer
+        // plots for an unpriced package — this fixture predates that gate
+        // and needs both classes priced so the block-scoping it exercises
+        // is reachable at all.
+        app(RecordCemeteryPackagePriceVersion::class)($packageA, '4500000.00', 'user:1', 'Penetapan harga awal');
+        app(RecordCemeteryPackagePriceVersion::class)($packageB, '5000000.00', 'user:1', 'Penetapan harga awal');
 
         $blockA = CemeteryBlock::query()->create([
             'cemetery_id' => $cemetery->getKey(),
@@ -965,6 +997,7 @@ final class BookingWizardPlotPickerTest extends TestCase
             'sort_order' => 1,
             'is_active' => true,
         ]);
+        app(RecordCemeteryPackagePriceVersion::class)($package, '4500000.00', 'user:1', 'Penetapan harga awal');
 
         $block = CemeteryBlock::query()->create([
             'cemetery_id' => $cemetery->getKey(),

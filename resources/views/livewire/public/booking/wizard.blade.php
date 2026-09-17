@@ -474,6 +474,15 @@
                             <a href="/bantuan" class="font-medium underline underline-offset-2">hubungi Bantuan</a>
                             agar petugas kami membantu langsung.
                         </x-mk.alert>
+                    @elseif ($this->pickerUnpricedReason === 'no-package')
+                        <p class="text-base text-neutral-700">
+                            Pilih paket terlebih dahulu — harga petak mengikuti paket yang Anda pilih.
+                        </p>
+                    @elseif ($this->pickerUnpricedReason === 'no-price')
+                        <p class="text-base text-neutral-700">
+                            Harga paket ini belum tersedia, jadi petaknya belum bisa dipesan online.
+                            Hubungi bantuan untuk melanjutkan.
+                        </p>
                     @else
                     @php
                         // Floor/Block Map — mirrors the Filament admin reference at
