@@ -337,29 +337,22 @@
                                     </div>
 
                                     @if ($packages->isEmpty())
-                                        @if ($this->pickerAppliesTo($cemetery->id))
-                                            <x-mk.button
-                                                variant="primary"
-                                                full
-                                                wire:click="openPickerFor('{{ $cemetery->id }}')"
-                                                wire:loading.attr="disabled"
-                                                wire:target="openPickerFor"
-                                            >
-                                                Pilih {{ $cemetery->name }} &mdash; Lihat Peta Plot
-                                            </x-mk.button>
-                                        @else
-                                            @php $isSelectedCemetery = $cemeteryId === $cemetery->id; @endphp
-                                            <x-mk.button
-                                                variant="primary"
-                                                full
-                                                wire:click="selectCemetery('{{ $cemetery->id }}')"
-                                                wire:loading.attr="disabled"
-                                                wire:target="selectCemetery"
-                                                :aria-current="$isSelectedCemetery ? 'step' : null"
-                                            >
-                                                {{ $isSelectedCemetery ? 'Terpilih' : 'Pilih' }} {{ $cemetery->name }}
-                                            </x-mk.button>
-                                        @endif
+                                        {{-- Review finding I-4: a granular cemetery with no packages has
+                                             nothing D4's gate would let the picker offer (spec D4/D5 refuse
+                                             an unpriced/package-less pick), so the picker CTA is never
+                                             offered here regardless of pickerAppliesTo() — fall through to
+                                             the plain cemetery-selection button every other cemetery uses. --}}
+                                        @php $isSelectedCemetery = $cemeteryId === $cemetery->id; @endphp
+                                        <x-mk.button
+                                            variant="primary"
+                                            full
+                                            wire:click="selectCemetery('{{ $cemetery->id }}')"
+                                            wire:loading.attr="disabled"
+                                            wire:target="selectCemetery"
+                                            :aria-current="$isSelectedCemetery ? 'step' : null"
+                                        >
+                                            {{ $isSelectedCemetery ? 'Terpilih' : 'Pilih' }} {{ $cemetery->name }}
+                                        </x-mk.button>
                                     @else
                                         <div>
                                             <p id="cemetery-{{ $cemetery->id }}-packages-label" class="text-sm text-neutral-600">

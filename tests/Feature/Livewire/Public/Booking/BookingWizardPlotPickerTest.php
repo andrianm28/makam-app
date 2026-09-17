@@ -179,6 +179,29 @@ final class BookingWizardPlotPickerTest extends TestCase
     }
 
     /**
+     * Review finding I-4. A granular cemetery with zero active packages
+     * used to offer a primary "Pilih {cemetery} — Lihat Peta Plot" button
+     * that opened the picker with no package selected — which spec D4's
+     * gate then unconditionally refuses with "Pilih paket terlebih dahulu",
+     * telling the customer to do something the screen does not offer. The
+     * fix falls through to the plain cemetery-selection button (the one
+     * every other package-less cemetery already uses).
+     */
+    public function test_a_granular_cemetery_with_no_packages_offers_the_plain_select_button(): void
+    {
+        $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+        $draftId = $this->draftIdAtDiscovery();
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->call('selectCity', LaunchCityCode::JAKARTA)
+            ->assertDontSee('Lihat Peta Plot')
+            ->assertSee('Pilih '.$cemetery->name);
+
+        $component->call('selectCemetery', $cemetery->id)
+            ->assertSet('cemeteryId', $cemetery->id);
+    }
+
+    /**
      * `pickerBlocks()` previously had no guard around its own query — a
      * genuine DB failure (found in an audit of the shipped Phase E work,
      * 3 Sep 2026) would throw straight to a 500 instead of degrading, the
