@@ -732,12 +732,8 @@ final class BookingWizard extends Component
         try {
             return CemeteryBlock::query()
                 ->where('cemetery_id', $this->pickerCemeteryId)
-                ->when(
-                    $packageId !== null,
-                    fn ($query) => $query->whereHas('plots', $matchesSelectedPackage),
-                )
-                ->with(['plots' => fn ($query) => $query
-                    ->when($packageId !== null, $matchesSelectedPackage)
+                ->whereHas('plots', $matchesSelectedPackage)
+                ->with(['plots' => fn ($query) => $matchesSelectedPackage($query)
                     ->orderBy('slot')
                     ->limit((int) config('booking.plot_picker_max_plots_per_block'))])
                 ->orderBy('code')
