@@ -110,7 +110,7 @@ PAIRS = [
     ("text-muted on surface-raised", "color-neutral-600", WHITE, NEED_TEXT),
     ("text-placeholder on surface-raised", "color-neutral-500", WHITE, NEED_TEXT),
     ("text-default on surface-page", "color-neutral-700", "color-neutral-50", NEED_TEXT),
-    ("text-default on surface-warm", "color-neutral-700", "color-primary-50", NEED_TEXT),
+    ("text-default on surface-warm", "color-neutral-700", "color-accent-100", NEED_TEXT),
     ("text-strong on secondary-100", "color-neutral-900", "color-secondary-100", NEED_TEXT),
     # Homepage visual refresh (19 Aug 2026): Cara Kerja's full-bleed band is
     # secondary-50 with its own section heading/copy sitting directly on it
@@ -149,14 +149,14 @@ PAIRS = [
     # Non-text: interactive control boundaries must hold on all three surfaces
     ("border-interactive on surface-raised", "color-neutral-450", WHITE, NEED_NONTEXT),
     ("border-interactive on surface-page", "color-neutral-450", "color-neutral-50", NEED_NONTEXT),
-    ("border-interactive on surface-warm", "color-neutral-450", "color-primary-50", NEED_NONTEXT),
+    ("border-interactive on surface-warm", "color-neutral-450", "color-accent-100", NEED_NONTEXT),
     ("focus ring on surface-raised", "color-primary-600", WHITE, NEED_NONTEXT),
     ("focus ring on surface-page", "color-primary-600", "color-neutral-50", NEED_NONTEXT),
     # Homepage visual refresh (19 Aug 2026): the hero and CS-CTA panel put
     # focusable elements (buttons, links) directly on surface-warm
     # (primary-50) for the first time — previously only text and non-focus
     # borders were asserted there.
-    ("focus ring on surface-warm", "color-primary-600", "color-primary-50", NEED_NONTEXT),
+    ("focus ring on surface-warm", "color-primary-600", "color-accent-100", NEED_NONTEXT),
     ("focus ring inverse on primary-600", "color-primary-300", "color-primary-600", NEED_NONTEXT),
     ("border-error on surface-raised", "color-danger-600", WHITE, NEED_NONTEXT),
     ("urgent border on urgent bg", "color-warning-600", "color-warning-50", NEED_NONTEXT),
@@ -251,6 +251,61 @@ def resolve(tokens: dict, ref: str) -> str:
     return tokens[ref]
 
 
+def surface_alias_map(path) -> dict:
+    """`--mk-surface-*` -> the `--color-*` primitive it aliases, from the CSS text."""
+    return dict(SURFACE_ALIAS_RE.findall(path.read_text(encoding="utf-8")))
+
+
+def check_pairs_name_the_real_surface(tokens: dict, aliases: dict) -> list:
+    """Every "... on surface-X" assertion must use the colour surface-X IS.
+
+    ----------------------------------------------------------------------
+    Why this exists
+    ----------------------------------------------------------------------
+    A pair's label and its background argument are two independent facts, and
+    nothing tied them together. `PAIRS` says "on surface-warm" in a string
+    while passing `color-primary-50` as the background; the string is a
+    comment, the argument is the test. Move the alias and only the argument
+    has to change -- and if nobody remembers, GATE 1 keeps printing PASS for a
+    colour that is no longer on the page.
+
+    That is not hypothetical. `--mk-surface-warm` moved from
+    `--color-primary-50` (#F5F7F6) to `--color-accent-100` (#F0E9DD) when Sand
+    became the accent (ADR-0041 D8, PR #323). The three "on surface-warm"
+    pairs were not moved with it. For the next several merges GATE 1 verified
+    the warm surface against a colour the warm surface had stopped being, and
+    reported 3.31:1 for a border that actually rendered at 2.95:1 -- under the
+    3.0 non-text floor. A real WCAG failure, shipped green.
+
+    `WHITE` is accepted wherever the alias resolves to #FFFFFF: the literal and
+    `--color-neutral-0` are the same colour, and spelling it `WHITE` in the
+    raised-surface pairs is the file's own long-standing idiom, not drift.
+    """
+    problems = []
+
+    for label, _fg, bg_ref, _need in PAIRS:
+        match = re.search(r"on (surface-[a-z]+)", label)
+        if match is None:
+            continue
+
+        alias = "mk-" + match.group(1)
+        primitive = aliases.get(alias)
+        if primitive is None:
+            # The label names a surface the stylesheet does not alias to a
+            # primitive (or does not define at all). Silence here would let a
+            # typo'd label opt a pair out of this check entirely.
+            problems.append((label, alias, "(no such alias)", bg_ref))
+            continue
+
+        want = tokens.get(primitive)
+        got = "#FFFFFF" if bg_ref == WHITE else tokens.get(bg_ref)
+
+        if want is None or got is None or want.upper() != got.upper():
+            problems.append((label, primitive, want, got))
+
+    return problems
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
@@ -268,6 +323,16 @@ def main() -> int:
     failures = []
     print(f"WCAG contrast verification — {path}")
     print(f"{len(tokens)} colour tokens parsed, {len(PAIRS)} pairs asserted\n")
+
+    # Checked BEFORE any ratio is computed: a pair aimed at the wrong colour
+    # produces a number that is arithmetically correct and meaningless, and a
+    # meaningless PASS is worse than a FAIL.
+    mispointed = check_pairs_name_the_real_surface(tokens, surface_alias_map(path))
+    for label, primitive, want, got in mispointed:
+        print(f"FAIL  pair '{label}' tests {got}, but that surface is {primitive} = {want}")
+        failures.append((f"mispointed pair: {label}", str(got), f"{primitive} = {want}", 0.0, 0.0))
+    if mispointed:
+        print()
 
     for label, fg_ref, bg_ref, need in PAIRS:
         fg, bg = resolve(tokens, fg_ref), resolve(tokens, bg_ref)
@@ -331,7 +396,13 @@ def main() -> int:
     if failures:
         print(f"RESULT: FAIL — {len(failures)} assertion(s) regressed")
         for label, fg, bg, ratio, need in failures:
-            print(f"  - {label}: {ratio:.2f} < {need} ({fg} on {bg})")
+            # A mispointed pair has no ratio to report -- it failed before any
+            # ratio was worth computing -- so printing "0.00 < 0.0" would make
+            # the one failure that is ABOUT a misleading number misleading.
+            if label.startswith("mispointed pair: "):
+                print(f"  - {label}: tests {fg}, but that surface is {bg}")
+            else:
+                print(f"  - {label}: {ratio:.2f} < {need} ({fg} on {bg})")
         return 1
     print(f"RESULT: PASS — all {len(PAIRS)} pairs meet WCAG 2.1 AA")
     return 0

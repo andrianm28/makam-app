@@ -1245,7 +1245,7 @@ PASS    9.53  (min 4.5)  text-default (body) on surface-raised  #444643 on #FFFF
 PASS    6.63  (min 4.5)  text-muted on surface-raised  #5C5D5A on #FFFFFF
 PASS    5.06  (min 4.5)  text-placeholder on surface-raised  #6E6F6B on #FFFFFF
 PASS    8.68  (min 4.5)  text-default on surface-page  #444643 on #F7F4ED
-PASS    8.86  (min 4.5)  text-default on surface-warm  #444643 on #F5F7F6
+PASS    7.90  (min 4.5)  text-default on surface-warm  #444643 on #F0E9DD
 PASS   12.89  (min 4.5)  text-strong on secondary-100  #232523 on #E6ECE9
 PASS    8.78  (min 4.5)  text-default on secondary-50  #444643 on #F4F6F5
 PASS   14.22  (min 4.5)  text-strong on secondary-50  #232523 on #F4F6F5
@@ -1273,12 +1273,12 @@ PASS   10.08  (min 4.5)  text-link on surface-raised  #29483A on #FFFFFF
 PASS   12.09  (min 4.5)  text-link-hover on surface-raised  #223B30 on #FFFFFF
 PASS   11.01  (min 4.5)  text-link on surface-page  #223B30 on #F7F4ED
 PASS    7.34  (min 4.5)  error text on surface-raised  #A32435 on #FFFFFF
-PASS    3.56  (min 3.0)  border-interactive on surface-raised  #888883 on #FFFFFF
-PASS    3.24  (min 3.0)  border-interactive on surface-page  #888883 on #F7F4ED
-PASS    3.31  (min 3.0)  border-interactive on surface-warm  #888883 on #F5F7F6
+PASS    3.86  (min 3.0)  border-interactive on surface-raised  #82827D on #FFFFFF
+PASS    3.52  (min 3.0)  border-interactive on surface-page  #82827D on #F7F4ED
+PASS    3.20  (min 3.0)  border-interactive on surface-warm  #82827D on #F0E9DD
 PASS   10.08  (min 3.0)  focus ring on surface-raised  #29483A on #FFFFFF
 PASS    9.18  (min 3.0)  focus ring on surface-page  #29483A on #F7F4ED
-PASS    9.37  (min 3.0)  focus ring on surface-warm  #29483A on #F5F7F6
+PASS    8.36  (min 3.0)  focus ring on surface-warm  #29483A on #F0E9DD
 PASS    4.80  (min 3.0)  focus ring inverse on primary-600  #A9B6B0 on #29483A
 PASS    7.34  (min 3.0)  border-error on surface-raised  #A32435 on #FFFFFF
 PASS    4.70  (min 3.0)  urgent border on urgent bg  #9A6300 on #FDF6EB
@@ -1764,12 +1764,14 @@ COLOUR    primary-600 #29483A  brand/CTA/link/focus (FOREST — guideline 2026, 
           neutral-50  #F7F4ED  IVORY — page background (guideline 2026)
           neutral-700 #444643  body text
           neutral-800 #303330  CHARCOAL — strongest body text (guideline 2026)
-          neutral-450 #888883  interactive borders  ← not 300
+          neutral-450 #82827D  interactive borders  ← not 300
           secondary-300 #8FA99A SAGE — surface/accent ONLY, never a fill (guideline 2026; white on it is 2.53:1)
           text-price  #1B3026  (primary-800) monetary figures ONLY — confirmed price/fee/total, never indicative
 
-          Sand #D8C6A5 is in the guideline but NOT yet a token — it needs one
-          designated purpose first (§1.2(d)).
+          accent-200  #D8C6A5  SAND — the guideline's warm accent (ADR-0041 D8).
+          accent-100  #F0E9DD  --mk-surface-warm: the trust/quiet band's ground.
+                               Updated 16 Sep 2026 — this block said Sand was
+                               "NOT yet a token" until PR #323 gave it one.
 
 Each accent/semantic token above has exactly ONE purpose app-wide (§1.2(d), §9.2 MUST NOT 13).
 

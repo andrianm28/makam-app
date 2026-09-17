@@ -112,7 +112,11 @@
   --color-neutral-200: #DDDBD4; /* decorative divider only -- see design-system.md 6.3 */
   --color-neutral-300: #C3C2BC; /* decorative border only -- see design-system.md 6.3 */
   --color-neutral-400: #9B9B96;
-  --color-neutral-450: #888883; /* INTERACTIVE BORDER -- non-text 3.56:1 on white, 3.24:1 on Ivory */
+  --color-neutral-450: #82827D; /* INTERACTIVE BORDER -- non-text 3.86:1 on white, 3.52:1 on Ivory,
+                                   3.20:1 on the Sand warm surface. Was #888883 until 16 Sep 2026,
+                                   which rendered 2.95:1 once ADR-0041 D8 moved that surface to
+                                   Sand -- under the 3.0 non-text floor, and invisible because the
+                                   contrast gate was still testing the surface it used to be. */
   --color-neutral-500: #6E6F6B; /* placeholder -- AA 5.06:1 on white, 4.61:1 on Ivory */
   --color-neutral-600: #5C5D5A; /* muted / helper text -- AA 6.63:1 / 6.03:1 */
   --color-neutral-700: #444643; /* body text -- AA 9.53:1 / 8.68:1 */

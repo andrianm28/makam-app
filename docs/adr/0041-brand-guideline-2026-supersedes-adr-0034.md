@@ -245,6 +245,29 @@ Two calls the measurements made rather than taste:
 All ten surface pairs now clear the 10/765 floor; `warm` vs `quiet` goes from
 **3** to **41**. Text on the new warm surface: Charcoal 10.60:1, Forest 8.36:1.
 
+> **Correction, 16 Sep 2026 — D8 checked text on the new surface and nothing
+> else, and that gap shipped a WCAG failure.**
+>
+> The line above measures Charcoal and Forest, both text. It does not measure
+> the interactive border, and `--color-neutral-450` (`#888883`) renders
+> **2.95:1** on Sand `#F0E9DD` — under the 3.0 non-text floor. It had cleared
+> 3.31:1 on the cool `primary-50` this decision replaced.
+>
+> GATE 1 did not catch it, because moving `--mk-surface-warm` to `accent-100`
+> did not move the three `"on surface-warm"` pairs in `verify-contrast.py`,
+> which kept testing `color-primary-50`. The gate reported a correct ratio for
+> a colour that was no longer on the page.
+>
+> Both are fixed together: `--color-neutral-450` becomes `#82827D` (3.20:1 on
+> Sand, and 3.56 -> 3.86 on white, 3.24 -> 3.52 on Ivory — every surface
+> improves), and `verify-contrast.py` now refuses to run a pair whose label
+> names a surface its background argument is not. The instance was the smaller
+> half; a gate that can aim at the wrong colour was the larger one.
+>
+> D8 itself stands — Sand as the accent, anchored at 200, surface at
+> `accent-100` — and the numbers above are correct for the pairs they name.
+> This records what they did not name.
+
 ### Merging this with the kamboja chain — two things to expect
 
 Verified by trial merge, not predicted:
