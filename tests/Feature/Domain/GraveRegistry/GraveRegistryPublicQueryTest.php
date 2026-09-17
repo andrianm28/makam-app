@@ -9,8 +9,8 @@ use App\Domain\GraveRegistry\GraveRecordProjection;
 use App\Domain\GraveRegistry\GraveRegistryPublicQuery;
 use App\Domain\GraveRegistry\GraveSearchCriteria;
 use App\Domain\GraveRegistry\Models\GraveRecord;
-use App\Support\ExampleData\CemeteryExampleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\Support\CemeteryFixture;
 use Tests\Support\RequiresUuidTypeEnforcement;
 use Tests\TestCase;
@@ -76,7 +76,7 @@ final class GraveRegistryPublicQueryTest extends TestCase
         $this->assertSame(GraveRecordAccessMode::OPEN, $row->accessMode);
         $this->assertFalse($row->isRestricted());
         $this->assertSame($record->deceased_name, $row->deceasedName);
-        $this->assertSame(CemeteryExampleData::bySlug(CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])[1], $row->cemeteryName);
+        $this->assertSame($this->storedCemeteryName($cemeteryId), $row->cemeteryName);
         $this->assertSame((string) $record->block, $row->block);
         $this->assertSame($record->death_date?->format('Y-m-d'), $row->deathDate);
         $this->assertSame($record->due_date?->format('Y-m-d'), $row->dueDate);
@@ -116,7 +116,7 @@ final class GraveRegistryPublicQueryTest extends TestCase
 
         $this->assertSame(GraveRecordAccessMode::LIMITED, $row->accessMode);
         $this->assertTrue($row->isRestricted());
-        $this->assertSame(CemeteryExampleData::bySlug(CemeteryExampleData::ALL_RESTRICTED_SLUG)[1], $row->cemeteryName);
+        $this->assertSame($this->storedCemeteryName($cemeteryId), $row->cemeteryName);
         $this->assertSame((string) $record->block, $row->block);
 
         // Withheld — and genuinely absent from the value object, not merely
@@ -587,5 +587,25 @@ final class GraveRegistryPublicQueryTest extends TestCase
             ->update(['access_mode' => GraveRecordAccessMode::LIMITED]);
 
         return $cemeteryId;
+    }
+
+    /**
+     * The cemetery name as STORED, which is what the projection must echo.
+     *
+     * Both assertions above compared the generator's literal instead, and that
+     * only held while nothing ever rewrote the column. Something does now:
+     * `2026_09_17_100000_mark_fabricated_cemetery_names_as_examples` appends
+     * "(pemakaman contoh)" to fabricated names, so generator-literal and
+     * stored value are deliberately no longer the same string.
+     *
+     * Reading the database is also what this file already says it does — see
+     * `test_an_open_record_projects_every_publicly_allowed_field`'s own
+     * comment: "Asserted against the stored row rather than a literal
+     * name/date so the projection is pinned to the DATA, not to a generated
+     * value." The name was the one field that had not followed that rule.
+     */
+    private function storedCemeteryName(string $cemeteryId): string
+    {
+        return (string) DB::table('cemeteries')->where('id', $cemeteryId)->value('name');
     }
 }
