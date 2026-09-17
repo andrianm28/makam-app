@@ -7706,8 +7706,8 @@
   category: "governance / silent-work-loss"
   effort: S
   audit_verdict: CONFIRMED
-  status: in_review
-  status_evidence: [open#331]
+  status: resolved
+  status_evidence: [merged#331]
   status_verified: false
   files:
     - ".github/workflows/ci.yml:19"
