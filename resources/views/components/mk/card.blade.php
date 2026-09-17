@@ -16,6 +16,43 @@
     Slots: default (body), `header`, `footer`, `media` (all optional).
     `media` renders full-bleed above the padded body, clipped to the card's
     own rounded corners.
+
+    --- Why `emphasis` exists (added 14 Sep 2026, kamboja plan Tahap 4) ---
+    docs/superpowers/plans/2026-09-13-kamboja-design-language.md §2.3
+    measured the live homepage and found eighteen cards rendering the
+    IDENTICAL treatment — one `neutral-0` surface, one `radius-lg`, one
+    1 px `neutral-200` border, one `shadow-sm` — for three genuinely
+    different jobs: a service card
+    (286x242, the entrance to a whole journey), a TPU/TPS card (389x402,
+    a content card), and an FAQ row (600x130, one line of answer).
+    Hierarchy was left entirely to box size. `emphasis` is the axis that
+    was missing; it is deliberately NOT a new radius or a new colour
+    stamped onto every card.
+
+    `base` is the default and renders byte-identical to every card that
+    shipped before this prop existed, so the 27 existing call sites are
+    untouched. Only the ELEVATION and (when no `intent` is set) the border
+    colour move — both from existing tokens, no new token was added:
+
+      quiet  shadow-none  border-neutral-200   a row, not a raised object
+      base   shadow-sm    border-neutral-200   design-system.md §3.3's base
+      strong shadow-md    border-primary-200   a journey entrance
+
+    On `strong`: design-system.md §1.5's elevation line reads "`sm` cards
+    · `md` dropdowns/sticky footer". That line describes the DEFAULT card
+    role, which `base` still is — and §3.3 already sanctions a card
+    reaching `shadow-md`, since every interactive card does exactly that
+    on hover. `strong` rests there instead of only hovering there. §1.5
+    and §3.3 are updated to say so rather than leaving this file the only
+    record. `--shadow-lg` is NOT used here: §1.5 reserves it for modals,
+    which is why an interactive `strong` card's hover shadow stays `md`
+    (its hover feedback is the border and background tint, per §5's
+    "hover Transform: none" colour-only rule).
+
+    Unknown `emphasis` falls back to `base`, matching how `$padding` and
+    `$intent` already behave in this same file — not the throw
+    icon-medallion.blade.php uses, because this file's local convention is
+    the defensive fallback and consistency within one primitive wins.
 --}}
 @props([
     'as' => 'div',
@@ -23,6 +60,7 @@
     'padding' => 'md',
     'interactive' => false,
     'intent' => null,
+    'emphasis' => 'base',
 ])
 
 @php
@@ -52,7 +90,29 @@
     // only when there's media to clip to the card's own rounded corners;
     // added unconditionally it would silently clip legitimate overflowing
     // content (a popover opened from inside the card, for instance).
-    $base = trim('block rounded-lg border shadow-sm' . ($hasMedia ? ' overflow-hidden' : ''));
+    // Three static maps, one per emphasis, for the same reason
+    // $intentSurfaces below is a static map: Tailwind's @source scanner
+    // reads file TEXT and cannot execute PHP, so every class name it must
+    // generate has to appear here as a complete literal string. Never
+    // build `shadow-{$emphasis}` or similar.
+    $emphasisRestShadow = [
+        'quiet' => 'shadow-none',
+        'base' => 'shadow-sm',
+        'strong' => 'shadow-md',
+    ];
+    $emphasisHoverShadow = [
+        'quiet' => 'hover:shadow-sm',
+        'base' => 'hover:shadow-md',
+        'strong' => 'hover:shadow-md',
+    ];
+    $emphasisBorder = [
+        'quiet' => 'border-neutral-200',
+        'base' => 'border-neutral-200',
+        'strong' => 'border-primary-200',
+    ];
+    $emphasis = array_key_exists($emphasis, $emphasisRestShadow) ? $emphasis : 'base';
+
+    $base = trim('block rounded-lg border ' . $emphasisRestShadow[$emphasis] . ($hasMedia ? ' overflow-hidden' : ''));
 
     // §3.3: intent (when set) drives border + background from the
     // `--mk-intent-*` semantic tokens (§2.10) — these have no Tailwind
@@ -81,7 +141,13 @@
         'danger'  => 'border-[var(--mk-intent-danger-border)] bg-[var(--mk-intent-danger-bg)]',
         'urgent'  => 'border-[var(--mk-intent-urgent-border)] bg-[var(--mk-intent-urgent-bg)]',
     ];
-    $surfaceClasses = $intent ? $intentSurfaces[$intent] : 'border-neutral-200 bg-neutral-0';
+    // An intent card keeps owning its own border AND background (§3.3's
+    // cemetery/service-row variants); `emphasis` then contributes only the
+    // elevation above. Same precedence the `hover:bg-primary-50` tint
+    // already follows — emphasis never competes with an intent surface.
+    $surfaceClasses = $intent
+        ? $intentSurfaces[$intent]
+        : $emphasisBorder[$emphasis] . ' bg-neutral-0';
 
     $paddingMap = [
         'none' => '',
@@ -106,7 +172,7 @@
     // `ease-standard` budget as before.
     $interactiveClasses = $interactive
         ? 'transition-[border-color,box-shadow,background-color] duration-fast ease-standard
-           hover:border-primary-300 hover:shadow-md'
+           hover:border-primary-300 ' . $emphasisHoverShadow[$emphasis]
            . ($intent === null ? ' hover:bg-primary-50' : '') . '
            focus-within:outline-none focus-within:ring-2 focus-within:ring-primary-600 focus-within:ring-offset-2'
         : '';
