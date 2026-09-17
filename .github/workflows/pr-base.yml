@@ -1,0 +1,49 @@
+name: PR base
+
+# -----------------------------------------------------------------------------
+# Why this is its OWN workflow and not a job in ci.yml
+# -----------------------------------------------------------------------------
+# `ci.yml`'s pull_request trigger is scoped to `branches:
+# [docs/design-system-and-planning]`, so CI does not run at all on a pull
+# request whose BASE is some other branch. That is a reasonable cost decision
+# for the main suite — and it is precisely why nothing caught #307, #312 and
+# #313 on 16 Sep 2026: every one of them was opened against a feature branch,
+# so no pull_request run ever evaluated them. A job added to ci.yml would
+# inherit the same blind spot and never fire for the case it exists for.
+#
+# This workflow therefore triggers on pull requests against ANY base, and runs
+# one cheap check. It deliberately does not run tests, build anything, or
+# install dependencies.
+# -----------------------------------------------------------------------------
+
+on:
+  pull_request:
+    branches: ["**"]
+
+concurrency:
+  group: pr-base-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify-base:
+    name: PR base has not already merged
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The check is an ancestry question, so it needs real history and
+          # both refs. `ci/verify-pr-base.sh` fails closed when it cannot
+          # resolve one, rather than passing without checking.
+          fetch-depth: 0
+
+      - name: Fetch the base branch and trunk
+        run: |
+          git fetch --no-tags origin \
+            "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}" \
+            "+refs/heads/docs/design-system-and-planning:refs/remotes/origin/docs/design-system-and-planning"
+
+      - name: Verify the base branch still reaches trunk
+        run: bash ci/verify-pr-base.sh "${{ github.base_ref }}"

@@ -7700,6 +7700,41 @@
   recommendation: >-
     Have an operator confirm three values directly: SESSION_SECURE_COOKIE, CACHE_STORE, and
     QUEUE_CONNECTION for dev and beta. Nothing else in this bucket needs action.
+- id: COORD-19
+  dim: COORD
+  severity: High
+  category: "governance / silent-work-loss"
+  effort: S
+  audit_verdict: CONFIRMED
+  status: in_review
+  status_evidence: [open#331]
+  status_verified: false
+  files:
+    - ".github/workflows/ci.yml:19"
+    - "ci/verify-pr-base.sh"
+  statement: >-
+    Sebuah PR yang di-merge ke branch induknya SETELAH induk itu sendiri merge ke trunk akan
+    mendaratkan pekerjaannya di branch yang tidak ada yang me-merge lagi. GitHub menampilkan PR itu
+    sebagai MERGED dan tidak ada apa pun yang menandainya. Terjadi tiga kali pada 16 Sep 2026 -
+    #307 (Tahap R1 rencana refund, batu kunci sistem refund: OpenRefundObligation tidak punya satu
+    pun pemanggil di trunk selama sehari), #312 (Kamboja Tahap 4), dan #313 (Tahap 8). #302 merge
+    pukul 03:15:12Z dan #307 merge ke branch #302 pukul 03:15:22Z, sepuluh detik terlambat.
+    Sapuan atas seluruh 320 PR ter-merge menemukan lima ber-base bukan trunk; #169 dan #319 isinya
+    sampai lewat jalur lain, tiga sisanya tidak. Penyebab tidak adanya deteksi bisa ditunjuk
+    persis: trigger pull_request di ci.yml dibatasi `branches: [docs/design-system-and-planning]`,
+    sehingga tidak ada run pull_request yang pernah mengevaluasi ketiga PR itu.
+  recommendation: >-
+    Jangan larang penumpukan PR - itu cara kerja yang sah, dan bukan cacatnya. Yang bisa diperiksa
+    persis adalah base yang SUDAH menjadi leluhur trunk: merge ke sana tidak bisa mencapai trunk
+    lewat langkah mana pun berikutnya, karena perjalanan branch itu sudah selesai. Pasang
+    pemeriksaan itu di workflow TERSENDIRI yang trigger-nya `pull_request: branches: ["**"]`,
+    karena job di dalam ci.yml akan mewarisi titik buta yang sama dan tidak pernah menyala untuk
+    kasus yang membutuhkannya. Pemeriksaannya harus gagal-tertutup bila salah satu ref tidak bisa
+    diresolve. Batasnya diakui terus terang: penjaga ini menangkap peristiwa ASAL di setiap rantai
+    (#307 dan #312) tetapi bukan yang mewarisinya (#313), karena pada saat #313 merge, basisnya
+    memang belum merge - yang sudah rusak adalah jalur onward basis itu, dan itu tidak bisa
+    diketahui tanpa menanyakan PR mana yang masih terbuka.
+
 
 - id: DB-12
   dim: DB
