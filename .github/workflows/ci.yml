@@ -42,6 +42,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # GATE 19 reads `git log` to find merge commits, so it needs real
+          # history. The default depth-1 clone is not merely reduced here, it
+          # is misleading: a depth-1 clone of a branch tipped by a merge shows
+          # exactly ONE merge commit, which is enough to satisfy a naive
+          # "is there any history" check while the gate can see a single PR.
+          # GATE 19 therefore refuses to run on a shallow clone rather than
+          # pass without checking; this is what keeps it able to run.
+          # Same setting, same reason, as the destructive-migration job below.
+          fetch-depth: 0
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
