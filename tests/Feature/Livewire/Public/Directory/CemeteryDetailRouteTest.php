@@ -9,6 +9,7 @@ use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Livewire\Public\Directory\CemeteryDetail;
 use App\Support\ExampleData\CemeteryExampleData;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
@@ -426,7 +427,16 @@ final class CemeteryDetailRouteTest extends TestCase
         // `pre_need_payment_schedules` FK-references `pre_need_cases`
         // (restrictOnDelete), and `pre_need_cases` FK-references
         // `quotes`/`plot_reservations`/`funeral_cases`/`cemetery_packages`,
-        // so both must precede their parents below (2BP01).
+        // so both must precede their parents below (2BP01). `quote_lines`
+        // (ADR-0042's PLOT arm, `2026_09_17_110000_add_plot_line_columns_
+        // to_quote_lines_table.php`) FK-references `grave_plots` and
+        // `cemetery_packages` the same way, so it needs the same treatment
+        // before those tables are dropped below.
+        Schema::table('quote_lines', function (Blueprint $table) {
+            $table->dropForeign(['grave_plot_id']);
+            $table->dropForeign(['cemetery_package_id']);
+        });
+
         Schema::dropIfExists('pre_need_consultation_requests');
         Schema::dropIfExists('pre_need_payment_schedules');
         Schema::dropIfExists('pre_need_cases');
