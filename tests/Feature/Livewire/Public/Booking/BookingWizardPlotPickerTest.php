@@ -1028,4 +1028,75 @@ final class BookingWizardPlotPickerTest extends TestCase
 
         $this->assertDatabaseHas('plot_reservations', ['plot_id' => $plot->id]);
     }
+
+    /**
+     * Review finding I-2: `pickerBlocks()`'s two call sites apply the
+     * IDENTICAL `$matchesSelectedPackage` closure, but `whereHas('plots',
+     * ...)` (which block appears at all) and the eager-loaded `with(['plots'
+     * => ...])` (which PLOTS render inside a surfaced block) are separate
+     * call sites, and every prior fixture put each package's plot in its
+     * OWN block — so a block was never asked to filter between two
+     * different packages' plots within itself, and the `with()` filter's
+     * removal took zero kills.
+     *
+     * This fixture puts BOTH packages' plots in the SAME block, which is
+     * the one shape that can tell the two call sites apart: `whereHas`
+     * still returns the block either way (it has a matching-package plot),
+     * but only the `with()` filter decides whether the OTHER package's
+     * plot leaks into the tile grid alongside it.
+     */
+    public function test_picker_blocks_plots_exclude_a_different_packages_plot_within_the_same_block(): void
+    {
+        $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+
+        $packageA = CemeteryPackage::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'name' => 'Makam Tumpang — Kelas A',
+            'availability_status' => CemeteryPackageAvailabilityStatus::AVAILABLE,
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+        $packageB = CemeteryPackage::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'name' => 'Makam Tumpang — Kelas B',
+            'availability_status' => CemeteryPackageAvailabilityStatus::AVAILABLE,
+            'sort_order' => 2,
+            'is_active' => true,
+        ]);
+        app(RecordCemeteryPackagePriceVersion::class)($packageA, '4500000.00', 'user:1', 'Penetapan harga awal');
+        app(RecordCemeteryPackagePriceVersion::class)($packageB, '5000000.00', 'user:1', 'Penetapan harga awal');
+
+        $block = CemeteryBlock::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'code' => 'BLOK-A',
+            'name' => 'Blok A',
+            'capacity' => 2,
+        ]);
+        $plotA = GravePlot::query()->create([
+            'block_id' => $block->getKey(),
+            'slot' => '001',
+            'plot_state' => PlotState::AVAILABLE,
+            'cemetery_package_id' => $packageA->getKey(),
+        ]);
+        $plotB = GravePlot::query()->create([
+            'block_id' => $block->getKey(),
+            'slot' => '002',
+            'plot_state' => PlotState::AVAILABLE,
+            'cemetery_package_id' => $packageB->getKey(),
+        ]);
+
+        $draftId = $this->draftIdAtDiscovery();
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->call('openPickerFor', $cemetery->id, $packageA->getKey());
+
+        $blocks = $component->instance()->pickerBlocks();
+
+        $this->assertCount(1, $blocks, 'The block has a packageA plot, so it must still appear.');
+        $this->assertCount(1, $blocks->first()->plots, 'Only the selected package\'s plot must render inside the block.');
+        $this->assertSame($plotA->id, $blocks->first()->plots->first()->id);
+
+        $component->assertSee('Plot BLOK-A 001 — Tersedia')
+            ->assertDontSee('Plot BLOK-A 002');
+    }
 }
