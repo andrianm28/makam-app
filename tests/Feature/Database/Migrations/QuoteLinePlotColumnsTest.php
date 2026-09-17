@@ -17,8 +17,13 @@ use App\Domain\OrderWorkflow\ProductType;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\Quotation\Actions\IssueQuote;
+use App\Domain\ServiceCatalog\Actions\DefineServicePackage;
+use App\Domain\ServiceCatalog\Actions\PublishServicePackageVersion;
+use App\Domain\ServiceCatalog\FulfillmentOwner;
 use App\Domain\ServiceCatalog\Models\ServiceDefinition;
+use App\Domain\ServiceCatalog\Models\ServicePackageVersion;
 use App\Domain\ServiceCatalog\ServiceCode;
+use App\Domain\ServiceCatalog\ServicePackageItemType;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -137,6 +142,108 @@ final class QuoteLinePlotColumnsTest extends TestCase
             'service_definition_id' => 1,
             'cemetery_package_id' => 1,
         ]));
+    }
+
+    /**
+     * Review finding I-3. No test in this file, before these five, ever
+     * inserted a row carrying `service_package_version_id` at all — the
+     * single root cause behind six of the twelve pinned rejections being
+     * unpinned. Each of these rows sets exactly the two columns needed to
+     * violate exactly ONE clause of ONE arm while leaving every OTHER
+     * clause (in every arm) satisfied on its own terms, so the row is
+     * refused for the reason under test and no other.
+     */
+    public function test_the_check_refuses_a_row_naming_both_a_package_and_a_service(): void
+    {
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessageMatches('/quote_lines_line_family_check/');
+
+        DB::table('quote_lines')->insert($this->row([
+            'service_package_version_id' => $this->makeServicePackageVersion()->id,
+            'service_definition_id' => (int) ServiceDefinition::findByCode(ServiceCode::DOCUMENT_PROCESSING)->getKey(),
+        ]));
+    }
+
+    /**
+     * Isolates the PACKAGE arm's `grave_plot_id IS NULL` clause: every
+     * other PACKAGE clause holds (spv set, sd null, cp null), so only that
+     * clause blocks it.
+     */
+    public function test_the_check_refuses_a_row_naming_a_package_and_a_plot(): void
+    {
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessageMatches('/quote_lines_line_family_check/');
+
+        DB::table('quote_lines')->insert($this->row([
+            'service_package_version_id' => $this->makeServicePackageVersion()->id,
+            'grave_plot_id' => (string) $this->makeGravePlot()->getKey(),
+        ]));
+    }
+
+    /**
+     * Isolates the PACKAGE arm's `cemetery_package_id IS NULL` clause.
+     */
+    public function test_the_check_refuses_a_row_naming_a_package_and_a_cemetery_package(): void
+    {
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessageMatches('/quote_lines_line_family_check/');
+
+        DB::table('quote_lines')->insert($this->row([
+            'service_package_version_id' => $this->makeServicePackageVersion()->id,
+            'cemetery_package_id' => (int) $this->makeCemeteryPackage()->getKey(),
+        ]));
+    }
+
+    /**
+     * Isolates the SERVICE arm's `grave_plot_id IS NULL` clause. (The
+     * SERVICE arm's `cemetery_package_id IS NULL` clause already has
+     * `test_the_check_refuses_a_row_mixing_a_service_key_with_a_package_key`.)
+     */
+    public function test_the_check_refuses_a_row_naming_a_service_and_a_plot(): void
+    {
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessageMatches('/quote_lines_line_family_check/');
+
+        DB::table('quote_lines')->insert($this->row([
+            'service_definition_id' => (int) ServiceDefinition::findByCode(ServiceCode::DOCUMENT_PROCESSING)->getKey(),
+            'grave_plot_id' => (string) $this->makeGravePlot()->getKey(),
+        ]));
+    }
+
+    /**
+     * Isolates the PLOT arm's `service_package_version_id IS NULL` clause.
+     */
+    public function test_the_check_refuses_a_row_naming_a_package_a_plot_and_a_cemetery_package(): void
+    {
+        $plot = $this->makeGravePlot();
+        $package = $this->makeCemeteryPackage();
+
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessageMatches('/quote_lines_line_family_check/');
+
+        DB::table('quote_lines')->insert($this->row([
+            'service_package_version_id' => $this->makeServicePackageVersion()->id,
+            'grave_plot_id' => (string) $plot->getKey(),
+            'cemetery_package_id' => (int) $package->getKey(),
+        ]));
+    }
+
+    private function makeServicePackageVersion(): ServicePackageVersion
+    {
+        $package = (new DefineServicePackage)(
+            code: 'PKG-'.Str::upper(Str::random(6)),
+            name: 'Paket Uji Migrasi',
+            items: [[
+                'service_definition_id' => ServiceDefinition::findByCode(ServiceCode::GRAVE_DIGGING)->id,
+                'item_type' => ServicePackageItemType::INCLUDED,
+                'quantity' => 1,
+                'unit' => 'paket',
+                'fulfillment_owner' => FulfillmentOwner::PLATFORM,
+            ]],
+            actorReference: 7,
+        );
+
+        return (new PublishServicePackageVersion)($package->draftVersion(), actorReference: 7);
     }
 
     private function makeCemetery(): Cemetery
