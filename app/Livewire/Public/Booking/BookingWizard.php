@@ -681,6 +681,7 @@ final class BookingWizard extends Component
     public function pickerBlocks(): \Illuminate\Support\Collection
     {
         $this->pickerBlocksUnavailable = false;
+        $this->pickerUnpricedReason = null;
 
         if ($this->pickerCemeteryId === null || ! $this->pickerAppliesTo($this->pickerCemeteryId)) {
             return new \Illuminate\Support\Collection;

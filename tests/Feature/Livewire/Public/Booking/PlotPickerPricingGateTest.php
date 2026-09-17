@@ -160,4 +160,34 @@ final class PlotPickerPricingGateTest extends TestCase
         $component->assertDontSee('Harga paket ini belum tersedia');
         $component->assertSee('A-1');
     }
+
+    /**
+     * Review finding M-3: `pickerBlocks()` resets `$pickerBlocksUnavailable`
+     * first thing on every call, but `$pickerUnpricedReason` was left
+     * untouched by the first early return (`pickerCemeteryId === null ||
+     * ! pickerAppliesTo(...)`). A client-supplied non-granular cemetery id
+     * following an unpriced-package render used to leave the section
+     * showing a stale "Harga paket ini belum tersedia".
+     */
+    public function test_switching_to_a_non_granular_cemetery_clears_a_stale_unpriced_reason(): void
+    {
+        $component = $this->wizardAtPickerWithUnpricedPackage();
+        $component->assertSee('Harga paket ini belum tersedia');
+        self::assertSame('no-price', $component->instance()->pickerUnpricedReason);
+
+        $aggregate = Cemetery::query()->create([
+            'type' => CemeteryType::TPU,
+            'publication_status' => CemeteryPublicationStatus::PUBLISHED,
+            'name' => 'TPU Uji Agregat',
+            'slug' => 'tpu-uji-agregat-'.Str::lower(Str::random(6)),
+            'city' => LaunchCityCode::JAKARTA,
+            'address' => 'Jl. Contoh No. 2',
+            'plot_tracking_mode' => PlotTrackingMode::AGGREGATE,
+        ]);
+
+        $component->call('openPickerFor', $aggregate->id);
+
+        self::assertNull($component->instance()->pickerUnpricedReason);
+        $component->assertDontSee('Harga paket ini belum tersedia');
+    }
 }
