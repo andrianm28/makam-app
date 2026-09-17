@@ -55,13 +55,13 @@ Do this first. Every later task's doc block cites this ADR as its authority, and
 - Consumes: nothing
 - Produces: the ADR number `0042`, cited by Tasks 2-5 doc blocks
 
-- [ ] **Step 1: Find the next free ADR number**
+- [ ] **Step 1: Confirm the ADR number**
 
 ```bash
 ls docs/adr/ | sort | tail -3
 ```
 
-Expected: `0041-...` is the highest. If it is not, use the next number after the highest and use that number consistently for the rest of this task.
+Expected: `0041-brand-guideline-2026-supersedes-adr-0034.md` is the highest, so **0042 is the number** — verified by the controller before this task was dispatched. If the listing shows anything higher, STOP and report it rather than renumbering: Tasks 2-5 cite `ADR-0042` in their doc blocks, and a silent renumber here would leave them citing a document that does not exist.
 
 - [ ] **Step 2: Write the ADR**
 
@@ -221,15 +221,17 @@ final class QuoteLinePlotColumnsTest extends TestCase
     public function test_the_check_refuses_a_plot_line_carrying_only_the_plot(): void
     {
         $this->expectException(QueryException::class);
+        $this->expectExceptionMessageMatches('/quote_lines_line_family_check/');
 
         DB::table('quote_lines')->insert($this->row([
-            'grave_plot_id' => 1,
+            'grave_plot_id' => (string) Str::uuid(),
         ]));
     }
 
     public function test_the_check_refuses_a_plot_line_carrying_only_the_package(): void
     {
         $this->expectException(QueryException::class);
+        $this->expectExceptionMessageMatches('/quote_lines_line_family_check/');
 
         DB::table('quote_lines')->insert($this->row([
             'cemetery_package_id' => 1,
@@ -239,6 +241,7 @@ final class QuoteLinePlotColumnsTest extends TestCase
     public function test_the_check_refuses_a_row_mixing_a_service_key_with_a_plot_key(): void
     {
         $this->expectException(QueryException::class);
+        $this->expectExceptionMessageMatches('/quote_lines_line_family_check/');
 
         DB::table('quote_lines')->insert($this->row([
             'service_definition_id' => 1,
@@ -250,8 +253,27 @@ final class QuoteLinePlotColumnsTest extends TestCase
     public function test_the_check_refuses_a_row_naming_no_family_at_all(): void
     {
         $this->expectException(QueryException::class);
+        $this->expectExceptionMessageMatches('/quote_lines_line_family_check/');
 
         DB::table('quote_lines')->insert($this->row([]));
+    }
+
+    /**
+     * A real quote, so `quote_id` cannot trip the FK before the CHECK fires.
+     *
+     * Every test here asserts the exception message names
+     * `quote_lines_line_family_check`. Without that, `QueryException` alone
+     * would pass on an FK violation just as happily as on the CHECK, and the
+     * test could not tell "the CHECK works" from "some constraint works".
+     */
+    private function realQuoteId(): string
+    {
+        // Build the cheapest valid `quotes` row this schema allows; read
+        // `database/migrations/2026_08_12_100040_create_quotes_table.php` for
+        // its required columns and reuse whatever fixture
+        // `tests/Feature/Domain/Quotation/IssueQuoteServiceLineTest.php`
+        // already uses to make an order and a quote.
+        throw new \RuntimeException('Implement using the existing quote fixture.');
     }
 
     /**
@@ -260,12 +282,15 @@ final class QuoteLinePlotColumnsTest extends TestCase
      */
     private function row(array $family): array
     {
-        // quote_id 1 need not exist: PostgreSQL evaluates the CHECK before the
-        // FK, and every case here is expected to fail on the CHECK. A row that
-        // reached the FK would mean the CHECK did not fire, which is the
-        // failure these tests are for.
+        // No `created_at`/`updated_at`: `quote_lines` has no timestamp columns
+        // (`QuoteLine::$timestamps = false`) and naming them raises a 42703
+        // before the CHECK can fire. An explicit `id` IS required: the UUID
+        // primary key has no database default, and `HasUuids` only assigns one
+        // on Eloquent's `creating` event, which a raw `DB::table()->insert()`
+        // never fires.
         return array_merge([
-            'quote_id' => 1,
+            'id' => (string) Str::uuid(),
+            'quote_id' => $this->realQuoteId(),
             'price_version_id' => 1,
             'price_version_number' => 1,
             'description' => 'x',
@@ -332,7 +357,13 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('quote_lines', function (Blueprint $table): void {
-            $table->foreignId('grave_plot_id')
+            // `foreignUuid`, NOT `foreignId`: `grave_plots.id` is
+            // `$table->uuid('id')->primary()`
+            // (`2026_08_16_100010_create_grave_plots_table.php:54`), so a
+            // bigint FK fails with a PostgreSQL datatype mismatch.
+            // `cemetery_packages.id` really is `$table->id()`, so the next
+            // column stays `foreignId` — the pair is mixed on purpose.
+            $table->foreignUuid('grave_plot_id')
                 ->nullable()
                 ->after('service_definition_id')
                 ->constrained('grave_plots')
@@ -427,7 +458,12 @@ git commit -m "feat(quotation): quote_lines carries a frozen plot+package pair, 
 **Interfaces:**
 - Consumes: `quote_lines.grave_plot_id`, `quote_lines.cemetery_package_id` (Task 2)
 - Produces: a PLOT line shape the composer must emit —
-  `array{grave_plot_id: int, cemetery_package_id: int, price_version_id: int, price_version_number: int, quantity: int, unit_amount: string, currency: string, fulfillment_owner: string}`.
+  `array{grave_plot_id: string, cemetery_package_id: int, price_version_id: int, price_version_number: int, quantity: int, unit_amount: string, currency: string, fulfillment_owner: string}`.
+  **The pair is mixed on purpose:** `grave_plots.id` is a UUID
+  (`2026_08_16_100010_create_grave_plots_table.php:54`) so `grave_plot_id` is a
+  STRING, while `cemetery_packages.id` is a bigint
+  (`2026_07_26_190200_create_cemetery_packages_table.php:55`) so
+  `cemetery_package_id` is an INT. Do not "tidy" them into one type.
   Note it carries NO `description`: like a service line, the description is derived.
 
 - [ ] **Step 1: Write the failing test**
@@ -466,7 +502,7 @@ final class IssueQuotePlotLineTest extends TestCase
 
         $row = DB::table('quote_lines')->where('quote_id', $quote->getKey())->sole();
 
-        $this->assertSame($line['grave_plot_id'], (int) $row->grave_plot_id);
+        $this->assertSame($line['grave_plot_id'], (string) $row->grave_plot_id);
         $this->assertSame($line['cemetery_package_id'], (int) $row->cemetery_package_id);
         $this->assertNull($row->service_definition_id);
         $this->assertNull($row->service_package_version_id);
@@ -699,7 +735,9 @@ Add beside `normalizeServiceLine()`:
         string $lineCurrency,
         string $fulfillmentOwner,
     ): array {
-        $gravePlotId = (int) $this->requiredInt($line, 'grave_plot_id', $index);
+        // A UUID, so `requiredString` — `requiredInt` would silently coerce
+        // a UUID to 0 and then "find" nothing for a reason no message explains.
+        $gravePlotId = $this->requiredString($line, 'grave_plot_id', $index);
         $cemeteryPackageId = (int) $this->requiredInt($line, 'cemetery_package_id', $index);
 
         $plot = GravePlot::query()->with('block')->find($gravePlotId);
@@ -791,7 +829,16 @@ Expected: PASS. If an existing test asserts the old "one line family" message, u
 
 - [ ] **Step 11: Mutation-test the combination rule**
 
-Predict first: adding `[self::PLOT_LINE, self::PACKAGE_LINE]` to `LEGAL_FAMILY_SETS` should kill exactly `test_a_plot_line_may_not_share_a_quote_with_a_package_line`.
+Predict first: adding `[self::PACKAGE_LINE, self::PLOT_LINE]` to `LEGAL_FAMILY_SETS` should kill exactly `test_a_plot_line_may_not_share_a_quote_with_a_package_line`.
+
+**The order of that literal is load-bearing, and getting it wrong makes the
+mutation inert.** `$present` is `sort()`ed before the `in_array(..., true)`
+comparison, so it is always alphabetical — `['package', 'plot']`. An unsorted
+literal `[PLOT, PACKAGE]` can therefore never match anything, the guard keeps
+refusing the combination, and the suite stays green. A green suite there is
+NOT a passed mutation test; it is a mutation that never happened. (Measured:
+the first draft of this step used the unsorted literal and killed nothing
+across 48 tests.)
 
 Apply the mutation, `grep` the file to confirm it landed, run the suite, compare against the prediction, restore, confirm green. Report the difference between prediction and result.
 
@@ -1016,7 +1063,7 @@ Then add the method:
         Money::fromDecimal((string) $priceVersion->amount);
 
         return [[
-            'grave_plot_id' => (int) $plot->getKey(),
+            'grave_plot_id' => (string) $plot->getKey(),
             'cemetery_package_id' => (int) $package->getKey(),
             'price_version_id' => (int) $priceVersion->getKey(),
             'price_version_number' => (int) $priceVersion->version_number,
