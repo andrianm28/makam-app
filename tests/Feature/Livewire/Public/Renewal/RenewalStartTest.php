@@ -15,6 +15,7 @@ use App\Domain\Renewal\RenewalJourneyStep;
 use App\Livewire\Public\Renewal\RenewalStart;
 use App\Platform\FeatureGate\Models\FeatureGate;
 use App\Support\ExampleData\CemeteryExampleData;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -420,7 +421,16 @@ final class RenewalStartTest extends TestCase
         // (restrictOnDelete), and `pre_need_cases` FK-references
         // `quotes`/`plot_reservations`/`funeral_cases`/
         // `cemetery_packages`/`cemeteries`, so both must precede their
-        // parents below (2BP01).
+        // parents below (2BP01). `quote_lines` (ADR-0042's PLOT arm,
+        // `2026_09_17_110000_add_plot_line_columns_to_quote_lines_table.php`)
+        // FK-references `grave_plots` and `cemetery_packages` the same way,
+        // so it needs the same treatment before those two tables are
+        // dropped below.
+        Schema::table('quote_lines', function (Blueprint $table) {
+            $table->dropForeign(['grave_plot_id']);
+            $table->dropForeign(['cemetery_package_id']);
+        });
+
         Schema::dropIfExists('pre_need_consultation_requests');
         Schema::dropIfExists('pre_need_payment_schedules');
         Schema::dropIfExists('pre_need_cases');

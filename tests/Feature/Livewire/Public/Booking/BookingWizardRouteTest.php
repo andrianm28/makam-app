@@ -215,9 +215,18 @@ final class BookingWizardRouteTest extends TestCase
         // `booking_drafts` itself still FK-references the directory tables,
         // and on PostgreSQL an incoming FK blocks `DROP TABLE` of the parent
         // (2BP01) whether or not any row exists, so those two constraints
-        // still have to go first.
+        // still have to go first. `quote_lines` (ADR-0042's PLOT arm,
+        // `2026_09_17_110000_add_plot_line_columns_to_quote_lines_table.php`)
+        // now FK-references `grave_plots` and `cemetery_packages` the same
+        // way, so it needs the same treatment before those two tables are
+        // dropped below.
         Schema::table('booking_drafts', function (Blueprint $table) {
             $table->dropForeign(['cemetery_id']);
+            $table->dropForeign(['cemetery_package_id']);
+        });
+
+        Schema::table('quote_lines', function (Blueprint $table) {
+            $table->dropForeign(['grave_plot_id']);
             $table->dropForeign(['cemetery_package_id']);
         });
 

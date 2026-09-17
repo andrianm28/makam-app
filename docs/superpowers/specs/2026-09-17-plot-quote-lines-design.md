@@ -255,7 +255,7 @@ fail.
 
 ## Accompanying ADR
 
-D1 amends a decision recorded only in a doc block. An ADR must record that the
+D1 amends a decision recorded only in a doc block. **ADR-0042** records that the
 one-family rule is now an enumerated-combination rule, that `{PLOT, SERVICE}` is
 declared a single pricing universe, and that PACKAGE remains exclusive —
 otherwise the next reader finds two contradicting doc blocks and no ruling.

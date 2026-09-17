@@ -15,6 +15,7 @@ use App\Domain\Booking\Exceptions\BookingDraftVersionConflictException;
 use App\Domain\Booking\Exceptions\BookingStepValidationException;
 use App\Domain\Booking\Models\BookingDraft;
 use App\Domain\CemeteryCapability\Models\CemeteryCapabilityProfile;
+use App\Domain\CemeteryCapability\Models\CemeteryPackage;
 use App\Domain\CemeteryDirectory\CemeteryPublicQuery;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\CemeteryDirectory\PlotTrackingMode;
@@ -173,6 +174,17 @@ final class BookingWizard extends Component
      * shape one level down.
      */
     public bool $pickerBlocksUnavailable = false;
+
+    /**
+     * Set by `pickerBlocks()` itself, alongside `$pickerBlocksUnavailable`,
+     * when the gate refuses to offer plots because they cannot be charged
+     * (spec D4/D5): `'no-package'` when the draft carries no package
+     * selection (or names one that no longer exists), `'no-price'` when the
+     * selected package exists but has no current firm price, `null`
+     * whenever the picker is open on a priced package. The Blade view reads
+     * this to choose which of the two empty-state messages to show.
+     */
+    public ?string $pickerUnpricedReason = null;
 
     /**
      * `idle` before any save, `saving` never actually observed server-side
@@ -669,10 +681,48 @@ final class BookingWizard extends Component
     public function pickerBlocks(): \Illuminate\Support\Collection
     {
         $this->pickerBlocksUnavailable = false;
+        $this->pickerUnpricedReason = null;
 
         if ($this->pickerCemeteryId === null || ! $this->pickerAppliesTo($this->pickerCemeteryId)) {
             return new \Illuminate\Support\Collection;
         }
+
+        // Spec D4 — a plot chosen without a package cannot be charged, because
+        // the DRAFT's package is the pricing vehicle (spec D3). Refusing here
+        // is better than rendering blocks that lead to an unbillable order.
+        if ($this->pickerCemeteryPackageId === null) {
+            $this->pickerUnpricedReason = 'no-package';
+
+            return new \Illuminate\Support\Collection;
+        }
+
+        // Spec D5 — ONE gate, not a per-plot filter. The vehicle is the same
+        // for every plot in this picker, so either the package has a current
+        // firm price and every plot is priceable, or it has none and no plot
+        // is. (This splits per-plot when Tahap 0 tier 2 gives a plot its own
+        // price; it is written as one gate because that is what is true now.)
+        $package = CemeteryPackage::query()->find($this->pickerCemeteryPackageId);
+
+        // TWO branches, not one compound condition — and here the split
+        // changes what the visitor is told, not just what a test can pin.
+        // A package row that has gone means the draft's selection is no
+        // longer valid, and the action is to pick a package again; telling
+        // that visitor "this package has no price yet" would be false, and
+        // would point them at an operator instead of at the one control that
+        // fixes it.
+        if ($package === null) {
+            $this->pickerUnpricedReason = 'no-package';
+
+            return new \Illuminate\Support\Collection;
+        }
+
+        if ($package->currentPriceVersion() === null) {
+            $this->pickerUnpricedReason = 'no-price';
+
+            return new \Illuminate\Support\Collection;
+        }
+
+        $this->pickerUnpricedReason = null;
 
         $packageId = $this->pickerCemeteryPackageId;
 
@@ -683,12 +733,8 @@ final class BookingWizard extends Component
         try {
             return CemeteryBlock::query()
                 ->where('cemetery_id', $this->pickerCemeteryId)
-                ->when(
-                    $packageId !== null,
-                    fn ($query) => $query->whereHas('plots', $matchesSelectedPackage),
-                )
-                ->with(['plots' => fn ($query) => $query
-                    ->when($packageId !== null, $matchesSelectedPackage)
+                ->whereHas('plots', $matchesSelectedPackage)
+                ->with(['plots' => fn ($query) => $matchesSelectedPackage($query)
                     ->orderBy('slot')
                     ->limit((int) config('booking.plot_picker_max_plots_per_block'))])
                 ->orderBy('code')
