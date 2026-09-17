@@ -5,7 +5,12 @@ declare(strict_types=1);
 namespace App\Domain\Quotation\Actions;
 
 use App\Domain\Booking\Models\BookingDraft;
+use App\Domain\CemeteryCapability\Models\CemeteryPackage;
+use App\Domain\PlotInventory\Models\GravePlot;
+use App\Domain\PlotReservation\Models\PlotReservation;
+use App\Domain\Quotation\Exceptions\UnpricedBookingPlotException;
 use App\Domain\Quotation\Exceptions\UnpricedBookingServiceException;
+use App\Domain\ServiceCatalog\FulfillmentOwner;
 use App\Domain\ServiceCatalog\Models\PriceVersion;
 use App\Domain\ServiceCatalog\Models\ServiceDefinition;
 use App\Platform\FinancialLedger\Money;
@@ -55,7 +60,10 @@ final readonly class ComposeQuoteLinesFromBookingDraft
      */
     public function __invoke(BookingDraft $draft): array
     {
-        $lines = [];
+        // The plot comes FIRST: it is the largest component of the order, and
+        // a reader scanning a quote should meet what was bought before what
+        // was added to it.
+        $lines = $this->plotLines($draft);
 
         foreach ($draft->selected_services as $index => $selection) {
             $code = $this->codeOf($selection, $index);
@@ -127,5 +135,80 @@ final readonly class ComposeQuoteLinesFromBookingDraft
         }
 
         return $selection['quantity'];
+    }
+
+    /**
+     * Zero or one plot line, from the draft's active hold.
+     *
+     * `PlotReservation::activeForDraft()` returns at most one hold per draft,
+     * so no quantity question arises: a plot line is always quantity 1.
+     *
+     * The pricing vehicle is the DRAFT's package. `grave_plots.cemetery_package_id`
+     * is deliberately NOT read — its own migration calls it "an indicative
+     * convenience reference, not the plot's identity", and it is
+     * `nullOnDelete`, so a charge must not rest on it (spec D3).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function plotLines(BookingDraft $draft): array
+    {
+        $hold = PlotReservation::activeForDraft($draft);
+
+        if ($hold === null) {
+            return [];
+        }
+
+        $packageId = $draft->cemetery_package_id;
+
+        if ($packageId === null) {
+            throw UnpricedBookingPlotException::forMissingPackage();
+        }
+
+        $package = CemeteryPackage::query()->find($packageId);
+
+        if (! $package instanceof CemeteryPackage) {
+            throw UnpricedBookingPlotException::forUnpricedPackage($packageId);
+        }
+
+        $plot = GravePlot::query()->with('block')->find($hold->plot_id);
+
+        // TWO branches, not one compound condition. A missing plot is not a
+        // cross-cemetery package, and collapsing them would make the thrown
+        // message say "package [X] belongs to a different cemetery" when the
+        // truth is that the held plot does not exist — a message that actively
+        // misleads whoever reads it next.
+        //
+        // Splitting them also makes each clause pinnable: a single
+        // `A || B` throwing one exception lets a test for B pass while A is
+        // deleted, which is exactly the gap Task 3's review found in
+        // `normalizePlotLine()`'s polymorphic check.
+        if ($plot === null) {
+            throw UnpricedBookingPlotException::forMissingPlot($hold->plot_id);
+        }
+
+        if ((string) $package->cemetery_id !== (string) $plot->block?->cemetery_id) {
+            throw UnpricedBookingPlotException::forCrossCemeteryPackage($packageId);
+        }
+
+        $priceVersion = $package->currentPriceVersion();
+
+        if (! $priceVersion instanceof PriceVersion) {
+            throw UnpricedBookingPlotException::forUnpricedPackage($packageId);
+        }
+
+        // Same seam as the service branch: a malformed stored amount is
+        // rejected here rather than deeper inside `IssueQuote`.
+        Money::fromDecimal((string) $priceVersion->amount);
+
+        return [[
+            'grave_plot_id' => (string) $plot->getKey(),
+            'cemetery_package_id' => (int) $package->getKey(),
+            'price_version_id' => (int) $priceVersion->getKey(),
+            'price_version_number' => (int) $priceVersion->version_number,
+            'quantity' => 1,
+            'unit_amount' => (string) $priceVersion->amount,
+            'currency' => (string) $priceVersion->currency,
+            'fulfillment_owner' => FulfillmentOwner::PLATFORM,
+        ]];
     }
 }
