@@ -69,6 +69,31 @@ final class PlotReservationState
         self::CONFIRMED,
     ];
 
+    /**
+     * The states in which a plot claim has NOT been withdrawn — the active
+     * pair plus `CONVERTED`.
+     *
+     * `ACTIVE_STATES` answers "does THIS row still hold the plot", which is
+     * correctly false for a converted row: the claim moved to a new,
+     * order-anchored row. Some readers need the other question — "was this
+     * claim withdrawn, or does it still stand somewhere" — and for them a
+     * converted row is a claim that stands. `RELEASED` and `EXPIRED` are the
+     * two states where it genuinely does not.
+     *
+     * `Models\PlotReservation::chosenForDraft()` is the one reader today:
+     * a quote must still name the plot the customer chose, and submission
+     * converts that choice rather than withdrawing it. Do NOT reach for this
+     * where `ACTIVE_STATES` is meant — a converted row holds nothing, and
+     * treating it as though it does would let two rows claim one plot.
+     *
+     * @var list<string>
+     */
+    public const array ACTIVE_OR_CONVERTED_STATES = [
+        self::HELD,
+        self::CONFIRMED,
+        self::CONVERTED,
+    ];
+
     public static function isKnown(string $state): bool
     {
         return in_array($state, self::KNOWN_STATES, true);

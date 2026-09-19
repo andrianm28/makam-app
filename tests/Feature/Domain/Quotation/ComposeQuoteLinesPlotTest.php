@@ -16,8 +16,10 @@ use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\CemeteryDirectory\PlotTrackingMode;
+use App\Domain\OrderWorkflow\Actions\SubmitBookingDraft;
 use App\Domain\PlotInventory\Models\CemeteryBlock;
 use App\Domain\PlotInventory\Models\GravePlot;
+use App\Domain\PlotReservation\Actions\ReservePlot;
 use App\Domain\PlotReservation\Models\PlotReservation;
 use App\Domain\PlotReservation\PlotReservationState;
 use App\Domain\Quotation\Actions\ComposeQuoteLinesFromBookingDraft;
@@ -59,6 +61,112 @@ final class ComposeQuoteLinesPlotTest extends TestCase
         $this->assertArrayHasKey('grave_plot_id', $lines[0]);
         $this->assertArrayHasKey('cemetery_package_id', $lines[0]);
         $this->assertSame(1, $lines[0]['quantity']);
+    }
+
+    /**
+     * C1 — the gap every other test in this file steps over.
+     *
+     * Each test above composes from a draft whose hold is still live, which
+     * is a state no production call site ever sees: all three callers
+     * (`IssueOrderQuote`, `OpenBookingOnlinePayment`, `QuotePreNeed`) run
+     * AFTER `SubmitBookingDraft`, and submission runs
+     * `ConvertDraftHoldToOrderReservation`, which closes the draft-scoped
+     * chain with a `converted` row. `CONVERTED` is not in `ACTIVE_STATES`,
+     * so `activeForDraft()` reads null and the plot silently leaves the
+     * quote. This test is the one that composes on the far side of that
+     * conversion.
+     */
+    public function test_a_submitted_draft_still_emits_its_plot_line(): void
+    {
+        $draft = $this->draftWithHeldPlotAndPricedPackage();
+
+        $this->assertArrayHasKey(
+            'grave_plot_id',
+            app(ComposeQuoteLinesFromBookingDraft::class)($draft)[0],
+            'Precondition: before submission the plot line is emitted.'
+        );
+
+        app(SubmitBookingDraft::class)($draft, 'idem-c1-'.Str::random(8));
+
+        $lines = app(ComposeQuoteLinesFromBookingDraft::class)($draft->fresh());
+
+        $this->assertArrayHasKey(
+            'grave_plot_id',
+            $lines[0],
+            'The customer chose a plot and submitted it; the quote must still carry it.'
+        );
+    }
+
+    /**
+     * The pin that protects the OPERATOR path from this fix.
+     *
+     * `chosenForDraft()` is draft-scoped on purpose. The tempting shortcut —
+     * reading `activeForOrder()` instead — also cures C1, and would newly
+     * emit a plot line here, on an order whose plot an OPERATOR reserved
+     * directly. `IssueQuoteFromReservedPlot` quotes exactly these orders
+     * today and succeeds; under that shortcut it would throw
+     * `UnpricedBookingPlotException` the moment the order's draft carried no
+     * package.
+     *
+     * `ReservePlot` writes `order_id` with no `booking_draft_id`, so the
+     * draft-scoped read cannot see it. Swap `chosenForDraft()` for
+     * `activeForOrder()` and this test goes red.
+     */
+    public function test_an_operator_reserved_plot_is_not_quoted_onto_the_customers_draft(): void
+    {
+        $cemetery = $this->makeCemetery();
+        $package = $this->makePackage($cemetery);
+        $this->packagePriceVersion($package);
+
+        // A draft that chose NO plot of its own, submitted to get an order.
+        $draft = $this->draftWithSelectedServices($this->basicServices(), $cemetery, $package);
+        $order = app(SubmitBookingDraft::class)($draft, 'idem-op-'.Str::random(8));
+
+        // The operator reserves a plot against the ORDER, after the fact.
+        app(ReservePlot::class)(
+            $this->makePlot($cemetery),
+            $order,
+            'operator:1',
+            'admin',
+        );
+
+        foreach (app(ComposeQuoteLinesFromBookingDraft::class)($draft->fresh()) as $line) {
+            $this->assertArrayNotHasKey(
+                'grave_plot_id',
+                $line,
+                'An operator reservation hangs off the order, not the draft; it must not become a customer quote line.'
+            );
+        }
+    }
+
+    /**
+     * A withdrawn choice is not a choice. `released` and `expired` are the
+     * two states `ACTIVE_OR_CONVERTED_STATES` deliberately excludes — widen
+     * that constant to all of `KNOWN_STATES` and this test goes red.
+     */
+    public function test_a_released_plot_hold_emits_no_plot_line(): void
+    {
+        $cemetery = $this->makeCemetery();
+        $plot = $this->makePlot($cemetery);
+        $package = $this->makePackage($cemetery);
+        $this->packagePriceVersion($package);
+
+        $draft = $this->draftWithSelectedServices($this->basicServices(), $cemetery, $package);
+        $this->holdPlotForDraft($plot, $draft);
+
+        // `plot_reservations` is append-only, so a withdrawal is a NEW row
+        // closing the chain — exactly how the real release path records it.
+        PlotReservation::query()->create([
+            'plot_id' => $plot->getKey(),
+            'booking_draft_id' => $draft->getKey(),
+            'state' => PlotReservationState::RELEASED,
+            'reserved_by_ref' => "booking_draft:{$draft->getKey()}",
+            'reserved_at' => Carbon::now(),
+        ]);
+
+        foreach (app(ComposeQuoteLinesFromBookingDraft::class)($draft) as $line) {
+            $this->assertArrayNotHasKey('grave_plot_id', $line);
+        }
     }
 
     public function test_a_draft_with_no_held_plot_emits_only_service_lines(): void

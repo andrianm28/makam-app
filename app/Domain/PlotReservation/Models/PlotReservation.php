@@ -214,6 +214,49 @@ final class PlotReservation extends Model
      * `activeForPlotId()`'s own doc block for the pass that actually closes
      * that report.)
      */
+    /**
+     * The plot this DRAFT's customer chose, where that choice still stands —
+     * `activeForDraft()`'s quoting-time counterpart.
+     *
+     * `activeForDraft()` asks "does this draft ITSELF still hold a plot", and
+     * once `Actions\ConvertDraftHoldToOrderReservation` has run the honest
+     * answer is no: the claim moved to a new order-anchored row and the
+     * draft-scoped chain was closed with a `converted` row. Quoting asks a
+     * different question — "what did this customer choose, and was that
+     * choice withdrawn" — and a converted hold is a choice that stands.
+     * `released` and `expired` are the two that genuinely did not survive.
+     *
+     * Without this distinction the plot silently left every quote: all three
+     * composer call sites (`IssueOrderQuote`, `OpenBookingOnlinePayment`,
+     * `QuotePreNeed`) run AFTER submission, so `activeForDraft()` read null
+     * every time and the largest line of the order was never billed.
+     *
+     * DELIBERATELY draft-scoped, not `activeForOrder()`. An operator-placed
+     * reservation (`Actions\ReservePlot`) writes `order_id` with NO
+     * `booking_draft_id`, so it can never surface here. That is what keeps
+     * `IssueQuoteFromReservedPlot`'s operator path composing exactly the
+     * lines it composes today: reading the order instead would newly emit a
+     * plot line there, and throw `UnpricedBookingPlotException` whenever that
+     * order's draft carries no package — turning a path that succeeds into
+     * one that fails.
+     *
+     * @param  BookingDraft  $draft  read for its key only — never content.
+     */
+    public static function chosenForDraft(BookingDraft $draft): ?self
+    {
+        $head = self::query()
+            ->where('booking_draft_id', $draft->getKey())
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->first();
+
+        if ($head === null || ! in_array($head->state, PlotReservationState::ACTIVE_OR_CONVERTED_STATES, true)) {
+            return null;
+        }
+
+        return $head;
+    }
+
     public static function activeForDraftId(int|string $draftId): ?self
     {
         return self::incumbentOf(
