@@ -67,3 +67,25 @@ Two gate scripts, run after the change they cover:
 - [`ci/verify-infra.sh`](ci/verify-infra.sh) — the live `makam-nonprod` stack; needs `docker` access, so it only runs on the deployment host.
 
 Composer and npm builds run in CI (`.github/workflows/ci.yml`), never on this host — see `docs/operations/ci-cd-and-release.md` §10. Do not run `npm run build` or a full `composer install` here; verify by pushing and checking the CI result instead.
+
+## Agent skills
+
+Per-repo configuration for the `mattpocock/skills` engineering skills. These
+files record what is already true of this repository; they do not introduce new
+authority.
+
+### Issue tracker
+
+No external issue tracker — `tasks.md` owns per-spec progress and
+`findings.yml` owns audit findings (ADR-0038). See
+[`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md).
+
+### Triage labels
+
+The five canonical roles, unchanged. Nothing carries them today. See
+[`docs/agents/triage-labels.md`](docs/agents/triage-labels.md).
+
+### Domain docs
+
+Single-context, with `docs/domain/` standing in for `CONTEXT.md`. See
+[`docs/agents/domain.md`](docs/agents/domain.md).
