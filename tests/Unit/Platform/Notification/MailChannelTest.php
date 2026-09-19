@@ -10,6 +10,7 @@ use App\Platform\Notification\Contracts\RecipientAddressResolver;
 use App\Platform\Notification\DeliveryState;
 use App\Platform\Notification\Models\NotificationDelivery;
 use App\Platform\Notification\Models\NotificationTemplateVersion;
+use App\Platform\Notification\NotificationVariableResolver;
 use App\Platform\Notification\Recipient;
 use App\Platform\Notification\RecipientRole;
 use App\Platform\Notification\RecipientSet;
@@ -66,13 +67,13 @@ final class MailChannelTest extends TestCase
 
         $addresses = new class implements RecipientAddressResolver
         {
-            public function emailFor(Recipient $recipient): ?string
+            public function emailFor(Recipient $recipient): string
             {
                 return 'customer@example.test';
             }
         };
 
-        $channel = new MailChannel(new TemplateRenderer, $addresses);
+        $channel = new MailChannel(new TemplateRenderer, $addresses, app(NotificationVariableResolver::class));
 
         $result = $channel->send($this->delivery(), $this->version(), new RecipientSet([$this->recipient()]));
 
@@ -96,7 +97,7 @@ final class MailChannelTest extends TestCase
             }
         };
 
-        $channel = new MailChannel(new TemplateRenderer, $addresses);
+        $channel = new MailChannel(new TemplateRenderer, $addresses, app(NotificationVariableResolver::class));
 
         // The delivery names recipient_ref "7"; the set carries "999" — no match.
         $result = $channel->send($this->delivery('7'), $this->version(), new RecipientSet([$this->recipient('999')]));
@@ -118,7 +119,7 @@ final class MailChannelTest extends TestCase
             }
         };
 
-        $channel = new MailChannel(new TemplateRenderer, $addresses);
+        $channel = new MailChannel(new TemplateRenderer, $addresses, app(NotificationVariableResolver::class));
 
         $result = $channel->send($this->delivery(), $this->version(), new RecipientSet([$this->recipient()]));
 
@@ -133,13 +134,13 @@ final class MailChannelTest extends TestCase
 
         $addresses = new class implements RecipientAddressResolver
         {
-            public function emailFor(Recipient $recipient): ?string
+            public function emailFor(Recipient $recipient): string
             {
                 return 'customer@example.test';
             }
         };
 
-        $channel = new MailChannel(new TemplateRenderer, $addresses);
+        $channel = new MailChannel(new TemplateRenderer, $addresses, app(NotificationVariableResolver::class));
 
         $result = $channel->send($this->delivery(), $this->version(), new RecipientSet([$this->recipient()]));
 
@@ -153,13 +154,13 @@ final class MailChannelTest extends TestCase
 
         $addresses = new class implements RecipientAddressResolver
         {
-            public function emailFor(Recipient $recipient): ?string
+            public function emailFor(Recipient $recipient): string
             {
                 return $recipient->actorRef.'@example.test';
             }
         };
 
-        $channel = new MailChannel(new TemplateRenderer, $addresses);
+        $channel = new MailChannel(new TemplateRenderer, $addresses, app(NotificationVariableResolver::class));
 
         $set = new RecipientSet([$this->recipient('7'), $this->recipient('8'), $this->recipient('9')]);
 
