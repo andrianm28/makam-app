@@ -260,14 +260,20 @@ final class NotificationTemplatePersistenceTest extends TestCase
 
     /**
      * Batch 2E (NOTIF-03, `2026_09_06_130000_add_v2_notification_templates_
-     * for_zero_recipient_events.php`) gives two events ("Vendor
+     * for_zero_recipient_events.php`) gave two events ("Vendor
      * accepted/rejected", "Marketplace order submitted") a real-copy
-     * version 2 and flips their `active_version_id` to it — those two
-     * therefore now carry TWO version rows each (version 1's original
-     * matrix-snapshot placeholder, kept untouched and inactive; version 2's
-     * real Indonesian copy, active). Every other event is unaffected: still
-     * exactly one version row, still the matrix-snapshot placeholder,
-     * still active. This test asserts both shapes rather than assuming
+     * version 2 and flipped their `active_version_id` to it. Task 4
+     * (`.superpowers/sdd/2026-09-19-notification-template-variables/`,
+     * `2026_09_20_100000_add_v3_notification_templates_with_double_brace_
+     * placeholders.php`) then superseded that same version 2 with version 3
+     * — identical copy, `{{ }}` placeholders instead of version 2's single
+     * braces, which `TemplateRenderer::PLACEHOLDER_PATTERN` never matched —
+     * and flipped `active_version_id` again. Those two events therefore now
+     * carry THREE version rows each (version 1's original matrix-snapshot
+     * placeholder; version 2's real-but-unrenderable copy; version 3's
+     * real, renderable copy — active). Every other event is unaffected:
+     * still exactly one version row, still the matrix-snapshot placeholder,
+     * still active. This test asserts all three shapes rather than assuming
      * "one version per event" universally.
      */
     public function test_the_matrix_seed_covers_every_matrix_event_with_one_active_version(): void
@@ -279,11 +285,11 @@ final class NotificationTemplatePersistenceTest extends TestCase
         sort($matrixEvents);
         sort($seededEvents);
 
-        $eventsWithRealCopyVersion2 = ['Vendor accepted/rejected', 'Marketplace order submitted'];
+        $eventsWithDoubleBraceVersion3 = ['Vendor accepted/rejected', 'Marketplace order submitted'];
 
         $this->assertSame($matrixEvents, $seededEvents);
         $this->assertSame(
-            count($matrixRows) + count($eventsWithRealCopyVersion2),
+            count($matrixRows) + (count($eventsWithDoubleBraceVersion3) * 2),
             NotificationTemplateVersion::query()->count()
         );
         $this->assertSame(count($matrixRows), NotificationTemplate::query()->whereNotNull('active_version_id')->count());
@@ -295,15 +301,22 @@ final class NotificationTemplatePersistenceTest extends TestCase
             $this->assertSame($this->matrixDefaultChannel($row['recipients']), $template->default_channel);
             $this->assertSame($this->matrixOutboxEventName($row['event']), $template->outbox_event_name);
 
-            if (in_array($row['event'], $eventsWithRealCopyVersion2, true)) {
-                // Version 1 still exists, untouched, just no longer active.
+            if (in_array($row['event'], $eventsWithDoubleBraceVersion3, true)) {
+                // Versions 1 and 2 still exist, untouched, just no longer active.
                 $version1 = NotificationTemplateVersion::query()
                     ->where('template_id', $template->id)
                     ->where('version', 1)
                     ->sole();
 
-                $this->assertSame(2, $activeVersion->version);
+                $version2 = NotificationTemplateVersion::query()
+                    ->where('template_id', $template->id)
+                    ->where('version', 2)
+                    ->sole();
+
+                $this->assertSame(3, $activeVersion->version);
                 $this->assertNotSame($version1->id, $template->active_version_id);
+                $this->assertNotSame($version2->id, $template->active_version_id);
+                $this->assertStringNotContainsString('{{', $version2->body, 'version 2 used single-brace placeholders');
 
                 foreach ($row['recipients'] as $recipient => $channelFact) {
                     $this->assertStringContainsString($recipient.': '.$channelFact, $version1->body);
