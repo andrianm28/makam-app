@@ -40,6 +40,20 @@ final class NotificationVariableResolverTest extends TestCase
         self::assertSame(['order_id' => 'MO-1'], $resolver->forOutboxRow($row, 'Marketplace order submitted', $version));
     }
 
+    /**
+     * The safety claim every seeded version-1 template rests on: a version
+     * with an EMPTY allowlist gets an empty bag, so it renders exactly as
+     * it did when all three call sites passed a hardcoded `[]`.
+     *
+     * Driven through `forOutboxRow()` — the real entry point — and not
+     * through `restrictToAllowlist()` directly. The direct call proves only
+     * that the helper filters; it cannot prove that the public path
+     * actually reaches the filter, and it built a source it then never
+     * consulted, so it read as end-to-end evidence while being nothing of
+     * the kind. Here the source genuinely runs and genuinely supplies
+     * `order_id`, and the assertion is that the allowlist discards it
+     * anyway.
+     */
     public function test_a_version_with_an_empty_allowlist_gets_an_empty_bag(): void
     {
         $resolver = new NotificationVariableResolver(new class implements NotificationVariableSource
@@ -58,7 +72,14 @@ final class NotificationVariableResolverTest extends TestCase
         $version = new NotificationTemplateVersion;
         $version->setRawAttributes(['variable_allowlist' => json_encode([])]);
 
-        self::assertSame([], $resolver->restrictToAllowlist(['order_id' => 'MO-1'], $version));
+        $row = new OutboxEvent;
+        $row->setRawAttributes([
+            'aggregate_type' => 'marketplace_order',
+            'aggregate_id' => 'abc',
+            'payload' => json_encode(['data' => ['order_id' => 'MO-1']]),
+        ]);
+
+        self::assertSame([], $resolver->forOutboxRow($row, 'Marketplace order submitted', $version));
     }
 
     public function test_a_source_that_does_not_handle_the_aggregate_is_skipped(): void

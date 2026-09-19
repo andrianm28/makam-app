@@ -19,6 +19,28 @@ use Tests\TestCase;
  * migration runs as part of every `RefreshDatabase` test (it is a real,
  * already-applied migration, not a fixture instantiated by hand), so these
  * tests read its effect directly rather than re-running `up()`/`down()`.
+ *
+ * ---------------------------------------------------------------------------
+ * Version 2 is no longer the ACTIVE version — and these tests say so
+ * ---------------------------------------------------------------------------
+ * `2026_09_20_100000_add_v3_notification_templates_with_double_brace_
+ * placeholders.php` ships a version 3 for both events this migration
+ * touched and repoints `notification_templates.active_version_id` at it,
+ * because version 2's bodies used single braces (`{order_id}`) that
+ * `TemplateRenderer::PLACEHOLDER_PATTERN` has never matched. Two tests
+ * here used to assert `active_version_id === $v2->id`; run after the v3
+ * migration they are simply false, and asserting a false thing is worse
+ * than asserting a narrower true one.
+ *
+ * What this migration is actually accountable for has not changed, so
+ * neither has what these tests check: version 2 EXISTS, carries real
+ * Indonesian copy rather than the version-1 "Matrix snapshot" placeholder,
+ * and is immutable. Only the "and it is what renders today" clause moved,
+ * and it moved to a LATER version — so each of those two tests now asserts
+ * that the active pointer sits on a version strictly NEWER than 2. That
+ * keeps a real regression loud: if anything ever repointed a template back
+ * to version 1's placeholder body, or dropped version 2 out of the
+ * history, this file fails again.
  */
 final class AddV2NotificationTemplatesForZeroRecipientEventsTest extends TestCase
 {
@@ -36,14 +58,29 @@ final class AddV2NotificationTemplatesForZeroRecipientEventsTest extends TestCas
         return [$template, $v1, $v2];
     }
 
-    public function test_vendor_accepted_rejected_now_has_a_version_2_active_with_real_indonesian_copy(): void
+    public function test_vendor_accepted_rejected_has_a_version_2_with_real_indonesian_copy_superseded_by_a_newer_version(): void
     {
         [$template, , $v2] = $this->vendorAcceptedRejected();
 
-        $this->assertSame($v2->id, $template->active_version_id);
+        $this->assertSame(2, $v2->version);
         $this->assertNotNull($v2->subject);
         $this->assertStringNotContainsString('Matrix snapshot', $v2->body);
         $this->assertStringContainsString('vendor', mb_strtolower($v2->subject.' '.$v2->body));
+        $this->assertGreaterThan(2, $this->activeVersionNumberFor($template));
+    }
+
+    /**
+     * The `version` NUMBER the template currently renders from, not its
+     * row id — the id is an auto-increment whose value depends on how many
+     * versions every other template inserted first, which is exactly what
+     * made the old `assertSame($v2->id, ...)` assertions read as opaque
+     * "24 is not 22" failures instead of naming the real change.
+     */
+    private function activeVersionNumberFor(NotificationTemplate $template): int
+    {
+        return (int) NotificationTemplateVersion::query()
+            ->whereKey($template->active_version_id)
+            ->value('version');
     }
 
     public function test_vendor_accepted_rejected_version_1_survives_untouched(): void
@@ -55,13 +92,14 @@ final class AddV2NotificationTemplatesForZeroRecipientEventsTest extends TestCas
         $this->assertSame('seed:notification-matrix', $v1->created_by);
     }
 
-    public function test_marketplace_order_submitted_now_has_a_version_2_active_with_real_indonesian_copy(): void
+    public function test_marketplace_order_submitted_has_a_version_2_with_real_indonesian_copy_superseded_by_a_newer_version(): void
     {
         $template = NotificationTemplate::query()->where('event_name', 'Marketplace order submitted')->sole();
         $v2 = NotificationTemplateVersion::query()->where('template_id', $template->id)->where('version', 2)->sole();
 
-        $this->assertSame($v2->id, $template->active_version_id);
+        $this->assertSame(2, $v2->version);
         $this->assertStringNotContainsString('Matrix snapshot', $v2->body);
+        $this->assertGreaterThan(2, $this->activeVersionNumberFor($template));
     }
 
     public function test_marketplace_order_submitted_version_1_survives_untouched(): void

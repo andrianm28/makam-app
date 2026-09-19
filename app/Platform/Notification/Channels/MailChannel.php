@@ -52,11 +52,32 @@ use Throwable;
  * ---------------------------------------------------------------------------
  * Rendering
  * ---------------------------------------------------------------------------
- * Calls `TemplateRenderer::render($version, [])` itself, per the `Channel`
- * contract's doc block — every seeded template version has an empty
- * `variable_allowlist`, so `render($version, [])` is the only call that can
- * ever succeed against current data (the same D6 constraint
- * `Actions\DispatchNotification` already documents).
+ * Renders for itself, per the `Contracts\Channel` contract's doc block, by
+ * resolving its own variable bag first:
+ * `render($version, $this->variables->forDelivery($delivery, $version))`.
+ * `forDelivery()` is the channel-shaped entry point on
+ * `NotificationVariableResolver`: this class holds only the
+ * `NotificationDelivery`, so the resolver walks `$delivery->event_id` back
+ * to the outbox row that carries the payload, rebuilds the bag
+ * `Actions\DispatchNotification` built on the fresh-event path, and
+ * restricts it to this version's allowlist.
+ *
+ * This doc block used to claim the opposite — that `render($version, [])`
+ * "is the only call that can ever succeed against current data", because
+ * every seeded template version had an empty `variable_allowlist`. It no
+ * longer does: the version-2 and version-3 template migrations ship
+ * allowlisted variables and bodies that reference them with real
+ * `{{ name }}` placeholders. Against those, `[]` is the one call that can
+ * never succeed — `TemplateRenderer::render()` throws "Notification
+ * variable [x] was not provided." for any name the body references and the
+ * caller omits. `Jobs\SendNotificationChannelJob` catches anything thrown
+ * out of `send()`, records it as `DeliveryResult::CHANNEL_SEND_FAILED` in
+ * the retryable `Failed` state, and re-queues it on the backoff — so the
+ * throw does not fail one unlucky delivery, it burns the retry budget of
+ * every single send of that template. Resolving the bag is strictly safer and never
+ * narrower: for a version whose allowlist is empty the resolver restricts
+ * the bag back down to exactly `[]`, so the seeded version-1 templates
+ * render byte-identically to before.
  *
  * ---------------------------------------------------------------------------
  * Failure classification
