@@ -154,6 +154,32 @@ git commit -m "refactor: parameterize image digests via \${APP_IMAGE_DEV}/\${APP
 
 ## Step 6 — Branch protection on `docs/design-system-and-planning`
 
+> **Read this before running the command below — as written it can lock the
+> only maintainer out of merging.**
+>
+> Measured 19 Sep 2026: this branch has **no protection at all**, 0 runners are
+> registered, and `MAKAM_DEPLOY_RUNNER_ACTIVE` is unset — so nothing here has
+> been executed yet and this warning is still ahead of you, not behind you.
+>
+> `required_approving_review_count=1` combined with `enforce_admins=true` means
+> every PR needs an approving review from *someone else*, and admins may not
+> bypass it. On a repository with a single maintainer that is not a safeguard,
+> it is a **deadlock**: nobody can approve your PRs, and `enforce_admins` stops
+> you from merging your own. Choose deliberately:
+>
+> | Option | `required_pull_request_reviews` | `enforce_admins` | When it fits |
+> | --- | --- | --- | --- |
+> | **A (recommended while solo)** | `null` | `true` | CI still gates every merge; no human approver needed |
+> | **B** | `1` | `false` | Records the intent for future collaborators; admin can still merge |
+> | **C (as written below)** | `1` | `true` | Only when a second human can actually approve PRs |
+>
+> Option A drops `-f 'required_pull_request_reviews[...]=1'` and adds
+> `-F 'required_pull_request_reviews=null'`. Option B keeps the review line and
+> sets `-F 'enforce_admins=false'`.
+>
+> Whichever you choose, the status-check contexts below are unchanged — they
+> are the part that actually protects the branch.
+
 ```bash
 gh api --method PUT repos/andrianm28/makam-app/branches/docs%2Fdesign-system-and-planning/protection \
   -f 'required_status_checks[strict]=true' \
