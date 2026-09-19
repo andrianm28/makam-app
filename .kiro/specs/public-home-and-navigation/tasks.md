@@ -10,6 +10,11 @@
 - [x] Add route and feature-gate explanatory pages. _Requirements: 6, 7_ — done 26 Jul 2026 (honest "coming soon" stubs for the three not-yet-built destinations, read AC6 expansively — see sprint-plan.md's S4-T3 commit history for the reasoning)
 - [ ] Add responsive, keyboard, and analytics tests. _Requirements: 8, 9_ — analytics done (menu-impression events, test-covered); **keyboard and responsive verification are NOT done** (no browser available on this host)
 
+- [ ] Add the three secondary hero calls-to-action (Perpanjang Makam, Layanan Pemakaman, Wakaf Tanah) and move the customer-service call-to-action to a persistent element below the hero. _Requirements: 3, 5, 10, 11_ — not started (PRD amendment 19 Sep 2026, follow-up order 3)
+- [ ] Build the static Wakaf Tanah information page with no form or upload. _Requirements: 12_ — not started (PRD amendment 19 Sep 2026, follow-up order 3)
+- [ ] Build the static Tentang Kami page; keep it unpublished and unlinked until YIEM supplies the legal identity (PRD §13 open question). _Requirements: 13_ — not started, **blocked on stakeholder input** (PRD amendment 19 Sep 2026, follow-up order 3)
+- [ ] Wire the supporting navigation entries to their existing routes. _Requirements: 14_ — not started (PRD amendment 19 Sep 2026, follow-up order 3)
+
 ## Design system
 
 Governed by [`docs/design/design-system.md`](../../../docs/design/design-system.md) (component contracts, state patterns) and [`resources/css/tokens.css`](../../../resources/css/tokens.css) (every design value).

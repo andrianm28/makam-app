@@ -15,6 +15,8 @@
 - [x] Dispatch admin/operator notifications per the notification matrix when triggered. _Requirements: 14_ — shipped: `App\Domain\OrderWorkflow\Listeners\DispatchOrderNotifications` bridges `order.status_changed.v1` to the notification matrix rows with the status discriminator (`OrderNotificationTest`).
 - [ ] Add browser tests for resumable intake and duplicate submission. _Requirements: 2, 9_ — **NOT TESTED as browser tests**: resumable intake and duplicate submission are covered at the Livewire/feature layer (`BookingWizardDraftBindingTest`, `BookingWizardEndToEndTest::test_a_double_submitted_step_1_does_not_create_two_drafts_from_one_click`, `BookingWizardSaveIntegrityTest`), but no browser (Dusk/Playwright) harness exists in this repository, so the browser-level item stays open.
 
+- [ ] Snapshot operator contact and the effective required-document list onto the order at confirmation; render both on the confirmation screen and pass them to the confirmation email template. _Requirements: 13, 15_ — not started (PRD amendment 19 Sep 2026, follow-up order 1)
+
 ## Design system
 
 Governed by [`docs/design/design-system.md`](../../../docs/design/design-system.md) (component contracts, state patterns) and [`resources/css/tokens.css`](../../../resources/css/tokens.css) (every design value).

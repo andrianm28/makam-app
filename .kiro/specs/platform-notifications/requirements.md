@@ -22,6 +22,8 @@ EARS notation ([kiro.dev/docs/specs](https://kiro.dev/docs/specs/feature-specs/)
 12. THE SYSTEM SHALL enable WhatsApp only with an approved BSP and approved templates. WHILE `G-WA-01` is closed THE SYSTEM SHALL state in the UI that WhatsApp is unavailable.
 13. THE SYSTEM SHALL version templates and make them previewable. THE SYSTEM SHALL NOT let a template change retroactively alter sent records.
 14. WHEN a delivery fails THE SYSTEM SHALL make the failure observable and retry it with bounded backoff. THE SYSTEM SHALL escalate permanent failure to an operational queue.
+15. WHEN a customer confirmation notification is rendered for an order that carries a confirmation snapshot THE SYSTEM SHALL expose the snapshot's operator contact and required-document list as allowlisted template variables. These are not restricted data under AC11; the document list is a list of document names, never document content.
+16. THE SYSTEM SHALL dispatch `Reminder due` according to the window and recipient policy recorded under that row in `notification-matrix.md`, with AC8's `window` equal to the reminder window. WHEN a due date enters the system after one or more windows have already passed THE SYSTEM SHALL dispatch only the nearest window still in the future.
 
 ## Negative criteria
 
@@ -30,3 +32,14 @@ EARS notation ([kiro.dev/docs/specs](https://kiro.dev/docs/specs/feature-specs/)
 - No business-state change caused by a channel outcome.
 - No notification sent outside the matrix recipient scope.
 - No restricted data in a notification payload or log.
+- No back-filled reminder for a window that has already passed.
+
+## Amended (19 Sep 2026)
+
+Acceptance criteria above the original count were added from the YIEM PRD
+reconciliation (`docs/product/prd-yiem-2026-09-18.md` §16, decisions Q7, Q15, Q17, Q18, Q39). The PRD is a
+stakeholder document subordinate to `docs/product/mvp-scope.md`; these
+criteria are the repo-side approval of the decisions it records, in the
+same shape `renewal-and-grave-registry/requirements.md`'s `## Superseded`
+section uses. Existing numbering is untouched.
+AC16 deliberately names no window values: AC1 forbids restating the matrix, and the values live in its `Reminder due` policy section.
