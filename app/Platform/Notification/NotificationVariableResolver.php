@@ -41,6 +41,26 @@ final class NotificationVariableResolver
     }
 
     /**
+     * Returns a NEW resolver with `$source` appended AFTER every source
+     * this resolver already holds, in their existing order — never
+     * prepended. This is the exact shape a feature module's
+     * `$this->app->extend(NotificationVariableResolver::class, ...)` call
+     * (`Providers\NotificationServiceProvider`'s own doc block) is meant to
+     * use: the closure receives the resolver the provider actually built
+     * and calls `->appending($moduleSource)` on it, rather than
+     * reconstructing a resolver from scratch and guessing at what the
+     * provider registered. Because sources merge in registration order
+     * with LATER keys winning, appending (never prepending) is what lets a
+     * feature-module source override a platform-supplied key instead of
+     * being silently overwritten by it, regardless of how many sources the
+     * provider itself already registered or in what order.
+     */
+    public function appending(NotificationVariableSource $source): self
+    {
+        return new self(...[...$this->sources, $source]);
+    }
+
+    /**
      * @return array<string, scalar|\Stringable|null>
      */
     public function forOutboxRow(OutboxEvent $row, string $matrixEventName, NotificationTemplateVersion $version): array

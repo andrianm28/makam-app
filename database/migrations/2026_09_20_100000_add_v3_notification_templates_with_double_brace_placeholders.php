@@ -23,12 +23,43 @@ use Illuminate\Support\Facades\DB;
  * 2 shipped saw the literal string `{order_id}` (or `{vendor_order_id}` /
  * `{outcome}`) in their notification body instead of the real value.
  *
- * This migration inserts version 3 for exactly those two templates,
- * identical to version 2 in every respect except the placeholder syntax in
- * `body`. `variable_allowlist` and `restricted_fields` are carried over
- * unchanged from version 2 — no new variable is introduced, so the
- * allowlist and the PII guard list do not change; only the delimiter
- * syntax the renderer actually recognises changes.
+ * This migration inserts version 3 for exactly those two templates.
+ * `variable_allowlist` and `restricted_fields` are carried over unchanged
+ * from version 2 — no new variable is introduced, so the allowlist and the
+ * PII guard list do not change.
+ *
+ * ---------------------------------------------------------------------------
+ * "Vendor accepted/rejected" body is NOT a byte-for-byte copy of version 2
+ * ---------------------------------------------------------------------------
+ * Fix round 1 review caught two live copy defects in version 2's
+ * "Vendor accepted/rejected" body that were latent only because the single
+ * braces never rendered: (1) it opened with `Kabar baik!` ("Good news!"),
+ * but `UpdateVendorOrderStatus.php` emits `vendor_order.decided.v1` for
+ * BOTH `DITERIMA_VENDOR` (accepted) and `DITOLAK_VENDOR` (rejected) — one
+ * matrix row, one template, no branch by outcome — so that sentence would
+ * congratulate a bereaved customer on a REJECTION; (2) `{{ outcome }}`
+ * would have interpolated the raw `VendorProcessingStatus` constant
+ * (`DITERIMA_VENDOR` / `DITOLAK_VENDOR`) directly into the sentence — no
+ * Indonesian label map exists anywhere in this codebase — producing
+ * "telah DITOLAK_VENDOR oleh vendor." in a customer-facing message. Making
+ * these placeholders actually render (this task's whole point) is what
+ * would have shipped both defects live, so fixing them is this task's to
+ * do, not a follow-up.
+ *
+ * The version-3 body below is deliberately NEUTRAL: it states that the
+ * vendor has made a decision and sends the customer to their order page
+ * for the outcome, rather than asserting or wording the outcome itself.
+ * `outcome` stays in `variable_allowlist` (a supplied, allowlisted, but
+ * UNreferenced variable is accepted by `TemplateRenderer::render()` — its
+ * loop only requires "referenced" and "supplied" names to be allowlisted
+ * and, for referenced-but-unsupplied names, to throw; it does not require
+ * that a supplied name be referenced) so `UpdateVendorOrderStatus`'s
+ * existing payload shape (`vendor_order_id`, `outcome`) needs no change.
+ * A proper accepted-vs-rejected wording needs either a second matrix row
+ * (splitting this into two events) or a status-label catalogue mapping
+ * `VendorProcessingStatus` constants to Indonesian phrases — both are
+ * product decisions out of this task's scope, noted as a follow-up in
+ * `task-4-report.md` rather than guessed at here.
  *
  * `down()` cannot delete the version-3 rows it inserts — the immutability
  * trigger on `notification_template_versions` (from
@@ -51,8 +82,8 @@ return new class extends Migration
         [
             'event' => 'Vendor accepted/rejected',
             'subject' => 'Pesanan Anda telah diproses vendor',
-            'body' => 'Kabar baik! Pesanan Anda dengan nomor referensi vendor {{ vendor_order_id }} telah {{ outcome }} oleh vendor. '
-                .'Silakan cek halaman pesanan Anda di Makam.co.id untuk detail lebih lanjut. '
+            'body' => 'Vendor telah membuat keputusan atas pesanan Anda dengan nomor referensi vendor {{ vendor_order_id }}. '
+                .'Silakan cek halaman pesanan Anda di Makam.co.id untuk melihat keputusan dan detail lebih lanjut. '
                 .'Jika ada pertanyaan, hubungi layanan pelanggan kami.',
             'variable_allowlist' => ['vendor_order_id', 'outcome'],
         ],

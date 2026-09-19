@@ -317,6 +317,7 @@ final class NotificationTemplatePersistenceTest extends TestCase
                 $this->assertNotSame($version1->id, $template->active_version_id);
                 $this->assertNotSame($version2->id, $template->active_version_id);
                 $this->assertStringNotContainsString('{{', $version2->body, 'version 2 used single-brace placeholders');
+                $this->assertStringContainsString('{{', $activeVersion->body, 'the active version must use the renderer\'s real double-brace placeholders — a future version that reintroduced single braces must fail here');
 
                 foreach ($row['recipients'] as $recipient => $channelFact) {
                     $this->assertStringContainsString($recipient.': '.$channelFact, $version1->body);

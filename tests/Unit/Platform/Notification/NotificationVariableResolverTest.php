@@ -119,4 +119,55 @@ final class NotificationVariableResolverTest extends TestCase
 
         self::assertSame(['order_id' => 'from-module'], (new NotificationVariableResolver($first, $second))->forOutboxRow($row, 'x', $version));
     }
+
+    /**
+     * `appending()` is what `Providers\NotificationServiceProvider`'s
+     * `$this->app->extend(...)` contract is built on (see that method's
+     * own doc block) — a feature module extends the REAL resolver the
+     * provider produced rather than reconstructing one from scratch. Two
+     * things must hold for that to be safe: the source already present
+     * keeps supplying keys the appended source does not touch, and the
+     * appended source — being later in registration order — wins any key
+     * both supply.
+     */
+    public function test_appending_keeps_the_existing_source_and_lets_the_new_one_win_on_collision(): void
+    {
+        $existing = new class implements NotificationVariableSource
+        {
+            public function handles(string $aggregateType): bool
+            {
+                return true;
+            }
+
+            public function variablesFor(string $matrixEventName, string $aggregateType, string $aggregateId, array $payload): array
+            {
+                return ['order_id' => 'from-existing', 'shared' => 'from-existing'];
+            }
+        };
+
+        $appended = new class implements NotificationVariableSource
+        {
+            public function handles(string $aggregateType): bool
+            {
+                return true;
+            }
+
+            public function variablesFor(string $matrixEventName, string $aggregateType, string $aggregateId, array $payload): array
+            {
+                return ['shared' => 'from-appended'];
+            }
+        };
+
+        $resolver = (new NotificationVariableResolver($existing))->appending($appended);
+
+        $version = new NotificationTemplateVersion;
+        $version->setRawAttributes(['variable_allowlist' => json_encode(['order_id', 'shared'])]);
+        $row = new OutboxEvent;
+        $row->setRawAttributes(['aggregate_type' => 'order', 'aggregate_id' => 'o1', 'payload' => json_encode([])]);
+
+        self::assertSame(
+            ['order_id' => 'from-existing', 'shared' => 'from-appended'],
+            $resolver->forOutboxRow($row, 'x', $version),
+        );
+    }
 }
