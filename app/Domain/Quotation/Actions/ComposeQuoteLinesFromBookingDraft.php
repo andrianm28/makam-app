@@ -138,10 +138,17 @@ final readonly class ComposeQuoteLinesFromBookingDraft
     }
 
     /**
-     * Zero or one plot line, from the draft's active hold.
+     * Zero or one plot line, from the plot this draft's customer chose.
      *
-     * `PlotReservation::activeForDraft()` returns at most one hold per draft,
+     * `PlotReservation::chosenForDraft()` returns at most one row per draft,
      * so no quantity question arises: a plot line is always quantity 1.
+     *
+     * It is `chosenForDraft()` and NOT `activeForDraft()` because every
+     * caller of this mapper runs after `SubmitBookingDraft`, which converts
+     * the draft hold to an order-anchored one. `activeForDraft()` excludes
+     * `converted`, correctly for its own question and fatally for this one:
+     * read here it returned null on every real submission and the plot — the
+     * largest component of the order — silently left the quote.
      *
      * The pricing vehicle is the DRAFT's package. `grave_plots.cemetery_package_id`
      * is deliberately NOT read — its own migration calls it "an indicative
@@ -152,7 +159,7 @@ final readonly class ComposeQuoteLinesFromBookingDraft
      */
     private function plotLines(BookingDraft $draft): array
     {
-        $hold = PlotReservation::activeForDraft($draft);
+        $hold = PlotReservation::chosenForDraft($draft);
 
         if ($hold === null) {
             return [];

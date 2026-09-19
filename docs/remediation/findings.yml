@@ -8088,3 +8088,26 @@
     When a download surface is built, drive it through IssueSignedUrl (never a storage-native
     presigned URL, as the plan requires) and fix VAULT-06 first, or the new surface will refuse
     every document.
+
+- id: DOM-13
+  dim: DOM
+  severity: Low
+  category: "correctness"
+  effort: M
+  audit_verdict: UNVERIFIED
+  status: open
+  status_evidence: []
+  status_verified: false
+  files:
+    - "app/Domain/PlotReservation/Models/PlotReservation.php:245"
+    - "app/Domain/Quotation/Actions/ComposeQuoteLinesFromBookingDraft.php:162"
+  statement: >-
+    chosenForDraft() reads the draft's own reservation chain, so a converted choice still quotes
+    the plot even if the order-anchored hold it became was later released; a re-quote after a
+    release would name a plot the order no longer holds
+  recommendation: >-
+    Close it by giving the composer the order it is composing for, then requiring that the draft's
+    converted choice and PlotReservation::activeForOrder() name the same plot. Deliberately NOT
+    bundled into the C1 fix: BookingDraft exposes no order relation, so it changes the composer's
+    signature and all three call sites, and that is not a change to make inside a financial fix
+    under a deadline.
