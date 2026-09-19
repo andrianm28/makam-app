@@ -8088,3 +8088,29 @@
     When a download surface is built, drive it through IssueSignedUrl (never a storage-native
     presigned URL, as the plan requires) and fix VAULT-06 first, or the new surface will refuse
     every document.
+
+- id: SCHEMA-01
+  dim: SCHEMA
+  severity: High
+  category: "schema-drift / pay-first statuses"
+  effort: S
+  audit_verdict: UNVERIFIED
+  status: open
+  status_evidence: []
+  status_verified: false
+  files:
+    - "database/migrations/2026_08_12_100000_create_orders_table.php:89"
+    - "app/Domain/OrderWorkflow/OrderStatus.php:20"
+  statement: >-
+    orders_status_check is built from OrderStatus::cases() at the moment the create-orders
+    migration runs, and no later migration re-creates it. The three pay-first statuses added
+    13 Sep 2026 (DIBAYAR_MENUNGGU_KONFIRMASI, DIKONFIRMASI, DITOLAK_SETELAH_BAYAR) are therefore
+    absent from the constraint on any database migrated before that date; a fresh migrate:fresh
+    (CI, tests) includes them, which is why nothing red has surfaced. Whether dev and beta carry
+    the stale constraint is NOT TESTED — surfaced 19 Sep 2026 by the grill-spec session for the
+    order-confirmation snapshot (S17), not by an audit.
+  recommendation: >-
+    Add a migration that drops and re-creates orders_status_check from OrderStatus::cases(), and
+    a test that asserts the live constraint's value list equals the enum (a cases()-driven test,
+    the same shape OrderReadModelTest uses). Verify on dev and beta with pg_get_constraintdef
+    before relying on any DIKONFIRMASI transition there. Separate PR; unrelated to the snapshot.

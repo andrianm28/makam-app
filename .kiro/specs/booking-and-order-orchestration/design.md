@@ -82,10 +82,13 @@ quote_lines(id, quote_id, service_package_version_id, price_version_id,
        line_total_minor, currency, fulfillment_owner)
 funeral_cases(id, booking_draft_id, status, urgency, area, owner, deadlines)
 pre_need_interests(id, booking_draft_id, status, contact)
-order_confirmation_snapshots(id, order_id, operator_contact_phone, operator_hours_text,
-       contact_is_platform_fallback, required_document_codes[], captured_at)
-       -- AC15, added 19 Sep 2026; written once at confirmation, never updated
+order_confirmation_snapshots(id, order_id UNIQUE, contact_name, contact_phone,
+       contact_hours_text, contact_is_platform_fallback, required_document_codes[],
+       captured_at)
+       -- AC15, added 19 Sep 2026; written once at submission (MASUK), never updated
 ```
+
+**Confirmation snapshot (AC15, grill-spec 19 Sep 2026, S1/S2/S5/S8/S13).** `Actions\CaptureOrderConfirmationSnapshot` runs inside `SubmitBookingDraft`'s transaction, after the `OrderParty` row, so an order never exists without its snapshot. `contact_*` is the cemetery's operator contact when the cemetery has a phone; otherwise the platform customer-service phone with `contact_is_platform_fallback = true`, and `contact_phone` stays NULL when only `ContactInfo`'s placeholder default exists (a fake number is never printed). `required_document_codes` holds codes only; labels resolve from `RequiredDocumentCode` at render, and codes are never deleted from the catalog. Orders submitted before the table existed have no row and render only the help-centre line — no backfill. The model is write-once in the same shape as `NotificationTemplateVersion` (saving/update/delete throw once persisted). `OrderReadModel` exposes the row as `handover` (`OrderConfirmationHandover`), which is what the wizard's Step 4 and the `Booking submitted` template variables read.
 
 Money is integer minor units, converted from `decimal:2` exactly once at quote
 issuance (`Money::fromDecimal`). PostgreSQL CHECK constraints pin order status
