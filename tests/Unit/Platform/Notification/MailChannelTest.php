@@ -67,7 +67,7 @@ final class MailChannelTest extends TestCase
 
         $addresses = new class implements RecipientAddressResolver
         {
-            public function emailFor(Recipient $recipient): ?string
+            public function emailFor(Recipient $recipient): string
             {
                 return 'customer@example.test';
             }
@@ -134,7 +134,7 @@ final class MailChannelTest extends TestCase
 
         $addresses = new class implements RecipientAddressResolver
         {
-            public function emailFor(Recipient $recipient): ?string
+            public function emailFor(Recipient $recipient): string
             {
                 return 'customer@example.test';
             }
@@ -154,7 +154,7 @@ final class MailChannelTest extends TestCase
 
         $addresses = new class implements RecipientAddressResolver
         {
-            public function emailFor(Recipient $recipient): ?string
+            public function emailFor(Recipient $recipient): string
             {
                 return $recipient->actorRef.'@example.test';
             }

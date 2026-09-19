@@ -320,7 +320,7 @@ final class NotificationTemplateVariablesRenderTest extends TestCase
                 private readonly int|string $scopeId,
             ) {}
 
-            public function subjectFor(string $aggregateType, int|string $aggregateId): ?RecipientResolutionSubject
+            public function subjectFor(string $aggregateType, int|string $aggregateId): RecipientResolutionSubject
             {
                 return new RecipientResolutionSubject($this->ownerRef, $this->scopeType, $this->scopeId);
             }
