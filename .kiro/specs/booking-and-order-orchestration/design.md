@@ -82,6 +82,9 @@ quote_lines(id, quote_id, service_package_version_id, price_version_id,
        line_total_minor, currency, fulfillment_owner)
 funeral_cases(id, booking_draft_id, status, urgency, area, owner, deadlines)
 pre_need_interests(id, booking_draft_id, status, contact)
+order_confirmation_snapshots(id, order_id, operator_contact_phone, operator_hours_text,
+       contact_is_platform_fallback, required_document_codes[], captured_at)
+       -- AC15, added 19 Sep 2026; written once at confirmation, never updated
 ```
 
 Money is integer minor units, converted from `decimal:2` exactly once at quote

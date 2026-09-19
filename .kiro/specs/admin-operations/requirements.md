@@ -17,3 +17,14 @@ EARS notation ([kiro.dev/docs/specs](https://kiro.dev/docs/specs/feature-specs/)
 9. THE SYSTEM SHALL NOT allow an admin to bypass payment/state invariants through UI or bulk actions.
 10. THE SYSTEM SHALL scope export/report queries to the requesting admin's role and business-entity permissions.
 11. THE SYSTEM SHALL include dashboard exception queues for failed payment, missing operator response, vendor delay, and unmatched renewal.
+12. THE SYSTEM SHALL provide within AC7's reporting two derived measures computed from existing timestamps only: median time from first booking-draft creation to order confirmation, and the ratio of paid invoices to issued invoices per period. THE SYSTEM SHALL NOT introduce analytics tables for them and SHALL NOT present targets until the stakeholder sets them.
+13. THE SYSTEM SHALL make AC2's facility management select from `docs/product/facility-catalog.md`, and SHALL include in cemetery management the operator contact phone, operating-hours text, and the required-document override from `docs/product/required-document-catalog.md`. The operator panel SHALL read these fields in release 1 and SHALL NOT be required to edit them (ADR-0008).
+
+## Amended (19 Sep 2026)
+
+Acceptance criteria above the original count were added from the YIEM PRD
+reconciliation (`docs/product/prd-yiem-2026-09-18.md` §16, decisions Q22, Q24, Q28, Q35, Q40). The PRD is a
+stakeholder document subordinate to `docs/product/mvp-scope.md`; these
+criteria are the repo-side approval of the decisions it records, in the
+same shape `renewal-and-grave-registry/requirements.md`'s `## Superseded`
+section uses. Existing numbering is untouched.

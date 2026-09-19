@@ -20,6 +20,7 @@ EARS notation ([kiro.dev/docs/specs](https://kiro.dev/docs/specs/feature-specs/)
 12. WHILE an operator has not responded THE SYSTEM SHALL preserve the manual admin/case-manager fallback.
 13. WHEN a customer reaches Step 9 THE SYSTEM SHALL provide order reference, status, invoice state, channel-delivery state, next action, and support.
 14. WHEN a required admin/operator notification is triggered THE SYSTEM SHALL follow the notification matrix.
+15. WHEN an order is confirmed THE SYSTEM SHALL snapshot onto the order the cemetery's operator contact (phone, operating hours, or the platform customer-service fallback) and the effective required-document list (cemetery override or platform default, codes per `docs/product/required-document-catalog.md`). The confirmation screen and its confirmation email SHALL present both alongside AC13's fields. A later cemetery edit SHALL NOT change what an existing order shows.
 
 ## Negative criteria
 
@@ -27,3 +28,13 @@ EARS notation ([kiro.dev/docs/specs](https://kiro.dev/docs/specs/feature-specs/)
 - No payment for expired reservation or closed gate.
 - No loss of draft when changing step or provider failure.
 - No internal branching that removes a stakeholder-required entry or leaves the user without confirmation.
+- No confirmation that tells a family to bring documents from a list that can change under them.
+
+## Amended (19 Sep 2026)
+
+Acceptance criteria above the original count were added from the YIEM PRD
+reconciliation (`docs/product/prd-yiem-2026-09-18.md` §16, decisions Q15, Q22, Q23, Q35). The PRD is a
+stakeholder document subordinate to `docs/product/mvp-scope.md`; these
+criteria are the repo-side approval of the decisions it records, in the
+same shape `renewal-and-grave-registry/requirements.md`'s `## Superseded`
+section uses. Existing numbering is untouched.
