@@ -165,20 +165,29 @@ git commit -m "refactor: parameterize image digests via \${APP_IMAGE_DEV}/\${APP
 > every PR needs an approving review from *someone else*, and admins may not
 > bypass it. On a repository with a single maintainer that is not a safeguard,
 > it is a **deadlock**: nobody can approve your PRs, and `enforce_admins` stops
-> you from merging your own. Choose deliberately:
+> you from merging your own.
 >
-> | Option | `required_pull_request_reviews` | `enforce_admins` | When it fits |
-> | --- | --- | --- | --- |
-> | **A (recommended while solo)** | `null` | `true` | CI still gates every merge; no human approver needed |
-> | **B** | `1` | `false` | Records the intent for future collaborators; admin can still merge |
-> | **C (as written below)** | `1` | `true` | Only when a second human can actually approve PRs |
+> **This is already decided — do not re-open it.**
+> `docs/superpowers/specs/2026-09-18-demo-dinas-pemakaman-design.md` §D3 records
+> the owner's amendment of 18 Sep 2026: for the demo week, run this step with
+> **`required_approving_review_count=0`**, keeping all ten required status
+> checks, and **raise it to 1 after the demo**. Nothing merges without green CI,
+> which is the part that actually protects a compressed week. D3 notes this also
+> closes `COORD-17` a week later than it otherwise would.
 >
-> Option A drops `-f 'required_pull_request_reviews[...]=1'` and adds
-> `-F 'required_pull_request_reviews=null'`. Option B keeps the review line and
-> sets `-F 'enforce_admins=false'`.
+> So replace the review line below with:
 >
-> Whichever you choose, the status-check contexts below are unchanged — they
-> are the part that actually protects the branch.
+> ```
+>   -f 'required_pull_request_reviews[required_approving_review_count]=0' \
+> ```
+>
+> The amendment was recorded in the spec but never applied to this file, which
+> is why the command below still reads `=1`. The status-check contexts are
+> unchanged either way — they are the part that actually protects the branch.
+>
+> After the demo, the same command with `=1` restores the intended posture. If
+> there is still only one maintainer then, pair it with
+> `-F 'enforce_admins=false'` so the owner is not locked out again.
 
 ```bash
 gh api --method PUT repos/andrianm28/makam-app/branches/docs%2Fdesign-system-and-planning/protection \
