@@ -223,6 +223,15 @@ on `plot_tracking_mode === GRANULAR`, so it is demoable today.
   set aside on the owner's instruction.
 - C1 (the plot line never reaching a production quote) and PR #334's
   activation.
+
+  > **Correction, 19 Sep 2026 — C1 is no longer undiagnosed.** It was confirmed
+  > empirically (a regression test seen red before any fix) and closed by
+  > PR #336, which targets `feat/plot-quote-lines` rather than trunk. The line
+  > above still stands as written: #336 lands *into* the held PR #334, so
+  > neither reaches the demo, and C1 remains out of scope for this week. What
+  > changed is only that it is now a solved problem waiting on a hold, not an
+  > open design question. PR #334's hold reason moved with it — from "C1
+  > undecided" to beta carrying 0 priced cemetery packages (measured 19 Sep).
 - The full browser-test suite `AGENTS.md` requires. Only the demo script's path
   gets E2E coverage this week.
 - Seeding the Dinas's real cemetery data, which D2 decided against.
