@@ -17,6 +17,10 @@ in_app_notifications         -- always created for admin/operator/vendor
 
 `notification_deliveries` is the only source the UI may read to claim a delivery.
 
+## Template variables (AC15, added 19 Sep 2026)
+
+Until 19 Sep 2026 every `TemplateRenderer::render()` call site passed an empty bag, so no template could carry a value. `NotificationVariableResolver` now builds the bag: for a fresh outbox event from the row itself (`DispatchNotification`), and for a channel send from the delivery's `event_id` back to the outbox row (`MailChannel`, `LogChannel`). It consults `Contracts\NotificationVariableSource` implementations registered per aggregate type — the platform ships the payload-derived one; a feature module registers its own (e.g. `OrderWorkflow` for `order`) so the platform never imports a Domain model — and restricts the merged bag to the version's `variable_allowlist` before rendering, so a version-1 template with an empty allowlist keeps rendering. Values must be scalar or `Stringable`; a document list is pre-joined text. Placeholders are `{{ name }}` only; the two version-2 bodies that used single braces are superseded by version-3 rows.
+
 ## Sequence
 
 ```text
