@@ -10,6 +10,7 @@ use App\Platform\Notification\DeliveryResult;
 use App\Platform\Notification\DeliveryState;
 use App\Platform\Notification\Models\NotificationDelivery;
 use App\Platform\Notification\Models\NotificationTemplateVersion;
+use App\Platform\Notification\NotificationVariableResolver;
 use App\Platform\Notification\Recipient;
 use App\Platform\Notification\RecipientSet;
 use App\Platform\Notification\TemplateRenderer;
@@ -74,6 +75,7 @@ final class MailChannel implements Channel
     public function __construct(
         private readonly TemplateRenderer $renderer,
         private readonly RecipientAddressResolver $addresses,
+        private readonly NotificationVariableResolver $variables,
     ) {}
 
     public function send(
@@ -101,7 +103,7 @@ final class MailChannel implements Channel
             );
         }
 
-        $rendered = $this->renderer->render($version, []);
+        $rendered = $this->renderer->render($version, $this->variables->forDelivery($delivery, $version));
         $subject = $rendered['subject'] ?? 'Notifikasi Makam.co.id';
         $body = $rendered['body'];
 

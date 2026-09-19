@@ -18,6 +18,7 @@ use App\Platform\Notification\Jobs\SendNotificationChannelJob;
 use App\Platform\Notification\Models\NotificationDelivery;
 use App\Platform\Notification\Models\NotificationTemplateVersion;
 use App\Platform\Notification\NotificationDeliveryWriteGuard;
+use App\Platform\Notification\NotificationVariableResolver;
 use App\Platform\Notification\Recipient;
 use App\Platform\Notification\RecipientResolver;
 use App\Platform\Notification\RecipientRole;
@@ -100,6 +101,7 @@ final class DispatchNotification
         private readonly TemplateRenderer $renderer,
         private readonly ModeResolver $modeResolver,
         private readonly RecordInAppNotification $recordInAppNotification,
+        private readonly NotificationVariableResolver $variables,
     ) {}
 
     /**
@@ -260,13 +262,20 @@ final class DispatchNotification
             ? NotificationTemplateVersion::query()->find($template->active_version_id)
             : null;
 
-        // D6: every seeded version has an empty variable_allowlist and no
-        // {{ placeholder }} in its body — render($version, []) is the only
-        // call that can ever succeed against this data. Rendering here,
-        // inside the caller's transaction, fails fast (rolls back this
-        // event's recording) if a template can never be rendered, rather
-        // than queuing deliveries for content that cannot be produced.
-        $rendered = $version !== null ? $this->renderer->render($version, []) : null;
+        // D6, superseded: this call used to pass a hardcoded `[]`, which
+        // was only ever safe because every seeded version had an empty
+        // variable_allowlist and no {{ placeholder }} in its body. The bag
+        // is now RESOLVED from the outbox row and ALLOWLIST-RESTRICTED by
+        // `NotificationVariableResolver` — a version with an empty
+        // allowlist still gets exactly `[]`, byte-identical to before, so
+        // every version-1 template renders unchanged. Rendering here,
+        // inside the caller's transaction, still fails fast (rolls back
+        // this event's recording) if a template can never be rendered,
+        // rather than queuing deliveries for content that cannot be
+        // produced.
+        $rendered = $version !== null
+            ? $this->renderer->render($version, $this->variables->forOutboxRow($outboxRow, (string) $template->event_name, $version))
+            : null;
 
         $whatsAppMode = $this->modeResolver->whatsAppMode();
 

@@ -9,6 +9,7 @@ use App\Platform\Notification\DeliveryResult;
 use App\Platform\Notification\DeliveryState;
 use App\Platform\Notification\Models\NotificationDelivery;
 use App\Platform\Notification\Models\NotificationTemplateVersion;
+use App\Platform\Notification\NotificationVariableResolver;
 use App\Platform\Notification\RecipientSet;
 use App\Platform\Notification\TemplateRenderer;
 use Illuminate\Support\Facades\Log;
@@ -56,14 +57,17 @@ final class LogChannel implements Channel
      */
     public const string LOG_ONLY_MESSAGE = 'NOTIFICATION_CHANNEL_LOG_ONLY';
 
-    public function __construct(private readonly TemplateRenderer $renderer) {}
+    public function __construct(
+        private readonly TemplateRenderer $renderer,
+        private readonly NotificationVariableResolver $variables,
+    ) {}
 
     public function send(
         NotificationDelivery $delivery,
         NotificationTemplateVersion $version,
         RecipientSet $recipients,
     ): DeliveryResult {
-        $rendered = $this->renderer->render($version, []);
+        $rendered = $this->renderer->render($version, $this->variables->forDelivery($delivery, $version));
         $providerRef = 'log-'.substr(hash('sha256', (string) ($delivery->provider_idempotency_key ?? $delivery->getKey())), 0, 16);
 
         Log::info('Notification written to development log.', [

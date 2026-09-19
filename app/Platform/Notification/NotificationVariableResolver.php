@@ -75,7 +75,20 @@ final class NotificationVariableResolver
      */
     public function forDelivery(NotificationDelivery $delivery, NotificationTemplateVersion $version): array
     {
-        $row = OutboxEvent::query()->find((string) $delivery->event_id);
+        $eventId = $delivery->event_id;
+
+        if ($eventId === null || $eventId === '') {
+            // A delivery with no outbox anchor has no payload to resolve
+            // from. Returning early (rather than issuing a lookup on an
+            // empty key) also keeps a channel usable against an in-memory
+            // `NotificationDelivery` that was never persisted — which is
+            // exactly how `Tests\Unit\Platform\Notification\
+            // MailChannelTest` and `NotificationChannelsTest` drive the two
+            // channels, with no database tables behind them at all.
+            return [];
+        }
+
+        $row = OutboxEvent::query()->find((string) $eventId);
         $template = NotificationTemplate::query()->find($version->template_id);
 
         if ($row === null || $template === null) {
