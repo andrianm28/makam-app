@@ -11,7 +11,7 @@
 Paket ini memisahkan empat lapisan:
 
 1. **RKS source requirements** — K23–K35.
-2. **Stakeholder MVP expectation** — homepage, sembilan langkah pemesanan, funeral marketplace, perpanjangan, FAQ, dashboard admin, dan dashboard vendor.
+2. **Stakeholder MVP expectation** — homepage, empat tahap pemesanan (Cari & Pilih, Data Pemesan & Data Almarhum, Pembayaran, Konfirmasi), funeral marketplace, perpanjangan, FAQ, dashboard admin, dan dashboard vendor. (Catatan historis: sembilan langkah berasal dari RKS K23–K35; sejak keputusan owner 2 Sep 2026 yang kanonis adalah empat tahap di atas.)
 3. **Design baseline** — keputusan arsitektur untuk membangun requirement dengan aman.
 4. **Benchmark-derived extensions** — kemampuan opsional atau gated yang tidak otomatis menjadi scope MVP.
 
@@ -31,19 +31,16 @@ Back office
 └── Dashboard Vendor
 ```
 
-Pemesanan Makam mempertahankan sembilan langkah yang terlihat oleh pengguna:
+Pemesanan Makam memakai empat tahap yang terlihat oleh pengguna:
 
 ```text
-1 Lokasi
-2 TPU/TPS
-3 Jenis Layanan
-4 Pilih Layanan
-5 Ringkasan
-6 Data Pemesan
-7 Data Almarhum + Dokumen
-8 Pembayaran
-9 Konfirmasi
+1 Cari & Pilih
+2 Data Pemesan & Data Almarhum
+3 Pembayaran
+4 Konfirmasi
 ```
+
+(Catatan historis: sembilan langkah berasal dari RKS K23–K35; sejak keputusan owner 2 Sep 2026 yang kanonis adalah empat tahap di atas.)
 
 Urgent dan Pre-Need boleh bercabang secara internal setelah Step 3, tetapi entry point, progress, dan hasilnya harus tetap konsisten dengan ekspektasi pengguna. Pembayaran daring mengikuti gate K3/K4/K5; ketika gate belum aktif, Step 8 menggunakan koordinasi pembayaran manual tanpa menghilangkan langkah pembayaran dari UX.
 

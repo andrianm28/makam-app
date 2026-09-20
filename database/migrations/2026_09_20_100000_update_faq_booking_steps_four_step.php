@@ -17,8 +17,8 @@ return new class extends Migration
 
         $this->updateArticle(
             'kapan-pembayaran-dapat-dilakukan',
-            'Pembayaran dilakukan pada tahap Pembayaran, setelah ringkasan pesanan, data pemesan, dan data almarhum selesai dikonfirmasi.',
-            'Pembayaran adalah tahap ketiga dari empat tahap pemesanan, dilakukan setelah Anda meninjau ringkasan pesanan serta melengkapi data pemesan dan data almarhum. Bila pembayaran online belum tersedia, tahap yang sama menyediakan jalur koordinasi manual tanpa menghilangkan tahap pembayaran dari alur.'
+            'Pembayaran dilakukan pada langkah Pembayaran, setelah ringkasan pesanan, data pemesan, dan data almarhum selesai dikonfirmasi.',
+            'Pembayaran adalah langkah ketiga dari empat langkah pemesanan, dilakukan setelah Anda meninjau ringkasan pesanan serta melengkapi data pemesan dan data almarhum. Bila pembayaran online belum tersedia, tahap yang sama menyediakan jalur koordinasi manual tanpa menghilangkan tahap pembayaran dari alur.'
         );
     }
 

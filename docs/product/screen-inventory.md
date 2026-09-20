@@ -78,6 +78,19 @@ live UI path from a search result to the fee screen, `RenewalFee`'s
 a session-backed handoff (`App\Domain\Renewal\RenewalGraveSelection`) that
 never puts a grave id in a URL.
 
+**20 Sep 2026 — booking step count reduced to four.** The 29 Aug 2026
+`9-behind-4-screens` framing above is superseded — the documented step count
+itself is now four, not nine behind four screens: PUB-010…013 render on Screen
+1 "Cari & Pilih", PUB-014…016 on Screen 2 "Detail Pemesanan" (Ringkasan as a
+persistent summary card alongside Data Pemesan/Almarhum, not its own step),
+PUB-017 on Screen 3 "Pembayaran", PUB-018 on Screen 4 "Konfirmasi". No row's
+route changed; the PUB-010…PUB-018 rows below still describe the same screens,
+now grouped under four tahap headings instead of nine step headings. The 29 Aug
+note above is left verbatim per this file's convention of annotating superseded
+reasoning rather than silently rewriting it.
+
+(Catatan historis: sembilan langkah berasal dari RKS K23–K35; sejak keputusan owner 2 Sep 2026 yang kanonis adalah empat tahap di atas.)
+
 ## Revision note — 15 August 2026, online-payment-gateway Task 6 (UI lane)
 
 PUB-017, PUB-019, and PUB-023 are corrected below: the booking Step 8 online branch and the marketplace checkout online option are now real when `G-PAY-01` is open (dev only — production keeps the gate closed and the manual fallback), and the browser-return pages gained a display-only, webhook-driven state read. The 14 Aug note above is left verbatim; the sentences it superseded are replaced in place.
