@@ -40,7 +40,10 @@ final class FaqArticleDetailRouteTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Bagaimana cara memesan makam?');
-        $response->assertSee('sembilan langkah');
+        $response->assertSee('empat langkah');
+        $response->assertSee('Cari & Pilih');
+        $response->assertSee('Pembayaran');
+        $response->assertDontSee('sembilan langkah');
         $response->assertSee('Diperbarui');
         $response->assertSee('Hubungi Customer Service');
         $response->assertSee('/bantuan');
