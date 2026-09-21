@@ -154,6 +154,41 @@ git commit -m "refactor: parameterize image digests via \${APP_IMAGE_DEV}/\${APP
 
 ## Step 6 — Branch protection on `docs/design-system-and-planning`
 
+> **Read this before running the command below — as written it can lock the
+> only maintainer out of merging.**
+>
+> Measured 19 Sep 2026: this branch has **no protection at all**, 0 runners are
+> registered, and `MAKAM_DEPLOY_RUNNER_ACTIVE` is unset — so nothing here has
+> been executed yet and this warning is still ahead of you, not behind you.
+>
+> `required_approving_review_count=1` combined with `enforce_admins=true` means
+> every PR needs an approving review from *someone else*, and admins may not
+> bypass it. On a repository with a single maintainer that is not a safeguard,
+> it is a **deadlock**: nobody can approve your PRs, and `enforce_admins` stops
+> you from merging your own.
+>
+> **This is already decided — do not re-open it.**
+> `docs/superpowers/specs/2026-09-18-demo-dinas-pemakaman-design.md` §D3 records
+> the owner's amendment of 18 Sep 2026: for the demo week, run this step with
+> **`required_approving_review_count=0`**, keeping all ten required status
+> checks, and **raise it to 1 after the demo**. Nothing merges without green CI,
+> which is the part that actually protects a compressed week. D3 notes this also
+> closes `COORD-17` a week later than it otherwise would.
+>
+> So replace the review line below with:
+>
+> ```
+>   -f 'required_pull_request_reviews[required_approving_review_count]=0' \
+> ```
+>
+> The amendment was recorded in the spec but never applied to this file, which
+> is why the command below still reads `=1`. The status-check contexts are
+> unchanged either way — they are the part that actually protects the branch.
+>
+> After the demo, the same command with `=1` restores the intended posture. If
+> there is still only one maintainer then, pair it with
+> `-F 'enforce_admins=false'` so the owner is not locked out again.
+
 ```bash
 gh api --method PUT repos/andrianm28/makam-app/branches/docs%2Fdesign-system-and-planning/protection \
   -f 'required_status_checks[strict]=true' \
