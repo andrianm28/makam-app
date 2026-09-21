@@ -42,17 +42,14 @@ Empat menu utama harus tampil jelas dan dapat diakses di desktop maupun mobile:
 
 ### 4.2 Pemesanan Makam
 
-Sembilan langkah:
+Empat tahap (Cari & Pilih, Data Pemesan & Data Almarhum, Pembayaran, Konfirmasi):
 
-1. Pilih Kota/Kabupaten: Jakarta, Bogor, Depok, Tangerang, Bekasi.
-2. Pilih TPU/TPS: tipe, nama, foto, alamat, Google Maps, fasilitas, harga, availability.
-3. Pilih jenis layanan: Makam Baru, Makam Tumpang, Urgent, Pre-Need.
-4. Pilih layanan dasar dan tambahan.
-5. Ringkasan pesanan dan rincian biaya.
-6. Data pemesan.
-7. Data almarhum dan upload dokumen.
-8. Pembayaran.
-9. Konfirmasi: invoice, email, WhatsApp bila aktif, serta notifikasi admin/pengelola.
+1. Cari & Pilih: kota/kabupaten — Jakarta, Bogor, Depok, Tangerang, Bekasi; TPU/TPS — tipe, nama, foto, alamat, Google Maps, fasilitas, harga, availability; jenis layanan — Makam Baru, Makam Tumpang, Urgent, Pre-Need; layanan dasar dan tambahan.
+2. Data Pemesan & Data Almarhum: data pemesan, data almarhum dan upload dokumen, sambil meninjau kartu Ringkasan Pesanan (rincian biaya).
+3. Pembayaran: online bila tersedia atau koordinasi manual.
+4. Konfirmasi: nomor pesanan, status, invoice, email, WhatsApp bila aktif, serta notifikasi admin/pengelola.
+
+(Catatan historis: sembilan langkah berasal dari RKS K23–K35; sejak keputusan owner 2 Sep 2026 yang kanonis adalah empat tahap di atas.)
 
 ### 4.3 Funeral Marketplace
 
@@ -153,7 +150,7 @@ Daftar ini dapat diperluas oleh admin setelah change approval, tetapi kelima wil
 MVP dinyatakan memenuhi ekspektasi hanya jika:
 
 - empat menu publik tersedia;
-- seluruh sembilan langkah dapat diselesaikan atau memakai fallback yang sah;
+- seluruh empat tahap (Cari & Pilih, Data Pemesan & Data Almarhum, Pembayaran, Konfirmasi) dapat diselesaikan atau memakai fallback yang sah; (Catatan historis: sembilan langkah berasal dari RKS K23–K35; sejak keputusan owner 2 Sep 2026 yang kanonis adalah empat tahap di atas.)
 - seluruh kategori layanan dan marketplace minimum tersedia;
 - perpanjangan enam langkah tersedia;
 - enam kategori FAQ tersedia;

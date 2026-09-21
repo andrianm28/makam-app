@@ -19,15 +19,12 @@ Homepage wajib memiliki hero/intro singkat, empat service cards, customer-servic
 
 | Step | Requirement | Required outcome |
 |---:|---|---|
-| 1 | Pilih kota/kabupaten | Salah satu dari Jakarta, Bogor, Depok, Tangerang, Bekasi |
-| 2 | Pilih TPU/TPS | Detail lokasi dan availability tampil |
-| 3 | Pilih jenis layanan | Makam Baru, Makam Tumpang, Urgent, Pre-Need |
-| 4 | Pilih layanan | Basic dan add-on catalog |
-| 5 | Ringkasan | Line item dan total |
-| 6 | Data pemesan | Identitas dan contact |
-| 7 | Data almarhum + dokumen | Data dan upload privat |
-| 8 | Pembayaran | Online ketika gate aktif; manual fallback ketika tidak |
-| 9 | Konfirmasi | Nomor pesanan, status, invoice, notification status, next step |
+| 1 | Cari & Pilih | Salah satu dari Jakarta, Bogor, Depok, Tangerang, Bekasi; detail lokasi dan availability tampil; Makam Baru, Makam Tumpang, Urgent, Pre-Need; basic dan add-on catalog |
+| 2 | Data Pemesan & Data Almarhum | Identitas dan contact; data dan upload privat; line item dan total pada kartu Ringkasan Pesanan |
+| 3 | Pembayaran | Online ketika gate aktif; manual fallback ketika tidak |
+| 4 | Konfirmasi | Nomor pesanan, status, invoice, notification status, next step |
+
+(Catatan historis: sembilan langkah berasal dari RKS K23–K35; sejak keputusan owner 2 Sep 2026 yang kanonis adalah empat tahap di atas.)
 
 ## 3. Marketplace MVP
 
