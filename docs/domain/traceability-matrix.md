@@ -1,4 +1,4 @@
-# Traceability Matrix — v0.6
+# Traceability Matrix — v0.22
 
 ## Status legend
 
@@ -137,6 +137,8 @@ verbatim.
 
 **v0.21 — 29 Aug 2026, Phase F booking-flow shortening (branch `feat/booking-flow-shortening`).** The `DIVERIFIKASI -> PENAWARAN_TERKIRIM` shortcut — a conditional edge that lets an already-reserved plot stand in for the manual `MENUNGGU_KETERSEDIAAN` confirmation — shipped as `Actions\IssueQuoteFromReservedPlot` (domain) plus a 'Lanjutkan dengan Plot Tercadang' header action on both the `/admin` and `/operator` order views. **No new row is minted and no row changes status:** this is a second path to the availability decision PLOT-03 already claims, so PLOT-03's description and evidence cell are widened with the three new test files instead of standing up a rival row. `docs/domain/order-lifecycle.md` §2's matrix gains the new edge, marked as its one conditional row. Section D carries the method-level trail and the scope limit — in particular that the aggregate-tier exclusion is an explicitly enforced check rather than a structural guarantee, because `CreateCemeteryBlock` does not currently refuse a block on an aggregate-tier cemetery; that pre-existing gap is recorded as open follow-up work and is claimed by no row. The v0.20 note above is kept verbatim. **Correction, 4 Sep 2026:** the `CreateCemeteryBlock` gap this note describes was closed the same day this note was written — `app/Domain/PlotInventory/Actions/CreateCemeteryBlock.php:86-91` now guards against creating a block on a non-`GRANULAR`-tier cemetery (commit `ca434723`, merged via PR #215, `fix/cemetery-block-tier-guard`). This note is kept verbatim above for its own historical record; the gap is closed, not open follow-up work.
 
+v0.22 — 19 September 2026, YIEM PRD reconciliation. (The H1 read `v0.6` while the notes below already cited v0.21; the H1 is corrected to v0.22 here rather than left drifting.) Section E gains PRD-01…PRD-08, all `Specified`, mirroring the acceptance criteria added the same day to six specs (`cemetery-directory-and-availability` AC13–AC16, `booking-and-order-orchestration` AC15, `platform-notifications` AC15–AC16, `public-home-and-navigation` AC10–AC14, `renewal-and-grave-registry` AC17–AC20, `admin-operations` AC12–AC13). Source and decision record: `docs/product/prd-yiem-2026-09-18.md` §16. Nothing in sections A–B changed.
+
 ## A. RKS authority
 
 | RKS | Capability | Spec | Gate/control |
@@ -249,6 +251,16 @@ Screens required by a cross-cutting UX principle rather than a stakeholder-workf
 | AKUN-06 | Order list (`/akun/pesanan`) — own orders only via `order_parties.user_id`, most-recent-first, status badge resolved through `StatusIntent` (not a hardcoded label) | plan-mode session; PR #114 | PUB-103 | `tests/Feature/Livewire/Public/Akun/OrderListTest.php`<br>`tests/Feature/Domain/OrderWorkflow/OrderForUserScopeTest.php` | Covered |
 | AKUN-07 | Renewal (akun) gate-closed page — honest "not yet available" over `<x-mk.gate-closed-page>`, never a raw 403/404 | plan-mode session; PR #113 | PUB-104 | `tests/Feature/Livewire/Public/Akun/DeferredSubPagesTest.php` | Covered |
 | AKUN-08 | Document (akun) gate-closed page — same honest pattern as AKUN-07 | plan-mode session; PR #113 | PUB-105 | `tests/Feature/Livewire/Public/Akun/DeferredSubPagesTest.php` | Covered |
+| PRD-01 | Order confirmation and its email carry the operator contact (phone, hours, or platform fallback) and the required-document list, snapshotted at confirmation | `prd-yiem-2026-09-18.md` MK-04; `booking-and-order-orchestration` AC15; `cemetery-directory-and-availability` AC15; `platform-notifications` AC15 | booking wizard confirmation step | none yet | Specified |
+| PRD-02 | Facility filter over `facility-catalog.md` codes; price/availability filters offered only where sourced data exists, data-less cemeteries stay listed | `prd-yiem-2026-09-18.md` MK-01; `cemetery-directory-and-availability` AC13–AC14; `admin-operations` AC13 | PUB-011 | none yet | Specified |
+| PRD-03 | Hero: one primary CTA (Cari Makam) plus three secondary (Perpanjang Makam, Layanan Pemakaman, Wakaf Tanah); customer-service element directly below the hero; four service cards unchanged | `prd-yiem-2026-09-18.md` §1; `public-home-and-navigation` AC10–AC11 | PUB-001 | none yet | Specified |
+| PRD-04 | Wakaf Tanah static information page with no form, upload, or interest registration | `prd-yiem-2026-09-18.md` MK-09; `public-home-and-navigation` AC12 | PUB-072 | none yet | Specified |
+| PRD-05 | Tentang Kami static page carrying the foundation's legal identity; unpublished and unlinked until supplied | `prd-yiem-2026-09-18.md` §3, §13; `public-home-and-navigation` AC13 | PUB-073 | none yet | Specified — blocked on stakeholder input |
+| PRD-06 | `terverifikasi` badge derived from an active capability profile with evidence, owner, and past `effective_at`; no negative badge | `prd-yiem-2026-09-18.md` MK-13; `cemetery-directory-and-availability` AC16 | PUB-011 | none yet | Specified |
+| PRD-07 | Renewal reminders only with heir consent and a known `due_date`, on the matrix's `Reminder due` windows, nearest future window only when late | `prd-yiem-2026-09-18.md` MK-06; `renewal-and-grave-registry` AC17–AC19; `platform-notifications` AC16; `notification-matrix.md` `Reminder due` policy | no screen (email); renewal confirmation step for consent | none yet | Specified |
+| PRD-08 | Admin report: draft-to-confirmation median and paid-to-issued invoice ratio, derived from existing timestamps, no targets shown | `prd-yiem-2026-09-18.md` §5; `admin-operations` AC12 | admin report module | none yet | Specified |
+
+**PRD-01…PRD-08 (added 19 Sep 2026).** These expectations come from the YIEM PRD reconciliation (`docs/product/prd-yiem-2026-09-18.md` §16–§17), a stakeholder document subordinate to `mvp-scope.md`, not from RKS or section B; they sit here because they have no RKS-derived ID. Every row is `Specified` at birth: the acceptance criteria were amended in the owning specs in the same change, no code exists, and none may move to `Covered` without a named test read against the claim.
 
 **Evidence, read against the claim, not the filename — all eight verified by reading each named
 test file's method list directly on 20 Aug 2026, not trusted from a prior summary.**

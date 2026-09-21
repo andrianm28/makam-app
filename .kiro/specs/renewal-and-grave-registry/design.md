@@ -15,6 +15,7 @@ grave_records
   death_date
   due_date
   heir_contact_encrypted/reference
+  heir_reminder_consent_at   -- AC17, added 19 Sep 2026; NULL = no reminders
   access_mode
   source
   source_updated_at
@@ -25,8 +26,12 @@ grave_import_errors
 renewals
 renewal_quotes
 renewal_external_markings
-reminder_deliveries
+reminder_deliveries(grave_record_id, due_date, window, dispatched_at)
+  -- AC15/AC18/AC19: unique (grave_record_id, due_date, window); window set per
+  -- notification-matrix.md `Reminder due` policy; nearest future window only
 ```
+
+`grave_import_rows` carries a consent flag per row (AC17); import validation rejects a missing flag as a row-level error, it does not default it to consent.
 
 ## Import
 

@@ -11,6 +11,9 @@
 - [ ] Add audit events and security tests. _Requirements: 8_
 - [ ] Disable unsafe bulk state changes. _Requirements: 9_
 
+- [ ] Add the two derived report measures (draft-to-confirmation median, paid-to-issued invoice ratio) as read-only queries in the report module. _Requirements: 7, 12_ — not started (PRD amendment 19 Sep 2026, follow-up order 6)
+- [ ] Switch the cemetery facility field to the closed catalog and add the operator contact and required-document override fields to the cemetery resource. _Requirements: 2, 13_ — not started (PRD amendment 19 Sep 2026, follow-up order 1–2; schema owned by `cemetery-directory-and-availability`)
+
 ## Design system
 
 Governed by [`docs/design/design-system.md`](../../../docs/design/design-system.md) (component contracts, state patterns) and [`resources/css/tokens.css`](../../../resources/css/tokens.css) (every design value).

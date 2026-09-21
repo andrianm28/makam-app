@@ -1,4 +1,4 @@
-# Domain Model — v0.2
+# Domain Model — v0.3
 
 ## 1. Bounded contexts
 
@@ -182,3 +182,14 @@ erDiagram
 | Plot hold | Short-lived lock before confirmed reservation/purchase |
 | Certificate | Versioned issued domain record with file representation |
 | Memorial | Optional remembrance content, not authoritative grave registry |
+| Verified cemetery (lokasi terverifikasi) | A Cemetery whose active capability profile was activated with owner approval, evidence, and an effective date. The public trust badge derives from this and from nothing else; there is no editorial toggle |
+| Wakaf Tanah | Land endowed for burial use. In this platform it is informational content plus a contact channel, not an aggregate: no intake, listing, or transfer of land rights exists (invariant 12) until a legal gate and a verification process owner are established |
+| Bukti booking | Stakeholder term for the order confirmation plus invoice a customer shows the operator. The order number is the reference; there is no separate booking-proof record |
+
+> Three rows added 19 Sep 2026 from the PRD reconciliation grill
+> (`docs/product/prd-yiem-2026-09-18.md` §16, decisions Q2, Q10, Q11). The
+> remaining PRD terms map to existing rows without new entries: lokasi makam →
+> Cemetery, unit makam → PlotUnit, unit terkunci sementara → Plot hold,
+> pengelola makam → cemetery operator, surat perpanjangan → Certificate.
+> "Layanan pemakaman" is deliberately not one term: booking add-ons are
+> ServicePackage items and marketplace products are VendorOrder items.

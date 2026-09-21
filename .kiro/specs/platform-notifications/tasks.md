@@ -18,6 +18,9 @@ Implemented and reconciled on `lane/l2-notifications` (lane Tasks 1–6, 11 Aug 
 - [x] Add tests: no private attachment on any external channel. _Requirements: 10_ — guard is structural (no attachment on the `Channel` contract; restricted variables rejected at render); the real external-channel half is NOT TESTED below.
 - [x] Add tests: duplicate outbox delivery produces exactly one notification. _Requirements: 8_
 
+- [ ] Allowlist the confirmation-snapshot variables (operator contact, required-document names) for customer confirmation templates. _Requirements: 15_ — not started (PRD amendment 19 Sep 2026, follow-up order 1)
+- [ ] Consume the renewal reminder schedule with `window` keyed to the matrix's reminder windows; nearest-future-window only for late due dates. _Requirements: 8, 16_ — not started (PRD amendment 19 Sep 2026, follow-up order 5; scheduler itself is owned by `renewal-and-grave-registry`)
+
 ## Design system
 
 This spec owns the **delivery-state contract** the UI renders. Per [`docs/design/design-system.md`](../../../docs/design/design-system.md) §6.8 and [`resources/css/tokens.css`](../../../resources/css/tokens.css):
