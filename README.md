@@ -113,6 +113,9 @@ Urgent dan Pre-Need boleh bercabang secara internal setelah Step 3, tetapi entry
 | Layanan pemakaman | `docs/product/service-catalog.md` |
 | Kategori marketplace | `docs/product/marketplace-catalog.md` |
 | Konten awal FAQ | `docs/product/faq-catalog.md` |
+| Fasilitas TPU/TPS | `docs/product/facility-catalog.md` |
+| Dokumen yang perlu dibawa | `docs/product/required-document-catalog.md` |
+| PRD stakeholder YIEM | `docs/product/prd-yiem-2026-09-18.md` |
 | Requirement fitur | `.kiro/specs/*/requirements.md` |
 | Kontrak API | `docs/contracts/openapi.yaml` |
 | Penerima notifikasi | `docs/contracts/notification-matrix.md` |

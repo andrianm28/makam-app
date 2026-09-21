@@ -14,6 +14,9 @@ Part of the v0.6 steering set (split from the former monolithic `project.md` on 
 6. `../../docs/product/service-catalog.md`
 7. `../../docs/product/marketplace-catalog.md`
 8. `../../docs/product/faq-catalog.md`
+9. `../../docs/product/facility-catalog.md`
+10. `../../docs/product/required-document-catalog.md`
+11. `../../docs/product/prd-yiem-2026-09-18.md` — stakeholder PRD (YIEM), subordinate to `mvp-scope.md`; see its header note
 
 The Stakeholder Workflow MVP is a committed acceptance baseline. External gates may change the operating mode, but they must use the documented fallback rather than removing a required public flow.
 

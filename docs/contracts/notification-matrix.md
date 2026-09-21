@@ -138,6 +138,33 @@ by `event_name` alone — see `ConsumeOutboxNotificationJob`'s doc block.
 > is unique per row and the online path's row already claims `Renewal paid/
 > verified` — not because the recipient policy differs.
 
+### `Reminder due` — window and recipient policy, recorded 19 Sep 2026
+
+The row itself is unchanged: its cells are pinned by the module's tests and
+`EMAIL/WA` for the customer already describes the channel policy below. What
+was `TBD` in practice — *which* windows, *which* contact — was decided in the
+PRD reconciliation grill (`docs/product/prd-yiem-2026-09-18.md` §16, Q7,
+Q17, Q18) and is recorded here so the reminder scheduler in
+`.kiro/specs/renewal-and-grave-registry` (AC15, still not started) has a
+defined window set to key idempotency on.
+
+- **Windows:** `H-90`, `H-30`, `H-7` before `grave_records.due_date`. These
+  three are the canonical window set; "one reminder per grave per window"
+  (`docs/domain/domain-model.md` invariant 11) is keyed on
+  `(grave_record, window)`.
+- **Eligibility:** only a grave whose `due_date` is known to the platform —
+  set by a renewal processed here or by an operator import. A NULL
+  `due_date` produces nothing; the platform never asks an heir to self-declare
+  an expiry for reminder purposes.
+- **Recipient:** exactly one heir contact recorded on the grave record who
+  has consented to be contacted. Not every account that ever renewed the
+  grave.
+- **Channel:** `EMAIL` is the baseline. `WA` follows the same `G-WA-01`
+  gate reading as every other row: while `WhatsAppMode` is
+  `EMAIL_IN_APP_FALLBACK` it is recorded as `UNAVAILABLE`, never dispatched.
+- **Admin / Pengelola `optional`:** unchanged reading — emitted only when the
+  record carries that recipient, and carrying no external channel token.
+
 ## Delivery rules
 
 1. Notification outbox is durable and idempotent.
