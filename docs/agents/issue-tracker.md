@@ -1,33 +1,35 @@
-# Issue Tracker
+# Issue tracker: Local Markdown (specflow)
 
-**This repository has no external issue tracker, and that is a recorded
-decision — not an omission.** See
-[`docs/adr/0038-tasks-md-owns-per-spec-progress-no-external-issue-tracker.md`](../adr/0038-tasks-md-owns-per-spec-progress-no-external-issue-tracker.md).
+> _Contradicts ADR-0038 (tasks-md-owns-per-spec-progress-no-external-issue-tracker), by explicit owner direction 20 Sep 2026: new specs follow specflow, not Kiro. ADR-0038 needs a superseding ADR to close the loop; until then this file is the operative convention and dual ownership is explicitly rejected (see Frozen below)._
 
-Do not run `gh issue create`. Measured 19 Sep 2026: 0 GitHub issues, 334 pull
-requests. Work has always flowed through PRs.
+Issues and specs for new work live as markdown files in `.scratch/`.
 
-## Where each kind of work item lives
+## Conventions
 
-| Kind | Home | Notes |
-| --- | --- | --- |
-| Per-spec progress | `.kiro/specs/<spec>/tasks.md` | The durable answer to "what does this spec still need" |
-| Audit findings | `docs/remediation/findings.yml` | Closed status vocabulary, enforced by `ci/verify-docs.sh` GATE 15 |
-| A unit of work in flight | a pull request | One PR per unit of work, against the working trunk (`AGENTS.md` §Development methodology) |
-| How one pass was executed | `docs/superpowers/plans/` | **Append-only history. Never consult it for current state** (`AGENTS.md`) |
+- One feature per directory: `.scratch/<feature-slug>/`
+- The spec is `.scratch/<feature-slug>/spec.md`
+- Implementation plans are written to `docs/superpowers/plans/` unless an ADR in
+  this repo says otherwise; record the actual location here, because
+  `/specflow:spec-to-plan` reads this line and passes it to
+  `superpowers:writing-plans`, whose own default would otherwise win
+- Implementation issues are one file per ticket at `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01`, never a single combined tickets file
+- Triage state is recorded as a `Status:` line near the top of each issue file. specflow tidak mengirim skill `triage`, jadi `docs/agents/triage-labels.md` tidak dibuat; pakai string status apa pun yang repo ini sudah pakai.
+- Comments and conversation history append to the bottom of the file under a `## Comments` heading
 
-## What the skills should do instead
+## Frozen (not authoritative for new work)
 
-- **`to-tickets`** — write the items into the relevant `tasks.md`, or into
-  `findings.yml` when they are audit findings. Follow each file's existing
-  shape; `findings.yml`'s required fields are enforced by GATE 15.
-- **`triage`** — triage arrives as pull requests, not issues. The labels in
-  [`triage-labels.md`](triage-labels.md) are defined but nothing currently
-  carries them.
-- **`to-spec`** — specs live in `.kiro/specs/` and
-  `docs/superpowers/specs/`. New work follows Superpowers SDD: plan doc first,
-  worktree isolation, one PR per unit of work.
+- `.kiro/specs/*/{requirements,design,tasks}.md` is a frozen archive. Do not consult it to answer "what is the current state" for new work and do not update its checkboxes.
+- `docs/remediation/findings.yml` remains the read-only record of past audit findings; new findings go to `.scratch/` per the conventions above.
 
-## PRs as a request surface
+## When a skill says "publish to the issue tracker"
 
-**Off.** Flip this line if external PRs should enter the triage queue.
+Create a new file under `.scratch/<feature-slug>/` (creating the directory if needed).
+
+## When a skill says "fetch the relevant ticket"
+
+Read the file at the referenced path. The user will normally pass the path or the issue number directly.
+
+## Baseline test route (recorded 20 Sep 2026, spec-to-plan step 4)
+
+- `bash ci/verify-docs.sh` runs on this host with no build (verified ALL PASS in worktree).
+- PHP tests (phpunit/artisan) CANNOT run on this host: worktrees ship without `vendor/` and installs are forbidden here per `CLAUDE.md`; the main checkout's `vendor/` requires PHP >= 8.5 while the host provides PHP 8.3.6. No app container is running. Run the PHP baseline inside the project's PHP 8.5 container or CI (`CI php job`) instead, e.g. `php artisan test tests/Feature/Livewire/Public/Faq/FaqArticleDetailRouteTest.php`. Never assume green from an unrunnable baseline.

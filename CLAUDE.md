@@ -70,22 +70,37 @@ Composer and npm builds run in CI (`.github/workflows/ci.yml`), never on this ho
 
 ## Agent skills
 
-Per-repo configuration for the `mattpocock/skills` engineering skills. These
-files record what is already true of this repository; they do not introduce new
-authority.
-
 ### Issue tracker
 
-No external issue tracker — `tasks.md` owns per-spec progress and
-`findings.yml` owns audit findings (ADR-0038). See
-[`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md).
-
-### Triage labels
-
-The five canonical roles, unchanged. Nothing carries them today. See
-[`docs/agents/triage-labels.md`](docs/agents/triage-labels.md).
+Local markdown under `.scratch/` (specflow, fully — not Kiro). See `docs/agents/issue-tracker.md`.
 
 ### Domain docs
 
-Single-context, with `docs/domain/` standing in for `CONTEXT.md`. See
-[`docs/agents/domain.md`](docs/agents/domain.md).
+Single-context. See `docs/agents/domain.md`.
+
+### Alur spec -> implementasi
+
+Repo ini memakai alur spec specflow untuk intake, lalu menyerahkannya ke
+Superpowers untuk implementasi. Urutannya:
+
+1. **Intake**: ketik `/specflow:grill-with-docs`. Fase ini user-invoked: sesi grilling
+   dimulai saat kamu mengetiknya, dan ia sekaligus memelihara ADR. Repo ini tidak
+   memakai `CONTEXT.md` — lihat `docs/agents/domain.md` untuk kenapa.
+2. **Spec**: `/specflow:to-spec` menulis ke lokasi yang dicatat
+   `docs/agents/issue-tracker.md` (`.scratch/<feature-slug>/spec.md`; bukan `.kiro/specs/`).
+3. **Bersyarat**: `/specflow:to-tickets` hanya bila kerjanya lebih besar dari satu
+   rencana, atau bentuknya wide refactor. Untuk kerja yang muat satu rencana,
+   lewati: `superpowers:writing-plans` sudah memecahnya jadi task, dan
+   menjalankan keduanya adalah dekomposisi ganda.
+4. **Rencana**: `/specflow:spec-to-plan` — **satu panggilan, prosedur sembilan langkah**.
+   Ia sendiri yang memanggil `superpowers:using-git-worktrees` untuk membuat
+   workspace terisolasi (ia menjalankan baseline test dan melapor bila merah,
+   bukan menjamin hijau), lalu
+   `superpowers:writing-plans` untuk menulis dokumennya, lalu menyisipkan
+   kendala seam ke tiap blok task dan menjalankan skrip penjaga. Jangan
+   memanggilnya dua kali.
+5. **Eksekusi**: `superpowers:subagent-driven-development`.
+6. **Review**: `/specflow:code-review` (dua sumbu). **Debug**: `/specflow:diagnosing-bugs`.
+7. **Penutup**: `superpowers:finishing-a-development-branch` — verifikasi test,
+   pilih di antara tiga opsi yang disajikannya, bersihkan worktree. Membuang
+   kerja hanya atas permintaan eksplisit, bukan opsi menu.
