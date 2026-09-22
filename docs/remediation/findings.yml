@@ -7913,6 +7913,40 @@
     currently reads Closed (local evidence) without one), and wire a provider delivery-receipt path
     when a real BSP/ESP lands.
 
+- id: NOTIF-14
+  dim: NOTIF
+  severity: Medium
+  category: "notification-template-rendering"
+  effort: S
+  audit_verdict: UNVERIFIED
+  status: in_review
+  status_evidence: [branch:feat/notification-template-variables@cc8907e5]
+  status_verified: false
+  status_note: >-
+    Fixed by commit 38ad73dd on feat/notification-template-variables (version-3 template rows with
+    double-brace placeholders). No PR has been opened for this branch yet, so this is a commit
+    reference, not a merged#/open# PR reference like the rest of this ledger's status_evidence
+    values; update to open#<n> once a PR exists and to merged#<n> once it merges.
+  files:
+    - "database/migrations/2026_09_06_130000_add_v2_notification_templates_for_zero_recipient_events.php"
+    - "database/migrations/2026_09_20_100000_add_v3_notification_templates_with_double_brace_placeholders.php"
+    - "app/Platform/Notification/TemplateRenderer.php:19"
+  statement: >-
+    The version-2 bodies seeded for "Vendor accepted/rejected" and "Marketplace order submitted"
+    used single-brace placeholders (`{vendor_order_id}`, `{outcome}`, `{order_id}`), but
+    TemplateRenderer::PLACEHOLDER_PATTERN has only ever matched double-brace `{{ name }}`, so every
+    customer who received one of these two notifications saw the literal brace text instead of the
+    resolved value. This was undetectable in practice from the render call sites alone: before this
+    same branch, DispatchNotification, MailChannel, and LogChannel all called
+    TemplateRenderer::render() with an empty variable bag, so no notification template of any kind
+    had ever actually had a variable resolved end to end.
+  recommendation: >-
+    Fixed on this branch by database/migrations/2026_09_20_100000_add_v3_notification_templates_with_double_brace_placeholders.php,
+    which adds version-3 rows for both templates using {{ }} placeholders and repoints
+    active_version_id, carrying the allowlist and restricted fields over unchanged. Independent
+    re-verification (reading the migration and its test coverage against a real PR, not just this
+    branch's own claim) is still outstanding before this can move past in_review.
+
 - id: PAY-14
   dim: PAY
   severity: Info

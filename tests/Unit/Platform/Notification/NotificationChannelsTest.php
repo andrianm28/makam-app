@@ -9,6 +9,7 @@ use App\Platform\Notification\Channels\NullChannel;
 use App\Platform\Notification\DeliveryState;
 use App\Platform\Notification\Models\NotificationDelivery;
 use App\Platform\Notification\Models\NotificationTemplateVersion;
+use App\Platform\Notification\NotificationVariableResolver;
 use App\Platform\Notification\RecipientSet;
 use App\Platform\Notification\TemplateRenderer;
 use Illuminate\Support\Facades\Log;
@@ -40,7 +41,7 @@ final class NotificationChannelsTest extends TestCase
             'restricted_fields' => [],
         ]);
 
-        $result = (new LogChannel(new TemplateRenderer))->send($delivery, $version, RecipientSet::empty());
+        $result = (new LogChannel(new TemplateRenderer, app(NotificationVariableResolver::class)))->send($delivery, $version, RecipientSet::empty());
 
         $this->assertSame(DeliveryState::Unavailable, $result->state);
         $this->assertSame(LogChannel::LOG_ONLY_MESSAGE, $result->message);

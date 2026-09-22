@@ -12,6 +12,8 @@ use App\Platform\Notification\Contracts\RecipientRoleSource;
 use App\Platform\Notification\EloquentRecipientAddressResolver;
 use App\Platform\Notification\Listeners\DispatchNotificationConsumerOnOutboxEventPublished;
 use App\Platform\Notification\NotificationDeliveryWriteGuard;
+use App\Platform\Notification\NotificationVariableResolver;
+use App\Platform\Notification\PayloadNotificationVariableSource;
 use App\Platform\Notification\ProvisionalAggregateNotificationSubjectSource;
 use App\Platform\Notification\ProvisionalScopeEntityRecipientRoleSource;
 use App\Platform\Outbox\Events\OutboxEventPublished;
@@ -59,6 +61,23 @@ use Illuminate\Support\ServiceProvider;
  * - `RecipientAddressResolver` -> `EloquentRecipientAddressResolver`
  *   (added alongside `Channels\MailChannel` — see that contract's own doc
  *   block).
+ *
+ * *** `NotificationVariableResolver` binding: *** a CLOSURE singleton, not
+ * `->singleton(NotificationVariableResolver::class)` auto-resolution,
+ * because the resolver's constructor is variadic
+ * (`__construct(NotificationVariableSource ...$sources)`) — the container
+ * cannot autowire a variadic — and because a feature module registers its
+ * own source by `$this->app->extend(NotificationVariableResolver::class,
+ * ...)`, appending to the sources this closure supplies. `extend()` needs
+ * something to extend, so this must stay a closure.
+ *
+ * Registration ORDER is load-bearing:
+ * `PayloadNotificationVariableSource::handles()` returns true for EVERY
+ * aggregate type, and `NotificationVariableResolver` merges sources in
+ * registration order with LATER keys winning. The platform payload
+ * pass-through is therefore registered FIRST, so a feature-module source
+ * appended later can override a payload key with an authoritative value
+ * rather than being silently overwritten by it.
  */
 final class NotificationServiceProvider extends ServiceProvider
 {
@@ -68,6 +87,10 @@ final class NotificationServiceProvider extends ServiceProvider
         $this->app->bind(NotificationSubjectSource::class, ProvisionalAggregateNotificationSubjectSource::class);
         $this->app->bind(RecipientAddressResolver::class, EloquentRecipientAddressResolver::class);
         $this->app->bind(Channel::class, (string) config('notification.channel'));
+
+        $this->app->singleton(NotificationVariableResolver::class, static fn (): NotificationVariableResolver => new NotificationVariableResolver(
+            new PayloadNotificationVariableSource,
+        ));
     }
 
     public function boot(): void
