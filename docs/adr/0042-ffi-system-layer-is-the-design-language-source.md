@@ -185,9 +185,27 @@ documented conflict between two instructions from the same person.
 
 ## Open questions this ADR does not answer
 
-- Whether the owner, knowing FFI is a Kitabisa clone, still wants visual
-  kinship with it at all.
+- ~~Whether the owner, knowing FFI is a Kitabisa clone, still wants visual
+  kinship with it at all.~~ Answered 22 Sep 2026: yes, confirmed knowing —
+  see [ADR-0043](0043-ffi-full-visual-clone-supersedes-system-layer-only.md).
 - Whether Makam and FFI are meant to read as one organisation's products. If
   yes, the shared element should be a deliberate house style, not one site
   imitating the other.
 - Whether the four open design branches land or close.
+
+## Superseded (22 Sep 2026)
+
+The decision this ADR records — FFI contributes a system layer only, palette
+and page structure stay Makam's own — is **superseded** by
+[ADR-0043](0043-ffi-full-visual-clone-supersedes-system-layer-only.md). The
+owner, informed of this ADR's central finding (FFI is an unrebranded
+Kitabisa clone) and of the conflict with ADR-0041, asked explicitly for the
+full visual identity and page structure, not the system layer alone. This
+text is kept verbatim rather than rewritten, per this repository's own
+convention for superseded reasoning (see ADR-0041's own note on ADR-0034,
+and `renewal-and-grave-registry/requirements.md`'s `## Superseded` section).
+The analysis above — what FFI technically is, the Kitabisa evidence, the
+system-layer inventory, the conflict with the brand guideline's page 09 —
+remains the record of what was true and known at the point the owner made
+the reversed decision. Nothing in it was found to be wrong; the decision
+built on it simply changed.
