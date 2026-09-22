@@ -3,7 +3,20 @@
 **22 September 2026.** Menjawab permintaan pemilik proyek *"owner minta
 tampilannya sama dengan ffi"*, menunjuk `/home/ubuntu/fundforindonesia.org`.
 
-Keputusannya ada di [ADR-0042](../../adr/0042-ffi-system-layer-is-the-design-language-source.md);
+> **DISUPERSEDE 22 Sep 2026, sore, oleh
+> [`2026-09-22-ffi-full-visual-clone-design.md`](2026-09-22-ffi-full-visual-clone-design.md).**
+> Dokumen ini ditulis di bawah ADR-0042 (hanya lapisan sistem yang
+> menyeberang). Hari yang sama, pemilik proyek menegaskan lewat instruksi
+> lebih kuat — *"owner minta visual ui persis seperti ffi"* — bahwa itu
+> termasuk palet, tipografi, dan struktur halaman, bukan lapisan sistem
+> saja. ADR-0043 mencatat pembalikan itu. Dokumen ini dipertahankan apa
+> adanya, bukan ditulis ulang, sesuai konvensi repo untuk keputusan yang
+> disupersede: temuan Kitabisa, inventarisasi lapisan sistem, dan
+> pemeriksaan kepatuhan PRD di dalamnya tetap akurat sebagai catatan kapan
+> ditulis, dan sebagian besar diwarisi langsung oleh dokumen penggantinya.
+
+Keputusannya ada di [ADR-0042](../../adr/0042-ffi-system-layer-is-the-design-language-source.md)
+(disupersede oleh [ADR-0043](../../adr/0043-ffi-full-visual-clone-supersedes-system-layer-only.md));
 dokumen ini adalah spesifikasinya. Konteks untuk pemilik ada di
 [`catatan-pemilik-2026-09-22-tampilan-ffi.md`](../../product/catatan-pemilik-2026-09-22-tampilan-ffi.md).
 
