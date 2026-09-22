@@ -130,7 +130,11 @@ documented conflict between two instructions from the same person.
    are merged — Tahap 1 (vertical rhythm), 2 (surface alternation, which
    produced ADR-0040's `--mk-surface-quiet`), 3 (mobile CTA above the fold),
    4 (component hierarchy, which produced `card`'s `emphasis` axis) and 8
-   (doc sync).
+   (doc sync). Tahap 3 is identified by **content, not by label**: PR #303
+   carries no stage number, and was matched to Tahap 3 by what it did —
+   *"hero mobile — CTA naik 256px, dari 1,4 layar di bawah lipatan jadi
+   0,14"*. Stated here so a later reader does not mistake it for a
+   self-declared mapping.
 7. **Tahap 5, 6 and 7 are not cancelled by this ADR, because none of them
    depends on kamboja.** Each is blocked on a decision, not on a source:
    Tahap 5 (image register) and Tahap 7 (copy voice) are already unblocked by

@@ -292,6 +292,13 @@ sama, bukan sebagai kelas lepas.
   pedoman merek Makam sendiri, dan Tahap 6 menunggu tinjauan kontrak produk.
 
 **Catatan kebersihan dokumen.** Seluruh kotak centang di rencana Kamboja masih
-`- [ ]` padahal lima dari delapan tahapnya sudah merge. Berkas itu berbohong
-tentang keadaan dirinya sendiri dan perlu disinkronkan; bukan pekerjaan
-spesifikasi ini, tetapi dicatat agar tidak hilang.
+`- [ ]` padahal lima dari delapan tahapnya sudah merge, yaitu Tahap 1, 2, 3,
+4, dan 8. Berkas itu berbohong tentang keadaan dirinya sendiri, dan satu-satunya
+cara mengetahui keadaan sebenarnya saat ini adalah membaca git log, bukan
+membaca rencananya. Perlu disinkronkan; bukan pekerjaan spesifikasi ini, tetapi
+dicatat agar tidak hilang.
+
+Perlu diketahui juga bahwa Tahap 3 dikenali dari **isinya, bukan dari
+labelnya**: PR #303 tidak menyebut nomor tahap sama sekali, dan dicocokkan
+karena yang dikerjakannya persis deskripsi Tahap 3. Pemetaan seperti ini
+rapuh, dan itu alasan tambahan kenapa berkas rencananya perlu disinkronkan.
