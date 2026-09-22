@@ -51,6 +51,8 @@ final class QuoteLine extends Model
         'quote_id',
         'service_definition_id',
         'service_package_version_id',
+        'grave_plot_id',
+        'cemetery_package_id',
         'price_version_id',
         'price_version_number',
         'description',

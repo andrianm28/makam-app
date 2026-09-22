@@ -107,6 +107,16 @@ final class LaunchCityTest extends TestCase
             $table->dropForeign(['cemetery_package_id']);
         });
 
+        // `quote_lines` (ADR-0042's PLOT arm,
+        // `2026_09_17_110000_add_plot_line_columns_to_quote_lines_table.php`)
+        // FK-references `grave_plots` and `cemetery_packages` the same way,
+        // so it needs the same treatment before those two tables are
+        // dropped below.
+        Schema::table('quote_lines', function (Blueprint $table) {
+            $table->dropForeign(['grave_plot_id']);
+            $table->dropForeign(['cemetery_package_id']);
+        });
+
         // P4 visitation tables (16 Aug 2026) come first of all — the four
         // FK-reference `cemeteries`/`cemetery_visitation_policies`, and
         // PostgreSQL blocks `DROP TABLE` of a parent by ANY incoming FK

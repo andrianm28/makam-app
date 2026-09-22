@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domain\Quotation\Actions;
 
+use App\Domain\CemeteryCapability\Models\CemeteryPackage;
 use App\Domain\OrderWorkflow\Models\Order;
+use App\Domain\PlotInventory\Models\GravePlot;
 use App\Domain\Quotation\Models\Quote;
 use App\Domain\Quotation\Models\QuoteLine;
 use App\Domain\Quotation\QuoteStatus;
@@ -18,6 +20,7 @@ use App\Platform\Outbox\OutboxClassification;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 use OverflowException;
 
@@ -57,9 +60,9 @@ use OverflowException;
  * FK, not re-checked here: it is a reference into an append-only table.
  *
  * ---------------------------------------------------------------------------
- * DUAL LINE TYPES — the P0 ruling (14 Aug 2026)
+ * LINE FAMILIES — the P0 ruling (14 Aug 2026) and ADR-0042 (17 Sep 2026)
  * ---------------------------------------------------------------------------
- * `IssueQuote` accepts exactly ONE of two line families per quote:
+ * `IssueQuote` accepts one of three line families per line:
  *
  * - A PACKAGE line (`service_package_version_id` present): the Task 4
  *   shape above, unchanged — marketplace/operator quotes keep working.
@@ -69,11 +72,21 @@ use OverflowException;
  *   `list<array{service_definition_id: int, price_version_id: int,
  *   price_version_number: int, quantity: int, unit_amount: string,
  *   currency: string, fulfillment_owner: string}>`.
+ * - A PLOT line (`grave_plot_id` AND `cemetery_package_id` both present,
+ *   ADR-0042): a grave plot sold with the `CemeteryPackage` that priced
+ *   it, shape `list<array{grave_plot_id: string, cemetery_package_id: int,
+ *   price_version_id: int, price_version_number: int, quantity: int,
+ *   unit_amount: string, currency: string, fulfillment_owner: string}>`.
+ *   Note `grave_plot_id` is a UUID string — `cemetery_package_id` is a
+ *   bigint — the two columns are deliberately different types.
  *
- * A line must carry EXACTLY ONE of the two family keys (both or neither is
- * rejected), and a single quote must not mix families — one line family
- * per quote, mirroring the single-currency rule's reasoning (a quote
- * snapshots ONE kind of pricing universe).
+ * A line must carry EXACTLY ONE family's key group (a partial or doubled
+ * group is rejected). Per ADR-0042 the SET of families present across a
+ * quote's lines must be one of `[package]`, `[service]`, `[plot]`, or
+ * `[plot, service]` — a plot and the funeral services bought with it are
+ * one pricing universe, but PACKAGE stays exclusive, mirroring the
+ * single-currency rule's reasoning (a quote snapshots ONE kind of pricing
+ * universe).
  *
  * For a service line the referenced `PriceVersion` must EXIST and BE THE
  * CURRENT (non-superseded) version OF THAT SERVICE — the frozen-snapshot
@@ -109,6 +122,30 @@ final readonly class IssueQuote
     private const string SERVICE_LINE = 'service';
 
     private const string PACKAGE_LINE = 'package';
+
+    /**
+     * ADR-0042. A plot line names `grave_plot_id` (what was sold) AND
+     * `cemetery_package_id` (the pricing vehicle that produced the amount).
+     */
+    private const string PLOT_LINE = 'plot';
+
+    /**
+     * The family SETS a quote may carry, per ADR-0042. `{PLOT, SERVICE}` is
+     * the pay-first path: a plot and the funeral services bought with it are
+     * one pricing universe. PACKAGE stays exclusive, so the marketplace
+     * invariant the original ruling protected is untouched.
+     *
+     * Sorted arrays, compared against a sorted set — the order lines arrive
+     * in must not change the verdict.
+     *
+     * @var list<list<string>>
+     */
+    private const array LEGAL_FAMILY_SETS = [
+        [self::PACKAGE_LINE],
+        [self::SERVICE_LINE],
+        [self::PLOT_LINE],
+        [self::PLOT_LINE, self::SERVICE_LINE],
+    ];
 
     /**
      * @param  list<array<string, mixed>>  $lines  See the test suite's class
@@ -169,6 +206,8 @@ final readonly class IssueQuote
                     'quote_id' => $quote->getKey(),
                     'service_definition_id' => $line['service_definition_id'],
                     'service_package_version_id' => $line['service_package_version_id'],
+                    'grave_plot_id' => $line['grave_plot_id'] ?? null,
+                    'cemetery_package_id' => $line['cemetery_package_id'] ?? null,
                     'price_version_id' => $line['price_version_id'],
                     'price_version_number' => $line['price_version_number'],
                     'description' => $line['description'],
@@ -216,7 +255,7 @@ final readonly class IssueQuote
         }
 
         $currency = null;
-        $family = null;
+        $familiesSeen = [];
         $normalized = [];
 
         foreach ($lines as $index => $line) {
@@ -225,15 +264,7 @@ final readonly class IssueQuote
             }
 
             $lineFamily = $this->lineFamilyOf($line, $index);
-
-            if ($family === null) {
-                $family = $lineFamily;
-            } elseif ($lineFamily !== $family) {
-                throw new InvalidArgumentException(
-                    "Quote line [{$index}] is a [{$lineFamily}] line in a set whose ".
-                    "first line is a [{$family}] line — a quote must carry one line family."
-                );
-            }
+            $familiesSeen[$lineFamily] = true;
 
             $quantity = $this->requiredInt($line, 'quantity', $index);
 
@@ -264,6 +295,12 @@ final readonly class IssueQuote
                 continue;
             }
 
+            if ($lineFamily === self::PLOT_LINE) {
+                $normalized[] = $this->normalizePlotLine($line, $index, $quantity, $unitAmountMinor, $lineCurrency, $fulfillmentOwner);
+
+                continue;
+            }
+
             $servicePackageVersionId = (int) $this->requiredInt($line, 'service_package_version_id', $index);
             $version = ServicePackageVersion::query()->find($servicePackageVersionId);
 
@@ -277,6 +314,8 @@ final readonly class IssueQuote
             $normalized[] = [
                 'service_definition_id' => null,
                 'service_package_version_id' => $servicePackageVersionId,
+                'grave_plot_id' => null,
+                'cemetery_package_id' => null,
                 'price_version_id' => $this->requiredInt($line, 'price_version_id', $index),
                 'price_version_number' => $this->requiredInt($line, 'price_version_number', $index),
                 'description' => $this->requiredString($line, 'description', $index),
@@ -288,28 +327,67 @@ final readonly class IssueQuote
             ];
         }
 
+        // ADR-0042: the SET of families present must be one of the legal
+        // combinations. This is a per-set rule, so unlike the per-row rule it
+        // has no database backstop; that is stated in the ADR rather than
+        // assumed away.
+        $present = array_keys($familiesSeen);
+        sort($present);
+
+        if (! in_array($present, self::LEGAL_FAMILY_SETS, true)) {
+            throw new InvalidArgumentException(
+                'A quote may not mix line families this way: got combination ['.
+                implode(', ', $present).']. ADR-0042 permits [package], [service], [plot], '.
+                'or [plot + service].'
+            );
+        }
+
         return $normalized;
     }
 
     /**
-     * Exactly one of the two family keys must be present. A line that names
-     * both (or neither) is ambiguous and refused outright.
+     * Exactly one family's key group must be present: `service_definition_id`
+     * alone, `service_package_version_id` alone, or BOTH `grave_plot_id` and
+     * `cemetery_package_id` (a plot line naming only one of that pair is as
+     * ambiguous as naming none). Any other combination is refused outright.
      *
      * @param  array<string, mixed>  $line
      */
     private function lineFamilyOf(array $line, int $index): string
     {
-        $isService = array_key_exists('service_definition_id', $line);
-        $isPackage = array_key_exists('service_package_version_id', $line);
+        $families = [];
 
-        if ($isService === $isPackage) {
+        if (array_key_exists('service_definition_id', $line)) {
+            $families[] = self::SERVICE_LINE;
+        }
+
+        if (array_key_exists('service_package_version_id', $line)) {
+            $families[] = self::PACKAGE_LINE;
+        }
+
+        // A plot line names BOTH keys, so both are required to claim the
+        // family and neither alone is accepted — the same pair the
+        // `quote_lines_line_family_check` constraint enforces in the database.
+        if (array_key_exists('grave_plot_id', $line) || array_key_exists('cemetery_package_id', $line)) {
+            if (! array_key_exists('grave_plot_id', $line) || ! array_key_exists('cemetery_package_id', $line)) {
+                throw new InvalidArgumentException(
+                    "Quote line [{$index}] is a plot line and must carry BOTH ".
+                    '[grave_plot_id] and [cemetery_package_id].'
+                );
+            }
+
+            $families[] = self::PLOT_LINE;
+        }
+
+        if (count($families) !== 1) {
             throw new InvalidArgumentException(
                 "Quote line [{$index}] must carry exactly one of ".
-                '[service_definition_id] (service line) or [service_package_version_id] (package line).'
+                '[service_definition_id] (service line), [service_package_version_id] (package line), '.
+                'or [grave_plot_id]+[cemetery_package_id] (plot line).'
             );
         }
 
-        return $isService ? self::SERVICE_LINE : self::PACKAGE_LINE;
+        return $families[0];
     }
 
     /**
@@ -372,9 +450,132 @@ final readonly class IssueQuote
         return [
             'service_definition_id' => $serviceDefinitionId,
             'service_package_version_id' => null,
+            'grave_plot_id' => null,
+            'cemetery_package_id' => null,
             'price_version_id' => $priceVersionId,
             'price_version_number' => $priceVersionNumber,
             'description' => $definition->name,
+            'quantity' => $quantity,
+            'unit_amount_minor' => $unitAmountMinor,
+            'line_total_minor' => $this->lineTotalMinor($unitAmountMinor, $quantity),
+            'currency' => $lineCurrency,
+            'fulfillment_owner' => $fulfillmentOwner,
+        ];
+    }
+
+    /**
+     * A plot line's frozen-snapshot branch, mirroring the service branch.
+     *
+     * Four things are checked, and the fourth is the one most easily missed:
+     * the named `PriceVersion` must exist, be CURRENT, belong to the named
+     * `CemeteryPackage` — `price_versions` is polymorphic and holds rows for
+     * `ServiceDefinition` and `ServicePackageVersion` too — and that package
+     * must belong to the SAME cemetery as the plot, compared through the
+     * plot's own path (`grave_plots.block_id` -> `cemetery_blocks.cemetery_id`).
+     * Without the last one a draft could freeze another cemetery's package
+     * price onto this plot, a defect visible only when somebody asks why the
+     * amount is what it is.
+     *
+     * `grave_plot_id` is read with `requiredString`, not `requiredInt`:
+     * `grave_plots.id` is a UUID (`2026_08_16_100010_create_grave_plots_
+     * table.php`), while `cemetery_package_id` names `cemetery_packages.id`,
+     * an ordinary bigint. The two columns are deliberately different types
+     * and must not be coerced into one.
+     *
+     * `description` is derived from the plot and its package, never
+     * caller-supplied, so no line description can drift from the catalogue.
+     *
+     * @param  array<string, mixed>  $line
+     * @return array<string, mixed>
+     */
+    private function normalizePlotLine(
+        array $line,
+        int $index,
+        int $quantity,
+        int $unitAmountMinor,
+        string $lineCurrency,
+        string $fulfillmentOwner,
+    ): array {
+        // Spec: "a plot line is always quantity 1" — a plot is a unique
+        // physical unit, unlike a service or package line, which may
+        // legitimately repeat. The composer already hardcodes 1
+        // (`ComposeQuoteLinesFromBookingDraft::plotLines()`), so this is a
+        // guard-layer backstop against any other caller.
+        if ($quantity !== 1) {
+            throw new InvalidArgumentException(
+                "Quote line [{$index}] is a plot line and must have quantity exactly 1, got [{$quantity}]."
+            );
+        }
+
+        $gravePlotId = $this->requiredString($line, 'grave_plot_id', $index);
+        $cemeteryPackageId = (int) $this->requiredInt($line, 'cemetery_package_id', $index);
+
+        // `grave_plots.id` is a UUID column; comparing a non-UUID string
+        // against it is a Postgres type error (`SQLSTATE[22P02]`), not a
+        // miss — the same reason `BookingWizard::holdPlotForDiscovery()`
+        // guards with `Str::isUuid()` before ever querying. Refusing here
+        // keeps the readable-message contract layer 2 promises.
+        if (! Str::isUuid($gravePlotId)) {
+            throw new InvalidArgumentException(
+                "Quote line [{$index}] references grave plot [{$gravePlotId}], which is not a valid UUID."
+            );
+        }
+
+        $plot = GravePlot::query()->with('block')->find($gravePlotId);
+
+        if (! $plot instanceof GravePlot) {
+            throw new InvalidArgumentException(
+                "Quote line [{$index}] references unknown grave plot [{$gravePlotId}]."
+            );
+        }
+
+        $package = CemeteryPackage::query()->find($cemeteryPackageId);
+
+        if (! $package instanceof CemeteryPackage) {
+            throw new InvalidArgumentException(
+                "Quote line [{$index}] references unknown cemetery package [{$cemeteryPackageId}]."
+            );
+        }
+
+        if ((string) $package->cemetery_id !== (string) $plot->block?->cemetery_id) {
+            throw new InvalidArgumentException(
+                "Quote line [{$index}] prices grave plot [{$gravePlotId}] with cemetery package ".
+                "[{$cemeteryPackageId}], which belongs to a different cemetery."
+            );
+        }
+
+        $priceVersionId = (int) $this->requiredInt($line, 'price_version_id', $index);
+        $priceVersion = PriceVersion::query()->find($priceVersionId);
+
+        if (! $priceVersion instanceof PriceVersion
+            || ! $priceVersion->isCurrent()
+            || $priceVersion->priceable_type !== CemeteryPackage::class
+            || (int) $priceVersion->priceable_id !== $cemeteryPackageId) {
+            throw new InvalidArgumentException(
+                "Quote line [{$index}] references price version [{$priceVersionId}], ".
+                "which is not the current price version of cemetery package [{$cemeteryPackageId}]."
+            );
+        }
+
+        $priceVersionNumber = $this->requiredInt($line, 'price_version_number', $index);
+
+        if (Money::fromDecimal((string) $priceVersion->amount) !== $unitAmountMinor
+            || $lineCurrency !== (string) $priceVersion->currency
+            || $priceVersionNumber !== (int) $priceVersion->version_number) {
+            throw new InvalidArgumentException(
+                "Quote line [{$index}] unit amount, currency, or version number contradicts ".
+                "price version [{$priceVersionId}]'s frozen anchor."
+            );
+        }
+
+        return [
+            'service_definition_id' => null,
+            'service_package_version_id' => null,
+            'grave_plot_id' => $gravePlotId,
+            'cemetery_package_id' => $cemeteryPackageId,
+            'price_version_id' => $priceVersionId,
+            'price_version_number' => $priceVersionNumber,
+            'description' => $package->name.' — '.$plot->slot,
             'quantity' => $quantity,
             'unit_amount_minor' => $unitAmountMinor,
             'line_total_minor' => $this->lineTotalMinor($unitAmountMinor, $quantity),

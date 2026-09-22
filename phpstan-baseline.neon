@@ -1317,7 +1317,7 @@ parameters:
 		-
 			message: '#^Call to an undefined method Livewire\\Component\:\:pickerBlocks\(\)\.$#'
 			identifier: method.notFound
-			count: 6
+			count: 7
 			path: tests/Feature/Livewire/Public/Booking/BookingWizardPlotPickerTest.php
 
 		-
@@ -1343,6 +1343,12 @@ parameters:
 			identifier: method.notFound
 			count: 1
 			path: tests/Feature/Livewire/Public/Booking/BookingWizardStepsFourAndFiveTest.php
+
+		-
+			message: '#^Access to an undefined property Livewire\\Component\:\:\$pickerUnpricedReason\.$#'
+			identifier: property.notFound
+			count: 2
+			path: tests/Feature/Livewire/Public/Booking/PlotPickerPricingGateTest.php
 
 		-
 			message: '#^Call to an undefined method Illuminate\\Testing\\TestResponse\:\:html\(\)\.$#'

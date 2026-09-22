@@ -9,6 +9,7 @@ use App\Domain\Booking\Actions\StartBookingDraft;
 use App\Domain\Booking\BookingServiceType;
 use App\Domain\Booking\BookingWizardStep;
 use App\Domain\Booking\Models\BookingDraft;
+use App\Domain\CemeteryCapability\Actions\RecordCemeteryPackagePriceVersion;
 use App\Domain\CemeteryCapability\CemeteryPackageAvailabilityStatus;
 use App\Domain\CemeteryCapability\Models\CemeteryPackage;
 use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
@@ -66,6 +67,26 @@ final class BookingWizardPlotPickerTest extends TestCase
             'slot' => '001',
             'plot_state' => PlotState::AVAILABLE,
         ]);
+    }
+
+    /**
+     * A package that can actually be charged (spec D4/D5, Task 5's plot
+     * picker pricing gate) — most fixtures in this file predate that gate
+     * and only need a package that clears it, not any particular price.
+     */
+    private function pricedPackageFor(Cemetery $cemetery): CemeteryPackage
+    {
+        $package = CemeteryPackage::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'name' => 'Makam Single',
+            'availability_status' => CemeteryPackageAvailabilityStatus::AVAILABLE,
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        app(RecordCemeteryPackagePriceVersion::class)($package, '4500000.00', 'user:1', 'Penetapan harga awal');
+
+        return $package;
     }
 
     /**
@@ -137,12 +158,13 @@ final class BookingWizardPlotPickerTest extends TestCase
     public function test_the_picker_renders_for_a_granular_cemetery_at_discovery(): void
     {
         $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+        $package = $this->pricedPackageFor($cemetery);
         $block = CemeteryBlock::query()->create(['cemetery_id' => $cemetery->getKey(), 'code' => 'BLOK-A', 'name' => 'Blok A', 'capacity' => 1]);
         GravePlot::query()->create(['block_id' => $block->getKey(), 'slot' => '001', 'plot_state' => 'available']);
         $draftId = $this->draftIdAtDiscovery();
 
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
-            ->call('openPickerFor', $cemetery->id)
+            ->call('openPickerFor', $cemetery->id, $package->getKey())
             ->assertSee('BLOK-A')
             ->assertSee('001');
     }
@@ -154,6 +176,29 @@ final class BookingWizardPlotPickerTest extends TestCase
 
         Livewire::test(BookingWizard::class, ['draftId' => $draftId])
             ->assertDontSee('Lihat Peta Plot');
+    }
+
+    /**
+     * Review finding I-4. A granular cemetery with zero active packages
+     * used to offer a primary "Pilih {cemetery} — Lihat Peta Plot" button
+     * that opened the picker with no package selected — which spec D4's
+     * gate then unconditionally refuses with "Pilih paket terlebih dahulu",
+     * telling the customer to do something the screen does not offer. The
+     * fix falls through to the plain cemetery-selection button (the one
+     * every other package-less cemetery already uses).
+     */
+    public function test_a_granular_cemetery_with_no_packages_offers_the_plain_select_button(): void
+    {
+        $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+        $draftId = $this->draftIdAtDiscovery();
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->call('selectCity', LaunchCityCode::JAKARTA)
+            ->assertDontSee('Lihat Peta Plot')
+            ->assertSee('Pilih '.$cemetery->name);
+
+        $component->call('selectCemetery', $cemetery->id)
+            ->assertSet('cemeteryId', $cemetery->id);
     }
 
     /**
@@ -170,13 +215,14 @@ final class BookingWizardPlotPickerTest extends TestCase
     {
         $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
         $this->makePlotIn($cemetery);
+        $package = $this->pricedPackageFor($cemetery);
         $draftId = $this->draftIdAtDiscovery();
 
         $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId]);
 
         $this->makeCemeteryBlocksUnreadable();
 
-        $component->call('openPickerFor', $cemetery->id)
+        $component->call('openPickerFor', $cemetery->id, $package->getKey())
             ->assertOk()
             ->assertSee('Peta plot sedang tidak dapat dimuat')
             ->assertDontSee('Belum ada plot terdaftar');
@@ -772,6 +818,7 @@ final class BookingWizardPlotPickerTest extends TestCase
         config(['booking.plot_picker_max_blocks' => 2]);
 
         $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+        $package = $this->pricedPackageFor($cemetery);
 
         foreach (['BLOK-A', 'BLOK-B', 'BLOK-C', 'BLOK-D'] as $code) {
             $block = CemeteryBlock::query()->create([
@@ -786,7 +833,7 @@ final class BookingWizardPlotPickerTest extends TestCase
         $draftId = $this->draftIdAtDiscovery();
 
         $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
-            ->call('openPickerFor', $cemetery->id);
+            ->call('openPickerFor', $cemetery->id, $package->getKey());
 
         $blocks = $component->instance()->pickerBlocks();
 
@@ -803,6 +850,7 @@ final class BookingWizardPlotPickerTest extends TestCase
         config(['booking.plot_picker_max_plots_per_block' => 3]);
 
         $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+        $package = $this->pricedPackageFor($cemetery);
         $block = CemeteryBlock::query()->create([
             'cemetery_id' => $cemetery->getKey(),
             'code' => 'BLOK-A',
@@ -821,7 +869,7 @@ final class BookingWizardPlotPickerTest extends TestCase
         $draftId = $this->draftIdAtDiscovery();
 
         $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
-            ->call('openPickerFor', $cemetery->id);
+            ->call('openPickerFor', $cemetery->id, $package->getKey());
 
         $blocks = $component->instance()->pickerBlocks();
 
@@ -849,6 +897,13 @@ final class BookingWizardPlotPickerTest extends TestCase
             'sort_order' => 2,
             'is_active' => true,
         ]);
+
+        // Task 5's plot picker pricing gate (spec D4/D5) refuses to offer
+        // plots for an unpriced package — this fixture predates that gate
+        // and needs both classes priced so the block-scoping it exercises
+        // is reachable at all.
+        app(RecordCemeteryPackagePriceVersion::class)($packageA, '4500000.00', 'user:1', 'Penetapan harga awal');
+        app(RecordCemeteryPackagePriceVersion::class)($packageB, '5000000.00', 'user:1', 'Penetapan harga awal');
 
         $blockA = CemeteryBlock::query()->create([
             'cemetery_id' => $cemetery->getKey(),
@@ -965,6 +1020,7 @@ final class BookingWizardPlotPickerTest extends TestCase
             'sort_order' => 1,
             'is_active' => true,
         ]);
+        app(RecordCemeteryPackagePriceVersion::class)($package, '4500000.00', 'user:1', 'Penetapan harga awal');
 
         $block = CemeteryBlock::query()->create([
             'cemetery_id' => $cemetery->getKey(),
@@ -994,5 +1050,76 @@ final class BookingWizardPlotPickerTest extends TestCase
             ->assertHasNoErrors(['plot']);
 
         $this->assertDatabaseHas('plot_reservations', ['plot_id' => $plot->id]);
+    }
+
+    /**
+     * Review finding I-2: `pickerBlocks()`'s two call sites apply the
+     * IDENTICAL `$matchesSelectedPackage` closure, but `whereHas('plots',
+     * ...)` (which block appears at all) and the eager-loaded `with(['plots'
+     * => ...])` (which PLOTS render inside a surfaced block) are separate
+     * call sites, and every prior fixture put each package's plot in its
+     * OWN block — so a block was never asked to filter between two
+     * different packages' plots within itself, and the `with()` filter's
+     * removal took zero kills.
+     *
+     * This fixture puts BOTH packages' plots in the SAME block, which is
+     * the one shape that can tell the two call sites apart: `whereHas`
+     * still returns the block either way (it has a matching-package plot),
+     * but only the `with()` filter decides whether the OTHER package's
+     * plot leaks into the tile grid alongside it.
+     */
+    public function test_picker_blocks_plots_exclude_a_different_packages_plot_within_the_same_block(): void
+    {
+        $cemetery = $this->makeCemetery(PlotTrackingMode::GRANULAR);
+
+        $packageA = CemeteryPackage::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'name' => 'Makam Tumpang — Kelas A',
+            'availability_status' => CemeteryPackageAvailabilityStatus::AVAILABLE,
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+        $packageB = CemeteryPackage::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'name' => 'Makam Tumpang — Kelas B',
+            'availability_status' => CemeteryPackageAvailabilityStatus::AVAILABLE,
+            'sort_order' => 2,
+            'is_active' => true,
+        ]);
+        app(RecordCemeteryPackagePriceVersion::class)($packageA, '4500000.00', 'user:1', 'Penetapan harga awal');
+        app(RecordCemeteryPackagePriceVersion::class)($packageB, '5000000.00', 'user:1', 'Penetapan harga awal');
+
+        $block = CemeteryBlock::query()->create([
+            'cemetery_id' => $cemetery->getKey(),
+            'code' => 'BLOK-A',
+            'name' => 'Blok A',
+            'capacity' => 2,
+        ]);
+        $plotA = GravePlot::query()->create([
+            'block_id' => $block->getKey(),
+            'slot' => '001',
+            'plot_state' => PlotState::AVAILABLE,
+            'cemetery_package_id' => $packageA->getKey(),
+        ]);
+        $plotB = GravePlot::query()->create([
+            'block_id' => $block->getKey(),
+            'slot' => '002',
+            'plot_state' => PlotState::AVAILABLE,
+            'cemetery_package_id' => $packageB->getKey(),
+        ]);
+
+        $draftId = $this->draftIdAtDiscovery();
+
+        $component = Livewire::test(BookingWizard::class, ['draftId' => $draftId])
+            ->call('openPickerFor', $cemetery->id, $packageA->getKey());
+
+        $blocks = $component->instance()->pickerBlocks();
+
+        $this->assertCount(1, $blocks, 'The block has a packageA plot, so it must still appear.');
+        $this->assertCount(1, $blocks->first()->plots, 'Only the selected package\'s plot must render inside the block.');
+        $this->assertSame($plotA->id, $blocks->first()->plots->first()->id);
+
+        $component->assertSee('Plot BLOK-A 001 — Tersedia')
+            ->assertDontSee('Plot BLOK-A 002');
     }
 }
