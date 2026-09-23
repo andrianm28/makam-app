@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Livewire\Public;
 
+use App\Domain\CemeteryCapability\CemeteryPackageAvailabilityStatus;
+use App\Domain\CemeteryCapability\Models\CemeteryPackage;
 use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
@@ -450,6 +452,153 @@ final class HomePageRouteTest extends TestCase
         foreach ($expectedHiddenByCap as $name) {
             $response->assertDontSee($name);
         }
+    }
+
+    /**
+     * Stage 3 ticket 03 — the three secondary CTAs (design doc §4.2).
+     * Wakaf Tanah has no real route in this codebase (confirmed by search
+     * before implementing this ticket) — same honest-disabled-control
+     * pattern header.blade.php's own $akunAvailable handling already
+     * establishes, not a working link.
+     */
+    public function test_secondary_ctas_render_below_the_services_grid(): void
+    {
+        $response = $this->get('/');
+        $response->assertOk();
+
+        $html = $response->getContent();
+        $servicesEnd = strpos($html, '</section>', strpos($html, 'id="services-heading"'));
+        $this->assertNotFalse($servicesEnd);
+        $servicesSection = substr($html, strpos($html, 'id="services-heading"'), $servicesEnd - strpos($html, 'id="services-heading"'));
+
+        $this->assertStringContainsString('href="'.route('perpanjangan.index').'"', $servicesSection);
+        $this->assertStringContainsString('Perpanjang Makam', $servicesSection);
+        $this->assertStringContainsString('href="'.route('marketplace.index').'"', $servicesSection);
+        $this->assertStringContainsString('Layanan Pemakaman', $servicesSection);
+        // Honest disabled control, not a link — no href, aria-disabled.
+        $this->assertStringContainsString('Wakaf Tanah', $servicesSection);
+        $this->assertStringContainsString('aria-disabled="true"', $servicesSection);
+    }
+
+    /**
+     * Stage 3 ticket 03 — urgent-availability TPU/TPS, derived from real
+     * seeded packages marked LIMITED (CemeteryPackageAvailabilityStatus),
+     * the same "derive expectations from the example-data generator"
+     * pattern the section-5 test above already uses.
+     */
+    public function test_urgent_availability_section_shows_cemeteries_with_limited_packages(): void
+    {
+        $response = $this->get('/');
+        $response->assertOk();
+        $response->assertSee('TPU &amp; TPS dengan Ketersediaan Terbatas', false);
+
+        $limitedSlugs = collect(CemeteryExampleData::packages())
+            ->filter(fn (array $p): bool => $p[3] === CemeteryPackageAvailabilityStatus::LIMITED)
+            ->pluck(0)
+            ->unique();
+        $this->assertNotEmpty($limitedSlugs, 'fixture must have at least one LIMITED package for this test to be meaningful');
+
+        $qualifyingNames = collect(CemeteryExampleData::cemeteries())
+            ->filter(fn (array $c): bool => $limitedSlugs->contains($c[2]) && $c[7] === CemeteryPublicationStatus::PUBLISHED)
+            ->pluck(1);
+
+        $html = $response->getContent();
+        $sectionStart = strpos($html, 'id="urgent-availability-heading"');
+        $this->assertNotFalse($sectionStart, 'urgent-availability section must render given real LIMITED packages exist in the fixture');
+        $sectionEnd = strpos($html, '<h2', strpos($html, '</section>', $sectionStart));
+        $section = substr($html, $sectionStart, ($sectionEnd !== false ? $sectionEnd : strlen($html)) - $sectionStart);
+
+        foreach ($qualifyingNames as $name) {
+            $this->assertStringContainsString($name, $section);
+        }
+
+        // A published cemetery with no LIMITED package must not appear in
+        // THIS section (it may legitimately appear elsewhere on the page).
+        $nonQualifying = collect(CemeteryExampleData::cemeteries())
+            ->first(fn (array $c): bool => ! $limitedSlugs->contains($c[2]) && $c[7] === CemeteryPublicationStatus::PUBLISHED);
+        $this->assertNotNull($nonQualifying);
+        $this->assertStringNotContainsString($nonQualifying[1], $section);
+    }
+
+    public function test_urgent_availability_section_is_absent_when_nothing_qualifies(): void
+    {
+        // No LIMITED package exists for any cemetery once the fixture ones
+        // are neutralised — real empty-state behaviour, not a mocked flag.
+        CemeteryPackage::query()
+            ->where('availability_status', CemeteryPackageAvailabilityStatus::LIMITED)
+            ->update(['availability_status' => CemeteryPackageAvailabilityStatus::AVAILABLE]);
+
+        $response = $this->get('/');
+
+        $response->assertOk();
+        $response->assertDontSee('id="urgent-availability-heading"', false);
+    }
+
+    /**
+     * Stage 3 ticket 03 — newest published TPU/TPS, ordered by
+     * `published_at` desc (with an `id` tie-breaker the fixture's
+     * identical-timestamp rows make necessary for determinism).
+     */
+    public function test_newest_published_section_shows_published_cemeteries(): void
+    {
+        $response = $this->get('/');
+        $response->assertOk();
+        $response->assertSee('TPU &amp; TPS Terbaru', false);
+
+        $html = $response->getContent();
+        $sectionStart = strpos($html, 'id="newest-published-heading"');
+        $this->assertNotFalse($sectionStart);
+        $sectionEnd = strpos($html, '<h2', strpos($html, '</section>', $sectionStart));
+        $section = substr($html, $sectionStart, ($sectionEnd !== false ? $sectionEnd : strlen($html)) - $sectionStart);
+
+        // At least one real published cemetery name renders in this
+        // section — not asserting the exact top-6 set, since every
+        // published cemetery in the fixture shares the same `published_at`
+        // instant and is therefore a legitimate member of "newest" under
+        // the `id` tie-breaker.
+        $anyPublished = collect(CemeteryExampleData::cemeteries())
+            ->first(fn (array $c): bool => $c[7] === CemeteryPublicationStatus::PUBLISHED);
+        $this->assertNotNull($anyPublished);
+        $this->assertStringContainsString($anyPublished[1], $html);
+
+        // Excluded by the draft-publication-status scope, same as section 5.
+        $this->assertStringNotContainsString(
+            CemeteryExampleData::bySlug(CemeteryExampleData::DRAFT_SLUG)[1],
+            $section
+        );
+    }
+
+    public function test_new_sections_render_between_services_and_how_it_works(): void
+    {
+        $response = $this->get('/');
+        $response->assertOk();
+
+        $html = $response->getContent();
+        $servicesPos = strpos($html, 'id="services-heading"');
+        $urgentPos = strpos($html, 'id="urgent-availability-heading"');
+        $newestPos = strpos($html, 'id="newest-published-heading"');
+        $howItWorksPos = strpos($html, 'id="how-it-works-heading"');
+
+        $this->assertNotFalse($servicesPos);
+        $this->assertNotFalse($urgentPos);
+        $this->assertNotFalse($newestPos);
+        $this->assertNotFalse($howItWorksPos);
+
+        $this->assertGreaterThan($servicesPos, $urgentPos, 'urgent-availability must come after services');
+        $this->assertGreaterThan($urgentPos, $newestPos, 'newest-published must come after urgent-availability');
+        $this->assertGreaterThan($newestPos, $howItWorksPos, 'how-it-works (untouched by this ticket) must still come after the new sections');
+    }
+
+    public function test_how_it_works_featured_cemeteries_and_trust_sections_are_untouched(): void
+    {
+        // Ticket 03 explicitly does not remove these — ticket 04 does,
+        // once its own replacement section also exists.
+        $response = $this->get('/');
+        $response->assertOk();
+
+        $response->assertSee('id="how-it-works-heading"', false);
+        $response->assertSee('id="featured-cemeteries-heading"', false);
+        $response->assertSee('id="trust-heading"', false);
     }
 
     public function test_faq_highlights_link_into_the_real_faq_routes(): void
