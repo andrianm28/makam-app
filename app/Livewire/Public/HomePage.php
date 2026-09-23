@@ -174,6 +174,10 @@ final class HomePage extends Component
             // metadata that is easy to overlook as "just marketing copy".
             'title' => 'Makam.co.id - Pemesanan dan Layanan Pemakaman',
             'active' => null,
+            // <x-mk.bottom-nav>'s own five keys are 'beranda' | 'pemesanan'
+            // | 'perpanjangan' | 'akun' | 'bantuan' — a distinct vocabulary
+            // from <x-mk.header>'s 'active' above. The homepage is Beranda.
+            'bottomNavActive' => 'beranda',
         ]);
     }
 }

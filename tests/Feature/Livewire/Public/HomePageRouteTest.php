@@ -662,4 +662,40 @@ final class HomePageRouteTest extends TestCase
         $this->assertGreaterThan($heroEnd, $previewHeading, 'Preview section must render after the hero.');
         $this->assertLessThan($servicesHeading, $previewHeading, 'Preview section must render before the service cards.');
     }
+
+    public function test_bottom_nav_renders_with_beranda_active_and_is_hidden_above_lg(): void
+    {
+        $response = $this->get('/');
+
+        $response->assertSee('aria-label="Navigasi utama"', false);
+        $response->assertSee('lg:hidden', false);
+
+        // Beranda's own anchor carries aria-current + the active classes;
+        // isolate it the same way MkBottomNavTest's own active-tab tests do,
+        // so this doesn't just prove SOME tab is active, but that Beranda
+        // specifically is.
+        $html = $response->getContent();
+        $berandaStart = strpos($html, 'href="/"><svg') !== false
+            ? strpos($html, 'href="/"')
+            : strpos($html, 'href="/"', strpos($html, 'Navigasi utama'));
+        $this->assertNotFalse($berandaStart, 'Beranda tab anchor not found');
+        $berandaEnd = strpos($html, '</a>', $berandaStart);
+        $berandaAnchor = substr($html, $berandaStart, $berandaEnd - $berandaStart);
+
+        $this->assertStringContainsString('aria-current="page"', $berandaAnchor);
+        $this->assertStringContainsString('text-primary-700', $berandaAnchor);
+        $this->assertStringContainsString('border-primary-600', $berandaAnchor);
+
+        // The header's own hamburger/active state is untouched by this change.
+        $response->assertSee('Menu utama (seluler)', false);
+    }
+
+    public function test_bottom_nav_does_not_visually_overlap_the_footer(): void
+    {
+        $response = $this->get('/');
+
+        // Footer carries the mobile-only bottom-nav clearance margin; lg:mb-0
+        // cancels it where the bar is hidden.
+        $response->assertSee('mb-[var(--mk-bottomnav-total)] lg:mb-0', false);
+    }
 }

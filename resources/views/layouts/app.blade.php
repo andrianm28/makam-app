@@ -28,9 +28,13 @@
 
     Livewire's `->layout('layouts.app', [...])` mechanism injects the
     component's rendered HTML as `$slot` and merges any extra array passed
-    as the second argument (`title`, `active`) into this view's own data —
-    both are read defensively with `??` so this layout never hard-fails if
-    a future caller omits either.
+    as the second argument (`title`, `active`, `bottomNavActive`) into this
+    view's own data — all are read defensively with `??` so this layout
+    never hard-fails if a future caller omits either. `$bottomNavActive`
+    follows the identical `?? null` default pattern `$active` already
+    establishes above, and every public page must pass its own value the
+    same way through the layout call's second argument — a future page
+    building on this layout should mirror the HomePage implementation below.
 
     ---------------------------------------------------------------------------
     UPDATED 17 Aug 2026 (brand identity adoption, Task 4) — real favicon +
@@ -189,6 +193,8 @@
         {{ $slot }}
     </main>
 
+    <x-mk.bottom-nav :active="$bottomNavActive ?? null" />
+
     {{-- Vertical padding `py-8` -> `py-section lg:py-section-lg` on 14 Sep 2026
          (ADR-0040 D6). `py-8` was the same 32px half-rhythm value Tahap 1
          (commit ebdeec7e) removed from every other band on every public page;
@@ -196,7 +202,7 @@
          page's largest brand field also its thinnest-breathing one. Now it
          consumes --mk-section-gap / --mk-section-gap-lg like everything above
          it. Colour, links, copy and structure are unchanged. --}}
-    <footer class="bg-primary-900 px-4 py-section text-neutral-0 md:px-6 lg:px-8 lg:py-section-lg">
+    <footer class="bg-primary-900 px-4 py-section text-neutral-0 md:px-6 lg:px-8 lg:py-section-lg mb-[var(--mk-bottomnav-total)] lg:mb-0">
         <div class="mx-auto flex max-w-content flex-col items-center gap-4 text-center">
             <a href="/" class="inline-flex items-center gap-2" aria-label="makam.co.id — beranda">
                 <x-mk.logo variant="inverse" :size="28" />
