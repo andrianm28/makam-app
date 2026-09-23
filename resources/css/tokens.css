@@ -57,7 +57,12 @@
    * surface tint, 700–900 as text on those tints, 300–400 as decorative
    * rule/icon.
    * ------------------------------------------------------------------------ */
-  --color-secondary-50:  #F4F6F5;
+  --color-secondary-50:  #F0F2F1; /* ADR-0043: nudged from #F4F6F5 -- flush
+    against --color-neutral-50 (#F5F5F5, FFI's literal Ivory) after the
+    rebase, 3/765 short of the 10/765 surface-separation floor
+    verify-contrast.py enforces. Hue/sat held (Sage 150 deg), L nudged
+    0.9608 -> 0.9448 to clear it (12/765). text-strong 14.32:1,
+    secondary-700 8.21:1, secondary-600 6.00:1 -- all still AA. */
   --color-secondary-100: #E6ECE9;
   --color-secondary-200: #C7D4CC;
   --color-secondary-300: #8FA99A; /* SAGE -- the guideline's secondary, verbatim. ADR-0041 anchors it at 300, NOT 600, because Sage is LIGHT (white label 2.53:1) and 600 is this file's slot for a fill that carries a white label. */
@@ -98,7 +103,12 @@
   --color-neutral-0:   #FFFFFF;
   --color-neutral-0:   #FFFFFF;
   --color-neutral-50:  #F5F5F5; /* FFI's literal background, ADR-0043, verbatim. */
-  --color-neutral-100: #EEEEEE;
+  --color-neutral-100: #ECECEC; /* ADR-0043: nudged 2/channel from #EEEEEE.
+    Not an FFI literal (unlike neutral-0/50/800) -- free to move. Needed once
+    secondary-50's own nudge (above) closed in on this shade from the other
+    side: 15/765 from the new secondary-50, 27/765 from neutral-50.
+    text-disabled (#757575) on it: 3.90:1, still clears the 3.0 non-text
+    floor. */
   --color-neutral-200: #E0E0E0; /* decorative divider only -- see design-system.md 6.3 */
   --color-neutral-300: #BCBCBC; /* decorative border only -- see design-system.md 6.3 */
   --color-neutral-400: #999999;
@@ -112,8 +122,8 @@
 
   /* ---------------------------------------------------------------------------
    * 1.4 COLOUR — SEMANTIC
-   * Hue separation (600 shade, ADR-0034): primary 26 | success 146 | info 228
-   *                                       warning 39 | danger 352
+   * Hue separation (600 shade, ADR-0043): primary 210.0 | success 145.0 | info 246.2
+   *                                       warning 42.0 | danger 0.0
    * ------------------------------------------------------------------------ */
   /* SUCCESS — FFI Green (hue ~150°, ADR-0043). DIBAYAR, SELESAI, upload accepted, autosave confirmed */
   --color-success-50:  #E9FFF2;
@@ -156,18 +166,23 @@
   --color-danger-900: #780000;
   --color-danger-950: #3E0000;
 
-  /* INFO — gated-fallback mode banners, neutral system notices */
-  --color-info-50:  #F1F3FC;
-  --color-info-100: #E0E5F8;
-  --color-info-200: #C3CCF1;
-  --color-info-300: #9CAAE5;
-  --color-info-400: #7183D5;
-  --color-info-500: #4D60C0;
-  --color-info-600: #3A4E9B; /* white label AA 7.66:1 */
-  --color-info-700: #31417F;
-  --color-info-800: #293568;
-  --color-info-900: #242D55;
-  --color-info-950: #12162C;
+  /* ADR-0043: hue rotated 227.6deg -> 246deg, S/L held per shade. The
+   * rebase put primary at 210deg (FFI blue); info's old hue collided
+   * (Delta 17.6deg, under the 30deg HUE_MIN_SEPARATION verify-contrast.py
+   * enforces) -- the same situation danger/success resolved earlier by
+   * moving the same way. 246deg clears primary by 36deg, success (145deg)
+   * by 101deg, danger (0deg) by 114deg. */
+  --color-info-50:  #F2F1FC;
+  --color-info-100: #E2E0F8;
+  --color-info-200: #C8C3F1;
+  --color-info-300: #A39CE5;
+  --color-info-400: #7B71D5;
+  --color-info-500: #594DC0;
+  --color-info-600: #443A9B; /* white label AA 9.03:1 */
+  --color-info-700: #39317F;
+  --color-info-800: #2F2968;
+  --color-info-900: #292455;
+  --color-info-950: #15122C;
 
   /* ---------------------------------------------------------------------------
    * 1.5 SPACING — 4 px base. Tailwind 4 derives the whole scale from this,
@@ -286,13 +301,17 @@
   --mk-surface-page: var(--color-neutral-50);
   --mk-surface-raised: var(--color-neutral-0);
   --mk-surface-sunken: var(--color-neutral-100);
-  --mk-surface-warm: var(--color-accent-100);     /* ADR-0041 D8: trust/quiet
+  --mk-surface-warm: var(--color-accent-50);      /* ADR-0043: repointed from
+    accent-100 -- border-interactive (neutral-450, non-text UI) only cleared
+    2.89:1 on accent-100 against the WCAG 1.4.11 3.0:1 floor once accent
+    became FFI's orange; accent-50 clears it at 3.41:1. Was ADR-0041 D8: trust/quiet
     sections. Was primary-50 -- which the brand rebase turned COOL, because
     primary stopped being brown. A token named "warm" holding a cool grey is a
     contradiction, and it also landed 3/765 from --mk-surface-quiet, collapsing
     the three-band alternation ADR-0040 D1/D2 exists for. Sand is the warm one,
-    and now it is here. 41/765 from quiet; all ten surface pairs clear the
-    10/765 floor verify-contrast.py enforces. */
+    and now it is here, at the 50 slot. 30/765 from quiet, 32/765 from
+    page; all ten surface pairs clear the 10/765 floor verify-contrast.py
+    enforces. */
   --mk-surface-quiet: var(--color-secondary-50);   /* ADR-0040: the THIRD page
     band, so consecutive page sections can alternate and their boundaries read
     without a divider line (design-system.md §4.4: "Proximity carries the
