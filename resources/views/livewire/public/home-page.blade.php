@@ -276,8 +276,9 @@
                         <div class="space-y-3">
                             @if (isset($serviceIcons[$key]))
                                 {{-- `size="xl"` (64px), Tahap 4 butir 2 — SIZE only;
-                                     `tone="earth"` is unchanged from Tahap 2. --}}
-                                <x-mk.icon-medallion :icon="$serviceIcons[$key]" tone="earth" size="xl" />
+                                     the rendered colour is unchanged from Tahap 2,
+                                     but the prop value is renamed `earth` -> `primary`. --}}
+                                <x-mk.icon-medallion :icon="$serviceIcons[$key]" tone="primary" size="xl" />
                             @endif
                             {{-- `text-primary-600` on the card's `bg-neutral-0`
                                  is `primary heading on surface-raised`, an
@@ -438,8 +439,8 @@
          to `--color-primary-50` since ADR-0034; what it lacked was a
          utility, which is exactly why this call site wrote the primitive.
          §4.5 item 6 names the TOKEN, so the token is now what the markup
-         says. The `leaf` medallions below stay leaf: with the Cara Kerja
-         numerals now `brand`, both tint tones remain in real use and the
+         says. The `secondary` medallions below keep their tint: with the
+         Cara Kerja numerals now `brand`, both tint tones remain in real use and the
          trust points keep the quieter of the two, which is the right
          weight for a reassurance section. --}}
     <section aria-labelledby="trust-heading" class="surface-warm py-section lg:py-section-lg">
@@ -454,7 +455,7 @@
                     ['icon' => 'alert-circle', 'title' => 'Jujur soal keterbatasan', 'body' => 'Kami tidak mengarang data, tarif, atau ketersediaan yang belum dapat kami pastikan. Kami akan menyatakannya dengan jelas dan mengarahkan Anda ke customer service.'],
                 ] as $index => $point)
                     <li wire:key="trust-point-{{ $index }}" class="flex flex-col items-start gap-2 text-left">
-                        <x-mk.icon-medallion :icon="$point['icon']" tone="leaf" />
+                        <x-mk.icon-medallion :icon="$point['icon']" tone="secondary" />
                         <h3 class="text-base font-semibold text-neutral-900">{{ $point['title'] }}</h3>
                         <p class="text-sm text-neutral-700">{{ $point['body'] }}</p>
                     </li>

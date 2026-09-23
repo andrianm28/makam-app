@@ -19,23 +19,23 @@
     which also keeps this visually distinct from that benchmark rather than
     copying it, per the user's own "jangan terlalu mirip" instruction.
 
-    --- Why `tone="leaf"` is inside the Leaf cage, not an exception to it ---
-    design-system.md §1.2(b) restricts `secondary` (Leaf) to "50-200 as
+    --- Why `tone="secondary"` is inside the Sage cage, not an exception to it ---
+    design-system.md §1.2(b) restricts `secondary` (Sage) to "50-200 as
     surface tint, 700-900 as text on those tints, 300-400 as decorative
     rules/icons" — never a fill, badge, button, or alert (§9.2 MUST-NOT #7).
-    `tone="leaf"` renders `bg-secondary-100 text-secondary-800`: a surface
+    `tone="secondary"` renders `bg-secondary-100 text-secondary-800`: a surface
     tint with text on it, exactly the permitted pairing, not a fill. Both
     `primary-800 on primary-100` and `secondary-800 on secondary-100` are
     already asserted in docs/design/verify-contrast.py (lines pre-dating
     this component), so no new contrast pair was needed for the tiles
     themselves. This component must never render inside a context carrying
-    order/payment/availability status, where a Leaf tile could be misread
-    as a `success` state (Leaf sits ~23° from success on the hue wheel,
+    order/payment/availability status, where a Sage tile could be misread
+    as a `success` state (Sage sits ~23° from success on the hue wheel,
     design-system.md §1.2(b)) — it is `aria-hidden` and marketing-only.
 
     --- Why `tone="brand"` exists, and why it is a fill where the other two
         are tints (added 14 Sep 2026, ADR-0040) ---
-    `earth` and `leaf` both paint a 100-shade tile with an 800-shade mark on
+    `primary` and `secondary` both paint a 100-shade tile with an 800-shade mark on
     it. Neither is a brand FIELD, and the kamboja benchmark's §2.2 survey of
     the live homepage found the brand colour filling exactly one element on
     the whole page (the 160x52 `Pesan Makam` button) while appearing 46 times
@@ -48,7 +48,7 @@
     This tone does NOT relax §3.3a's "never adjacent to order/payment/
     availability data" rule — it tightens the reason for it, because a filled
     tile reads louder than a tint. It is also not a licence to fill a
-    medallion with any other family: `secondary` (Leaf) stays caged by
+    medallion with any other family: `secondary` (Sage) stays caged by
     §1.2(b)/§9.2 MUST-NOT #7 and must never gain a fill tone here.
 
     --- Three internal $tones entries MUST be static complete literal strings ---
@@ -66,7 +66,7 @@
 --}}
 @props([
     'icon' => null,
-    'tone' => 'earth',
+    'tone' => 'primary',
     'size' => 'md',
 ])
 
@@ -75,9 +75,9 @@
     // uses for $intent — a silently-wrong tone on a brand-colour surface is
     // exactly the kind of defect that pattern exists to catch loud.
     $tones = [
-        'earth' => 'bg-primary-100 text-primary-800',
-        'leaf'  => 'bg-secondary-100 text-secondary-800',
-        'brand' => 'bg-primary-600 text-neutral-0',
+        'primary'   => 'bg-primary-100 text-primary-800',
+        'secondary' => 'bg-secondary-100 text-secondary-800',
+        'brand'     => 'bg-primary-600 text-neutral-0',
     ];
 
     if (! array_key_exists($tone, $tones)) {

@@ -137,7 +137,7 @@ What replaces it is stronger and does not depend on where any hue sits: **Sage i
 
 Secondary stays **restricted by usage**: shades 50–200 as surface tint, 300 as the guideline's own Sage for tinted bands, 700–900 as text on those tints, 400 as decorative rules/icons. It is **never** a filled badge, alert, or button — now for a reason a contrast checker can prove, rather than one a hue chart suggests.
 
-A `secondary-100` tile carrying a `secondary-800` icon (`<x-mk.icon-medallion tone="leaf">`, added 19 Aug 2026) is a surface-tint-plus-text usage, not a fill — it stays inside the cage, not an exception to it. It is `aria-hidden`, decorative only, and never appears adjacent to order/payment/availability data where a status reading could attach to it.
+A `secondary-100` tile carrying a `secondary-800` icon (`<x-mk.icon-medallion tone="secondary">`, added 19 Aug 2026) is a surface-tint-plus-text usage, not a fill — it stays inside the cage, not an exception to it. It is `aria-hidden`, decorative only, and never appears adjacent to order/payment/availability data where a status reading could attach to it.
 
 **(e) Success is teal `#0C6D7A`, not green — and this is the one place the guideline was overruled by measurement.** Added 15 Sep 2026, [ADR-0041](../adr/0041-brand-guideline-2026-supersedes-adr-0034.md) D7.
 
@@ -493,18 +493,18 @@ refresh introduced, used inside `<x-mk.card>`'s default slot (service cards, Car
 trust points), never as a standalone status indicator.
 
 **Props:** `icon` (`icon.*` component name; omit and use the default slot for a numeral instead)
-· `tone` (`earth` | `leaf` | `brand`, closed list) · `size` (`md` 44px default | `lg` 52px | `xl` 64px).
+· `tone` (`primary` | `secondary` | `brand`, closed list) · `size` (`md` 44px default | `lg` 52px | `xl` 64px).
 
 **Base:** `rounded-xl` (never `rounded-full` — §1.5 restricts that to avatars/stepper-dots/
-progress-tracks). `earth` → `bg-primary-100 text-primary-800`. `leaf` → `bg-secondary-100
-text-secondary-800` — a surface-tint usage already inside the Leaf cage (§1.2(b), §9.2 MUST-NOT
+progress-tracks). `primary` → `bg-primary-100 text-primary-800`. `secondary` → `bg-secondary-100
+text-secondary-800` — a surface-tint usage already inside the Sage cage (§1.2(b), §9.2 MUST-NOT
 #7), not an exception to it. Both pairs are asserted in `docs/design/verify-contrast.py`.
 
 **`brand` — added 14 Sep 2026, [ADR-0040](../adr/0040-add-surface-quiet-and-widen-the-brand-field.md) D3.** `brand` → `bg-primary-600 text-neutral-0`: a genuine Earth **fill**, not a tint like the other two — the same fill `<x-mk.button variant="primary">` uses, at medallion scale. It exists because a survey of the live homepage found the brand colour filling exactly one element on the entire page while appearing 46 times as text. `white on primary-600` is already asserted in `verify-contrast.py` (10.10:1), so no new pair was needed. This tone does **not** loosen the adjacency rule below — a filled tile reads louder than a tint, so it applies more strongly. It is also not a precedent for a `secondary` fill tone: Leaf stays caged by §1.2(b) and §9.2 MUST NOT 7, and a Leaf medallion fill remains forbidden.
 
 Always `aria-hidden="true"` — decorative only, never a substitute for a real text label (same
 rule `<x-mk.badge>`'s `dot` prop follows). Never placed adjacent to order/payment/availability
-data, so it never carries a status reading despite `leaf` sitting near the `success` hue.
+data, so it never carries a status reading despite `secondary` sitting near the `success` hue.
 
 **`xl` (64 px) — added 14 Sep 2026, kamboja plan Tahap 4.** Size only: no new tone, no change to `brand`. The homepage's four service cards use it, because 44 → 52 px is an 18 % step that does not read as hierarchy at card scale. Tile `size-16`, mark `size-7` — both on `tokens.css`'s 4 px `--spacing` scale, keeping the same ~45 % mark-to-tile ratio `md` and `lg` already use. `xl` is for a card that is a **journey entrance** (`<x-mk.card emphasis="strong">`); it is not a licence to enlarge every medallion on a page.
 
