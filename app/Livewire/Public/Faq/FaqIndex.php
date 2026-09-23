@@ -164,6 +164,9 @@ final class FaqIndex extends Component
                 default => 'FAQ - Makam.co.id',
             },
             'active' => 'faq',
+            // Not one of <x-mk.bottom-nav>'s five tabs — same reasoning as
+            // MarketplaceIndex's own 'layanan' page.
+            'bottomNavActive' => null,
         ]);
     }
 }

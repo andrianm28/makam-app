@@ -1363,4 +1363,19 @@ final class RenewalStartTest extends TestCase
     {
         return (string) DB::table('cemeteries')->where('id', $cemeteryId)->value('name');
     }
+
+    public function test_bottom_nav_renders_with_perpanjangan_active(): void
+    {
+        $response = $this->get('/perpanjangan');
+
+        $response->assertSee('aria-label="Navigasi utama"', false);
+
+        $html = $response->getContent();
+        $start = strpos($html, 'href="/perpanjangan"', strpos($html, 'Navigasi utama'));
+        $this->assertNotFalse($start, 'Perpanjangan tab anchor not found in bottom nav');
+        $end = strpos($html, '</a>', $start);
+        $anchor = substr($html, $start, $end - $start);
+
+        $this->assertStringContainsString('aria-current="page"', $anchor);
+    }
 }

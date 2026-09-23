@@ -403,6 +403,7 @@ final class RenewalStart extends Component
                 ? 'Perpanjangan Makam '.$selectedCityLabel.' - Makam.co.id'
                 : 'Perpanjangan Makam - Makam.co.id',
             'active' => 'perpanjangan',
+            'bottomNavActive' => 'perpanjangan',
         ]);
     }
 }
