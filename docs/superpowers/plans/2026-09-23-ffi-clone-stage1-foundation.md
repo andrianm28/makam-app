@@ -655,6 +655,24 @@ comment."
 **Files:**
 - Modify: `docs/design/design-system.md`
 
+**Note on the fenced-block text below:** every `(ADR-0043, docs/adr/0043-…md)`
+citation inside a fenced code block in this task's steps is written that way
+on purpose, without real markdown link syntax. GATE 4's link checker greps
+the raw plan text for a bracket-paren relative-link pattern, and
+`docs/design/design-system.md` sits one directory level away from the plan
+(`docs/superpowers/plans/`), so a real relative link correct for one
+location is broken for the other — writing the real link syntax anywhere in
+this plan file, even as an example, trips the gate against the plan itself.
+When you paste this content into `design-system.md`, construct a proper
+markdown link relative to `design-system.md`'s own location instead of the
+plain-text citation: link text "ADR-0043", target path one directory level
+up from `docs/design/` into `adr/`, then the file
+`0043-ffi-full-visual-clone-supersedes-system-layer-only.md` — i.e. the
+same relative-path pattern `docs/design/design-system.md` already uses for
+its other ADR citations elsewhere in that file (check one for the exact
+syntax). Do this for all three occurrences (Steps 1, 2, and 3's transcript
+intro references ADR-0043 indirectly).
+
 **Interfaces:**
 - Consumes: the final, fully-verified palette state from Task 2 (the real
   `verify-contrast.py` output) and the typeface name from Task 3.
@@ -676,7 +694,7 @@ After the existing `v0.5` line (the one beginning "`v0.5` (16 Sep 2026):
 **the palette is rebased onto the official Brand Guideline 2026**…"), add:
 
 ```
-`v0.6` (23 Sep 2026): **the palette and typeface are rebased onto FFI's** ([ADR-0043](../adr/0043-ffi-full-visual-clone-supersedes-system-layer-only.md), superseding ADR-0042 and ADR-0041's palette/typography). `primary` becomes FFI's blue (`#0073E6`, hue 210°) replacing Forest; `accent` becomes FFI's orange (`#FF6B35`) replacing Sand; `success`/`warning`/`danger` become FFI's green/amber/red. `neutral-0`/`neutral-50`/`neutral-800` are FFI's literal white/`#F5F5F5`/`#363636`, verbatim; the rest of the neutral ramp is regenerated. `info` has no FFI equivalent and is hue-rotated 227.6°→246° to clear the new `primary`, holding S/L. `secondary` (Sage) is unchanged except its `50` shade, nudged for surface separation against the new `neutral-50`; `neutral-100` nudged in turn. `--mk-surface-warm` repoints from `accent-100` to `accent-50`. Typeface: Plus Jakarta Sans → Inter, same self-hosted single-family pattern. §7.1's transcript is re-run, not edited. Filament panels, component library, and page structure are untouched — this is Stage 1 of 3, see `docs/superpowers/specs/2026-09-22-ffi-full-visual-clone-design.md`.
+`v0.6` (23 Sep 2026): **the palette and typeface are rebased onto FFI's** (ADR-0043, docs/adr/0043-ffi-full-visual-clone-supersedes-system-layer-only.md, superseding ADR-0042 and ADR-0041's palette/typography). `primary` becomes FFI's blue (`#0073E6`, hue 210°) replacing Forest; `accent` becomes FFI's orange (`#FF6B35`) replacing Sand; `success`/`warning`/`danger` become FFI's green/amber/red. `neutral-0`/`neutral-50`/`neutral-800` are FFI's literal white/`#F5F5F5`/`#363636`, verbatim; the rest of the neutral ramp is regenerated. `info` has no FFI equivalent and is hue-rotated 227.6°→246° to clear the new `primary`, holding S/L. `secondary` (Sage) is unchanged except its `50` shade, nudged for surface separation against the new `neutral-50`; `neutral-100` nudged in turn. `--mk-surface-warm` repoints from `accent-100` to `accent-50`. Typeface: Plus Jakarta Sans → Inter, same self-hosted single-family pattern. §7.1's transcript is re-run, not edited. Filament panels, component library, and page structure are untouched — this is Stage 1 of 3, see `docs/superpowers/specs/2026-09-22-ffi-full-visual-clone-design.md`.
 ```
 
 - [ ] **Step 2: Add a supersession note to §1.2's palette table**
@@ -688,7 +706,7 @@ supersession notes, matching how the 15 Sep 2026 note itself sits above
 even-earlier text):
 
 ```
-**Superseded again 23 Sep 2026 by the FFI visual clone** ([ADR-0043](../adr/0043-ffi-full-visual-clone-supersedes-system-layer-only.md)).
+**Superseded again 23 Sep 2026 by the FFI visual clone** (ADR-0043, docs/adr/0043-ffi-full-visual-clone-supersedes-system-layer-only.md).
 `primary` is FFI's blue `#0073E6` (hue 210°), `accent` is FFI's orange
 `#FF6B35`, `success` is FFI's green `#00C853`, `warning` is FFI's amber
 `#FFB300`, `danger` is FFI's red (see `resources/css/tokens.css` for the
@@ -708,7 +726,7 @@ AA`") and its preceding "Real output, re-run…" sentence with:
 
 ```
 Real output, re-run 23 Sep 2026 — the FFI visual clone rebase
-([ADR-0043](../adr/0043-ffi-full-visual-clone-supersedes-system-layer-only.md)):
+(ADR-0043, docs/adr/0043-ffi-full-visual-clone-supersedes-system-layer-only.md):
 primary/accent/success/warning/danger/neutral become FFI's values, info is
 hue-rotated (no FFI equivalent), secondary/neutral get two small surface-
 separation nudges. Run against the shipped `tokens.css`:
