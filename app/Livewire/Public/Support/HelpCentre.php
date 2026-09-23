@@ -146,6 +146,7 @@ final class HelpCentre extends Component
             // action with no active treatment, so null is the correct value
             // here, not an invented fifth key.
             'active' => null,
+            'bottomNavActive' => 'bantuan',
         ]);
     }
 }

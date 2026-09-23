@@ -824,4 +824,63 @@ final class HomePageRouteTest extends TestCase
         $this->assertGreaterThan($heroEnd, $previewHeading, 'Preview section must render after the hero.');
         $this->assertLessThan($servicesHeading, $previewHeading, 'Preview section must render before the service cards.');
     }
+
+    public function test_bottom_nav_renders_with_beranda_active_and_is_hidden_above_lg(): void
+    {
+        $response = $this->get('/');
+
+        $response->assertSee('aria-label="Navigasi utama"', false);
+
+        $html = $response->getContent();
+        $navigasiUtamaPos = strpos($html, 'Navigasi utama');
+        $this->assertNotFalse($navigasiUtamaPos, 'Bottom nav aria-label not found');
+
+        // `header.blade.php` already emits the literal string 'lg:hidden'
+        // elsewhere on the page (its own mobile bar classes), so asserting
+        // 'lg:hidden' anywhere in the whole page would still pass even if the
+        // bottom nav itself lost 'lg:hidden' entirely. Isolate the bottom
+        // nav's own opening <nav ...> tag — the nearest preceding '<nav'
+        // before its aria-label, through to that tag's own closing '>' —
+        // and assert 'lg:hidden' inside THAT substring only, so this
+        // assertion can actually fail if the bottom nav specifically dropped
+        // it.
+        $navTagStart = strrpos(substr($html, 0, $navigasiUtamaPos), '<nav');
+        $this->assertNotFalse($navTagStart, 'Opening <nav> tag not found before the bottom nav aria-label');
+        $navTagEnd = strpos($html, '>', $navTagStart);
+        $this->assertNotFalse($navTagEnd, 'Bottom nav <nav> tag never closes');
+        $navOpeningTag = substr($html, $navTagStart, $navTagEnd - $navTagStart + 1);
+
+        $this->assertStringContainsString('lg:hidden', $navOpeningTag, 'Bottom nav <nav> tag must carry lg:hidden');
+
+        // Beranda's own anchor carries aria-current + the active classes;
+        // isolate it the same way MkBottomNavTest's own active-tab tests do,
+        // so this doesn't just prove SOME tab is active, but that Beranda
+        // specifically is.
+        $berandaStart = strpos($html, 'href="/"', $navigasiUtamaPos);
+        $this->assertNotFalse($berandaStart, 'Beranda tab anchor not found');
+        $berandaEnd = strpos($html, '</a>', $berandaStart);
+        $berandaAnchor = substr($html, $berandaStart, $berandaEnd - $berandaStart);
+
+        $this->assertStringContainsString('aria-current="page"', $berandaAnchor);
+        $this->assertStringContainsString('text-primary-700', $berandaAnchor);
+        $this->assertStringContainsString('border-primary-600', $berandaAnchor);
+
+        // The header's own hamburger/active state is untouched by this change.
+        $response->assertSee('Menu utama (seluler)', false);
+    }
+
+    public function test_bottom_nav_does_not_visually_overlap_the_footer(): void
+    {
+        $response = $this->get('/');
+
+        // The footer's clearance margin lives in layouts/app.blade.php, the
+        // SHARED layout every wired public page renders through — not in
+        // HomePage itself. So this one test covers the footer-clearance fix
+        // for every page wired to the bottom nav, not just the homepage;
+        // duplicating it per page would assert the same shared markup
+        // fourteen-plus times over.
+        // Footer carries the mobile-only bottom-nav clearance margin; lg:mb-0
+        // cancels it where the bar is hidden.
+        $response->assertSee('mb-[var(--mk-bottomnav-total)] lg:mb-0', false);
+    }
 }

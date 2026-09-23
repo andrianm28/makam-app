@@ -53,6 +53,7 @@ final class RenewalConfirmation extends Component
         ])->layout('layouts.app', [
             'title' => 'Konfirmasi Perpanjangan Makam - Makam.co.id',
             'active' => 'perpanjangan',
+            'bottomNavActive' => 'perpanjangan',
         ]);
     }
 }

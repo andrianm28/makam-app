@@ -229,6 +229,11 @@ final class CemeteryDirectoryIndex extends Component
             // highlighting "Pemesanan Makam" would claim the user is inside
             // the booking wizard, which they are not.
             'active' => null,
+            // Not one of <x-mk.header>'s four keys NOR <x-mk.bottom-nav>'s
+            // five tabs — the cemetery directory has no active-state
+            // treatment in either navigation surface, same honest-null
+            // reasoning this file's own 'active' comment already gives.
+            'bottomNavActive' => null,
         ]);
     }
 }

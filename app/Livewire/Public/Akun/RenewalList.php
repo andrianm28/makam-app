@@ -31,6 +31,7 @@ final class RenewalList extends Component
             ->layout('layouts.app', [
                 'title' => 'Perpanjangan - Makam.co.id',
                 'active' => null,
+                'bottomNavActive' => 'akun',
             ]);
     }
 }

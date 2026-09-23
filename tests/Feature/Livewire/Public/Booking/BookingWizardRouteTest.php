@@ -258,4 +258,19 @@ final class BookingWizardRouteTest extends TestCase
             ->assertOk()
             ->assertSee('Daftar TPU/TPS sedang tidak dapat dimuat');
     }
+
+    public function test_bottom_nav_renders_with_pemesanan_active(): void
+    {
+        $response = $this->get('/pemesanan-makam');
+
+        $response->assertSee('aria-label="Navigasi utama"', false);
+
+        $html = $response->getContent();
+        $start = strpos($html, 'href="/pemesanan-makam"', strpos($html, 'Navigasi utama'));
+        $this->assertNotFalse($start, 'Pemesanan tab anchor not found in bottom nav');
+        $end = strpos($html, '</a>', $start);
+        $anchor = substr($html, $start, $end - $start);
+
+        $this->assertStringContainsString('aria-current="page"', $anchor);
+    }
 }

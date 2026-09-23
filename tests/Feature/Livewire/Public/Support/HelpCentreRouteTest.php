@@ -241,4 +241,19 @@ final class HelpCentreRouteTest extends TestCase
         $this->assertStringNotContainsString('wa.me', $body);
         $this->assertStringNotContainsString('api.whatsapp.com', $body);
     }
+
+    public function test_bottom_nav_renders_with_bantuan_active(): void
+    {
+        $response = $this->get('/bantuan');
+
+        $response->assertSee('aria-label="Navigasi utama"', false);
+
+        $html = $response->getContent();
+        $start = strpos($html, 'href="/bantuan"', strpos($html, 'Navigasi utama'));
+        $this->assertNotFalse($start, 'Bantuan tab anchor not found in bottom nav');
+        $end = strpos($html, '</a>', $start);
+        $anchor = substr($html, $start, $end - $start);
+
+        $this->assertStringContainsString('aria-current="page"', $anchor);
+    }
 }

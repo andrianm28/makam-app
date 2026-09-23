@@ -52,6 +52,7 @@ final class AkunIndex extends Component
             // action with no active treatment, same reasoning as
             // HelpCentre's own 'active' => null.
             'active' => null,
+            'bottomNavActive' => 'akun',
         ]);
     }
 }

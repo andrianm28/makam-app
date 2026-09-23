@@ -42,13 +42,30 @@ use Tests\TestCase;
  * revealed screen (the `?tpu=` "orphaned" state in particular — see the
  * "Cemetery scoping" section below).
  *
- * `Livewire::test()` rather than `$this->get('/perpanjangan')`: `routes/
- * web.php` is a shared file; the route, its name, and its HTTP status are
- * NOT TESTED here.
+ * `Livewire::test()` rather than `$this->get('/perpanjangan')` for every test
+ * above: `routes/web.php` is a shared file; the route, its name, and its HTTP
+ * status are NOT TESTED by those. The one exception is
+ * `test_bottom_nav_renders_with_perpanjangan_active()` below, which makes a
+ * real `$this->get('/perpanjangan')` request because the bottom nav lives in
+ * the shared layout, not in `RenewalStart` itself — `Livewire::test()` never
+ * renders `layouts/app.blade.php`, so there is no way to assert the nav's
+ * markup without a real HTTP request. That request is also why `setUp()`
+ * needed `withoutVite()` added: it renders `layouts/app.blade.php`'s
+ * `@vite(...)` directive, which the other, `Livewire::test()`-only tests in
+ * this file never reach.
  */
 final class RenewalStartTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // HTTP requests below render layouts/app.blade.php, which contains
+        // `@vite(...)`; CI's `php` job has no frontend build. Same
+        // requirement as other public Livewire route tests.
+        $this->withoutVite();
+    }
 
     /**
      * Copy fragments that identify each of the three grave-search empty
@@ -1416,5 +1433,20 @@ final class RenewalStartTest extends TestCase
     private function storedCemeteryName(string $cemeteryId): string
     {
         return (string) DB::table('cemeteries')->where('id', $cemeteryId)->value('name');
+    }
+
+    public function test_bottom_nav_renders_with_perpanjangan_active(): void
+    {
+        $response = $this->get('/perpanjangan');
+
+        $response->assertSee('aria-label="Navigasi utama"', false);
+
+        $html = $response->getContent();
+        $start = strpos($html, 'href="/perpanjangan"', strpos($html, 'Navigasi utama'));
+        $this->assertNotFalse($start, 'Perpanjangan tab anchor not found in bottom nav');
+        $end = strpos($html, '</a>', $start);
+        $anchor = substr($html, $start, $end - $start);
+
+        $this->assertStringContainsString('aria-current="page"', $anchor);
     }
 }

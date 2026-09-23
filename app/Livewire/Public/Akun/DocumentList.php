@@ -29,6 +29,7 @@ final class DocumentList extends Component
             ->layout('layouts.app', [
                 'title' => 'Dokumen - Makam.co.id',
                 'active' => null,
+                'bottomNavActive' => 'akun',
             ]);
     }
 }

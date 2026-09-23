@@ -588,4 +588,20 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
 
         return $bodyStart === false ? $content : substr($content, $bodyStart);
     }
+
+    public function test_bottom_nav_renders_with_no_active_tab(): void
+    {
+        $response = $this->get('/pemakaman');
+
+        $response->assertSee('aria-label="Navigasi utama"', false);
+
+        $html = $response->getContent();
+        $start = strpos($html, 'aria-label="Navigasi utama"');
+        $this->assertNotFalse($start, 'Bottom nav not found');
+        $end = strpos($html, '</nav>', $start);
+        $this->assertNotFalse($end, 'Bottom nav is unterminated');
+
+        $bottomNav = substr($html, $start, $end - $start);
+        $this->assertSame(0, substr_count($bottomNav, 'aria-current="page"'), 'No tab should be active in bottom nav for cemetery directory');
+    }
 }

@@ -70,4 +70,21 @@ final class AkunIndexRouteTest extends TestCase
 
         $this->actingAs($user)->get('/akun')->assertOk();
     }
+
+    public function test_bottom_nav_renders_with_akun_active(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get('/akun');
+
+        $response->assertSee('aria-label="Navigasi utama"', false);
+
+        $html = $response->getContent();
+        $start = strpos($html, 'href="/akun"', strpos($html, 'Navigasi utama'));
+        $this->assertNotFalse($start, 'Akun tab anchor not found in bottom nav');
+        $end = strpos($html, '</a>', $start);
+        $anchor = substr($html, $start, $end - $start);
+
+        $this->assertStringContainsString('aria-current="page"', $anchor);
+    }
 }
