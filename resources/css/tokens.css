@@ -2,7 +2,7 @@
  * Makam.co.id — Design Tokens (SINGLE SOURCE OF TRUTH)
  * =============================================================================
  * Spec         : docs/design/design-system.md
- * Version      : v0.2 (brand identity adopted — ADR-0034)
+ * Version      : v0.6 (FFI visual clone rebase — ADR-0043)
  * Stack        : Tailwind CSS 4.1+ (CSS-first `@theme`), Livewire 4, Filament 5
  *
  * RULES (enforced — see docs/design/design-system.md §9 Governance)
@@ -37,12 +37,12 @@
   --color-primary-100: #D1E8FF;
   --color-primary-200: #9DCEFF;
   --color-primary-300: #56ABFF;
-  --color-primary-400: #1288FF; /* white label 3.48:1 -- LARGE TEXT ONLY, never a body-copy fill */
-  --color-primary-500: #0073E6; /* white label AA 5.97:1 -- usable, but 600 is the brand fill */
-  --color-primary-600: #004182; /* FFI's primary blue, ADR-0043. White label AA 10.08:1. */
-  --color-primary-700: #00356B; /* hover / link on light -- white 12.09:1 */
-  --color-primary-800: #002A55; /* pressed -- white 14.02:1 */
-  --color-primary-900: #002040; /* footer, inverse header -- white 16.16:1 */
+  --color-primary-400: #1288FF; /* white label 3.51:1 -- LARGE TEXT ONLY, never a body-copy fill */
+  --color-primary-500: #0073E6; /* white label AA 4.57:1 -- usable, but 600 is the brand fill */
+  --color-primary-600: #004182; /* 600-slot fill generated from FFI's #0073E6 anchor -- NOT FFI's own hex. #0073E6 itself only reaches 4.57:1 with a white label, short of what this slot needs to carry one; FFI's own hover/dark blue #005BB5 is not in this ramp. ADR-0043. White label AA 10.10:1. */
+  --color-primary-700: #00356B; /* hover / link on light -- white 12.20:1 */
+  --color-primary-800: #002A55; /* pressed -- white 14.36:1 */
+  --color-primary-900: #002040; /* footer, inverse header -- white 16.40:1 */
   --color-primary-950: #001428;
 
   /* ---------------------------------------------------------------------------
@@ -75,7 +75,7 @@
   --color-secondary-950: #151917;
 
   /* ---------------------------------------------------------------------------
-   * 1.2b COLOUR -- ACCENT FFI Orange (hue ~39°, warm)
+   * 1.2b COLOUR -- ACCENT FFI Orange (hue ~16°, warm)
    * ADR-0043: FFI palette rebase. Replaces the former SAND family added in
    * ADR-0041 D8. Values are FFI's literal orange, anchored at 300 per the
    * same precedent that anchored Sage at 300 (light anchor, not dark fill).
@@ -87,8 +87,8 @@
   --color-accent-200: #FFA989;
   --color-accent-300: #FF6B35; /* FFI's accent, ADR-0043, verbatim. */
   --color-accent-400: #F34100;
-  --color-accent-500: #CA3600; /* white label AA 4.95:1 */
-  --color-accent-600: #721E00; /* white label AA 7.13:1 -- the fill slot */
+  --color-accent-500: #CA3600; /* white label AA 5.20:1 */
+  --color-accent-600: #721E00; /* white label AA 11.05:1 -- the fill slot */
   --color-accent-700: #5E1900;
   --color-accent-800: #4B1400;
   --color-accent-900: #380F00;
@@ -101,7 +101,6 @@
    * Replaces the former Petrol-harmonised neutral family from ADR-0034.
    * ------------------------------------------------------------------------ */
   --color-neutral-0:   #FFFFFF;
-  --color-neutral-0:   #FFFFFF;
   --color-neutral-50:  #F5F5F5; /* FFI's literal background, ADR-0043, verbatim. */
   --color-neutral-100: #ECECEC; /* ADR-0043: nudged 2/channel from #EEEEEE.
     Not an FFI literal (unlike neutral-0/50/800) -- free to move. Needed once
@@ -112,7 +111,7 @@
   --color-neutral-200: #E0E0E0; /* decorative divider only -- see design-system.md 6.3 */
   --color-neutral-300: #BCBCBC; /* decorative border only -- see design-system.md 6.3 */
   --color-neutral-400: #999999;
-  --color-neutral-450: #878787; /* INTERACTIVE BORDER -- see existing comment for the 16 Sep 2026 history; re-verify its numbers in Step 6 against the new surfaces below rather than trusting the old comment's ratios. */
+  --color-neutral-450: #878787; /* INTERACTIVE BORDER -- 3.59:1 on white, 3.30:1 on page, 3.17:1 on the warm surface (all verified, docs/design/verify-contrast.py). Was #888883 until 16 Sep 2026, which fell to 2.95:1 when the warm surface moved (ADR-0041 D8) -- under the 3.0 non-text floor. */
   --color-neutral-500: #757575; /* placeholder */
   --color-neutral-600: #606060; /* muted / helper text */
   --color-neutral-700: #4B4B4B; /* body text */
@@ -125,20 +124,20 @@
    * Hue separation (600 shade, ADR-0043): primary 210.0 | success 145.0 | info 246.2
    *                                       warning 42.0 | danger 0.0
    * ------------------------------------------------------------------------ */
-  /* SUCCESS — FFI Green (hue ~150°, ADR-0043). DIBAYAR, SELESAI, upload accepted, autosave confirmed */
+  /* SUCCESS — FFI Green (hue ~145°, ADR-0043). DIBAYAR, SELESAI, upload accepted, autosave confirmed */
   --color-success-50:  #E9FFF2;
   --color-success-100: #CCFFE1;
   --color-success-200: #92FFBF;
   --color-success-300: #44FF92;
   --color-success-400: #00F767;
   --color-success-500: #00C853; /* FFI's success green, ADR-0043, verbatim. */
-  --color-success-600: #00712F; /* white label AA 6.03:1 -- the fill slot */
+  --color-success-600: #00712F; /* white label AA 6.17:1 -- the fill slot */
   --color-success-700: #005D27;
   --color-success-800: #004A1F;
   --color-success-900: #003817;
   --color-success-950: #00230E;
 
-  /* WARNING — FFI Amber (hue ~41°, ADR-0043). MENUNGGU_*, quote expiring, scan pending, URGENT time pressure */
+  /* WARNING — FFI Amber (hue ~42°, ADR-0043). MENUNGGU_*, quote expiring, scan pending, URGENT time pressure */
   --color-warning-50:  #FFF9E9;
   --color-warning-100: #FFF0CD;
   --color-warning-200: #FFDF95;
@@ -151,9 +150,15 @@
   --color-warning-900: #3B2900;
   --color-warning-950: #251A00;
 
-  /* DANGER — FFI Red (hue ~3°, ADR-0043). DITOLAK, validation error,
-   * payment failed, file rejected. Muted red, not neon: the tone must stay
-   * respectful (§2.3). Values from FFI, transcribed verbatim. */
+  /* DANGER — FFI Red (hue 0°, ADR-0043). DITOLAK, validation error,
+   * payment failed, file rejected. Only the 600 slot (#D50000) is FFI's
+   * literal value, transcribed verbatim; the other ten stops are hand-
+   * derived on the same lightness-position curve generate-ramp-pivot.php
+   * uses, not reproducible by running that tool today (its interpolation
+   * was fixed after this ramp was already computed; re-running it now
+   * yields a different ramp). FFI's red is fully saturated, not the muted
+   * brick design-system.md §1.2(c) specifies -- ADR-0043 supersedes that
+   * rule for this rebase; see §1.2's supersession note. */
   --color-danger-50:  #FFECEC;
   --color-danger-100: #FFD5D5;
   --color-danger-200: #FFB2B2;
@@ -305,11 +310,11 @@
   --mk-surface-warm: var(--color-accent-50);      /* ADR-0043: repointed from
     accent-100 -- border-interactive (neutral-450, non-text UI) only cleared
     2.89:1 on accent-100 against the WCAG 1.4.11 3.0:1 floor once accent
-    became FFI's orange; accent-50 clears it at 3.41:1. Was ADR-0041 D8: trust/quiet
+    became FFI's orange; accent-50 clears it at 3.17:1. Was ADR-0041 D8: trust/quiet
     sections. Was primary-50 -- which the brand rebase turned COOL, because
     primary stopped being brown. A token named "warm" holding a cool grey is a
     contradiction, and it also landed 3/765 from --mk-surface-quiet, collapsing
-    the three-band alternation ADR-0040 D1/D2 exists for. Sand is the warm one,
+    the three-band alternation ADR-0040 D1/D2 exists for. FFI's orange is the warm one,
     and now it is here, at the 50 slot. 30/765 from quiet, 32/765 from
     page; all ten surface pairs clear the 10/765 floor verify-contrast.py
     enforces. */
@@ -332,7 +337,7 @@
     badge, button, or alert. Contrast needs no new verify-contrast.py pair —
     "text-default on secondary-50" and "text-strong on secondary-50" are both
     already asserted there. Surface-vs-surface separation IS newly asserted
-    (the 10/765 floor), and this band clears `--mk-surface-warm` by 41. */
+    (the 10/765 floor), and this band clears `--mk-surface-warm` by 30. */
   --mk-surface-inverse: var(--color-primary-900);  /* footer */
   --mk-surface-overlay: rgb(13 17 17 / 0.55);      /* modal backdrop */
   --mk-surface-disabled: var(--color-neutral-100);
@@ -342,7 +347,7 @@
   --mk-text-default: var(--color-neutral-700);
   --mk-text-muted: var(--color-neutral-600);
   --mk-text-placeholder: var(--color-neutral-500);
-  --mk-text-disabled: var(--color-neutral-500);   /* NOT 400: keeps 3.96:1 */
+  --mk-text-disabled: var(--color-neutral-500);   /* NOT 400: keeps 3.90:1 */
   --mk-text-inverse: var(--color-neutral-0);
   --mk-text-link: var(--color-primary-600);
   --mk-text-link-hover: var(--color-primary-700);
@@ -351,13 +356,13 @@
     (cemetery price ranges, renewal fees, quote/invoice totals) — a plain-text
     "price/amount emphasis" purpose distinct from every other existing use of
     primary-800 (button `pressed` fill, badge-on-tint foreground), neither of
-    which is body text on a white surface. Reuses the Earth family's darkest
+    which is body text on a white surface. Reuses the FFI-blue primary family's darkest
     legible shade instead of adding a new hue, keeping the palette restrained
     (design-system.md §2.2 "few hues") the same way `--mk-intent-urgent-*`
     reuses `warning` instead of inventing a colour (see that token's own
     comment above). Provably AA on white without a new verify-contrast.py
     assertion: primary-800 is strictly darker than the already-verified
-    "primary-700 on white" pair (12.16:1, design-system.md §7.1), so its own
+    "primary-700 on white" pair (12.20:1, design-system.md §7.1), so its own
     ratio only improves. Per design-system.md §1.2(d) "one accent, one
     purpose", this token renders a CONFIRMED/final monetary figure only — an
     INDICATIVE price range stays `neutral`, per the existing §2.3 DO. */
@@ -365,7 +370,7 @@
   /* 2.3 BORDERS
    * `subtle`/`default` are DECORATIVE (WCAG 1.4.11 does not apply).
    * `interactive` is MANDATORY for any control boundary that conveys state:
-   * input, select, textarea, checkbox, radio, unfilled button. 3.67:1 verified. */
+   * input, select, textarea, checkbox, radio, unfilled button. 3.59:1 verified. */
   --mk-border-subtle: var(--color-neutral-200);
   --mk-border-default: var(--color-neutral-300);
   --mk-border-interactive: var(--color-neutral-450);
@@ -375,7 +380,7 @@
 
   /* 2.4 FOCUS — single global treatment, never removed, never outline:none */
   --mk-focus-color: var(--color-primary-600);
-  --mk-focus-color-inverse: var(--color-primary-300); /* on brand fills, 4.42:1 */
+  --mk-focus-color-inverse: var(--color-primary-300); /* on brand fills, 4.17:1 */
   --mk-focus-width: 2px;
   --mk-focus-offset: 2px;
   --mk-focus-ring: 0 0 0 var(--mk-focus-offset) var(--mk-surface-raised),

@@ -99,14 +99,10 @@ page 07, and each 50-950 ramp is generated from its guideline value as the
 anchor, with every step's contrast measured rather than assumed.
 
 **Superseded again 23 Sep 2026 by the FFI visual clone** ([ADR-0043](../adr/0043-ffi-full-visual-clone-supersedes-system-layer-only.md)).
-`primary` is FFI's blue `#0073E6` (hue 210°), `accent` is FFI's orange
+`primary` is FFI's blue `#0073E6` (hue 210°) — note `primary-600` (the fill/CTA slot, `#004182`) is a *generated* 600-slot value, not FFI's own hex; FFI's own hover blue `#005BB5` is not in this ramp. `accent` is FFI's orange
 `#FF6B35`, `success` is FFI's green `#00C853`, `warning` is FFI's amber
-`#FFB300`, `danger` is FFI's red (see `resources/css/tokens.css` for the
-reconciled anchor slot — `docs/superpowers/plans/2026-09-23-ffi-clone-
-stage1-foundation.md` Task 1 Step 5a). `secondary` (Sage `#8FA99A`) is
-unchanged — FFI has no equivalent third surface-tint colour at this stage.
-`info` (`#3A4E9B` → rotated to hue 246°, values in `tokens.css`) has no FFI
-equivalent either. Full ratios: §7.1.
+`#FFB300`, `danger` is FFI's red `#D50000` (600 slot only — see `resources/css/tokens.css` for why the rest of that ramp isn't tool-reproducible). `secondary` (Sage `#8FA99A`) is
+unchanged — FFI has no equivalent third surface-tint colour at this stage. Two of this document's own present-tense rules are superseded by this rebase, not merely values: **(c)**'s muted-brick danger tone (§1.2(c)) — FFI's red is fully saturated, and the FFI-fidelity direction (ADR-0043) overrides the bereavement-tone preference for this specific value; and **(e)**'s "Success is teal, not green" (§1.2(e)) — success has returned to green (FFI's own), and the secondary/success hue proximity (e) was written to avoid is back near where it started (Δ≈1°, uncovered by any gate — the verifier's hue-separation rule doesn't include `secondary`, and §1.2(b)'s cage has been contrast-based, not hue-based, since v0.5).
 
 Sage is anchored at **300, not 600**. `600` is `tokens.css`'s convention for
 "a fill that carries a white label", and Sage fails that at 2.53:1. Putting
@@ -187,7 +183,7 @@ Never use an odd value. `p-[13px]` is a lint failure (§9.5).
 |---|---|---|
 | `--font-sans` | Inter Variable → system fallback | Public site only. **Superseded, 26 Aug 2026 (explicit owner decision):** admin/vendor Filament panels no longer use this token or any custom font at all — see §8.3's updated note. Brand voice, including typography, is a public-surface concern only. |
 | `--font-display` | Inter Variable → system fallback | `h1`/`h2`, hero, header wordmark. **Face changed 23 Sep 2026 ([ADR-0043](../adr/0043-ffi-full-visual-clone-supersedes-system-layer-only.md)):** FFI ships Inter as its single family for body and headings, replacing Plus Jakarta Sans. It is variable, so heading weight costs no second file — the "ONE family now does body and headings" structural rationale from the ADR-0041 rebase still applies, it just names Inter instead. **Font payload size is NOT MEASURED on this host** — the previous **26.7 KB** figure was specific to Plus Jakarta Sans and no longer applies; no npm build runs here to re-measure Inter (`docs/operations/ci-cd-and-release.md`), so §4.6's 60 KB budget is verified by CI's frontend job, not by this document. `latin-ext` ships with its own `unicode-range` and never downloads for Indonesian, same as before. **Lora is still NOT loaded**: it remains scoped to "emotional headline • quote • storytelling", surfaces that do not exist yet — ADR-0043 maintains this constraint without restating the old, now-inapplicable KB math. |
-| `--font-document` | Source Serif 4 / Lora → Georgia | Certificate/agreement/invoice documents **only**, consumed by `print.css` (§8.5) once it is built. Holds the value `--font-display` carried before ADR-0034, verbatim — added specifically so a document can never silently inherit the new Poppins brand face. |
+| `--font-document` | Source Serif 4 / Lora → Georgia | Certificate/agreement/invoice documents **only**, consumed by `print.css` (§8.5) once it is built. Holds the value `--font-display` carried before ADR-0034, verbatim — added specifically so a document can never silently inherit the display face. |
 | `--font-mono` | JetBrains Mono → system | Order reference, payment reference, audit IDs |
 
 **Self-hosting is mandatory.** No Google Fonts, no CDN. Two reasons, both from existing baselines: staging is `noindex` and access-restricted ([`security-baseline.md`](../security/security-baseline.md) §Non-production isolation), and a third-party font request leaks the visitor's IP and referrer on pages where that visitor is arranging a funeral or uploading a death certificate. Subset to `latin` + `latin-ext`; Indonesian needs no extra ranges.
@@ -292,7 +288,7 @@ Easing: `--ease-standard` default · `--ease-decelerate` entering · `--ease-acc
 - Show the source and last-updated time on any fee or availability figure (renewal tariff, `G-RATE-01`).
 - Pair every status colour with an icon **and** an Indonesian text label.
 - Keep the customer-service escape hatch visible on every transactional screen — required by `AGENTS.md` and `screen-inventory.md` §D.
-- Use `--mk-surface-warm` (Earth `primary-50`, ADR-0034 D6 — no longer Leaf) for trust/reassurance sections to soften long white pages.
+- Use `--mk-surface-warm` (FFI's orange `accent-50`, ADR-0043 — no longer Earth) for trust/reassurance sections to soften long white pages.
 
 **DON'T**
 
@@ -345,7 +341,8 @@ Blade components live in `resources/views/components/`; the Livewire-facing wrap
 (Updated 23 Sep 2026, ADR-0043: `primary-600` on white is now 10.10:1 —
 see §7.1. The underlying rule — never `500` as a text-bearing fill — still
 holds; only the specific ratio and the "sampled from the logo" premise are
-historical.)
+historical. `primary-500`'s real value is `4.57:1` (large-text only, unchanged
+from before).)
 
 **Sizes** — `sm` `h-9` (36 px, **desktop admin tables only**) · `md` `h-11` (44 px, default) · `lg` `h-13` (52 px, primary CTA).
 
@@ -415,7 +412,7 @@ $classes = trim("$base {$sizes[$size]} {$variants[$variant]} " . ($full ? 'w-ful
 
 | State | Border | Extra |
 |---|---|---|
-| idle | `border-neutral-450` | 3.67:1 verified — **not** `neutral-300` |
+| idle | `border-neutral-450` | 3.59:1 verified — **not** `neutral-300` |
 | hover | `border-neutral-600` | — |
 | focus | `border-primary-600` + `ring-2 ring-primary-600 ring-offset-1` | — |
 | filled | as idle | — |
@@ -1364,7 +1361,7 @@ Selected measured ratios (full output above):
 **Four findings from that verification worth keeping visible:**
 
 1. `warning-600` was originally `#A66B00` and measured **4.44:1** — a real AA failure for a white label. Darkened to `#9A6300` → 5.05:1.
-2. `neutral-300` (1.71:1) and `neutral-400` (2.67:1) **both fail WCAG 1.4.11** as input borders. This is why `--color-neutral-450` (`#7F8787`, 3.67:1) exists and why `--mk-border-interactive` is mandatory for control boundaries. `neutral-200`/`300` remain valid for **decorative** dividers only, where 1.4.11 does not apply.
+2. `neutral-300` (1.90:1) and `neutral-400` (2.85:1) **both fail WCAG 1.4.11** as input borders. This is why `--color-neutral-450` (`#878787`, 3.59:1) exists and why `--mk-border-interactive` is mandatory for control boundaries. `neutral-200`/`300` remain valid for **decorative** dividers only, where 1.4.11 does not apply.
 3. **Danger's hue was tuned −11° when Earth replaced Petrol as `primary` (ADR-0034 D4).** Earth's hue (≈26°) sits only ≈24° from the pre-existing danger hue (≈3°) — below the verifier's `HUE_MIN_SEPARATION = 30.0°` for the `primary`/`success`/`info`/`danger` status families. Per §9.4 ("fix the token, never the assertion"), every danger shade's hue was rotated −11° (lightness/saturation held), moving 600 from `#A32A24` (hue 3°) to `#A32435` (measured hue **352.0°**). Measured primary/danger separation after the tune: **≈34.2°** (`|26.2 − 352.0| = 325.8`, `360 − 325.8 = 34.2`), clearing the 30° floor. The OQ-12 hue refresh moved primary from 26.1° to 26.2° — negligible drift, the 30° floor still clears by the same margin.
 4. **`primary-500` carries only a thin AA margin as a white-text fill — do not use it for that.** Measured **4.73:1**, barely above the 4.5:1 body-text floor (versus `primary-600`'s comfortable 10.25:1). The verifier only asserts the large-text 3.0 minimum for this pair (see `verify-contrast.py`'s own pairing), which is why it shows `(large only)` above — but the number is close enough to the normal-text floor that a slightly different rendering environment or sub-pixel AA could tip it under 4.5:1. Treat `500` as a mid-ramp surface/decorative swatch, not a button or badge fill; fills stay on `600` (§3.1).
 
@@ -1379,7 +1376,7 @@ fill.)
 
 Single global treatment — `--mk-focus-ring`: 2 px `primary-600` ring at 2 px offset. `focus-visible` only (no ring on mouse click), but **`:focus-visible` must never be replaced by removing focus entirely.** `outline: none` without a replacement ring is a lint failure.
 
-On brand-filled surfaces use `--mk-focus-color-inverse` (`primary-300`, 4.42:1 against `primary-600`).
+On brand-filled surfaces use `--mk-focus-color-inverse` (`primary-300`, 4.17:1 against `primary-600`).
 
 Focus order follows DOM order. Modals trap focus and restore it to the trigger. The skip link is the first focusable element.
 
@@ -1640,7 +1637,7 @@ Whether this remains correct once panels stop carrying the tokens.css palette (i
 
 ### 8.5 Print / document stylesheet
 
-**Not yet built** — `print.css` does not exist in this repository (ADR-0034 D10.1); the snippet below is the intended shape, not a shipped file. **Its body font is `var(--font-document)`, not `var(--font-display)`.** `--font-display` is now the Poppins brand face (§1.4) and must never appear on a certificate/agreement/invoice; `--font-document` (Source Serif 4) exists specifically so a printed legal document keeps serif gravitas regardless of what the public site's display face becomes.
+**Not yet built** — `print.css` does not exist in this repository (ADR-0034 D10.1); the snippet below is the intended shape, not a shipped file. **Its body font is `var(--font-document)`, not `var(--font-display)`.** `--font-display` is now Inter (§1.4) and must never appear on a certificate/agreement/invoice; `--font-document` (Source Serif 4) exists specifically so a printed legal document keeps serif gravitas regardless of what the public site's display face becomes.
 
 ```css
 /* resources/css/print.css — invoice, kwitansi, agreement, certificate */
@@ -1650,7 +1647,7 @@ Whether this remains correct once panels stop carrying the tokens.css palette (i
 @page { size: A4; margin: 18mm 16mm; }
 
 @layer base {
-  /* --font-document, NOT --font-display — that is Poppins now (§1.4, ADR-0034 D7). */
+  /* --font-document, NOT --font-display — that is Inter now (§1.4, ADR-0043). */
   body { font-family: var(--font-document); font-size: 11pt; color: #000; }
   .page-break { break-after: page; }
   a[href]::after { content: " (" attr(href) ")"; font-size: 9pt; }

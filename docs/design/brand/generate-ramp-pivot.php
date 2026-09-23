@@ -5,9 +5,11 @@
  * hex at slot 600; this script anchors it at whichever slot the caller
  * names, because not every brand anchor sits at the ramp's 600
  * position (Sage: 300, Sand: 200, and now every FFI anchor below).
- * Method is otherwise identical: interpolate lightness along the same
- * curve the ramp already uses via *position-based* (not multiplicative-ratio)
- * interpolation, holding hue+saturation fixed at the pivot's own H/S.
+ * Equivalence to generate-ramp.php's method is proven exact only at pivot
+ * 600 -- the two scripts produce byte-identical output there. At every
+ * other pivot slot, this script re-expresses the same lightness curve
+ * relative to the new pivot; that is not a bit-identical reproduction of
+ * what generate-ramp.php itself would produce if run at that slot.
  *
  * Usage: php generate-ramp-pivot.php <#RRGGBB> <pivot-slot 50|100|...|950>
  */
