@@ -27,20 +27,43 @@ final class MkBottomNavTest extends TestCase
         $html = Blade::render('<x-mk.bottom-nav />');
 
         $expectedOrder = [
-            'href="/"',
-            'href="/pemesanan-makam"',
-            'href="/perpanjangan"',
-            'href="/akun"',
-            'href="/bantuan"',
+            'href="/"' => 'Beranda',
+            'href="/pemesanan-makam"' => 'Pemesanan',
+            'href="/perpanjangan"' => 'Perpanjangan',
+            'href="/akun"' => 'Akun',
+            'href="/bantuan"' => 'Bantuan',
         ];
 
         $lastPosition = -1;
-        foreach ($expectedOrder as $href) {
+        foreach ($expectedOrder as $href => $label) {
             $this->assertStringContainsString($href, $html);
             $position = strpos($html, $href);
             $this->assertGreaterThan($lastPosition, $position, "$href out of order");
             $lastPosition = $position;
         }
+    }
+
+    public function test_renders_exactly_the_five_canonical_indonesian_labels(): void
+    {
+        // ADR-0044 names this exact 5-tab set as the approved decision and
+        // AGENTS.md forbids inventing alternate navigation labels -- these
+        // strings are a product contract, not implementation detail.
+        $html = Blade::render('<x-mk.bottom-nav />');
+
+        foreach (['Beranda', 'Pemesanan', 'Perpanjangan', 'Akun', 'Bantuan'] as $label) {
+            $this->assertStringContainsString('>'.$label.'</span>', $html);
+        }
+    }
+
+    public function test_renders_exactly_five_tabs(): void
+    {
+        // ADR-0044: "does not approve or design any navigation item beyond
+        // the five named here (no sixth tab...)" -- pin the count so a
+        // stray addition fails loudly instead of passing the ordering
+        // check above by coincidence.
+        $html = Blade::render('<x-mk.bottom-nav />');
+
+        $this->assertSame(5, substr_count($html, '<li>'));
     }
 
     public function test_hidden_above_lg_breakpoint(): void
@@ -97,6 +120,7 @@ final class MkBottomNavTest extends TestCase
         $this->assertStringContainsString('text-primary-700', $bantuanAnchor);
         $this->assertStringContainsString('border-t-2', $bantuanAnchor);
         $this->assertStringContainsString('border-primary-600', $bantuanAnchor);
+        $this->assertStringNotContainsString('border-transparent', $bantuanAnchor);
     }
 
     public function test_inactive_tabs_carry_transparent_border_not_no_border(): void
@@ -121,5 +145,8 @@ final class MkBottomNavTest extends TestCase
 
         $this->assertStringContainsString('z-bottomnav', $html);
         $this->assertStringContainsString('mk-bottomnav-total', $html);
+        $this->assertStringContainsString('mk-bottomnav-h', $html);
+        $this->assertStringContainsString('mk-safe-bottom', $html);
+        $this->assertStringContainsString('duration-fast', $html);
     }
 }
