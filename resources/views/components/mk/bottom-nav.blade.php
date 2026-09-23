@@ -4,8 +4,24 @@
     <x-mk.bottom-nav> — the five-tab mobile persistent navigation
     primitive, FFI full-visual-clone design doc §3, Stage 2 ticket 02,
     approved by ADR-0044 (resolves design-system.md OQ-04). Follows
-    button.blade.php's convention: @props with defaults, classes composed
-    once in a single @php block, one $attributes->merge() on the root.
+    button.blade.php's convention: a props declaration with defaults, classes
+    composed once in a single PHP block, one $attributes->merge() on the root.
+
+    NOTE ON THIS COMMENT'S OWN WORDING: this file deliberately never spells
+    the component-props directive or the inline-PHP directive as their own
+    two-word "at sign" + name form anywhere in this comment (it says "props
+    declaration" and "PHP block" instead). Blade's directive compiler in
+    this dependency version matches that literal two-token form even inside
+    a double-brace comment block when it is not immediately followed by an
+    opening parenthesis — it does not require the match to be outside a
+    comment. Writing that form here, bare, once compiled to an empty-args
+    props block, and writing the second one, bare, once compiled to an
+    unmatched literal PHP open tag that the real closing-PHP directive
+    below then closed, scrambling the rest of this comment into invalid
+    PHP (real, reproduced ParseError: syntax error, unexpected token ","
+    in the compiled view, isolated by bisecting compileString() output
+    line-by-line against the pinned app image). Do not reintroduce that
+    bare two-token form anywhere in this file's prose.
 
     `active` is an explicit prop, matching header.blade.php's own
     established convention exactly (same pattern: 'active' => null, a
