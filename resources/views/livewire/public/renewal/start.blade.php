@@ -114,8 +114,8 @@
             </h2>
 
             <div wire:loading.delay wire:target="selectCity,resetCity" class="grid gap-4 md:grid-cols-2" aria-busy="true">
-                <div class="h-28 rounded-lg bg-[var(--mk-skeleton-base)] animate-pulse"></div>
-                <div class="h-28 rounded-lg bg-[var(--mk-skeleton-base)] animate-pulse"></div>
+                <x-mk.skeleton shape="card" announce="" />
+                <x-mk.skeleton shape="card" announce="" />
                 <span class="sr-only">Memuat daftar TPU/TPS&hellip;</span>
             </div>
 
@@ -316,9 +316,9 @@
                 </form>
 
                 <div wire:loading.delay wire:target="search" class="space-y-3" aria-busy="true">
-                    <div class="h-16 rounded-lg bg-[var(--mk-skeleton-base)] animate-pulse"></div>
-                    <div class="h-16 rounded-lg bg-[var(--mk-skeleton-base)] animate-pulse"></div>
-                    <div class="h-16 rounded-lg bg-[var(--mk-skeleton-base)] animate-pulse"></div>
+                    <x-mk.skeleton shape="card" announce="" />
+                    <x-mk.skeleton shape="card" announce="" />
+                    <x-mk.skeleton shape="card" announce="" />
                     <span class="sr-only">Mencari data makam&hellip;</span>
                 </div>
 

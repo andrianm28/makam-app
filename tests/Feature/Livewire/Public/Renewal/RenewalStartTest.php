@@ -1358,6 +1358,53 @@ final class RenewalStartTest extends TestCase
         $this->assertNull(RenewalGraveSelection::current());
     }
 
+    /**
+     * Stage 3 ticket 02 — the Step 2 TPU/TPS grid's two hand-rolled
+     * skeleton `div`s were replaced by real `<x-mk.skeleton>` instances.
+     * `wire:loading` markup is always present in the server-rendered HTML
+     * (visibility is toggled client-side by Livewire's JS via CSS
+     * attribute selectors), so reaching Step 2's `$city !== ''` state
+     * already renders it — no need to fake-trigger the loading state
+     * itself. Asserting the component's own distinguishing
+     * `mk-skeleton-shimmer` class (unique to `<x-mk.skeleton>`, never
+     * present in the old hand-rolled markup) is a literal, known string,
+     * not recomputed from the component's source.
+     */
+    public function test_step_2_tpu_tps_grid_renders_the_real_skeleton_component(): void
+    {
+        $html = Livewire::test(RenewalStart::class)
+            ->call('selectCity', LaunchCityCode::JAKARTA)
+            ->html();
+
+        $this->assertSame(
+            2,
+            substr_count($html, 'mk-skeleton-shimmer'),
+            'Expected 2 <x-mk.skeleton> instances in the Step 2 TPU/TPS grid.'
+        );
+        $this->assertStringNotContainsString('bg-[var(--mk-skeleton-base)] animate-pulse', $html);
+    }
+
+    /**
+     * Same as above, for the Step 3 search-results list's three
+     * hand-rolled skeleton `div`s, now real `<x-mk.skeleton>` instances.
+     * `cemeteryId` alone reaches `$selectedCemetery !== null` (Step 3),
+     * matching `test_go_to_step_search_resets_the_chosen_city_and_cemetery`'s
+     * own established mount pattern for this screen.
+     */
+    public function test_step_3_search_results_list_renders_the_real_skeleton_component(): void
+    {
+        $html = Livewire::test(RenewalStart::class, [
+            'cemeteryId' => CemeteryFixture::id('package', 0),
+        ])->html();
+
+        $this->assertSame(
+            3,
+            substr_count($html, 'mk-skeleton-shimmer'),
+            'Expected 3 <x-mk.skeleton> instances in the Step 3 search-results list.'
+        );
+        $this->assertStringNotContainsString('bg-[var(--mk-skeleton-base)] animate-pulse', $html);
+    }
+
     /** The cemetery name as STORED — what the page renders, marker included. */
     private function storedCemeteryName(string $cemeteryId): string
     {
