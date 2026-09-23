@@ -6,8 +6,8 @@
  * names, because not every brand anchor sits at the ramp's 600
  * position (Sage: 300, Sand: 200, and now every FFI anchor below).
  * Method is otherwise identical: interpolate lightness along the same
- * curve the ramp already uses, holding hue+saturation fixed at the
- * pivot's own H/S.
+ * curve the ramp already uses via *position-based* (not multiplicative-ratio)
+ * interpolation, holding hue+saturation fixed at the pivot's own H/S.
  *
  * Usage: php generate-ramp-pivot.php <#RRGGBB> <pivot-slot 50|100|...|950>
  */
@@ -15,13 +15,14 @@
 const SLOTS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
 
 // Lightness curve borrowed verbatim from generate-ramp.php's own 600-pivot
-// table, expressed as a fraction of the pivot's lightness per slot offset
-// from 600 — this file re-derives it generically off whatever slot is
-// asked for, rather than only ever supporting 600.
-const CURVE_L_AT_600_PIVOT = [
-    50 => 0.97, 100 => 0.925, 200 => 0.855, 300 => 0.755, 400 => 0.639,
-    500 => 0.527, 600 => null, 700 => 0.345, 800 => 0.284, 900 => 0.237,
-    950 => 0.122,
+// table. These are the ACTUAL lightness values of the proven primary ramp,
+// not generated — they are the canonical curve we re-express as positions
+// and then apply to any new anchor.
+const OLD_ANCHOR_L = 0.24314; // current primary-600's own L
+const OLD_SHADE_L = [
+    50 => 0.959, 100 => 0.906, 200 => 0.800, 300 => 0.657, 400 => 0.518, 500 => 0.431,
+    600 => 0.24314,
+    700 => 0.200, 800 => 0.159, 900 => 0.120, 950 => 0.075,
 ];
 
 function hexToRgb(string $hex): array
@@ -65,19 +66,43 @@ if (!$anchorHex || !in_array($pivotArg, SLOTS, true)) {
 
 [$h, $s, $pivotL] = rgbToHsl(...hexToRgb($anchorHex));
 
-// Re-express the 600-pivot curve as ratios relative to the 600 lightness,
-// then apply those ratios to whatever lightness the real pivot slot has —
-// this keeps the visual "shape" of the ramp regardless of which slot anchors it.
-$curveAt600 = CURVE_L_AT_600_PIVOT;
-$curveAt600[600] = 0.527; // the same L generate-ramp.php's own 600 slot assumes as its reference
-$pivotRatio = $curveAt600[$pivotArg] / $curveAt600[600];
+// Compute position-based curve from the old reference curve.
+// The original curve is anchored at slot 600 with lightness OLD_ANCHOR_L.
+// We re-express it as positions relative to the OLD pivot slot (which may differ
+// from 600), then apply those same positions to the NEW pivot's lightness.
+$oldPivotL = OLD_SHADE_L[$pivotArg];
 
+$curvePositions = [];
+foreach (OLD_SHADE_L as $shade => $l) {
+    if ($shade < $pivotArg) {
+        // Fraction of the way from old pivot to white
+        $curvePositions[$shade] = ($l - $oldPivotL) / (1 - $oldPivotL);
+    } elseif ($shade === $pivotArg) {
+        // The pivot slot itself has position 0
+        $curvePositions[$shade] = 0.0;
+    } else {
+        // Fraction of the way from old pivot to black
+        $curvePositions[$shade] = ($oldPivotL - $l) / $oldPivotL;
+    }
+}
+
+// Apply the position-based curve to the new anchor
 foreach (SLOTS as $slot) {
     if ($slot === $pivotArg) {
         echo "$slot: $anchorHex (anchor)\n";
         continue;
     }
-    $ratio = ($curveAt600[$slot] / $curveAt600[600]) / $pivotRatio;
-    $l = max(0.02, min(0.98, $pivotL * $ratio));
+
+    $pos = $curvePositions[$slot];
+    if ($slot < $pivotArg) {
+        // Fraction of the way from pivot to white
+        $l = $pivotL + $pos * (1 - $pivotL);
+    } else {
+        // Fraction of the way from pivot to black
+        $l = $pivotL - $pos * $pivotL;
+    }
+
+    // Clamp to valid range
+    $l = max(0.02, min(0.98, $l));
     echo "$slot: " . hslToHex($h, $s, $l) . "\n";
 }
