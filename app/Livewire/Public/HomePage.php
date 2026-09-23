@@ -215,7 +215,15 @@ final class HomePage extends Component
         try {
             $verifiedCemeteries = Cemetery::published()
                 ->whereHas('capabilityProfiles', function ($query): void {
-                    $query->current()->where('registry_mode', RegistryMode::AUTHORITATIVE);
+                    // Inlines CemeteryCapabilityProfile::scopeCurrent()'s own
+                    // `whereNull('superseded_at')` condition rather than
+                    // calling the scope through this closure: Larastan
+                    // resolves the closure's $query parameter as a generic
+                    // Builder<Model>, not Builder<CemeteryCapabilityProfile>,
+                    // so it cannot see the custom scope method (real CI
+                    // failure: "Call to an undefined method ...::current()").
+                    // Same condition, no scope-resolution type gap.
+                    $query->whereNull('superseded_at')->where('registry_mode', RegistryMode::AUTHORITATIVE);
                 })
                 ->orderBy('city')
                 ->orderBy('name')
