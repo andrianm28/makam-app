@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Livewire\Public;
 
 use App\Domain\CemeteryCapability\CemeteryPackageAvailabilityStatus;
+use App\Domain\CemeteryCapability\RegistryMode;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\Faq\FaqPublicQuery;
 use App\Jobs\RecordMenuImpressions;
@@ -125,41 +126,18 @@ final class HomePage extends Component
             $faqHighlightsUnavailable = true;
         }
 
-        // IA §3 item 5 "TPU/TPS unggulan/tersedia bila data ada" — REVERSED
-        // 26 Jul 2026 from this class's original "deliberately NOT queried"
-        // stance. That original reasoning (see git history on this method)
-        // was sound at S4-T1/S4-T3 time: the only rows were ten fictional
-        // seed fixtures with NULL price/photo/coordinates, and presenting
-        // them as "featured" would have shown fabricated content as real.
-        // The premise changed by explicit user authorization, the same one
-        // `App\Support\ContactInfo`'s own doc block documents: `dev.makam.
-        // co.id` is a real, intentionally public, non-production host
-        // (docs/operations/dev-staging-environment.md, ADR-0031) where
-        // clearly-fictional DUMMY data is the correct content type to
-        // render end-to-end, not a fabrication risk. `2026_07_26_210000_
-        // backfill_dummy_map_price_and_photo_for_seeded_cemeteries.php`
-        // backfilled price/photo/coordinates for exactly this purpose.
-        //
-        // Same §6.3 provider-unavailable discipline as the FAQ highlights
-        // query above: a secondary panel failing must never take the whole
-        // homepage down. design-system.md §6.2's required-states row for
-        // this section ("Featured cemeteries absent (homepage §5) | Hide
-        // the section entirely") still governs the truly-empty case (e.g.
-        // every cemetery unpublished later) — that branch is kept in the
-        // view even though unreachable against today's seed data.
-        $featuredCemeteries = new Collection;
-        $featuredCemeteriesUnavailable = false;
-
-        try {
-            $featuredCemeteries = Cemetery::published()
-                ->orderBy('city')
-                ->orderBy('name')
-                ->take(6)
-                ->get();
-        } catch (Throwable $e) {
-            report($e);
-            $featuredCemeteriesUnavailable = true;
-        }
+        // Stage 3 ticket 04 — the old "featured cemeteries" query (IA §3
+        // item 5's original, pre-Stage-3 query: published cemeteries
+        // ordered by city/name, no capability filter) was removed here.
+        // Its section is deleted by this ticket; its real-data
+        // responsibility is now split across ticket 03's two sections
+        // (urgent-availability, newest-published, both below) and this
+        // ticket's own verified-cemeteries query (further below) — three
+        // more specific signals replacing one generic one, per the design
+        // doc §4.1 mapping. Removed rather than left unused: this
+        // codebase's own established discipline against dead code (see
+        // e.g. the Stage 3 bottom-nav-wiring ticket's own final-review fix
+        // round for the same principle applied to a dead test branch).
 
         // Stage 3 ticket 03 — "urgent-availability TPU/TPS". No per-cemetery
         // "urgent" flag exists anywhere in this domain (confirmed by search
@@ -192,8 +170,9 @@ final class HomePage extends Component
         // a real, existing timestamp column (set when a cemetery transitions
         // to published — see Cemetery::scopePublished()'s own doc block);
         // ordering by it descending is the honest "newest" signal, distinct
-        // from the existing featured-cemeteries query above (which orders
-        // by city/name, not recency).
+        // from the urgent-availability query above (which orders by
+        // city/name, not recency) and the verified-cemeteries query below
+        // (which filters by registry_mode, not recency).
         $newestPublishedCemeteries = new Collection;
         $newestPublishedCemeteriesUnavailable = false;
 
@@ -214,16 +193,49 @@ final class HomePage extends Component
             $newestPublishedCemeteriesUnavailable = true;
         }
 
+        // Stage 3 ticket 04 — "featured/verified TPU/TPS". "Lokasi
+        // terverifikasi" is design-system.md's already-decided definition:
+        // active capability profile, evidence present. Every seeded
+        // cemetery's current profile carries the SAME placeholder evidence
+        // text ("belum ada evaluasi operator lapangan ... bukan hasil
+        // aktivasi kapabilitas nyata" — CemeteryExampleData::seed()'s own
+        // insert), so a bare "evidence IS NOT NULL" check would dishonestly
+        // mark every cemetery verified. RegistryMode::AUTHORITATIVE is the
+        // real, meaningful signal here — its own doc comment: "An
+        // authoritative, EVIDENCED registry exists", and it is explicitly
+        // "never set by this batch's seed data." Using it (not a new rule
+        // invented for this ticket) means this section is honestly EMPTY
+        // against today's real seed data, exactly like the original
+        // featured-cemeteries section was before its own dummy-data
+        // backfill unblocked it — a real, named current-state gap, not a
+        // bug.
+        $verifiedCemeteries = new Collection;
+        $verifiedCemeteriesUnavailable = false;
+
+        try {
+            $verifiedCemeteries = Cemetery::published()
+                ->whereHas('capabilityProfiles', function ($query): void {
+                    $query->current()->where('registry_mode', RegistryMode::AUTHORITATIVE);
+                })
+                ->orderBy('city')
+                ->orderBy('name')
+                ->take(6)
+                ->get();
+        } catch (Throwable $e) {
+            report($e);
+            $verifiedCemeteriesUnavailable = true;
+        }
+
         return view('livewire.public.home-page', [
             'urgentMode' => $urgentMode,
             'faqHighlights' => $faqHighlights,
             'faqHighlightsUnavailable' => $faqHighlightsUnavailable,
-            'featuredCemeteries' => $featuredCemeteries,
-            'featuredCemeteriesUnavailable' => $featuredCemeteriesUnavailable,
             'urgentAvailabilityCemeteries' => $urgentAvailabilityCemeteries,
             'urgentAvailabilityCemeteriesUnavailable' => $urgentAvailabilityCemeteriesUnavailable,
             'newestPublishedCemeteries' => $newestPublishedCemeteries,
             'newestPublishedCemeteriesUnavailable' => $newestPublishedCemeteriesUnavailable,
+            'verifiedCemeteries' => $verifiedCemeteries,
+            'verifiedCemeteriesUnavailable' => $verifiedCemeteriesUnavailable,
             'primaryMenus' => self::PRIMARY_MENUS,
         ])->layout('layouts.app', [
             // No unsubstantiated superlative ("terpercaya"/"terbaik") in the

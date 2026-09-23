@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Tests\Feature\Livewire\Public;
 
 use App\Domain\CemeteryCapability\CemeteryPackageAvailabilityStatus;
+use App\Domain\CemeteryCapability\Models\CemeteryCapabilityProfile;
 use App\Domain\CemeteryCapability\Models\CemeteryPackage;
+use App\Domain\CemeteryCapability\RegistryMode;
 use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
@@ -266,9 +268,11 @@ final class HomePageRouteTest extends TestCase
         $response->assertSee('Pesan Makam');
         $response->assertSee('href="/pemesanan-makam"', false);
 
-        // Sections around the insertion point still render: Trust (6) above
-        // it, FAQ highlights (7) below it.
-        $response->assertSee('Kenapa Makam.co.id');
+        // FAQ highlights below it still renders. The old "Trust" section
+        // that used to sit above it (Kenapa Makam.co.id) was replaced by
+        // Stage 3 ticket 04's verified-cemeteries section — see
+        // test_verified_cemeteries_section_* below for that section's own
+        // coverage.
         $response->assertSee('Pertanyaan yang Sering Diajukan');
     }
 
@@ -403,71 +407,6 @@ final class HomePageRouteTest extends TestCase
     }
 
     /**
-     * RENAMED from `test_section_5_never_renders_any_of_the_s4_t1_seed_
-     * fixture_cemetery_names`, which asserted none of these ten names could
-     * ever appear on the public homepage — correct at S4-T3 time, when
-     * these rows were fictional fixtures with NULL price/photo/coordinates
-     * and showing them as "featured" would have misrepresented fabricated
-     * content as real (see this file's own prior doc comment, kept in the
-     * original PR history).
-     *
-     * The premise changed by explicit user authorization — see
-     * `App\Livewire\Public\HomePage::render()`'s own doc block for the full
-     * reasoning trail. Section 5 now deliberately renders these same ten
-     * names (nine published, one draft) with clearly-fictional dummy
-     * price/photo/coordinate data, for full public display on
-     * `dev.makam.co.id`. This test is flipped accordingly: it now asserts
-     * the nine PUBLISHED example names DO appear, and the one deliberately
-     * DRAFT example (`CemeteryExampleData::DRAFT_SLUG`) still does not —
-     * `Cemetery::published()` filtering the draft row out is itself real
-     * production behaviour worth protecting, not just a fixture detail.
-     */
-    public function test_section_5_shows_published_dummy_cemeteries_and_excludes_the_draft_one(): void
-    {
-        $response = $this->get('/');
-        $response->assertOk();
-
-        // HomePage::render() orders by (city, name) then ->take(6), over
-        // published rows only. The expected list is DERIVED from the
-        // example-data generator under that same ordering, so a change to
-        // the seed data updates the expectation in one place instead of
-        // leaving a frozen name snapshot that drifts from the seed.
-        $published = collect(CemeteryExampleData::cemeteries())
-            ->reject(fn (array $c): bool => $c[7] !== CemeteryPublicationStatus::PUBLISHED)
-            ->sortBy(fn (array $c): array => [$c[3], $c[1]])
-            ->values();
-
-        $expectedVisibleNames = $published->take(6)->pluck(1)->all();
-        $expectedHiddenByCap = $published->skip(6)->pluck(1)->all();
-
-        foreach ($expectedVisibleNames as $name) {
-            $response->assertSee($name);
-        }
-
-        // Excluded by the draft-publication-status scope (Cemetery::published()):
-        $response->assertDontSee(CemeteryExampleData::bySlug(CemeteryExampleData::DRAFT_SLUG)[1]);
-
-        // Excluded purely by the ->take(6) display cap, scoped to THIS
-        // section specifically (not the whole page): Stage 3 ticket 03
-        // added two more sections (urgent-availability, newest-published)
-        // drawing from overlapping but differently-filtered/ordered
-        // cemetery pools, so a name capped out of featured-cemeteries can
-        // legitimately still appear in one of those — that's correct,
-        // not a regression. The cap's effect on THIS section specifically
-        // is still asserted here so a future cap change stays visible.
-        $html = $response->getContent();
-        $featuredStart = strpos($html, 'id="featured-cemeteries-heading"');
-        $this->assertNotFalse($featuredStart);
-        $featuredEnd = strpos($html, '</section>', $featuredStart);
-        $this->assertNotFalse($featuredEnd);
-        $featuredSection = substr($html, $featuredStart, $featuredEnd - $featuredStart);
-
-        foreach ($expectedHiddenByCap as $name) {
-            $this->assertStringNotContainsString($name, $featuredSection);
-        }
-    }
-
-    /**
      * Stage 3 ticket 03 — the three secondary CTAs (design doc §4.2).
      * Wakaf Tanah has no real route in this codebase (confirmed by search
      * before implementing this ticket) — same honest-disabled-control
@@ -581,37 +520,145 @@ final class HomePageRouteTest extends TestCase
         );
     }
 
-    public function test_new_sections_render_between_services_and_how_it_works(): void
+    /**
+     * Stage 3 ticket 04 — the design doc §4.1 final section order for the
+     * region this stage restructured, checked in one pass rather than
+     * each section's independent presence: services (carrying the
+     * secondary CTAs), urgent TPU/TPS, newest TPU/TPS, verified TPU/TPS,
+     * family warmth, FAQ highlights, customer-service CTA. The urgent
+     * banner and plot-availability preview are deliberately excluded —
+     * both are conditionally rendered (gate state / seed configuration)
+     * and already have their own dedicated ordering tests elsewhere in
+     * this file. Same relative-`strpos` ordering technique the rest of
+     * this file's tests already use.
+     */
+    public function test_final_homepage_section_order_matches_the_design_doc(): void
     {
+        // Verified section is honestly empty against real, unmodified
+        // seed data (see HomePage::render()'s own doc comment) — activate
+        // one real profile so this order check can locate the section by
+        // its heading like every other section, not just when data
+        // exists.
+        $this->createGenuinelyVerifiedCemetery();
+
         $response = $this->get('/');
         $response->assertOk();
 
         $html = $response->getContent();
-        $servicesPos = strpos($html, 'id="services-heading"');
-        $urgentPos = strpos($html, 'id="urgent-availability-heading"');
-        $newestPos = strpos($html, 'id="newest-published-heading"');
-        $howItWorksPos = strpos($html, 'id="how-it-works-heading"');
+        $positions = [
+            'services' => strpos($html, 'id="services-heading"'),
+            'secondary CTAs' => strpos($html, 'Perpanjang Makam'),
+            'urgent TPU/TPS' => strpos($html, 'id="urgent-availability-heading"'),
+            'newest TPU/TPS' => strpos($html, 'id="newest-published-heading"'),
+            'verified TPU/TPS' => strpos($html, 'id="verified-heading"'),
+            'family warmth' => strpos($html, 'id="family-warmth-heading"'),
+            'FAQ highlights' => strpos($html, 'id="faq-highlights-heading"'),
+            'customer-service CTA' => strpos($html, 'id="cs-cta-heading"'),
+        ];
 
-        $this->assertNotFalse($servicesPos);
-        $this->assertNotFalse($urgentPos);
-        $this->assertNotFalse($newestPos);
-        $this->assertNotFalse($howItWorksPos);
+        foreach ($positions as $label => $position) {
+            $this->assertNotFalse($position, "expected to find the $label marker in the response");
+        }
 
-        $this->assertGreaterThan($servicesPos, $urgentPos, 'urgent-availability must come after services');
-        $this->assertGreaterThan($urgentPos, $newestPos, 'newest-published must come after urgent-availability');
-        $this->assertGreaterThan($newestPos, $howItWorksPos, 'how-it-works (untouched by this ticket) must still come after the new sections');
+        $ordered = array_values($positions);
+        $labels = array_keys($positions);
+        for ($i = 1; $i < count($ordered); $i++) {
+            $this->assertGreaterThan(
+                $ordered[$i - 1],
+                $ordered[$i],
+                $labels[$i].' must come after '.$labels[$i - 1]
+            );
+        }
     }
 
-    public function test_how_it_works_featured_cemeteries_and_trust_sections_are_untouched(): void
+    public function test_how_it_works_featured_cemeteries_and_trust_sections_are_removed(): void
     {
-        // Ticket 03 explicitly does not remove these — ticket 04 does,
-        // once its own replacement section also exists.
+        // The three sections ticket 04 explicitly removes, now that its
+        // own replacement (the verified-cemeteries section) exists.
         $response = $this->get('/');
         $response->assertOk();
 
-        $response->assertSee('id="how-it-works-heading"', false);
-        $response->assertSee('id="featured-cemeteries-heading"', false);
-        $response->assertSee('id="trust-heading"', false);
+        $response->assertDontSee('id="how-it-works-heading"', false);
+        $response->assertDontSee('id="featured-cemeteries-heading"', false);
+        $response->assertDontSee('id="trust-heading"', false);
+
+        // Their redistributed substance survives elsewhere, not silently
+        // dropped.
+        $response->assertSee('lunas setelah benar-benar', false);
+        $response->assertSee('pilih lokasi dan jenis layanan', false);
+    }
+
+    /**
+     * Stage 3 ticket 04 — verified-cemeteries section, honest empty state.
+     * Every seeded cemetery's current capability profile is the S4-T1
+     * safe default (`registry_mode = NONE`) — confirmed directly against
+     * `CemeteryExampleData::seed()`'s own insert, not assumed — so this
+     * section genuinely renders nothing against real, unmodified seed
+     * data. This is the real current-state behaviour, not a placeholder
+     * pending future data.
+     */
+    public function test_verified_cemeteries_section_is_absent_against_unmodified_seed_data(): void
+    {
+        $response = $this->get('/');
+        $response->assertOk();
+
+        $response->assertDontSee('id="verified-heading"', false);
+    }
+
+    public function test_verified_cemeteries_section_renders_with_the_trust_badges_when_a_cemetery_is_genuinely_verified(): void
+    {
+        $cemetery = $this->createGenuinelyVerifiedCemetery();
+
+        $response = $this->get('/');
+        $response->assertOk();
+
+        $html = $response->getContent();
+        $sectionStart = strpos($html, 'id="verified-heading"');
+        $this->assertNotFalse($sectionStart, 'verified section must render given a real AUTHORITATIVE registry_mode profile exists');
+        $sectionEnd = strpos($html, '</section>', $sectionStart);
+        $section = substr($html, $sectionStart, ($sectionEnd !== false ? $sectionEnd : strlen($html)) - $sectionStart);
+
+        $this->assertStringContainsString($cemetery->name, $section);
+        $this->assertStringContainsString('Lokasi Terverifikasi', $section);
+        $this->assertStringContainsString('Harga Transparan', $section);
+    }
+
+    /**
+     * Real domain-model construction, not a mock: a brand-new published
+     * `Cemetery` plus a real, current `CemeteryCapabilityProfile` row with
+     * `registry_mode = AUTHORITATIVE` — the same real-state-construction
+     * technique `test_plot_availability_preview_renders_between_the_hero_
+     * and_the_service_cards_when_data_exists` above already uses for its
+     * own new-cemetery fixture.
+     */
+    private function createGenuinelyVerifiedCemetery(): Cemetery
+    {
+        $cemetery = Cemetery::query()->create([
+            'type' => CemeteryType::TPU,
+            'publication_status' => CemeteryPublicationStatus::PUBLISHED,
+            'name' => 'TPU Terverifikasi Homepage',
+            'slug' => 'tpu-terverifikasi-homepage',
+            'city' => LaunchCityCode::JAKARTA,
+            'address' => 'Jl. Contoh Verifikasi No. 1',
+            'plot_tracking_mode' => PlotTrackingMode::GRANULAR,
+        ]);
+
+        $defaults = CemeteryCapabilityProfile::safeDefaults();
+
+        CemeteryCapabilityProfile::query()->create([
+            ...$defaults,
+            'cemetery_id' => $cemetery->getKey(),
+            'version_number' => 1,
+            'registry_mode' => RegistryMode::AUTHORITATIVE,
+            'source' => 'test:homepage-verified-section',
+            'owner' => 'Test fixture',
+            'evidence' => 'Registry authoritatively evidenced for this test fixture.',
+            'rollback_plan' => 'Not applicable — test fixture only.',
+            'effective_at' => now(),
+            'superseded_at' => null,
+        ]);
+
+        return $cemetery;
     }
 
     public function test_faq_highlights_link_into_the_real_faq_routes(): void
