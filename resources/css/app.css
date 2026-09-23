@@ -46,6 +46,28 @@
 @utility duration-slow    { transition-duration: var(--mk-duration-slow); }
 @utility duration-slower  { transition-duration: var(--mk-duration-slower); }
 
+/* Skeleton shimmer -- --mk-skeleton-base/-sheen, tokens.css §2.9. A
+ * two-tone gradient sweep, not a single-colour opacity pulse, so both
+ * tokens are actually consumed. tokens.css's own global
+ * @media (prefers-reduced-motion: reduce) rule (*, *::before, *::after)
+ * collapses this animation's duration to 1ms automatically -- nothing
+ * reduced-motion-specific belongs here or in the component. */
+@utility mk-skeleton-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--mk-skeleton-base) 0%,
+    var(--mk-skeleton-sheen) 50%,
+    var(--mk-skeleton-base) 100%
+  );
+  background-size: 200% 100%;
+  animation: mk-skeleton-shimmer-sweep 1.5s ease-in-out infinite;
+}
+
+@keyframes mk-skeleton-shimmer-sweep {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 /* -----------------------------------------------------------------------------
  * Section rhythm — design-system.md §4.4.
  *
