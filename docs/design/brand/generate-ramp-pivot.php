@@ -16,7 +16,6 @@ declare(strict_types=1);
  *
  * Usage: php generate-ramp-pivot.php <#RRGGBB> <pivot-slot 50|100|...|950>
  */
-
 const SLOTS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
 
 // Lightness curve borrowed verbatim from generate-ramp.php's own 600-pivot
@@ -33,13 +32,17 @@ const OLD_SHADE_L = [
 function hexToRgb(string $hex): array
 {
     $hex = ltrim($hex, '#');
+
     return [hexdec(substr($hex, 0, 2)), hexdec(substr($hex, 2, 2)), hexdec(substr($hex, 4, 2))];
 }
 
 function rgbToHsl(int $r, int $g, int $b): array
 {
-    $r /= 255; $g /= 255; $b /= 255;
-    $max = max($r, $g, $b); $min = min($r, $g, $b);
+    $r /= 255;
+    $g /= 255;
+    $b /= 255;
+    $max = max($r, $g, $b);
+    $min = min($r, $g, $b);
     $l = ($max + $min) / 2;
     if ($max === $min) {
         return [0, 0, $l];
@@ -51,6 +54,7 @@ function rgbToHsl(int $r, int $g, int $b): array
     if ($h < 0) {
         $h += 360;
     }
+
     return [$h, $s, $l];
 }
 
@@ -67,11 +71,12 @@ function hslToHex(float $h, float $s, float $l): string
         $h < 60 => [$c, $x, 0], $h < 120 => [$x, $c, 0], $h < 180 => [0, $c, $x],
         $h < 240 => [0, $x, $c], $h < 300 => [$x, 0, $c], default => [$c, 0, $x],
     };
+
     return sprintf('#%02X%02X%02X', (int) round(($r + $m) * 255), (int) round(($g + $m) * 255), (int) round(($b + $m) * 255));
 }
 
 [$anchorHex, $pivotArg] = [$argv[1] ?? null, (int) ($argv[2] ?? 0)];
-if (!$anchorHex || !in_array($pivotArg, SLOTS, true)) {
+if (! $anchorHex || ! in_array($pivotArg, SLOTS, true)) {
     fwrite(STDERR, "Usage: php generate-ramp-pivot.php <#RRGGBB> <pivot-slot>\n");
     exit(1);
 }
@@ -102,6 +107,7 @@ foreach (OLD_SHADE_L as $shade => $l) {
 foreach (SLOTS as $slot) {
     if ($slot === $pivotArg) {
         echo "$slot: $anchorHex (anchor)\n";
+
         continue;
     }
 
