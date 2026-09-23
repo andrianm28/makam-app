@@ -123,6 +123,38 @@ default and `design-system.md` §3.11's own unapproved 4-item draft.
   here (no sixth tab, no per-tab badge/notification affordance, etc.) —
   those are separate decisions if and when they come up.
 
+## Amendment 1 (23 September 2026, Stage 2 ticket 02 plan-writing): hamburger-menu coexistence — decided, not left open
+
+**Finding.** This ADR's own "What this ADR deliberately does not do"
+section states plainly that it "does not design the hamburger-menu /
+bottom-nav coexistence on mobile," naming it newly open. That question was
+in fact put to and answered by the owner while writing Stage 2 ticket 02's
+implementation plan, the same day this ADR was accepted — but the answer
+was never recorded here. In the meantime, both `design-system.md` §3.11
+and `information-architecture.md` §2 were edited (ticket 02, Task 2) to
+describe the bottom nav coexisting with a kept hamburger and to cite this
+ADR as that decision's authority. That citation was wrong at the time it
+was written: this document, as originally accepted, explicitly declines to
+make that call. A later reader tracing either doc's citation back here
+would find this ADR contradicting the very claim it was cited for.
+
+**Decision (this amendment).** While planning ticket 02, the 5 canonical
+tabs (Beranda, Pemesanan, Perpanjangan, Akun, Bantuan) were found not to
+cover two real desktop navigation items — Layanan Pemakaman and FAQ — that
+`information-architecture.md` §2's desktop row still requires reachable on
+every viewport ("menu labels tetap sama dengan desktop"). Put to the
+owner as a choice between dropping those two items from mobile entirely,
+folding them into one of the five existing tabs, or keeping
+`<x-mk.header>`'s existing hamburger menu alongside the new bottom nav
+specifically to reach them: **the owner chose to keep the hamburger
+menu alongside the bottom nav.** This resolves the open question this
+ADR originally left standing — `design-system.md` §3.11 and
+`information-architecture.md` §2 may now cite ADR-0044 for the
+hamburger-coexistence decision without qualification; the "deliberately
+does not do" bullet above is superseded by this amendment and kept only
+for its historical record of what this ADR did not settle on 23 September
+2026 before ticket 02's plan was written.
+
 ## Alternatives considered
 
 - **Adopt `design-system.md` §3.11's own 4-item draft instead of the
