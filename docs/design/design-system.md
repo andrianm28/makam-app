@@ -46,6 +46,8 @@ This document is the **single source of truth for visual design decisions**. It 
 
 `v0.5` (16 Sep 2026): **the palette is rebased onto the official Brand Guideline 2026** — [ADR-0041](../adr/0041-brand-guideline-2026-supersedes-adr-0034.md), which supersedes ADR-0034 on colour and typography. Forest `#29483A` replaces Earth as `primary`, Sage `#8FA99A` replaces Leaf as the caged `secondary` (anchored at **300**, not 600 — white on Sage is 2.53:1), Ivory `#F7F4ED` and Charcoal `#303330` become the page background and strongest body text. **`success` moves off green to teal `#0C6D7A`** (§1.2(e)): a green brand primary sat 7.4° from the green `success`, inside §7.1's ≥30° rule, and the owner chose to move the status colour rather than weaken the gate. §1.2(a) and (b) are rewritten — (b)'s cage survives every palette this document has had, but its justification changes from hue to **measured contrast**. §1.2(e) is new. §7.1's transcript is re-run, not edited. Sand `#D8C6A5` is in the guideline but deliberately **not** yet a token: under §1.2(d) an accent needs one designated purpose first. Typography (Plus Jakarta Sans, Lora) is **not** in this revision — the faces are self-hosted npm packages and changing them needs a build this host cannot run.
 
+`v0.6` (23 Sep 2026): **the palette and typeface are rebased onto FFI's** ([ADR-0043](../adr/0043-ffi-full-visual-clone-supersedes-system-layer-only.md), superseding ADR-0042 and ADR-0041's palette/typography). `primary` becomes FFI's blue (`#0073E6`, hue 210°) replacing Forest; `accent` becomes FFI's orange (`#FF6B35`) replacing Sand; `success`/`warning`/`danger` become FFI's green/amber/red. `neutral-0`/`neutral-50`/`neutral-800` are FFI's literal white/`#F5F5F5`/`#363636`, verbatim; the rest of the neutral ramp is regenerated. `info` has no FFI equivalent and is hue-rotated 227.6°→246° to clear the new `primary`, holding S/L. `secondary` (Sage) is unchanged except its `50` shade, nudged for surface separation against the new `neutral-50`; `neutral-100` nudged in turn. `--mk-surface-warm` repoints from `accent-100` to `accent-50`. Typeface: Plus Jakarta Sans → Inter, same self-hosted single-family pattern. §7.1's transcript is re-run, not edited. Filament panels, component library, and page structure are untouched — this is Stage 1 of 3, see `docs/superpowers/specs/2026-09-22-ffi-full-visual-clone-design.md`.
+
 ---
 
 ## 1. Design tokens
@@ -95,6 +97,12 @@ The four brand values above — Forest, Sage, Ivory, Charcoal — are transcribe
 [`MAKAM_CO_ID_Brand_Guideline_Visual_2026.pdf`](brand/source/MAKAM_CO_ID_Brand_Guideline_Visual_2026.pdf)
 page 07, and each 50-950 ramp is generated from its guideline value as the
 anchor, with every step's contrast measured rather than assumed.
+
+**Superseded again 23 Sep 2026 by the FFI visual clone** ([ADR-0043](../adr/0043-ffi-full-visual-clone-supersedes-system-layer-only.md)).
+`primary` is FFI's blue `#0073E6` (hue 210°) — note `primary-600` (the fill/CTA slot, `#004182`) is a *generated* 600-slot value, not FFI's own hex; FFI's own hover blue `#005BB5` is not in this ramp. `accent` is FFI's orange
+`#FF6B35`, `success` is FFI's green `#00C853`, `warning` is FFI's amber
+`#FFB300`, `danger` is FFI's red `#D50000` (600 slot only — see `resources/css/tokens.css` for why the rest of that ramp isn't tool-reproducible). `secondary` (Sage `#8FA99A`) is
+unchanged — FFI has no equivalent third surface-tint colour at this stage. Two of this document's own present-tense rules are superseded by this rebase, not merely values: **(c)**'s muted-brick danger tone (§1.2(c)) — FFI's red is fully saturated, and the FFI-fidelity direction (ADR-0043) overrides the bereavement-tone preference for this specific value; and **(e)**'s "Success is teal, not green" (§1.2(e)) — success has returned to green (FFI's own), and the secondary/success hue proximity (e) was written to avoid is back near where it started (Δ≈1°, uncovered by any gate — the verifier's hue-separation rule doesn't include `secondary`, and §1.2(b)'s cage has been contrast-based, not hue-based, since v0.5).
 
 Sage is anchored at **300, not 600**. `600` is `tokens.css`'s convention for
 "a fill that carries a white label", and Sage fails that at 2.53:1. Putting
@@ -173,14 +181,14 @@ Never use an odd value. `p-[13px]` is a lint failure (§9.5).
 
 | Token | Stack | Where |
 |---|---|---|
-| `--font-sans` | Plus Jakarta Sans Variable → system fallback | Public site only. **Superseded, 26 Aug 2026 (explicit owner decision):** admin/vendor Filament panels no longer use this token or any custom font at all — see §8.3's updated note. Brand voice, including typography, is a public-surface concern only. |
-| `--font-display` | Plus Jakarta Sans Variable → system fallback | `h1`/`h2`, hero, header wordmark. **Face changed 16 Sep 2026 ([ADR-0041](../adr/0041-brand-guideline-2026-supersedes-adr-0034.md)):** the guideline gives Plus Jakarta Sans "website • app • social • corporate" — every surface this app has — so ONE family now does body and headings where Inter+Poppins did. It is variable, so heading weight costs no second file. Measured initial route payload (latin subset, woff2): **26.7 KB**, down from ≈56 KB (48 Inter + 8 Poppins) — half the §4.6 budget. `latin-ext` (21.2 KB) ships with its own `unicode-range` and never downloads for Indonesian. **Lora is NOT loaded**: the guideline scopes it to "emotional headline • quote • storytelling", surfaces that do not exist yet, and its 36.9 KB would put the payload at 63.6 KB — over budget, to render nothing (ADR-0041 OQ-B3). |
-| `--font-document` | Source Serif 4 / Lora → Georgia | Certificate/agreement/invoice documents **only**, consumed by `print.css` (§8.5) once it is built. Holds the value `--font-display` carried before ADR-0034, verbatim — added specifically so a document can never silently inherit the new Poppins brand face. |
+| `--font-sans` | Inter Variable → system fallback | Public site only. **Superseded, 26 Aug 2026 (explicit owner decision):** admin/vendor Filament panels no longer use this token or any custom font at all — see §8.3's updated note. Brand voice, including typography, is a public-surface concern only. |
+| `--font-display` | Inter Variable → system fallback | `h1`/`h2`, hero, header wordmark. **Face changed 23 Sep 2026 ([ADR-0043](../adr/0043-ffi-full-visual-clone-supersedes-system-layer-only.md)):** FFI ships Inter as its single family for body and headings, replacing Plus Jakarta Sans. It is variable, so heading weight costs no second file — the "ONE family now does body and headings" structural rationale from the ADR-0041 rebase still applies, it just names Inter instead. **Font payload size is NOT MEASURED on this host** — the previous **26.7 KB** figure was specific to Plus Jakarta Sans and no longer applies; no npm build runs here to re-measure Inter (`docs/operations/ci-cd-and-release.md`), so §4.6's 60 KB budget is verified by CI's frontend job, not by this document. `latin-ext` ships with its own `unicode-range` and never downloads for Indonesian, same as before. **Lora is still NOT loaded**: it remains scoped to "emotional headline • quote • storytelling", surfaces that do not exist yet — ADR-0043 maintains this constraint without restating the old, now-inapplicable KB math. |
+| `--font-document` | Source Serif 4 / Lora → Georgia | Certificate/agreement/invoice documents **only**, consumed by `print.css` (§8.5) once it is built. Holds the value `--font-display` carried before ADR-0034, verbatim — added specifically so a document can never silently inherit the display face. |
 | `--font-mono` | JetBrains Mono → system | Order reference, payment reference, audit IDs |
 
 **Self-hosting is mandatory.** No Google Fonts, no CDN. Two reasons, both from existing baselines: staging is `noindex` and access-restricted ([`security-baseline.md`](../security/security-baseline.md) §Non-production isolation), and a third-party font request leaks the visitor's IP and referrer on pages where that visitor is arranging a funeral or uploading a death certificate. Subset to `latin` + `latin-ext`; Indonesian needs no extra ranges.
 
-`--font-display` (Plus Jakarta Sans, the same family as `--font-sans` since ADR-0041) ships site-wide as part of `app.css` (§4.6 budget covers it as part of the initial route payload) and applies only to `h1`/`h2`; it is never used on the booking wizard's own body copy. `--font-document` is a separate, unrelated stack reserved for printed documents (§8.5) — it does not load on any public route today because `print.css` does not exist yet.
+`--font-display` (Inter, the same family as `--font-sans` since ADR-0043) ships site-wide as part of `app.css` (§4.6 budget covers it as part of the initial route payload) and applies only to `h1`/`h2`; it is never used on the booking wizard's own body copy. `--font-document` is a separate, unrelated stack reserved for printed documents (§8.5) — it does not load on any public route today because `print.css` does not exist yet.
 
 **Scale** (mobile-first; 16 px root; `rem`-based so browser zoom works)
 
@@ -280,7 +288,7 @@ Easing: `--ease-standard` default · `--ease-decelerate` entering · `--ease-acc
 - Show the source and last-updated time on any fee or availability figure (renewal tariff, `G-RATE-01`).
 - Pair every status colour with an icon **and** an Indonesian text label.
 - Keep the customer-service escape hatch visible on every transactional screen — required by `AGENTS.md` and `screen-inventory.md` §D.
-- Use `--mk-surface-warm` (Earth `primary-50`, ADR-0034 D6 — no longer Leaf) for trust/reassurance sections to soften long white pages.
+- Use `--mk-surface-warm` (FFI's orange `accent-50`, ADR-0043 — no longer Earth) for trust/reassurance sections to soften long white pages.
 
 **DON'T**
 
@@ -329,6 +337,12 @@ Blade components live in `resources/views/components/`; the Livewire-facing wrap
 | `link` | `text-primary-600 underline` | `text-primary-700` | — | Inline in prose |
 
 > **Fill colour stays on `primary-600`, not `primary-500`.** Sampled from the official logo (§1.2 OQ-12 note), `primary-500` measures only **4.73:1** for white text — a thin AA margin (the 4.5:1 floor with almost no headroom, versus `primary-600`'s comfortable 10.25:1). Do not reach for `500` as a button/badge fill; it is a mid-ramp swatch for surfaces and larger decorative use, not a text-bearing fill. See §7.1 for the measured ratio.
+
+(Updated 23 Sep 2026, ADR-0043: `primary-600` on white is now 10.10:1 —
+see §7.1. The underlying rule — never `500` as a text-bearing fill — still
+holds; only the specific ratio and the "sampled from the logo" premise are
+historical. `primary-500`'s real value is `4.57:1` (large-text only, unchanged
+from before).)
 
 **Sizes** — `sm` `h-9` (36 px, **desktop admin tables only**) · `md` `h-11` (44 px, default) · `lg` `h-13` (52 px, primary CTA).
 
@@ -398,7 +412,7 @@ $classes = trim("$base {$sizes[$size]} {$variants[$variant]} " . ($full ? 'w-ful
 
 | State | Border | Extra |
 |---|---|---|
-| idle | `border-neutral-450` | 3.67:1 verified — **not** `neutral-300` |
+| idle | `border-neutral-450` | 3.59:1 verified — **not** `neutral-300` |
 | hover | `border-neutral-600` | — |
 | focus | `border-primary-600` + `ring-2 ring-primary-600 ring-offset-1` | — |
 | filled | as idle | — |
@@ -486,7 +500,7 @@ progress-tracks). `earth` → `bg-primary-100 text-primary-800`. `leaf` → `bg-
 text-secondary-800` — a surface-tint usage already inside the Leaf cage (§1.2(b), §9.2 MUST-NOT
 #7), not an exception to it. Both pairs are asserted in `docs/design/verify-contrast.py`.
 
-**`brand` — added 14 Sep 2026, [ADR-0040](../adr/0040-add-surface-quiet-and-widen-the-brand-field.md) D3.** `brand` → `bg-primary-600 text-neutral-0`: a genuine Earth **fill**, not a tint like the other two — the same fill `<x-mk.button variant="primary">` uses, at medallion scale. It exists because a survey of the live homepage found the brand colour filling exactly one element on the entire page while appearing 46 times as text. `white on primary-600` is already asserted in `verify-contrast.py` (10.25:1), so no new pair was needed. This tone does **not** loosen the adjacency rule below — a filled tile reads louder than a tint, so it applies more strongly. It is also not a precedent for a `secondary` fill tone: Leaf stays caged by §1.2(b) and §9.2 MUST NOT 7, and a Leaf medallion fill remains forbidden.
+**`brand` — added 14 Sep 2026, [ADR-0040](../adr/0040-add-surface-quiet-and-widen-the-brand-field.md) D3.** `brand` → `bg-primary-600 text-neutral-0`: a genuine Earth **fill**, not a tint like the other two — the same fill `<x-mk.button variant="primary">` uses, at medallion scale. It exists because a survey of the live homepage found the brand colour filling exactly one element on the entire page while appearing 46 times as text. `white on primary-600` is already asserted in `verify-contrast.py` (10.10:1), so no new pair was needed. This tone does **not** loosen the adjacency rule below — a filled tile reads louder than a tint, so it applies more strongly. It is also not a precedent for a `secondary` fill tone: Leaf stays caged by §1.2(b) and §9.2 MUST NOT 7, and a Leaf medallion fill remains forbidden.
 
 Always `aria-hidden="true"` — decorative only, never a substitute for a real text label (same
 rule `<x-mk.badge>`'s `dot` prop follows). Never placed adjacent to order/payment/availability
@@ -738,7 +752,7 @@ Desktop (`md+`): `w-full text-sm` · header `bg-neutral-50 text-xs font-semibold
 **Base:** `inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs font-medium border`
 **Colours:** `bg-[var(--mk-intent-{intent}-bg)] text-[var(--mk-intent-{intent}-fg)] border-[var(--mk-intent-{intent}-border)]`
 
-Every intent's `800`-on-`100` pairing is verified ≥ 7.25:1 (§7.1).
+Every intent's `800`-on-`100` pairing is verified ≥ 7.20:1 (§7.1).
 
 **Mandatory:** a badge always carries **text**, and carries an **icon** whenever it communicates status. Colour alone never conveys state (WCAG 1.4.1). Never abbreviate a canonical status enum in the badge label.
 
@@ -1037,7 +1051,7 @@ Derived from [`performance-and-capacity.md`](../operations/performance-and-capac
 |---|---|
 | CSS shipped (gzip) | ≤ 45 KB |
 | JS shipped, public pages (gzip) | ≤ 60 KB (Livewire + Alpine + app) |
-| Font payload, initial route | ≤ 60 KB (Plus Jakarta Sans variable, latin subset, `woff2`, `font-display: swap`) — currently **26.7 KB**, ADR-0041 |
+| Font payload, initial route | ≤ 60 KB (Inter variable, latin subset, `woff2`, `font-display: swap`) — **NOT MEASURED on this host; CI's build is authoritative**, see §1.4, ADR-0043 |
 | `--font-display` serif | Loaded only on hero + document routes |
 | Largest hero image | ≤ 120 KB, `AVIF`/`WebP`, explicit `width`/`height` |
 | Icons | Inline SVG sprite, tree-shaken. **No icon font.** |
@@ -1230,72 +1244,80 @@ Target: **WCAG 2.1 Level AA**. `lang="id"` on `<html>`.
 
 Verified by [`verify-contrast.py`](verify-contrast.py) against `resources/css/tokens.css`.
 
-Real output, re-run 16 Sep 2026 — the Brand Guideline 2026 rebase
-([ADR-0041](../adr/0041-brand-guideline-2026-supersedes-adr-0034.md)): Forest/Sage/Ivory/Charcoal
-replace Earth/Leaf, and `success` moves off green to teal (§1.2(e)). Run against the shipped
-`tokens.css`:
+Real output, re-run 23 Sep 2026 — the FFI visual clone rebase
+([ADR-0043](../adr/0043-ffi-full-visual-clone-supersedes-system-layer-only.md)):
+primary/accent/success/warning/danger/neutral become FFI's values, info is
+hue-rotated (no FFI equivalent), secondary/neutral get two small surface-
+separation nudges. Run against the shipped `tokens.css`:
 
 ```
 WCAG contrast verification — resources/css/tokens.css
-79 colour tokens parsed, 49 pairs asserted
+90 colour tokens parsed, 49 pairs asserted
 
-PASS   15.44  (min 4.5)  text-strong on surface-raised  #232523 on #FFFFFF
-PASS   12.79  (min 4.5)  headings on surface-raised  #303330 on #FFFFFF
-PASS    9.53  (min 4.5)  text-default (body) on surface-raised  #444643 on #FFFFFF
-PASS    6.63  (min 4.5)  text-muted on surface-raised  #5C5D5A on #FFFFFF
-PASS    5.06  (min 4.5)  text-placeholder on surface-raised  #6E6F6B on #FFFFFF
-PASS    8.68  (min 4.5)  text-default on surface-page  #444643 on #F7F4ED
-PASS    7.90  (min 4.5)  text-default on surface-warm  #444643 on #F0E9DD
-PASS   12.89  (min 4.5)  text-strong on secondary-100  #232523 on #E6ECE9
-PASS    8.78  (min 4.5)  text-default on secondary-50  #444643 on #F4F6F5
-PASS   14.22  (min 4.5)  text-strong on secondary-50  #232523 on #F4F6F5
-PASS    4.14  (min 3.0)  text-disabled on surface-disabled  #6E6F6B on #EBE8E2
-PASS   10.08  (min 4.5)  white on primary-600  #FFFFFF on #29483A
-PASS   12.09  (min 4.5)  white on primary-700 (hover)  #FFFFFF on #223B30
-PASS    6.03  (min 4.5)  white on success-600  #FFFFFF on #0C6D7A
-PASS    5.05  (min 4.5)  white on warning-600  #FFFFFF on #9A6300
-PASS    7.34  (min 4.5)  white on danger-600  #FFFFFF on #A32435
-PASS    9.37  (min 4.5)  white on danger-700 (hover)  #FFFFFF on #871D2C
-PASS    7.66  (min 4.5)  white on info-600  #FFFFFF on #3A4E9B
-PASS   11.24  (min 4.5)  primary-700 on primary-50  #223B30 on #F5F7F6
-PASS   11.90  (min 4.5)  primary-800 on primary-100  #1B3026 on #EAEDEB
-PASS    7.03  (min 4.5)  success-700 on success-50  #0A5C66 on #F0F6F7
-PASS    8.12  (min 4.5)  success-800 on success-100  #084A53 on #DDEBEC
-PASS    5.99  (min 4.5)  warning-700 on warning-50  #855400 on #FDF6EB
-PASS    7.25  (min 4.5)  warning-800 on warning-100  #6A4400 on #FAEACB
-PASS    8.49  (min 4.5)  danger-700 on danger-50  #871D2C on #FDF1F2
-PASS    9.01  (min 4.5)  danger-800 on danger-100  #6E1825 on #FBDCDF
-PASS    8.65  (min 4.5)  info-700 on info-50  #31417F on #F1F3FC
-PASS    9.28  (min 4.5)  info-800 on info-100  #293568 on #E0E5F8
-PASS    8.51  (min 4.5)  secondary-700 on secondary-50  #3F4A44 on #F4F6F5
+PASS   16.10  (min 4.5)  text-strong on surface-raised  #212121 on #FFFFFF
+PASS   12.08  (min 4.5)  headings on surface-raised  #363636 on #FFFFFF
+PASS    8.72  (min 4.5)  text-default (body) on surface-raised  #4B4B4B on #FFFFFF
+PASS    6.29  (min 4.5)  text-muted on surface-raised  #606060 on #FFFFFF
+PASS    4.61  (min 4.5)  text-placeholder on surface-raised  #757575 on #FFFFFF
+PASS    8.00  (min 4.5)  text-default on surface-page  #4B4B4B on #F5F5F5
+PASS    7.69  (min 4.5)  text-default on surface-warm  #4B4B4B on #FFEDE7
+PASS   13.45  (min 4.5)  text-strong on secondary-100  #212121 on #E6ECE9
+PASS    7.76  (min 4.5)  text-default on secondary-50  #4B4B4B on #F0F2F1
+PASS   14.32  (min 4.5)  text-strong on secondary-50  #212121 on #F0F2F1
+PASS    3.90  (min 3.0)  text-disabled on surface-disabled  #757575 on #ECECEC
+PASS   10.10  (min 4.5)  white on primary-600  #FFFFFF on #004182
+PASS   12.20  (min 4.5)  white on primary-700 (hover)  #FFFFFF on #00356B
+PASS    6.17  (min 4.5)  white on success-600  #FFFFFF on #00712F
+PASS    6.85  (min 4.5)  white on warning-600  #FFFFFF on #785400
+PASS    5.48  (min 4.5)  white on danger-600  #FFFFFF on #D50000
+PASS    7.44  (min 4.5)  white on danger-700 (hover)  #FFFFFF on #AF0000
+PASS    9.03  (min 4.5)  white on info-600  #FFFFFF on #443A9B
+PASS   11.06  (min 4.5)  primary-700 on primary-50  #00356B on #EBF5FF
+PASS   11.42  (min 4.5)  primary-800 on primary-100  #002A55 on #D1E8FF
+PASS    7.73  (min 4.5)  success-700 on success-50  #005D27 on #E9FFF2
+PASS    9.48  (min 4.5)  success-800 on success-100  #004A1F on #CCFFE1
+PASS    8.43  (min 4.5)  warning-700 on warning-50  #624500 on #FFF9E9
+PASS    9.94  (min 4.5)  warning-800 on warning-100  #4E3700 on #FFF0CD
+PASS    6.54  (min 4.5)  danger-700 on danger-50  #AF0000 on #FFECEC
+PASS    7.20  (min 4.5)  danger-800 on danger-100  #900000 on #FFD5D5
+PASS    9.77  (min 4.5)  info-700 on info-50  #39317F on #F2F1FC
+PASS    9.92  (min 4.5)  info-800 on info-100  #2F2968 on #E2E0F8
+PASS    8.21  (min 4.5)  secondary-700 on secondary-50  #3F4A44 on #F0F2F1
 PASS    9.93  (min 4.5)  secondary-800 on secondary-100  #313934 on #E6ECE9
-PASS   10.08  (min 4.5)  text-link on surface-raised  #29483A on #FFFFFF
-PASS   12.09  (min 4.5)  text-link-hover on surface-raised  #223B30 on #FFFFFF
-PASS   11.01  (min 4.5)  text-link on surface-page  #223B30 on #F7F4ED
-PASS    7.34  (min 4.5)  error text on surface-raised  #A32435 on #FFFFFF
-PASS    3.86  (min 3.0)  border-interactive on surface-raised  #82827D on #FFFFFF
-PASS    3.52  (min 3.0)  border-interactive on surface-page  #82827D on #F7F4ED
-PASS    3.20  (min 3.0)  border-interactive on surface-warm  #82827D on #F0E9DD
-PASS   10.08  (min 3.0)  focus ring on surface-raised  #29483A on #FFFFFF
-PASS    9.18  (min 3.0)  focus ring on surface-page  #29483A on #F7F4ED
-PASS    8.36  (min 3.0)  focus ring on surface-warm  #29483A on #F0E9DD
-PASS    4.80  (min 3.0)  focus ring inverse on primary-600  #A9B6B0 on #29483A
-PASS    7.34  (min 3.0)  border-error on surface-raised  #A32435 on #FFFFFF
-PASS    4.70  (min 3.0)  urgent border on urgent bg  #9A6300 on #FDF6EB
-PASS   10.08  (min 3.0)  primary heading on surface-raised  #29483A on #FFFFFF
-PASS    5.97  (min 3.0)  white on primary-500 (large only)  #FFFFFF on #50695D
-PASS   16.16  (min 4.5)  white on surface-inverse  #FFFFFF on #14241D
-PASS   13.70  (min 4.5)  primary-100 on surface-inverse  #EAEDEB on #14241D
-PASS   11.04  (min 4.5)  primary-200 on surface-inverse  #D0D7D4 on #14241D
-PASS   15.44  (min 4.5)  white on neutral-900  #FFFFFF on #232523
+PASS   10.10  (min 4.5)  text-link on surface-raised  #004182 on #FFFFFF
+PASS   12.20  (min 4.5)  text-link-hover on surface-raised  #00356B on #FFFFFF
+PASS   11.19  (min 4.5)  text-link on surface-page  #00356B on #F5F5F5
+PASS    5.48  (min 4.5)  error text on surface-raised  #D50000 on #FFFFFF
+PASS    3.59  (min 3.0)  border-interactive on surface-raised  #878787 on #FFFFFF
+PASS    3.30  (min 3.0)  border-interactive on surface-page  #878787 on #F5F5F5
+PASS    3.17  (min 3.0)  border-interactive on surface-warm  #878787 on #FFEDE7
+PASS   10.10  (min 3.0)  focus ring on surface-raised  #004182 on #FFFFFF
+PASS    9.27  (min 3.0)  focus ring on surface-page  #004182 on #F5F5F5
+PASS    8.91  (min 3.0)  focus ring on surface-warm  #004182 on #FFEDE7
+PASS    4.17  (min 3.0)  focus ring inverse on primary-600  #56ABFF on #004182
+PASS    5.48  (min 3.0)  border-error on surface-raised  #D50000 on #FFFFFF
+PASS    6.51  (min 3.0)  urgent border on urgent bg  #785400 on #FFF9E9
+PASS   10.10  (min 3.0)  primary heading on surface-raised  #004182 on #FFFFFF
+PASS    4.57  (min 3.0)  white on primary-500 (large only)  #FFFFFF on #0073E6
+PASS   16.40  (min 4.5)  white on surface-inverse  #FFFFFF on #002040
+PASS   13.04  (min 4.5)  primary-100 on surface-inverse  #D1E8FF on #002040
+PASS    9.92  (min 4.5)  primary-200 on surface-inverse  #9DCEFF on #002040
+PASS   16.10  (min 4.5)  white on neutral-900  #FFFFFF on #212121
 
 Hue separation of semantic families (600 shade):
-  primary     152.9 deg
-  success     187.1 deg
-  info        227.6 deg
-  danger      352.0 deg
+  primary     210.0 deg
+  success     145.0 deg
+  info        246.2 deg
+  danger        0.0 deg
   secondary   144.0 deg
-  warning      38.6 deg
+  warning      42.0 deg
+
+Page surfaces must stay distinguishable from each other:
+  mk-surface-page      #F5F5F5
+  mk-surface-raised    #FFFFFF
+  mk-surface-sunken    #ECECEC
+  mk-surface-warm      #FFEDE7
+  mk-surface-quiet     #F0F2F1
 
 RESULT: PASS — all 49 pairs meet WCAG 2.1 AA
 ```
@@ -1320,28 +1342,33 @@ Selected measured ratios (full output above):
 
 | Pair | Ratio | Min |
 |---|---|---|
-| body text `neutral-700` on white | **9.53** | 4.5 |
-| muted `neutral-600` on white | **6.63** | 4.5 |
-| placeholder `neutral-500` on white | **5.06** | 4.5 |
-| white on `primary-600` (Forest, primary button) | **10.08** | 4.5 |
-| white on `success-600` (teal, §1.2(e)) | **6.03** | 4.5 |
-| white on `warning-600` | **5.05** | 4.5 |
-| white on `danger-600` (tuned, ADR-0034) | **7.34** | 4.5 |
-| white on `info-600` | **7.66** | 4.5 |
-| badge `*-800` on `*-100` (all six families) | **7.25 – 11.60** | 4.5 |
-| link `primary-600` on white | **10.08** | 4.5 |
-| `border-interactive` on white / page / warm | **3.56 / 3.24 / 3.31** | 3.0 |
-| focus ring `primary-600` on white | **10.25** | 3.0 |
-| inverse focus ring `primary-300` on `primary-600` | **4.42** | 3.0 |
-| white on `surface-inverse` (footer) | **16.36** | 4.5 |
-| disabled text `neutral-500` on `neutral-100` | **3.96** | 3.0 |
+| body text `neutral-700` on white | **8.72** | 4.5 |
+| muted `neutral-600` on white | **6.29** | 4.5 |
+| placeholder `neutral-500` on white | **4.61** | 4.5 |
+| white on `primary-600` (FFI blue, primary button) | **10.10** | 4.5 |
+| white on `success-600` | **6.17** | 4.5 |
+| white on `warning-600` | **6.85** | 4.5 |
+| white on `danger-600` | **5.48** | 4.5 |
+| white on `info-600` | **9.03** | 4.5 |
+| badge `*-800` on `*-100` (all six families) | **7.20 – 11.42** | 4.5 |
+| link `primary-600` on white | **10.10** | 4.5 |
+| `border-interactive` on white / page / warm | **3.59 / 3.30 / 3.17** | 3.0 |
+| focus ring `primary-600` on white | **10.10** | 3.0 |
+| inverse focus ring `primary-300` on `primary-600` | **4.17** | 3.0 |
+| white on `surface-inverse` (footer) | **16.40** | 4.5 |
+| disabled text `neutral-500` on `neutral-100` | **3.90** | 3.0 |
 
 **Four findings from that verification worth keeping visible:**
 
 1. `warning-600` was originally `#A66B00` and measured **4.44:1** — a real AA failure for a white label. Darkened to `#9A6300` → 5.05:1.
-2. `neutral-300` (1.71:1) and `neutral-400` (2.67:1) **both fail WCAG 1.4.11** as input borders. This is why `--color-neutral-450` (`#7F8787`, 3.67:1) exists and why `--mk-border-interactive` is mandatory for control boundaries. `neutral-200`/`300` remain valid for **decorative** dividers only, where 1.4.11 does not apply.
+2. `neutral-300` (1.90:1) and `neutral-400` (2.85:1) **both fail WCAG 1.4.11** as input borders. This is why `--color-neutral-450` (`#878787`, 3.59:1) exists and why `--mk-border-interactive` is mandatory for control boundaries. `neutral-200`/`300` remain valid for **decorative** dividers only, where 1.4.11 does not apply.
 3. **Danger's hue was tuned −11° when Earth replaced Petrol as `primary` (ADR-0034 D4).** Earth's hue (≈26°) sits only ≈24° from the pre-existing danger hue (≈3°) — below the verifier's `HUE_MIN_SEPARATION = 30.0°` for the `primary`/`success`/`info`/`danger` status families. Per §9.4 ("fix the token, never the assertion"), every danger shade's hue was rotated −11° (lightness/saturation held), moving 600 from `#A32A24` (hue 3°) to `#A32435` (measured hue **352.0°**). Measured primary/danger separation after the tune: **≈34.2°** (`|26.2 − 352.0| = 325.8`, `360 − 325.8 = 34.2`), clearing the 30° floor. The OQ-12 hue refresh moved primary from 26.1° to 26.2° — negligible drift, the 30° floor still clears by the same margin.
 4. **`primary-500` carries only a thin AA margin as a white-text fill — do not use it for that.** Measured **4.73:1**, barely above the 4.5:1 body-text floor (versus `primary-600`'s comfortable 10.25:1). The verifier only asserts the large-text 3.0 minimum for this pair (see `verify-contrast.py`'s own pairing), which is why it shows `(large only)` above — but the number is close enough to the normal-text floor that a slightly different rendering environment or sub-pixel AA could tip it under 4.5:1. Treat `500` as a mid-ramp surface/decorative swatch, not a button or badge fill; fills stay on `600` (§3.1).
+
+(Updated 23 Sep 2026, ADR-0043: `primary-500` white-text is now 4.57:1
+(large-text only, same as before), `primary-600` is 10.10:1 — see the table
+above. The underlying rule is unchanged: never use `500` as a text-bearing
+fill.)
 
 **Re-run this script in CI on every colour change** (§9.5).
 
@@ -1349,7 +1376,7 @@ Selected measured ratios (full output above):
 
 Single global treatment — `--mk-focus-ring`: 2 px `primary-600` ring at 2 px offset. `focus-visible` only (no ring on mouse click), but **`:focus-visible` must never be replaced by removing focus entirely.** `outline: none` without a replacement ring is a lint failure.
 
-On brand-filled surfaces use `--mk-focus-color-inverse` (`primary-300`, 4.42:1 against `primary-600`).
+On brand-filled surfaces use `--mk-focus-color-inverse` (`primary-300`, 4.17:1 against `primary-600`).
 
 Focus order follows DOM order. Modals trap focus and restore it to the trigger. The skip link is the first focusable element.
 
@@ -1487,11 +1514,11 @@ Tailwind 4 moved theme configuration **into CSS** via `@theme`. `tokens.css` is 
 
 /* Self-hosted fonts — no CDN (see §1.4). */
 @font-face {
-  font-family: "Plus Jakarta Sans Variable";
+  font-family: "Inter Variable";
   font-style: normal;
   font-weight: 200 800;
   font-display: swap;
-  src: url("/fonts/plus-jakarta-sans-latin-wght-normal.woff2") format("woff2");
+  src: url("/fonts/inter-latin-wght-normal.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+2000-206F;
 }
 ```
@@ -1610,7 +1637,7 @@ Whether this remains correct once panels stop carrying the tokens.css palette (i
 
 ### 8.5 Print / document stylesheet
 
-**Not yet built** — `print.css` does not exist in this repository (ADR-0034 D10.1); the snippet below is the intended shape, not a shipped file. **Its body font is `var(--font-document)`, not `var(--font-display)`.** `--font-display` is now the Poppins brand face (§1.4) and must never appear on a certificate/agreement/invoice; `--font-document` (Source Serif 4) exists specifically so a printed legal document keeps serif gravitas regardless of what the public site's display face becomes.
+**Not yet built** — `print.css` does not exist in this repository (ADR-0034 D10.1); the snippet below is the intended shape, not a shipped file. **Its body font is `var(--font-document)`, not `var(--font-display)`.** `--font-display` is now Inter (§1.4) and must never appear on a certificate/agreement/invoice; `--font-document` (Source Serif 4) exists specifically so a printed legal document keeps serif gravitas regardless of what the public site's display face becomes.
 
 ```css
 /* resources/css/print.css — invoice, kwitansi, agreement, certificate */
@@ -1620,7 +1647,7 @@ Whether this remains correct once panels stop carrying the tokens.css palette (i
 @page { size: A4; margin: 18mm 16mm; }
 
 @layer base {
-  /* --font-document, NOT --font-display — that is Poppins now (§1.4, ADR-0034 D7). */
+  /* --font-document, NOT --font-display — that is Inter now (§1.4, ADR-0043). */
   body { font-family: var(--font-document); font-size: 11pt; color: #000; }
   .page-break { break-after: page; }
   a[href]::after { content: " (" attr(href) ")"; font-size: 9pt; }
@@ -1756,22 +1783,21 @@ Also recommended: `axe-core` in the browser-test suite, and a Lighthouse budget 
 ## 10. Quick reference
 
 ```
-COLOUR    primary-600 #29483A  brand/CTA/link/focus (FOREST — guideline 2026, ADR-0041)
-          success-600 #0C6D7A  DIBAYAR, SELESAI  ← TEAL, not green (§1.2(e))
-          warning-600 #9A6300  MENUNGGU_*, Urgent, scan pending
-          danger-600  #A32435  DITOLAK, error, failed (hue tuned −11°, ADR-0034)
-          info-600    #3A4E9B  gated-fallback banners
-          neutral-50  #F7F4ED  IVORY — page background (guideline 2026)
-          neutral-700 #444643  body text
-          neutral-800 #303330  CHARCOAL — strongest body text (guideline 2026)
-          neutral-450 #82827D  interactive borders  ← not 300
-          secondary-300 #8FA99A SAGE — surface/accent ONLY, never a fill (guideline 2026; white on it is 2.53:1)
-          text-price  #1B3026  (primary-800) monetary figures ONLY — confirmed price/fee/total, never indicative
+COLOUR    primary-600 #004182  brand/CTA/link/focus (FFI blue, ADR-0043)
+          success-600 #00712F  DIBAYAR, SELESAI
+          warning-600 #785400  MENUNGGU_*, Urgent, scan pending
+          danger-600  #D50000  DITOLAK, error, failed
+          info-600    #443A9B  gated-fallback banners (hue rotated, no FFI equivalent)
+          neutral-50  #F5F5F5  IVORY — FFI's literal page background (ADR-0043)
+          neutral-700 #4B4B4B  body text
+          neutral-800 #363636  strongest body text (FFI's literal text colour, ADR-0043)
+          neutral-450 #878787  interactive borders  ← not 300
+          secondary-300 #8FA99A SAGE — surface/accent ONLY, never a fill (unchanged)
+          text-price  #002A55  (primary-800) monetary figures ONLY
 
-          accent-200  #D8C6A5  SAND — the guideline's warm accent (ADR-0041 D8).
-          accent-100  #F0E9DD  --mk-surface-warm: the trust/quiet band's ground.
-                               Updated 16 Sep 2026 — this block said Sand was
-                               "NOT yet a token" until PR #323 gave it one.
+          accent-300  #FF6B35  FFI's accent orange (ADR-0043).
+          accent-50   #FFEDE7  --mk-surface-warm: the trust/quiet band's ground.
+                               Repointed from accent-100 23 Sep 2026 — see §1.2.
 
 Each accent/semantic token above has exactly ONE purpose app-wide (§1.2(d), §9.2 MUST NOT 13).
 

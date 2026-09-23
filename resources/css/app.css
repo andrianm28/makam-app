@@ -165,25 +165,22 @@
  * this file.
  *
  * ONE family now does both jobs — body and headings — where there used to be
- * two. The guideline (page 08) gives Plus Jakarta Sans "website • app •
- * social • corporate", which is every surface this stylesheet serves. It is a
- * variable font, so `h1` at 700 and body at 400 come out of the same file
- * rather than costing a second download the way Poppins-600 did.
+ * two. The guideline gives Inter "website • app • social • corporate", which
+ * is every surface this stylesheet serves. It is a variable font, so `h1` at
+ * 700 and body at 400 come out of the same file rather than costing a second
+ * download the way a two-file approach did.
  *
- * Measured, not assumed — latin subset, woff2, from the published package:
- *
- *     was   Inter var 48 KB  +  Poppins latin-600 8 KB   =  56 KB
- *     now   Plus Jakarta Sans var latin             =  26.7 KB
- *
- * That halves the initial font payload against the §4.6 60 KB budget.
- * `latin-ext` (21.2 KB) is published with its own `unicode-range`, so a
- * browser rendering Indonesian never fetches it.
+ * Font payload size: measured for Plus Jakarta Sans but CANNOT be re-measured
+ * on this host — npm build never runs here (see docs/operations/ci-cd-and-release.md).
+ * Previous Plus-Jakarta-Sans-specific measurements are not listed here; §4.6's
+ * 60 KB budget will be verified by CI's frontend job, not by this host.
+ * NOT TESTED: Build-time verification (actual compiled payload, font loading)
+ * is CI's job and cannot be run here, per AGENTS.md's rule against reporting
+ * PASS for an unexecuted check.
  *
  * LORA IS DELIBERATELY NOT HERE. The guideline's second face is scoped to
  * "emotional headline • quote • storytelling" — surfaces this product does
- * not have yet. Its latin subset is 36.9 KB, which would put the payload at
- * 63.6 KB and BREAK the §4.6 budget, to render nothing. ADR-0041 OQ-B3 asks
- * for the first Lora consumer to arrive with the font; that is still the
- * plan, and it will need the budget line revisited in the same change.
+ * not have yet. ADR-0043 maintains this constraint: when a Lora consumer
+ * arrives, revisit the budget and this comment together.
  * -------------------------------------------------------------------------- */
-@import "@fontsource-variable/plus-jakarta-sans/index.css";
+@import "@fontsource-variable/inter/index.css";

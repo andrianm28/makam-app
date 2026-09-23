@@ -110,7 +110,7 @@ PAIRS = [
     ("text-muted on surface-raised", "color-neutral-600", WHITE, NEED_TEXT),
     ("text-placeholder on surface-raised", "color-neutral-500", WHITE, NEED_TEXT),
     ("text-default on surface-page", "color-neutral-700", "color-neutral-50", NEED_TEXT),
-    ("text-default on surface-warm", "color-neutral-700", "color-accent-100", NEED_TEXT),
+    ("text-default on surface-warm", "color-neutral-700", "color-accent-50", NEED_TEXT),
     ("text-strong on secondary-100", "color-neutral-900", "color-secondary-100", NEED_TEXT),
     # Homepage visual refresh (19 Aug 2026): Cara Kerja's full-bleed band is
     # secondary-50 with its own section heading/copy sitting directly on it
@@ -149,14 +149,14 @@ PAIRS = [
     # Non-text: interactive control boundaries must hold on all three surfaces
     ("border-interactive on surface-raised", "color-neutral-450", WHITE, NEED_NONTEXT),
     ("border-interactive on surface-page", "color-neutral-450", "color-neutral-50", NEED_NONTEXT),
-    ("border-interactive on surface-warm", "color-neutral-450", "color-accent-100", NEED_NONTEXT),
+    ("border-interactive on surface-warm", "color-neutral-450", "color-accent-50", NEED_NONTEXT),
     ("focus ring on surface-raised", "color-primary-600", WHITE, NEED_NONTEXT),
     ("focus ring on surface-page", "color-primary-600", "color-neutral-50", NEED_NONTEXT),
     # Homepage visual refresh (19 Aug 2026): the hero and CS-CTA panel put
     # focusable elements (buttons, links) directly on surface-warm
     # (primary-50) for the first time — previously only text and non-focus
     # borders were asserted there.
-    ("focus ring on surface-warm", "color-primary-600", "color-accent-100", NEED_NONTEXT),
+    ("focus ring on surface-warm", "color-primary-600", "color-accent-50", NEED_NONTEXT),
     ("focus ring inverse on primary-600", "color-primary-300", "color-primary-600", NEED_NONTEXT),
     ("border-error on surface-raised", "color-danger-600", WHITE, NEED_NONTEXT),
     ("urgent border on urgent bg", "color-warning-600", "color-warning-50", NEED_NONTEXT),

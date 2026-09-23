@@ -2,7 +2,7 @@
  * Makam.co.id — Design Tokens (SINGLE SOURCE OF TRUTH)
  * =============================================================================
  * Spec         : docs/design/design-system.md
- * Version      : v0.2 (brand identity adopted — ADR-0034)
+ * Version      : v0.6 (FFI visual clone rebase — ADR-0043)
  * Stack        : Tailwind CSS 4.1+ (CSS-first `@theme`), Livewire 4, Filament 5
  *
  * RULES (enforced — see docs/design/design-system.md §9 Governance)
@@ -27,28 +27,23 @@
  * -------------------------------------------------------------------------- */
 @theme {
   /* ---------------------------------------------------------------------------
-   * 1.1 COLOUR — PRIMARY "Earth"  (hue ~26°, warm brown)
-   * ADR-0034 (17 Aug 2026): official Makam.co.id identity adopted. The
-   * *Filosofi Logo* names earth/calm/stability/warmth as the brand's core
-   * associations and mandates a brown-led palette — this REVERSES the old
-   * §1.2a "Petrol" decision (OQ-01 resolved). Green is NO LONGER the brand
-   * CTA colour: the former teal-vs-green ambiguity argument ("a brand button
-   * must never read as a success badge") is now satisfied structurally
-   * instead of by hue-avoidance — brand fills are brown, green is confined
-   * to artwork and the caged `secondary` family (see §1.2). Brand, primary
-   * CTA, links, active nav, focus ring, informational surfaces.
+   * 1.1 COLOUR — PRIMARY FFI Blue (hue 210°)
+   * ADR-0043 (23 Sep 2026): FFI palette rebase. Replaces the former FOREST
+   * brown (26°) brand identity adopted in ADR-0034. Values are FFI's literal
+   * blue ramp, anchored at 500 with dark variant at 600. Brand, primary CTA,
+   * links, active nav, focus ring, informational surfaces.
    * ------------------------------------------------------------------------ */
-  --color-primary-50:  #F5F7F6;
-  --color-primary-100: #EAEDEB;
-  --color-primary-200: #D0D7D4;
-  --color-primary-300: #A9B6B0;
-  --color-primary-400: #7A8E85; /* white label 3.48:1 -- LARGE TEXT ONLY, never a body-copy fill */
-  --color-primary-500: #50695D; /* white label AA 5.97:1 -- usable, but 600 is the brand fill */
-  --color-primary-600: #29483A; /* FOREST -- the 2026 guideline's primary, verbatim. White label AA 10.08:1. ADR-0041. */
-  --color-primary-700: #223B30; /* hover / link on light -- white 12.09:1 */
-  --color-primary-800: #1B3026; /* pressed -- white 14.02:1 */
-  --color-primary-900: #14241D; /* footer, inverse header -- white 16.16:1 */
-  --color-primary-950: #0E1814;
+  --color-primary-50:  #EBF5FF;
+  --color-primary-100: #D1E8FF;
+  --color-primary-200: #9DCEFF;
+  --color-primary-300: #56ABFF;
+  --color-primary-400: #1288FF; /* white label 3.51:1 -- LARGE TEXT ONLY, never a body-copy fill */
+  --color-primary-500: #0073E6; /* white label AA 4.57:1 -- usable, but 600 is the brand fill */
+  --color-primary-600: #004182; /* 600-slot fill generated from FFI's #0073E6 anchor -- NOT FFI's own hex. #0073E6 itself only reaches 4.57:1 with a white label, short of what this slot needs to carry one; FFI's own hover/dark blue #005BB5 is not in this ramp. ADR-0043. White label AA 10.10:1. */
+  --color-primary-700: #00356B; /* hover / link on light -- white 12.20:1 */
+  --color-primary-800: #002A55; /* pressed -- white 14.36:1 */
+  --color-primary-900: #002040; /* footer, inverse header -- white 16.40:1 */
+  --color-primary-950: #001428;
 
   /* ---------------------------------------------------------------------------
    * 1.2 COLOUR — SECONDARY "Leaf" (hue ~132°, green)
@@ -62,7 +57,12 @@
    * surface tint, 700–900 as text on those tints, 300–400 as decorative
    * rule/icon.
    * ------------------------------------------------------------------------ */
-  --color-secondary-50:  #F4F6F5;
+  --color-secondary-50:  #F0F2F1; /* ADR-0043: nudged from #F4F6F5 -- flush
+    against --color-neutral-50 (#F5F5F5, FFI's literal Ivory) after the
+    rebase, 3/765 short of the 10/765 surface-separation floor
+    verify-contrast.py enforces. Hue/sat held (Sage 150 deg), L nudged
+    0.9608 -> 0.9448 to clear it (12/765). text-strong 14.32:1,
+    secondary-700 8.21:1, secondary-600 6.00:1 -- all still AA. */
   --color-secondary-100: #E6ECE9;
   --color-secondary-200: #C7D4CC;
   --color-secondary-300: #8FA99A; /* SAGE -- the guideline's secondary, verbatim. ADR-0041 anchors it at 300, NOT 600, because Sage is LIGHT (white label 2.53:1) and 600 is this file's slot for a fill that carries a white label. */
@@ -75,118 +75,119 @@
   --color-secondary-950: #151917;
 
   /* ---------------------------------------------------------------------------
-   * 1.2b COLOUR -- ACCENT "Sand" (hue ~38 deg, warm)
-   * The 2026 Brand Guideline's third brand colour, added 16 Sep 2026 by
-   * ADR-0041 D8. It sat unwired for a day because design-system.md 1.2(d)
-   * requires an accent to have exactly ONE designated purpose before it gets
-   * a token -- and it now has one: the trust/reassurance surface (2.3).
-   *
-   * Anchored at 200, not 600. Sand's luminance (0.577) sits closest to this
-   * ramp position across every sibling family, and the guideline value is
-   * transcribed verbatim rather than nudged to fit a slot -- the same
-   * discipline that put Sage at 300.
-   *
-   * Sand and Ivory are the SAME warm family: a Sand tint at 80% white lands
-   * exactly on Ivory #F7F4ED. That is why accent-50 is mixed lighter than a
-   * sibling 50 would be -- otherwise it would duplicate --color-neutral-50
-   * and the two would be indistinguishable tokens with different names.
+   * 1.2b COLOUR -- ACCENT FFI Orange (hue ~16°, warm)
+   * ADR-0043: FFI palette rebase. Replaces the former SAND family added in
+   * ADR-0041 D8. Values are FFI's literal orange, anchored at 300 per the
+   * same precedent that anchored Sage at 300 (light anchor, not dark fill).
+   * Purpose unchanged: trust/reassurance surface (2.3). Transcribed verbatim
+   * rather than nudged to fit a slot — same discipline as Sage.
    * ------------------------------------------------------------------------ */
-  --color-accent-50:  #FBF9F6;
-  --color-accent-100: #F0E9DD; /* --mk-surface-warm; charcoal AA 10.60:1, forest 8.36:1 */
-  --color-accent-200: #D8C6A5; /* SAND -- the guideline's accent, verbatim. ADR-0041. */
-  --color-accent-300: #B5A68B;
-  --color-accent-400: #978B74;
-  --color-accent-500: #796F5C; /* white label AA 4.95:1 */
-  --color-accent-600: #5F5749; /* white label AA 7.13:1 -- the fill slot */
-  --color-accent-700: #494338;
-  --color-accent-800: #363229;
-  --color-accent-900: #25221C;
-  --color-accent-950: #161410;
+  --color-accent-50:  #FFEDE7;
+  --color-accent-100: #FFD6C8;
+  --color-accent-200: #FFA989;
+  --color-accent-300: #FF6B35; /* FFI's accent, ADR-0043, verbatim. */
+  --color-accent-400: #F34100;
+  --color-accent-500: #CA3600; /* white label AA 5.20:1 */
+  --color-accent-600: #721E00; /* white label AA 11.05:1 -- the fill slot */
+  --color-accent-700: #5E1900;
+  --color-accent-800: #4B1400;
+  --color-accent-900: #380F00;
+  --color-accent-950: #230900;
 
   /* ---------------------------------------------------------------------------
-   * 1.3 COLOUR — NEUTRAL (slightly cool, harmonises with Petrol)
+   * 1.3 COLOUR — NEUTRAL FFI Grays
+   * ADR-0043: FFI palette rebase. 0/50/800 are FFI-literal, rest regenerated
+   * to harmonise with the new primary (210°) and accent (39°) families.
+   * Replaces the former Petrol-harmonised neutral family from ADR-0034.
    * ------------------------------------------------------------------------ */
   --color-neutral-0:   #FFFFFF;
-  --color-neutral-50:  #F7F4ED; /* IVORY -- the guideline's background, verbatim. ADR-0041. */
-  --color-neutral-100: #EBE8E2;
-  --color-neutral-200: #DDDBD4; /* decorative divider only -- see design-system.md 6.3 */
-  --color-neutral-300: #C3C2BC; /* decorative border only -- see design-system.md 6.3 */
-  --color-neutral-400: #9B9B96;
-  --color-neutral-450: #82827D; /* INTERACTIVE BORDER -- non-text 3.86:1 on white, 3.52:1 on Ivory,
-                                   3.20:1 on the Sand warm surface. Was #888883 until 16 Sep 2026,
-                                   which rendered 2.95:1 once ADR-0041 D8 moved that surface to
-                                   Sand -- under the 3.0 non-text floor, and invisible because the
-                                   contrast gate was still testing the surface it used to be. */
-  --color-neutral-500: #6E6F6B; /* placeholder -- AA 5.06:1 on white, 4.61:1 on Ivory */
-  --color-neutral-600: #5C5D5A; /* muted / helper text -- AA 6.63:1 / 6.03:1 */
-  --color-neutral-700: #444643; /* body text -- AA 9.53:1 / 8.68:1 */
-  --color-neutral-800: #303330; /* CHARCOAL -- the guideline's text colour, verbatim. AA 12.79:1 / 11.64:1. ADR-0041. */
-  --color-neutral-900: #232523; /* display headings -- AA 15.44:1 / 14.05:1 */
-  --color-neutral-950: #161716;
+  --color-neutral-50:  #F5F5F5; /* FFI's literal background, ADR-0043, verbatim. */
+  --color-neutral-100: #ECECEC; /* ADR-0043: nudged 2/channel from #EEEEEE.
+    Not an FFI literal (unlike neutral-0/50/800) -- free to move. Needed once
+    secondary-50's own nudge (above) closed in on this shade from the other
+    side: 15/765 from the new secondary-50, 27/765 from neutral-50.
+    text-disabled (#757575) on it: 3.90:1, still clears the 3.0 non-text
+    floor. */
+  --color-neutral-200: #E0E0E0; /* decorative divider only -- see design-system.md 6.3 */
+  --color-neutral-300: #BCBCBC; /* decorative border only -- see design-system.md 6.3 */
+  --color-neutral-400: #999999;
+  --color-neutral-450: #878787; /* INTERACTIVE BORDER -- 3.59:1 on white, 3.30:1 on page, 3.17:1 on the warm surface (all verified, docs/design/verify-contrast.py). Was #888883 until 16 Sep 2026, which fell to 2.95:1 when the warm surface moved (ADR-0041 D8) -- under the 3.0 non-text floor. */
+  --color-neutral-500: #757575; /* placeholder */
+  --color-neutral-600: #606060; /* muted / helper text */
+  --color-neutral-700: #4B4B4B; /* body text */
+  --color-neutral-800: #363636; /* FFI's literal text colour, ADR-0043, verbatim. */
+  --color-neutral-900: #212121; /* display headings */
+  --color-neutral-950: #050505;
 
   /* ---------------------------------------------------------------------------
    * 1.4 COLOUR — SEMANTIC
-   * Hue separation (600 shade, ADR-0034): primary 26 | success 146 | info 228
-   *                                       warning 39 | danger 352
+   * Hue separation (600 shade, ADR-0043): primary 210.0 | success 145.0 | info 246.2
+   *                                       warning 42.0 | danger 0.0
    * ------------------------------------------------------------------------ */
-  /* SUCCESS — DIBAYAR, SELESAI, upload accepted, autosave confirmed */
-  --color-success-50:  #F0F6F7;
-  --color-success-100: #DDEBEC;
-  --color-success-200: #B1D0D4;
-  --color-success-300: #81B3BA;
-  --color-success-400: #4B939D;
-  --color-success-500: #247C87;
-  --color-success-600: #0C6D7A; /* TEAL, not green -- ADR-0041 D7. White label AA 6.03:1. Hue 187.1 deg, 34.2 deg from the Forest brand primary: a status chip must never be mistakable for a brand fill. */
-  --color-success-700: #0A5C66;
-  --color-success-800: #084A53;
-  --color-success-900: #063B42;
-  --color-success-950: #042327;
+  /* SUCCESS — FFI Green (hue ~145°, ADR-0043). DIBAYAR, SELESAI, upload accepted, autosave confirmed */
+  --color-success-50:  #E9FFF2;
+  --color-success-100: #CCFFE1;
+  --color-success-200: #92FFBF;
+  --color-success-300: #44FF92;
+  --color-success-400: #00F767;
+  --color-success-500: #00C853; /* FFI's success green, ADR-0043, verbatim. */
+  --color-success-600: #00712F; /* white label AA 6.17:1 -- the fill slot */
+  --color-success-700: #005D27;
+  --color-success-800: #004A1F;
+  --color-success-900: #003817;
+  --color-success-950: #00230E;
 
-  /* WARNING — MENUNGGU_*, quote expiring, scan pending, URGENT time pressure */
-  --color-warning-50:  #FDF6EB;
-  --color-warning-100: #FAEACB;
-  --color-warning-200: #F3D294;
-  --color-warning-300: #E7B357;
-  --color-warning-400: #D4922A;
-  --color-warning-500: #B87A12;
-  --color-warning-600: #9A6300; /* darkened from #A66B00 to reach AA 5.05:1 */
-  --color-warning-700: #855400;
-  --color-warning-800: #6A4400;
-  --color-warning-900: #573800;
-  --color-warning-950: #2E1D00;
+  /* WARNING — FFI Amber (hue ~42°, ADR-0043). MENUNGGU_*, quote expiring, scan pending, URGENT time pressure */
+  --color-warning-50:  #FFF9E9;
+  --color-warning-100: #FFF0CD;
+  --color-warning-200: #FFDF95;
+  --color-warning-300: #FFC94A;
+  --color-warning-400: #FFB300; /* FFI's warning amber, ADR-0043, verbatim. */
+  --color-warning-500: #D49500;
+  --color-warning-600: #785400; /* darkened to reach AA 6.85:1 white-label -- same discipline the old #A66B00 -> #9A6300 darkening already used */
+  --color-warning-700: #624500;
+  --color-warning-800: #4E3700;
+  --color-warning-900: #3B2900;
+  --color-warning-950: #251A00;
 
-  /* DANGER — DITOLAK, validation error, payment failed, file rejected.
-   * Muted brick, not neon red: the tone must stay respectful (§2.3).
-   * ADR-0034: hue rotated −11° (3° → ~352°, HLS lightness/saturation held)
-   * because the new Earth primary (hue ~26°) crowded the old danger hue
-   * below the ≥30° HUE_MIN_SEPARATION the verifier enforces — measured
-   * primary/danger separation is now ~34°. Fix is to the token, not the
-   * assertion (design-system.md §9.4). Not derived from the logo render, so
-   * not PROVISIONAL under OQ-12. */
-  --color-danger-50:  #FDF1F2;
-  --color-danger-100: #FBDCDF;
-  --color-danger-200: #F5B9BF;
-  --color-danger-300: #EC8C96;
-  --color-danger-400: #DE5966;
-  --color-danger-500: #C63342;
-  --color-danger-600: #A32435; /* white label AA 7.34:1 */
-  --color-danger-700: #871D2C;
-  --color-danger-800: #6E1825;
-  --color-danger-900: #5B151F;
-  --color-danger-950: #31090F;
+  /* DANGER — FFI Red (hue 0°, ADR-0043). DITOLAK, validation error,
+   * payment failed, file rejected. Only the 600 slot (#D50000) is FFI's
+   * literal value, transcribed verbatim; the other ten stops are hand-
+   * derived on the same lightness-position curve generate-ramp-pivot.php
+   * uses, not reproducible by running that tool today (its interpolation
+   * was fixed after this ramp was already computed; re-running it now
+   * yields a different ramp). FFI's red is fully saturated, not the muted
+   * brick design-system.md §1.2(c) specifies -- ADR-0043 supersedes that
+   * rule for this rebase; see §1.2's supersession note. */
+  --color-danger-50:  #FFECEC;
+  --color-danger-100: #FFD5D5;
+  --color-danger-200: #FFB2B2;
+  --color-danger-300: #FF7F7F;
+  --color-danger-400: #FF4444;
+  --color-danger-500: #FF0C0C;
+  --color-danger-600: #D50000; /* FFI's danger red, ADR-0043, verbatim. White label AA 5.48:1 -- the fill slot. */
+  --color-danger-700: #AF0000;
+  --color-danger-800: #900000;
+  --color-danger-900: #780000;
+  --color-danger-950: #3E0000;
 
-  /* INFO — gated-fallback mode banners, neutral system notices */
-  --color-info-50:  #F1F3FC;
-  --color-info-100: #E0E5F8;
-  --color-info-200: #C3CCF1;
-  --color-info-300: #9CAAE5;
-  --color-info-400: #7183D5;
-  --color-info-500: #4D60C0;
-  --color-info-600: #3A4E9B; /* white label AA 7.66:1 */
-  --color-info-700: #31417F;
-  --color-info-800: #293568;
-  --color-info-900: #242D55;
-  --color-info-950: #12162C;
+  /* ADR-0043: hue rotated 227.6deg -> 246deg, S/L held per shade. The
+   * rebase put primary at 210deg (FFI blue); info's old hue collided
+   * (Delta 17.6deg, under the 30deg HUE_MIN_SEPARATION verify-contrast.py
+   * enforces) -- the same situation danger/success resolved earlier by
+   * moving the same way. 246deg clears primary by 36deg, success (145deg)
+   * by 101deg, danger (0deg) by 114deg. */
+  --color-info-50:  #F2F1FC;
+  --color-info-100: #E2E0F8;
+  --color-info-200: #C8C3F1;
+  --color-info-300: #A39CE5;
+  --color-info-400: #7B71D5;
+  --color-info-500: #594DC0;
+  --color-info-600: #443A9B; /* white label AA 9.03:1 */
+  --color-info-700: #39317F;
+  --color-info-800: #2F2968;
+  --color-info-900: #292455;
+  --color-info-950: #15122C;
 
   /* ---------------------------------------------------------------------------
    * 1.5 SPACING — 4 px base. Tailwind 4 derives the whole scale from this,
@@ -200,15 +201,16 @@
    * access-restricted, and third-party font fetches leak visitor IPs on a page
    * where the visitor is arranging a funeral. Subset: latin + latin-ext.
    * ------------------------------------------------------------------------ */
-  --font-sans: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system,
-               "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  /* ADR-0041: ONE family for body and headings. The guideline gives Plus
-   * Jakarta Sans every surface this app has; it is variable, so heading
-   * weight costs no second file the way Poppins-600 did. Lora -- the
-   * guideline's second face -- is scoped to quote/storytelling surfaces
-   * that do not exist yet, so it is not loaded (see app.css). */
-  --font-display: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", ui-sans-serif, system-ui,
-                  sans-serif;
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system,
+             "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* ADR-0043: ONE family for body and headings. Same as before: the
+   * guideline specifies Inter for every surface this app has; it is
+   * variable, so heading weight costs no second file the way Poppins-600
+   * did. Lora -- the guideline's second face -- is scoped to quote/
+   * storytelling surfaces that do not exist yet, so it is not loaded
+   * (see app.css). */
+  --font-display: "Inter Variable", "Inter", ui-sans-serif, system-ui,
+                sans-serif;
   /* Documents (certificate/agreement/invoice print, design-system.md §8.5)
    * keep serif gravitas and NEVER inherit the brand display face. Consumed
    * by print.css when that file is built — declared now so no document can
@@ -305,13 +307,17 @@
   --mk-surface-page: var(--color-neutral-50);
   --mk-surface-raised: var(--color-neutral-0);
   --mk-surface-sunken: var(--color-neutral-100);
-  --mk-surface-warm: var(--color-accent-100);     /* ADR-0041 D8: trust/quiet
+  --mk-surface-warm: var(--color-accent-50);      /* ADR-0043: repointed from
+    accent-100 -- border-interactive (neutral-450, non-text UI) only cleared
+    2.89:1 on accent-100 against the WCAG 1.4.11 3.0:1 floor once accent
+    became FFI's orange; accent-50 clears it at 3.17:1. Was ADR-0041 D8: trust/quiet
     sections. Was primary-50 -- which the brand rebase turned COOL, because
     primary stopped being brown. A token named "warm" holding a cool grey is a
     contradiction, and it also landed 3/765 from --mk-surface-quiet, collapsing
-    the three-band alternation ADR-0040 D1/D2 exists for. Sand is the warm one,
-    and now it is here. 41/765 from quiet; all ten surface pairs clear the
-    10/765 floor verify-contrast.py enforces. */
+    the three-band alternation ADR-0040 D1/D2 exists for. FFI's orange is the warm one,
+    and now it is here, at the 50 slot. 30/765 from quiet, 32/765 from
+    page; all ten surface pairs clear the 10/765 floor verify-contrast.py
+    enforces. */
   --mk-surface-quiet: var(--color-secondary-50);   /* ADR-0040: the THIRD page
     band, so consecutive page sections can alternate and their boundaries read
     without a divider line (design-system.md §4.4: "Proximity carries the
@@ -331,7 +337,7 @@
     badge, button, or alert. Contrast needs no new verify-contrast.py pair —
     "text-default on secondary-50" and "text-strong on secondary-50" are both
     already asserted there. Surface-vs-surface separation IS newly asserted
-    (the 10/765 floor), and this band clears `--mk-surface-warm` by 41. */
+    (the 10/765 floor), and this band clears `--mk-surface-warm` by 30. */
   --mk-surface-inverse: var(--color-primary-900);  /* footer */
   --mk-surface-overlay: rgb(13 17 17 / 0.55);      /* modal backdrop */
   --mk-surface-disabled: var(--color-neutral-100);
@@ -341,7 +347,7 @@
   --mk-text-default: var(--color-neutral-700);
   --mk-text-muted: var(--color-neutral-600);
   --mk-text-placeholder: var(--color-neutral-500);
-  --mk-text-disabled: var(--color-neutral-500);   /* NOT 400: keeps 3.96:1 */
+  --mk-text-disabled: var(--color-neutral-500);   /* NOT 400: keeps 3.90:1 */
   --mk-text-inverse: var(--color-neutral-0);
   --mk-text-link: var(--color-primary-600);
   --mk-text-link-hover: var(--color-primary-700);
@@ -350,13 +356,13 @@
     (cemetery price ranges, renewal fees, quote/invoice totals) — a plain-text
     "price/amount emphasis" purpose distinct from every other existing use of
     primary-800 (button `pressed` fill, badge-on-tint foreground), neither of
-    which is body text on a white surface. Reuses the Earth family's darkest
+    which is body text on a white surface. Reuses the FFI-blue primary family's darkest
     legible shade instead of adding a new hue, keeping the palette restrained
     (design-system.md §2.2 "few hues") the same way `--mk-intent-urgent-*`
     reuses `warning` instead of inventing a colour (see that token's own
     comment above). Provably AA on white without a new verify-contrast.py
     assertion: primary-800 is strictly darker than the already-verified
-    "primary-700 on white" pair (12.16:1, design-system.md §7.1), so its own
+    "primary-700 on white" pair (12.20:1, design-system.md §7.1), so its own
     ratio only improves. Per design-system.md §1.2(d) "one accent, one
     purpose", this token renders a CONFIRMED/final monetary figure only — an
     INDICATIVE price range stays `neutral`, per the existing §2.3 DO. */
@@ -364,7 +370,7 @@
   /* 2.3 BORDERS
    * `subtle`/`default` are DECORATIVE (WCAG 1.4.11 does not apply).
    * `interactive` is MANDATORY for any control boundary that conveys state:
-   * input, select, textarea, checkbox, radio, unfilled button. 3.67:1 verified. */
+   * input, select, textarea, checkbox, radio, unfilled button. 3.59:1 verified. */
   --mk-border-subtle: var(--color-neutral-200);
   --mk-border-default: var(--color-neutral-300);
   --mk-border-interactive: var(--color-neutral-450);
@@ -374,7 +380,7 @@
 
   /* 2.4 FOCUS — single global treatment, never removed, never outline:none */
   --mk-focus-color: var(--color-primary-600);
-  --mk-focus-color-inverse: var(--color-primary-300); /* on brand fills, 4.42:1 */
+  --mk-focus-color-inverse: var(--color-primary-300); /* on brand fills, 4.17:1 */
   --mk-focus-width: 2px;
   --mk-focus-offset: 2px;
   --mk-focus-ring: 0 0 0 var(--mk-focus-offset) var(--mk-surface-raised),
