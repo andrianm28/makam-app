@@ -1119,6 +1119,15 @@ Covered in §1.6 (tokens). Design rules:
 
 Every skeleton carries an `sr-only` announcement; a screen-reader user hears nothing from a pulsing box.
 
+**As of Stage 2 ticket 01 (23 Sep 2026), `<x-mk.skeleton>` is the
+component-backed form of this pattern** — a two-tone `mk-skeleton-shimmer`
+sweep (`--mk-skeleton-base`/`-sheen`) rather than the single-tone
+`animate-pulse` shown above, because a single tone leaves
+`--mk-skeleton-sheen` unused despite it existing for exactly this. Prefer
+`<x-mk.skeleton>` for any new loading state; the inline `wire:loading`
+recipe above remains valid for existing call sites and for cases the
+component doesn't cover yet.
+
 **A page-level skeleton follows §4.4's rhythm, not its own (added 14 Sep 2026, kamboja plan Tahap 8).** "Mirrors the real layout" is a CLS requirement before it is an aesthetic one: a skeleton padded differently from the section it stands in for shifts the page at the moment content arrives, which is exactly what the < 0.1 budget above measures. So a skeleton standing in for a whole page section takes `py-section lg:py-section-lg` like the section will, and inherits that section's surface utility if it has one. The inline example above is a **within-section** skeleton — a list of results inside an already-padded container — and correctly carries no section padding of its own.
 
 ### 6.2 Empty
