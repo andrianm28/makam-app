@@ -142,6 +142,23 @@ final class OrderListTest extends TestCase
         $this->get('/akun/pesanan')->assertRedirect(route('login'));
     }
 
+    public function test_bottom_nav_renders_with_akun_active(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get('/akun/pesanan');
+
+        $response->assertSee('aria-label="Navigasi utama"', false);
+
+        $html = $response->getContent();
+        $start = strpos($html, 'href="/akun"', strpos($html, 'Navigasi utama'));
+        $this->assertNotFalse($start, 'Akun tab anchor not found in bottom nav');
+        $end = strpos($html, '</a>', $start);
+        $anchor = substr($html, $start, $end - $start);
+
+        $this->assertStringContainsString('aria-current="page"', $anchor);
+    }
+
     private function makeOrder(string $reference, OrderStatus $status): Order
     {
         return Order::query()->create([

@@ -47,6 +47,18 @@ final class RenewalPaymentTest extends TestCase
     use RefreshDatabase;
     use RequiresUuidTypeEnforcement;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // The bottom-nav test below makes a real `$this->get(...)` request,
+        // which renders `layouts/app.blade.php`, which contains
+        // `@vite(...)`; CI's `php` job has no frontend build. Same
+        // requirement `RenewalStartTest::setUp()` already hit and fixed for
+        // the sibling ticket-01 page. Every other test in this file uses
+        // `Livewire::test()` only, which never reaches the layout.
+        $this->withoutVite();
+    }
+
     private const string MERCHANT_REF = 'mk-merchant-dev';
 
     private const string BADAN_USAHA_REF = 'badan-usaha-dev';
@@ -837,5 +849,23 @@ final class RenewalPaymentTest extends TestCase
             ->call('terimaDanLanjutkan')
             ->assertSee('koordinasi manual')
             ->assertDontSee('Bayar Sekarang');
+    }
+
+    public function test_bottom_nav_renders_with_perpanjangan_active(): void
+    {
+        $this->closeThePaymentGate();
+        $renewal = $this->createRenewalWithQuote();
+
+        $response = $this->get('/perpanjangan/pembayaran?perpanjangan='.$renewal->id);
+
+        $response->assertSee('aria-label="Navigasi utama"', false);
+
+        $html = $response->getContent();
+        $start = strpos($html, 'href="/perpanjangan"', strpos($html, 'Navigasi utama'));
+        $this->assertNotFalse($start, 'Perpanjangan tab anchor not found in bottom nav');
+        $end = strpos($html, '</a>', $start);
+        $anchor = substr($html, $start, $end - $start);
+
+        $this->assertStringContainsString('aria-current="page"', $anchor);
     }
 }
