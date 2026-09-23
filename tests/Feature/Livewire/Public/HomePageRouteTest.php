@@ -534,13 +534,10 @@ final class HomePageRouteTest extends TestCase
      */
     public function test_final_homepage_section_order_matches_the_design_doc(): void
     {
-        // Verified section is honestly empty against real, unmodified
-        // seed data (see HomePage::render()'s own doc comment) — activate
-        // one real profile so this order check can locate the section by
-        // its heading like every other section, not just when data
-        // exists.
-        $this->createGenuinelyVerifiedCemetery();
-
+        // The verified section's heading always renders, even against
+        // real, unmodified seed data where no cemetery's card grid
+        // qualifies (see the view's own comment) — no extra fixture setup
+        // needed here to locate it, unlike the other real-data sections.
         $response = $this->get('/');
         $response->assertOk();
 
@@ -589,20 +586,27 @@ final class HomePageRouteTest extends TestCase
     }
 
     /**
-     * Stage 3 ticket 04 — verified-cemeteries section, honest empty state.
-     * Every seeded cemetery's current capability profile is the S4-T1
-     * safe default (`registry_mode = NONE`) — confirmed directly against
-     * `CemeteryExampleData::seed()`'s own insert, not assumed — so this
-     * section genuinely renders nothing against real, unmodified seed
-     * data. This is the real current-state behaviour, not a placeholder
-     * pending future data.
+     * Stage 3 ticket 04 — verified-cemeteries CARD GRID, honest empty
+     * state. Every seeded cemetery's current capability profile is the
+     * S4-T1 safe default (`registry_mode = NONE`) — confirmed directly
+     * against `CemeteryExampleData::seed()`'s own insert, not assumed —
+     * so no real card renders against real, unmodified seed data. The
+     * section ITSELF (heading + reassurance intro, replacing the old,
+     * always-visible "Trust/safety" section) still renders regardless —
+     * see the view's own comment on why only the card grid is
+     * data-dependent, not the whole section.
      */
-    public function test_verified_cemeteries_section_is_absent_against_unmodified_seed_data(): void
+    public function test_verified_cemeteries_card_grid_is_absent_against_unmodified_seed_data(): void
     {
         $response = $this->get('/');
         $response->assertOk();
 
-        $response->assertDontSee('id="verified-heading"', false);
+        // The section and its reassurance copy still render.
+        $response->assertSee('id="verified-heading"', false);
+        $response->assertSee('lunas setelah benar-benar', false);
+
+        // But no real verified-cemetery card does.
+        $response->assertDontSee('Lokasi Terverifikasi');
     }
 
     public function test_verified_cemeteries_section_renders_with_the_trust_badges_when_a_cemetery_is_genuinely_verified(): void
@@ -641,6 +645,14 @@ final class HomePageRouteTest extends TestCase
             'city' => LaunchCityCode::JAKARTA,
             'address' => 'Jl. Contoh Verifikasi No. 1',
             'plot_tracking_mode' => PlotTrackingMode::GRANULAR,
+            // Real price fields so CemeteryPresenter::priceRange()/
+            // priceAttribution() both resolve non-null — the section's
+            // "Harga Transparan" note only renders alongside a real price.
+            'price_min' => 5_000_000,
+            'price_max' => 8_000_000,
+            'price_currency' => 'IDR',
+            'price_source' => 'Test fixture',
+            'price_effective_at' => now(),
         ]);
 
         $defaults = CemeteryCapabilityProfile::safeDefaults();

@@ -463,26 +463,34 @@
          terverifikasi" is HomePage::render()'s own documented definition —
          a real, existing `registry_mode = AUTHORITATIVE` capability
          profile, not a new rule invented here. Against today's real seed
-         data this is honestly empty (see that method's own doc comment) —
-         same §6.2 empty-state / §6.3 provider-unavailable discipline as
-         every other real-data section on this page; hidden entirely
-         rather than an empty shell. --}}
-    @unless ($verifiedCemeteriesUnavailable || $verifiedCemeteries->isEmpty())
-        <section aria-labelledby="verified-heading" class="surface-warm py-section lg:py-section-lg">
-            <div class="mx-auto max-w-content px-4 md:px-6 lg:px-8">
-                <h2 id="verified-heading" class="mb-2 text-center text-2xl font-semibold text-neutral-900">
-                    TPU &amp; TPS Terverifikasi
-                </h2>
-                {{-- Redistributed from the old "Trust/safety" section
-                     (privacy, verified payment, honesty about
-                     limitations) — condensed into one intro sentence
-                     rather than the original 3-card grid, since this
-                     section's own job is the card grid below. --}}
-                <p class="mx-auto mb-6 max-w-prose text-center text-base text-neutral-700">
-                    Dokumen Anda disimpan privat dan diperiksa sebelum diakses siapa pun, pembayaran baru dianggap
-                    lunas setelah benar-benar terverifikasi oleh tim kami, dan kami tidak mengarang data atau
-                    ketersediaan yang belum dapat kami pastikan.
-                </p>
+         data no cemetery currently qualifies (see that method's own doc
+         comment) — but unlike the other real-data sections on this page,
+         the section ITSELF (heading + reassurance intro) is NOT hidden in
+         that case: this section replaces the old, always-visible
+         "Trust/safety" section, and a homepage test already expects that
+         reassurance band to always render (test_homepage_sections_
+         alternate_surfaces_without_divider_lines). Only the CARD GRID
+         below — the actual real-data list — follows the §6.2 empty-state
+         / §6.3 provider-unavailable discipline and hides when nothing
+         qualifies or the query fails. --}}
+    <section aria-labelledby="verified-heading" class="surface-warm py-section lg:py-section-lg">
+        <div class="mx-auto max-w-content px-4 md:px-6 lg:px-8">
+            <h2 id="verified-heading" class="mb-2 text-center text-2xl font-semibold text-neutral-900">
+                TPU &amp; TPS Terverifikasi
+            </h2>
+            {{-- Redistributed from the old "Trust/safety" section
+                 (privacy, verified payment, honesty about
+                 limitations) — condensed into one intro sentence
+                 rather than the original 3-card grid, since this
+                 section's own job is the card grid below. Always
+                 renders, independent of the card grid's own data
+                 availability (see this section's own top comment). --}}
+            <p class="mx-auto mb-6 max-w-prose text-center text-base text-neutral-700">
+                Dokumen Anda disimpan privat dan diperiksa sebelum diakses siapa pun, pembayaran baru dianggap
+                lunas setelah benar-benar terverifikasi oleh tim kami, dan kami tidak mengarang data atau
+                ketersediaan yang belum dapat kami pastikan.
+            </p>
+            @unless ($verifiedCemeteriesUnavailable || $verifiedCemeteries->isEmpty())
                 <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-3" aria-label="TPU dan TPS terverifikasi">
                     @foreach ($verifiedCemeteries as $cemetery)
                         @php
@@ -526,9 +534,9 @@
                         </li>
                     @endforeach
                 </ul>
-            </div>
-        </section>
-    @endunless
+            @endunless
+        </div>
+    </section>
 
     {{-- "Kehangatan Keluarga" — supporting photo section, between the
          verified-cemeteries section above and FAQ highlights below (see
