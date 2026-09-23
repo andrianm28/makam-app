@@ -32,7 +32,7 @@ final class AkunHeaderLinkTest extends TestCase
 
         $this->assertStringContainsString('href="'.route('login').'"', $html);
         $this->assertStringContainsString('Masuk/Akun', $html);
-        $this->assertStringNotContainsString('aria-disabled="true"', $html);
+        $this->assertStringNotContainsString('aria-disabled="true"', $this->headerRegion($html));
     }
 
     public function test_an_authenticated_user_sees_a_real_link_to_akun(): void
@@ -44,6 +44,25 @@ final class AkunHeaderLinkTest extends TestCase
         $this->assertStringContainsString('href="'.route('akun.index').'"', $html);
         $this->assertStringNotContainsString('Masuk/Akun', $html);
         $this->assertStringContainsString('Akun', $html);
-        $this->assertStringNotContainsString('aria-disabled="true"', $html);
+        $this->assertStringNotContainsString('aria-disabled="true"', $this->headerRegion($html));
+    }
+
+    /**
+     * Scoped to `<header>...</header>` — the homepage legitimately carries
+     * its own, unrelated `aria-disabled="true"` control since Stage 3
+     * ticket 03 (a "Wakaf Tanah" secondary CTA with no real destination
+     * route yet, rendered as an honest disabled control rather than a
+     * fabricated URL). A whole-page assertion would false-fail on that
+     * addition; this test's actual concern — this file's own doc block —
+     * is the header's account-area link specifically.
+     */
+    private function headerRegion(string $html): string
+    {
+        $start = strpos($html, '<header');
+        $this->assertNotFalse($start, 'Expected a <header> tag in the homepage response.');
+        $end = strpos($html, '</header>', $start);
+        $this->assertNotFalse($end);
+
+        return substr($html, $start, $end - $start);
     }
 }

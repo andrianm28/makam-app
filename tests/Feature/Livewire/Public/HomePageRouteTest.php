@@ -447,10 +447,23 @@ final class HomePageRouteTest extends TestCase
         // Excluded by the draft-publication-status scope (Cemetery::published()):
         $response->assertDontSee(CemeteryExampleData::bySlug(CemeteryExampleData::DRAFT_SLUG)[1]);
 
-        // Excluded purely by the ->take(6) display cap — asserted here so a
-        // future cap change is a deliberate, visible test update:
+        // Excluded purely by the ->take(6) display cap, scoped to THIS
+        // section specifically (not the whole page): Stage 3 ticket 03
+        // added two more sections (urgent-availability, newest-published)
+        // drawing from overlapping but differently-filtered/ordered
+        // cemetery pools, so a name capped out of featured-cemeteries can
+        // legitimately still appear in one of those — that's correct,
+        // not a regression. The cap's effect on THIS section specifically
+        // is still asserted here so a future cap change stays visible.
+        $html = $response->getContent();
+        $featuredStart = strpos($html, 'id="featured-cemeteries-heading"');
+        $this->assertNotFalse($featuredStart);
+        $featuredEnd = strpos($html, '</section>', $featuredStart);
+        $this->assertNotFalse($featuredEnd);
+        $featuredSection = substr($html, $featuredStart, $featuredEnd - $featuredStart);
+
         foreach ($expectedHiddenByCap as $name) {
-            $response->assertDontSee($name);
+            $this->assertStringNotContainsString($name, $featuredSection);
         }
     }
 
