@@ -42,9 +42,17 @@ use Tests\TestCase;
  * revealed screen (the `?tpu=` "orphaned" state in particular — see the
  * "Cemetery scoping" section below).
  *
- * `Livewire::test()` rather than `$this->get('/perpanjangan')`: `routes/
- * web.php` is a shared file; the route, its name, and its HTTP status are
- * NOT TESTED here.
+ * `Livewire::test()` rather than `$this->get('/perpanjangan')` for every test
+ * above: `routes/web.php` is a shared file; the route, its name, and its HTTP
+ * status are NOT TESTED by those. The one exception is
+ * `test_bottom_nav_renders_with_perpanjangan_active()` below, which makes a
+ * real `$this->get('/perpanjangan')` request because the bottom nav lives in
+ * the shared layout, not in `RenewalStart` itself — `Livewire::test()` never
+ * renders `layouts/app.blade.php`, so there is no way to assert the nav's
+ * markup without a real HTTP request. That request is also why `setUp()`
+ * needed `withoutVite()` added: it renders `layouts/app.blade.php`'s
+ * `@vite(...)` directive, which the other, `Livewire::test()`-only tests in
+ * this file never reach.
  */
 final class RenewalStartTest extends TestCase
 {
