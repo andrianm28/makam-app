@@ -1345,21 +1345,21 @@ Selected measured ratios (full output above):
 
 | Pair | Ratio | Min |
 |---|---|---|
-| body text `neutral-700` on white | **9.53** | 4.5 |
-| muted `neutral-600` on white | **6.63** | 4.5 |
-| placeholder `neutral-500` on white | **5.06** | 4.5 |
-| white on `primary-600` (Forest, primary button) | **10.08** | 4.5 |
-| white on `success-600` (teal, §1.2(e)) | **6.03** | 4.5 |
-| white on `warning-600` | **5.05** | 4.5 |
-| white on `danger-600` (tuned, ADR-0034) | **7.34** | 4.5 |
-| white on `info-600` | **7.66** | 4.5 |
-| badge `*-800` on `*-100` (all six families) | **7.25 – 11.60** | 4.5 |
-| link `primary-600` on white | **10.08** | 4.5 |
-| `border-interactive` on white / page / warm | **3.56 / 3.24 / 3.31** | 3.0 |
-| focus ring `primary-600` on white | **10.25** | 3.0 |
-| inverse focus ring `primary-300` on `primary-600` | **4.42** | 3.0 |
-| white on `surface-inverse` (footer) | **16.36** | 4.5 |
-| disabled text `neutral-500` on `neutral-100` | **3.96** | 3.0 |
+| body text `neutral-700` on white | **8.72** | 4.5 |
+| muted `neutral-600` on white | **6.29** | 4.5 |
+| placeholder `neutral-500` on white | **4.61** | 4.5 |
+| white on `primary-600` (FFI blue, primary button) | **10.10** | 4.5 |
+| white on `success-600` | **6.17** | 4.5 |
+| white on `warning-600` | **6.85** | 4.5 |
+| white on `danger-600` | **5.48** | 4.5 |
+| white on `info-600` | **9.03** | 4.5 |
+| badge `*-800` on `*-100` (all six families) | **7.20 – 11.42** | 4.5 |
+| link `primary-600` on white | **10.10** | 4.5 |
+| `border-interactive` on white / page / warm | **3.59 / 3.30 / 3.17** | 3.0 |
+| focus ring `primary-600` on white | **10.10** | 3.0 |
+| inverse focus ring `primary-300` on `primary-600` | **4.17** | 3.0 |
+| white on `surface-inverse` (footer) | **16.40** | 4.5 |
+| disabled text `neutral-500` on `neutral-100` | **3.90** | 3.0 |
 
 **Four findings from that verification worth keeping visible:**
 
@@ -1367,6 +1367,11 @@ Selected measured ratios (full output above):
 2. `neutral-300` (1.71:1) and `neutral-400` (2.67:1) **both fail WCAG 1.4.11** as input borders. This is why `--color-neutral-450` (`#7F8787`, 3.67:1) exists and why `--mk-border-interactive` is mandatory for control boundaries. `neutral-200`/`300` remain valid for **decorative** dividers only, where 1.4.11 does not apply.
 3. **Danger's hue was tuned −11° when Earth replaced Petrol as `primary` (ADR-0034 D4).** Earth's hue (≈26°) sits only ≈24° from the pre-existing danger hue (≈3°) — below the verifier's `HUE_MIN_SEPARATION = 30.0°` for the `primary`/`success`/`info`/`danger` status families. Per §9.4 ("fix the token, never the assertion"), every danger shade's hue was rotated −11° (lightness/saturation held), moving 600 from `#A32A24` (hue 3°) to `#A32435` (measured hue **352.0°**). Measured primary/danger separation after the tune: **≈34.2°** (`|26.2 − 352.0| = 325.8`, `360 − 325.8 = 34.2`), clearing the 30° floor. The OQ-12 hue refresh moved primary from 26.1° to 26.2° — negligible drift, the 30° floor still clears by the same margin.
 4. **`primary-500` carries only a thin AA margin as a white-text fill — do not use it for that.** Measured **4.73:1**, barely above the 4.5:1 body-text floor (versus `primary-600`'s comfortable 10.25:1). The verifier only asserts the large-text 3.0 minimum for this pair (see `verify-contrast.py`'s own pairing), which is why it shows `(large only)` above — but the number is close enough to the normal-text floor that a slightly different rendering environment or sub-pixel AA could tip it under 4.5:1. Treat `500` as a mid-ramp surface/decorative swatch, not a button or badge fill; fills stay on `600` (§3.1).
+
+(Updated 23 Sep 2026, ADR-0043: `primary-500` white-text is now 4.57:1
+(large-text only, same as before), `primary-600` is 10.10:1 — see the table
+above. The underlying rule is unchanged: never use `500` as a text-bearing
+fill.)
 
 **Re-run this script in CI on every colour change** (§9.5).
 
