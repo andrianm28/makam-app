@@ -304,7 +304,147 @@
                 Lihat semua TPU &amp; TPS
             </a>
         </p>
+        {{-- Stage 3 ticket 03 — the three PRD-required secondary CTAs
+             (design doc §4.2), same placement/visual-weight pattern as the
+             "Lihat semua TPU & TPS" link directly above (plain text link,
+             never inside <x-mk.hero>, which structurally supports no more
+             than its one primary CTA).
+
+             Wakaf Tanah has no real route anywhere in this codebase —
+             confirmed by a repo-wide search before writing this, not
+             assumed. Rather than invent a URL (forbidden by this ticket's
+             own text) or silently drop the requirement, this follows
+             header.blade.php's own established "honest disabled control"
+             precedent for a destination that doesn't exist yet (see that
+             file's $akunAvailable handling) — real, undecided gap, named
+             here and in this ticket's PR, not fabricated. --}}
+        <p class="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-center text-sm">
+            <a href="{{ route('perpanjangan.index') }}" class="font-medium text-primary-700 underline underline-offset-2">
+                Perpanjang Makam
+            </a>
+            <a href="{{ route('marketplace.index') }}" class="font-medium text-primary-700 underline underline-offset-2">
+                Layanan Pemakaman
+            </a>
+            <span class="text-neutral-400" aria-disabled="true" title="Segera hadir">
+                Wakaf Tanah
+            </span>
+        </p>
     </section>
+
+    {{-- Stage 3 ticket 03 — "TPU & TPS dengan ketersediaan terbatas"
+         (urgent-availability). Hidden entirely when nothing qualifies or
+         the query fails — same §6.2 empty-state / §6.3 provider-
+         unavailable discipline as every other real-data section on this
+         page. Card partial mirrors the existing featured-cemeteries
+         section below verbatim (same presenter calls, same badge/price
+         block) — that section is this codebase's own already-FFI-restyled
+         (Stage 1 palette + Stage 2 component library) card treatment, so
+         reusing it here is fidelity, not a shortcut. Ticket 04 relocates
+         "lokasi terverifikasi"/"harga transparan" into a later section;
+         this one does not carry those badges. --}}
+    @unless ($urgentAvailabilityCemeteriesUnavailable || $urgentAvailabilityCemeteries->isEmpty())
+        <section aria-labelledby="urgent-availability-heading" class="mx-auto max-w-content px-4 py-section md:px-6 lg:px-8 lg:py-section-lg">
+            <h2 id="urgent-availability-heading" class="mb-6 text-center text-2xl font-semibold text-neutral-900">
+                TPU &amp; TPS dengan Ketersediaan Terbatas
+            </h2>
+            <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-3" aria-label="TPU dan TPS dengan ketersediaan terbatas">
+                @foreach ($urgentAvailabilityCemeteries as $cemetery)
+                    @php
+                        $priceRange = CemeteryPresenter::priceRange($cemetery);
+                        $priceAttribution = CemeteryPresenter::priceAttribution($cemetery);
+                        $photoUrl = CemeteryPresenter::photoUrl($cemetery);
+                    @endphp
+                    <li wire:key="urgent-cemetery-{{ $cemetery->id }}">
+                        <x-mk.card
+                            as="a"
+                            interactive
+                            :href="route('cemeteries.show', ['cemeterySlug' => $cemetery->slug])"
+                            class="h-full touch-target"
+                        >
+                            <x-slot:media>
+                                @if ($photoUrl)
+                                    <img
+                                        src="{{ $photoUrl }}"
+                                        alt="Foto {{ $cemetery->name }}"
+                                        loading="lazy"
+                                        class="h-40 w-full object-cover"
+                                    >
+                                @else
+                                    <div class="flex h-40 w-full items-center justify-center bg-neutral-100">
+                                        <span class="text-sm text-neutral-600">Foto belum tersedia</span>
+                                    </div>
+                                @endif
+                            </x-slot:media>
+                            <div class="space-y-2">
+                                <x-mk.badge intent="pending">Ketersediaan Terbatas</x-mk.badge>
+                                <h3 class="text-lg font-semibold text-neutral-900">{{ $cemetery->name }}</h3>
+                                <p class="text-sm text-neutral-600">{{ $cemetery->address }}</p>
+                                @if ($priceRange !== null && $priceAttribution !== null)
+                                    <p class="pt-1 text-base font-medium text-neutral-900">{{ $priceRange }}</p>
+                                    <p class="text-sm text-[var(--mk-text-muted)]">
+                                        Sumber: {{ $priceAttribution['source'] }}@if ($priceAttribution['effective']) &middot; per {{ $priceAttribution['effective'] }}@endif
+                                    </p>
+                                @endif
+                            </div>
+                        </x-mk.card>
+                    </li>
+                @endforeach
+            </ul>
+        </section>
+    @endunless
+
+    {{-- Stage 3 ticket 03 — "TPU & TPS terbaru" (newest published). Same
+         empty/failure discipline and card partial as the section above. --}}
+    @unless ($newestPublishedCemeteriesUnavailable || $newestPublishedCemeteries->isEmpty())
+        <section aria-labelledby="newest-published-heading" class="mx-auto max-w-content px-4 py-section md:px-6 lg:px-8 lg:py-section-lg">
+            <h2 id="newest-published-heading" class="mb-6 text-center text-2xl font-semibold text-neutral-900">
+                TPU &amp; TPS Terbaru
+            </h2>
+            <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-3" aria-label="TPU dan TPS terbaru">
+                @foreach ($newestPublishedCemeteries as $cemetery)
+                    @php
+                        $priceRange = CemeteryPresenter::priceRange($cemetery);
+                        $priceAttribution = CemeteryPresenter::priceAttribution($cemetery);
+                        $photoUrl = CemeteryPresenter::photoUrl($cemetery);
+                    @endphp
+                    <li wire:key="newest-cemetery-{{ $cemetery->id }}">
+                        <x-mk.card
+                            as="a"
+                            interactive
+                            :href="route('cemeteries.show', ['cemeterySlug' => $cemetery->slug])"
+                            class="h-full touch-target"
+                        >
+                            <x-slot:media>
+                                @if ($photoUrl)
+                                    <img
+                                        src="{{ $photoUrl }}"
+                                        alt="Foto {{ $cemetery->name }}"
+                                        loading="lazy"
+                                        class="h-40 w-full object-cover"
+                                    >
+                                @else
+                                    <div class="flex h-40 w-full items-center justify-center bg-neutral-100">
+                                        <span class="text-sm text-neutral-600">Foto belum tersedia</span>
+                                    </div>
+                                @endif
+                            </x-slot:media>
+                            <div class="space-y-2">
+                                <x-mk.badge intent="neutral">{{ $cemetery->type }}</x-mk.badge>
+                                <h3 class="text-lg font-semibold text-neutral-900">{{ $cemetery->name }}</h3>
+                                <p class="text-sm text-neutral-600">{{ $cemetery->address }}</p>
+                                @if ($priceRange !== null && $priceAttribution !== null)
+                                    <p class="pt-1 text-base font-medium text-neutral-900">{{ $priceRange }}</p>
+                                    <p class="text-sm text-[var(--mk-text-muted)]">
+                                        Sumber: {{ $priceAttribution['source'] }}@if ($priceAttribution['effective']) &middot; per {{ $priceAttribution['effective'] }}@endif
+                                    </p>
+                                @endif
+                            </div>
+                        </x-mk.card>
+                    </li>
+                @endforeach
+            </ul>
+        </section>
+    @endunless
 
     {{-- Section 4: Cara kerja singkat — a simplified summary of
          mvp-scope.md §2's real nine booking steps, not an invented flow.
