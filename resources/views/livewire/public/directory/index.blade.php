@@ -275,7 +275,7 @@
             aria-busy="true"
         >
             @for ($i = 0; $i < 3; $i++)
-                <div class="h-72 rounded-lg bg-[var(--mk-skeleton-base)] animate-pulse"></div>
+                <x-mk.skeleton shape="card" announce="" />
             @endfor
             <span class="sr-only">Memuat daftar lokasi…</span>
         </div>
