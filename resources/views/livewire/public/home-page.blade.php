@@ -1,18 +1,30 @@
 {{--
     resources/views/livewire/public/home-page.blade.php
 
-    App\Livewire\Public\HomePage's view — `/`. Nine-section order below is
-    NORMATIVE (information-architecture.md §3, design-system.md §4.5 — do
-    not reorder, do not drop a section silently):
+    App\Livewire\Public\HomePage's view — `/`. IA §3's nine-section list
+    below is still the NORMATIVE floor (do not drop any of its content
+    silently), but Stage 3 (design doc §4.1) restructured the body between
+    Section 3 and Section 7 into FFI's card-grid treatment. Real,
+    as-shipped order after Stage 3 tickets 03+04:
       1. Header/navigation      -> rendered by layouts/app.blade.php, not here
       2. Hero + CTA "Pesan Makam"
-      3. Four service cards, stakeholder order (AC1)
-      4. Cara kerja singkat
-      5. TPU/TPS unggulan       -> see below, REVERSED 26 Jul 2026
-      6. Trust/safety
-      7. FAQ highlights
+      3. Four service cards, stakeholder order (AC1), + 3 secondary CTAs (ticket 03)
+      -. TPU/TPS dengan ketersediaan terbatas (ticket 03 — replaces old "Cara kerja singkat" position)
+      -. TPU/TPS terbaru (ticket 03)
+      -. TPU/TPS terverifikasi (ticket 04 — carries IA §3 item 6's trust/safety
+         substance forward, plus the PRD's "lokasi terverifikasi"/"harga
+         transparan" trust badges; replaces old "TPU/TPS unggulan" + "Trust/
+         safety" positions)
+      7. FAQ highlights (now also carries IA §3 item 4's "Cara kerja singkat"
+         substance forward, condensed, per ticket 04)
       8. Customer-service CTA
       9. Footer                 -> rendered by layouts/app.blade.php, not here
+    IA §3's original items 4 ("Cara kerja singkat") and 6 ("Trust/safety")
+    are no longer their own sections — their substance is redistributed
+    into FAQ highlights and the new verified section respectively (ticket
+    04's own documented decision), not deleted. IA §3 item 5 ("TPU/TPS
+    unggulan") is likewise redistributed across the three new TPU/TPS
+    sections above.
 
     --- ADDED 5 Sep 2026: plot-availability preview, between Section 2 and
     Section 3 (not renumbered above) ---
@@ -29,52 +41,44 @@
     highest-traffic page. See this section's own inline comment below for
     the placement reasoning.
 
-    --- ADDED 26 Aug 2026: "Kehangatan Keluarga" supporting photo section,
-    between 6 and 7 (not renumbered above) ---
+    --- ADDED 26 Aug 2026: "Kehangatan Keluarga" supporting photo section
+    (not renumbered above) ---
     This is deliberately NOT a tenth entry in the NORMATIVE nine-section
     list above — it is not part of information-architecture.md §3's
     contract, so nothing there needed to change. It is new, project-owner-
     approved homepage content: a second, different real photo (warm, joyful
     family) reinforcing the "lighter, younger, warmer" brand direction
     alongside the existing location-focused hero (Section 2, which stays
-    untouched). Placed directly after Section 6 (Trust/safety) because it
+    untouched). Placed directly after the verified-cemeteries section
+    (Stage 3 ticket 04, itself carrying forward the old Section 6
+    "Trust/safety" this note originally referenced) because it
     continues the same reassurance beat with a human visual, right before
     the page moves into FAQ mode — see that section's own comment below for
     the full reasoning and image sourcing.
 
-    --- Section 5 now renders — reversed from its original "deliberately
-    absent" state ---
-    App\Livewire\Public\HomePage::render()'s own doc block has the full
-    reasoning trail. Short version: the ten Cemetery rows here were
-    fictional seed fixtures with NULL price/photo/coordinates when this
-    section was first built, so showing them as "featured" would have
-    misrepresented fabricated content as real — design-system.md §6.2's
-    required-states table's "hide the section entirely" row governed that
-    state. The user has since explicitly authorized clearly-fictional
-    DUMMY price/photo/coordinate data for full public display on
-    dev.makam.co.id (see `App\Support\ContactInfo`'s own doc block for the
-    identical authorization trail, and `2026_07_26_210000_backfill_dummy_
-    map_price_and_photo_for_seeded_cemeteries.php` for the data itself), so
-    that "hide entirely" state is no longer the true one — it remains coded
-    below for the case where every cemetery is later unpublished, but is
-    not reachable against today's seed data.
+    --- Real Cemetery data renders on this page, using DUMMY price/photo/
+    coordinate values — same authorization trail for all three real-data
+    sections below (urgent-availability, newest-published, verified) ---
+    The user has explicitly authorized clearly-fictional DUMMY price/
+    photo/coordinate data for full public display on dev.makam.co.id (see
+    `App\Support\ContactInfo`'s own doc block for the identical
+    authorization trail, and `2026_07_26_210000_backfill_dummy_map_
+    price_and_photo_for_seeded_cemeteries.php` for the data itself) — real
+    Cemetery rows, dummy field values, not a fabrication risk. Each
+    section's own empty/failure handling still governs the case where
+    nothing qualifies (design-system.md §6.2's "hide the section
+    entirely" row) or the query fails (§6.3 provider-unavailable).
 
-    UPDATED 19 Aug 2026 (homepage visual refresh) — cards are now real
-    links. `cemetery-directory-and-availability` (S4-T6) has since shipped
-    a real detail route (`cemeteries.show`,
+    Cards in these sections are real links (`cemeteries.show`,
     resources/views/livewire/public/directory/index.blade.php renders the
-    identical `<x-mk.card as="a" interactive>` pattern this section now
-    reuses), so the "no route to link to" reasoning that justified
-    NOT-a-link cards no longer holds. Price now renders through
-    `CemeteryPresenter::priceRange()`/`priceAttribution()` (same presenter
-    the directory page uses) rather than a bare `Rp {min}-{max}` string —
-    the previous version rendered a fee figure with no source, which
-    design-system.md §2.3's DO ("show the source and last-updated time on
-    any fee figure") requires and the directory page already did
-    correctly; the homepage was the one place still missing it. The
-    availability badge the directory page shows is deliberately still
-    omitted here — it needs a per-row capability-profile lookup, not worth
-    the homepage's query budget for six featured cards.
+    identical `<x-mk.card as="a" interactive>` pattern reused here) and
+    price renders through `CemeteryPresenter::priceRange()`/
+    `priceAttribution()` (same presenter the directory page uses), never a
+    bare figure with no source — design-system.md §2.3's DO ("show the
+    source and last-updated time on any fee figure"). The availability
+    badge the directory page shows is deliberately still omitted here —
+    it needs a per-row capability-profile lookup, not worth the
+    homepage's query budget for six cards per section.
 
     --- Section 9 (footer) is NOT re-rendered here ---
     design-system.md §4.1's page-shell diagram places the footer as a
@@ -335,8 +339,8 @@
          (urgent-availability). Hidden entirely when nothing qualifies or
          the query fails — same §6.2 empty-state / §6.3 provider-
          unavailable discipline as every other real-data section on this
-         page. Card partial mirrors the existing featured-cemeteries
-         section below verbatim (same presenter calls, same badge/price
+         page. Card partial mirrors the verified-cemeteries section
+         below verbatim (same presenter calls, same badge/price
          block) — that section is this codebase's own already-FFI-restyled
          (Stage 1 palette + Stage 2 component library) card treatment, so
          reusing it here is fidelity, not a shortcut. Ticket 04 relocates
@@ -446,170 +450,101 @@
         </section>
     @endunless
 
-    {{-- Section 4: Cara kerja singkat — a simplified summary of
-         mvp-scope.md §2's real nine booking steps, not an invented flow.
+    {{-- Stage 3 ticket 04 — "TPU & TPS Terverifikasi" (featured/verified).
+         Replaces the old "Cara Kerja" (Section 4), "TPU/TPS Unggulan"
+         (old Section 5), and "Trust/safety" (old Section 6) sections —
+         their content is redistributed, not deleted: this section's intro
+         paragraph carries the old trust/safety points' substance (privacy,
+         verified payment, honesty about limitations); the FAQ highlights
+         section below carries the old Cara Kerja steps' substance.
 
-         UPDATED 19 Aug 2026 — full-bleed bg-secondary-50 band (the Leaf
-         tint moved here from the trust band, section 6, which now
-         correctly uses bg-primary-50 — see that section's own comment for
-         why).
-         UPDATED 14 Sep 2026 (ADR-0040) — that same colour is now written
-         as `surface-quiet`, the named semantic token, instead of the raw
-         `bg-secondary-50` primitive tokens.css §2's header forbids
-         reaching for. Identical pixels; this band is the first
-         alternation point in the page's page/quiet/page/warm/page/quiet/
-         page order. The step numerals changed tone `leaf` -> `brand`: they
-         sit on white cards, not on this band, and they are four of the
-         elements ADR-0040 adds to the one element that previously carried
-         a brand FILL rather than brand ink.
-         Each step is a real <x-mk.card> (non-interactive — nothing
-         to click here) instead of a hand-rolled bordered <li>, per
-         design-system.md §9.2 MUST #2 ("extend primitives rather than
-         forking"). The numeral moves into <x-mk.icon-medallion>'s default
-         slot rather than an icon — a number is the correct affordance for
-         an ordered <ol> item; see icon-medallion.blade.php's own doc block
-         for why Cara Kerja specifically does not use icons. --}}
-    <section aria-labelledby="how-it-works-heading" class="surface-quiet py-section lg:py-section-lg">
+         Carries the PRD trust element into the first screenful (design
+         doc §7): "lokasi terverifikasi" and "harga transparan". "Lokasi
+         terverifikasi" is HomePage::render()'s own documented definition —
+         a real, existing `registry_mode = AUTHORITATIVE` capability
+         profile, not a new rule invented here. Against today's real seed
+         data no cemetery currently qualifies (see that method's own doc
+         comment) — but unlike the other real-data sections on this page,
+         the section ITSELF (heading + reassurance intro) is NOT hidden in
+         that case: this section replaces the old, always-visible
+         "Trust/safety" section, and a homepage test already expects that
+         reassurance band to always render (test_homepage_sections_
+         alternate_surfaces_without_divider_lines). Only the CARD GRID
+         below — the actual real-data list — follows the §6.2 empty-state
+         / §6.3 provider-unavailable discipline and hides when nothing
+         qualifies or the query fails. --}}
+    <section aria-labelledby="verified-heading" class="surface-warm py-section lg:py-section-lg">
         <div class="mx-auto max-w-content px-4 md:px-6 lg:px-8">
-            <h2 id="how-it-works-heading" class="mb-6 text-center text-2xl font-semibold text-neutral-900">
-                Cara Kerja
+            <h2 id="verified-heading" class="mb-2 text-center text-2xl font-semibold text-neutral-900">
+                TPU &amp; TPS Terverifikasi
             </h2>
-            <ol class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-4">
-                @foreach ([
-                    ['title' => 'Pilih lokasi & jenis layanan', 'body' => 'Pilih kota, TPU/TPS, dan jenis layanan: makam baru, makam tumpang, Urgent, atau Pre-Need.'],
-                    ['title' => 'Lengkapi data & dokumen', 'body' => 'Isi data pemesan dan almarhum, unggah dokumen yang diperlukan secara privat dan aman.'],
-                    ['title' => 'Selesaikan pembayaran', 'body' => 'Bayar online bila tersedia, atau ikuti instruksi pembayaran manual.'],
-                    ['title' => 'Terima konfirmasi', 'body' => 'Dapatkan nomor pesanan, status, dan langkah selanjutnya.'],
-                ] as $index => $step)
-                    <li wire:key="how-it-works-{{ $index }}">
-                        <x-mk.card class="h-full">
-                            <div class="space-y-2">
-                                <x-mk.icon-medallion tone="brand">{{ $index + 1 }}</x-mk.icon-medallion>
-                                <h3 class="text-base font-semibold text-neutral-900">{{ $step['title'] }}</h3>
-                                <p class="text-sm text-neutral-600">{{ $step['body'] }}</p>
-                            </div>
-                        </x-mk.card>
-                    </li>
-                @endforeach
-            </ol>
+            {{-- Redistributed from the old "Trust/safety" section
+                 (privacy, verified payment, honesty about
+                 limitations) — condensed into one intro sentence
+                 rather than the original 3-card grid, since this
+                 section's own job is the card grid below. Always
+                 renders, independent of the card grid's own data
+                 availability (see this section's own top comment). --}}
+            <p class="mx-auto mb-6 max-w-prose text-center text-base text-neutral-700">
+                Dokumen Anda disimpan privat dan diperiksa sebelum diakses siapa pun, pembayaran baru dianggap
+                lunas setelah benar-benar terverifikasi oleh tim kami, dan kami tidak mengarang data atau
+                ketersediaan yang belum dapat kami pastikan.
+            </p>
+            @unless ($verifiedCemeteriesUnavailable || $verifiedCemeteries->isEmpty())
+                <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-3" aria-label="TPU dan TPS terverifikasi">
+                    @foreach ($verifiedCemeteries as $cemetery)
+                        @php
+                            $priceRange = CemeteryPresenter::priceRange($cemetery);
+                            $priceAttribution = CemeteryPresenter::priceAttribution($cemetery);
+                            $photoUrl = CemeteryPresenter::photoUrl($cemetery);
+                        @endphp
+                        <li wire:key="verified-cemetery-{{ $cemetery->id }}">
+                            <x-mk.card
+                                as="a"
+                                interactive
+                                :href="route('cemeteries.show', ['cemeterySlug' => $cemetery->slug])"
+                                class="h-full touch-target"
+                            >
+                                <x-slot:media>
+                                    @if ($photoUrl)
+                                        <img
+                                            src="{{ $photoUrl }}"
+                                            alt="Foto {{ $cemetery->name }}"
+                                            loading="lazy"
+                                            class="h-40 w-full object-cover"
+                                        >
+                                    @else
+                                        <div class="flex h-40 w-full items-center justify-center bg-neutral-100">
+                                            <span class="text-sm text-neutral-600">Foto belum tersedia</span>
+                                        </div>
+                                    @endif
+                                </x-slot:media>
+                                <div class="space-y-2">
+                                    <x-mk.badge intent="success">Lokasi Terverifikasi</x-mk.badge>
+                                    <h3 class="text-lg font-semibold text-neutral-900">{{ $cemetery->name }}</h3>
+                                    <p class="text-sm text-neutral-600">{{ $cemetery->address }}</p>
+                                    @if ($priceRange !== null && $priceAttribution !== null)
+                                        <p class="pt-1 text-base font-medium text-neutral-900">{{ $priceRange }}</p>
+                                        <p class="text-sm text-[var(--mk-text-muted)]">
+                                            Harga Transparan &middot; Sumber: {{ $priceAttribution['source'] }}@if ($priceAttribution['effective']) &middot; per {{ $priceAttribution['effective'] }}@endif
+                                        </p>
+                                    @endif
+                                </div>
+                            </x-mk.card>
+                        </li>
+                    @endforeach
+                </ul>
+            @endunless
         </div>
     </section>
 
-    {{-- Section 5: TPU/TPS unggulan — HomePage::render()'s own doc block
-         has the full "why this now renders" reasoning; the top-of-file doc
-         block above has the "why cards are real links now" reasoning
-         (UPDATED 19 Aug 2026). §6.2 provider-unavailable / truly-empty
-         degrade the same way FAQ highlights does below: hide the section
-         entirely rather than an empty shell, per design-system.md §6.2's
-         own required-states row for this section. --}}
-    @unless ($featuredCemeteriesUnavailable || $featuredCemeteries->isEmpty())
-        <section aria-labelledby="featured-cemeteries-heading" class="mx-auto max-w-content px-4 py-section md:px-6 lg:px-8 lg:py-section-lg">
-            <h2 id="featured-cemeteries-heading" class="mb-6 text-center text-2xl font-semibold text-neutral-900">
-                TPU &amp; TPS Unggulan
-            </h2>
-            <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-3" aria-label="TPU dan TPS tersedia">
-                @foreach ($featuredCemeteries as $cemetery)
-                    @php
-                        $priceRange = CemeteryPresenter::priceRange($cemetery);
-                        $priceAttribution = CemeteryPresenter::priceAttribution($cemetery);
-                        $photoUrl = CemeteryPresenter::photoUrl($cemetery);
-                    @endphp
-                    <li wire:key="featured-cemetery-{{ $cemetery->id }}">
-                        <x-mk.card
-                            as="a"
-                            interactive
-                            :href="route('cemeteries.show', ['cemeterySlug' => $cemetery->slug])"
-                            class="h-full touch-target"
-                        >
-                            <x-slot:media>
-                                @if ($photoUrl)
-                                    <img
-                                        src="{{ $photoUrl }}"
-                                        alt="Foto {{ $cemetery->name }}"
-                                        loading="lazy"
-                                        class="h-40 w-full object-cover"
-                                    >
-                                @else
-                                    {{-- Same labelled-placeholder pattern
-                                         directory/index.blade.php uses — a
-                                         real state, not an edge case. --}}
-                                    <div class="flex h-40 w-full items-center justify-center bg-neutral-100">
-                                        <span class="text-sm text-neutral-600">Foto belum tersedia</span>
-                                    </div>
-                                @endif
-                            </x-slot:media>
-                            <div class="space-y-2">
-                                <x-mk.badge intent="neutral">{{ $cemetery->type }}</x-mk.badge>
-                                <h3 class="text-lg font-semibold text-neutral-900">{{ $cemetery->name }}</h3>
-                                <p class="text-sm text-neutral-600">{{ $cemetery->address }}</p>
-                                {{-- Price WITH source, one block so a figure
-                                     can never appear without its
-                                     attribution (design-system.md §2.3) —
-                                     same presenter, same rule the directory
-                                     page already follows. --}}
-                                @if ($priceRange !== null && $priceAttribution !== null)
-                                    <p class="pt-1 text-base font-medium text-neutral-900">{{ $priceRange }}</p>
-                                    <p class="text-sm text-[var(--mk-text-muted)]">
-                                        Sumber: {{ $priceAttribution['source'] }}@if ($priceAttribution['effective']) &middot; per {{ $priceAttribution['effective'] }}@endif
-                                    </p>
-                                @endif
-                            </div>
-                        </x-mk.card>
-                    </li>
-                @endforeach
-            </ul>
-        </section>
-    @endunless
-
-    {{-- Section 6: Trust/safety — surface-warm (--mk-surface-warm ->
-         --color-primary-50 -> bg-primary-50, already a generated Tailwind
-         utility, no arbitrary value needed). Full-bleed tint with a
-         contained inner wrapper, the same pattern the footer below uses.
-
-         FIXED 19 Aug 2026: this section previously used bg-secondary-50 on
-         a stale comment's claim that `--mk-surface-warm` mapped there.
-         Since ADR-0034, `--mk-surface-warm` maps to `--color-primary-50`
-         (Earth, not Leaf) — design-system.md §2.3's DO and §4.5 item 6
-         both say explicitly to use it for trust/reassurance sections. The
-         Leaf tint moved to the Cara Kerja band (section 4) instead, which
-         is what actually produces the page's warm/leaf/warm rhythm.
-
-         UPDATED 14 Sep 2026 (ADR-0040): `bg-primary-50` becomes
-         `surface-warm`. Identical pixels — `--mk-surface-warm` has mapped
-         to `--color-primary-50` since ADR-0034; what it lacked was a
-         utility, which is exactly why this call site wrote the primitive.
-         §4.5 item 6 names the TOKEN, so the token is now what the markup
-         says. The `secondary` medallions below keep their tint: with the
-         Cara Kerja numerals now `brand`, both tint tones remain in real use and the
-         trust points keep the quieter of the two, which is the right
-         weight for a reassurance section. --}}
-    <section aria-labelledby="trust-heading" class="surface-warm py-section lg:py-section-lg">
-        <div class="mx-auto max-w-content px-4 md:px-6 lg:px-8">
-            <h2 id="trust-heading" class="mb-6 text-center text-2xl font-semibold text-neutral-900">
-                Kenapa Makam.co.id
-            </h2>
-            <ul class="grid grid-cols-1 gap-4 sm:grid-cols-3 md:gap-6">
-                @foreach ([
-                    ['icon' => 'shield-check', 'title' => 'Dokumen privat & aman', 'body' => 'Dokumen seperti KTP, KK, dan surat keterangan kematian disimpan secara privat dan diperiksa sebelum dapat diakses siapa pun, termasuk tim kami.'],
-                    ['icon' => 'check-badge', 'title' => 'Pembayaran diverifikasi', 'body' => 'Status pesanan hanya berubah menjadi lunas setelah pembayaran benar-benar terverifikasi oleh tim kami — bukan otomatis saat Anda kembali dari halaman pembayaran.'],
-                    ['icon' => 'alert-circle', 'title' => 'Jujur soal keterbatasan', 'body' => 'Kami tidak mengarang data, tarif, atau ketersediaan yang belum dapat kami pastikan. Kami akan menyatakannya dengan jelas dan mengarahkan Anda ke customer service.'],
-                ] as $index => $point)
-                    <li wire:key="trust-point-{{ $index }}" class="flex flex-col items-start gap-2 text-left">
-                        <x-mk.icon-medallion :icon="$point['icon']" tone="secondary" />
-                        <h3 class="text-base font-semibold text-neutral-900">{{ $point['title'] }}</h3>
-                        <p class="text-sm text-neutral-700">{{ $point['body'] }}</p>
-                    </li>
-                @endforeach
-            </ul>
-        </div>
-    </section>
-
-    {{-- "Kehangatan Keluarga" — supporting photo section, between Sections
-         6 and 7 (see this file's top doc block, "ADDED 26 Aug 2026", for
-         why this is not a tenth NORMATIVE section). Reuses <x-mk.card>'s
+    {{-- "Kehangatan Keluarga" — supporting photo section, between the
+         verified-cemeteries section above and FAQ highlights below (see
+         this file's top doc block, "ADDED 26 Aug 2026", for why this is
+         not a tenth NORMATIVE section). Reuses <x-mk.card>'s
          existing `media` + padded-body slot pattern (design-system.md
-         §3.3, the same shape Section 5's featured-cemetery cards already
-         use above) rather than inventing a new layout — design-system.md
+         §3.3, the same shape the verified-cemetery cards above already
+         use) rather than inventing a new layout — design-system.md
          §9.2 MUST #2, "extend primitives rather than forking". Centered,
          single, non-interactive card (`padding="lg"`, no `href`, no
          `interactive`): informational only, nothing to click, so it reads
@@ -665,9 +600,18 @@
          the query succeeds but returns nothing. --}}
     <section aria-labelledby="faq-highlights-heading" class="surface-quiet py-section lg:py-section-lg">
         <div class="mx-auto max-w-content px-4 md:px-6 lg:px-8">
-            <h2 id="faq-highlights-heading" class="mb-6 text-center text-2xl font-semibold text-neutral-900">
+            <h2 id="faq-highlights-heading" class="mb-2 text-center text-2xl font-semibold text-neutral-900">
                 Pertanyaan yang Sering Diajukan
             </h2>
+            {{-- Stage 3 ticket 04 — redistributed from the old "Cara
+                 Kerja" section (pilih lokasi, lengkapi data, bayar, terima
+                 konfirmasi) — condensed into one intro sentence rather
+                 than the original 4-card breakdown, since this section's
+                 own job is the FAQ list below. --}}
+            <p class="mx-auto mb-6 max-w-prose text-center text-base text-neutral-700">
+                Prosesnya singkat: pilih lokasi dan jenis layanan, lengkapi data dan dokumen secara privat, selesaikan
+                pembayaran, lalu terima konfirmasi pesanan Anda.
+            </p>
 
             @if ($faqHighlightsUnavailable)
                 <x-mk.alert intent="pending" title="Pertanyaan populer sedang tidak tersedia" live="polite">
