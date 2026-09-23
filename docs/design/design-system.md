@@ -185,14 +185,14 @@ Never use an odd value. `p-[13px]` is a lint failure (§9.5).
 
 | Token | Stack | Where |
 |---|---|---|
-| `--font-sans` | Plus Jakarta Sans Variable → system fallback | Public site only. **Superseded, 26 Aug 2026 (explicit owner decision):** admin/vendor Filament panels no longer use this token or any custom font at all — see §8.3's updated note. Brand voice, including typography, is a public-surface concern only. |
-| `--font-display` | Plus Jakarta Sans Variable → system fallback | `h1`/`h2`, hero, header wordmark. **Face changed 16 Sep 2026 ([ADR-0041](../adr/0041-brand-guideline-2026-supersedes-adr-0034.md)):** the guideline gives Plus Jakarta Sans "website • app • social • corporate" — every surface this app has — so ONE family now does body and headings where Inter+Poppins did. It is variable, so heading weight costs no second file. Measured initial route payload (latin subset, woff2): **26.7 KB**, down from ≈56 KB (48 Inter + 8 Poppins) — half the §4.6 budget. `latin-ext` (21.2 KB) ships with its own `unicode-range` and never downloads for Indonesian. **Lora is NOT loaded**: the guideline scopes it to "emotional headline • quote • storytelling", surfaces that do not exist yet, and its 36.9 KB would put the payload at 63.6 KB — over budget, to render nothing (ADR-0041 OQ-B3). |
+| `--font-sans` | Inter Variable → system fallback | Public site only. **Superseded, 26 Aug 2026 (explicit owner decision):** admin/vendor Filament panels no longer use this token or any custom font at all — see §8.3's updated note. Brand voice, including typography, is a public-surface concern only. |
+| `--font-display` | Inter Variable → system fallback | `h1`/`h2`, hero, header wordmark. **Face changed 23 Sep 2026 ([ADR-0043](../adr/0043-ffi-full-visual-clone-supersedes-system-layer-only.md)):** FFI ships Inter as its single family for body and headings, replacing Plus Jakarta Sans. It is variable, so heading weight costs no second file — the "ONE family now does body and headings" structural rationale from the ADR-0041 rebase still applies, it just names Inter instead. **Font payload size is NOT MEASURED on this host** — the previous **26.7 KB** figure was specific to Plus Jakarta Sans and no longer applies; no npm build runs here to re-measure Inter (`docs/operations/ci-cd-and-release.md`), so §4.6's 60 KB budget is verified by CI's frontend job, not by this document. `latin-ext` ships with its own `unicode-range` and never downloads for Indonesian, same as before. **Lora is still NOT loaded**: it remains scoped to "emotional headline • quote • storytelling", surfaces that do not exist yet — ADR-0043 maintains this constraint without restating the old, now-inapplicable KB math. |
 | `--font-document` | Source Serif 4 / Lora → Georgia | Certificate/agreement/invoice documents **only**, consumed by `print.css` (§8.5) once it is built. Holds the value `--font-display` carried before ADR-0034, verbatim — added specifically so a document can never silently inherit the new Poppins brand face. |
 | `--font-mono` | JetBrains Mono → system | Order reference, payment reference, audit IDs |
 
 **Self-hosting is mandatory.** No Google Fonts, no CDN. Two reasons, both from existing baselines: staging is `noindex` and access-restricted ([`security-baseline.md`](../security/security-baseline.md) §Non-production isolation), and a third-party font request leaks the visitor's IP and referrer on pages where that visitor is arranging a funeral or uploading a death certificate. Subset to `latin` + `latin-ext`; Indonesian needs no extra ranges.
 
-`--font-display` (Plus Jakarta Sans, the same family as `--font-sans` since ADR-0041) ships site-wide as part of `app.css` (§4.6 budget covers it as part of the initial route payload) and applies only to `h1`/`h2`; it is never used on the booking wizard's own body copy. `--font-document` is a separate, unrelated stack reserved for printed documents (§8.5) — it does not load on any public route today because `print.css` does not exist yet.
+`--font-display` (Inter, the same family as `--font-sans` since ADR-0043) ships site-wide as part of `app.css` (§4.6 budget covers it as part of the initial route payload) and applies only to `h1`/`h2`; it is never used on the booking wizard's own body copy. `--font-document` is a separate, unrelated stack reserved for printed documents (§8.5) — it does not load on any public route today because `print.css` does not exist yet.
 
 **Scale** (mobile-first; 16 px root; `rem`-based so browser zoom works)
 
@@ -503,7 +503,7 @@ progress-tracks). `earth` → `bg-primary-100 text-primary-800`. `leaf` → `bg-
 text-secondary-800` — a surface-tint usage already inside the Leaf cage (§1.2(b), §9.2 MUST-NOT
 #7), not an exception to it. Both pairs are asserted in `docs/design/verify-contrast.py`.
 
-**`brand` — added 14 Sep 2026, [ADR-0040](../adr/0040-add-surface-quiet-and-widen-the-brand-field.md) D3.** `brand` → `bg-primary-600 text-neutral-0`: a genuine Earth **fill**, not a tint like the other two — the same fill `<x-mk.button variant="primary">` uses, at medallion scale. It exists because a survey of the live homepage found the brand colour filling exactly one element on the entire page while appearing 46 times as text. `white on primary-600` is already asserted in `verify-contrast.py` (10.25:1), so no new pair was needed. This tone does **not** loosen the adjacency rule below — a filled tile reads louder than a tint, so it applies more strongly. It is also not a precedent for a `secondary` fill tone: Leaf stays caged by §1.2(b) and §9.2 MUST NOT 7, and a Leaf medallion fill remains forbidden.
+**`brand` — added 14 Sep 2026, [ADR-0040](../adr/0040-add-surface-quiet-and-widen-the-brand-field.md) D3.** `brand` → `bg-primary-600 text-neutral-0`: a genuine Earth **fill**, not a tint like the other two — the same fill `<x-mk.button variant="primary">` uses, at medallion scale. It exists because a survey of the live homepage found the brand colour filling exactly one element on the entire page while appearing 46 times as text. `white on primary-600` is already asserted in `verify-contrast.py` (10.10:1), so no new pair was needed. This tone does **not** loosen the adjacency rule below — a filled tile reads louder than a tint, so it applies more strongly. It is also not a precedent for a `secondary` fill tone: Leaf stays caged by §1.2(b) and §9.2 MUST NOT 7, and a Leaf medallion fill remains forbidden.
 
 Always `aria-hidden="true"` — decorative only, never a substitute for a real text label (same
 rule `<x-mk.badge>`'s `dot` prop follows). Never placed adjacent to order/payment/availability
@@ -1054,7 +1054,7 @@ Derived from [`performance-and-capacity.md`](../operations/performance-and-capac
 |---|---|
 | CSS shipped (gzip) | ≤ 45 KB |
 | JS shipped, public pages (gzip) | ≤ 60 KB (Livewire + Alpine + app) |
-| Font payload, initial route | ≤ 60 KB (Plus Jakarta Sans variable, latin subset, `woff2`, `font-display: swap`) — currently **26.7 KB**, ADR-0041 |
+| Font payload, initial route | ≤ 60 KB (Inter variable, latin subset, `woff2`, `font-display: swap`) — **NOT MEASURED on this host; CI's build is authoritative**, see §1.4, ADR-0043 |
 | `--font-display` serif | Loaded only on hero + document routes |
 | Largest hero image | ≤ 120 KB, `AVIF`/`WebP`, explicit `width`/`height` |
 | Icons | Inline SVG sprite, tree-shaken. **No icon font.** |
@@ -1254,7 +1254,7 @@ hue-rotated (no FFI equivalent), secondary/neutral get two small surface-
 separation nudges. Run against the shipped `tokens.css`:
 
 ```
-WCAG contrast verification — /home/ubuntu/makam-app/.worktrees/ffi-stage1-foundation/resources/css/tokens.css
+WCAG contrast verification — resources/css/tokens.css
 90 colour tokens parsed, 49 pairs asserted
 
 PASS   16.10  (min 4.5)  text-strong on surface-raised  #212121 on #FFFFFF
@@ -1517,11 +1517,11 @@ Tailwind 4 moved theme configuration **into CSS** via `@theme`. `tokens.css` is 
 
 /* Self-hosted fonts — no CDN (see §1.4). */
 @font-face {
-  font-family: "Plus Jakarta Sans Variable";
+  font-family: "Inter Variable";
   font-style: normal;
   font-weight: 200 800;
   font-display: swap;
-  src: url("/fonts/plus-jakarta-sans-latin-wght-normal.woff2") format("woff2");
+  src: url("/fonts/inter-latin-wght-normal.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+2000-206F;
 }
 ```
