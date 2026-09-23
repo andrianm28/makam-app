@@ -41,18 +41,25 @@ function rgbToHsl(int $r, int $g, int $b): array
     $r /= 255; $g /= 255; $b /= 255;
     $max = max($r, $g, $b); $min = min($r, $g, $b);
     $l = ($max + $min) / 2;
-    if ($max === $min) return [0, 0, $l];
+    if ($max === $min) {
+        return [0, 0, $l];
+    }
     $d = $max - $min;
     $s = $l > 0.5 ? $d / (2 - $max - $min) : $d / ($max + $min);
     $h = $max === $r ? fmod((($g - $b) / $d), 6) : ($max === $g ? (($b - $r) / $d) + 2 : (($r - $g) / $d) + 4);
     $h *= 60;
-    if ($h < 0) $h += 360;
+    if ($h < 0) {
+        $h += 360;
+    }
     return [$h, $s, $l];
 }
 
 function hslToHex(float $h, float $s, float $l): string
 {
-    $h = fmod($h, 360); if ($h < 0) $h += 360;
+    $h = fmod($h, 360);
+    if ($h < 0) {
+        $h += 360;
+    }
     $c = (1 - abs(2 * $l - 1)) * $s;
     $x = $c * (1 - abs(fmod($h / 60, 2) - 1));
     $m = $l - $c / 2;
@@ -109,5 +116,5 @@ foreach (SLOTS as $slot) {
 
     // Clamp to valid range
     $l = max(0.02, min(0.98, $l));
-    echo "$slot: " . hslToHex($h, $s, $l) . "\n";
+    printf("%d: %s\n", $slot, hslToHex($h, $s, $l));
 }
