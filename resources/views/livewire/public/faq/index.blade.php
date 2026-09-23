@@ -218,9 +218,9 @@
              announcement. wire:target="search" so this only reacts to the
              search submit, not unrelated component activity. --}}
         <div wire:loading.delay wire:target="search" class="mx-auto max-w-content space-y-3" aria-busy="true">
-            <div class="h-20 rounded-lg bg-[var(--mk-skeleton-base)] animate-pulse"></div>
-            <div class="h-20 rounded-lg bg-[var(--mk-skeleton-base)] animate-pulse"></div>
-            <div class="h-20 rounded-lg bg-[var(--mk-skeleton-base)] animate-pulse"></div>
+            <x-mk.skeleton shape="card" announce="" />
+            <x-mk.skeleton shape="card" announce="" />
+            <x-mk.skeleton shape="card" announce="" />
             <span class="sr-only">Memuat hasil pencarian…</span>
         </div>
 

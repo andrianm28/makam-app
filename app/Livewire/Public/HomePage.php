@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Public;
 
+use App\Domain\CemeteryCapability\CemeteryPackageAvailabilityStatus;
 use App\Domain\CemeteryDirectory\Models\Cemetery;
 use App\Domain\Faq\FaqPublicQuery;
 use App\Jobs\RecordMenuImpressions;
@@ -160,12 +161,69 @@ final class HomePage extends Component
             $featuredCemeteriesUnavailable = true;
         }
 
+        // Stage 3 ticket 03 — "urgent-availability TPU/TPS". No per-cemetery
+        // "urgent" flag exists anywhere in this domain (confirmed by search
+        // before writing this); the honest, non-fabricated signal is a real
+        // one already tracked here: a cemetery with at least one package/
+        // class explicitly marked `LIMITED` (CemeteryPackageAvailabilityStatus)
+        // is genuinely running low, which is what FFI's own "urgent
+        // campaigns about to close" pattern means applied honestly to this
+        // domain's real data — not a new rule invented for this ticket.
+        // Same §6.3 provider-unavailable / §6.2 empty-state discipline as
+        // every other real-data section on this page.
+        $urgentAvailabilityCemeteries = new Collection;
+        $urgentAvailabilityCemeteriesUnavailable = false;
+
+        try {
+            $urgentAvailabilityCemeteries = Cemetery::published()
+                ->whereHas('packages', function ($query): void {
+                    $query->where('availability_status', CemeteryPackageAvailabilityStatus::LIMITED);
+                })
+                ->orderBy('city')
+                ->orderBy('name')
+                ->take(6)
+                ->get();
+        } catch (Throwable $e) {
+            report($e);
+            $urgentAvailabilityCemeteriesUnavailable = true;
+        }
+
+        // Stage 3 ticket 03 — "newest published TPU/TPS". `published_at` is
+        // a real, existing timestamp column (set when a cemetery transitions
+        // to published — see Cemetery::scopePublished()'s own doc block);
+        // ordering by it descending is the honest "newest" signal, distinct
+        // from the existing featured-cemeteries query above (which orders
+        // by city/name, not recency).
+        $newestPublishedCemeteries = new Collection;
+        $newestPublishedCemeteriesUnavailable = false;
+
+        try {
+            // Secondary `id` tie-breaker: real cemeteries publish at
+            // distinct times, but the seeded example-data fixture sets
+            // `published_at` to the same instant for every row (see
+            // CemeteryExampleData::cemeteries()), which would otherwise
+            // leave the ordering among ties to the database's own
+            // unspecified tie behaviour — not deterministic, not testable.
+            $newestPublishedCemeteries = Cemetery::published()
+                ->orderBy('published_at', 'desc')
+                ->orderBy('id')
+                ->take(6)
+                ->get();
+        } catch (Throwable $e) {
+            report($e);
+            $newestPublishedCemeteriesUnavailable = true;
+        }
+
         return view('livewire.public.home-page', [
             'urgentMode' => $urgentMode,
             'faqHighlights' => $faqHighlights,
             'faqHighlightsUnavailable' => $faqHighlightsUnavailable,
             'featuredCemeteries' => $featuredCemeteries,
             'featuredCemeteriesUnavailable' => $featuredCemeteriesUnavailable,
+            'urgentAvailabilityCemeteries' => $urgentAvailabilityCemeteries,
+            'urgentAvailabilityCemeteriesUnavailable' => $urgentAvailabilityCemeteriesUnavailable,
+            'newestPublishedCemeteries' => $newestPublishedCemeteries,
+            'newestPublishedCemeteriesUnavailable' => $newestPublishedCemeteriesUnavailable,
             'primaryMenus' => self::PRIMARY_MENUS,
         ])->layout('layouts.app', [
             // No unsubstantiated superlative ("terpercaya"/"terbaik") in the

@@ -296,4 +296,30 @@ final class FaqIndexRouteTest extends TestCase
         $bottomNav = substr($html, $start, $end - $start);
         $this->assertSame(0, substr_count($bottomNav, 'aria-current="page"'), 'No tab should be active in bottom nav for FAQ');
     }
+
+    /**
+     * Stage 3 ticket 02 — the three hand-rolled skeleton `div`s in the
+     * search-results loading region were replaced by real
+     * `<x-mk.skeleton>` instances. `wire:loading` markup is always present
+     * in the server-rendered HTML (visibility is toggled client-side by
+     * Livewire's JS via CSS attribute selectors, and this region has no
+     * gating `@if`), so a plain request already renders it.
+     * `mk-skeleton-shimmer` is a literal, known string unique to
+     * `<x-mk.skeleton>`, not recomputed from the component's source.
+     */
+    public function test_loading_region_renders_the_real_skeleton_component(): void
+    {
+        $response = $this->get('/faq');
+
+        $response->assertOk();
+
+        $html = $response->getContent();
+
+        $this->assertSame(
+            3,
+            substr_count($html, 'mk-skeleton-shimmer'),
+            'Expected 3 <x-mk.skeleton> instances in the search-results loading region.'
+        );
+        $this->assertStringNotContainsString('bg-[var(--mk-skeleton-base)] animate-pulse', $html);
+    }
 }
