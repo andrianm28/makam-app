@@ -95,7 +95,7 @@ Mobile:
 - persistent “Bantuan” or customer-service action;
 - menu labels tetap sama dengan desktop.
 
-**Updated 23 Sep 2026 (ADR-0044, resolving OQ-04):** A persistent 5-tab bottom navigation now ships on mobile below the `lg` breakpoint, showing Beranda, Pemesanan, Perpanjangan, Akun, and Bantuan. The existing hamburger navigation is retained alongside it — the 5 canonical tabs do not cover all desktop navigation items (Layanan Pemakaman and FAQ are accessible only via the hamburger on mobile), so both navigation affordances coexist on mobile viewports.
+**Updated 23 Sep 2026 (ADR-0044, resolving OQ-04):** A persistent 5-tab bottom navigation — Beranda, Pemesanan, Perpanjangan, Akun, and Bantuan, below the `lg` breakpoint — is approved and implemented as `<x-mk.bottom-nav>`, pending Stage 3 wiring into real pages. Once wired, the existing hamburger navigation stays alongside it — the 5 canonical tabs do not cover all desktop navigation items (Layanan Pemakaman and FAQ are accessible only via the hamburger on mobile), so both navigation affordances will coexist on mobile viewports.
 
 ## 3. Homepage hierarchy
 
