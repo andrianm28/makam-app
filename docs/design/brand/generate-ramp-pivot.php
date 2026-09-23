@@ -1,4 +1,7 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * generate-ramp-pivot.php — generalises generate-ramp.php to an
  * arbitrary pivot slot. generate-ramp.php always anchors its one input
