@@ -16,6 +16,10 @@ use Tests\TestCase;
  * as MkCardTest: the `$sizes`/`$iconSizes` maps must stay static literal
  * strings or Tailwind's `@source` scanner generates no CSS for them and
  * the tile silently renders unstyled while every other test stays green.
+ *
+ * This class also owns `tone`'s closed-list contract (`primary` |
+ * `secondary` | `brand`, renamed from `earth`/`leaf` 23 Sep 2026) and its
+ * throw-on-unknown-value behaviour, not just `size`.
  */
 final class MkIconMedallionTest extends TestCase
 {
@@ -45,14 +49,14 @@ final class MkIconMedallionTest extends TestCase
     public function test_xl_is_a_size_only_and_carries_no_tone_of_its_own(): void
     {
         // Tahap 4 is explicitly SIZE only: the `brand` fill Tahap 2 added
-        // (ADR-0040 D3) must not travel with the new size, and `earth`
+        // (ADR-0040 D3) must not travel with the new size, and `primary`
         // must still render its tint at `xl`.
-        $earth = Blade::render('<x-mk.icon-medallion icon="document-text" tone="primary" size="xl" />');
+        $primary = Blade::render('<x-mk.icon-medallion icon="document-text" tone="primary" size="xl" />');
         $brand = Blade::render('<x-mk.icon-medallion icon="document-text" tone="brand" size="xl" />');
 
-        $this->assertStringContainsString('bg-primary-100', $earth);
-        $this->assertStringContainsString('text-primary-800', $earth);
-        $this->assertStringNotContainsString('bg-primary-600', $earth);
+        $this->assertStringContainsString('bg-primary-100', $primary);
+        $this->assertStringContainsString('text-primary-800', $primary);
+        $this->assertStringNotContainsString('bg-primary-600', $primary);
 
         $this->assertStringContainsString('bg-primary-600', $brand);
         $this->assertStringContainsString('text-neutral-0', $brand);
@@ -106,5 +110,21 @@ final class MkIconMedallionTest extends TestCase
             $this->assertInstanceOf(InvalidArgumentException::class, $cause);
             $this->assertStringContainsString('Unsupported <x-mk.icon-medallion> tone [leaf]', $cause->getMessage());
         }
+    }
+
+    public function test_secondary_renders_the_secondary_tint(): void
+    {
+        $html = Blade::render('<x-mk.icon-medallion icon="document-text" tone="secondary" />');
+
+        $this->assertStringContainsString('bg-secondary-100', $html);
+        $this->assertStringContainsString('text-secondary-800', $html);
+    }
+
+    public function test_the_default_tone_is_primary(): void
+    {
+        $html = Blade::render('<x-mk.icon-medallion icon="document-text" />');
+
+        $this->assertStringContainsString('bg-primary-100', $html);
+        $this->assertStringContainsString('text-primary-800', $html);
     }
 }

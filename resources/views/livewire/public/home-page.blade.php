@@ -439,8 +439,8 @@
          to `--color-primary-50` since ADR-0034; what it lacked was a
          utility, which is exactly why this call site wrote the primitive.
          §4.5 item 6 names the TOKEN, so the token is now what the markup
-         says. The `leaf` medallions below stay leaf: with the Cara Kerja
-         numerals now `brand`, both tint tones remain in real use and the
+         says. The `secondary` medallions below keep their tint: with the
+         Cara Kerja numerals now `brand`, both tint tones remain in real use and the
          trust points keep the quieter of the two, which is the right
          weight for a reassurance section. --}}
     <section aria-labelledby="trust-heading" class="surface-warm py-section lg:py-section-lg">
