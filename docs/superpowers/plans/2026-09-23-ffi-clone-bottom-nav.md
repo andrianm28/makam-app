@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build `<x-mk.bottom-nav>`, the five-tab mobile persistent navigation primitive [ADR-0044](../adr/0044-approve-ffi-five-tab-bottom-navigation.md) approved, and bring `design-system.md`/`information-architecture.md` into sync with that approval — both were left with a stale "proposed, not approved" / no-bottom-nav status that ADR-0044 explicitly deferred to this plan to resolve.
+**Goal:** Build `<x-mk.bottom-nav>`, the five-tab mobile persistent navigation primitive [ADR-0044](../../adr/0044-approve-ffi-five-tab-bottom-navigation.md) approved, and bring `design-system.md`/`information-architecture.md` into sync with that approval — both were left with a stale "proposed, not approved" / no-bottom-nav status that ADR-0044 explicitly deferred to this plan to resolve.
 
 **Architecture:** One new Blade component following the established `<x-mk.*>` convention, plus two new `icon.*` primitives it needs that don't exist yet (`home`, `user` — real, verified Heroicons v2.2.0 outline glyphs, fetched directly from the upstream package, matching `icon/clock-x.blade.php`'s own documented provenance discipline: never invented path data). The component itself is standalone and unwired — no real screen renders it yet, matching the ticket's own scope (wiring is Stage 3). `design-system.md` §3.11 and `information-architecture.md` §2 are updated to describe the now-approved end state (5-tab bottom nav on mobile, existing hamburger kept alongside it for the two desktop nav items — Layanan Pemakaman, FAQ — the 5 tabs don't cover), using this document's own established additive-supersession convention, not a silent rewrite.
 
 **Tech Stack:** Laravel Blade components, Tailwind CSS 4, PHPUnit (`Illuminate\Support\Facades\Blade::render()` seam).
 
-**Spec:** `.scratch/ffi-clone-stage2-components/issues/02-mk-bottom-nav.md` (ticket; seam and testing rationale drawn from the parent spec, `.scratch/ffi-clone-stage2-components/spec.md`); product-scope authority: [ADR-0044](../adr/0044-approve-ffi-five-tab-bottom-navigation.md)
+**Spec:** `.scratch/ffi-clone-stage2-components/issues/02-mk-bottom-nav.md` (ticket; seam and testing rationale drawn from the parent spec, `.scratch/ffi-clone-stage2-components/spec.md`); product-scope authority: [ADR-0044](../../adr/0044-approve-ffi-five-tab-bottom-navigation.md)
 
 **Gerbang specflow:** rencana ini BELUM siap dieksekusi sampai kedua perintah
 di bawah keluar dengan status 0. Controller yang membaca header ini: kalau
@@ -31,7 +31,7 @@ rencananya, jangan melewati gerbangnya.
 - Uses the existing `--mk-bottomnav-h` (3.5rem/56px), `--mk-safe-bottom` (`env(safe-area-inset-bottom, 0px)`), and `--mk-bottomnav-total` (`calc(var(--mk-bottomnav-h) + var(--mk-safe-bottom))`) tokens — all already defined, none invented by this plan.
 - No literal hex/px/arbitrary-Tailwind-value anywhere in the new component file.
 - **Icon provenance is real or nothing** — matching `icon/clock-x.blade.php`'s own documented discipline. `home` and `user` icons (needed for Beranda and Akun tabs; `document-text`, `clock-x`, and `question-mark-circle` already exist and cover the other three) are the real, unmodified Heroicons v2.2.0 outline `HomeIcon`/`UserIcon` path data, fetched directly from `github.com/tailwindlabs/heroicons` at tag `v2.2.0` — not hand-drawn, not approximated.
-- **[ADR-0044](../adr/0044-approve-ffi-five-tab-bottom-navigation.md) resolves OQ-04: approved**, with a real, decided answer (made during this plan's own preparation, not left open) to the one question ADR-0044 itself left unresolved — whether mobile keeps its hamburger menu alongside the new bottom nav. **Decided: yes, keep it.** The 5 bottom-nav tabs don't cover two real desktop nav items (`Layanan Pemakaman`, `FAQ` — `information-architecture.md` §2's desktop row has 7 items total), so mobile still needs a path to them; the existing hamburger (`resources/views/components/mk/header.blade.php`, already implemented, already covers all 7 items) keeps that job. This is a documentation update, not a `header.blade.php` code change — wiring bottom-nav next to the real header is Stage 3's job, out of scope here.
+- **[ADR-0044](../../adr/0044-approve-ffi-five-tab-bottom-navigation.md) resolves OQ-04: approved**, with a real, decided answer (made during this plan's own preparation, not left open) to the one question ADR-0044 itself left unresolved — whether mobile keeps its hamburger menu alongside the new bottom nav. **Decided: yes, keep it.** The 5 bottom-nav tabs don't cover two real desktop nav items (`Layanan Pemakaman`, `FAQ` — `information-architecture.md` §2's desktop row has 7 items total), so mobile still needs a path to them; the existing hamburger (`resources/views/components/mk/header.blade.php`, already implemented, already covers all 7 items) keeps that job. This is a documentation update, not a `header.blade.php` code change — wiring bottom-nav next to the real header is Stage 3's job, out of scope here.
 - `design-system.md` §3.11's "⚠️ PROPOSED, NOT APPROVED" banner and its 4-item draft are superseded by ADR-0044's approved 5-item form — update via this document's own established additive-supersession convention (append, don't silently rewrite — see ADR-0041/ADR-0043's own precedent there).
 - `design-system.md` §11's OQ-04 row updates from "IA-compliant header only; bottom nav not shipped" to "Resolved, approved (ADR-0044)."
 - `information-architecture.md` §2's mobile-nav bullet list updates to describe the approved end state: bottom nav for the 5 canonical tabs, hamburger kept for the remaining desktop items — not a silent removal of the hamburger bullet.
@@ -398,7 +398,7 @@ is additive supersession (see ADR-0041/ADR-0043's own precedent in this
 same file):
 
 ```
-**Approved 23 Sep 2026 ([ADR-0044](../adr/0044-approve-ffi-five-tab-bottom-navigation.md)), resolving OQ-04.** The blockquote above is historical — bottom navigation IS now approved, in the 5-item form below, not the 4-item draft that follows this note. §3.10's IA-compliant header stays the DEFAULT for desktop and is joined, not replaced, by this component on mobile; the existing hamburger (`<x-mk.header>`, §3.10) is KEPT alongside the bottom nav — the 5 canonical tabs (Beranda, Pemesanan, Perpanjangan, Akun, Bantuan) don't cover two real desktop nav items (Layanan Pemakaman, FAQ), so mobile still needs the hamburger's overflow to reach them.
+**Approved 23 Sep 2026 ([ADR-0044](../../adr/0044-approve-ffi-five-tab-bottom-navigation.md)), resolving OQ-04.** The blockquote above is historical — bottom navigation IS now approved, in the 5-item form below, not the 4-item draft that follows this note. §3.10's IA-compliant header stays the DEFAULT for desktop and is joined, not replaced, by this component on mobile; the existing hamburger (`<x-mk.header>`, §3.10) is KEPT alongside the bottom nav — the 5 canonical tabs (Beranda, Pemesanan, Perpanjangan, Akun, Bantuan) don't cover two real desktop nav items (Layanan Pemakaman, FAQ), so mobile still needs the hamburger's overflow to reach them.
 ```
 
 - [ ] **Step 3: Replace §3.11's 4-item draft spec with the real, shipped 5-item form**
@@ -417,7 +417,7 @@ same additive convention.
 Find the OQ-04 row in §11's open-questions table (currently: `| **OQ-04**
 | **Mobile bottom navigation**... | IA-compliant header only; bottom nav
 **not shipped** | §3.11 |`). Update the middle column to: `**Resolved,
-approved 23 Sep 2026 ([ADR-0044](../adr/0044-approve-ffi-five-tab-bottom-navigation.md)).** 5-tab bottom nav ships on mobile,
+approved 23 Sep 2026 ([ADR-0044](../../adr/0044-approve-ffi-five-tab-bottom-navigation.md)).** 5-tab bottom nav ships on mobile,
 existing hamburger kept alongside it for the 2 desktop items the 5 tabs
 don't cover (Layanan Pemakaman, FAQ).` Keep the row's first column
 (the original question text) unchanged — only the resolution column
