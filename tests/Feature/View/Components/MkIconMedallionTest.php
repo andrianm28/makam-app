@@ -66,17 +66,45 @@ final class MkIconMedallionTest extends TestCase
         // $intent -- see the component's own file-header comment). Once
         // the map keys are renamed from earth/leaf to primary/secondary,
         // this throw fires for the old names automatically -- no logic
-        // change, just a map-key rename -- and that's exactly what this
-        // test locks in.
-        $this->expectException(InvalidArgumentException::class);
+        // change, just a map-key rename.
+        //
+        // Blade wraps every exception thrown while compiling/rendering a
+        // view in Illuminate\View\ViewException (to attach the view file
+        // path), and here it does so twice -- once for the anonymous
+        // component's own compiled view, once for the outer render -- so
+        // the exception actually observed is a ViewException wrapping a
+        // ViewException wrapping the real InvalidArgumentException.
+        // expectException(InvalidArgumentException::class) fails for that
+        // reason alone (see MkHeroTest::test_it_throws_without_a_heading()
+        // and MkLogoTest::test_unknown_variant_throws() for the same
+        // pattern). Walk the getPrevious() chain down to the real cause.
+        try {
+            Blade::render('<x-mk.icon-medallion icon="document-text" tone="earth" />');
+            $this->fail('Expected an exception when tone="earth" is rendered.');
+        } catch (\Throwable $e) {
+            $cause = $e;
+            while ($cause->getPrevious() !== null) {
+                $cause = $cause->getPrevious();
+            }
 
-        Blade::render('<x-mk.icon-medallion icon="document-text" tone="earth" />');
+            $this->assertInstanceOf(InvalidArgumentException::class, $cause);
+            $this->assertStringContainsString('Unsupported <x-mk.icon-medallion> tone [earth]', $cause->getMessage());
+        }
     }
 
     public function test_leaf_also_throws_after_the_rename(): void
     {
-        $this->expectException(InvalidArgumentException::class);
+        try {
+            Blade::render('<x-mk.icon-medallion icon="document-text" tone="leaf" />');
+            $this->fail('Expected an exception when tone="leaf" is rendered.');
+        } catch (\Throwable $e) {
+            $cause = $e;
+            while ($cause->getPrevious() !== null) {
+                $cause = $cause->getPrevious();
+            }
 
-        Blade::render('<x-mk.icon-medallion icon="document-text" tone="leaf" />');
+            $this->assertInstanceOf(InvalidArgumentException::class, $cause);
+            $this->assertStringContainsString('Unsupported <x-mk.icon-medallion> tone [leaf]', $cause->getMessage());
+        }
     }
 }
