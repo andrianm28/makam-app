@@ -42,7 +42,11 @@
         'section' => $shimmer . ' h-64 w-full rounded-lg',
     ];
 
-    $shapeClass = $shapeClasses[$shape] ?? $shapeClasses['text'];
+    // Normalize once -- every branch below checks $resolvedShape, never the
+    // raw $shape prop, so an unknown value falls back to "text" both
+    // visually (the CSS classes) AND structurally (which branch renders).
+    $resolvedShape = array_key_exists($shape, $shapeClasses) ? $shape : 'text';
+    $shapeClass = $shapeClasses[$resolvedShape];
     $instanceCount = max(1, (int) $count);
     $lineCount = max(1, (int) $lines);
 @endphp
@@ -50,14 +54,14 @@
 <div {{ $attributes->except('aria-busy')->merge(['class' => 'block', 'aria-busy' => 'true']) }}>
     <span class="sr-only">{{ $announce }}</span>
 
-    @if ($shape === 'section' && $sectionRhythm)
+    @if ($resolvedShape === 'section' && $sectionRhythm)
         <div class="py-section lg:py-section-lg">
             <div class="{{ $shapeClass }}" aria-hidden="true"></div>
         </div>
     @else
         <div class="space-y-2">
             @for ($i = 0; $i < $instanceCount; $i++)
-                @if ($shape === 'text')
+                @if ($resolvedShape === 'text')
                     <div class="space-y-2">
                         @for ($j = 0; $j < $lineCount; $j++)
                             <div class="{{ $shapeClass }}" aria-hidden="true"></div>
