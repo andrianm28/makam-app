@@ -1387,12 +1387,19 @@ final class RenewalStartTest extends TestCase
     /**
      * Same as above, for the Step 3 search-results list's three
      * hand-rolled skeleton `div`s, now real `<x-mk.skeleton>` instances.
-     * `cemeteryId` alone reaches `$selectedCemetery !== null` (Step 3),
-     * matching `test_go_to_step_search_resets_the_chosen_city_and_cemetery`'s
-     * own established mount pattern for this screen.
+     * `cemeteryId` alone reaches `$selectedCemetery !== null`, but the
+     * real search UI (this ticket's own loading region included) is
+     * further gated behind the G-DATA-01 feature gate, which seeds
+     * CLOSED by default (`test_the_data_gate_seeds_closed_so_gate_closed_
+     * is_the_default_state` asserts exactly this) — `openTheDataGate()`
+     * is this file's own established helper for reaching the open-gate
+     * search UI, used by every other test in this file that needs it
+     * (e.g. `test_arriving_without_searching_renders_no_empty_state_at_all`).
      */
     public function test_step_3_search_results_list_renders_the_real_skeleton_component(): void
     {
+        $this->openTheDataGate();
+
         $html = Livewire::test(RenewalStart::class, [
             'cemeteryId' => CemeteryFixture::id('package', 0),
         ])->html();
