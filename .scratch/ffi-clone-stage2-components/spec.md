@@ -120,19 +120,24 @@ anymore.
   comment names it "wizard sticky footer") and below `--mk-z-header:
   1200`.
 - **Coexistence with the wizard's sticky footer is an open layout
-  question, not a solved one.** `--mk-z-sticky-cta` exists and is
-  commented as backing a wizard sticky footer, but no current Blade file
-  under `resources/views/livewire/public/booking/` renders a
-  bottom-fixed/sticky CTA bar today — repo-wide search found no literal
-  usage of that token outside its own definition. Two possibilities the
-  implementation plan must settle, not this spec: either that sticky
-  footer doesn't exist yet (in which case `<x-mk.bottom-nav>` is the
-  first consumer of `--mk-z-sticky-cta`'s stacking context and there is
-  no real collision today, only a future one to design for), or it exists
-  under a name/pattern this search didn't match. The plan must verify
-  which is true before deciding whether "which yields" is a real
-  right-now layout problem or a documented constraint for whichever
-  component builds the wizard's sticky footer next.
+  question, not a solved one.** `--mk-z-sticky-cta` is commented as
+  backing a "wizard sticky footer" but its one real consumer today,
+  `resources/views/components/mk/stepper.blade.php`, uses it for a
+  **top**-sticky progress header (`sticky top-[var(--mk-header-h)]`), not
+  a bottom-fixed CTA bar — confirmed by direct search, along with two
+  other components (`hero.blade.php`, `table.blade.php`) that reference
+  `z-sticky-cta` in their own comments specifically to explain why *they*
+  don't reuse it. No bottom-fixed/sticky CTA bar exists anywhere in the
+  codebase today under any name this search tried. `--mk-z-bottomnav`
+  (1100, above `--mk-z-sticky-cta`'s 900) is confirmed to have zero
+  consumers today. So `<x-mk.bottom-nav>` has no live bottom-of-viewport
+  element to collide with right now — but the token names it might one
+  day share a viewport-bottom with (whatever eventually renders the
+  wizard's real sticky action bar) don't yet exist to test against. The
+  plan should build `<x-mk.bottom-nav>` against this known-empty state and
+  document the z-index relationship (`--mk-z-bottomnav` above
+  `--mk-z-sticky-cta`) for whichever ticket builds a real bottom CTA bar
+  next, rather than inventing a collision to design around today.
 - **`<x-mk.card>`'s `emphasis` prop and `<x-mk.button>`'s `variant` prop
   need no code change.** Confirmed by reading both files: every colour
   class either resolves through a Tailwind class generated from a
@@ -142,21 +147,39 @@ anymore.
   no Stage 2 task for either file. The same holds for every other
   existing `<x-mk.*>` primitive checked (`icon-medallion.blade.php`
   itself is the one exception below).
-- **`<x-mk.icon-medallion>`'s `tone` prop currently accepts `earth` and
-  `leaf`** (`'earth' => 'bg-primary-100 text-primary-800'`, `'leaf' =>
-  'bg-secondary-100 text-secondary-800'`), names inherited from the
-  brand identity two rebases ago (Earth brown, Leaf green — both gone
-  since ADR-0034 was superseded, and `primary`/`secondary` mean FFI blue
-  and Sage respectively today). This is a real, unresolved naming
-  decision for this stage's own grilling, not something this spec settles
-  by itself: whether to rename the accepted values to something
-  palette-agnostic (e.g. `primary`/`secondary`, matching the token family
-  names they already resolve to), keep them and accept the mismatch, or
-  something else. Whatever is decided, `tests/Feature/View/Components/
-  MkIconMedallionTest.php` (existing, passing, uses `tone="earth"` in
-  every one of its assertions) is the test that must be updated in
-  lock-step — a silent rename would leave it calling a value that no
-  longer means what its own test name says.
+- **`<x-mk.icon-medallion>`'s `tone` prop currently accepts `earth`,
+  `leaf`, and `brand`** (`'earth' => 'bg-primary-100 text-primary-800'`,
+  `'leaf' => 'bg-secondary-100 text-secondary-800'`, `'brand' =>
+  'bg-primary-600 text-neutral-0'`). `brand` names what it does (the
+  brand fill), not a colour identity, and needs no rename. `earth`/`leaf`
+  are names inherited from the brand identity two rebases ago (Earth
+  brown, Leaf green — both gone since ADR-0034 was superseded, and
+  `primary`/`secondary` mean FFI blue and Sage respectively today). This
+  is a real, unresolved naming decision for this stage's own grilling,
+  not something this spec settles by itself: whether to rename the
+  accepted values to something palette-agnostic (e.g.
+  `primary`/`secondary`, matching the token family names they already
+  resolve to), keep them and accept the mismatch, or something else.
+  **Real, verified call sites** (confirmed by direct search, not the
+  file's own doc comments, which also mention `tone="leaf"` in prose):
+  `resources/views/livewire/public/home-page.blade.php` (two explicit
+  usages, `tone="earth"` and `tone="leaf"`),
+  `resources/views/livewire/public/akun/akun-index.blade.php` (four
+  usages that never pass `tone` at all — they render whatever the
+  component's own default resolves to), and
+  `tests/Feature/View/Components/MkIconMedallionTest.php` (four
+  assertions, all `tone="earth"`). `card.blade.php` mentions
+  `icon-medallion` only in a comment about its own naming convention —
+  it does not actually render one. **The default tone value is `earth`**
+  (`'tone' => 'earth'` in the component's own `@props`), which means
+  `akun-index.blade.php`'s four medallions are a real, if implicit,
+  consumer of whichever tone `earth` maps to — a rename decision must
+  explicitly say what those four should render as (most likely: give them
+  an explicit tone rather than continue relying on an unstated default),
+  not just relabel a string nobody at that call site chose on purpose.
+  Whatever is decided, `MkIconMedallionTest.php` is the test that must be
+  updated in lock-step — a silent rename would leave it calling a value
+  that no longer means what its own test name says.
 - Token and semantic-alias **names** are unchanged throughout, same
   discipline Stage 1 held — this stage only adds two new components and
   possibly renames one existing prop's *accepted values*, never a
@@ -184,7 +207,17 @@ anymore.
   contract. `MkIconMedallionTest`'s own tests are the direct prior art:
   they assert specific size classes present and specific ones absent
   (`assertStringContainsString`/`assertStringNotContainsString`), which
-  is the same shape this stage's new tests should take.
+  is the same shape this stage's new tests should take. `MkCardTest.php`'s
+  own file-header comment names the concrete reason class-string
+  assertions matter here, not just as a style preference: this codebase
+  has twice shipped a component that built a Tailwind class by
+  interpolating a PHP variable, which Tailwind's `@source` scanner cannot
+  see (it reads file text, not executed PHP output) — the component
+  rendered with zero real styling and every functional test still passed,
+  because nothing asserted on the actual class string. Any new
+  `$shapes`/`$sizes`-style map in `<x-mk.skeleton>` or `<x-mk.bottom-nav>`
+  must stay static literal strings, and the tests must assert the
+  resulting class string directly, for the same reason.
 - **If `<x-mk.icon-medallion>`'s `tone` values are renamed**: the seam is
   the same `Blade::render()` call — update `MkIconMedallionTest.php`'s
   existing assertions to the new accepted value(s) rather than leaving
