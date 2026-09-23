@@ -50,6 +50,15 @@ final class RenewalStartTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // HTTP requests below render layouts/app.blade.php, which contains
+        // `@vite(...)`; CI's `php` job has no frontend build. Same
+        // requirement as other public Livewire route tests.
+        $this->withoutVite();
+    }
+
     /**
      * Copy fragments that identify each of the three grave-search empty
      * states — migrated from `GraveSearchStatesTest`. Asserting one state's
