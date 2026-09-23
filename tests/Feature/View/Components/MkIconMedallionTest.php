@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\View\Components;
 
 use Illuminate\Support\Facades\Blade;
+use InvalidArgumentException;
 use Tests\TestCase;
 
 /**
@@ -20,7 +21,7 @@ final class MkIconMedallionTest extends TestCase
 {
     public function test_xl_renders_a_64px_tile_with_a_proportional_mark(): void
     {
-        $html = Blade::render('<x-mk.icon-medallion icon="document-text" tone="earth" size="xl" />');
+        $html = Blade::render('<x-mk.icon-medallion icon="document-text" tone="primary" size="xl" />');
 
         // 4rem tile / 1.75rem mark, both on tokens.css's 4px --spacing
         // scale — the ~45% mark-to-tile ratio `md` and `lg` already use.
@@ -32,8 +33,8 @@ final class MkIconMedallionTest extends TestCase
 
     public function test_the_existing_sizes_are_unchanged_by_the_xl_addition(): void
     {
-        $md = Blade::render('<x-mk.icon-medallion icon="document-text" tone="earth" />');
-        $lg = Blade::render('<x-mk.icon-medallion icon="document-text" tone="earth" size="lg" />');
+        $md = Blade::render('<x-mk.icon-medallion icon="document-text" tone="primary" />');
+        $lg = Blade::render('<x-mk.icon-medallion icon="document-text" tone="primary" size="lg" />');
 
         $this->assertStringContainsString('size-11', $md);
         $this->assertStringContainsString('size-5', $md);
@@ -46,7 +47,7 @@ final class MkIconMedallionTest extends TestCase
         // Tahap 4 is explicitly SIZE only: the `brand` fill Tahap 2 added
         // (ADR-0040 D3) must not travel with the new size, and `earth`
         // must still render its tint at `xl`.
-        $earth = Blade::render('<x-mk.icon-medallion icon="document-text" tone="earth" size="xl" />');
+        $earth = Blade::render('<x-mk.icon-medallion icon="document-text" tone="primary" size="xl" />');
         $brand = Blade::render('<x-mk.icon-medallion icon="document-text" tone="brand" size="xl" />');
 
         $this->assertStringContainsString('bg-primary-100', $earth);
@@ -55,5 +56,27 @@ final class MkIconMedallionTest extends TestCase
 
         $this->assertStringContainsString('bg-primary-600', $brand);
         $this->assertStringContainsString('text-neutral-0', $brand);
+    }
+
+    public function test_the_old_earth_and_leaf_tone_names_now_throw(): void
+    {
+        // A rename, not a dual-accepting alias. icon-medallion.blade.php
+        // already throws InvalidArgumentException for any tone not in its
+        // $tones map (the same defensive pattern badge.blade.php uses for
+        // $intent -- see the component's own file-header comment). Once
+        // the map keys are renamed from earth/leaf to primary/secondary,
+        // this throw fires for the old names automatically -- no logic
+        // change, just a map-key rename -- and that's exactly what this
+        // test locks in.
+        $this->expectException(InvalidArgumentException::class);
+
+        Blade::render('<x-mk.icon-medallion icon="document-text" tone="earth" />');
+    }
+
+    public function test_leaf_also_throws_after_the_rename(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        Blade::render('<x-mk.icon-medallion icon="document-text" tone="leaf" />');
     }
 }

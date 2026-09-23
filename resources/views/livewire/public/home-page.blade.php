@@ -276,8 +276,9 @@
                         <div class="space-y-3">
                             @if (isset($serviceIcons[$key]))
                                 {{-- `size="xl"` (64px), Tahap 4 butir 2 — SIZE only;
-                                     `tone="earth"` is unchanged from Tahap 2. --}}
-                                <x-mk.icon-medallion :icon="$serviceIcons[$key]" tone="earth" size="xl" />
+                                     the rendered colour is unchanged from Tahap 2,
+                                     but the prop value is renamed `earth` -> `primary`. --}}
+                                <x-mk.icon-medallion :icon="$serviceIcons[$key]" tone="primary" size="xl" />
                             @endif
                             {{-- `text-primary-600` on the card's `bg-neutral-0`
                                  is `primary heading on surface-raised`, an
@@ -454,7 +455,7 @@
                     ['icon' => 'alert-circle', 'title' => 'Jujur soal keterbatasan', 'body' => 'Kami tidak mengarang data, tarif, atau ketersediaan yang belum dapat kami pastikan. Kami akan menyatakannya dengan jelas dan mengarahkan Anda ke customer service.'],
                 ] as $index => $point)
                     <li wire:key="trust-point-{{ $index }}" class="flex flex-col items-start gap-2 text-left">
-                        <x-mk.icon-medallion :icon="$point['icon']" tone="leaf" />
+                        <x-mk.icon-medallion :icon="$point['icon']" tone="secondary" />
                         <h3 class="text-base font-semibold text-neutral-900">{{ $point['title'] }}</h3>
                         <p class="text-sm text-neutral-700">{{ $point['body'] }}</p>
                     </li>
