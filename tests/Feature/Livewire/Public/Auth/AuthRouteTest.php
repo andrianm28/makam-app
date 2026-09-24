@@ -70,4 +70,47 @@ final class AuthRouteTest extends TestCase
 
         $this->get('/masuk')->assertRedirect();
     }
+
+    /**
+     * FFI-clone-whole-frontend ticket 04 — the four auth pages were rewired
+     * onto a shared `<x-mk.auth-shell>` component that owns the §6.10
+     * support escape-hatch link. This asserts the real, rendered behaviour
+     * on all four routes so no future change to the shell can silently drop
+     * it from one page without a test noticing.
+     */
+    public function test_login_route_shows_the_support_escape_hatch_link(): void
+    {
+        $response = $this->get('/masuk');
+
+        $response->assertOk();
+        $response->assertSee('Butuh bantuan?');
+        $response->assertSee('/bantuan', false);
+    }
+
+    public function test_register_route_shows_the_support_escape_hatch_link(): void
+    {
+        $response = $this->get('/daftar');
+
+        $response->assertOk();
+        $response->assertSee('Butuh bantuan?');
+        $response->assertSee('/bantuan', false);
+    }
+
+    public function test_forgot_password_route_shows_the_support_escape_hatch_link(): void
+    {
+        $response = $this->get('/lupa-'.'password');
+
+        $response->assertOk();
+        $response->assertSee('Butuh bantuan?');
+        $response->assertSee('/bantuan', false);
+    }
+
+    public function test_reset_password_route_shows_the_support_escape_hatch_link(): void
+    {
+        $response = $this->get('/reset-'.'password/any-placeholder-token');
+
+        $response->assertOk();
+        $response->assertSee('Butuh bantuan?');
+        $response->assertSee('/bantuan', false);
+    }
 }

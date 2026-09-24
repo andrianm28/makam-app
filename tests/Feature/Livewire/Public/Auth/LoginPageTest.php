@@ -63,6 +63,19 @@ final class LoginPageTest extends TestCase
         $response->assertSee(route('filament.operator.auth.login'), false);
     }
 
+    /**
+     * FFI-clone-whole-frontend ticket 04 — the page was rewired onto
+     * `<x-mk.auth-shell>`, which owns the page's one <h1>. Asserts a real
+     * semantic heading survives the shell restyle, not just styled text.
+     */
+    public function test_the_page_renders_a_single_heading_with_the_page_title(): void
+    {
+        $response = $this->get('/masuk');
+
+        $response->assertOk();
+        $this->assertMatchesRegularExpression('#<h1[^>]*>\s*Masuk\s*</h1>#', $response->getContent());
+    }
+
     public function test_correct_credentials_authenticate_and_redirect_to_akun(): void
     {
         $user = User::factory()->create(['password' => 'password']);
