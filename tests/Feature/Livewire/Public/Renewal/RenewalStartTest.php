@@ -630,6 +630,13 @@ final class RenewalStartTest extends TestCase
      * `max:120`. This proves <x-mk.field>'s aria-describedby/aria-invalid
      * wiring actually activates on a genuine validation failure, not just
      * that the markup exists.
+     *
+     * The `name` field also carries a `hint` prop, so
+     * <x-mk.field>'s own `$describedBy` computation
+     * (field.blade.php: `collect([hint_id, error_id])->filter()->implode(' ')`)
+     * combines BOTH ids, hint first — the real rendered attribute is
+     * `aria-describedby="grave-search-name-hint grave-search-name-error"`,
+     * not just the error id alone.
      */
     public function test_a_name_validation_error_still_describes_the_error_to_the_field(): void
     {
@@ -638,7 +645,7 @@ final class RenewalStartTest extends TestCase
         Livewire::test(RenewalStart::class, ['cemeteryId' => CemeteryFixture::id('package', 0)])
             ->set('name', str_repeat('a', 121))
             ->call('search')
-            ->assertSeeHtml('aria-describedby="grave-search-name-error"')
+            ->assertSeeHtml('aria-describedby="grave-search-name-hint grave-search-name-error"')
             ->assertSeeHtml('aria-invalid="true"');
     }
 
