@@ -95,6 +95,27 @@ final class PasswordResetTest extends TestCase
         );
     }
 
+    /**
+     * FFI-clone-whole-frontend ticket 04 — the page was rewired onto
+     * `<x-mk.auth-shell>`, which owns the page's one <h1>. Asserts a real
+     * semantic heading survives the shell restyle, not just styled text.
+     */
+    public function test_the_forgot_password_page_renders_a_single_heading_with_the_page_title(): void
+    {
+        $response = $this->get('/lupa-'.'password');
+
+        $response->assertOk();
+        $this->assertMatchesRegularExpression('#<h1[^>]*>\s*Lupa Kata Sandi\s*</h1>#', $response->getContent());
+    }
+
+    public function test_the_reset_password_page_renders_a_single_heading_with_the_page_title(): void
+    {
+        $response = $this->get('/reset-'.'password/any-placeholder-token');
+
+        $response->assertOk();
+        $this->assertMatchesRegularExpression('#<h1[^>]*>\s*Reset Kata Sandi\s*</h1>#', $response->getContent());
+    }
+
     public function test_valid_token_and_matching_email_resets_the_password_without_auto_login(): void
     {
         $user = User::factory()->create(['password' => 'old-password']);
