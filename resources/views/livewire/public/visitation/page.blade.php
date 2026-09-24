@@ -24,14 +24,24 @@
     (§3.6) for the pending state, `<x-mk.button>` (§3.1) for actions.
     Tokens only — no hardcoded colour/spacing values, no Tailwind
     arbitrary values.
+
+    FFI-clone-whole-frontend ticket 09 — both branches' page shell
+    (container/heading classes) now matches the same
+    py-section/max-w-content/max-w-prose-scale convention as
+    help-centre.blade.php/faq/index.blade.php, rather than this file's
+    previous narrower, smaller-heading shell. Each branch's content
+    keeps its original max-w-3xl reading width, now nested inside the
+    wider page shell instead of constraining the whole page.
 --}}
 
 @if ($cemetery === null)
     {{-- =============================================================
          Picker state — /kunjungan (slug-less)
          ============================================================= --}}
-    <div class="mx-auto w-full max-w-3xl px-4 py-10">
-        <h1 class="text-2xl font-semibold text-neutral-900">Kunjungan Makam</h1>
+    <div class="py-section md:py-section-lg">
+        <div class="mx-auto max-w-content px-4">
+        <div class="mx-auto w-full max-w-3xl">
+        <h1 class="text-3xl font-semibold tracking-tight text-neutral-900">Kunjungan Makam</h1>
         <p class="mt-2 text-base text-neutral-600">
             Pilih lokasi untuk melihat jam kunjungan atau mengajukan permintaan kunjungan.
         </p>
@@ -57,15 +67,19 @@
                 </x-mk.alert>
             @endforelse
         </div>
+        </div>
+        </div>
     </div>
 @else
-    <div class="mx-auto w-full max-w-3xl px-4 py-10">
+    <div class="py-section md:py-section-lg">
+        <div class="mx-auto max-w-content px-4">
+        <div class="mx-auto w-full max-w-3xl">
         <p class="text-sm text-neutral-600">
             <a href="{{ route('kunjungan.index') }}" class="font-medium underline underline-offset-2">Kunjungan</a>
             &rsaquo; {{ $cemetery->name }}
         </p>
 
-        <h1 class="mt-2 text-2xl font-semibold text-neutral-900">Kunjungan Makam</h1>
+        <h1 class="mt-2 text-3xl font-semibold tracking-tight text-neutral-900">Kunjungan Makam</h1>
         <p class="mt-1 text-base text-neutral-600">{{ $cemetery->name }}</p>
 
         @if ($capabilitiesDegraded)
@@ -290,5 +304,7 @@
                 </p>
             </x-mk.alert>
         @endif
+        </div>
+        </div>
     </div>
 @endif

@@ -46,6 +46,24 @@ final class InvoiceReceiptPageTest extends TestCase
     }
 
     /**
+     * FFI-clone-whole-frontend ticket 09 — the page shell now matches the
+     * same py-section/max-w-content convention as help-centre.blade.php/
+     * faq/index.blade.php, and the heading uses the established
+     * content-page-title scale, not the smaller pre-restyle size.
+     */
+    public function test_the_receipt_page_uses_the_ffi_container_gutters_and_heading_scale(): void
+    {
+        $order = $this->paidOrder();
+        $invoice = OrderInvoice::query()->where('order_id', $order->getKey())->sole();
+
+        Livewire::test(InvoiceReceiptPage::class, ['reference' => $invoice->reference])
+            ->assertOk()
+            ->assertSeeHtml('py-section md:py-section-lg')
+            ->assertSeeHtml('mx-auto max-w-content px-4')
+            ->assertSeeHtml('<h1 class="text-3xl font-semibold tracking-tight text-neutral-900">Kwitansi Pembayaran</h1>');
+    }
+
+    /**
      * A real HTTP GET, not just a `Livewire::test()` mount — the route is
      * wired, not only the component. `abort(404)` fires in `mount()` before
      * the view (and its `@vite` asset tags) is ever rendered, so this does
