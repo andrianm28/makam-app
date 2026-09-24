@@ -218,82 +218,40 @@
 
                 <form wire:submit.prevent="search" role="search" aria-label="Cari data makam" class="mx-auto mb-8 max-w-form">
                     <div class="flex flex-col gap-4">
-                        <div class="flex flex-col gap-1.5">
-                            <label for="grave-search-name" class="text-base font-medium text-neutral-800">
-                                Nama almarhum
-                            </label>
-                            <input
-                                type="search"
-                                id="grave-search-name"
-                                name="name"
-                                wire:model="name"
-                                autocomplete="off"
-                                placeholder="Contoh: Budi Santoso"
-                                @if ($errors->has('name')) aria-invalid="true" aria-describedby="grave-search-name-error" @endif
-                                class="h-11 w-full rounded-md border bg-neutral-0 px-4 text-base text-neutral-900
-                                    placeholder:text-neutral-500
-                                    transition-[border-color,box-shadow] duration-fast ease-standard
-                                    focus:outline-none focus:ring-2 focus:ring-offset-1
-                                    {{ $errors->has('name')
-                                        ? 'border-danger-600 focus:border-danger-600 focus:ring-danger-600'
-                                        : 'border-neutral-450 hover:border-neutral-600 focus:border-primary-600 focus:ring-primary-600' }}"
-                            >
-                            <p class="text-sm text-neutral-600">
-                                Pencarian memaklumi perbedaan ejaan dan tanda baca, jadi tidak harus persis sama.
-                            </p>
-                            @error('name')
-                                <p id="grave-search-name-error" class="text-sm text-danger-700">{{ $message }}</p>
-                            @enderror
-                        </div>
+                        <x-mk.field
+                            type="search"
+                            id="grave-search-name"
+                            name="name"
+                            label="Nama almarhum"
+                            hint="Pencarian memaklumi perbedaan ejaan dan tanda baca, jadi tidak harus persis sama."
+                            autocomplete="off"
+                            wire:model="name"
+                            :error="$errors->first('name')"
+                        />
 
                         <div class="flex flex-col gap-4 sm:flex-row">
-                            <div class="flex flex-1 flex-col gap-1.5">
-                                <label for="grave-search-block" class="text-base font-medium text-neutral-800">
-                                    Blok <span class="font-normal text-neutral-600">(opsional)</span>
-                                </label>
-                                <input
-                                    type="text"
-                                    id="grave-search-block"
-                                    name="block"
-                                    wire:model="block"
-                                    autocomplete="off"
-                                    placeholder="Contoh: A-12"
-                                    @if ($errors->has('block')) aria-invalid="true" aria-describedby="grave-search-block-error" @endif
-                                    class="h-11 w-full rounded-md border bg-neutral-0 px-4 text-base text-neutral-900
-                                        placeholder:text-neutral-500
-                                        transition-[border-color,box-shadow] duration-fast ease-standard
-                                        focus:outline-none focus:ring-2 focus:ring-offset-1
-                                        {{ $errors->has('block')
-                                            ? 'border-danger-600 focus:border-danger-600 focus:ring-danger-600'
-                                            : 'border-neutral-450 hover:border-neutral-600 focus:border-primary-600 focus:ring-primary-600' }}"
-                                >
-                                @error('block')
-                                    <p id="grave-search-block-error" class="text-sm text-danger-700">{{ $message }}</p>
-                                @enderror
-                            </div>
+                            <x-mk.field
+                                type="text"
+                                id="grave-search-block"
+                                name="block"
+                                label="Blok"
+                                :optional="true"
+                                autocomplete="off"
+                                wire:model="block"
+                                :error="$errors->first('block')"
+                                class="flex-1"
+                            />
 
-                            <div class="flex flex-1 flex-col gap-1.5">
-                                <label for="grave-search-death-date" class="text-base font-medium text-neutral-800">
-                                    Tanggal wafat <span class="font-normal text-neutral-600">(opsional)</span>
-                                </label>
-                                <input
-                                    type="date"
-                                    id="grave-search-death-date"
-                                    name="death_date"
-                                    wire:model="deathDate"
-                                    @if ($errors->has('deathDate')) aria-invalid="true" aria-describedby="grave-search-death-date-error" @endif
-                                    class="h-11 w-full rounded-md border bg-neutral-0 px-4 text-base text-neutral-900
-                                        placeholder:text-neutral-500
-                                        transition-[border-color,box-shadow] duration-fast ease-standard
-                                        focus:outline-none focus:ring-2 focus:ring-offset-1
-                                        {{ $errors->has('deathDate')
-                                            ? 'border-danger-600 focus:border-danger-600 focus:ring-danger-600'
-                                            : 'border-neutral-450 hover:border-neutral-600 focus:border-primary-600 focus:ring-primary-600' }}"
-                                >
-                                @error('deathDate')
-                                    <p id="grave-search-death-date-error" class="text-sm text-danger-700">{{ $message }}</p>
-                                @enderror
-                            </div>
+                            <x-mk.field
+                                type="date"
+                                id="grave-search-death-date"
+                                name="death_date"
+                                label="Tanggal wafat"
+                                :optional="true"
+                                wire:model="deathDate"
+                                :error="$errors->first('deathDate')"
+                                class="flex-1"
+                            />
                         </div>
 
                         <div class="flex flex-wrap gap-2">

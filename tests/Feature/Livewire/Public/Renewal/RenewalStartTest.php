@@ -605,6 +605,50 @@ final class RenewalStartTest extends TestCase
             ->assertSee('Nama almarhum');
     }
 
+    public function test_the_grave_search_form_uses_the_mk_field_primitive(): void
+    {
+        $this->openTheDataGate();
+
+        $html = Livewire::test(RenewalStart::class, ['cemeteryId' => CemeteryFixture::id('package', 0)])
+            ->assertSeeHtml('id="grave-search-name"')
+            ->assertSeeHtml('id="grave-search-block"')
+            ->assertSeeHtml('id="grave-search-death-date"')
+            // <x-mk.field>'s own wrapper class (field.blade.php's `$attributes->merge(['class' => 'flex flex-col gap-1.5'])`)
+            // — the marker that this is now rendered by the primitive, not hand-rolled markup.
+            ->assertSeeHtml('flex flex-col gap-1.5')
+            // <x-mk.field>'s own literal `(opsional)` marker recipe for `block`/`deathDate`.
+            ->assertSeeHtml('<span class="font-normal text-neutral-600">(opsional)</span>')
+            ->html();
+
+        // `name` has no optional/required marker — only two, matching `block` and `deathDate`.
+        $this->assertSame(2, substr_count($html, '<span class="font-normal text-neutral-600">(opsional)</span>'));
+    }
+
+    /**
+     * `name` is `nullable`, so a truly blank submission never fails
+     * validation on it — the real, reachable error case is exceeding
+     * `max:120`. This proves <x-mk.field>'s aria-describedby/aria-invalid
+     * wiring actually activates on a genuine validation failure, not just
+     * that the markup exists.
+     *
+     * The `name` field also carries a `hint` prop, so
+     * <x-mk.field>'s own `$describedBy` computation
+     * (field.blade.php: `collect([hint_id, error_id])->filter()->implode(' ')`)
+     * combines BOTH ids, hint first — the real rendered attribute is
+     * `aria-describedby="grave-search-name-hint grave-search-name-error"`,
+     * not just the error id alone.
+     */
+    public function test_a_name_validation_error_still_describes_the_error_to_the_field(): void
+    {
+        $this->openTheDataGate();
+
+        Livewire::test(RenewalStart::class, ['cemeteryId' => CemeteryFixture::id('package', 0)])
+            ->set('name', str_repeat('a', 121))
+            ->call('search')
+            ->assertSeeHtml('aria-describedby="grave-search-name-hint grave-search-name-error"')
+            ->assertSeeHtml('aria-invalid="true"');
+    }
+
     // =====================================================================
     // Migrated from GraveSearchStatesTest — STATE 2: privacy-limited
     // (AC14, §6.2)

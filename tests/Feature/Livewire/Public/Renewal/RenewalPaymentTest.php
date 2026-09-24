@@ -483,6 +483,23 @@ final class RenewalPaymentTest extends TestCase
             ->assertSee('Terakhir diperbarui');
     }
 
+    public function test_the_fee_quote_cards_detail_blocks_use_the_tinted_panel_convention(): void
+    {
+        $this->openTheDataGate();
+        $cemetery = $this->cemeteryWithPrice();
+        $grave = GraveRecord::factory()->create(['cemetery_id' => $cemetery->id]);
+        RenewalGraveSelection::remember($grave->id);
+
+        Livewire::test(RenewalPayment::class)
+            ->assertOk()
+            // Matches the already-shipped booking-wizard convention verbatim
+            // (resources/views/livewire/public/booking/wizard.blade.php:1466).
+            ->assertSeeHtml('rounded-lg bg-neutral-50 p-4')
+            ->assertSeeHtml('<dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm rounded-lg bg-neutral-50 p-4">')
+            ->assertSeeHtml('<dt class="text-neutral-600">Nama almarhum</dt>')
+            ->assertSeeHtml('<dt class="text-neutral-600">Sumber tarif</dt>');
+    }
+
     /**
      * Migrated from RenewalFeeTest.
      */
