@@ -168,19 +168,16 @@
     color: var(--mk-text-link-hover);
   }
 
-  /* Inverse-surface links (the footer's bg-primary-900). The global `a`
-   * rule above paints links --mk-text-link (primary-600, 1.68:1 against
-   * primary-900 — a WCAG 1.4.3 fail the browser/a11y audit caught). The
-   * footer is an inverse surface, so its links use the inverse text token
-   * (--mk-text-inverse, neutral-0/white, 8.55:1 against primary-900 per
-   * tokens.css). Scoped to the footer, never global. */
-  footer a {
-    color: var(--mk-text-inverse);
-  }
-
-  footer a:hover {
-    color: var(--mk-text-on-brand);
-  }
+  /* REMOVED 24 Sep 2026 (pixel-fidelity 1:1 visual clone of FFI) — this
+   * block forced footer links to --mk-text-inverse (white) because the
+   * footer used to be an inverse surface (bg-primary-900). The footer is
+   * now a light surface (bg-neutral-100, layouts/app.blade.php), so this
+   * override became a real, serious bug the moment that change landed:
+   * white text at 1.18:1 on light gray, caught by the real Playwright
+   * axe-core a11y smoke test across every public page (the footer is
+   * shared layout, so the bug reached every page at once). The footer's
+   * links now correctly fall through to the global `a`/`a:hover` rules
+   * above, same as everywhere else on the page. */
 
   /* Global focus. NEVER override this to `outline: none` without a replacement
    * ring — design-system.md §7.2 and the ci/verify-docs.sh gate both enforce it. */

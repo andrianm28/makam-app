@@ -202,18 +202,45 @@
          page's largest brand field also its thinnest-breathing one. Now it
          consumes --mk-section-gap / --mk-section-gap-lg like everything above
          it. Colour, links, copy and structure are unchanged. --}}
-    <footer class="bg-primary-900 px-4 py-section text-neutral-0 md:px-6 lg:px-8 lg:py-section-lg mb-[var(--mk-bottomnav-total)] lg:mb-0">
-        <div class="mx-auto flex max-w-content flex-col items-center gap-4 text-center">
-            <a href="/" class="inline-flex items-center gap-2" aria-label="makam.co.id — beranda">
-                <x-mk.logo variant="inverse" :size="28" />
-            </a>
-            <nav aria-label="Tautan footer" class="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm">
-                <a href="{{ route('legal.privacy') }}" class="underline underline-offset-2 hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2">Kebijakan Privasi</a>
-                <a href="{{ route('legal.terms') }}" class="underline underline-offset-2 hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2">Syarat &amp; Ketentuan</a>
-                <a href="/bantuan" class="underline underline-offset-2 hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2">Bantuan / Kontak</a>
-            </nav>
-            <p class="text-sm">&copy; {{ date('Y') }} Makam.co.id</p>
-            <p class="text-xs text-primary-200">{{ \App\Support\CompanyInfo::name() }} &middot; {{ \App\Support\CompanyInfo::address() }}</p>
+    {{-- UPDATED 24 Sep 2026 (pixel-fidelity 1:1 visual clone of FFI) --
+         REVERSES the 26 Jul 2026 decision above to upgrade this footer to
+         the dark inverse-surface treatment. FFI's own real footer
+         (Footer.tsx) is a light surface with links grouped under real
+         column headings, not a dark centered panel -- the owner's 1:1
+         direction explicitly asked for this reversal, the same way the
+         icon-medallion squircle-to-circle reversal (PR #358) was. Makam
+         has no About/Careers/Press pages and no established real social
+         account anywhere in this codebase (confirmed by a repo-wide
+         search before writing this), so this keeps only the two column
+         groups Makam has real content for -- it does not force FFI's
+         exact four-column count or invent pages/social links that don't
+         exist. --}}
+    <footer class="bg-neutral-100 px-4 py-section text-neutral-900 md:px-6 lg:px-8 lg:py-section-lg mb-[var(--mk-bottomnav-total)] lg:mb-0">
+        <div class="mx-auto max-w-content">
+            <div class="flex flex-col items-center gap-2 text-center md:items-start md:text-left">
+                <a href="/" class="inline-flex items-center gap-2" aria-label="makam.co.id — beranda">
+                    <x-mk.logo :size="28" />
+                </a>
+            </div>
+            <div class="mt-6 grid grid-cols-2 gap-6 text-center md:text-left">
+                <div>
+                    <h2 class="text-sm font-semibold text-neutral-900">Bantuan</h2>
+                    <ul class="mt-2 space-y-1 text-sm text-neutral-600">
+                        <li><a href="/bantuan" class="underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2">Bantuan / Kontak</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h2 class="text-sm font-semibold text-neutral-900">Legal</h2>
+                    <ul class="mt-2 space-y-1 text-sm text-neutral-600">
+                        <li><a href="{{ route('legal.privacy') }}" class="underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2">Kebijakan Privasi</a></li>
+                        <li><a href="{{ route('legal.terms') }}" class="underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2">Syarat &amp; Ketentuan</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="mt-6 border-t border-neutral-200 pt-4 text-center text-sm text-neutral-600 md:text-left">
+                <p>&copy; {{ date('Y') }} Makam.co.id</p>
+                <p class="text-xs">{{ \App\Support\CompanyInfo::name() }} &middot; {{ \App\Support\CompanyInfo::address() }}</p>
+            </div>
         </div>
     </footer>
 </body>

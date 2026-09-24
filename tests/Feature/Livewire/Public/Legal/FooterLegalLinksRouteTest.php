@@ -101,4 +101,71 @@ final class FooterLegalLinksRouteTest extends TestCase
         $response->assertSee('PT Contoh Makam Digital Indonesia');
         $response->assertSee('Jl. Contoh Cendana No. 88, Kuningan, Jakarta Selatan');
     }
+
+    /**
+     * UPDATED 24 Sep 2026 (pixel-fidelity 1:1 visual clone of FFI) —
+     * REVERSES the 26 Jul 2026 decision to upgrade this footer to a dark
+     * inverse-surface treatment. FFI's own real footer (Footer.tsx) is a
+     * light surface, not a dark centered panel.
+     */
+    public function test_footer_uses_a_light_surface_not_the_old_dark_inverse_panel(): void
+    {
+        $response = $this->get('/privasi');
+        $response->assertOk();
+
+        $html = $response->getContent();
+        $this->assertNotFalse($html);
+
+        // Assert the negative: the old dark-surface classes are genuinely
+        // gone, not left alongside new light-surface ones.
+        $this->assertStringNotContainsString('bg-primary-900', $html);
+        $this->assertStringNotContainsString('variant="inverse"', $html);
+
+        // Assert the positive: the new light surface is real, scoped to
+        // the footer element specifically.
+        $footerStart = strpos($html, '<footer');
+        $this->assertNotFalse($footerStart, 'Expected a <footer> element.');
+        $footerEnd = strpos($html, '</footer>', $footerStart);
+        $this->assertNotFalse($footerEnd);
+        $footer = substr($html, $footerStart, $footerEnd - $footerStart);
+
+        $this->assertStringContainsString('bg-neutral-100', $footer);
+    }
+
+    /**
+     * FFI's real Footer.tsx groups its links under real column headings
+     * (Informasi, Bantuan, Legal, Ikuti Kami) — Makam keeps only the two
+     * groups it has real content for (Bantuan, Legal), per this ticket's
+     * explicit instruction not to invent an "Informasi" column of
+     * pages that don't exist, or social-media links to accounts that
+     * don't exist (confirmed via repo-wide search before implementing:
+     * Makam has no established real social account anywhere in this
+     * codebase).
+     */
+    public function test_footer_renders_grouped_columns_with_real_headings_and_no_invented_content(): void
+    {
+        $response = $this->get('/privasi');
+        $response->assertOk();
+
+        $html = $response->getContent();
+        $this->assertNotFalse($html);
+
+        $footerStart = strpos($html, '<footer');
+        $footerEnd = strpos($html, '</footer>', $footerStart);
+        $footer = substr($html, $footerStart, $footerEnd - $footerStart);
+
+        // Two real heading elements, one per group -- not just bold text.
+        $this->assertMatchesRegularExpression('#<h[2-4][^>]*>\s*Bantuan\s*</h[2-4]>#', $footer);
+        $this->assertMatchesRegularExpression('#<h[2-4][^>]*>\s*Legal\s*</h[2-4]>#', $footer);
+
+        // No invented "Informasi"/About/Careers/Press column.
+        $this->assertStringNotContainsString('Tentang Kami', $footer);
+        $this->assertStringNotContainsString('Karir', $footer);
+
+        // No social-media icons/links -- Makam has no established real
+        // account for any of these.
+        $this->assertStringNotContainsString('instagram.com', $footer);
+        $this->assertStringNotContainsString('facebook.com', $footer);
+        $this->assertStringNotContainsString('twitter.com', $footer);
+    }
 }

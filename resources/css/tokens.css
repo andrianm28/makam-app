@@ -338,7 +338,7 @@
     "text-default on secondary-50" and "text-strong on secondary-50" are both
     already asserted there. Surface-vs-surface separation IS newly asserted
     (the 10/765 floor), and this band clears `--mk-surface-warm` by 30. */
-  --mk-surface-inverse: var(--color-primary-900);  /* footer */
+  --mk-surface-inverse: var(--color-primary-900);  /* UPDATED 24 Sep 2026 -- the footer no longer uses this (pixel-fidelity 1:1 clone reversed it to a light surface, layouts/app.blade.php). Token kept for any future inverse-surface element; not currently consumed anywhere in real markup. */
   --mk-surface-overlay: rgb(13 17 17 / 0.55);      /* modal backdrop */
   --mk-surface-disabled: var(--color-neutral-100);
 

@@ -983,7 +983,8 @@ A **skip link** (`z-skiplink`) is the first focusable element: visually hidden u
 │  │    Container: max-w-content, px-4 md:px-6 lg:px-8     │ │
 │  │    Section gap: 40px mobile / 64px lg                 │ │
 │  └───────────────────────────────────────────────────────┘ │
-├─ Footer (surface-inverse: primary-900) ────────────────────┤
+├─ Footer (neutral-100, light — UPDATED 24 Sep 2026, was ───┤
+│   surface-inverse/primary-900; pixel-fidelity 1:1 clone)   │
 └─ Toast region (z-toast, aria-live) ────────────────────────┘
 ```
 
@@ -1374,7 +1375,9 @@ Selected measured ratios (full output above):
 | `border-interactive` on white / page / warm | **3.59 / 3.30 / 3.17** | 3.0 |
 | focus ring `primary-600` on white | **10.10** | 3.0 |
 | inverse focus ring `primary-300` on `primary-600` | **4.17** | 3.0 |
-| white on `surface-inverse` (footer) | **16.40** | 4.5 |
+| white on `surface-inverse` (historical — footer no longer uses this surface as of 24 Sep 2026; kept for any future inverse element) | **16.40** | 4.5 |
+| `neutral-900` on `neutral-100` (footer, since 24 Sep 2026) | **13.63** | 4.5 |
+| `neutral-600` on `neutral-100` (footer secondary text, since 24 Sep 2026) | **5.32** | 4.5 |
 | disabled text `neutral-500` on `neutral-100` | **3.90** | 3.0 |
 
 **Four findings from that verification worth keeping visible:**
