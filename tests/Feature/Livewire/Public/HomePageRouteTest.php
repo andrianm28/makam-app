@@ -234,14 +234,17 @@ final class HomePageRouteTest extends TestCase
         $response = $this->get('/');
 
         $response->assertOk();
-        // UPDATED 13 Sep 2026 (Task C1, mobile CTA above the fold): the
-        // hero root gained `flex flex-col ... md:block` so that CSS `order`
-        // can lift the text panel above the photo below `md`. The literal
-        // this assertion matches therefore changed; what it proves has not
-        // — it is still the component's distinguishing root class string.
-        // The ordering behaviour itself is asserted in
+        // UPDATED 24 Sep 2026 (ADR-0045, resolves OQ-K5): the hero's old
+        // two-block layout (a `flex flex-col ... md:block` root, so CSS
+        // `order` could lift the text panel above the photo on mobile) is
+        // replaced by a unified photo-with-scrim-overlay layout — the root
+        // no longer needs `order` at all, so it drops back to a plain
+        // `relative overflow-hidden rounded-lg`. The literal this assertion
+        // matches has changed again; what it proves has not — it is still
+        // the component's distinguishing root class string. The overlay's
+        // own behaviour is asserted in
         // Tests\Feature\View\Components\MkHeroTest, which owns the component.
-        $response->assertSee('relative flex flex-col overflow-hidden rounded-lg md:block', false);
+        $response->assertSee('relative overflow-hidden rounded-lg', false);
         $response->assertSee('src="'.asset('images/hero/cemetery-garden-daylight.jpg').'"', false);
         $response->assertSee('Pesan Makam');
         $response->assertSee('href="/pemesanan-makam"', false);
