@@ -55,4 +55,46 @@ final class DeferredSubPagesTest extends TestCase
     {
         $this->get('/akun/dokumen')->assertRedirect(route('login'));
     }
+
+    /**
+     * Stage 3 ticket 01's fix round wired `bottomNavActive => 'akun'` into
+     * this controller but, unlike its DraftList/OrderList siblings, never
+     * got its own bottom-nav assertion — this file already covers the
+     * route's other behaviour, so the missing assertion belongs here, not
+     * in a new file. Same anchor-isolation pattern as
+     * DraftListTest::test_bottom_nav_renders_with_akun_active.
+     */
+    public function test_bottom_nav_renders_with_akun_active_on_the_renewal_page(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get('/akun/perpanjangan');
+
+        $response->assertSee('aria-label="Navigasi utama"', false);
+
+        $html = $response->getContent();
+        $start = strpos($html, 'href="/akun"', strpos($html, 'Navigasi utama'));
+        $this->assertNotFalse($start, 'Akun tab anchor not found in bottom nav');
+        $end = strpos($html, '</a>', $start);
+        $anchor = substr($html, $start, $end - $start);
+
+        $this->assertStringContainsString('aria-current="page"', $anchor);
+    }
+
+    public function test_bottom_nav_renders_with_akun_active_on_the_document_page(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get('/akun/dokumen');
+
+        $response->assertSee('aria-label="Navigasi utama"', false);
+
+        $html = $response->getContent();
+        $start = strpos($html, 'href="/akun"', strpos($html, 'Navigasi utama'));
+        $this->assertNotFalse($start, 'Akun tab anchor not found in bottom nav');
+        $end = strpos($html, '</a>', $start);
+        $anchor = substr($html, $start, $end - $start);
+
+        $this->assertStringContainsString('aria-current="page"', $anchor);
+    }
 }
