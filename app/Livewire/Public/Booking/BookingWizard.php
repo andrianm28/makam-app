@@ -2103,6 +2103,7 @@ final class BookingWizard extends Component
         ])->layout('layouts.app', [
             'title' => 'Pemesanan Makam - Makam.co.id',
             'active' => null,
+            'bottomNavActive' => 'pemesanan',
         ]);
     }
 }

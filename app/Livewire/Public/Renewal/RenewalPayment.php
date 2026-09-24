@@ -105,6 +105,7 @@ final class RenewalPayment extends Component
                 ? 'Biaya Perpanjangan Makam - Makam.co.id'
                 : 'Pembayaran Perpanjangan Makam - Makam.co.id',
             'active' => 'perpanjangan',
+            'bottomNavActive' => 'perpanjangan',
         ]);
     }
 

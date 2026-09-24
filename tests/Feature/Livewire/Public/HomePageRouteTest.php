@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Livewire\Public;
 
+use App\Domain\CemeteryCapability\CemeteryPackageAvailabilityStatus;
+use App\Domain\CemeteryCapability\Models\CemeteryCapabilityProfile;
+use App\Domain\CemeteryCapability\Models\CemeteryPackage;
+use App\Domain\CemeteryCapability\RegistryMode;
 use App\Domain\CemeteryDirectory\CemeteryPublicationStatus;
 use App\Domain\CemeteryDirectory\CemeteryType;
 use App\Domain\CemeteryDirectory\LaunchCityCode;
@@ -264,9 +268,11 @@ final class HomePageRouteTest extends TestCase
         $response->assertSee('Pesan Makam');
         $response->assertSee('href="/pemesanan-makam"', false);
 
-        // Sections around the insertion point still render: Trust (6) above
-        // it, FAQ highlights (7) below it.
-        $response->assertSee('Kenapa Makam.co.id');
+        // FAQ highlights below it still renders. The old "Trust" section
+        // that used to sit above it (Kenapa Makam.co.id) was replaced by
+        // Stage 3 ticket 04's verified-cemeteries section — see
+        // test_verified_cemeteries_section_* below for that section's own
+        // coverage.
         $response->assertSee('Pertanyaan yang Sering Diajukan');
     }
 
@@ -401,55 +407,270 @@ final class HomePageRouteTest extends TestCase
     }
 
     /**
-     * RENAMED from `test_section_5_never_renders_any_of_the_s4_t1_seed_
-     * fixture_cemetery_names`, which asserted none of these ten names could
-     * ever appear on the public homepage — correct at S4-T3 time, when
-     * these rows were fictional fixtures with NULL price/photo/coordinates
-     * and showing them as "featured" would have misrepresented fabricated
-     * content as real (see this file's own prior doc comment, kept in the
-     * original PR history).
-     *
-     * The premise changed by explicit user authorization — see
-     * `App\Livewire\Public\HomePage::render()`'s own doc block for the full
-     * reasoning trail. Section 5 now deliberately renders these same ten
-     * names (nine published, one draft) with clearly-fictional dummy
-     * price/photo/coordinate data, for full public display on
-     * `dev.makam.co.id`. This test is flipped accordingly: it now asserts
-     * the nine PUBLISHED example names DO appear, and the one deliberately
-     * DRAFT example (`CemeteryExampleData::DRAFT_SLUG`) still does not —
-     * `Cemetery::published()` filtering the draft row out is itself real
-     * production behaviour worth protecting, not just a fixture detail.
+     * Stage 3 ticket 03 — the three secondary CTAs (design doc §4.2).
+     * Wakaf Tanah has no real route in this codebase (confirmed by search
+     * before implementing this ticket) — same honest-disabled-control
+     * pattern header.blade.php's own $akunAvailable handling already
+     * establishes, not a working link.
      */
-    public function test_section_5_shows_published_dummy_cemeteries_and_excludes_the_draft_one(): void
+    public function test_secondary_ctas_render_below_the_services_grid(): void
     {
         $response = $this->get('/');
         $response->assertOk();
 
-        // HomePage::render() orders by (city, name) then ->take(6), over
-        // published rows only. The expected list is DERIVED from the
-        // example-data generator under that same ordering, so a change to
-        // the seed data updates the expectation in one place instead of
-        // leaving a frozen name snapshot that drifts from the seed.
-        $published = collect(CemeteryExampleData::cemeteries())
-            ->reject(fn (array $c): bool => $c[7] !== CemeteryPublicationStatus::PUBLISHED)
-            ->sortBy(fn (array $c): array => [$c[3], $c[1]])
-            ->values();
+        $html = $response->getContent();
+        $servicesEnd = strpos($html, '</section>', strpos($html, 'id="services-heading"'));
+        $this->assertNotFalse($servicesEnd);
+        $servicesSection = substr($html, strpos($html, 'id="services-heading"'), $servicesEnd - strpos($html, 'id="services-heading"'));
 
-        $expectedVisibleNames = $published->take(6)->pluck(1)->all();
-        $expectedHiddenByCap = $published->skip(6)->pluck(1)->all();
+        $this->assertStringContainsString('href="'.route('perpanjangan.index').'"', $servicesSection);
+        $this->assertStringContainsString('Perpanjang Makam', $servicesSection);
+        $this->assertStringContainsString('href="'.route('marketplace.index').'"', $servicesSection);
+        $this->assertStringContainsString('Layanan Pemakaman', $servicesSection);
+        // Honest disabled control, not a link — no href, aria-disabled.
+        $this->assertStringContainsString('Wakaf Tanah', $servicesSection);
+        $this->assertStringContainsString('aria-disabled="true"', $servicesSection);
+    }
 
-        foreach ($expectedVisibleNames as $name) {
-            $response->assertSee($name);
+    /**
+     * Stage 3 ticket 03 — urgent-availability TPU/TPS, derived from real
+     * seeded packages marked LIMITED (CemeteryPackageAvailabilityStatus),
+     * the same "derive expectations from the example-data generator"
+     * pattern the section-5 test above already uses.
+     */
+    public function test_urgent_availability_section_shows_cemeteries_with_limited_packages(): void
+    {
+        $response = $this->get('/');
+        $response->assertOk();
+        $response->assertSee('TPU &amp; TPS dengan Ketersediaan Terbatas', false);
+
+        $limitedSlugs = collect(CemeteryExampleData::packages())
+            ->filter(fn (array $p): bool => $p[3] === CemeteryPackageAvailabilityStatus::LIMITED)
+            ->pluck(0)
+            ->unique();
+        $this->assertNotEmpty($limitedSlugs, 'fixture must have at least one LIMITED package for this test to be meaningful');
+
+        $qualifyingNames = collect(CemeteryExampleData::cemeteries())
+            ->filter(fn (array $c): bool => $limitedSlugs->contains($c[2]) && $c[7] === CemeteryPublicationStatus::PUBLISHED)
+            ->pluck(1);
+
+        $html = $response->getContent();
+        $sectionStart = strpos($html, 'id="urgent-availability-heading"');
+        $this->assertNotFalse($sectionStart, 'urgent-availability section must render given real LIMITED packages exist in the fixture');
+        $sectionEnd = strpos($html, '<h2', strpos($html, '</section>', $sectionStart));
+        $section = substr($html, $sectionStart, ($sectionEnd !== false ? $sectionEnd : strlen($html)) - $sectionStart);
+
+        foreach ($qualifyingNames as $name) {
+            $this->assertStringContainsString($name, $section);
         }
 
-        // Excluded by the draft-publication-status scope (Cemetery::published()):
-        $response->assertDontSee(CemeteryExampleData::bySlug(CemeteryExampleData::DRAFT_SLUG)[1]);
+        // A published cemetery with no LIMITED package must not appear in
+        // THIS section (it may legitimately appear elsewhere on the page).
+        $nonQualifying = collect(CemeteryExampleData::cemeteries())
+            ->first(fn (array $c): bool => ! $limitedSlugs->contains($c[2]) && $c[7] === CemeteryPublicationStatus::PUBLISHED);
+        $this->assertNotNull($nonQualifying);
+        $this->assertStringNotContainsString($nonQualifying[1], $section);
+    }
 
-        // Excluded purely by the ->take(6) display cap — asserted here so a
-        // future cap change is a deliberate, visible test update:
-        foreach ($expectedHiddenByCap as $name) {
-            $response->assertDontSee($name);
+    public function test_urgent_availability_section_is_absent_when_nothing_qualifies(): void
+    {
+        // No LIMITED package exists for any cemetery once the fixture ones
+        // are neutralised — real empty-state behaviour, not a mocked flag.
+        CemeteryPackage::query()
+            ->where('availability_status', CemeteryPackageAvailabilityStatus::LIMITED)
+            ->update(['availability_status' => CemeteryPackageAvailabilityStatus::AVAILABLE]);
+
+        $response = $this->get('/');
+
+        $response->assertOk();
+        $response->assertDontSee('id="urgent-availability-heading"', false);
+    }
+
+    /**
+     * Stage 3 ticket 03 — newest published TPU/TPS, ordered by
+     * `published_at` desc (with an `id` tie-breaker the fixture's
+     * identical-timestamp rows make necessary for determinism).
+     */
+    public function test_newest_published_section_shows_published_cemeteries(): void
+    {
+        $response = $this->get('/');
+        $response->assertOk();
+        $response->assertSee('TPU &amp; TPS Terbaru', false);
+
+        $html = $response->getContent();
+        $sectionStart = strpos($html, 'id="newest-published-heading"');
+        $this->assertNotFalse($sectionStart);
+        $sectionEnd = strpos($html, '<h2', strpos($html, '</section>', $sectionStart));
+        $section = substr($html, $sectionStart, ($sectionEnd !== false ? $sectionEnd : strlen($html)) - $sectionStart);
+
+        // At least one real published cemetery name renders in this
+        // section — not asserting the exact top-6 set, since every
+        // published cemetery in the fixture shares the same `published_at`
+        // instant and is therefore a legitimate member of "newest" under
+        // the `id` tie-breaker.
+        $anyPublished = collect(CemeteryExampleData::cemeteries())
+            ->first(fn (array $c): bool => $c[7] === CemeteryPublicationStatus::PUBLISHED);
+        $this->assertNotNull($anyPublished);
+        $this->assertStringContainsString($anyPublished[1], $html);
+
+        // Excluded by the draft-publication-status scope, same as section 5.
+        $this->assertStringNotContainsString(
+            CemeteryExampleData::bySlug(CemeteryExampleData::DRAFT_SLUG)[1],
+            $section
+        );
+    }
+
+    /**
+     * Stage 3 ticket 04 — the design doc §4.1 final section order for the
+     * region this stage restructured, checked in one pass rather than
+     * each section's independent presence: services (carrying the
+     * secondary CTAs), urgent TPU/TPS, newest TPU/TPS, verified TPU/TPS,
+     * family warmth, FAQ highlights, customer-service CTA. The urgent
+     * banner and plot-availability preview are deliberately excluded —
+     * both are conditionally rendered (gate state / seed configuration)
+     * and already have their own dedicated ordering tests elsewhere in
+     * this file. Same relative-`strpos` ordering technique the rest of
+     * this file's tests already use.
+     */
+    public function test_final_homepage_section_order_matches_the_design_doc(): void
+    {
+        // The verified section's heading always renders, even against
+        // real, unmodified seed data where no cemetery's card grid
+        // qualifies (see the view's own comment) — no extra fixture setup
+        // needed here to locate it, unlike the other real-data sections.
+        $response = $this->get('/');
+        $response->assertOk();
+
+        $html = $response->getContent();
+        $positions = [
+            'services' => strpos($html, 'id="services-heading"'),
+            'secondary CTAs' => strpos($html, 'Perpanjang Makam'),
+            'urgent TPU/TPS' => strpos($html, 'id="urgent-availability-heading"'),
+            'newest TPU/TPS' => strpos($html, 'id="newest-published-heading"'),
+            'verified TPU/TPS' => strpos($html, 'id="verified-heading"'),
+            'family warmth' => strpos($html, 'id="family-warmth-heading"'),
+            'FAQ highlights' => strpos($html, 'id="faq-highlights-heading"'),
+            'customer-service CTA' => strpos($html, 'id="cs-cta-heading"'),
+        ];
+
+        foreach ($positions as $label => $position) {
+            $this->assertNotFalse($position, "expected to find the $label marker in the response");
         }
+
+        $ordered = array_values($positions);
+        $labels = array_keys($positions);
+        for ($i = 1; $i < count($ordered); $i++) {
+            $this->assertGreaterThan(
+                $ordered[$i - 1],
+                $ordered[$i],
+                $labels[$i].' must come after '.$labels[$i - 1]
+            );
+        }
+    }
+
+    public function test_how_it_works_featured_cemeteries_and_trust_sections_are_removed(): void
+    {
+        // The three sections ticket 04 explicitly removes, now that its
+        // own replacement (the verified-cemeteries section) exists.
+        $response = $this->get('/');
+        $response->assertOk();
+
+        $response->assertDontSee('id="how-it-works-heading"', false);
+        $response->assertDontSee('id="featured-cemeteries-heading"', false);
+        $response->assertDontSee('id="trust-heading"', false);
+
+        // Their redistributed substance survives elsewhere, not silently
+        // dropped.
+        $response->assertSee('lunas setelah benar-benar', false);
+        $response->assertSee('pilih lokasi dan jenis layanan', false);
+    }
+
+    /**
+     * Stage 3 ticket 04 — verified-cemeteries CARD GRID, honest empty
+     * state. Every seeded cemetery's current capability profile is the
+     * S4-T1 safe default (`registry_mode = NONE`) — confirmed directly
+     * against `CemeteryExampleData::seed()`'s own insert, not assumed —
+     * so no real card renders against real, unmodified seed data. The
+     * section ITSELF (heading + reassurance intro, replacing the old,
+     * always-visible "Trust/safety" section) still renders regardless —
+     * see the view's own comment on why only the card grid is
+     * data-dependent, not the whole section.
+     */
+    public function test_verified_cemeteries_card_grid_is_absent_against_unmodified_seed_data(): void
+    {
+        $response = $this->get('/');
+        $response->assertOk();
+
+        // The section and its reassurance copy still render.
+        $response->assertSee('id="verified-heading"', false);
+        $response->assertSee('lunas setelah benar-benar', false);
+
+        // But no real verified-cemetery card does.
+        $response->assertDontSee('Lokasi Terverifikasi');
+    }
+
+    public function test_verified_cemeteries_section_renders_with_the_trust_badges_when_a_cemetery_is_genuinely_verified(): void
+    {
+        $cemetery = $this->createGenuinelyVerifiedCemetery();
+
+        $response = $this->get('/');
+        $response->assertOk();
+
+        $html = $response->getContent();
+        $sectionStart = strpos($html, 'id="verified-heading"');
+        $this->assertNotFalse($sectionStart, 'verified section must render given a real AUTHORITATIVE registry_mode profile exists');
+        $sectionEnd = strpos($html, '</section>', $sectionStart);
+        $section = substr($html, $sectionStart, ($sectionEnd !== false ? $sectionEnd : strlen($html)) - $sectionStart);
+
+        $this->assertStringContainsString($cemetery->name, $section);
+        $this->assertStringContainsString('Lokasi Terverifikasi', $section);
+        $this->assertStringContainsString('Harga Transparan', $section);
+    }
+
+    /**
+     * Real domain-model construction, not a mock: a brand-new published
+     * `Cemetery` plus a real, current `CemeteryCapabilityProfile` row with
+     * `registry_mode = AUTHORITATIVE` — the same real-state-construction
+     * technique `test_plot_availability_preview_renders_between_the_hero_
+     * and_the_service_cards_when_data_exists` above already uses for its
+     * own new-cemetery fixture.
+     */
+    private function createGenuinelyVerifiedCemetery(): Cemetery
+    {
+        $cemetery = Cemetery::query()->create([
+            'type' => CemeteryType::TPU,
+            'publication_status' => CemeteryPublicationStatus::PUBLISHED,
+            'name' => 'TPU Terverifikasi Homepage',
+            'slug' => 'tpu-terverifikasi-homepage',
+            'city' => LaunchCityCode::JAKARTA,
+            'address' => 'Jl. Contoh Verifikasi No. 1',
+            'plot_tracking_mode' => PlotTrackingMode::GRANULAR,
+            // Real price fields so CemeteryPresenter::priceRange()/
+            // priceAttribution() both resolve non-null — the section's
+            // "Harga Transparan" note only renders alongside a real price.
+            'price_min' => 5_000_000,
+            'price_max' => 8_000_000,
+            'price_currency' => 'IDR',
+            'price_source' => 'Test fixture',
+            'price_effective_at' => now(),
+        ]);
+
+        $defaults = CemeteryCapabilityProfile::safeDefaults();
+
+        CemeteryCapabilityProfile::query()->create([
+            ...$defaults,
+            'cemetery_id' => $cemetery->getKey(),
+            'version_number' => 1,
+            'registry_mode' => RegistryMode::AUTHORITATIVE,
+            'source' => 'test:homepage-verified-section',
+            'owner' => 'Test fixture',
+            'evidence' => 'Registry authoritatively evidenced for this test fixture.',
+            'rollback_plan' => 'Not applicable — test fixture only.',
+            'effective_at' => now(),
+            'superseded_at' => null,
+        ]);
+
+        return $cemetery;
     }
 
     public function test_faq_highlights_link_into_the_real_faq_routes(): void
@@ -661,5 +882,64 @@ final class HomePageRouteTest extends TestCase
         $this->assertNotFalse($previewHeading);
         $this->assertGreaterThan($heroEnd, $previewHeading, 'Preview section must render after the hero.');
         $this->assertLessThan($servicesHeading, $previewHeading, 'Preview section must render before the service cards.');
+    }
+
+    public function test_bottom_nav_renders_with_beranda_active_and_is_hidden_above_lg(): void
+    {
+        $response = $this->get('/');
+
+        $response->assertSee('aria-label="Navigasi utama"', false);
+
+        $html = $response->getContent();
+        $navigasiUtamaPos = strpos($html, 'Navigasi utama');
+        $this->assertNotFalse($navigasiUtamaPos, 'Bottom nav aria-label not found');
+
+        // `header.blade.php` already emits the literal string 'lg:hidden'
+        // elsewhere on the page (its own mobile bar classes), so asserting
+        // 'lg:hidden' anywhere in the whole page would still pass even if the
+        // bottom nav itself lost 'lg:hidden' entirely. Isolate the bottom
+        // nav's own opening <nav ...> tag — the nearest preceding '<nav'
+        // before its aria-label, through to that tag's own closing '>' —
+        // and assert 'lg:hidden' inside THAT substring only, so this
+        // assertion can actually fail if the bottom nav specifically dropped
+        // it.
+        $navTagStart = strrpos(substr($html, 0, $navigasiUtamaPos), '<nav');
+        $this->assertNotFalse($navTagStart, 'Opening <nav> tag not found before the bottom nav aria-label');
+        $navTagEnd = strpos($html, '>', $navTagStart);
+        $this->assertNotFalse($navTagEnd, 'Bottom nav <nav> tag never closes');
+        $navOpeningTag = substr($html, $navTagStart, $navTagEnd - $navTagStart + 1);
+
+        $this->assertStringContainsString('lg:hidden', $navOpeningTag, 'Bottom nav <nav> tag must carry lg:hidden');
+
+        // Beranda's own anchor carries aria-current + the active classes;
+        // isolate it the same way MkBottomNavTest's own active-tab tests do,
+        // so this doesn't just prove SOME tab is active, but that Beranda
+        // specifically is.
+        $berandaStart = strpos($html, 'href="/"', $navigasiUtamaPos);
+        $this->assertNotFalse($berandaStart, 'Beranda tab anchor not found');
+        $berandaEnd = strpos($html, '</a>', $berandaStart);
+        $berandaAnchor = substr($html, $berandaStart, $berandaEnd - $berandaStart);
+
+        $this->assertStringContainsString('aria-current="page"', $berandaAnchor);
+        $this->assertStringContainsString('text-primary-700', $berandaAnchor);
+        $this->assertStringContainsString('border-primary-600', $berandaAnchor);
+
+        // The header's own hamburger/active state is untouched by this change.
+        $response->assertSee('Menu utama (seluler)', false);
+    }
+
+    public function test_bottom_nav_does_not_visually_overlap_the_footer(): void
+    {
+        $response = $this->get('/');
+
+        // The footer's clearance margin lives in layouts/app.blade.php, the
+        // SHARED layout every wired public page renders through — not in
+        // HomePage itself. So this one test covers the footer-clearance fix
+        // for every page wired to the bottom nav, not just the homepage;
+        // duplicating it per page would assert the same shared markup
+        // fourteen-plus times over.
+        // Footer carries the mobile-only bottom-nav clearance margin; lg:mb-0
+        // cancels it where the bar is hidden.
+        $response->assertSee('mb-[var(--mk-bottomnav-total)] lg:mb-0', false);
     }
 }

@@ -28,7 +28,7 @@
     <div class="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2">
         <x-mk.card :href="route('akun.draft')" interactive>
             <div class="flex items-start gap-4">
-                <x-mk.icon-medallion icon="clock" />
+                <x-mk.icon-medallion icon="clock" tone="primary" />
                 <div>
                     <h2 class="text-lg font-semibold text-neutral-900">Draft Pemesanan</h2>
                     <p class="mt-1 text-sm text-neutral-600">
@@ -44,7 +44,7 @@
 
         <x-mk.card :href="route('akun.pesanan')" interactive>
             <div class="flex items-start gap-4">
-                <x-mk.icon-medallion icon="inbox" />
+                <x-mk.icon-medallion icon="inbox" tone="primary" />
                 <div>
                     <h2 class="text-lg font-semibold text-neutral-900">Pesanan</h2>
                     <p class="mt-1 text-sm text-neutral-600">
@@ -60,7 +60,7 @@
 
         <x-mk.card :href="route('akun.perpanjangan')" interactive>
             <div class="flex items-start gap-4">
-                <x-mk.icon-medallion icon="clock-x" />
+                <x-mk.icon-medallion icon="clock-x" tone="primary" />
                 <div>
                     <h2 class="text-lg font-semibold text-neutral-900">
                         Perpanjangan
@@ -75,7 +75,7 @@
 
         <x-mk.card :href="route('akun.dokumen')" interactive>
             <div class="flex items-start gap-4">
-                <x-mk.icon-medallion icon="document-text" />
+                <x-mk.icon-medallion icon="document-text" tone="primary" />
                 <div>
                     <h2 class="text-lg font-semibold text-neutral-900">
                         Dokumen

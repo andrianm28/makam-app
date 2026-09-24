@@ -555,6 +555,29 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
     }
 
     /**
+     * Stage 3 ticket 02 — the three hand-rolled skeleton `div`s in the
+     * filtered-list loading region were replaced by real
+     * `<x-mk.skeleton>` instances (one per `@for` iteration, still three).
+     * `wire:loading` markup is always present in the server-rendered HTML
+     * (visibility is toggled client-side by Livewire's JS via CSS
+     * attribute selectors, and this region has no gating `@if`), so a
+     * plain mount already renders it. `mk-skeleton-shimmer` is a literal,
+     * known string unique to `<x-mk.skeleton>`, not recomputed from the
+     * component's source.
+     */
+    public function test_loading_region_renders_the_real_skeleton_component(): void
+    {
+        $html = Livewire::test(CemeteryDirectoryIndex::class)->html();
+
+        $this->assertSame(
+            3,
+            substr_count($html, 'mk-skeleton-shimmer'),
+            'Expected 3 <x-mk.skeleton> instances, one per @for loop iteration.'
+        );
+        $this->assertStringNotContainsString('bg-[var(--mk-skeleton-base)] animate-pulse', $html);
+    }
+
+    /**
      * Ordering assertions scope to the body so `<title>` cannot produce a
      * false match.
      */
@@ -564,5 +587,21 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
         $bodyStart = strpos($content, '<body');
 
         return $bodyStart === false ? $content : substr($content, $bodyStart);
+    }
+
+    public function test_bottom_nav_renders_with_no_active_tab(): void
+    {
+        $response = $this->get('/pemakaman');
+
+        $response->assertSee('aria-label="Navigasi utama"', false);
+
+        $html = $response->getContent();
+        $start = strpos($html, 'aria-label="Navigasi utama"');
+        $this->assertNotFalse($start, 'Bottom nav not found');
+        $end = strpos($html, '</nav>', $start);
+        $this->assertNotFalse($end, 'Bottom nav is unterminated');
+
+        $bottomNav = substr($html, $start, $end - $start);
+        $this->assertSame(0, substr_count($bottomNav, 'aria-current="page"'), 'No tab should be active in bottom nav for cemetery directory');
     }
 }

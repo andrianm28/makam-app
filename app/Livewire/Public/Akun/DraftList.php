@@ -34,6 +34,7 @@ final class DraftList extends Component
         ])->layout('layouts.app', [
             'title' => 'Draft Pemesanan - Makam.co.id',
             'active' => null,
+            'bottomNavActive' => 'akun',
         ]);
     }
 }

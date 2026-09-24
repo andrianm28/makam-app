@@ -42,13 +42,30 @@ use Tests\TestCase;
  * revealed screen (the `?tpu=` "orphaned" state in particular — see the
  * "Cemetery scoping" section below).
  *
- * `Livewire::test()` rather than `$this->get('/perpanjangan')`: `routes/
- * web.php` is a shared file; the route, its name, and its HTTP status are
- * NOT TESTED here.
+ * `Livewire::test()` rather than `$this->get('/perpanjangan')` for every test
+ * above: `routes/web.php` is a shared file; the route, its name, and its HTTP
+ * status are NOT TESTED by those. The one exception is
+ * `test_bottom_nav_renders_with_perpanjangan_active()` below, which makes a
+ * real `$this->get('/perpanjangan')` request because the bottom nav lives in
+ * the shared layout, not in `RenewalStart` itself — `Livewire::test()` never
+ * renders `layouts/app.blade.php`, so there is no way to assert the nav's
+ * markup without a real HTTP request. That request is also why `setUp()`
+ * needed `withoutVite()` added: it renders `layouts/app.blade.php`'s
+ * `@vite(...)` directive, which the other, `Livewire::test()`-only tests in
+ * this file never reach.
  */
 final class RenewalStartTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // HTTP requests below render layouts/app.blade.php, which contains
+        // `@vite(...)`; CI's `php` job has no frontend build. Same
+        // requirement as other public Livewire route tests.
+        $this->withoutVite();
+    }
 
     /**
      * Copy fragments that identify each of the three grave-search empty
@@ -1358,9 +1375,78 @@ final class RenewalStartTest extends TestCase
         $this->assertNull(RenewalGraveSelection::current());
     }
 
+    /**
+     * Stage 3 ticket 02 — the Step 2 TPU/TPS grid's two hand-rolled
+     * skeleton `div`s were replaced by real `<x-mk.skeleton>` instances.
+     * `wire:loading` markup is always present in the server-rendered HTML
+     * (visibility is toggled client-side by Livewire's JS via CSS
+     * attribute selectors), so reaching Step 2's `$city !== ''` state
+     * already renders it — no need to fake-trigger the loading state
+     * itself. Asserting the component's own distinguishing
+     * `mk-skeleton-shimmer` class (unique to `<x-mk.skeleton>`, never
+     * present in the old hand-rolled markup) is a literal, known string,
+     * not recomputed from the component's source.
+     */
+    public function test_step_2_tpu_tps_grid_renders_the_real_skeleton_component(): void
+    {
+        $html = Livewire::test(RenewalStart::class)
+            ->call('selectCity', LaunchCityCode::JAKARTA)
+            ->html();
+
+        $this->assertSame(
+            2,
+            substr_count($html, 'mk-skeleton-shimmer'),
+            'Expected 2 <x-mk.skeleton> instances in the Step 2 TPU/TPS grid.'
+        );
+        $this->assertStringNotContainsString('bg-[var(--mk-skeleton-base)] animate-pulse', $html);
+    }
+
+    /**
+     * Same as above, for the Step 3 search-results list's three
+     * hand-rolled skeleton `div`s, now real `<x-mk.skeleton>` instances.
+     * `cemeteryId` alone reaches `$selectedCemetery !== null`, but the
+     * real search UI (this ticket's own loading region included) is
+     * further gated behind the G-DATA-01 feature gate, which seeds
+     * CLOSED by default (`test_the_data_gate_seeds_closed_so_gate_closed_
+     * is_the_default_state` asserts exactly this) — `openTheDataGate()`
+     * is this file's own established helper for reaching the open-gate
+     * search UI, used by every other test in this file that needs it
+     * (e.g. `test_arriving_without_searching_renders_no_empty_state_at_all`).
+     */
+    public function test_step_3_search_results_list_renders_the_real_skeleton_component(): void
+    {
+        $this->openTheDataGate();
+
+        $html = Livewire::test(RenewalStart::class, [
+            'cemeteryId' => CemeteryFixture::id('package', 0),
+        ])->html();
+
+        $this->assertSame(
+            3,
+            substr_count($html, 'mk-skeleton-shimmer'),
+            'Expected 3 <x-mk.skeleton> instances in the Step 3 search-results list.'
+        );
+        $this->assertStringNotContainsString('bg-[var(--mk-skeleton-base)] animate-pulse', $html);
+    }
+
     /** The cemetery name as STORED — what the page renders, marker included. */
     private function storedCemeteryName(string $cemeteryId): string
     {
         return (string) DB::table('cemeteries')->where('id', $cemeteryId)->value('name');
+    }
+
+    public function test_bottom_nav_renders_with_perpanjangan_active(): void
+    {
+        $response = $this->get('/perpanjangan');
+
+        $response->assertSee('aria-label="Navigasi utama"', false);
+
+        $html = $response->getContent();
+        $start = strpos($html, 'href="/perpanjangan"', strpos($html, 'Navigasi utama'));
+        $this->assertNotFalse($start, 'Perpanjangan tab anchor not found in bottom nav');
+        $end = strpos($html, '</a>', $start);
+        $anchor = substr($html, $start, $end - $start);
+
+        $this->assertStringContainsString('aria-current="page"', $anchor);
     }
 }

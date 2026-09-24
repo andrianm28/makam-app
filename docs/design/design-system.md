@@ -137,7 +137,7 @@ What replaces it is stronger and does not depend on where any hue sits: **Sage i
 
 Secondary stays **restricted by usage**: shades 50–200 as surface tint, 300 as the guideline's own Sage for tinted bands, 700–900 as text on those tints, 400 as decorative rules/icons. It is **never** a filled badge, alert, or button — now for a reason a contrast checker can prove, rather than one a hue chart suggests.
 
-A `secondary-100` tile carrying a `secondary-800` icon (`<x-mk.icon-medallion tone="leaf">`, added 19 Aug 2026) is a surface-tint-plus-text usage, not a fill — it stays inside the cage, not an exception to it. It is `aria-hidden`, decorative only, and never appears adjacent to order/payment/availability data where a status reading could attach to it.
+A `secondary-100` tile carrying a `secondary-800` icon (`<x-mk.icon-medallion tone="secondary">`, added 19 Aug 2026) is a surface-tint-plus-text usage, not a fill — it stays inside the cage, not an exception to it. It is `aria-hidden`, decorative only, and never appears adjacent to order/payment/availability data where a status reading could attach to it.
 
 **(e) Success is teal `#0C6D7A`, not green — and this is the one place the guideline was overruled by measurement.** Added 15 Sep 2026, [ADR-0041](../adr/0041-brand-guideline-2026-supersedes-adr-0034.md) D7.
 
@@ -493,18 +493,18 @@ refresh introduced, used inside `<x-mk.card>`'s default slot (service cards, Car
 trust points), never as a standalone status indicator.
 
 **Props:** `icon` (`icon.*` component name; omit and use the default slot for a numeral instead)
-· `tone` (`earth` | `leaf` | `brand`, closed list) · `size` (`md` 44px default | `lg` 52px | `xl` 64px).
+· `tone` (`primary` | `secondary` | `brand`, closed list) · `size` (`md` 44px default | `lg` 52px | `xl` 64px).
 
 **Base:** `rounded-xl` (never `rounded-full` — §1.5 restricts that to avatars/stepper-dots/
-progress-tracks). `earth` → `bg-primary-100 text-primary-800`. `leaf` → `bg-secondary-100
-text-secondary-800` — a surface-tint usage already inside the Leaf cage (§1.2(b), §9.2 MUST-NOT
+progress-tracks). `primary` → `bg-primary-100 text-primary-800`. `secondary` → `bg-secondary-100
+text-secondary-800` — a surface-tint usage already inside the Sage cage (§1.2(b), §9.2 MUST-NOT
 #7), not an exception to it. Both pairs are asserted in `docs/design/verify-contrast.py`.
 
 **`brand` — added 14 Sep 2026, [ADR-0040](../adr/0040-add-surface-quiet-and-widen-the-brand-field.md) D3.** `brand` → `bg-primary-600 text-neutral-0`: a genuine Earth **fill**, not a tint like the other two — the same fill `<x-mk.button variant="primary">` uses, at medallion scale. It exists because a survey of the live homepage found the brand colour filling exactly one element on the entire page while appearing 46 times as text. `white on primary-600` is already asserted in `verify-contrast.py` (10.10:1), so no new pair was needed. This tone does **not** loosen the adjacency rule below — a filled tile reads louder than a tint, so it applies more strongly. It is also not a precedent for a `secondary` fill tone: Leaf stays caged by §1.2(b) and §9.2 MUST NOT 7, and a Leaf medallion fill remains forbidden.
 
 Always `aria-hidden="true"` — decorative only, never a substitute for a real text label (same
 rule `<x-mk.badge>`'s `dot` prop follows). Never placed adjacent to order/payment/availability
-data, so it never carries a status reading despite `leaf` sitting near the `success` hue.
+data, so it never carries a status reading despite `secondary` sitting near the `success` hue.
 
 **`xl` (64 px) — added 14 Sep 2026, kamboja plan Tahap 4.** Size only: no new tone, no change to `brand`. The homepage's four service cards use it, because 44 → 52 px is an 18 % step that does not read as hierarchy at card scale. Tile `size-16`, mark `size-7` — both on `tokens.css`'s 4 px `--spacing` scale, keeping the same ~45 % mark-to-tile ratio `md` and `lg` already use. `xl` is for a card that is a **journey entrance** (`<x-mk.card emphasis="strong">`); it is not a licence to enlarge every medallion on a page.
 
@@ -951,13 +951,17 @@ The **persistent Bantuan action is mandatory** (IA §2) — it is never collapse
 
 A **skip link** (`z-skiplink`) is the first focusable element: visually hidden until focused, then `bg-primary-600 text-white` pinned top-left, targeting `#main`.
 
-### 3.11 Bottom navigation — ⚠️ **PROPOSED, NOT APPROVED**
+### 3.11 Bottom navigation — **APPROVED**
 
-> **This component is not in the approved IA.** [IA §2](../product/information-architecture.md) specifies mobile navigation as *logo + hamburger + persistent Bantuan*. `AGENTS.md` forbids inventing alternate navigation or labels without product change approval.
+> **(Historical — superseded 23 Sep 2026 by ADR-0044; see the note below.) This component is not in the approved IA.** [IA §2](../product/information-architecture.md) specifies mobile navigation as *logo + hamburger + persistent Bantuan*. `AGENTS.md` forbids inventing alternate navigation or labels without product change approval.
 >
 > **Default implementation is the IA-compliant header in §3.10.** The bottom nav below is a design proposal pending approval — tracked as **OQ-04**. Do not ship it without a product decision recorded in `mvp-scope.md` or an ADR.
 
-If approved, it must use the four canonical labels unchanged and follow: `fixed inset-x-0 bottom-0 z-bottomnav h-[var(--mk-bottomnav-total)] bg-white border-t border-neutral-200 pb-[var(--mk-safe-bottom)]`; 4 items, each a 44 px minimum target with icon + label (`text-2xs`); active `text-primary-700` with icon fill; `<nav aria-label="Navigasi utama">` + `aria-current="page"`. Any sticky wizard CTA must sit **above** it (`z-sticky-cta` < `z-bottomnav`) — content is padded by `--mk-bottomnav-total`, never overlapped.
+**Approved 23 Sep 2026 ([ADR-0044](../adr/0044-approve-ffi-five-tab-bottom-navigation.md)), resolving OQ-04.** The blockquote above is historical — bottom navigation IS now approved, in the 5-item form below, not the 4-item draft that follows this note. §3.10's IA-compliant header stays the DEFAULT for desktop and is joined, not replaced, by this component on mobile; the existing hamburger (`<x-mk.header>`, §3.10) is KEPT alongside the bottom nav — the 5 canonical tabs (Beranda, Pemesanan, Perpanjangan, Akun, Bantuan) don't cover two real desktop nav items (Layanan Pemakaman, FAQ), so mobile still needs the hamburger's overflow to reach them (ADR-0044 Amendment 1).
+
+**(Historical — superseded 23 Sep 2026 by ADR-0044; the 5-item "As implemented" paragraph below is current.)** If approved, it must use the four canonical labels unchanged and follow: `fixed inset-x-0 bottom-0 z-bottomnav h-[var(--mk-bottomnav-total)] bg-white border-t border-neutral-200 pb-[var(--mk-safe-bottom)]`; 4 items, each a 44 px minimum target with icon + label (`text-2xs`); active `text-primary-700` with icon fill; `<nav aria-label="Navigasi utama">` + `aria-current="page"`. Any sticky wizard CTA must sit **above** it (`z-sticky-cta` < `z-bottomnav`) — content is padded by `--mk-bottomnav-total`, never overlapped.
+
+**As implemented, `<x-mk.bottom-nav>` — approved but not yet wired into any real page (Stage 3's job)** — the 5-item bottom navigation (Beranda, Pemesanan, Perpanjangan, Akun, Bantuan) is `lg:hidden` with fixed positioning (`fixed inset-x-0 bottom-0`) on its `<nav>` root, sized to `h-[var(--mk-bottomnav-total)]` with safe-area padding `pb-[var(--mk-safe-bottom)]`; the `<ul>` inside is the 5-column grid (`grid grid-cols-5`), sized to `h-[var(--mk-bottomnav-h)]`. The background is `bg-neutral-0` with a top border `border-t border-neutral-200`. Each tab is a full-height, full-width link with centered flex layout (`flex-col items-center justify-center`), icon (`size-5`, 1.25 rem / 20 px, shrink-proof — outline glyphs only, no active-state fill variant, unlike the superseded 4-item draft above; colour + the `border-t-2` shape change still satisfy the active/inactive distinction without relying on fill), text label (`text-2xs`), and a small gap. **Active marking:** `text-primary-700 border-t-2 border-primary-600` (2 px top border override in primary color, replacing the default transparent top border). **Inactive:** `text-neutral-700 border-t-2 border-transparent`. **Accessibility:** `<nav aria-label="Navigasi utama">` and `aria-current="page"` on the active tab. **Touch targets:** all dimensions meet or exceed the 44 px WCAG minimum in both height (grid cell height, full `--mk-bottomnav-h`) and width (1/5 of viewport). **Responsive:** Only visible below `lg` breakpoint; the desktop header (§3.10) and its hamburger remain the primary navigation on wider viewports. **Stacking (still binding, carried forward from the superseded draft above):** any sticky wizard CTA must sit **above** the bottom nav (`z-sticky-cta` < `z-bottomnav`); page content must be padded by `--mk-bottomnav-total`, never overlapped by it — both are Stage 3 wiring obligations, not yet exercised since no real page renders this component yet.
 
 ---
 
@@ -1118,6 +1122,15 @@ Covered in §1.6 (tokens). Design rules:
 ```
 
 Every skeleton carries an `sr-only` announcement; a screen-reader user hears nothing from a pulsing box.
+
+**As of Stage 2 ticket 01 (23 Sep 2026), `<x-mk.skeleton>` is the
+component-backed form of this pattern** — a two-tone `mk-skeleton-shimmer`
+sweep (`--mk-skeleton-base`/`-sheen`) rather than the single-tone
+`animate-pulse` shown above, because a single tone leaves
+`--mk-skeleton-sheen` unused despite it existing for exactly this. Prefer
+`<x-mk.skeleton>` for any new loading state; the inline `wire:loading`
+recipe above remains valid for existing call sites and for cases the
+component doesn't cover yet.
 
 **A page-level skeleton follows §4.4's rhythm, not its own (added 14 Sep 2026, kamboja plan Tahap 8).** "Mirrors the real layout" is a CLS requirement before it is an aesthetic one: a skeleton padded differently from the section it stands in for shifts the page at the moment content arrives, which is exactly what the < 0.1 budget above measures. So a skeleton standing in for a whole page section takes `py-section lg:py-section-lg` like the section will, and inherits that section's surface utility if it has one. The inline example above is a **within-section** skeleton — a list of results inside an already-padded container — and correctly carries no section padding of its own.
 
@@ -1830,7 +1843,7 @@ These require a decision from design, product, or brand. **Each is a real fork, 
 | **OQ-02** | Is there an existing Makam.co.id brand identity — logo, colour, typeface? The live site at `makam.co.id` is a static landing page (14 KB `index.html`) not derived from this repo; it was **not** treated as brand authority here. | **Resolved, 17 Aug 2026 (ADR-0034).** The stakeholder supplied an official identity render plus the *Filosofi Logo Makam.co.id* philosophy text in chat on 17 Aug 2026; it is now authoritative. See §1.2, §1.4. | §1.2, §1.4 — resolved |
 | **OQ-03** | Is **Inter + Source Serif 4** acceptable, and is there budget/licence for a commercial alternative? Both chosen are open-licence and self-hostable. | **Amended, 17 Aug 2026 (ADR-0034).** Poppins added as `--font-display` (`h1`/`h2`, hero, header wordmark; philosophy: "modern, clean, digital, friendly, professional"), self-hosted via `@fontsource/poppins`, latin subset, weight 600 only. Inter is retained for body/UI/`h3`/`h4`/Filament. Source Serif 4 is retained too, moved to the new `--font-document` token (documents only, §1.4) so it can never be silently replaced by Poppins. | §1.4, §4.6 |
 | **OQ-12** | Official brand hex values, a vector source for the mark, and a horizontal lockup are still outstanding. Every Earth/Leaf hex adopted in this pass was derived from a chat-reviewed render, not sampled from confirmed brand collateral (ADR-0034 D9), and every raster asset built from it (§8, Task 3 — `mark-96`, `mark-inverse-96`, `lockup-320`/`640`, `favicon.ico`, `apple-touch-icon.png`) is provisional for the same reason. | **Resolved 21 Aug 2026.** The real official logo (`docs/design/brand/source/logo.png`) is now in hand. `primary` Earth `#563B26` and `secondary` Leaf `#336B3E` are sampled directly from it (`docs/design/brand/sample-logo-colours.php`), and the full 50–950 ramps are regenerated from those anchors (`docs/design/brand/generate-ramp.php`) — see the OQ-12 note in §1.2. `primary-500` was found to carry only a thin AA margin as a white-text fill (4.73:1, §7.1 finding 4) and is documented as fill-ineligible in §3.1. The vector logo source and horizontal lockup asset rebuild are tracked separately (§8, Task 3) and are **not** part of this resolution. | §1.2, §3.1, §7.1 — resolved (hex values); §1.4, §8 raster assets — still outstanding |
-| **OQ-04** | **Mobile bottom navigation** — approve or reject? IA §2 specifies hamburger + persistent Bantuan; a bottom nav would be a navigation change requiring product approval (§3.11). | IA-compliant header only; bottom nav **not shipped** | §3.11 |
+| **OQ-04** | **Mobile bottom navigation** — approve or reject? IA §2 specifies hamburger + persistent Bantuan; a bottom nav would be a navigation change requiring product approval (§3.11). | **Resolved, approved 23 Sep 2026 ([ADR-0044](../adr/0044-approve-ffi-five-tab-bottom-navigation.md)).** 5-tab bottom nav approved for mobile; implemented as `<x-mk.bottom-nav>`, pending Stage 3 wiring into real pages. Existing hamburger kept alongside it (ADR-0044 Amendment 1) for the 2 desktop items the 5 tabs don't cover (Layanan Pemakaman, FAQ). | §3.11 |
 | **OQ-05** | Which **icon set**? An outline set at 1.5 px stroke is assumed (Heroicons/Lucide class). Affects the SVG sprite and §4.6 budget. | Outline, 1.5 px, inline sprite | §3, §4.6 |
 | **OQ-06** | Exact **Indonesian microcopy** for each state in §6. Strings here are illustrative; final copy needs a product/legal pass, especially payment, Urgent availability, and privacy notices (`faq-catalog.md` forbids publishing unsupported SLA or method). | Illustrative only | §6 |
 | **OQ-07** | **Dark mode** — in or out? Absent from `screen-inventory.md`, so it currently has no required states and no test coverage. Adding it roughly doubles the visual QA surface. | **Out of MVP.** Not implemented (`tokens.css` §6) | §1.2, §7.1 |
@@ -1895,7 +1908,7 @@ Illustration style, photography direction and sourcing, logo design, motion-grap
 Ordered, because some steps depend on earlier ones.
 
 1. [x] Resolve **OQ-01** (brand primary) and **OQ-02** (existing identity) — **resolved 17 Aug 2026, ADR-0034** (Earth brown primary, Leaf green secondary); **OQ-12** (official hex values) — **resolved 21 Aug 2026**, logo-sampled Earth/Leaf hex now in `tokens.css` — everything downstream depends on the palette
-2. [ ] Resolve **OQ-04** (bottom nav) — it is a navigation contract, not a style choice
+2. [x] Resolve **OQ-04** (bottom nav) — **resolved 23 Sep 2026, ADR-0044** (5-tab form approved; component implemented, pending Stage 3 wiring)
 3. [ ] Record **ADR-0028 — Adopt token-driven design system** (§9.4)
 4. [x] Add `docs/design/design-system.md` to Kiro steering (**OQ-11**) so agents actually read it — done 25 Jul 2026, `.kiro/steering/design.md`
 5. [ ] Scaffold Laravel 13 + the eight `technology-baseline.md` §5 artefacts (blocks all build verification)

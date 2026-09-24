@@ -149,6 +149,10 @@ final class MarketplaceIndex extends Component
             // <x-mk.header>'s nav key for /marketplace (see that component's
             // own $items map) — not 'pemesanan'.
             'active' => 'layanan',
+            // Not one of <x-mk.bottom-nav>'s five tabs — Layanan Pemakaman
+            // is reachable only via the header's hamburger on mobile
+            // (ADR-0044 Amendment 1).
+            'bottomNavActive' => null,
         ]);
     }
 }

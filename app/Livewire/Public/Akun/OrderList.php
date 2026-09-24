@@ -44,6 +44,7 @@ final class OrderList extends Component
         ])->layout('layouts.app', [
             'title' => 'Pesanan Saya - Makam.co.id',
             'active' => null,
+            'bottomNavActive' => 'akun',
         ]);
     }
 }
