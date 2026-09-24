@@ -15,7 +15,7 @@
     Tone: quiet and respectful (kiro tasks.md tone constraint).
 --}}
 <div class="py-section md:py-section-lg">
-    <div class="mx-auto max-w-content px-4">
+    <div class="mx-auto max-w-content px-4 md:px-6 lg:px-8">
         @if (! $visible)
             {{-- Same uniform not-visible state as the public page — no
                  existence leak for cross-family access (AC1/AC8 negative
@@ -44,6 +44,8 @@
                 };
             @endphp
 
+            <h1 class="text-3xl font-semibold tracking-tight text-neutral-900 mb-6">Halaman Kenangan</h1>
+
             <div class="mb-6">
                 <x-mk.badge :intent="$privacyIntent" :dot="true">{{ $privacyLabel }}</x-mk.badge>
             </div>
@@ -55,7 +57,7 @@
             {{-- ============ Profile identity ============ --}}
             <section class="space-y-4">
                 <x-mk.card>
-                    <h1 class="text-xl font-semibold text-neutral-900">Nama yang ditampilkan</h1>
+                    <h2 class="text-lg font-semibold text-neutral-900">Nama yang ditampilkan</h2>
                     <p class="mt-1 max-w-prose text-sm text-neutral-600">
                         Nama ini tampil pada halaman kenangan yang dibuka lewat kode QR.
                     </p>
