@@ -282,7 +282,18 @@ final class HomePageRouteTest extends TestCase
         $response->assertSee('relative overflow-hidden rounded-lg', false);
 
         $html = $response->getContent();
-        $pictureStart = strpos($html, '<picture>');
+
+        // The shared header's <x-mk.logo> ALSO renders a <picture> element
+        // (its own webp/png brand-mark sources) and appears earlier in the
+        // DOM than the hero — a bare strpos($html, '<picture>') finds the
+        // logo's, not the hero's. Anchor the search to start at the
+        // hero's own distinguishing root class instead, so this really
+        // scopes to the hero's <picture>, not just the first one on the
+        // page.
+        $heroRootPos = strpos($html, 'relative overflow-hidden rounded-lg');
+        $this->assertNotFalse($heroRootPos, 'Hero root element not found.');
+
+        $pictureStart = strpos($html, '<picture>', $heroRootPos);
         $this->assertNotFalse($pictureStart, 'Hero <picture> element not found.');
         $pictureEnd = strpos($html, '</picture>', $pictureStart);
         $this->assertNotFalse($pictureEnd, 'Hero <picture> element is unterminated.');
