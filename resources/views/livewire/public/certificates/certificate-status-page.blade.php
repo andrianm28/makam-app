@@ -17,84 +17,95 @@
     Status → intent per the kiro design-system task (§3.7): draft neutral,
     issued success, revoked danger, replaced/superseded neutral. Rows are
     newest version first.
+
+    FFI-clone-whole-frontend ticket 09 — page shell (container/heading
+    classes) matches the same py-section/max-w-content/max-w-prose-scale
+    convention as help-centre.blade.php/faq/index.blade.php, rather than
+    this file's previous narrower, smaller-heading shell. The status list
+    keeps its original max-w-3xl reading width, now nested inside the
+    wider page shell instead of constraining the whole page.
 --}}
 
-<div class="mx-auto w-full max-w-3xl px-4 py-10">
-    <h1 class="text-2xl font-semibold text-neutral-900">Status Sertifikat</h1>
-    <p class="mt-2 text-base text-neutral-600">
-        Status penerbitan sertifikat untuk subjek ini. Dokumen sumber tidak
-        ditampilkan di halaman ini.
-    </p>
+<div class="py-section md:py-section-lg">
+    <div class="mx-auto max-w-content px-4">
+        <div class="mx-auto w-full max-w-3xl">
+            <h1 class="text-3xl font-semibold tracking-tight text-neutral-900">Status Sertifikat</h1>
+            <p class="mt-2 text-base text-neutral-600">
+                Status penerbitan sertifikat untuk subjek ini. Dokumen sumber tidak
+                ditampilkan di halaman ini.
+            </p>
 
-    <div class="mt-6">
-        @forelse ($statusRows as $row)
-            <x-mk.card class="mb-3">
-                <div class="flex flex-col gap-4">
-                    <dl class="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
-                        <div>
-                            <dt class="font-medium text-neutral-500">Tipe sertifikat</dt>
-                            <dd class="mt-1 font-semibold text-neutral-900">
-                                {{ $row['type'] === 'ORDER_SETTLEMENT' ? 'Penyelesaian Pesanan' : $row['type'] }}
-                            </dd>
-                        </div>
+            <div class="mt-6">
+                @forelse ($statusRows as $row)
+                    <x-mk.card class="mb-3">
+                        <div class="flex flex-col gap-4">
+                            <dl class="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+                                <div>
+                                    <dt class="font-medium text-neutral-500">Tipe sertifikat</dt>
+                                    <dd class="mt-1 font-semibold text-neutral-900">
+                                        {{ $row['type'] === 'ORDER_SETTLEMENT' ? 'Penyelesaian Pesanan' : $row['type'] }}
+                                    </dd>
+                                </div>
 
-                        <div>
-                            <dt class="font-medium text-neutral-500">Status</dt>
-                            <dd class="mt-1">
-                                @php
-                                    $intent = match ($row['status']) {
-                                        'issued' => 'success',
-                                        'revoked' => 'danger',
-                                        'replaced' => 'neutral',
-                                        default => 'neutral',
-                                    };
-                                    $label = match ($row['status']) {
-                                        'issued' => 'Terbit',
-                                        'revoked' => 'Dicabut',
-                                        'replaced' => 'Diganti',
-                                        default => 'Draf',
-                                    };
-                                @endphp
-                                <x-mk.badge :intent="$intent" dot>{{ $label }}</x-mk.badge>
-                            </dd>
-                        </div>
+                                <div>
+                                    <dt class="font-medium text-neutral-500">Status</dt>
+                                    <dd class="mt-1">
+                                        @php
+                                            $intent = match ($row['status']) {
+                                                'issued' => 'success',
+                                                'revoked' => 'danger',
+                                                'replaced' => 'neutral',
+                                                default => 'neutral',
+                                            };
+                                            $label = match ($row['status']) {
+                                                'issued' => 'Terbit',
+                                                'revoked' => 'Dicabut',
+                                                'replaced' => 'Diganti',
+                                                default => 'Draf',
+                                            };
+                                        @endphp
+                                        <x-mk.badge :intent="$intent" dot>{{ $label }}</x-mk.badge>
+                                    </dd>
+                                </div>
 
-                        <div>
-                            <dt class="font-medium text-neutral-500">Versi</dt>
-                            <dd class="mt-1 font-mono font-semibold text-neutral-900">v{{ $row['version'] }}</dd>
-                        </div>
+                                <div>
+                                    <dt class="font-medium text-neutral-500">Versi</dt>
+                                    <dd class="mt-1 font-mono font-semibold text-neutral-900">v{{ $row['version'] }}</dd>
+                                </div>
 
-                        <div>
-                            <dt class="font-medium text-neutral-500">Mulai berlaku</dt>
-                            <dd class="mt-1 text-neutral-700">
-                                {{ $row['effective_at'] !== null ? \Illuminate\Support\Carbon::parse($row['effective_at'])->translatedFormat('j F Y') : '—' }}
-                            </dd>
-                        </div>
+                                <div>
+                                    <dt class="font-medium text-neutral-500">Mulai berlaku</dt>
+                                    <dd class="mt-1 text-neutral-700">
+                                        {{ $row['effective_at'] !== null ? \Illuminate\Support\Carbon::parse($row['effective_at'])->translatedFormat('j F Y') : '—' }}
+                                    </dd>
+                                </div>
 
-                        <div class="sm:col-span-2">
-                            <dt class="font-medium text-neutral-500">Diterbitkan oleh</dt>
-                            <dd class="mt-1 text-neutral-700">
-                                @if ($row['issued_by_role'] === 'restricted_admin')
-                                    Admin terbatas
-                                @elseif ($row['issued_by_role'] === 'admin')
-                                    Admin
-                                @else
-                                    {{ $row['issued_by_role'] }}
-                                @endif
-                            </dd>
+                                <div class="sm:col-span-2">
+                                    <dt class="font-medium text-neutral-500">Diterbitkan oleh</dt>
+                                    <dd class="mt-1 text-neutral-700">
+                                        @if ($row['issued_by_role'] === 'restricted_admin')
+                                            Admin terbatas
+                                        @elseif ($row['issued_by_role'] === 'admin')
+                                            Admin
+                                        @else
+                                            {{ $row['issued_by_role'] }}
+                                        @endif
+                                    </dd>
+                                </div>
+                            </dl>
                         </div>
-                    </dl>
-                </div>
-            </x-mk.card>
-        @empty
-            <x-mk.alert intent="info" title="Belum ada sertifikat untuk subjek ini.">
-                <p class="text-sm">
-                    Status akan muncul setelah sertifikat diterbitkan oleh pengelola.
-                    Hubungi
-                    <a href="{{ route('bantuan.index') }}" class="font-medium underline underline-offset-2">Bantuan</a>
-                    untuk informasi lebih lanjut.
-                </p>
-            </x-mk.alert>
-        @endforelse
+                    </x-mk.card>
+                @empty
+                    <x-mk.alert intent="info" title="Belum ada sertifikat untuk subjek ini.">
+                        <p class="text-sm">
+                            Status akan muncul setelah sertifikat diterbitkan oleh pengelola.
+                            Hubungi
+                            <a href="{{ route('bantuan.index') }}" class="font-medium underline underline-offset-2">Bantuan</a>
+                            untuk informasi lebih lanjut.
+                        </p>
+                    </x-mk.alert>
+                @endforelse
+            </div>
+        </div>
     </div>
 </div>

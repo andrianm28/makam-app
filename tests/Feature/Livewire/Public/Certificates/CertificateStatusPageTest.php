@@ -122,6 +122,26 @@ final class CertificateStatusPageTest extends TestCase
             ->assertSee('Belum ada sertifikat untuk subjek ini.');
     }
 
+    /**
+     * FFI-clone-whole-frontend ticket 09 — the page shell now matches the
+     * same py-section/max-w-content convention as help-centre.blade.php/
+     * faq/index.blade.php, and the heading uses the established
+     * content-page-title scale, not the smaller pre-restyle size.
+     */
+    public function test_the_status_page_uses_the_ffi_container_gutters_and_heading_scale(): void
+    {
+        $order = $this->makePaidOrder();
+
+        Livewire::test(CertificateStatusPage::class, [
+            'subjectType' => Order::class,
+            'subjectId' => (string) $order->getKey(),
+        ])
+            ->assertOk()
+            ->assertSeeHtml('py-section md:py-section-lg')
+            ->assertSeeHtml('mx-auto max-w-content px-4')
+            ->assertSeeHtml('<h1 class="text-3xl font-semibold tracking-tight text-neutral-900">Status Sertifikat</h1>');
+    }
+
     public function test_an_unknown_subject_id_404s(): void
     {
         $this->get(route('sertifikat.status', [

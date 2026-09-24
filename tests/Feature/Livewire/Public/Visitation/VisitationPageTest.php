@@ -68,6 +68,24 @@ final class VisitationPageTest extends TestCase
             ->assertSee(route('kunjungan.cemetery', ['cemeterySlug' => $published->slug]));
     }
 
+    /**
+     * FFI-clone-whole-frontend ticket 09 — the picker-state page shell now
+     * matches the same py-section/max-w-content convention as
+     * help-centre.blade.php/faq/index.blade.php, and the heading uses the
+     * established content-page-title scale, not the smaller pre-restyle
+     * size.
+     */
+    public function test_the_index_route_uses_the_ffi_container_gutters_and_heading_scale(): void
+    {
+        $this->publishedCemetery();
+
+        $this->get(route('kunjungan.index'))
+            ->assertOk()
+            ->assertSee('py-section md:py-section-lg', false)
+            ->assertSee('mx-auto max-w-content px-4', false)
+            ->assertSee('<h1 class="text-3xl font-semibold tracking-tight text-neutral-900">Kunjungan Makam</h1>', false);
+    }
+
     public function test_an_information_only_cemetery_renders_the_hours_banner_and_no_form(): void
     {
         $cemetery = $this->publishedCemetery();
@@ -81,6 +99,24 @@ final class VisitationPageTest extends TestCase
             ->assertDontSee('Jumlah pengunjung')
             ->assertDontSee('Kirim Permintaan Kunjungan')
             ->assertDontSee('inputmode="numeric"');
+    }
+
+    /**
+     * FFI-clone-whole-frontend ticket 09 — the cemetery-selected page
+     * shell (the second branch of the same Blade file) now matches the
+     * same convention, verified separately since the two branches are
+     * distinct top-level wrappers.
+     */
+    public function test_a_cemetery_selected_route_uses_the_ffi_container_gutters_and_heading_scale(): void
+    {
+        $cemetery = $this->publishedCemetery();
+        $this->setVisitationMode($cemetery, 'INFORMATION_ONLY');
+
+        $this->get(route('kunjungan.cemetery', ['cemeterySlug' => $cemetery->slug]))
+            ->assertOk()
+            ->assertSee('py-section md:py-section-lg', false)
+            ->assertSee('mx-auto max-w-content px-4', false)
+            ->assertSee('<h1 class="mt-2 text-3xl font-semibold tracking-tight text-neutral-900">Kunjungan Makam</h1>', false);
     }
 
     public function test_an_information_only_cemetery_without_a_policy_renders_the_generic_hours_line(): void
