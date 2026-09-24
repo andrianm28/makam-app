@@ -21,6 +21,7 @@
     { "method": "GET|HEAD", "uri": "langganan/{subscriptionReference}", "name": "langganan.status" },
     { "method": "GET|HEAD", "uri": "privasi", "name": "legal.privacy" },
     { "method": "GET|HEAD", "uri": "syarat-ketentuan", "name": "legal.terms" },
+    { "method": "GET|HEAD", "uri": "wakaf-tanah", "name": "legal.wakaf-tanah" },
     { "method": "GET|HEAD", "uri": "masuk", "name": "login" },
     { "method": "POST", "uri": "keluar", "name": "logout" },
     { "method": "GET|HEAD", "uri": "marketplace/keranjang", "name": "marketplace.cart" },
