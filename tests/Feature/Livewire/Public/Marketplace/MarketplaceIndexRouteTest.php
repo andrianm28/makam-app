@@ -490,7 +490,13 @@ final class MarketplaceIndexRouteTest extends TestCase
 
         // Second, verify the new height classes also appear in the
         // legacy-no-photo branch by nullifying a product's photo and
-        // asserting both the placeholder text and the new height classes.
+        // asserting both the placeholder text and the new height classes
+        // — scoped to that one product's own card, not the whole page.
+        // Every other seeded product still has a real photo, so a
+        // page-wide assertSee('h-48 md:h-56') would pass via their <img>
+        // tags regardless of whether the placeholder div was ever
+        // updated; scoping via the card's own wire:key is what makes this
+        // a real assertion about the placeholder branch specifically.
         $product = Product::findByCode(ProductCode::FLOWER_BOARD);
         $this->assertNotNull($product);
 
@@ -498,7 +504,15 @@ final class MarketplaceIndexRouteTest extends TestCase
 
         $response = $this->get('/marketplace');
         $response->assertOk();
-        $response->assertSee('Foto belum tersedia');
-        $response->assertSee('h-48 md:h-56');
+
+        $html = $response->getContent();
+        $start = strpos($html, 'wire:key="product-'.$product->code.'"');
+        $this->assertNotFalse($start, 'Product card not found.');
+        $end = strpos($html, '</li>', $start);
+        $this->assertNotFalse($end, 'Product card is unterminated.');
+
+        $card = substr($html, $start, $end - $start);
+        $this->assertStringContainsString('Foto belum tersedia', $card);
+        $this->assertStringContainsString('h-48 md:h-56', $card);
     }
 }
