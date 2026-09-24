@@ -91,11 +91,16 @@
          focused, then pinned top-left at z-skiplink. `focus-visible:outline-*`
          overrides the global focus ring colour because this control sits on
          a primary-600 fill once focused, where the default ring colour would
-         be invisible — §7.2 names --mk-focus-color-inverse (primary-300) for
-         exactly this case. --}}
+         be invisible — §7.2 names --mk-focus-color-inverse for exactly this
+         case. UPDATED 24 Sep 2026 (pixel-fidelity colour correction):
+         --mk-focus-color-inverse now resolves to neutral-0 (white), not
+         primary-300 — primary-600 itself changed to FFI's real, brighter
+         blue value (see that token's own comment in tokens.css for the
+         exact hex), which dropped primary-300's contrast against it
+         below the 3:1 floor (verify-contrast.py). White clears 4.57:1. --}}
     <a
         href="#main"
-        class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-skiplink focus:inline-flex focus:items-center focus:rounded-md focus:bg-primary-600 focus:px-4 focus:py-2 focus:text-base focus:font-medium focus:text-neutral-0 focus-visible:outline-primary-300"
+        class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-skiplink focus:inline-flex focus:items-center focus:rounded-md focus:bg-primary-600 focus:px-4 focus:py-2 focus:text-base focus:font-medium focus:text-neutral-0 focus-visible:outline-neutral-0"
     >
         Lewati ke konten utama
     </a>

@@ -39,8 +39,8 @@
   --color-primary-300: #56ABFF;
   --color-primary-400: #1288FF; /* white label 3.51:1 -- LARGE TEXT ONLY, never a body-copy fill */
   --color-primary-500: #0073E6; /* white label AA 4.57:1 -- usable, but 600 is the brand fill */
-  --color-primary-600: #004182; /* 600-slot fill generated from FFI's #0073E6 anchor -- NOT FFI's own hex. #0073E6 itself only reaches 4.57:1 with a white label, short of what this slot needs to carry one; FFI's own hover/dark blue #005BB5 is not in this ramp. ADR-0043. White label AA 10.10:1. */
-  --color-primary-700: #00356B; /* hover / link on light -- white 12.20:1 */
+  --color-primary-600: #0073E6; /* FFI's ACTUAL primary hex (tailwind.config.ts colors.primary.DEFAULT), not a generated anchor -- pixel-fidelity correction, ADR-0043 amendment (24 Sep 2026 owner direction: 1:1 visual clone). White label AA 4.57:1 -- clears WCAG AA's 4.5:1 floor for normal text by a real but thin margin; this is the floor, not extra headroom. */
+  --color-primary-700: #005BB5; /* FFI's ACTUAL hover/dark blue (tailwind.config.ts colors.primary.dark), not a generated shade -- pixel-fidelity correction, same amendment as 600 above. */
   --color-primary-800: #002A55; /* pressed -- white 14.36:1 */
   --color-primary-900: #002040; /* footer, inverse header -- white 16.40:1 */
   --color-primary-950: #001428;
@@ -380,7 +380,7 @@
 
   /* 2.4 FOCUS — single global treatment, never removed, never outline:none */
   --mk-focus-color: var(--color-primary-600);
-  --mk-focus-color-inverse: var(--color-primary-300); /* on brand fills, 4.17:1 */
+  --mk-focus-color-inverse: var(--color-neutral-0); /* on brand fills -- was primary-300 (4.17:1 against the old, darker primary-600); the pixel-fidelity primary-600 correction (see that token's own comment) dropped primary-300's contrast against it to 1.89:1, below the 3:1 UI-component floor. White clears 4.57:1 against the new primary-600, verified by verify-contrast.py. */
   --mk-focus-width: 2px;
   --mk-focus-offset: 2px;
   --mk-focus-ring: 0 0 0 var(--mk-focus-offset) var(--mk-surface-raised),

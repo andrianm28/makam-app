@@ -236,14 +236,8 @@
     <section aria-labelledby="services-heading" class="mx-auto max-w-content px-4 py-section md:px-6 lg:px-8 lg:py-section-lg">
         <h2 id="services-heading" class="sr-only">Layanan utama</h2>
         @php
-            $serviceDescriptions = [
-                'pemesanan' => 'Pesan makam baru atau makam tumpang, lengkap dengan pilihan lokasi dan jenis layanan.',
-                'layanan' => 'Jelajahi paket dan produk layanan pemakaman dari vendor.',
-                'perpanjangan' => 'Cari data makam dan ajukan perpanjangan masa sewa secara online.',
-                'faq' => 'Temukan jawaban seputar pemesanan, dokumen, pembayaran, dan perpanjangan.',
-            ];
             // Decorative only (icon-medallion.blade.php is always
-            // aria-hidden) — the card's own <h3> text is what actually
+            // aria-hidden) — the tile's own <span> text is what actually
             // labels each destination, so an unmapped $key just renders no
             // icon rather than failing.
             $serviceIcons = [
@@ -253,53 +247,23 @@
                 'faq' => 'question-mark-circle',
             ];
         @endphp
-        <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-4" aria-label="Layanan utama">
+        {{-- REDESIGNED 24 Sep 2026 — pixel-fidelity 1:1 visual clone of FFI's
+             own QuickActionTiles.tsx: icon-in-a-circle, label directly
+             underneath, no card border/box, no description text, no
+             two-tone heading split. Superseded, not the shipped-then-
+             reverted A9/U8 two-tone device or the emphasis="strong" card
+             treatment — both removed here, since FFI's real tile has
+             neither. Labels/routes/order/icons themselves are UNCHANGED
+             (§9.2 MUST-NOT 9's four product labels, byte-identical). --}}
+        <ul class="grid grid-cols-2 gap-4 sm:grid-cols-4" aria-label="Layanan utama">
             @foreach ($primaryMenus as $key => $menu)
-                @php
-                    // A9/U8 — two-tone heading (kamboja plan §3.1 A9, §3.3 U8,
-                    // Tahap 4). The label is SPLIT for rendering, never
-                    // rewritten: same words, same order, so the four product
-                    // labels §9.2 MUST-NOT 9 protects are byte-identical when
-                    // read. `explode(..., 2)` keeps everything after the first
-                    // space together, so "Pemesanan Makam" reads
-                    // brand("Pemesanan") + near-black("Makam"), and a
-                    // three-word label would keep its last two words together
-                    // rather than fragmenting.
-                    //
-                    // Single-word labels ("FAQ") get NO brand line and render
-                    // exactly as they did before this change. A two-tone device
-                    // needs two parts; colouring a lone word brand would hand
-                    // the LAST card in AC1's stakeholder order the loudest
-                    // heading on the row, inverting the emphasis the order
-                    // exists to express. The fallback is also today's markup,
-                    // so the degenerate case degrades to the shipped state.
-                    [$headingLead, $headingRest] = array_pad(explode(' ', $menu['label'], 2), 2, null);
-                @endphp
                 <li wire:key="service-card-{{ $key }}">
-                    <x-mk.card as="a" interactive emphasis="strong" :href="$menu['route']" class="h-full touch-target">
-                        <div class="space-y-3">
-                            @if (isset($serviceIcons[$key]))
-                                {{-- `size="xl"` (64px), Tahap 4 butir 2 — SIZE only;
-                                     the rendered colour is unchanged from Tahap 2,
-                                     but the prop value is renamed `earth` -> `primary`. --}}
-                                <x-mk.icon-medallion :icon="$serviceIcons[$key]" tone="primary" size="xl" />
-                            @endif
-                            {{-- `text-primary-600` on the card's `bg-neutral-0`
-                                 is `primary heading on surface-raised`, an
-                                 EXISTING asserted pair in
-                                 docs/design/verify-contrast.py — no new pair,
-                                 no new token. --}}
-                            <h3 class="text-lg font-semibold text-neutral-900">
-                                @if ($headingRest !== null)
-                                    <span class="block text-primary-600">{{ $headingLead }}</span>
-                                    <span class="block">{{ $headingRest }}</span>
-                                @else
-                                    {{ $menu['label'] }}
-                                @endif
-                            </h3>
-                            <p class="text-base text-neutral-600">{{ $serviceDescriptions[$key] ?? '' }}</p>
-                        </div>
-                    </x-mk.card>
+                    <a href="{{ $menu['route'] }}" class="flex touch-target flex-col items-center gap-2">
+                        @if (isset($serviceIcons[$key]))
+                            <x-mk.icon-medallion :icon="$serviceIcons[$key]" tone="primary" size="xl" />
+                        @endif
+                        <span class="text-center text-sm font-medium text-neutral-900">{{ $menu['label'] }}</span>
+                    </a>
                 </li>
             @endforeach
         </ul>
