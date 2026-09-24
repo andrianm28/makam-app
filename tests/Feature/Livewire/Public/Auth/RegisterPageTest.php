@@ -45,6 +45,19 @@ final class RegisterPageTest extends TestCase
         $response->assertSee('Akun yang dibuat di halaman ini adalah akun Pelanggan.');
     }
 
+    /**
+     * FFI-clone-whole-frontend ticket 04 — the page was rewired onto
+     * `<x-mk.auth-shell>`, which owns the page's one <h1>. Asserts a real
+     * semantic heading survives the shell restyle, not just styled text.
+     */
+    public function test_the_page_renders_a_single_heading_with_the_page_title(): void
+    {
+        $response = $this->get('/daftar');
+
+        $response->assertOk();
+        $this->assertMatchesRegularExpression('#<h1[^>]*>\s*Daftar\s*</h1>#', $response->getContent());
+    }
+
     public function test_valid_registration_creates_a_user_and_authenticates_immediately(): void
     {
         Livewire::test(RegisterPage::class)
