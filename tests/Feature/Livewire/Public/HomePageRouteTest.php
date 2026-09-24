@@ -250,12 +250,19 @@ final class HomePageRouteTest extends TestCase
      * (docs/superpowers/plans/2026-08-25-brand-visual-refresh-phase2-homepage.md
      * Task 1) — proves the hero renders via the real `<x-mk.hero>` component
      * (its distinguishing root class), not just that the old hand-written
-     * markup's text happens to still appear. Also asserts the hero's image
-     * renders — the `src` is a PLACEHOLDER path
-     * (public/images/hero/cemetery-garden-daylight.jpg does not exist yet in
-     * this repo); the final binary photo file is a deliberate follow-up once
-     * the project owner picks one of the sourced candidates (see this PR's
-     * description). Wiring, tests, and verification are real and complete now.
+     * markup's text happens to still appear.
+     *
+     * UPDATED 24 Sep 2026 (FFI-clone-whole-frontend ticket 01): the hero's
+     * `image` prop now points at `family-warmth.jpg` — the same photo the
+     * "Kehangatan Keluarga" section below ALSO renders (deliberately;
+     * see home-page.blade.php's own doc block for why leaving that
+     * section untouched, rather than swapping it to a different photo,
+     * is this ticket's own scope boundary). Because the same `src` string
+     * now appears twice on the page, a plain page-wide `assertSee` for it
+     * would not prove the image is genuinely INSIDE the hero specifically.
+     * Scoped to the hero's own `<picture>...</picture>` element instead —
+     * the DS-01 responsive-derivative wrapper `<x-mk.hero>` renders,
+     * which nothing else on this page also renders.
      */
     public function test_hero_section_uses_the_mk_hero_component_with_a_real_image(): void
     {
@@ -273,7 +280,17 @@ final class HomePageRouteTest extends TestCase
         // own behaviour is asserted in
         // Tests\Feature\View\Components\MkHeroTest, which owns the component.
         $response->assertSee('relative overflow-hidden rounded-lg', false);
-        $response->assertSee('src="'.asset('images/hero/cemetery-garden-daylight.jpg').'"', false);
+
+        $html = $response->getContent();
+        $pictureStart = strpos($html, '<picture>');
+        $this->assertNotFalse($pictureStart, 'Hero <picture> element not found.');
+        $pictureEnd = strpos($html, '</picture>', $pictureStart);
+        $this->assertNotFalse($pictureEnd, 'Hero <picture> element is unterminated.');
+
+        $heroPicture = substr($html, $pictureStart, $pictureEnd - $pictureStart);
+        $this->assertStringContainsString('src="'.asset('images/home/family-warmth.jpg').'"', $heroPicture);
+        $this->assertStringNotContainsString('cemetery-garden-daylight', $heroPicture);
+
         $response->assertSee('Pesan Makam');
         $response->assertSee('href="/pemesanan-makam"', false);
     }
@@ -282,10 +299,18 @@ final class HomePageRouteTest extends TestCase
      * "Kehangatan Keluarga" supporting photo section (added 26 Aug 2026,
      * see home-page.blade.php's own doc block for the full placement and
      * sourcing reasoning) — proves the section renders on the real
-     * homepage with the real image, and proves the existing hero and other
+     * homepage with the real image, and proves the hero and other
      * sections still render alongside it (nothing broken by the insertion).
+     *
+     * UPDATED 24 Sep 2026 (FFI-clone-whole-frontend ticket 01): this
+     * section's own image is untouched by that ticket (its scope is the
+     * hero only) — it still renders `family-warmth.jpg`, the same photo
+     * the hero now ALSO renders. The old assertion here (that the hero
+     * shows a DIFFERENT photo, `cemetery-garden-daylight.jpg`) is stale
+     * and removed; `test_hero_section_uses_the_mk_hero_component_with_a_
+     * real_image` above is what proves the hero's own image now.
      */
-    public function test_family_warmth_section_renders_with_the_real_image_alongside_the_existing_hero(): void
+    public function test_family_warmth_section_renders_with_the_real_image_alongside_the_hero(): void
     {
         $response = $this->get('/');
 
@@ -295,8 +320,7 @@ final class HomePageRouteTest extends TestCase
         $response->assertSee('Didampingi dengan Hangat, Setiap Langkah');
         $response->assertSee('src="'.asset('images/home/family-warmth.jpg').'"', false);
 
-        // The existing hero (Section 2) is untouched — same image, same CTA.
-        $response->assertSee('src="'.asset('images/hero/cemetery-garden-daylight.jpg').'"', false);
+        // The hero (Section 2) still renders alongside it.
         $response->assertSee('Pesan Makam');
         $response->assertSee('href="/pemesanan-makam"', false);
 

@@ -199,18 +199,29 @@
          <x-mk.hero> has no slot for them and design-system.md's hero
          typography row does not call for an eyebrow.
 
-         `image` points to public/images/hero/cemetery-garden-daylight.jpg,
-         a real Indonesian cemetery photo the project owner picked from a
-         sourced/verified candidate set (aerial view, Tangerang, Banten;
-         Pexels, photographer Tom Fisk, Pexels License, no attribution
-         required — see this change's commit message for the source URL)
-         — see docs/design/design-system.md §2.2 (real cemetery/garden,
-         daylight, no people in grief) and the misattribution precedent in
-         database/migrations/2026_08_24_100000_backfill_photo_and_maps_url_for_real_cemeteries.php's
-         doc block (why the photo must not depict one specific, identifiable
-         real cemetery). --}}
+         UPDATED (FFI-clone-whole-frontend ticket 01): `image` now points to
+         public/images/home/family-warmth.jpg — a real, candid, joyful
+         family photo (Pexels, photographer RDNE Stock project, Pexels
+         License, no attribution required; see the "Kehangatan Keluarga"
+         section below, which already used this same photo and still does
+         — this section's own doc block explains its full provenance). The
+         parent spec's photography rule (marketing/emotional register
+         leads with a warm, human photo; functional cemetery-grounds
+         photography stays on the cemetery directory pages, unaffected)
+         is why this swap happened: a visitor's first impression should be
+         reassuring, not a facility photo.
+
+         `public/images/hero/cemetery-garden-daylight.jpg` (the previous
+         hero photo, a real Indonesian cemetery aerial view — Pexels,
+         photographer Tom Fisk, Pexels License) is no longer referenced
+         anywhere on the homepage as of this change. The file itself is
+         deliberately NOT deleted — it stays on disk, still real and
+         correctly licensed, in case a future page needs a plain
+         facility/location photo again. Its own responsive AVIF/WebP
+         derivatives (DS-01) are consequently also unused now but likewise
+         left in place, for the same reason. --}}
     <x-mk.hero
-        image="{{ asset('images/hero/cemetery-garden-daylight.jpg') }}"
+        image="{{ asset('images/home/family-warmth.jpg') }}"
         heading="Urus Pemakaman dengan Tenang, dalam Satu Platform"
         :cta="['label' => 'Pesan Makam', 'href' => '/pemesanan-makam']"
     >
