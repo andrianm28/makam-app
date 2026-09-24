@@ -261,6 +261,37 @@ final class MemorialPublicPageTest extends TestCase
     }
 
     /**
+     * The FFI-aligned visual language: the container carries the full
+     * gutter scale (matching marketplace/akun's already-restyled pages,
+     * not the older bare `px-4` FAQ still carries), and the page's one
+     * real heading (the deceased's display name) uses the established
+     * content-page-title scale, not the smaller pre-restyle size. A real
+     * HTTP round-trip through the real route, per the parent spec's own
+     * "what makes a good test here" guidance.
+     */
+    public function test_the_public_page_uses_the_ffi_container_gutters_and_heading_scale(): void
+    {
+        $this->openMemorialGate();
+        $profile = $this->profile(MemorialPrivacyMode::PUBLIC->value);
+        app(PublishMemorial::class)($profile, 'moderator:1', 'moderator');
+        $token = $this->tokenFor($profile);
+
+        $response = $this->withoutVite()->get("/m/{$token->token}");
+        $response->assertOk();
+
+        $html = $response->getContent();
+        $this->assertNotFalse($html);
+
+        $this->assertStringContainsString('mx-auto max-w-content px-4 md:px-6 lg:px-8', $html);
+        $this->assertStringContainsString(
+            '<h1 class="text-3xl font-semibold tracking-tight text-neutral-900">',
+            $html,
+        );
+        // The existing content is unchanged by the restyle.
+        $this->assertStringContainsString('Almarhum Ahmad Uji', $html);
+    }
+
+    /**
      * AC2's matrix: family_only needs token + an active editor for the
      * actor. With an editor the projection renders; the mode value itself
      * stays out of the HTML (it is not allowlisted).

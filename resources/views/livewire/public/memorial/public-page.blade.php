@@ -27,7 +27,7 @@
     on this page, badge included.
 --}}
 <div class="py-section md:py-section-lg">
-    <div class="mx-auto max-w-content px-4">
+    <div class="mx-auto max-w-content px-4 md:px-6 lg:px-8">
         @if (! $visible)
             {{-- The uniform not-visible state — identical for every denial
                  case (AC5): no existence leak, no privacy detail. --}}
@@ -41,7 +41,7 @@
         @else
             <article class="space-y-6">
                 <header class="border-b border-neutral-200 pb-4">
-                    <h1 class="text-2xl font-semibold text-neutral-900">
+                    <h1 class="text-3xl font-semibold tracking-tight text-neutral-900">
                         {{ $projection->displayName ?? 'Almarhum/Almarhumah' }}
                     </h1>
 
