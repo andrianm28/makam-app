@@ -47,13 +47,13 @@ final class SiteMeta
      * be passed through `asset()` by the caller: `og:image` must be an
      * absolute URL or the card renders with no image at all.
      */
-    private const string OG_IMAGE_PATH = 'images/hero/cemetery-garden-daylight.jpg';
+    private const string OG_IMAGE_PATH = 'images/home/family-warmth.jpg';
 
     /**
      * Describes the photograph, not the brand — this is the alt text a
      * screen reader announces for the share card.
      */
-    private const string OG_IMAGE_ALT = 'Pemakaman dengan taman hijau pada siang hari';
+    private const string OG_IMAGE_ALT = 'Keluarga yang hangat dan bahagia bersama';
 
     public static function description(): string
     {
