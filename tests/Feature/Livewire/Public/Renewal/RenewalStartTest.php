@@ -624,11 +624,19 @@ final class RenewalStartTest extends TestCase
         $this->assertSame(2, substr_count($html, '<span class="font-normal text-neutral-600">(opsional)</span>'));
     }
 
-    public function test_a_blank_submission_still_describes_the_name_error_to_the_field(): void
+    /**
+     * `name` is `nullable`, so a truly blank submission never fails
+     * validation on it — the real, reachable error case is exceeding
+     * `max:120`. This proves <x-mk.field>'s aria-describedby/aria-invalid
+     * wiring actually activates on a genuine validation failure, not just
+     * that the markup exists.
+     */
+    public function test_a_name_validation_error_still_describes_the_error_to_the_field(): void
     {
         $this->openTheDataGate();
 
         Livewire::test(RenewalStart::class, ['cemeteryId' => CemeteryFixture::id('package', 0)])
+            ->set('name', str_repeat('a', 121))
             ->call('search')
             ->assertSeeHtml('aria-describedby="grave-search-name-error"')
             ->assertSeeHtml('aria-invalid="true"');
