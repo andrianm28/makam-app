@@ -115,21 +115,21 @@ final class HomePageRouteTest extends TestCase
     }
 
     /**
-     * A9/U8 — two-tone service-card headings (kamboja plan Tahap 4,
-     * design-system.md §3.3b).
+     * REDESIGNED 24 Sep 2026 (pixel-fidelity 1:1 visual clone of FFI's
+     * QuickActionTiles.tsx) — SUPERSEDES the A9/U8 two-tone heading device
+     * this test used to assert (kamboja plan Tahap 4, design-system.md
+     * §3.3b). FFI's own tile has a single flat label under the icon, no
+     * split, no brand-ink lead word — so the replacement here asserts a
+     * flat label instead of the old two-span device.
      *
-     * The load-bearing assertion here is the third one: the four product
-     * labels §9.2 MUST NOT 9 protects must survive the split VERBATIM once
-     * markup is stripped. Tahap 4 is a visual-hierarchy stage and is
-     * forbidden from touching copy, so a heading that renders
-     * "Pemesanan  Makam" or drops a word is a copy change wearing a
-     * styling change's clothes — and neither
+     * The load-bearing assertion is still the same: the four product
+     * labels §9.2 MUST NOT 9 protects must survive VERBATIM. Neither
      * `test_all_four_menus_appear_in_ac1s_exact_order` nor the
-     * `assertSee()` tests below would catch it, because the header nav
-     * renders all four labels contiguously and would satisfy both on its
-     * own.
+     * `assertSee()` tests below would catch a corrupted label here, because
+     * the header nav renders all four labels contiguously and would
+     * satisfy both on its own.
      */
-    public function test_service_card_headings_render_two_tone_without_altering_a_label(): void
+    public function test_service_tile_labels_render_flat_without_altering_a_label(): void
     {
         $response = $this->get('/');
         $response->assertOk();
@@ -140,55 +140,47 @@ final class HomePageRouteTest extends TestCase
         // Scoped to Section 3's grid by its own aria-label, so the header
         // nav's copies of the same four labels cannot satisfy this test.
         $gridStart = strpos($body, 'aria-label="Layanan utama"');
-        $this->assertNotFalse($gridStart, 'Expected Section 3\'s service-card grid.');
+        $this->assertNotFalse($gridStart, 'Expected Section 3\'s service-tile grid.');
         $gridEnd = strpos($body, '</ul>', $gridStart);
         $this->assertNotFalse($gridEnd);
         $grid = substr($body, $gridStart, $gridEnd - $gridStart);
 
-        $headingCount = preg_match_all('#<h3[^>]*>(.*?)</h3>#s', $grid, $matches);
-        $this->assertSame(4, $headingCount, 'Expected four service-card headings in the grid.');
+        // FFI's tile has no heading element at all -- label is a plain
+        // <span>, not an <h3>. No two-tone split: the old
+        // '<span class="block text-primary-600">...' device is gone.
+        $this->assertStringNotContainsString('<h3', $grid);
+        $this->assertStringNotContainsString('text-primary-600">Pemesanan</span>', $grid);
+
+        $labelCount = preg_match_all(
+            '#<span class="text-center text-sm font-medium text-neutral-900">(.*?)</span>#s',
+            $grid,
+            $matches
+        );
+        $this->assertSame(4, $labelCount, 'Expected four service-tile labels in the grid.');
 
         $labels = ['Pemesanan Makam', 'Layanan Pemakaman', 'Perpanjangan Makam', 'FAQ'];
 
-        foreach ($matches[1] as $index => $headingInner) {
-            $text = trim((string) preg_replace('/\s+/', ' ', strip_tags($headingInner)));
+        foreach ($matches[1] as $index => $labelInner) {
+            $text = trim((string) preg_replace('/\s+/', ' ', strip_tags($labelInner)));
             $this->assertSame(
                 $labels[$index],
                 $text,
-                "Service-card heading $index must read exactly its product label."
+                "Service-tile label $index must read exactly its product label."
             );
         }
-
-        // The first three labels are multi-word, so they carry the device:
-        // lead word in brand ink, remainder near-black, two block spans
-        // inside ONE <h3>.
-        $this->assertMatchesRegularExpression(
-            '#<span class="block text-primary-600">Pemesanan</span>\s*<span class="block">Makam</span>#',
-            $matches[1][0]
-        );
-        $this->assertMatchesRegularExpression(
-            '#<span class="block text-primary-600">Layanan</span>\s*<span class="block">Pemakaman</span>#',
-            $matches[1][1]
-        );
-        $this->assertMatchesRegularExpression(
-            '#<span class="block text-primary-600">Perpanjangan</span>\s*<span class="block">Makam</span>#',
-            $matches[1][2]
-        );
-
-        // "FAQ" is one word: no second tone exists, so it gets no brand
-        // line at all rather than rendering wholly in brand ink, which
-        // would give the last card in AC1's stakeholder order the loudest
-        // heading on the row.
-        $this->assertStringNotContainsString('text-primary-600', $matches[1][3]);
     }
 
     /**
-     * Tahap 4 butir 1 + 2 — the four service cards are the page's journey
-     * entrances, so they render `<x-mk.card emphasis="strong">` (resting
-     * `shadow-md`, `border-primary-200`) and the 64 px `xl` medallion,
-     * rather than the same treatment every other card on the page uses.
+     * REDESIGNED 24 Sep 2026 (pixel-fidelity 1:1 visual clone) — SUPERSEDES
+     * the `emphasis="strong"` card treatment this test used to assert
+     * (Tahap 4 butir 1 + 2). FFI's own QuickActionTiles.tsx tile has no
+     * card, no border, no box at all -- just an icon-in-a-circle with a
+     * label underneath. The four tiles are still the page's journey
+     * entrances; they now express that with the 64 px `xl` medallion
+     * ALONE, matching FFI's own icon-in-a-circle tile exactly, not with a
+     * bordered card distinguishing them from other cards on the page.
      */
-    public function test_service_cards_render_as_strong_cards_with_the_xl_medallion(): void
+    public function test_service_tiles_render_as_bare_circular_medallions_with_no_card(): void
     {
         $response = $this->get('/');
         $response->assertOk();
@@ -202,18 +194,27 @@ final class HomePageRouteTest extends TestCase
         $this->assertNotFalse($gridEnd);
         $grid = substr($body, $gridStart, $gridEnd - $gridStart);
 
-        // Anchored on the card root's RESTING classes, in order. A bare
-        // `assertStringContainsString('shadow-md')` is vacuous here: every
-        // interactive card already emits `hover:shadow-md`, so it passed
-        // even with `emphasis="strong"` mutated down to `shadow-sm`
-        // (verified by mutation, 14 Sep 2026 — this is the repaired form).
-        $this->assertMatchesRegularExpression(
-            '#class="block rounded-lg border shadow-md border-primary-200 bg-neutral-0#',
+        // No card box of any kind survives the redesign.
+        $this->assertStringNotContainsString('<x-mk.card', $grid);
+        $this->assertStringNotContainsString('border-primary-200', $grid);
+        $this->assertStringNotContainsString('border-neutral-200', $grid);
+        $this->assertStringNotContainsString('shadow-md', $grid);
+        // No description text survives either -- FFI's tile has none.
+        $this->assertStringNotContainsString(
+            'Pesan makam baru atau makam tumpang',
             $grid
         );
-        $this->assertStringNotContainsString('border-neutral-200', $grid);
-        // 64px tile — design-system.md §3.3a's `xl`.
-        $this->assertStringContainsString('size-16', $grid);
+
+        // Each tile is a plain anchor wrapping a circular icon-medallion
+        // and a label, four times.
+        $this->assertSame(4, substr_count($grid, 'flex touch-target flex-col items-center gap-2'));
+        // rounded-full -- the icon-medallion's own pixel-fidelity shape
+        // correction (was rounded-xl), asserted here per-tile too, not
+        // just in MkIconMedallionTest, since this is the one real page
+        // that actually renders it.
+        $this->assertSame(4, substr_count($grid, 'rounded-full'));
+        // 64px tile -- design-system.md §3.3a's `xl`.
+        $this->assertSame(4, substr_count($grid, 'size-16'));
     }
 
     /**

@@ -157,7 +157,7 @@ PAIRS = [
     # (primary-50) for the first time — previously only text and non-focus
     # borders were asserted there.
     ("focus ring on surface-warm", "color-primary-600", "color-accent-50", NEED_NONTEXT),
-    ("focus ring inverse on primary-600", "color-primary-300", "color-primary-600", NEED_NONTEXT),
+    ("focus ring inverse on primary-600", "color-neutral-0", "color-primary-600", NEED_NONTEXT),  # UPDATED 24 Sep 2026: header.blade.php's skip-link now outlines with neutral-0 (white), not primary-300 -- primary-600 changed to FFI's real, brighter blue, which dropped primary-300's contrast against it below 3:1.
     ("border-error on surface-raised", "color-danger-600", WHITE, NEED_NONTEXT),
     ("urgent border on urgent bg", "color-warning-600", "color-warning-50", NEED_NONTEXT),
     # Large text

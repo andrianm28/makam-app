@@ -11,13 +11,18 @@
     with defaults, classes composed once in a single PHP block, one
     $attributes->merge() on the root element.
 
-    --- Why `rounded-xl`, not `rounded-full` ---
-    tokens.css §1.7 / design-system.md §1.5 restrict `--radius-full` to
-    "avatar, stepper dot, progress track ONLY." A circular badge is the
-    obvious "interactive" shape (and the one kitabisa.co.id itself uses),
-    but it is out for this component specifically — squircle tiles instead,
-    which also keeps this visually distinct from that benchmark rather than
-    copying it, per the user's own "jangan terlalu mirip" instruction.
+    --- `rounded-full`, REVERSED 24 Sep 2026 (was `rounded-xl`) ---
+    Originally squircle: tokens.css §1.7 / design-system.md §1.5 restrict
+    `--radius-full` to "avatar, stepper dot, progress track ONLY," and a
+    circular badge was deliberately avoided as "too similar" to
+    kitabisa.co.id/FFI, per the owner's own then-standing "jangan terlalu
+    mirip" instruction. That instruction is explicitly SUPERSEDED — the
+    owner's 24 Sep 2026 direction is a pixel-fidelity 1:1 visual clone of
+    FFI, asked for by name after reviewing the shipped Stage 1-3 work and
+    finding it did not read as FFI. Circular is FFI's own real badge shape
+    (QuickActionTiles.tsx: `rounded-full`, `w-12 h-12`/`w-14 h-14`). The
+    radius-full restriction above is stale pending its own update — this
+    component is now a real exception to it, not an oversight.
 
     --- Why `tone="secondary"` is inside the Sage cage, not an exception to it ---
     design-system.md §1.2(b) restricts `secondary` (Sage) to "50-200 as
@@ -109,7 +114,7 @@
     ];
     $iconSizeClasses = $iconSizes[$size] ?? $iconSizes['md'];
 
-    $base = 'inline-flex items-center justify-center rounded-xl font-semibold';
+    $base = 'inline-flex items-center justify-center rounded-full font-semibold';
     $classes = trim("$base $sizeClasses {$tones[$tone]}");
 @endphp
 
