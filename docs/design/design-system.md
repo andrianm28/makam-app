@@ -598,6 +598,12 @@ Padding is the only weight axis available without touching the photo, and both v
 the photo. The unified hero (copy over a full-bleed photo) needs a scrim token, an ADR, and a new
 contrast-verification method, and stays out of every stage until **OQ-K5** is answered.
 
+**Resolved 24 Sep 2026 ([ADR-0045](../adr/0045-hero-scrim-resolves-oq-k5.md)).** OQ-K5 is answered:
+`<x-mk.hero>` now renders the unified photo-with-overlay-text hero this note above describes as
+deferred. The paragraph above is historical — it correctly describes the state before this ADR,
+kept here unmodified per this document's own additive-supersession convention, not because it still
+describes current behaviour.
+
 **Heading typography:** `font-display text-4xl font-semibold tracking-tight text-neutral-900
 lg:text-5xl`, matching §1.4's hero row (`text-4xl` mobile / `lg:text-5xl` desktop) verbatim. These
 classes are restated explicitly in the component even though `app.css`'s base `h1` rule already
