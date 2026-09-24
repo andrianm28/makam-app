@@ -94,23 +94,8 @@
             $photoUrl = MarketplacePresenter::photoUrl($product);
         @endphp
 
-        <div class="grid grid-cols-1 gap-6 md:gap-8 lg:grid-cols-2">
-            <div class="overflow-hidden rounded-lg border border-neutral-200 bg-neutral-0">
-                @if ($photoUrl)
-                    {{-- Decorative: <h1> below names the product. --}}
-                    <img
-                        src="{{ $photoUrl }}"
-                        alt=""
-                        class="h-64 w-full object-cover md:h-80"
-                    >
-                @else
-                    <div class="flex h-64 w-full items-center justify-center bg-neutral-100 md:h-80">
-                        <span class="text-sm text-neutral-600">Foto belum tersedia</span>
-                    </div>
-                @endif
-            </div>
-
-            <div class="space-y-4">
+        <article class="space-y-8">
+            <header class="space-y-3">
                 <div>
                     <x-mk.badge intent="neutral">{{ $product->categoryLabel() }}</x-mk.badge>
                 </div>
@@ -123,11 +108,32 @@
                      below, and a dummy name next to a real one would read as
                      two different sellers of the same product. The marker
                      stays on the dummy name whenever it IS shown. --}}
-                @if ($listing === null && $product->vendor_name)
+                @if ($listing !== null)
+                    <p class="text-sm text-neutral-600">
+                        Ditawarkan oleh {{ $listing->vendor->name }}
+                    </p>
+                @elseif ($product->vendor_name)
                     <p class="text-base text-neutral-600">
                         Vendor: <span class="text-neutral-800">{{ MarketplacePresenter::vendorLabel($product) }}</span>
                     </p>
                 @endif
+            </header>
+
+            @if ($photoUrl)
+                {{-- Decorative: <h1> above names the product. --}}
+                <img
+                    src="{{ $photoUrl }}"
+                    alt=""
+                    class="h-56 w-full rounded-lg object-cover md:h-72"
+                >
+            @else
+                <div class="flex h-56 w-full items-center justify-center rounded-lg bg-neutral-100 md:h-72">
+                    <span class="text-sm text-neutral-600">Foto belum tersedia</span>
+                </div>
+            @endif
+
+            <section aria-labelledby="harga-ketersediaan-heading" class="space-y-3">
+                <h2 id="harga-ketersediaan-heading" class="text-lg font-semibold text-neutral-900">Harga dan Ketersediaan</h2>
 
                 @if ($listing !== null)
                     {{-- The REAL offer: the listing the add button below
@@ -136,9 +142,6 @@
                          this figure is not "data contoh". --}}
                     <p class="text-2xl font-semibold tabular-nums text-neutral-900">
                         {{ $listing->priceMoney()->format() }}
-                    </p>
-                    <p class="text-sm text-neutral-600">
-                        Ditawarkan oleh {{ $listing->vendor->name }}
                     </p>
 
                     <dl class="mt-3 space-y-2 text-sm text-neutral-700">
@@ -208,8 +211,6 @@
                     @endif
                 @endif
 
-                <p class="max-w-prose text-base text-neutral-700">{{ $product->description }}</p>
-
                 {{-- The add affordance — only when there is an offer to add.
                      Primary CTA, full-width on mobile (thumb reach), loading
                      disabled via wire:loading (the button primitive's own
@@ -235,8 +236,12 @@
                         </p>
                     </div>
                 @endif
-            </div>
-        </div>
+            </section>
+
+            <section aria-labelledby="deskripsi-heading" class="space-y-2">
+                <h2 id="deskripsi-heading" class="text-lg font-semibold text-neutral-900">Deskripsi</h2>
+                <p class="max-w-prose text-base text-neutral-700">{{ $product->description }}</p>
+            </section>
 
         {{-- Variants (AC2, partial). Three genuinely different situations,
              never collapsed into one message — see ProductDetail's own doc
@@ -379,6 +384,7 @@
                 </x-mk.alert>
             @endif
         </section>
+        </article>
 
         {{-- §3.4 single-vendor conflict modal — same copy, same actions, same
              state shape as the cart screen's (PUB-022), so the two surfaces

@@ -228,7 +228,7 @@
                                         <img
                                             src="{{ $photoUrl }}"
                                             alt=""
-                                            class="h-40 w-full object-cover"
+                                            class="h-48 md:h-56 w-full object-cover"
                                             loading="lazy"
                                         >
                                     @else
@@ -239,7 +239,7 @@
                                              beats a broken <img> or a
                                              silent gap, same convention as
                                              the cemetery directory card. --}}
-                                        <div class="flex h-40 w-full items-center justify-center bg-neutral-100">
+                                        <div class="flex h-48 md:h-56 w-full items-center justify-center bg-neutral-100">
                                             <span class="text-sm text-neutral-600">Foto belum tersedia</span>
                                         </div>
                                     @endif
