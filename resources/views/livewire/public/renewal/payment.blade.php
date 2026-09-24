@@ -104,20 +104,18 @@
                 <div class="mx-auto mb-8 max-w-prose">
                     <x-mk.card>
                         <div class="flex flex-col gap-6">
-                            <div class="flex flex-col gap-2 border-b border-neutral-200 pb-4">
-                                <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                                    <span class="text-neutral-600">Nama almarhum</span>
-                                    <span class="font-medium text-neutral-900">{{ $graveView->deceasedName }}</span>
+                            <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm rounded-lg bg-neutral-50 p-4">
+                                <dt class="text-neutral-600">Nama almarhum</dt>
+                                <dd class="font-medium text-neutral-900">{{ $graveView->deceasedName }}</dd>
 
-                                    <span class="text-neutral-600">Blok</span>
-                                    <span class="font-medium text-neutral-900">{{ $graveView->block ?? '—' }}</span>
+                                <dt class="text-neutral-600">Blok</dt>
+                                <dd class="font-medium text-neutral-900">{{ $graveView->block ?? '—' }}</dd>
 
-                                    <span class="text-neutral-600">Jatuh tempo saat ini</span>
-                                    <span class="font-medium text-neutral-900">
-                                        {{ $graveView->dueDate ?? '—' }}
-                                    </span>
-                                </div>
-                            </div>
+                                <dt class="text-neutral-600">Jatuh tempo saat ini</dt>
+                                <dd class="font-medium text-neutral-900">
+                                    {{ $graveView->dueDate ?? '—' }}
+                                </dd>
+                            </dl>
 
                             <div class="flex flex-col gap-1">
                                 <span class="text-sm text-neutral-600">Estimasi biaya perpanjangan</span>
@@ -126,17 +124,15 @@
                                 </span>
                             </div>
 
-                            <div class="flex flex-col gap-1 border-t border-neutral-200 pt-4">
-                                <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                                    <span class="text-neutral-600">Sumber tarif</span>
-                                    <span class="font-medium text-neutral-900">{{ $quote->tariffSource }}</span>
+                            <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm rounded-lg bg-neutral-50 p-4">
+                                <dt class="text-neutral-600">Sumber tarif</dt>
+                                <dd class="font-medium text-neutral-900">{{ $quote->tariffSource }}</dd>
 
-                                    <span class="text-neutral-600">Terakhir diperbarui</span>
-                                    <span class="font-medium text-neutral-900">
-                                        {{ $quote->tariffEffectiveAt?->format('d F Y') ?? '—' }}
-                                    </span>
-                                </div>
-                            </div>
+                                <dt class="text-neutral-600">Terakhir diperbarui</dt>
+                                <dd class="font-medium text-neutral-900">
+                                    {{ $quote->tariffEffectiveAt?->format('d F Y') ?? '—' }}
+                                </dd>
+                            </dl>
 
                             @if ($quote->hasLateFine())
                                 <div class="flex flex-col gap-1 border-t border-neutral-200 pt-4">
