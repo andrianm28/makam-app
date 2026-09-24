@@ -211,6 +211,20 @@ final class Cemetery extends Model
         $query->where('type', $type);
     }
 
+    /**
+     * FFI-clone pixel-fidelity ticket 01 — the header search bar's real
+     * backing capability. Case-insensitive substring match on `name`
+     * only (not address/city), matching what a visitor actually types
+     * when searching "TPU/TPS" by name. `ilike` is safe here per
+     * CemeteryPublicQuery::published()'s own comment: "A directory of
+     * launch-city cemeteries is never a large table" — no trigram index
+     * needed, unlike grave_records' own name search.
+     */
+    public function scopeMatchingName(Builder $query, string $name): void
+    {
+        $query->where('name', 'ilike', '%'.$name.'%');
+    }
+
     public function isPublished(): bool
     {
         return $this->publication_status === CemeteryPublicationStatus::PUBLISHED;

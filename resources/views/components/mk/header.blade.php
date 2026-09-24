@@ -195,6 +195,33 @@
             <x-mk.logo :size="32" />
         </a>
 
+        {{-- FFI-clone pixel-fidelity ticket 01 — real search bar, desktop
+             only, matching FFI's own DesktopHeader.tsx shape and position
+             (centered between logo and nav links) and its own real
+             behaviour (a plain form submit, no live/debounced query — read
+             directly from that file's onSubmit handler, not assumed).
+             Submits to the cemetery directory's own `q` search parameter
+             (CemeteryDirectoryIndex, wired in the same ticket) — never a
+             dead form. Mobile bar deliberately unchanged: FFI's own real
+             mobile header has no visible search bar either. --}}
+        <form action="{{ route('cemeteries.index') }}" method="GET" class="mx-8 max-w-md flex-1" role="search">
+            <label for="header-search" class="sr-only">Cari TPU/TPS</label>
+            <div class="relative">
+                <x-dynamic-component
+                    component="icon.magnifying-glass"
+                    class="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-neutral-500"
+                    aria-hidden="true"
+                />
+                <input
+                    id="header-search"
+                    type="search"
+                    name="q"
+                    placeholder="Cari TPU/TPS…"
+                    class="h-10 w-full rounded-full border border-neutral-200 bg-neutral-100 pl-10 pr-4 text-sm text-neutral-900 placeholder:text-neutral-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
+                />
+            </div>
+        </form>
+
         <nav aria-label="Menu utama" class="flex h-full items-center gap-6">
             @foreach ($navItems as $key => $item)
                 <a

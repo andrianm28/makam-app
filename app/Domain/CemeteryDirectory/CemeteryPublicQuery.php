@@ -215,9 +215,14 @@ final class CemeteryPublicQuery
      * expected to surface their own §6.3 validation state for a tampered
      * value rather than relying on this method to reject it.
      *
+     * `$name` — added for FFI-clone pixel-fidelity ticket 01 (the header
+     * search bar). Same `null`-means-unfiltered contract as `$city`/`$type`;
+     * an unmatched name is the safe "empty list", never an error, same
+     * reasoning as above.
+     *
      * @return Collection<int, Cemetery>
      */
-    public static function published(?string $city = null, ?string $type = null): Collection
+    public static function published(?string $city = null, ?string $type = null, ?string $name = null): Collection
     {
         $query = Cemetery::query()->published();
 
@@ -227,6 +232,10 @@ final class CemeteryPublicQuery
 
         if ($type !== null) {
             $query->ofType($type);
+        }
+
+        if ($name !== null) {
+            $query->matchingName($name);
         }
 
         /** @var Collection<int, Cemetery> $cemeteries */

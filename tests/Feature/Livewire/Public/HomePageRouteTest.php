@@ -101,6 +101,34 @@ final class HomePageRouteTest extends TestCase
         $this->assertTrue($positions['Perpanjangan Makam'] < $positions['FAQ']);
     }
 
+    /**
+     * FFI-clone pixel-fidelity ticket 01 — the header's real search bar,
+     * shared-layout content asserted here per the ticket's own stated
+     * seam (see also CemeteryDirectoryIndexRouteTest's
+     * test_q_search_filters_by_name_substring_case_insensitively for the
+     * search's actual filtering behaviour, tested at the seam that
+     * actually owns it).
+     */
+    public function test_header_search_bar_renders_on_desktop_and_submits_to_the_cemetery_directory(): void
+    {
+        $response = $this->get('/');
+        $response->assertOk();
+
+        $body = $response->getContent();
+        $this->assertNotFalse($body);
+
+        $this->assertStringContainsString('type="search"', $body);
+        $this->assertStringContainsString('name="q"', $body);
+        $this->assertStringContainsString('action="'.route('cemeteries.index').'"', $body);
+        $this->assertStringContainsString('method="GET"', $body);
+
+        // Real accessible label, not just the placeholder.
+        $this->assertMatchesRegularExpression(
+            '#<label for="header-search" class="sr-only">Cari TPU/TPS</label>#',
+            $body
+        );
+    }
+
     public function test_pemesanan_makam_is_the_primary_call_to_action(): void
     {
         $response = $this->get('/');
