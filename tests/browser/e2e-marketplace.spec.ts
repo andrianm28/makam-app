@@ -221,7 +221,36 @@ test.describe('E2E-MKT — single-vendor conflict', () => {
         await page.getByRole('button', { name: 'Tambah ke Keranjang' }).click();
         await expect(page.getByRole('dialog', { name: 'Hanya satu vendor per pesanan' })).toBeVisible();
 
-        results = await new AxeBuilder({ page }).analyze();
+        // A real, live axe finding, found re-verifying this page against
+        // PR #358's primary-600/700 correction (FFI pixel-fidelity ticket
+        // 04) — but a verified FALSE POSITIVE, not a real defect. With the
+        // conflict modal open, the "Tambah ke Keranjang" button underneath
+        // is fully covered by <x-mk.modal>'s backdrop
+        // (`--mk-surface-overlay: rgb(13 17 17 / 0.55)`, z-backdrop above
+        // the button's un-elevated stacking context). axe reports that
+        // button's `<span>` at insufficient contrast (foreground #fefefe,
+        // "background" #0d79e5, 4.26:1) — but #0d79e5 is neither the
+        // button's own declared background (`bg-primary-600` =
+        // rgb(0,115,230), confirmed unobstructed elsewhere on this same
+        // screen) nor the real composited pixel a viewer actually sees.
+        // Pixel-sampled directly from this exact failure's own screenshot
+        // (CI run 35964432538, both retries identical): the real rendered
+        // colour behind the backdrop is rgb(7,61,113) — matching
+        // primary-600 blended with the backdrop's own declared 55%-opacity
+        // dark overlay almost exactly — which gives white text a real
+        // contrast ratio far above 4.5:1. axe's colour-contrast rule does
+        // not composite this backdrop (a positioned sibling, not an
+        // ancestor, of the button) into its background calculation, so its
+        // #0d79e5 figure does not correspond to anything actually painted.
+        // `.exclude()` narrows out ONLY this one obscured button from this
+        // one scan — every other element on this screen, and this rule
+        // against every other screen in this suite, is still asserted at
+        // zero violations, the same discipline e2e-admin-vendor.spec.ts's
+        // `.fi-breadcrumbs-item-label` exclusion already established for a
+        // different verified false/out-of-scope finding.
+        results = await new AxeBuilder({ page })
+            .exclude('button[wire\\:click="addToCart"]')
+            .analyze();
         expect(results.violations).toEqual([]);
     });
 });
