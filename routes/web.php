@@ -28,6 +28,7 @@ use App\Livewire\Public\HomePage;
 use App\Livewire\Public\Invoices\InvoiceReceiptPage;
 use App\Livewire\Public\Legal\PrivacyPolicy;
 use App\Livewire\Public\Legal\TermsOfService;
+use App\Livewire\Public\Legal\WakafTanah;
 use App\Livewire\Public\Marketplace\Cart;
 use App\Livewire\Public\Marketplace\Checkout;
 use App\Livewire\Public\Marketplace\MarketplaceIndex;
@@ -435,6 +436,19 @@ Route::get('/kwitansi/{reference}', InvoiceReceiptPage::class)->name('invoice.sh
 */
 Route::get('/privasi', PrivacyPolicy::class)->name('legal.privacy');
 Route::get('/syarat-ketentuan', TermsOfService::class)->name('legal.terms');
+
+/*
+|--------------------------------------------------------------------------
+| Wakaf Tanah — AC12 of public-home-and-navigation, PUB-072
+|--------------------------------------------------------------------------
+| Static information page: purpose, general requirements, the six-step
+| process as information, and the help-centre contact channel. No form,
+| no upload, no interest registration — see WakafTanah's own doc block.
+| Also closes the real gap Stage 3 ticket 03 left on the homepage's
+| secondary-CTA link, which rendered as a disabled control because this
+| route did not exist yet.
+*/
+Route::get('/wakaf-tanah', WakafTanah::class)->name('legal.wakaf-tanah');
 
 /*
 |--------------------------------------------------------------------------

@@ -408,10 +408,10 @@ final class HomePageRouteTest extends TestCase
 
     /**
      * Stage 3 ticket 03 — the three secondary CTAs (design doc §4.2).
-     * Wakaf Tanah has no real route in this codebase (confirmed by search
-     * before implementing this ticket) — same honest-disabled-control
-     * pattern header.blade.php's own $akunAvailable handling already
-     * establishes, not a working link.
+     * Wakaf Tanah originally rendered as an honest disabled control
+     * (`header.blade.php`'s own $akunAvailable pattern) because its route
+     * didn't exist yet. `/wakaf-tanah` now exists (AC12 of
+     * public-home-and-navigation, PUB-072), so all three are real links.
      */
     public function test_secondary_ctas_render_below_the_services_grid(): void
     {
@@ -427,9 +427,9 @@ final class HomePageRouteTest extends TestCase
         $this->assertStringContainsString('Perpanjang Makam', $servicesSection);
         $this->assertStringContainsString('href="'.route('marketplace.index').'"', $servicesSection);
         $this->assertStringContainsString('Layanan Pemakaman', $servicesSection);
-        // Honest disabled control, not a link — no href, aria-disabled.
+        $this->assertStringContainsString('href="'.route('legal.wakaf-tanah').'"', $servicesSection);
         $this->assertStringContainsString('Wakaf Tanah', $servicesSection);
-        $this->assertStringContainsString('aria-disabled="true"', $servicesSection);
+        $this->assertStringNotContainsString('aria-disabled="true"', $servicesSection);
     }
 
     /**

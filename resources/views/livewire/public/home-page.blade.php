@@ -314,14 +314,11 @@
              never inside <x-mk.hero>, which structurally supports no more
              than its one primary CTA).
 
-             Wakaf Tanah has no real route anywhere in this codebase —
-             confirmed by a repo-wide search before writing this, not
-             assumed. Rather than invent a URL (forbidden by this ticket's
-             own text) or silently drop the requirement, this follows
-             header.blade.php's own established "honest disabled control"
-             precedent for a destination that doesn't exist yet (see that
-             file's $akunAvailable handling) — real, undecided gap, named
-             here and in this ticket's PR, not fabricated. --}}
+             Wakaf Tanah's route did not exist when this section was first
+             written (Stage 3 ticket 03), so it rendered as an honest
+             disabled control rather than a fabricated URL. `/wakaf-tanah`
+             now exists (AC12 of public-home-and-navigation, PUB-072), so
+             this is a real link. --}}
         <p class="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-center text-sm">
             <a href="{{ route('perpanjangan.index') }}" class="font-medium text-primary-700 underline underline-offset-2">
                 Perpanjang Makam
@@ -329,9 +326,9 @@
             <a href="{{ route('marketplace.index') }}" class="font-medium text-primary-700 underline underline-offset-2">
                 Layanan Pemakaman
             </a>
-            <span class="text-neutral-400" aria-disabled="true" title="Segera hadir">
+            <a href="{{ route('legal.wakaf-tanah') }}" class="font-medium text-primary-700 underline underline-offset-2">
                 Wakaf Tanah
-            </span>
+            </a>
         </p>
     </section>
 
