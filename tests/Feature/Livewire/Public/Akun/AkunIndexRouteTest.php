@@ -87,4 +87,26 @@ final class AkunIndexRouteTest extends TestCase
 
         $this->assertStringContainsString('aria-current="page"', $anchor);
     }
+
+    public function test_the_four_dashboard_tiles_use_the_journey_entrance_card_emphasis(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get('/akun');
+
+        // emphasis="strong" (design-system.md §3.3: "a journey entrance")
+        // renders shadow-md + border-primary-200 when no intent is set —
+        // the tile cards carry no intent, so this class pair is the real,
+        // rendered marker that the new emphasis value is actually applied,
+        // not merely present in the source file.
+        $response->assertSee('shadow-md', false);
+        $response->assertSee('border-primary-200', false);
+
+        // <x-mk.icon-medallion size="lg"> renders size-13 tile / size-6 mark
+        // (icon-medallion.blade.php's $sizes/$iconSizes maps) — the default
+        // ("md") renders size-11/size-5 instead, so this class pair proves
+        // the size bump landed, not just that some icon-medallion rendered.
+        $response->assertSee('size-13', false);
+        $response->assertSee('size-6', false);
+    }
 }
