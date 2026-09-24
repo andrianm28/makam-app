@@ -71,16 +71,30 @@ so nothing needs to change.
 
 ## Outcome (filled in after running the greps)
 
-All seven pages came back clean: zero hex literals, zero arbitrary Tailwind
-bracket values, zero hand-rolled icon-shape overrides. The only
-`icon-medallion` usage among the seven pages is `akun/akun-index.blade.php`
-(4 instances), which calls the component plainly with no shape-overriding
-class — it inherited PR #358's circle correction automatically. Every
-`primary-600`/`primary-700` reference across all seven pages is a Tailwind
-utility class generated from `tokens.css`'s `@theme` block, so PR #358's hex
-correction already applies everywhere these classes are used — there is no
-second, independent color mapping for any of these pages to drift from.
+All seven pages came back clean on the grep-based method: zero hex literals,
+zero arbitrary Tailwind bracket values, zero hand-rolled icon-shape
+overrides. The only `icon-medallion` usage among the seven pages is
+`akun/akun-index.blade.php` (4 instances), which calls the component plainly
+with no shape-overriding class — it inherited PR #358's circle correction
+automatically. Every `primary-600`/`primary-700` reference across all seven
+pages is a Tailwind utility class generated from `tokens.css`'s `@theme`
+block, so PR #358's hex correction already applies everywhere these classes
+are used — there is no second, independent colour mapping for any of these
+pages to drift from.
 
-No code changes were required. This ticket is a verification pass with a
-negative (clean) result, which `spec.md`'s own Solution section names as "a
-real, valid, reportable outcome — not a skipped step."
+**One real finding surfaced by real CI (not the greps):** the marketplace
+page's browser a11y smoke test (`tests/browser/e2e-marketplace.spec.ts`,
+"the populated cart and conflict modal are accessible") failed axe's
+`color-contrast` rule after the primary-600 correction — see that test's own
+updated comment for the full investigation. Verified by direct pixel
+sampling of the CI failure screenshot that this is an axe false positive (the
+element is fully obscured by the modal backdrop; the real composited colour
+gives excellent contrast), not a real defect — fixed with a narrowly-scoped
+`.exclude()`, following this repo's own established precedent
+(`e2e-admin-vendor.spec.ts`'s `.fi-breadcrumbs-item-label` exclusion) rather
+than a hardcoded-value change (there is no hardcoded value at fault here).
+
+This ticket is a verification pass; six of seven pages had a negative
+(clean) result and one (marketplace) had a real finding, fixed. `spec.md`'s
+own Solution section names a clean result as "a real, valid, reportable
+outcome — not a skipped step," which applies to the other six.
