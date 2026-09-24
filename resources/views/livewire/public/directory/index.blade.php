@@ -284,7 +284,7 @@
         <div
             wire:loading.delay
             wire:target="city,type,resetFilters"
-            class="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+            class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-3"
             aria-busy="true"
         >
             @for ($i = 0; $i < 3; $i++)
@@ -348,7 +348,7 @@
                         </div>
                     </div>
                 @else
-                    <ul class="grid gap-4 md:grid-cols-2 xl:grid-cols-3" aria-label="Daftar TPU dan TPS">
+                    <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-3" aria-label="Daftar TPU dan TPS">
                         @foreach ($cards as $card)
                             @php
                                 $cemetery = $card['cemetery'];
@@ -414,14 +414,14 @@
                                                 src="{{ $photoUrl }}"
                                                 alt="Foto {{ $cemetery->name }}"
                                                 loading="lazy"
-                                                class="h-40 w-full object-cover"
+                                                class="h-48 md:h-56 w-full object-cover"
                                             >
                                         @else
                                             {{-- No photo is a real state (the seed
                                                  migration ships some rows without
                                                  one). A labelled placeholder beats
                                                  a broken <img> or a silent gap. --}}
-                                            <div class="flex h-40 w-full items-center justify-center bg-neutral-100">
+                                            <div class="flex h-48 md:h-56 w-full items-center justify-center bg-neutral-100">
                                                 <span class="text-sm text-neutral-600">Foto belum tersedia</span>
                                             </div>
                                         @endif

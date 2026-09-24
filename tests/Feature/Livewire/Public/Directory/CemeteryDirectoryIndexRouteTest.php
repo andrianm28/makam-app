@@ -301,6 +301,27 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
         $response->assertSee((string) $cemetery->primary_photo_path);
     }
 
+    public function test_the_card_grid_photo_box_uses_the_restyled_gallery_scale(): void
+    {
+        // Both branches of the card's photo box (a real photo and the
+        // no-photo placeholder) render the same height classes, so a
+        // page-wide assertion is a real, non-vacuous check here — no
+        // sibling card can satisfy it by accident with a stale height.
+        $withPhoto = Cemetery::query()->published()->where('slug', CemeteryExampleData::PACKAGE_CEMETERY_SLUGS[0])->firstOrFail();
+        $this->assertNotNull($withPhoto->primary_photo_path, 'Fixture expected to carry a real photo.');
+
+        $response = $this->get(route('cemeteries.index'));
+        $response->assertOk();
+        $response->assertSee('h-48 md:h-56', false);
+
+        Cemetery::query()->published()->update(['primary_photo_path' => null]);
+
+        $response = $this->get(route('cemeteries.index'));
+        $response->assertOk();
+        $response->assertSee('Foto belum tersedia');
+        $response->assertSee('h-48 md:h-56', false);
+    }
+
     /**
      * UI/UX audit finding (26 Aug 2026) — a genuinely free cemetery
      * (`price_min`/`price_max` both exactly `0`, e.g. "gratis bagi pemegang

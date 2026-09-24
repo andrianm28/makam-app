@@ -133,6 +133,36 @@ final class CemeteryDetailRouteTest extends TestCase
     }
 
     /**
+     * FFI-clone-whole-frontend ticket 02: the detail page already matches
+     * FFI's real hero/info-blocks/CTA structural pattern — it was in fact
+     * the structural analog `product-detail.blade.php`'s own restructure
+     * (ticket 03) was modelled on. This locks that structure in with a
+     * real assertion, since no prior test named the section landmarks
+     * explicitly.
+     */
+    public function test_the_detail_page_uses_the_hero_info_blocks_structure(): void
+    {
+        $cemetery = $this->exampleCemetery();
+
+        $response = $this->get(route('cemeteries.show', ['cemeterySlug' => $cemetery->slug]));
+        $response->assertOk();
+
+        $html = $response->getContent();
+
+        foreach (['alamat-heading', 'fasilitas-heading', 'biaya-heading', 'paket-heading', 'langkah-heading'] as $sectionId) {
+            $pos = strpos($html, 'id="'.$sectionId.'"');
+            $this->assertNotFalse($pos, "Section landmark {$sectionId} not found.");
+
+            $sectionStart = strrpos(substr($html, 0, $pos), '<section');
+            $this->assertNotFalse($sectionStart, "{$sectionId} is not inside a <section> tag.");
+        }
+
+        // The header/hero/sections all sit inside one <article> wrapper.
+        $articlePos = strpos($html, '<article');
+        $this->assertNotFalse($articlePos, 'Detail page is not wrapped in an <article> element.');
+    }
+
+    /**
      * AC11 — THE test for this criterion. The map link is absent at the
      * data level (seeded rows never carry a maps URL or coordinates, see
      * `CemeteryExampleData`'s honesty framing), so `Cemetery::googleMapsUrl()`
