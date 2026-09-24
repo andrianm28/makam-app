@@ -18,6 +18,12 @@
     order tile (PR 3, Task 2 of `.superpowers/sdd/2026-08-20-akun-pesanan/
     task-2-brief.md`) carries no such marker — it links to `OrderList`,
     real account-scoped data.
+
+    Tiles render with `emphasis="strong"` and `<x-mk.icon-medallion size="lg">`
+    (FFI account-area visual restyle, `.scratch/ffi-clone-whole-frontend/
+    issues/07-account-area-visual-restyle.md`) — each tile is a journey
+    entrance into a whole sub-flow, the documented case for both props
+    (design-system.md §3.3, §3.3a).
 --}}
 <div class="mx-auto max-w-content px-4 py-8 md:px-6 lg:px-8">
     <h1 class="text-3xl font-semibold tracking-tight text-neutral-900">Akun Saya</h1>
@@ -25,10 +31,14 @@
         Halo, {{ $user->name }}.
     </p>
 
+    {{-- Each tile below is a journey entrance into a whole sub-flow (draft
+         resume, order list, renewal, documents) — design-system.md §3.3's
+         emphasis="strong" case exactly, matching the icon-medallion size
+         bump directly below it. --}}
     <div class="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2">
-        <x-mk.card :href="route('akun.draft')" interactive>
+        <x-mk.card :href="route('akun.draft')" interactive emphasis="strong">
             <div class="flex items-start gap-4">
-                <x-mk.icon-medallion icon="clock" tone="primary" />
+                <x-mk.icon-medallion icon="clock" tone="primary" size="lg" />
                 <div>
                     <h2 class="text-lg font-semibold text-neutral-900">Draft Pemesanan</h2>
                     <p class="mt-1 text-sm text-neutral-600">
@@ -42,9 +52,9 @@
             </div>
         </x-mk.card>
 
-        <x-mk.card :href="route('akun.pesanan')" interactive>
+        <x-mk.card :href="route('akun.pesanan')" interactive emphasis="strong">
             <div class="flex items-start gap-4">
-                <x-mk.icon-medallion icon="inbox" tone="primary" />
+                <x-mk.icon-medallion icon="inbox" tone="primary" size="lg" />
                 <div>
                     <h2 class="text-lg font-semibold text-neutral-900">Pesanan</h2>
                     <p class="mt-1 text-sm text-neutral-600">
@@ -58,9 +68,9 @@
             </div>
         </x-mk.card>
 
-        <x-mk.card :href="route('akun.perpanjangan')" interactive>
+        <x-mk.card :href="route('akun.perpanjangan')" interactive emphasis="strong">
             <div class="flex items-start gap-4">
-                <x-mk.icon-medallion icon="clock-x" tone="primary" />
+                <x-mk.icon-medallion icon="clock-x" tone="primary" size="lg" />
                 <div>
                     <h2 class="text-lg font-semibold text-neutral-900">
                         Perpanjangan
@@ -73,9 +83,9 @@
             </div>
         </x-mk.card>
 
-        <x-mk.card :href="route('akun.dokumen')" interactive>
+        <x-mk.card :href="route('akun.dokumen')" interactive emphasis="strong">
             <div class="flex items-start gap-4">
-                <x-mk.icon-medallion icon="document-text" tone="primary" />
+                <x-mk.icon-medallion icon="document-text" tone="primary" size="lg" />
                 <div>
                     <h2 class="text-lg font-semibold text-neutral-900">
                         Dokumen
