@@ -255,7 +255,7 @@
              treatment — both removed here, since FFI's real tile has
              neither. Labels/routes/order/icons themselves are UNCHANGED
              (§9.2 MUST-NOT 9's four product labels, byte-identical). --}}
-        <ul class="grid grid-cols-2 gap-4 sm:grid-cols-4" aria-label="Layanan utama">
+        <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-4" aria-label="Layanan utama">
             @foreach ($primaryMenus as $key => $menu)
                 <li wire:key="service-card-{{ $key }}">
                     <a href="{{ $menu['route'] }}" class="flex touch-target flex-col items-center gap-2">

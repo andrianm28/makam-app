@@ -349,8 +349,8 @@
   --mk-text-placeholder: var(--color-neutral-500);
   --mk-text-disabled: var(--color-neutral-500);   /* NOT 400: keeps 3.90:1 */
   --mk-text-inverse: var(--color-neutral-0);
-  --mk-text-link: var(--color-primary-600);
-  --mk-text-link-hover: var(--color-primary-700);
+  --mk-text-link: var(--color-primary-700); /* UPDATED 24 Sep 2026 -- was primary-600. Real axe-core a11y-smoke failure caught it: primary-600 (now FFI's real, brighter blue) as literal link TEXT on the page's default gray surface (#F5F5F5) only reaches 4.19:1, below the 4.5:1 text floor. primary-700 (FFI's own real hover/dark shade) reaches ~6.1:1 on that surface -- comfortably safe -- while primary-600 stays exactly FFI's real button/fill color, unaffected. */
+  --mk-text-link-hover: var(--color-primary-800); /* UPDATED 24 Sep 2026 -- was primary-700, promoted one step darker since primary-700 is now the resting link color above and a hover state needs to still visibly darken from it. */
   --mk-text-on-brand: var(--color-neutral-0);
   --mk-text-price: var(--color-primary-800); /* ADR-0037: monetary figures ONLY
     (cemetery price ranges, renewal fees, quote/invoice totals) — a plain-text
