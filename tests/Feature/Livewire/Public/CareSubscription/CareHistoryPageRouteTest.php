@@ -140,4 +140,68 @@ final class CareHistoryPageRouteTest extends TestCase
         $response->assertSee('Belum ada riwayat perawatan');
         $response->assertDontSee($victimsWorkOrder->reference);
     }
+
+    public function test_the_page_shell_matches_the_rest_of_the_account_areas_established_convention(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get('/riwayat-perawatan/'.$user->getAuthIdentifier());
+
+        // Matches AkunIndex/OrderList/DraftList's own shared shell — see
+        // resources/views/livewire/public/akun/{akun-index,order-list,
+        // draft-list}.blade.php, all of which use this exact class string.
+        $response->assertSee('mx-auto max-w-content px-4 py-8 md:px-6 lg:px-8', false);
+        $response->assertSee('text-3xl font-semibold tracking-tight text-neutral-900', false);
+    }
+
+    public function test_a_work_order_row_uses_the_list_row_card_emphasis(): void
+    {
+        $user = User::factory()->create();
+
+        $carePlan = CarePlan::query()->create([
+            'reference' => 'CP-'.Str::upper(Str::random(8)),
+            'name' => 'Perawatan Bulanan Standar',
+            'product_code' => 'GRAVE_CARE_MONTHLY',
+            'frequency' => CarePlanFrequency::Monthly->value,
+            'price_minor' => 150000,
+            'currency' => 'IDR',
+            'checklist_template' => ['membersihkan makam'],
+            'status' => 'active',
+        ]);
+
+        $subscription = Subscription::query()->create([
+            'reference' => 'SUB-'.Str::upper(Str::random(8)),
+            'grave_id' => (string) Str::uuid(),
+            'care_plan_id' => $carePlan->getKey(),
+            'customer_id' => $user->id,
+            'status' => 'active',
+            'frequency' => CarePlanFrequency::Monthly->value,
+            'price_minor' => 150000,
+            'currency' => 'IDR',
+            'current_cycle_number' => 2,
+            'started_at' => now()->subMonths(2),
+        ]);
+
+        $cycle = SubscriptionCycle::query()->create([
+            'subscription_id' => $subscription->getKey(),
+            'cycle_start' => now()->subMonth()->startOfMonth()->toDateString(),
+            'cycle_end' => now()->subMonth()->endOfMonth()->toDateString(),
+            'status' => 'COMPLETED',
+        ]);
+
+        WorkOrder::query()->create([
+            'reference' => 'WO-'.Str::upper(Str::random(8)),
+            'care_plan_id' => $carePlan->getKey(),
+            'subscription_cycle_id' => $cycle->getKey(),
+            'status' => 'completed',
+        ]);
+
+        $response = $this->actingAs($user)->get('/riwayat-perawatan/'.$user->getAuthIdentifier());
+
+        // emphasis="quiet" (design-system.md §3.3: "a row, not a raised
+        // object") renders shadow-none — the base default (unset emphasis)
+        // renders shadow-sm instead, so this is the real, rendered marker
+        // that the list-row treatment is actually applied to a genuine row.
+        $response->assertSee('shadow-none', false);
+    }
 }

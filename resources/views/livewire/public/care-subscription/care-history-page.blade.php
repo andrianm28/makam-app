@@ -13,6 +13,15 @@
     authenticated visitor IS this customer — see CareHistoryPage's own
     `isAuthorizedCustomer()`); everyone else sees the same history read-only,
     with a note pointing at login instead of a button that would just deny.
+
+    Page shell (container/heading classes) matches the account area's own
+    established convention (`akun-index.blade.php`/`order-list.blade.php`/
+    `draft-list.blade.php`'s identical shell) rather than this file's
+    previous narrower, smaller-heading shell. Each work-order card renders
+    `emphasis="quiet"` (design-system.md §3.3: "a row, not a raised
+    object") — a list row, not a dashboard tile (FFI account-area visual
+    restyle, `.scratch/ffi-clone-whole-frontend/issues/
+    07-account-area-visual-restyle.md`).
 --}}
 
 @php
@@ -20,8 +29,8 @@
     use App\Domain\VendorFulfillment\WorkOrderStatus;
 @endphp
 
-<div class="mx-auto w-full max-w-3xl px-4 py-10">
-    <h1 class="text-2xl font-semibold text-neutral-900">Riwayat Perawatan</h1>
+<div class="mx-auto max-w-content px-4 py-8 md:px-6 lg:px-8">
+    <h1 class="text-3xl font-semibold tracking-tight text-neutral-900">Riwayat Perawatan</h1>
     <p class="mt-2 text-base text-neutral-600">
         Daftar riwayat layanan perawatan makam. Status pembayaran dan pekerjaan
         ditampilkan secara terpisah.
@@ -55,7 +64,7 @@
                 $hasComplaint = $wo->complaint_status !== null;
             @endphp
 
-            <x-mk.card class="mb-3">
+            <x-mk.card emphasis="quiet" class="mb-3">
                 <div class="flex flex-col gap-3">
                     <dl class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                         <div>
