@@ -21,6 +21,16 @@ use Tests\TestCase;
  *    This test can't run a live axe scan (hermetic suite), so it pins the
  *    two source-level invariants the fixes rely on: distinct accessible
  *    names, and the footer link rule present in the compiled stylesheet.
+ *
+ *    UPDATED 24 Sep 2026 (pixel-fidelity 1:1 visual clone of FFI) — the
+ *    footer-scoped override above is REMOVED, not kept. The footer is no
+ *    longer bg-primary-900; it's a light bg-neutral-100 surface
+ *    (layouts/app.blade.php), so the scoped `footer a { color:
+ *    --mk-text-inverse }` rule this test used to pin became the bug: white
+ *    text at 1.18:1 on light gray, caught by the real Playwright axe-core
+ *    smoke test. The invariant this test now pins is the opposite one —
+ *    that no such override exists, so footer links correctly fall through
+ *    to the global `a`/`a:hover` rules like every other link on the page.
  */
 final class HeaderA11yAuditFixesTest extends TestCase
 {
@@ -73,26 +83,32 @@ final class HeaderA11yAuditFixesTest extends TestCase
         );
     }
 
-    public function test_the_footer_link_contrast_rule_is_present_in_the_compiled_stylesheet(): void
+    public function test_the_footer_has_no_stale_inverse_link_override(): void
     {
         // The hermetic suite runs without Vite, so assert against the
-        // stylesheet source (app.css) where the scoped rule lives — the
-        // compiled build is verified by the CI frontend job and by the
-        // browser/a11y smoke test against the deployed app.
+        // stylesheet source (app.css) — the compiled build is verified by
+        // the CI frontend job and by the browser/a11y smoke test against
+        // the deployed app.
+        //
+        // The footer is now a light bg-neutral-100 surface (pixel-fidelity
+        // 1:1 clone of FFI, 24 Sep 2026), not the bg-primary-900 surface
+        // this test used to assert a `footer a { color: --mk-text-inverse }`
+        // override for. That override is now the bug (white text at 1.18:1
+        // on light gray), so this test pins its absence instead.
         $css = file_get_contents(
             resource_path('css/app.css'),
         );
 
-        $this->assertStringContainsString(
+        $this->assertStringNotContainsString(
             'footer a {',
             $css,
-            'The footer-scoped link rule must exist to override the global link colour.',
+            'The footer no longer needs a scoped link-colour override — it should fall through to the global `a` rule.',
         );
 
         $this->assertStringContainsString(
-            '--mk-text-inverse',
+            'color: var(--mk-text-link);',
             $css,
-            'The footer link colour must use the inverse-text token (white on primary-900).',
+            'Footer links rely on the global link-colour rule now that the footer is a light surface.',
         );
     }
 }
