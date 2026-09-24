@@ -264,6 +264,19 @@
             </div>
         @endif
 
+        {{-- FFI-clone pixel-fidelity ticket 01 — honest acknowledgement of
+             the header search bar's real query, so a visitor who arrived
+             via that search sees confirmation it was actually applied
+             (not just that the result list silently changed). --}}
+        @if ($q !== '')
+            <p class="mx-auto mb-4 max-w-content text-sm text-neutral-600">
+                Menampilkan hasil pencarian untuk &ldquo;{{ $q }}&rdquo;.
+                <button type="button" wire:click="resetFilters" class="font-medium text-primary-700 underline underline-offset-2">
+                    Hapus pencarian
+                </button>
+            </p>
+        @endif
+
         {{-- §6.1 Loading — skeleton mirrors the real card grid so the layout
              does not jump when results arrive (tasks.md: "reserve exact
              heights, CLS < 0.1"). wire:target lists only the filter actions,

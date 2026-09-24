@@ -338,7 +338,7 @@
     "text-default on secondary-50" and "text-strong on secondary-50" are both
     already asserted there. Surface-vs-surface separation IS newly asserted
     (the 10/765 floor), and this band clears `--mk-surface-warm` by 30. */
-  --mk-surface-inverse: var(--color-primary-900);  /* footer */
+  --mk-surface-inverse: var(--color-primary-900);  /* UPDATED 24 Sep 2026 -- the footer no longer uses this (pixel-fidelity 1:1 clone reversed it to a light surface, layouts/app.blade.php). Token kept for any future inverse-surface element; not currently consumed anywhere in real markup. */
   --mk-surface-overlay: rgb(13 17 17 / 0.55);      /* modal backdrop */
   --mk-surface-disabled: var(--color-neutral-100);
 
@@ -481,6 +481,7 @@
   --mk-progress-fill: var(--color-primary-600);
   --mk-table-stripe: var(--color-neutral-50);
   --mk-table-hover: var(--color-primary-50);
+  --mk-hero-scrim: linear-gradient(to top, rgb(0 0 0 / 0.65) 0%, rgb(0 0 0 / 0.65) 45%, rgb(0 0 0 / 0) 100%); /* ADR-0045, resolves OQ-K5 (kamboja plan §4.3, design-system.md's own "deliberately not done" hero note). NOT the reference site's own real technique -- that composes the photo so its text-bearing side is naturally bright and uses DARK text on it, no overlay at all (see the kamboja plan's own 13 Sep 2026 correction after a live capture); this repo has no photography with that bright-side property yet (OQ-K3/OQ-K4), so this token is a CSS-guaranteed alternative that works with ANY photo, not a re-derivation of the reference's exact method. Alpha floor derived, not guessed: white text over this scrim's own darkest stop (0.65 black), even composited over a worst-case PURE WHITE photo behind it, still clears WCAG AA (4.5:1) -- verified for real by docs/design/verify-hero-scrim-contrast.py, which computes the worst-case composited color mathematically rather than asserting it in a comment. 0.65 carries real margin above the 0.535 minimum that math actually requires, for real-world photos (JPEG artifacts, sub-pixel rendering) that a pure mathematical worst-case doesn't model. Fades to fully transparent at the gradient's top so the photo's upper portion stays fully visible. */
   --mk-modal-sheet-max-height: 85dvh; /* §3.4 bottom sheet on mobile; dvh
     accounts for mobile browser chrome. No semantic-layer equivalent exists
     for "85% of viewport", so this is a genuine component token, not a

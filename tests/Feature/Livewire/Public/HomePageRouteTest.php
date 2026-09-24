@@ -101,6 +101,34 @@ final class HomePageRouteTest extends TestCase
         $this->assertTrue($positions['Perpanjangan Makam'] < $positions['FAQ']);
     }
 
+    /**
+     * FFI-clone pixel-fidelity ticket 01 — the header's real search bar,
+     * shared-layout content asserted here per the ticket's own stated
+     * seam (see also CemeteryDirectoryIndexRouteTest's
+     * test_q_search_filters_by_name_substring_case_insensitively for the
+     * search's actual filtering behaviour, tested at the seam that
+     * actually owns it).
+     */
+    public function test_header_search_bar_renders_on_desktop_and_submits_to_the_cemetery_directory(): void
+    {
+        $response = $this->get('/');
+        $response->assertOk();
+
+        $body = $response->getContent();
+        $this->assertNotFalse($body);
+
+        $this->assertStringContainsString('type="search"', $body);
+        $this->assertStringContainsString('name="q"', $body);
+        $this->assertStringContainsString('action="'.route('cemeteries.index').'"', $body);
+        $this->assertStringContainsString('method="GET"', $body);
+
+        // Real accessible label, not just the placeholder.
+        $this->assertMatchesRegularExpression(
+            '#<label for="header-search" class="sr-only">Cari TPU/TPS</label>#',
+            $body
+        );
+    }
+
     public function test_pemesanan_makam_is_the_primary_call_to_action(): void
     {
         $response = $this->get('/');
@@ -234,14 +262,17 @@ final class HomePageRouteTest extends TestCase
         $response = $this->get('/');
 
         $response->assertOk();
-        // UPDATED 13 Sep 2026 (Task C1, mobile CTA above the fold): the
-        // hero root gained `flex flex-col ... md:block` so that CSS `order`
-        // can lift the text panel above the photo below `md`. The literal
-        // this assertion matches therefore changed; what it proves has not
-        // — it is still the component's distinguishing root class string.
-        // The ordering behaviour itself is asserted in
+        // UPDATED 24 Sep 2026 (ADR-0045, resolves OQ-K5): the hero's old
+        // two-block layout (a `flex flex-col ... md:block` root, so CSS
+        // `order` could lift the text panel above the photo on mobile) is
+        // replaced by a unified photo-with-scrim-overlay layout — the root
+        // no longer needs `order` at all, so it drops back to a plain
+        // `relative overflow-hidden rounded-lg`. The literal this assertion
+        // matches has changed again; what it proves has not — it is still
+        // the component's distinguishing root class string. The overlay's
+        // own behaviour is asserted in
         // Tests\Feature\View\Components\MkHeroTest, which owns the component.
-        $response->assertSee('relative flex flex-col overflow-hidden rounded-lg md:block', false);
+        $response->assertSee('relative overflow-hidden rounded-lg', false);
         $response->assertSee('src="'.asset('images/hero/cemetery-garden-daylight.jpg').'"', false);
         $response->assertSee('Pesan Makam');
         $response->assertSee('href="/pemesanan-makam"', false);
