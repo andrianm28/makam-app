@@ -93,20 +93,47 @@ final class AkunIndexRouteTest extends TestCase
         $user = User::factory()->create();
 
         $response = $this->actingAs($user)->get('/akun');
+        $response->assertOk();
 
-        // emphasis="strong" (design-system.md §3.3: "a journey entrance")
-        // renders shadow-md + border-primary-200 when no intent is set —
-        // the tile cards carry no intent, so this class pair is the real,
-        // rendered marker that the new emphasis value is actually applied,
-        // not merely present in the source file.
-        $response->assertSee('shadow-md', false);
+        $html = $response->getContent();
+
+        // border-primary-200 is a solid, page-wide discriminator: nothing
+        // else on this page renders that pair. Kept unscoped.
         $response->assertSee('border-primary-200', false);
 
-        // <x-mk.icon-medallion size="lg"> renders size-13 tile / size-6 mark
-        // (icon-medallion.blade.php's $sizes/$iconSizes maps) — the default
-        // ("md") renders size-11/size-5 instead, so this class pair proves
-        // the size bump landed, not just that some icon-medallion rendered.
-        $response->assertSee('size-13', false);
-        $response->assertSee('size-6', false);
+        // shadow-md and size-6 are NOT safe to assert page-wide: every
+        // interactive <x-mk.card> already renders `hover:shadow-md`
+        // regardless of emphasis (card.blade.php's $emphasisHoverShadow
+        // maps both 'base' and 'strong' to it), and the shared header's
+        // mobile hamburger icon always renders a literal `size-6` class
+        // (hidden via CSS, not absent from the HTML) on every page that
+        // uses layouts.app. Both substrings were already present before
+        // this diff for reasons unrelated to the tile restyle, so a
+        // page-wide assertSee can't tell a correct tile from a broken
+        // one. Scope to one tile's own <a>...</a> markup instead, found
+        // by its unique heading text.
+        $headingPos = strpos($html, 'Draft Pemesanan');
+        $this->assertNotFalse($headingPos, 'Draft Pemesanan tile heading not found.');
+
+        $cardStart = strrpos(substr($html, 0, $headingPos), '<a ');
+        $this->assertNotFalse($cardStart, 'Draft Pemesanan tile is not wrapped in an <a> element.');
+
+        $cardEnd = strpos($html, '</a>', $headingPos);
+        $this->assertNotFalse($cardEnd, 'Draft Pemesanan tile <a> element is unterminated.');
+
+        $card = substr($html, $cardStart, $cardEnd - $cardStart);
+
+        // The REST shadow (emphasis="strong" specifically, distinct from
+        // the hover shadow every interactive card already carries) is
+        // `shadow-md` with no `hover:` prefix immediately before it.
+        $this->assertMatchesRegularExpression('/(?<!hover:)shadow-md/', $card);
+
+        // size-13 tile / size-6 icon (icon-medallion.blade.php's
+        // $sizes/$iconSizes map for size="lg") — both must appear inside
+        // THIS card, proving the size bump landed on the medallion, not
+        // just that the header's unrelated size-6 hamburger exists
+        // somewhere on the page.
+        $this->assertStringContainsString('size-13', $card);
+        $this->assertStringContainsString('size-6', $card);
     }
 }
