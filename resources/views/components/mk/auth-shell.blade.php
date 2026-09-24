@@ -23,7 +23,11 @@
     uses full-opacity `text-neutral-0` for BOTH title and subtitle instead:
     tokens.css's own comment on `--color-primary-600` records white text on
     that colour at 4.57:1 -- a thin pass of the 4.5:1 AA floor -- so any
-    opacity reduction below full white would fail GATE 1. `text-neutral-0`
+    opacity reduction below full white would drop under that floor (GATE 1
+    itself only checks the fixed pairs verify-contrast.py already lists,
+    not this component's own usage, so the risk is a real WCAG failure
+    the gate would not catch, not a mechanical GATE 1 failure).
+    `text-neutral-0`
     (not Tailwind's built-in `white`) matches every other `mk.*` primitive's
     established convention (see button.blade.php).
 
