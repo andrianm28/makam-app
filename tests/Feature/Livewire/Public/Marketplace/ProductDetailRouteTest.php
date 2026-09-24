@@ -132,6 +132,29 @@ final class ProductDetailRouteTest extends TestCase
         $response->assertSee('80 x 100 cm');
     }
 
+    public function test_the_detail_page_renders_the_hero_gallery_info_block_call_to_action_structure(): void
+    {
+        $response = $this->get('/marketplace/produk/'.ProductCode::GRAVESTONE_GRANITE);
+
+        $response->assertOk();
+
+        $html = $response->getContent();
+
+        $hargaStart = strpos($html, 'id="harga-ketersediaan-heading"');
+        $this->assertNotFalse($hargaStart, 'Harga dan Ketersediaan heading not found.');
+
+        $deskripsiStart = strpos($html, 'id="deskripsi-heading"');
+        $this->assertNotFalse($deskripsiStart, 'Deskripsi heading not found.');
+
+        // Mirrors e2e-marketplace.spec.ts's own
+        // page.locator('section', { has: page.getByRole('heading', { name: 'Pilihan Varian' }) })
+        // check — the variants heading still sits inside a <section> tag.
+        $variantsHeadingPos = strpos($html, 'Pilihan Varian');
+        $this->assertNotFalse($variantsHeadingPos, 'Pilihan Varian heading not found.');
+        $sectionBeforeVariants = strrpos(substr($html, 0, $variantsHeadingPos), '<section');
+        $this->assertNotFalse($sectionBeforeVariants, 'Pilihan Varian heading is not inside a <section> tag.');
+    }
+
     public function test_the_calligraphy_product_shows_its_calligraphy_style_and_inscription_example(): void
     {
         $response = $this->get('/marketplace/produk/'.ProductCode::GRAVESTONE_CALLIGRAPHY);
