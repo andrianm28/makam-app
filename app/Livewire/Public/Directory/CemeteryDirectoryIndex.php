@@ -72,6 +72,16 @@ final class CemeteryDirectoryIndex extends Component
     public string $type = '';
 
     /**
+     * FFI-clone pixel-fidelity ticket 01 — the header search bar's target
+     * query param, chosen as `q` (not `name`) to match the conventional
+     * short search-query param name a header search control uses
+     * elsewhere on the web, distinct from `CemeteryPublicQuery::published()`'s
+     * own `$name` parameter it maps onto.
+     */
+    #[Url(as: 'q', history: true)]
+    public string $q = '';
+
+    /**
      * §6.5 — set true only when the directory query itself throws.
      */
     public bool $directoryUnavailable = false;
@@ -128,7 +138,7 @@ final class CemeteryDirectoryIndex extends Component
 
     public function resetFilters(): void
     {
-        $this->reset(['city', 'type']);
+        $this->reset(['city', 'type', 'q']);
         $this->resetValidation();
     }
 
@@ -169,6 +179,7 @@ final class CemeteryDirectoryIndex extends Component
             $cemeteries = CemeteryPublicQuery::published(
                 city: $cityValid && $this->city !== '' ? $this->city : null,
                 type: $typeValid && $this->type !== '' ? $this->type : null,
+                name: $this->q !== '' ? $this->q : null,
             );
 
             // PERF-05: resolve every card's capability profile in ONE query
@@ -216,7 +227,7 @@ final class CemeteryDirectoryIndex extends Component
             'cards' => $cards,
             'cities' => CemeteryPublicQuery::launchCities(),
             'types' => CemeteryPublicQuery::types(),
-            'filtersActive' => $this->city !== '' || $this->type !== '',
+            'filtersActive' => $this->city !== '' || $this->type !== '' || $this->q !== '',
         ])->layout('layouts.app', [
             'title' => 'Direktori TPU dan TPS - Makam.co.id',
             // <x-mk.header>'s nav keys are exactly 'pemesanan' | 'layanan' |

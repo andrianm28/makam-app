@@ -186,6 +186,40 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
     }
 
     /**
+     * FFI-clone pixel-fidelity ticket 01 — the `q` search parameter the
+     * header search bar submits, wired through to
+     * `CemeteryPublicQuery::published()`'s new `name` filter
+     * (`Cemetery::scopeMatchingName()`, case-insensitive substring). Uses
+     * a real seeded cemetery's own name, lowercased and truncated to a
+     * substring, so the case-insensitivity and the substring (not
+     * exact-match) behaviour are both provable, not assumed.
+     */
+    public function test_q_search_filters_by_name_substring_case_insensitively(): void
+    {
+        $target = Cemetery::query()->published()->orderBy('id')->first();
+        $this->assertNotNull($target, 'Expected at least one published seeded cemetery.');
+
+        $others = Cemetery::query()
+            ->published()
+            ->where('id', '!=', $target->id)
+            ->where('name', 'not ilike', '%'.mb_substr($target->name, 3, 6).'%')
+            ->pluck('name');
+
+        $this->assertGreaterThan(0, $others->count(), 'Expected at least one other cemetery whose name does not overlap the search substring.');
+
+        $substring = mb_strtoupper(mb_substr($target->name, 3, 6));
+
+        $rendered = Livewire::test(CemeteryDirectoryIndex::class)
+            ->set('q', $substring);
+
+        $rendered->assertSee($target->name);
+
+        foreach ($others as $name) {
+            $rendered->assertDontSee($name);
+        }
+    }
+
+    /**
      * AC2's base guarantee. One seeded cemetery is deliberately `draft`
      * precisely so this exclusion is provable rather than vacuous.
      */
@@ -344,14 +378,21 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
             ->assertHasErrors('type');
     }
 
-    public function test_reset_filters_clears_both_filters(): void
+    /**
+     * RENAMED from `test_reset_filters_clears_both_filters` — FFI-clone
+     * pixel-fidelity ticket 01 added a third filter (`q`, the header
+     * search bar's query) that `resetFilters()` must also clear.
+     */
+    public function test_reset_filters_clears_city_type_and_q(): void
     {
         Livewire::test(CemeteryDirectoryIndex::class)
             ->set('city', LaunchCityCode::BOGOR)
             ->set('type', CemeteryType::TPS)
+            ->set('q', 'contoh')
             ->call('resetFilters')
             ->assertSet('city', '')
-            ->assertSet('type', '');
+            ->assertSet('type', '')
+            ->assertSet('q', '');
     }
 
     /**
