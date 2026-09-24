@@ -226,14 +226,14 @@
                 <div>
                     <h2 class="text-sm font-semibold text-neutral-900">Bantuan</h2>
                     <ul class="mt-2 space-y-1 text-sm text-neutral-600">
-                        <li><a href="/bantuan" class="underline underline-offset-2 hover:text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2">Bantuan / Kontak</a></li>
+                        <li><a href="/bantuan" class="underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2">Bantuan / Kontak</a></li>
                     </ul>
                 </div>
                 <div>
                     <h2 class="text-sm font-semibold text-neutral-900">Legal</h2>
                     <ul class="mt-2 space-y-1 text-sm text-neutral-600">
-                        <li><a href="{{ route('legal.privacy') }}" class="underline underline-offset-2 hover:text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2">Kebijakan Privasi</a></li>
-                        <li><a href="{{ route('legal.terms') }}" class="underline underline-offset-2 hover:text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2">Syarat &amp; Ketentuan</a></li>
+                        <li><a href="{{ route('legal.privacy') }}" class="underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2">Kebijakan Privasi</a></li>
+                        <li><a href="{{ route('legal.terms') }}" class="underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2">Syarat &amp; Ketentuan</a></li>
                     </ul>
                 </div>
             </div>
