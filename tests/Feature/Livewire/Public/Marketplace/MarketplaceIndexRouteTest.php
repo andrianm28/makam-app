@@ -376,15 +376,31 @@ final class MarketplaceIndexRouteTest extends TestCase
         // label or path. These structural assertions fail on an actual
         // <form> or Livewire action regardless of wording; the strings
         // stay as belt-and-braces.
+        //
+        // SCOPED 24 Sep 2026 (FFI-clone pixel-fidelity ticket 01): the
+        // shared header now legitimately carries its own real <form> (the
+        // header search bar, unrelated to marketplace cart/checkout) on
+        // every public page, including this one. A whole-page
+        // assertDontSee('<form') would false-fail on that addition; this
+        // test's actual concern is the marketplace page's OWN content, not
+        // the shared layout's header, so the assertions below are scoped
+        // to everything after </header> instead.
         $response = $this->get('/marketplace');
 
         $response->assertOk();
-        $response->assertDontSee('<form', escape: false);
-        $response->assertDontSee('wire:click', escape: false);
-        $response->assertDontSee('type="submit"', escape: false);
-        $response->assertDontSee('/marketplace/keranjang');
-        $response->assertDontSee('/marketplace/checkout');
-        $response->assertDontSee('Tambah ke Keranjang');
+
+        $body = $response->getContent();
+        $this->assertNotFalse($body);
+        $headerEnd = strpos($body, '</header>');
+        $this->assertNotFalse($headerEnd, 'Expected a </header> tag in the marketplace response.');
+        $pageContent = substr($body, $headerEnd);
+
+        $this->assertStringNotContainsString('<form', $pageContent);
+        $this->assertStringNotContainsString('wire:click', $pageContent);
+        $this->assertStringNotContainsString('type="submit"', $pageContent);
+        $this->assertStringNotContainsString('/marketplace/keranjang', $pageContent);
+        $this->assertStringNotContainsString('/marketplace/checkout', $pageContent);
+        $this->assertStringNotContainsString('Tambah ke Keranjang', $pageContent);
     }
 
     public function test_cart_and_checkout_routes_are_registered(): void
