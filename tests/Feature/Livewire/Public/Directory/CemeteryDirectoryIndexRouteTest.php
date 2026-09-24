@@ -645,4 +645,69 @@ final class CemeteryDirectoryIndexRouteTest extends TestCase
         $bottomNav = substr($html, $start, $end - $start);
         $this->assertSame(0, substr_count($bottomNav, 'aria-current="page"'), 'No tab should be active in bottom nav for cemetery directory');
     }
+
+    /**
+     * FFI-clone cemetery-directory-restyle task 1 — the real results list
+     * carries the literal card-grid recipe already used by every
+     * cemetery-card grid on the FFI-restyled homepage (`home-page.blade.php`'s
+     * urgent-availability/newest/verified sections). Scoped to the `<ul
+     * aria-label="Daftar TPU dan TPS">` element itself (not the whole page)
+     * via the same `strpos`/`substr` extraction pattern
+     * `test_bottom_nav_renders_with_no_active_tab` above uses, so a
+     * coincidental match of these class tokens elsewhere on the page cannot
+     * make this test pass vacuously.
+     */
+    public function test_the_results_list_carries_the_new_card_grid_classes(): void
+    {
+        $html = Livewire::test(CemeteryDirectoryIndex::class)->html();
+
+        $start = strpos($html, 'aria-label="Daftar TPU dan TPS"');
+        $this->assertNotFalse($start, 'Results <ul> not found — expected at least one published cemetery in the seed.');
+
+        // Walk back to the start of this element's own opening tag so the
+        // assertion is scoped to the <ul>'s class attribute, not whatever
+        // precedes it. Searching within the prefix up to $start (rather than
+        // passing a negative offset to strrpos()) keeps the direction
+        // unambiguous.
+        $tagStart = strrpos(substr($html, 0, $start), '<ul');
+        $this->assertNotFalse($tagStart, 'Could not find the opening <ul> tag.');
+        $tagEnd = strpos($html, '>', $start);
+        $this->assertNotFalse($tagEnd, 'Results <ul> opening tag is unterminated.');
+
+        $openingTag = substr($html, $tagStart, $tagEnd - $tagStart);
+
+        $this->assertStringContainsString('grid-cols-1', $openingTag);
+        $this->assertStringContainsString('sm:grid-cols-2', $openingTag);
+        $this->assertStringContainsString('md:gap-6', $openingTag);
+        $this->assertStringContainsString('lg:grid-cols-3', $openingTag);
+    }
+
+    /**
+     * FFI-clone cemetery-directory-restyle task 1 — both filter-chip rows
+     * (`Filter kota` and `Filter jenis lokasi`) adopt FFI's solid pill shape.
+     * Scoped to each `<nav>` region individually via the same
+     * `strpos`/`substr` extraction pattern used elsewhere in this file, so
+     * this fails if either row is left on the old `rounded-sm` shape even
+     * though the other was migrated.
+     */
+    public function test_both_filter_chip_rows_carry_the_rounded_full_pill_shape(): void
+    {
+        $html = Livewire::test(CemeteryDirectoryIndex::class)->html();
+
+        $cityStart = strpos($html, 'aria-label="Filter kota"');
+        $this->assertNotFalse($cityStart, 'City filter <nav> not found.');
+        $cityEnd = strpos($html, '</nav>', $cityStart);
+        $this->assertNotFalse($cityEnd, 'City filter <nav> is unterminated.');
+        $cityNav = substr($html, $cityStart, $cityEnd - $cityStart);
+
+        $this->assertGreaterThan(0, substr_count($cityNav, 'rounded-full'), 'Expected rounded-full pill classes in the city filter row.');
+
+        $typeStart = strpos($html, 'aria-label="Filter jenis lokasi"');
+        $this->assertNotFalse($typeStart, 'Type filter <nav> not found.');
+        $typeEnd = strpos($html, '</nav>', $typeStart);
+        $this->assertNotFalse($typeEnd, 'Type filter <nav> is unterminated.');
+        $typeNav = substr($html, $typeStart, $typeEnd - $typeStart);
+
+        $this->assertGreaterThan(0, substr_count($typeNav, 'rounded-full'), 'Expected rounded-full pill classes in the type filter row.');
+    }
 }

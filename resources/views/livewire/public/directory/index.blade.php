@@ -49,7 +49,7 @@
 @endphp
 
 <div class="py-section md:py-section-lg">
-    <div class="mx-auto max-w-content px-4">
+    <div class="mx-auto max-w-content px-4 md:px-6 lg:px-8">
         <div class="mx-auto mb-8 max-w-prose space-y-2 text-center">
             <h1 class="text-3xl font-semibold tracking-tight text-neutral-900">
                 Direktori TPU dan TPS
@@ -80,16 +80,17 @@
                 type="button"
                 wire:click="$set('city', '')"
                 @if ($city === '') aria-current="true" @endif
-                class="touch-target inline-flex items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
+                class="touch-target inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
             >
                 @if ($city === '')
                     {{-- The `icon.check` tick is NOT decoration — do not remove
                          it. Without it the active chip differs from an inactive
-                         one by HUE ALONE (identical inline-flex/rounded-sm/
-                         border/px-2/py-0.5/text-xs/font-medium recipe, only the
-                         colour family changes), which is what design-system.md
-                         §9.2 MUST-NOT "never convey status by colour alone"
-                         and WCAG 1.4.1 exist to prevent.
+                         one by HUE ALONE (identical inline-flex/rounded-full/
+                         px-3/py-1/text-xs/font-medium recipe, only the colour
+                         fill changes — solid primary-600 vs. neutral-100),
+                         which is what design-system.md §9.2 MUST-NOT "never
+                         convey status by colour alone" and WCAG 1.4.1 exist to
+                         prevent.
 
                          `aria-current` below already carries selection to
                          assistive tech, so this is specifically for a SIGHTED
@@ -104,10 +105,12 @@
                          tasks.md's own accessibility task ("no colour-only
                          availability signalling") is what this closes.
 
-                         Active chip reuses badge.blade.php's own literal
-                         structural recipe with primary-100/primary-800,
-                         rather than appending colour classes onto
-                         <x-mk.badge>'s already-complete intent string —
+                         Active and inactive chips both use a literal `<span>`
+                         recipe (FFI's solid pill shape: rounded-full,
+                         primary-600/neutral-0 when active, neutral-100/
+                         neutral-700 when inactive) rather than appending
+                         colour classes onto <x-mk.badge>'s already-complete
+                         intent string —
                          two competing utility declarations of equal
                          specificity would resolve by Tailwind's generated
                          rule order, which cannot be verified without a real
@@ -161,12 +164,12 @@
                          takes it: ba662d1 migrated marketplace's twin of this
                          chip and left this one behind, so this is the last
                          remaining fork of the three. --}}
-                    <span class="inline-flex items-center gap-1 rounded-sm border border-primary-300 bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-800">
+                    <span class="inline-flex items-center gap-1 rounded-full bg-primary-600 px-3 py-1 text-xs font-medium text-neutral-0">
                         <x-dynamic-component component="icon.check" class="size-3.5 shrink-0" aria-hidden="true" />
                         Semua Kota
                     </span>
                 @else
-                    <x-mk.badge intent="neutral">Semua Kota</x-mk.badge>
+                    <span class="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-700">Semua Kota</span>
                 @endif
             </button>
 
@@ -183,15 +186,15 @@
                     type="button"
                     wire:click="$set('city', @js($cityOption['code']))"
                     @if ($city === $cityOption['code']) aria-current="true" @endif
-                    class="touch-target inline-flex items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
+                    class="touch-target inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
                 >
                     @if ($city === $cityOption['code'])
-                        <span class="inline-flex items-center gap-1 rounded-sm border border-primary-300 bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-800">
+                        <span class="inline-flex items-center gap-1 rounded-full bg-primary-600 px-3 py-1 text-xs font-medium text-neutral-0">
                             <x-dynamic-component component="icon.check" class="size-3.5 shrink-0" aria-hidden="true" />
                             {{ $cityOption['label'] }}
                         </span>
                     @else
-                        <x-mk.badge intent="neutral">{{ $cityOption['label'] }}</x-mk.badge>
+                        <span class="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-700">{{ $cityOption['label'] }}</span>
                     @endif
                 </button>
             @endforeach
@@ -202,15 +205,15 @@
                 type="button"
                 wire:click="$set('type', '')"
                 @if ($type === '') aria-current="true" @endif
-                class="touch-target inline-flex items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
+                class="touch-target inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
             >
                 @if ($type === '')
-                    <span class="inline-flex items-center gap-1 rounded-sm border border-primary-300 bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-800">
+                    <span class="inline-flex items-center gap-1 rounded-full bg-primary-600 px-3 py-1 text-xs font-medium text-neutral-0">
                         <x-dynamic-component component="icon.check" class="size-3.5 shrink-0" aria-hidden="true" />
                         Semua Jenis
                     </span>
                 @else
-                    <x-mk.badge intent="neutral">Semua Jenis</x-mk.badge>
+                    <span class="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-700">Semua Jenis</span>
                 @endif
             </button>
 
@@ -219,15 +222,15 @@
                     type="button"
                     wire:click="$set('type', @js($typeOption['code']))"
                     @if ($type === $typeOption['code']) aria-current="true" @endif
-                    class="touch-target inline-flex items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
+                    class="touch-target inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
                 >
                     @if ($type === $typeOption['code'])
-                        <span class="inline-flex items-center gap-1 rounded-sm border border-primary-300 bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-800">
+                        <span class="inline-flex items-center gap-1 rounded-full bg-primary-600 px-3 py-1 text-xs font-medium text-neutral-0">
                             <x-dynamic-component component="icon.check" class="size-3.5 shrink-0" aria-hidden="true" />
                             {{ $typeOption['label'] }}
                         </span>
                     @else
-                        <x-mk.badge intent="neutral">{{ $typeOption['label'] }}</x-mk.badge>
+                        <span class="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-700">{{ $typeOption['label'] }}</span>
                     @endif
                 </button>
             @endforeach
@@ -284,7 +287,7 @@
         <div
             wire:loading.delay
             wire:target="city,type,resetFilters"
-            class="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+            class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-3"
             aria-busy="true"
         >
             @for ($i = 0; $i < 3; $i++)
@@ -348,7 +351,7 @@
                         </div>
                     </div>
                 @else
-                    <ul class="grid gap-4 md:grid-cols-2 xl:grid-cols-3" aria-label="Daftar TPU dan TPS">
+                    <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-3" aria-label="Daftar TPU dan TPS">
                         @foreach ($cards as $card)
                             @php
                                 $cemetery = $card['cemetery'];
