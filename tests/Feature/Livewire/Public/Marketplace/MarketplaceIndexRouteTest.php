@@ -474,4 +474,31 @@ final class MarketplaceIndexRouteTest extends TestCase
         $bottomNav = substr($html, $start, $end - $start);
         $this->assertSame(0, substr_count($bottomNav, 'aria-current="page"'), 'No tab should be active in bottom nav for marketplace');
     }
+
+    public function test_the_product_grid_photo_box_uses_the_restyled_gallery_scale(): void
+    {
+        // Verify that the photo box on product cards uses the new height
+        // classes h-48 md:h-56 (a larger, more gallery-like scale) instead
+        // of the previous h-40. This test covers both branches: real photos
+        // and the legacy-no-photo placeholder.
+
+        // First, verify the new height classes appear with a real photo
+        // (the default seeded state).
+        $response = $this->get('/marketplace');
+        $response->assertOk();
+        $response->assertSee('h-48 md:h-56');
+
+        // Second, verify the new height classes also appear in the
+        // legacy-no-photo branch by nullifying a product's photo and
+        // asserting both the placeholder text and the new height classes.
+        $product = Product::findByCode(ProductCode::FLOWER_BOARD);
+        $this->assertNotNull($product);
+
+        DB::table('products')->where('code', $product->code)->update(['photo_path' => null]);
+
+        $response = $this->get('/marketplace');
+        $response->assertOk();
+        $response->assertSee('Foto belum tersedia');
+        $response->assertSee('h-48 md:h-56');
+    }
 }
